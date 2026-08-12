@@ -6,3 +6,12 @@ license.workspace = true
 
 [dependencies]
 promo-model = { path = "../promo-model" }
+
+[dev-dependencies]
+criterion.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+
+[[bench]]
+name = "timeline_bench"
+harness = false

@@ -845,7 +845,10 @@ dependencies = [
 name = "promo-timeline"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "promo-model",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -14,3 +14,24 @@ slower than these numbers fails the push gate (bench-guard pattern).
 Spike verification: every pixel of the wgpu clear is observed byte-exact
 through the IOSurface CPU mapping (BGRA), at 256², 1920×1080, and
 3840×2160 — the zero-copy adoption path is real, not theoretical.
+
+## P1 — timeline math (2026-08-11)
+
+| Bench | Baseline | Notes |
+|---|---|---|
+| keyframe_interpolation/transform_10_keys | ~97 ns | |
+| keyframe_interpolation/transform_100_keys | ~302 ns | |
+| keyframe_interpolation/transform_1000_keys | ~1.59 µs | scales ~linearly (per-call sort of keyed frames, same as Swift) |
+| keyframe_interpolation/gain_10_keys | ~121 ns | f32 path |
+| keyframe_interpolation/gain_1000_keys | ~2.39 µs | |
+| mapping_3h_200cuts/source_time | ~49 µs | 3 h looped resource, 200 trim cuts + 25 held-frame pauses; cost dominated by per-call range/pause rebuild (mirrors the Swift design 1:1 — a session-level cache is a later-phase optimization, not P1's parity mandate) |
+| mapping_3h_200cuts/video_segment | ~74 µs | same workload |
+| mapping_3h_200cuts/trim_ranges_rebuild | ~778 ns | the 200-cut range walk itself |
+| layout/media_rect | ~1.23 ns | |
+| layout/letterbox_transform | ~1.18 ns | |
+
+Swift↔Rust head-to-head (ReVoice `PromoCoreParityTests.testRustHotPathNotSlowerThanSwift`,
+release-built core, debug-built Swift test host, 20 000 calls of
+`layer.transform` on the synthetic fixture's 3-key video layer):
+Swift ~1.17 µs/call vs Rust-through-FFI ~0.22 µs/call — **Rust 5.2× faster**;
+the "Rust must not be slower" P1 gate holds with an asserted 1.5× ceiling.
