@@ -37,6 +37,16 @@ through the IOSurface CPU mapping (BGRA), at 256², 1920×1080, and
 | compose_frame/1080p | ~1.49 ms | background + three 1080p IOSurface-adopted quads (rotation, radius, inside border) + solid overlay, rendered into an IOSurface — includes per-frame texture adoption and device sync |
 | compose_frame/4k | ~3.12 ms | same scene at 3840×2160 → ~320 fps of full-frame 4K compositing |
 
+## P3 slice 1 — preview engine (2026-08-11)
+
+| Bench | Baseline | Notes |
+|---|---|---|
+| preview/render_warm_1080p_2layers | ~1.53 ms | render-at-time with all layer frames cached — the scrub-latency proxy (P3 target < 50 ms: 30× headroom before real decode) |
+| preview/render_cold_1080p_2layers | ~2.07 ms | cache miss: provider call (1080p surface alloc) + CFRetain + texture adoption + compose; real video decode is host-side and additive |
+
+Governor/caching invariants are unit-tested (LRU eviction to budget,
+oversized-entry admission, hit/miss/eviction stats) — see promo-engine tests.
+
 Golden-frame gate (ReVoice `PromoCoreGoldenTests.testGoldenParity_CGvsGPU`):
 CG vs GPU render of a frame with background keyframes, rotated/zoomed image
 layer with border + corner radius, vector drawing, caption, and watermark —

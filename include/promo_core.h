@@ -86,6 +86,35 @@ int32_t promo_compose_frame(PromoCompositor *compositor, const char *scene_json,
                             const int32_t *surface_heights,
                             size_t surface_count, void *output_surface);
 
+/* ---- Phase 3: preview engine (macOS) ------------------------------------ */
+
+typedef struct PromoPreview PromoPreview;
+
+/* Host frame provider. layer_id is NUL-terminated; source_time < 0 means
+ * static content (image/drawing layers). Write a BGRA IOSurfaceRef to
+ * out_surface (the engine CFRetains it until eviction) and optional flags
+ * (bit 1 = pre-framed: engine skips radius/border). Return 0 on success,
+ * non-zero to skip the layer for this render. */
+typedef int32_t (*PromoFrameProvider)(void *user, const char *layer_id,
+                                      double source_time, int32_t tier,
+                                      void **out_surface, int32_t *out_flags);
+
+/* Creates a preview engine for a metadata.json payload. budget_bytes caps
+ * the frame cache (LRU eviction). NULL on parse/GPU failure. */
+PromoPreview *promo_preview_new(const char *project_json,
+                                PromoFrameProvider provider, void *user,
+                                uint64_t budget_bytes);
+void promo_preview_free(PromoPreview *preview);
+
+/* Renders the composition at `time` into a BGRA IOSurface (canvas
+ * aspect-fit inside width x height). 0 ok, -1 bad input, -4 render failed. */
+int32_t promo_preview_render(PromoPreview *preview, double time,
+                             void *output_surface, int32_t width,
+                             int32_t height);
+
+/* out[4] = cache hits, misses, cached bytes, evictions. */
+int32_t promo_preview_stats(const PromoPreview *preview, uint64_t *out);
+
 #ifdef __cplusplus
 }
 #endif

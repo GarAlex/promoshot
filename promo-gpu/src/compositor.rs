@@ -411,6 +411,20 @@ impl Compositor {
         textures: &[InputTexture],
         output: &wgpu::Texture,
     ) -> Result<(), GpuError> {
+        let refs: Vec<&InputTexture> = textures.iter().collect();
+        self.compose_to_texture_borrowed(ctx, scene, &refs, output)
+    }
+
+    /// Like `compose_to_texture`, but over borrowed textures — callers that
+    /// keep textures in a cache (the preview engine) compose without moving
+    /// or cloning them.
+    pub fn compose_to_texture_borrowed(
+        &self,
+        ctx: &GpuContext,
+        scene: &Scene,
+        textures: &[&InputTexture],
+        output: &wgpu::Texture,
+    ) -> Result<(), GpuError> {
         let device = &ctx.device;
         let (ow, oh) = (scene.output_width as f64, scene.output_height as f64);
         let (cw, ch) = (scene.canvas_width, scene.canvas_height);
@@ -560,6 +574,19 @@ impl Compositor {
         textures: &[InputTexture],
         output: crate::iosurface::IOSurfaceRef,
     ) -> Result<(), GpuError> {
+        let refs: Vec<&InputTexture> = textures.iter().collect();
+        self.compose_to_iosurface_borrowed(ctx, scene, &refs, output)
+    }
+
+    /// Borrowed-texture variant of `compose_to_iosurface` (macOS).
+    #[cfg(target_os = "macos")]
+    pub fn compose_to_iosurface_borrowed(
+        &self,
+        ctx: &GpuContext,
+        scene: &Scene,
+        textures: &[&InputTexture],
+        output: crate::iosurface::IOSurfaceRef,
+    ) -> Result<(), GpuError> {
         let texture = adopt_iosurface(
             ctx,
             output,
@@ -567,7 +594,7 @@ impl Compositor {
             scene.output_height,
             wgpu::TextureUsages::RENDER_ATTACHMENT,
         )?;
-        self.compose_to_texture(ctx, scene, textures, &texture)
+        self.compose_to_texture_borrowed(ctx, scene, textures, &texture)
     }
 }
 

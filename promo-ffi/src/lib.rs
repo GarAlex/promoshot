@@ -2,9 +2,12 @@
 //! until Phase 5 (see RUST-CORE-PLAN.md §3/§7 in the app repo).
 
 pub mod compose;
+pub mod preview;
 pub mod project;
 #[cfg(target_os = "macos")]
 pub use compose::*;
+#[cfg(target_os = "macos")]
+pub use preview::*;
 pub use project::*;
 
 use std::ffi::{c_char, c_double, c_int};

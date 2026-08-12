@@ -9,3 +9,10 @@ promo-model = { path = "../promo-model" }
 promo-timeline = { path = "../promo-timeline" }
 promo-media = { path = "../promo-media" }
 promo-gpu = { path = "../promo-gpu" }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "preview_bench"
+harness = false
