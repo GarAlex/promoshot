@@ -165,5 +165,6 @@ mod tests {
     fn spike_works_at_video_sizes() {
         let ctx = GpuContext::new().expect("gpu context");
         run(&ctx, 1920, 1080).expect("1080p spike");
+        run(&ctx, 3840, 2160).expect("4K spike");
     }
 }
