@@ -30,6 +30,20 @@ through the IOSurface CPU mapping (BGRA), at 256², 1920×1080, and
 | layout/media_rect | ~1.23 ns | |
 | layout/letterbox_transform | ~1.18 ns | |
 
+## P2 — GPU compositor (2026-08-11)
+
+| Bench | Baseline | Notes |
+|---|---|---|
+| compose_frame/1080p | ~1.49 ms | background + three 1080p IOSurface-adopted quads (rotation, radius, inside border) + solid overlay, rendered into an IOSurface — includes per-frame texture adoption and device sync |
+| compose_frame/4k | ~3.12 ms | same scene at 3840×2160 → ~320 fps of full-frame 4K compositing |
+
+Golden-frame gate (ReVoice `PromoCoreGoldenTests.testGoldenParity_CGvsGPU`):
+CG vs GPU render of a frame with background keyframes, rotated/zoomed image
+layer with border + corner radius, vector drawing, caption, and watermark —
+mean channel diff **~0.16**, pixels differing >8 **~0.83%** (all on AA edges /
+image interpolation), asserted < 2.0 mean and < 1.5% over-8, and asserted
+non-identical (proves the GPU path engaged, not the CG fallback).
+
 Swift↔Rust head-to-head (ReVoice `PromoCoreParityTests.testRustHotPathNotSlowerThanSwift`,
 release-built core, debug-built Swift test host, 20 000 calls of
 `layer.transform` on the synthetic fixture's 3-key video layer):
