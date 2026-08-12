@@ -77,8 +77,23 @@ real scale-up):
   **p95 12.0 ms / max 17.2 ms** (gate < 50 ms); memory growth 575 MB
   (< 2.5 GB); cache pinned at its 512 MB budget through ~30 k evictions;
   segmented proxy generation ~6.9× realtime on 4K.
-- The full 3 h / 30 min gate needs ~35 GB free disk for its fixture — not
-  yet run (machine had 50 GB free).
+**FULL 3 h / 30 min soak — PASSED (2026-08-12)** (the plan's P3 gate):
+3 h 4K fixture (1.6 GB, built at 2.1× realtime), proxy 10800 s → 1152 s
+(**9.37× realtime**, full duration verified), then 30 minutes of random
+scrubbing:
+
+| Metric | Result | Gate |
+|---|---|---|
+| tier-1 (proxy) seek | p50 **6.6 ms**, p95 **12.2 ms**, max 19.1 ms | < 50 ms ✓ |
+| tier-0 full-res 4K refine | p50 76.6 ms, p95 108.3 ms | (async, once per pause) |
+| memory high-water growth | **742 MB** (base 50 → 792 MB) | < 2.5 GB ✓ |
+| frame cache | 522 MB held, 169 156 evictions over 169 303 fetches | at 512 MB budget ✓ |
+
+80 620 random seeks. Cache hits = 0 by construction: random seeks across a
+3 h timeline never repeat, and a 512 MB budget holds ~4 s of 4K frames —
+the cache and the next-tick prefetch pay off for playback/scrub locality,
+not for uniform random access. The latency numbers are therefore
+worst-case (every seek a cold decode).
 
 CG-vs-GPU throughput head-to-head (ReVoice
 `PromoCoreGoldenTests.testStillsBatchThroughput_GPUvsCG`, permanent gate):
