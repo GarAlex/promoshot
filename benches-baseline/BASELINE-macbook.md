@@ -47,6 +47,13 @@ through the IOSurface CPU mapping (BGRA), at 256², 1920×1080, and
 Governor/caching invariants are unit-tested (LRU eviction to budget,
 oversized-entry admission, hit/miss/eviction stats) — see promo-engine tests.
 
+CG-vs-GPU throughput head-to-head (ReVoice
+`PromoCoreGoldenTests.testStillsBatchThroughput_GPUvsCG`, permanent gate):
+30-frame stills batch @1080p canvas, rotated/bordered/rounded 2560×1440
+image layer + watermark — CG ~12.7 ms/frame vs GPU-through-core
+~4.5 ms/frame → **2.8× faster**; the test asserts the GPU path is never
+slower than CG.
+
 Golden-frame gate (ReVoice `PromoCoreGoldenTests.testGoldenParity_CGvsGPU`):
 CG vs GPU render of a frame with background keyframes, rotated/zoomed image
 layer with border + corner radius, vector drawing, caption, and watermark —
