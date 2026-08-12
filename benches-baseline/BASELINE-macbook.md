@@ -59,6 +59,22 @@ CI variant: 60 s synthesized 4K fixture, 15 s random scrub; full plan gate =
 The suite's first run caught a real leak (autoreleased 4K CGImages piling up
 in the render loop, +5.5 GB); the provider now drains a pool per decode.
 
+Intermediate soak (2026-08-12, 10 min 4K fixture / 5 min scrub — the first
+real scale-up):
+- **Caught a second real bug**: proxy generation silently failed on long
+  sources — VideoToolbox collapses (-11821/-12137 "Cannot Decode" ~350 s in)
+  when one decoder session runs concurrently with the CI scaler + H.264
+  encoder for minutes, though a pure sequential read of the same file is
+  clean. Fix: segmented generation (fresh 60 s readers under one writer),
+  regression-tested (`testProxyGenerationOnLongFixture`, opt-in
+  TEST_RUNNER_PROMO_SOAK_LONG=1).
+- Results after the fix: 14 310 seeks / 5 min — tier-1 seek p50 6.7 ms /
+  **p95 12.0 ms / max 17.2 ms** (gate < 50 ms); memory growth 575 MB
+  (< 2.5 GB); cache pinned at its 512 MB budget through ~30 k evictions;
+  segmented proxy generation ~6.9× realtime on 4K.
+- The full 3 h / 30 min gate needs ~35 GB free disk for its fixture — not
+  yet run (machine had 50 GB free).
+
 CG-vs-GPU throughput head-to-head (ReVoice
 `PromoCoreGoldenTests.testStillsBatchThroughput_GPUvsCG`, permanent gate):
 30-frame stills batch @1080p canvas, rotated/bordered/rounded 2560×1440
