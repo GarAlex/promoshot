@@ -400,6 +400,61 @@ pub extern "C" fn promo_layer_resource_index(
         .unwrap_or(-1)
 }
 
+/// Audio mix-graph parity surface: computes the final per-track amplitude
+/// breakpoints (Swift `AudioTimelineBuilder.levelPoints` twin). Input JSON:
+/// `{"automation": [[t, v], …], "trackStart": s, "trackEnd": s,
+///   "focus": [[a, b], …], "isFocused": bool, "duckFactor": f, "ramp": s}`.
+/// Returns `[[t, v], …]` as JSON; free with `promo_string_free`.
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_audio_level_points(params_json: *const c_char) -> *mut c_char {
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
+        return std::ptr::null_mut();
+    };
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Params {
+        automation: Vec<(f64, f32)>,
+        track_start: f64,
+        track_end: f64,
+        #[serde(default)]
+        focus: Vec<(f64, f64)>,
+        #[serde(default)]
+        is_focused: bool,
+        duck_factor: f32,
+        ramp: f64,
+    }
+    let Ok(params) = serde_json::from_str::<Params>(text) else {
+        return std::ptr::null_mut();
+    };
+    let automation: Vec<tl::VolumePoint> = params
+        .automation
+        .iter()
+        .map(|&(time, volume)| tl::VolumePoint { time, volume })
+        .collect();
+    let points = tl::level_points(
+        &automation,
+        params.track_start,
+        params.track_end,
+        &params.focus,
+        params.is_focused,
+        params.duck_factor,
+        params.ramp,
+    );
+    let out: Vec<(f64, f32)> = points.iter().map(|p| (p.time, p.volume)).collect();
+    match serde_json::to_string(&out) {
+        Ok(s) => CString::new(s)
+            .map(CString::into_raw)
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

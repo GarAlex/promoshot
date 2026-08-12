@@ -78,6 +78,16 @@ Video export CG-vs-GPU (ReVoice `PromoCoreExportTests`, permanent gates):
   transfer) fed to the GPU shifted saturated colors; fixed with an on-GPU
   CI conversion to sRGB matching the CG path.
 
+## P5 slice 1 — audio mix graph (2026-08-12)
+
+| Bench | Baseline | Notes |
+|---|---|---|
+| pcm_mix/mix_60s_4in_stereo_48k_chunked | ~57 ms | 4 stereo 48 kHz inputs, 24-point automation each, 4096-frame chunks → **~1050× realtime** (3 h mix graph ≈ 10 s CPU) |
+
+Level-point parity (ReVoice `PromoCoreParityTests.testAudioLevelPointsParity`):
+7-case matrix (multi-point automation, overlapping/clamped focus intervals,
+focused/unfocused) — exact f32 equality with `AudioTimelineBuilder.levelPoints`.
+
 Golden-frame gate (ReVoice `PromoCoreGoldenTests.testGoldenParity_CGvsGPU`):
 CG vs GPU render of a frame with background keyframes, rotated/zoomed image
 layer with border + corner radius, vector drawing, caption, and watermark —

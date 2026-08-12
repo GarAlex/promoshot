@@ -166,3 +166,186 @@ pub fn audio_focus_intervals(project: &ProjectMetadata) -> Vec<(f64, f64)> {
         })
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// Mix-graph math (Swift `AudioTimelineBuilder` twins): the per-track
+// amplitude automation that AVFoundation (today) or the PCM mixer (core)
+// executes. All f32 exactly where Swift uses Float.
+
+/// A volume breakpoint on the output timeline. Consecutive points with
+/// different volumes describe a linear ramp.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VolumePoint {
+    pub time: f64,
+    pub volume: f32,
+}
+
+/// Swift `AudioTimelineBuilder.amplitude(forFraction:)` — perceptual taper:
+/// squared fraction (50% ≈ −12 dB, 10% ≈ −40 dB).
+pub fn amplitude_for_fraction(fraction: f32) -> f32 {
+    let f = fraction.clamp(0.0, 1.0);
+    f * f
+}
+
+/// Swift `mergeIntervals` — sorted, disjoint union of (start, end) spans.
+pub fn merge_intervals(intervals: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let mut sorted: Vec<(f64, f64)> = intervals.iter().copied().filter(|(a, b)| b > a).collect();
+    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut iter = sorted.into_iter();
+    let Some(mut current) = iter.next() else {
+        return Vec::new();
+    };
+    let mut result = Vec::new();
+    for interval in iter {
+        if interval.0 <= current.1 {
+            current.1 = current.1.max(interval.1);
+        } else {
+            result.push(current);
+            current = interval;
+        }
+    }
+    result.push(current);
+    result
+}
+
+/// Swift `duckGate(at:mergedFocus:duckFactor:ramp:)` — linear-amplitude duck
+/// multiplier: 1 outside any focus interval, `duck_factor` fully inside,
+/// `ramp`-second linear fades on the edges.
+pub fn duck_gate(t: f64, merged_focus: &[(f64, f64)], duck_factor: f32, ramp: f64) -> f32 {
+    for &(f0, f1) in merged_focus {
+        if t <= f0 - ramp || t >= f1 + ramp {
+            continue;
+        }
+        if t >= f0 && t <= f1 {
+            return duck_factor;
+        }
+        if t < f0 {
+            let p = if ramp > 0.0 {
+                ((t - (f0 - ramp)) / ramp) as f32
+            } else {
+                1.0
+            };
+            return 1.0 + (duck_factor - 1.0) * p;
+        }
+        let p = if ramp > 0.0 {
+            (((f1 + ramp) - t) / ramp) as f32
+        } else {
+            1.0
+        };
+        return 1.0 + (duck_factor - 1.0) * p;
+    }
+    1.0
+}
+
+/// Swift `sampleAutomation(at:points:)` — linear interpolation over a sorted
+/// fraction-domain curve, clamped outside its range.
+pub fn sample_automation(t: f64, points: &[VolumePoint]) -> f32 {
+    let Some(first) = points.first() else {
+        return 1.0;
+    };
+    if t <= first.time {
+        return first.volume;
+    }
+    let Some(last) = points.last() else {
+        return first.volume;
+    };
+    if t >= last.time {
+        return last.volume;
+    }
+    for pair in points.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if t >= a.time && t <= b.time {
+            let span = b.time - a.time;
+            let p = if span > 0.0 {
+                ((t - a.time) / span) as f32
+            } else {
+                1.0
+            };
+            return a.volume + (b.volume - a.volume) * p;
+        }
+    }
+    last.volume
+}
+
+/// Swift `levelPoints(...)` — the final per-track amplitude breakpoints:
+/// user automation through the perceptual taper, multiplied by the focus
+/// duck gate. Empty when the result is constant full amplitude.
+#[allow(clippy::too_many_arguments)]
+pub fn level_points(
+    automation: &[VolumePoint],
+    track_start: f64,
+    track_end: f64,
+    focus_intervals: &[(f64, f64)],
+    is_focused: bool,
+    duck_factor: f32,
+    ramp: f64,
+) -> Vec<VolumePoint> {
+    if track_end <= track_start {
+        return Vec::new();
+    }
+    let Some(first_auto) = automation.first() else {
+        return Vec::new();
+    };
+    let merged_focus: Vec<(f64, f64)> = if is_focused {
+        Vec::new()
+    } else {
+        merge_intervals(
+            &focus_intervals
+                .iter()
+                .filter_map(|&(lo, hi)| {
+                    let lo = lo.max(track_start);
+                    let hi = hi.min(track_end);
+                    (hi > lo).then_some((lo, hi))
+                })
+                .collect::<Vec<_>>(),
+        )
+    };
+
+    let mut times = vec![track_start, track_end];
+    for p in automation {
+        if p.time > track_start && p.time < track_end {
+            times.push(p.time);
+        }
+    }
+    for &(lo, hi) in &merged_focus {
+        for edge in [lo - ramp, lo, hi, hi + ramp] {
+            if edge > track_start && edge < track_end {
+                times.push(edge);
+            }
+        }
+    }
+    // Millisecond quantization + dedup + sort (Swift: Set of rounded values).
+    let mut sorted_times: Vec<f64> = times
+        .iter()
+        .map(|t| (t * 1000.0).round() / 1000.0)
+        .collect();
+    sorted_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sorted_times.dedup();
+
+    let mut points: Vec<VolumePoint> = Vec::new();
+    for t in sorted_times {
+        let frac = if automation.len() == 1 {
+            first_auto.volume
+        } else {
+            sample_automation(t, automation)
+        };
+        let amp = amplitude_for_fraction(frac) * duck_gate(t, &merged_focus, duck_factor, ramp);
+        if let Some(last) = points.last_mut() {
+            if (last.time - t).abs() < 0.000_1 {
+                *last = VolumePoint {
+                    time: t,
+                    volume: amp,
+                };
+                continue;
+            }
+        }
+        points.push(VolumePoint {
+            time: t,
+            volume: amp,
+        });
+    }
+    if points.iter().all(|p| (p.volume - 1.0).abs() < 0.000_1) {
+        return Vec::new();
+    }
+    points
+}

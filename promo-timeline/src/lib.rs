@@ -11,7 +11,10 @@ pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 
-pub use audio::{audio_focus_intervals, gain_ramp_segments, layer_gain, GainRampSegment};
+pub use audio::{
+    amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
+    level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
+};
 pub use interpolation::{
     interpolate_color_hex, layer_background_color_hex, layer_has_tilt_keyframes, layer_is_visible,
     layer_local_time, layer_rotation, layer_tilt_offset, layer_transform,
