@@ -61,13 +61,18 @@ in the render loop, +5.5 GB); the provider now drains a pool per decode.
 
 Intermediate soak (2026-08-12, 10 min 4K fixture / 5 min scrub — the first
 real scale-up):
-- **Caught a second real bug**: proxy generation silently failed on long
-  sources — VideoToolbox collapses (-11821/-12137 "Cannot Decode" ~350 s in)
-  when one decoder session runs concurrently with the CI scaler + H.264
-  encoder for minutes, though a pure sequential read of the same file is
-  clean. Fix: segmented generation (fresh 60 s readers under one writer),
-  regression-tested (`testProxyGenerationOnLongFixture`, opt-in
-  TEST_RUNNER_PROMO_SOAK_LONG=1).
+- **Caught a second real bug** (diagnosed correctly only after the full 3 h
+  run): proxy generation silently failed on long sources with VideoToolbox
+  -11821/-12137 "Cannot Decode". 60 s segmentation made the 10-minute case
+  pass and looked like a fix; the 3 h run showed the failure sits at
+  ~780–840 s of content regardless, and the truncated proxy still reported
+  success. **Real cause**: the writer-feed block runs for minutes and every
+  CMSampleBuffer/CVPixelBuffer in it was autoreleased with nothing draining
+  the pool — the decoder's buffer pool never came back. **Fix**: drain per
+  frame (same class as the 4K CGImage pile-up above). Verified on the 3 h
+  fixture: 1162 s (9.3× realtime), proxy duration 10800.0 s of 10800.0 s.
+  The regression test now targets the 3 h fixture and asserts proxy
+  duration == source duration.
 - Results after the fix: 14 310 seeks / 5 min — tier-1 seek p50 6.7 ms /
   **p95 12.0 ms / max 17.2 ms** (gate < 50 ms); memory growth 575 MB
   (< 2.5 GB); cache pinned at its 512 MB budget through ~30 k evictions;
