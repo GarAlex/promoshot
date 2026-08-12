@@ -44,14 +44,24 @@ fn compositor(c: &mut Criterion) {
                 },
                 SceneQuad {
                     texture: Some(1),
-                    rect: [w as f64 * 0.55, h as f64 * 0.1, w as f64 * 0.35, h as f64 * 0.35],
+                    rect: [
+                        w as f64 * 0.55,
+                        h as f64 * 0.1,
+                        w as f64 * 0.35,
+                        h as f64 * 0.35,
+                    ],
                     rotation_deg: 15.0,
                     corner_radius: 12.0,
                     ..Default::default()
                 },
                 SceneQuad {
                     texture: Some(2),
-                    rect: [w as f64 * 0.1, h as f64 * 0.55, w as f64 * 0.3, h as f64 * 0.3],
+                    rect: [
+                        w as f64 * 0.1,
+                        h as f64 * 0.55,
+                        w as f64 * 0.3,
+                        h as f64 * 0.3,
+                    ],
                     rotation_deg: -20.0,
                     border_width: 4.0,
                     border_rgba: [0.0, 0.8, 1.0, 1.0],
