@@ -11,7 +11,7 @@
 //! - The engine owns timing (trim/pause/loop source-time mapping), keyframe
 //!   interpolation, layout, z-order, caching, and GPU composition.
 
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};

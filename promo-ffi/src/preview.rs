@@ -3,7 +3,7 @@
 //! into IOSurfaces; the engine owns timing math, caching (under a byte
 //! budget), and GPU composition.
 
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use promo_engine::{FrameProviderFn, PreviewEngine};
 use promo_model::ProjectMetadata;

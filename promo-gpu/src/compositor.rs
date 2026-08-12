@@ -381,7 +381,7 @@ impl Compositor {
     }
 
     /// Adopts an IOSurface as a sampleable input texture (zero-copy, macOS).
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn import_iosurface(
         ctx: &GpuContext,
         surface: crate::iosurface::IOSurfaceRef,
@@ -566,7 +566,7 @@ impl Compositor {
     }
 
     /// Renders `scene` into an IOSurface-backed output (zero-copy, macOS).
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn compose_to_iosurface(
         &self,
         ctx: &GpuContext,
@@ -579,7 +579,7 @@ impl Compositor {
     }
 
     /// Borrowed-texture variant of `compose_to_iosurface` (macOS).
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn compose_to_iosurface_borrowed(
         &self,
         ctx: &GpuContext,
@@ -599,7 +599,7 @@ impl Compositor {
 }
 
 /// Adopts an IOSurface as a wgpu texture with the given usage (macOS).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn adopt_iosurface(
     ctx: &GpuContext,
     surface: crate::iosurface::IOSurfaceRef,

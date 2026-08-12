@@ -5,11 +5,11 @@
 
 pub mod governor;
 pub mod mixer;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod preview;
 
 pub use governor::MemoryGovernor;
 pub use mixer::{mix_chunk, MixInput};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use preview::{FrameProviderFn, PreviewEngine, PreviewStats, FLAG_PRE_FRAMED};
 pub use promo_model::core_version;

@@ -3,7 +3,7 @@
 //! IOSurfaces; the core renders on the GPU into the output IOSurface. No
 //! full-resolution pixels cross this boundary as CPU bytes — surfaces do.
 
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
 use promo_gpu::GpuContext;

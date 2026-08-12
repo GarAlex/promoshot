@@ -4,9 +4,9 @@
 pub mod compose;
 pub mod preview;
 pub mod project;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use compose::*;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use preview::*;
 pub use project::*;
 
@@ -44,7 +44,7 @@ pub extern "C" fn promo_gpu_spike_run(
     out_render_us: *mut c_double,
     out_readback_us: *mut c_double,
 ) -> c_int {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         let ctx = match promo_gpu::GpuContext::new() {
             Ok(ctx) => ctx,
@@ -68,7 +68,7 @@ pub extern "C" fn promo_gpu_spike_run(
             Err(_) => -3,
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     {
         let _ = (width, height, out_import_us, out_render_us, out_readback_us);
         -1
@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(promo_ffi_noop(41), 42);
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     #[test]
     fn spike_runs_through_ffi() {
         let (mut a, mut b, mut c) = (0.0, 0.0, 0.0);

@@ -10,9 +10,9 @@ pub mod compositor;
 mod surface;
 pub use surface::GpuSurface;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod iosurface;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod spike;
 
 use thiserror::Error;

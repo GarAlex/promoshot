@@ -8,7 +8,7 @@ license.workspace = true
 wgpu.workspace = true
 thiserror.workspace = true
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 # Must match the versions wgpu-hal's Metal backend uses, so raw-texture
 # interop hands over the same types.
 wgpu-hal = { version = "23", features = ["metal"] }
