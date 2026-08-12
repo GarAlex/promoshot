@@ -1,0 +1,30 @@
+[package]
+name = "promo-gpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wgpu.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Must match the versions wgpu-hal's Metal backend uses, so raw-texture
+# interop hands over the same types.
+wgpu-hal = { version = "23", features = ["metal"] }
+metal = "0.29"
+objc = "0.2"
+core-foundation = "0.10"
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "spike_bench"
+harness = false
+
+# objc 0.2's msg_send! expands cfg(feature = "cargo-clippy") checks; declare
+# the value expected so -D warnings doesn't trip on third-party macro output.
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ['cfg(feature, values("cargo-clippy"))']

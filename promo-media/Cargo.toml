@@ -1,0 +1,9 @@
+[package]
+name = "promo-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+promo-model = { path = "../promo-model" }
+thiserror.workspace = true

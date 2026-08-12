@@ -1,0 +1,11 @@
+[package]
+name = "promo-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+promo-model = { path = "../promo-model" }
+promo-timeline = { path = "../promo-timeline" }
+promo-media = { path = "../promo-media" }
+promo-gpu = { path = "../promo-gpu" }
