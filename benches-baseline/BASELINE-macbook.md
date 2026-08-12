@@ -66,6 +66,18 @@ image layer + watermark — CG ~12.7 ms/frame vs GPU-through-core
 ~4.5 ms/frame → **2.8× faster**; the test asserts the GPU path is never
 slower than CG.
 
+## P4 — export engine (2026-08-12)
+
+Video export CG-vs-GPU (ReVoice `PromoCoreExportTests`, permanent gates):
+- **4K→1080p, 10 s project: CG 1.27× realtime vs GPU 7.17× realtime —
+  5.6× faster** (the pure-Swift pipeline fails the plan's ≥ 2× gate on 4K
+  source; the core path clears it 3.5× over). Memory growth ~15 MB.
+- Decoded-frame parity on a letterboxed multi-layer export: mean diff ~1.2,
+  over-12 outliers ~2.5% (both sides H.264-lossy).
+- Color-space regression caught by the gate: raw decoded BGRA (BT.709
+  transfer) fed to the GPU shifted saturated colors; fixed with an on-GPU
+  CI conversion to sRGB matching the CG path.
+
 Golden-frame gate (ReVoice `PromoCoreGoldenTests.testGoldenParity_CGvsGPU`):
 CG vs GPU render of a frame with background keyframes, rotated/zoomed image
 layer with border + corner radius, vector drawing, caption, and watermark —
