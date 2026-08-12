@@ -68,6 +68,15 @@ impl GpuContext {
         })
     }
 
+    /// The process-wide shared context. Multiple wgpu devices on one process
+    /// are legal on macOS but panic inside Metal on the iOS simulator (fence
+    /// creation for a second device) — and one device is cheaper anyway, so
+    /// every production consumer (compositor FFI, preview engine) shares this.
+    pub fn shared() -> Option<&'static GpuContext> {
+        static SHARED: std::sync::OnceLock<Option<GpuContext>> = std::sync::OnceLock::new();
+        SHARED.get_or_init(|| GpuContext::new().ok()).as_ref()
+    }
+
     /// Human-readable adapter description (backend + name), for logs/gates.
     pub fn adapter_summary(&self) -> String {
         let info = self.adapter.get_info();

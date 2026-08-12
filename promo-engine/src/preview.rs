@@ -76,7 +76,7 @@ pub struct PreviewStats {
 
 pub struct PreviewEngine {
     meta: ProjectMetadata,
-    ctx: GpuContext,
+    ctx: &'static GpuContext,
     compositor: Compositor,
     provider: FrameProviderFn,
     user: *mut c_void,
@@ -114,8 +114,8 @@ impl PreviewEngine {
         user: *mut c_void,
         budget_bytes: usize,
     ) -> Result<Self, GpuError> {
-        let ctx = GpuContext::new()?;
-        let compositor = Compositor::new(&ctx)?;
+        let ctx = GpuContext::shared().ok_or(GpuError::NoAdapter)?;
+        let compositor = Compositor::new(ctx)?;
         Ok(PreviewEngine {
             meta,
             ctx,
@@ -182,7 +182,7 @@ impl PreviewEngine {
         unsafe { CFRetain(surface as *const c_void) };
         let (width, height) = unsafe { (IOSurfaceGetWidth(surface), IOSurfaceGetHeight(surface)) };
         let texture =
-            match Compositor::import_iosurface(&self.ctx, surface, width as u32, height as u32) {
+            match Compositor::import_iosurface(self.ctx, surface, width as u32, height as u32) {
                 Ok(t) => t,
                 Err(_) => {
                     unsafe { CFRelease(surface as *const c_void) };
@@ -357,7 +357,7 @@ impl PreviewEngine {
             quads,
         };
         self.compositor
-            .compose_to_iosurface_borrowed(&self.ctx, &scene, &textures, output)
+            .compose_to_iosurface_borrowed(self.ctx, &scene, &textures, output)
     }
 }
 

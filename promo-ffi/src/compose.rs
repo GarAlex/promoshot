@@ -12,7 +12,7 @@ use std::ffi::{c_char, c_int, c_void, CStr};
 
 /// Opaque to C: GPU context + pipeline, reused across frames.
 pub struct CompositorHandle {
-    ctx: GpuContext,
+    ctx: &'static GpuContext,
     compositor: Compositor,
 }
 
@@ -58,10 +58,10 @@ struct SceneWire {
 /// available. Free with `promo_compositor_free`.
 #[no_mangle]
 pub extern "C" fn promo_compositor_new() -> *mut CompositorHandle {
-    let Ok(ctx) = GpuContext::new() else {
+    let Some(ctx) = GpuContext::shared() else {
         return std::ptr::null_mut();
     };
-    let Ok(compositor) = Compositor::new(&ctx) else {
+    let Ok(compositor) = Compositor::new(ctx) else {
         return std::ptr::null_mut();
     };
     Box::into_raw(Box::new(CompositorHandle { ctx, compositor }))
@@ -130,7 +130,7 @@ pub extern "C" fn promo_compose_frame(
         if surface.is_null() || w <= 0 || h <= 0 {
             return -3;
         }
-        match Compositor::import_iosurface(&handle.ctx, surface, w as u32, h as u32) {
+        match Compositor::import_iosurface(handle.ctx, surface, w as u32, h as u32) {
             Ok(t) => textures.push(t),
             Err(_) => return -3,
         }
@@ -161,7 +161,7 @@ pub extern "C" fn promo_compose_frame(
     // Out-of-range texture indices fail the render below with Import.
     match handle
         .compositor
-        .compose_to_iosurface(&handle.ctx, &scene, &textures, output_surface)
+        .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
     {
         Ok(()) => 0,
         Err(promo_gpu::GpuError::Import(_)) => -3,
