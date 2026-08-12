@@ -6,6 +6,7 @@
 //! to by wgpu, and the result visible through the IOSurface's CPU mapping
 //! without any pixel copy.
 
+pub mod compositor;
 mod surface;
 pub use surface::GpuSurface;
 

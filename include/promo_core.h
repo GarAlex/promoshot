@@ -65,6 +65,27 @@ float promo_layer_gain(const PromoProject *project, int32_t layer_index,
 int32_t promo_layer_resource_index(const PromoProject *project,
                                    int32_t layer_index);
 
+/* ---- Phase 2: GPU compositor (macOS) ------------------------------------ */
+
+/* Opaque compositor (GPU context + pipeline, reused across frames). */
+typedef struct PromoCompositor PromoCompositor;
+
+/* NULL when no GPU. Free with promo_compositor_free. */
+PromoCompositor *promo_compositor_new(void);
+void promo_compositor_free(PromoCompositor *compositor);
+
+/* Renders one frame. scene_json: {canvasWidth, canvasHeight,
+ * backgroundRGBA[4], outputWidth, outputHeight, barsRGBA[4], quads:[{texture
+ * (index|absent=solid), rect[4], rotation, cornerRadius, borderWidth,
+ * borderRGBA[4], solidRGBA[4], opacity}]}. surfaces are BGRA IOSurfaceRefs;
+ * output_surface is a BGRA IOSurface of outputWidth x outputHeight.
+ * 0 ok, -1 bad input, -2 scene parse, -3 surface import, -4 render. */
+int32_t promo_compose_frame(PromoCompositor *compositor, const char *scene_json,
+                            const void *const *surfaces,
+                            const int32_t *surface_widths,
+                            const int32_t *surface_heights,
+                            size_t surface_count, void *output_surface);
+
 #ifdef __cplusplus
 }
 #endif

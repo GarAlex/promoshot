@@ -76,6 +76,32 @@ impl OwnedIoSurface {
         self.raw
     }
 
+    /// Fills the surface from tightly-packed BGRA bytes through the CPU
+    /// mapping (host-upload path for still-image layer content and tests).
+    pub fn write_pixels(&self, pixels: &[u8]) -> Result<(), super::GpuError> {
+        if pixels.len() != self.width * self.height * 4 {
+            return Err(super::GpuError::Import(format!(
+                "write_pixels: got {} bytes, want {}",
+                pixels.len(),
+                self.width * self.height * 4
+            )));
+        }
+        unsafe {
+            let mut seed = 0u32;
+            if IOSurfaceLock(self.raw, 0, &mut seed) != 0 {
+                return Err(super::GpuError::Import("IOSurfaceLock failed".into()));
+            }
+            let base = IOSurfaceGetBaseAddress(self.raw) as *mut u8;
+            let stride = IOSurfaceGetBytesPerRow(self.raw);
+            for row in 0..self.height {
+                let src = &pixels[row * self.width * 4..(row + 1) * self.width * 4];
+                std::ptr::copy_nonoverlapping(src.as_ptr(), base.add(row * stride), src.len());
+            }
+            IOSurfaceUnlock(self.raw, 0, &mut seed);
+            Ok(())
+        }
+    }
+
     /// Reads the surface's pixels through the CPU mapping (read-only lock).
     pub fn read_pixels(&self) -> Result<Vec<u8>, super::GpuError> {
         unsafe {

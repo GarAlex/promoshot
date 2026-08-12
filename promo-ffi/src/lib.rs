@@ -1,7 +1,10 @@
 //! promo-ffi: the C ABI the host apps link. Handle-based, additive-only
 //! until Phase 5 (see RUST-CORE-PLAN.md §3/§7 in the app repo).
 
+pub mod compose;
 pub mod project;
+#[cfg(target_os = "macos")]
+pub use compose::*;
 pub use project::*;
 
 use std::ffi::{c_char, c_double, c_int};

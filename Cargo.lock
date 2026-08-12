@@ -809,6 +809,7 @@ dependencies = [
  "promo-gpu",
  "promo-model",
  "promo-timeline",
+ "serde",
  "serde_json",
 ]
 
