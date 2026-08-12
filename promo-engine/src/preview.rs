@@ -87,6 +87,11 @@ pub struct PreviewEngine {
     next_id: u64,
     hits: u64,
     misses: u64,
+    /// Proxy tier requested from the provider for video frames: 0 = full
+    /// resolution, higher = smaller proxies. The host raises it while
+    /// scrubbing/playing and drops it back to 0 for the paused refine
+    /// (cache entries are keyed per tier, so both coexist).
+    preferred_tier: i32,
 }
 
 // The raw `user` pointer is owned by the host and promised valid for the
@@ -124,7 +129,17 @@ impl PreviewEngine {
             next_id: 1,
             hits: 0,
             misses: 0,
+            preferred_tier: 0,
         })
+    }
+
+    /// Sets the proxy tier used for subsequent video-frame requests.
+    pub fn set_preferred_tier(&mut self, tier: i32) {
+        self.preferred_tier = tier.max(0);
+    }
+
+    pub fn preferred_tier(&self) -> i32 {
+        self.preferred_tier
     }
 
     pub fn stats(&self) -> PreviewStats {
@@ -246,7 +261,12 @@ impl PreviewEngine {
                 -1.0
             };
 
-            let Some(frame_id) = self.frame(&layer.id, source_time, 0) else {
+            let tier = if layer.kind == ProjectLayerKind::Video {
+                self.preferred_tier
+            } else {
+                0
+            };
+            let Some(frame_id) = self.frame(&layer.id, source_time, tier) else {
                 continue;
             };
             let frame = &self.cache[&frame_id];
@@ -473,6 +493,27 @@ mod tests {
         assert_eq!(stats.hits, 2, "two cache hits");
         assert_eq!(state.lock().unwrap().requests.len(), 1);
         assert_eq!(stats.cached_bytes, 32 * 32 * 4);
+    }
+
+    #[test]
+    fn tier_switch_keys_cache_separately() {
+        let meta = fixture_meta(64.0);
+        let (mut engine, state) =
+            make_engine(meta, vec![("VID".into(), [0, 255, 0, 255], 32)], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+
+        engine.set_preferred_tier(1);
+        engine.render(3.0, out.raw(), 64, 64).unwrap();
+        engine.set_preferred_tier(0);
+        engine.render(3.0, out.raw(), 64, 64).unwrap();
+        // Same time, different tiers: two provider calls, tiers 1 then 0.
+        assert_eq!(engine.stats().misses, 2);
+        // Back to tier 1: cache hit, no new provider call.
+        engine.set_preferred_tier(1);
+        engine.render(3.0, out.raw(), 64, 64).unwrap();
+        assert_eq!(engine.stats().misses, 2);
+        assert_eq!(engine.stats().hits, 1);
+        assert_eq!(state.lock().unwrap().requests.len(), 2);
     }
 
     #[test]

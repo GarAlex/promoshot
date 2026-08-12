@@ -83,6 +83,19 @@ pub extern "C" fn promo_preview_render(
     }
 }
 
+/// Sets the proxy tier for subsequent video-frame requests (0 = full
+/// resolution; the host raises it while scrubbing and drops it back for the
+/// paused full-res refine). 0 ok, -1 bad handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_preview_set_tier(handle: *mut PreviewHandle, tier: c_int) -> c_int {
+    let Some(handle) = (unsafe { handle.as_mut() }) else {
+        return -1;
+    };
+    handle.engine.set_preferred_tier(tier);
+    0
+}
+
 /// Fills `out[0..4]` = cache hits, misses, cached bytes, evictions.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
