@@ -47,6 +47,18 @@ through the IOSurface CPU mapping (BGRA), at 256², 1920×1080, and
 Governor/caching invariants are unit-tested (LRU eviction to budget,
 oversized-entry admission, hit/miss/eviction stats) — see promo-engine tests.
 
+Soak / seek-latency suite (ReVoice `PromoCoreSoakTests.testScrubSoak4K`,
+CI variant: 60 s synthesized 4K fixture, 15 s random scrub; full plan gate =
+`PROMO_SOAK_FIXTURE_SECONDS=10800 PROMO_SOAK_SECONDS=1800`):
+- tier-1 (proxy) seek: p50 ~6.9 ms, **p95 ~12.5 ms** (gate < 50 ms), max ~132 ms
+  (first-touch decode)
+- tier-0 full-res 4K refine: p50 ~77 ms (once per pause, async in the UI)
+- memory: high-water growth **~638 MB** (gate < 2.5 GB), cache bytes held at
+  the 512 MB budget with ~1 200 evictions over 660 seeks
+- proxy generation on the 4K fixture: ~6.5× realtime
+The suite's first run caught a real leak (autoreleased 4K CGImages piling up
+in the render loop, +5.5 GB); the provider now drains a pool per decode.
+
 CG-vs-GPU throughput head-to-head (ReVoice
 `PromoCoreGoldenTests.testStillsBatchThroughput_GPUvsCG`, permanent gate):
 30-frame stills batch @1080p canvas, rotated/bordered/rounded 2560×1440

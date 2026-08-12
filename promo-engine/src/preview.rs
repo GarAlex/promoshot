@@ -214,6 +214,31 @@ impl PreviewEngine {
         Some(id)
     }
 
+    /// Decodes-ahead: fetches (and caches) the frames every visible video
+    /// layer needs at `time`, without composing. Playback calls this for
+    /// upcoming ticks so the render itself is all cache hits. Returns how
+    /// many frames were newly fetched.
+    pub fn prefetch(&mut self, time: f64) -> usize {
+        let layers: Vec<ProjectLayer> = self.meta.layers.clone().unwrap_or_default();
+        let mut fetched = 0;
+        for layer in &layers {
+            if layer.kind != ProjectLayerKind::Video || !tl::layer_is_visible(layer, time) {
+                continue;
+            }
+            let local = tl::layer_local_time(layer, time);
+            let source_time = match self.resource_for(layer) {
+                Some(res) => tl::source_time_for_local(res, local),
+                None => local,
+            };
+            let before = self.misses;
+            let _ = self.frame(&layer.id, source_time, self.preferred_tier);
+            if self.misses > before {
+                fetched += 1;
+            }
+        }
+        fetched
+    }
+
     /// Renders the composition at `time` into `output` (BGRA IOSurface of
     /// `output_width` × `output_height`; the canvas is aspect-fit inside).
     pub fn render(
@@ -493,6 +518,21 @@ mod tests {
         assert_eq!(stats.hits, 2, "two cache hits");
         assert_eq!(state.lock().unwrap().requests.len(), 1);
         assert_eq!(stats.cached_bytes, 32 * 32 * 4);
+    }
+
+    #[test]
+    fn prefetch_makes_render_all_hits() {
+        let meta = fixture_meta(64.0);
+        let (mut engine, state) =
+            make_engine(meta, vec![("VID".into(), [255, 128, 0, 255], 32)], 64 << 20);
+        assert_eq!(engine.prefetch(3.0), 1, "one video frame fetched");
+        assert_eq!(engine.prefetch(3.0), 0, "already cached");
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(3.0, out.raw(), 64, 64).unwrap();
+        let stats = engine.stats();
+        assert_eq!(stats.misses, 1, "render decoded nothing new");
+        assert_eq!(stats.hits, 2, "prefetch re-check + render hit");
+        assert_eq!(state.lock().unwrap().requests.len(), 1);
     }
 
     #[test]

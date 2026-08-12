@@ -112,6 +112,10 @@ int32_t promo_preview_render(PromoPreview *preview, double time,
                              void *output_surface, int32_t width,
                              int32_t height);
 
+/* Decodes-ahead for `time` (fills the frame cache without composing).
+ * Returns newly fetched frame count, or -1 on bad handle. */
+int32_t promo_preview_prefetch(PromoPreview *preview, double time);
+
 /* Proxy tier for subsequent video-frame requests (0 = full res; raise while
  * scrubbing, drop back for the paused full-res refine). Cache entries are
  * keyed per tier. 0 ok, -1 bad handle. */

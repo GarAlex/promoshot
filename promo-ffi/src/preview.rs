@@ -83,6 +83,17 @@ pub extern "C" fn promo_preview_render(
     }
 }
 
+/// Decodes-ahead for `time` (fills the frame cache without composing).
+/// Returns the number of newly fetched frames, or -1 on bad handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_preview_prefetch(handle: *mut PreviewHandle, time: c_double) -> c_int {
+    let Some(handle) = (unsafe { handle.as_mut() }) else {
+        return -1;
+    };
+    handle.engine.prefetch(time) as c_int
+}
+
 /// Sets the proxy tier for subsequent video-frame requests (0 = full
 /// resolution; the host raises it while scrubbing and drops it back for the
 /// paused full-res refine). 0 ok, -1 bad handle.
