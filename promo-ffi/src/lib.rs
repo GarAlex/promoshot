@@ -1,6 +1,9 @@
 //! promo-ffi: the C ABI the host apps link. Handle-based, additive-only
 //! until Phase 5 (see RUST-CORE-PLAN.md §3/§7 in the app repo).
 
+pub mod project;
+pub use project::*;
+
 use std::ffi::{c_char, c_double, c_int};
 
 /// Version string for the host gate test. Static storage — never freed.

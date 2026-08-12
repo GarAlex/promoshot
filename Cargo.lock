@@ -808,6 +808,8 @@ dependencies = [
  "promo-engine",
  "promo-gpu",
  "promo-model",
+ "promo-timeline",
+ "serde_json",
 ]
 
 [[package]]
