@@ -196,17 +196,39 @@ fn as_bytes<T: Copy>(v: &T) -> &[u8] {
 /// IOSurface on macOS, or uploaded from CPU bytes in tests / other hosts).
 pub struct InputTexture {
     view: wgpu::TextureView,
+    /// Identity for bind-group caching (monotonic, never reused).
+    id: u64,
     // Keeps the wgpu texture (and through it the Metal adoption) alive.
     _texture: wgpu::Texture,
 }
 
-/// The persistent compositor: pipeline + sampler, reused across frames.
+fn next_texture_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Uniform stride for the per-quad block, padded to the alignment every
+/// backend accepts for dynamic offsets (256 B).
+const QUAD_STRIDE: u64 = 256;
+
+/// The persistent compositor: pipeline, sampler, and the GPU resources
+/// reused across frames. Creating a uniform buffer and a bind group per
+/// quad per frame (the first implementation) costs millions of driver
+/// allocations across a long export; these are allocated once and reused.
 pub struct Compositor {
     pipeline: wgpu::RenderPipeline,
-    globals_layout: wgpu::BindGroupLayout,
     quad_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     dummy: InputTexture,
+    globals_buf: wgpu::Buffer,
+    globals_bind: wgpu::BindGroup,
+    /// Quad uniforms for a whole frame, one QUAD_STRIDE block per quad.
+    quad_buf: wgpu::Buffer,
+    quad_capacity: usize,
+    /// One bind group per input texture (keyed by texture identity), valid
+    /// until `quad_buf` is reallocated.
+    binds: std::collections::HashMap<u64, wgpu::BindGroup>,
 }
 
 impl Compositor {
@@ -238,8 +260,10 @@ impl Compositor {
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                        has_dynamic_offset: true,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<QuadRaw>() as u64
+                        ),
                     },
                     count: None,
                 },
@@ -320,13 +344,88 @@ impl Compositor {
 
         let dummy = Self::upload_texture(ctx, &[255, 255, 255, 255], 1, 1)?;
 
+        let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("globals"),
+            size: std::mem::size_of::<GlobalsRaw>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let globals_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("globals"),
+            layout: &globals_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: globals_buf.as_entire_binding(),
+            }],
+        });
+        let quad_capacity = 32;
+        let quad_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("quads"),
+            size: QUAD_STRIDE * quad_capacity as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Ok(Self {
             pipeline,
-            globals_layout,
             quad_layout,
             sampler,
             dummy,
+            globals_buf,
+            globals_bind,
+            quad_buf,
+            quad_capacity,
+            binds: std::collections::HashMap::new(),
         })
+    }
+
+    /// Bind group for one input texture, created once and reused.
+    fn bind_group_for(&mut self, ctx: &GpuContext, texture: Option<&InputTexture>) -> u64 {
+        let texture = texture.unwrap_or(&self.dummy);
+        let id = texture.id;
+        if !self.binds.contains_key(&id) {
+            let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("quad"),
+                layout: &self.quad_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &self.quad_buf,
+                            offset: 0,
+                            size: wgpu::BufferSize::new(std::mem::size_of::<QuadRaw>() as u64),
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
+            self.binds.insert(id, bind);
+        }
+        id
+    }
+
+    /// Grows the per-frame quad uniform buffer (invalidates cached bind
+    /// groups, which reference it).
+    fn ensure_quad_capacity(&mut self, ctx: &GpuContext, needed: usize) {
+        if needed <= self.quad_capacity {
+            return;
+        }
+        let capacity = needed.next_power_of_two();
+        self.quad_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("quads"),
+            size: QUAD_STRIDE * capacity as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.quad_capacity = capacity;
+        self.binds.clear();
     }
 
     /// Uploads tightly-packed premultiplied BGRA bytes as a sampleable
@@ -376,6 +475,7 @@ impl Compositor {
         let view = texture.create_view(&Default::default());
         Ok(InputTexture {
             view,
+            id: next_texture_id(),
             _texture: texture,
         })
     }
@@ -398,6 +498,7 @@ impl Compositor {
         let view = texture.create_view(&Default::default());
         Ok(InputTexture {
             view,
+            id: next_texture_id(),
             _texture: texture,
         })
     }
@@ -405,7 +506,7 @@ impl Compositor {
     /// Renders `scene` into `output` (a render-attachment texture of the
     /// scene's output size) and waits for completion.
     pub fn compose_to_texture(
-        &self,
+        &mut self,
         ctx: &GpuContext,
         scene: &Scene,
         textures: &[InputTexture],
@@ -419,13 +520,12 @@ impl Compositor {
     /// keep textures in a cache (the preview engine) compose without moving
     /// or cloning them.
     pub fn compose_to_texture_borrowed(
-        &self,
+        &mut self,
         ctx: &GpuContext,
         scene: &Scene,
         textures: &[&InputTexture],
         output: &wgpu::Texture,
     ) -> Result<(), GpuError> {
-        let device = &ctx.device;
         let (ow, oh) = (scene.output_width as f64, scene.output_height as f64);
         let (cw, ch) = (scene.canvas_width, scene.canvas_height);
         // Letterbox transform (same math as VideoComposer.letterboxTransform).
@@ -435,26 +535,12 @@ impl Compositor {
         } else {
             (1.0, 0.0, 0.0)
         };
-
         let globals = GlobalsRaw {
             fit: [scale as f32, scale as f32, off_x as f32, off_y as f32],
             output_size: [ow as f32, oh as f32, 0.0, 0.0],
         };
-        let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("globals"),
-            size: std::mem::size_of::<GlobalsRaw>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        ctx.queue.write_buffer(&globals_buf, 0, as_bytes(&globals));
-        let globals_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("globals"),
-            layout: &self.globals_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals_buf.as_entire_binding(),
-            }],
-        });
+        ctx.queue
+            .write_buffer(&self.globals_buf, 0, as_bytes(&globals));
 
         // Background canvas rect renders as the first solid quad.
         let mut quads = Vec::with_capacity(scene.quads.len() + 1);
@@ -465,9 +551,12 @@ impl Compositor {
             ..Default::default()
         });
         quads.extend_from_slice(&scene.quads);
+        self.ensure_quad_capacity(ctx, quads.len());
 
-        let mut binds = Vec::with_capacity(quads.len());
-        for q in &quads {
+        // One staging write for the whole frame's quad uniforms.
+        let mut staging = vec![0u8; QUAD_STRIDE as usize * quads.len()];
+        let mut binds: Vec<u64> = Vec::with_capacity(quads.len());
+        for (i, q) in quads.iter().enumerate() {
             let rot = q.rotation_deg.to_radians();
             let raw = QuadRaw {
                 rect: [
@@ -491,47 +580,25 @@ impl Compositor {
                     0.0,
                 ],
             };
-            let buf = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("quad"),
-                size: std::mem::size_of::<QuadRaw>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            ctx.queue.write_buffer(&buf, 0, as_bytes(&raw));
-            let view = match q.texture {
-                Some(i) => {
-                    &textures
-                        .get(i)
-                        .ok_or_else(|| GpuError::Import(format!("texture index {i} out of range")))?
-                        .view
-                }
-                None => &self.dummy.view,
+            let offset = QUAD_STRIDE as usize * i;
+            staging[offset..offset + std::mem::size_of::<QuadRaw>()]
+                .copy_from_slice(as_bytes(&raw));
+            let texture = match q.texture {
+                Some(index) => Some(*textures.get(index).ok_or_else(|| {
+                    GpuError::Import(format!("texture index {index} out of range"))
+                })?),
+                None => None,
             };
-            let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("quad"),
-                layout: &self.quad_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buf.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            });
-            binds.push((buf, bind));
+            binds.push(self.bind_group_for(ctx, texture));
         }
+        ctx.queue.write_buffer(&self.quad_buf, 0, &staging);
 
         let out_view = output.create_view(&Default::default());
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("compose"),
-        });
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("compose"),
+            });
         {
             let bars = scene.bars_rgba;
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -554,9 +621,10 @@ impl Compositor {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &globals_bind, &[]);
-            for (_, bind) in &binds {
-                pass.set_bind_group(1, bind, &[]);
+            pass.set_bind_group(0, &self.globals_bind, &[]);
+            for (i, id) in binds.iter().enumerate() {
+                let bind = self.binds.get(id).expect("bind group cached above");
+                pass.set_bind_group(1, bind, &[(QUAD_STRIDE as usize * i) as u32]);
                 pass.draw(0..4, 0..1);
             }
         }
@@ -568,7 +636,7 @@ impl Compositor {
     /// Renders `scene` into an IOSurface-backed output (zero-copy, macOS).
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn compose_to_iosurface(
-        &self,
+        &mut self,
         ctx: &GpuContext,
         scene: &Scene,
         textures: &[InputTexture],
@@ -581,7 +649,7 @@ impl Compositor {
     /// Borrowed-texture variant of `compose_to_iosurface` (macOS).
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn compose_to_iosurface_borrowed(
-        &self,
+        &mut self,
         ctx: &GpuContext,
         scene: &Scene,
         textures: &[&InputTexture],
@@ -665,7 +733,7 @@ mod tests {
     }
 
     fn compose(scene: &Scene, textures: &[InputTexture], ctx: &GpuContext) -> Vec<u8> {
-        let comp = Compositor::new(ctx).expect("compositor");
+        let mut comp = Compositor::new(ctx).expect("compositor");
         let out =
             OwnedIoSurface::new_bgra(scene.output_width as usize, scene.output_height as usize)
                 .expect("output surface");

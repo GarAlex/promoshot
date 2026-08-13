@@ -142,6 +142,16 @@ impl PreviewEngine {
         self.preferred_tier
     }
 
+    /// Re-targets the frame-cache budget, dropping LRU frames if it shrank.
+    pub fn set_cache_budget(&mut self, bytes: usize) {
+        for victim in self.governor.set_budget(bytes) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+    }
+
     pub fn stats(&self) -> PreviewStats {
         PreviewStats {
             hits: self.hits,

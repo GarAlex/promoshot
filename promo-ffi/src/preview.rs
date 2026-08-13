@@ -83,6 +83,18 @@ pub extern "C" fn promo_preview_render(
     }
 }
 
+/// Re-targets the frame-cache budget (bytes). The host sizes this from the
+/// machine's RAM and shrinks it under memory pressure. 0 ok, -1 bad handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_preview_set_cache_budget(handle: *mut PreviewHandle, bytes: u64) -> c_int {
+    let Some(handle) = (unsafe { handle.as_mut() }) else {
+        return -1;
+    };
+    handle.engine.set_cache_budget(bytes as usize);
+    0
+}
+
 /// Decodes-ahead for `time` (fills the frame cache without composing).
 /// Returns the number of newly fetched frames, or -1 on bad handle.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

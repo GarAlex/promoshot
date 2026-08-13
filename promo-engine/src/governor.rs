@@ -35,6 +35,27 @@ impl MemoryGovernor {
         }
     }
 
+    /// Re-targets the budget (e.g. the host learned how much RAM the
+    /// machine has, or the OS signalled memory pressure). Returns the
+    /// entries to drop, LRU first, so the new budget is respected.
+    #[must_use]
+    pub fn set_budget(&mut self, budget_bytes: usize) -> Vec<EntryId> {
+        self.budget = budget_bytes;
+        let mut victims = Vec::new();
+        while self.used > self.budget && !self.entries.is_empty() {
+            let (&victim, _) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, e)| e.last_used)
+                .expect("non-empty");
+            let entry = self.entries.remove(&victim).expect("present");
+            self.used -= entry.bytes;
+            self.evictions += 1;
+            victims.push(victim);
+        }
+        victims
+    }
+
     pub fn budget(&self) -> usize {
         self.budget
     }
@@ -129,6 +150,22 @@ mod tests {
         assert!(g.admit(1, 90).is_empty());
         assert!(g.admit(1, 30).is_empty());
         assert_eq!(g.used(), 30);
+    }
+
+    #[test]
+    fn shrinking_budget_evicts_lru_immediately() {
+        let mut g = MemoryGovernor::new(300);
+        assert!(g.admit(1, 100).is_empty());
+        assert!(g.admit(2, 100).is_empty());
+        assert!(g.admit(3, 100).is_empty());
+        g.touch(3);
+        g.touch(2);
+        let victims = g.set_budget(200);
+        assert_eq!(victims, vec![1], "least-recently-used goes first");
+        assert_eq!(g.used(), 200);
+        assert_eq!(g.budget(), 200);
+        // Growing the budget evicts nothing.
+        assert!(g.set_budget(1_000).is_empty());
     }
 
     #[test]

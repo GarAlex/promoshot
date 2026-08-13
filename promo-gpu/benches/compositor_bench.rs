@@ -10,7 +10,7 @@ fn compositor(c: &mut Criterion) {
         use promo_gpu::iosurface::OwnedIoSurface;
 
         let ctx = promo_gpu::GpuContext::new().expect("gpu");
-        let comp = Compositor::new(&ctx).expect("compositor");
+        let mut comp = Compositor::new(&ctx).expect("compositor");
 
         // Three 1080p-ish inputs adopted from IOSurfaces, like production.
         let inputs: Vec<OwnedIoSurface> = (0..3)

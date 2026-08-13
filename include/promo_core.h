@@ -112,6 +112,10 @@ int32_t promo_preview_render(PromoPreview *preview, double time,
                              void *output_surface, int32_t width,
                              int32_t height);
 
+/* Re-targets the frame-cache budget (bytes) — size it from the machine's
+ * RAM and shrink it under memory pressure. 0 ok, -1 bad handle. */
+int32_t promo_preview_set_cache_budget(PromoPreview *preview, uint64_t bytes);
+
 /* Decodes-ahead for `time` (fills the frame cache without composing).
  * Returns newly fetched frame count, or -1 on bad handle. */
 int32_t promo_preview_prefetch(PromoPreview *preview, double time);
