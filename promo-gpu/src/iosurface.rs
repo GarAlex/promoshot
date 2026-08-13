@@ -25,6 +25,8 @@ extern "C" {
     fn IOSurfaceGetBytesPerRow(buffer: IOSurfaceRef) -> usize;
     fn IOSurfaceGetWidth(buffer: IOSurfaceRef) -> usize;
     fn IOSurfaceGetHeight(buffer: IOSurfaceRef) -> usize;
+    /// Stable per-surface identity; never recycled while a retain is held.
+    pub fn IOSurfaceGetID(buffer: IOSurfaceRef) -> u32;
 }
 
 const K_IOSURFACE_LOCK_READ_ONLY: u32 = 1;

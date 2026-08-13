@@ -86,6 +86,19 @@ int32_t promo_compose_frame(PromoCompositor *compositor, const char *scene_json,
                             const int32_t *surface_heights,
                             size_t surface_count, void *output_surface);
 
+/* Binary-scene variant of promo_compose_frame (the 30-calls-per-output-second
+ * export path; skips JSON). header: 12 doubles — canvasW, canvasH,
+ * backgroundRGBA[4], outputW, outputH, barsRGBA[4]. quads: quad_count x 17
+ * doubles — textureIndex (-1 = solid), rect[4], rotation, cornerRadius,
+ * borderWidth, borderRGBA[4], solidRGBA[4], opacity. Same surface contract
+ * and return codes as promo_compose_frame. */
+int32_t promo_compose_frame_raw(PromoCompositor *compositor,
+                                const double *header, const double *quads,
+                                size_t quad_count, const void *const *surfaces,
+                                const int32_t *surface_widths,
+                                const int32_t *surface_heights,
+                                size_t surface_count, void *output_surface);
+
 /* ---- Phase 3: preview engine (macOS) ------------------------------------ */
 
 typedef struct PromoPreview PromoPreview;

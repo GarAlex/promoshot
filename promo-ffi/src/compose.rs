@@ -130,7 +130,10 @@ pub extern "C" fn promo_compose_frame(
         if surface.is_null() || w <= 0 || h <= 0 {
             return -3;
         }
-        match Compositor::import_iosurface(handle.ctx, surface, w as u32, h as u32) {
+        match handle
+            .compositor
+            .import_iosurface_cached(handle.ctx, surface, w as u32, h as u32)
+        {
             Ok(t) => textures.push(t),
             Err(_) => return -3,
         }
@@ -159,6 +162,104 @@ pub extern "C" fn promo_compose_frame(
             .collect(),
     };
     // Out-of-range texture indices fail the render below with Import.
+    match handle
+        .compositor
+        .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
+    {
+        Ok(()) => 0,
+        Err(promo_gpu::GpuError::Import(_)) => -3,
+        Err(_) => -4,
+    }
+}
+
+/// Doubles per quad in `promo_compose_frame_raw`'s flat layout.
+pub const QUAD_DOUBLES: usize = 17;
+/// Doubles in the frame header.
+pub const HEADER_DOUBLES: usize = 12;
+
+/// Binary-scene variant of `promo_compose_frame` — the hot export path calls
+/// this 30× per output second, and JSON encode (host) + parse (core) was
+/// measurable per-frame work that scales with layer count.
+///
+/// `header`: 12 doubles — canvasW, canvasH, backgroundRGBA[4], outputW,
+/// outputH, barsRGBA[4].
+/// `quads`: `quad_count` × 17 doubles — textureIndex (-1 = solid fill),
+/// rect[4], rotation, cornerRadius, borderWidth, borderRGBA[4],
+/// solidRGBA[4], opacity.
+/// Surfaces/output and return codes as in `promo_compose_frame`.
+///
+/// # Safety
+/// Pointers must be valid for the stated lengths; surfaces must be BGRA
+/// IOSurfaceRefs (contract documented in promo_core.h).
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // documented FFI contract, mirrors promo_compose_frame
+pub extern "C" fn promo_compose_frame_raw(
+    handle: *mut CompositorHandle,
+    header: *const f64,
+    quads: *const f64,
+    quad_count: usize,
+    surfaces: *const *mut c_void,
+    surface_widths: *const c_int,
+    surface_heights: *const c_int,
+    surface_count: usize,
+    output_surface: *mut c_void,
+) -> c_int {
+    let Some(handle) = (unsafe { handle.as_mut() }) else {
+        return -1;
+    };
+    if header.is_null() || output_surface.is_null() || (quad_count > 0 && quads.is_null()) {
+        return -1;
+    }
+    if surface_count > 0
+        && (surfaces.is_null() || surface_widths.is_null() || surface_heights.is_null())
+    {
+        return -1;
+    }
+    let h = unsafe { std::slice::from_raw_parts(header, HEADER_DOUBLES) };
+    let q = unsafe { std::slice::from_raw_parts(quads, quad_count * QUAD_DOUBLES) };
+
+    let mut textures: Vec<InputTexture> = Vec::with_capacity(surface_count);
+    for i in 0..surface_count {
+        let (surface, w, hh) = unsafe {
+            (
+                *surfaces.add(i),
+                *surface_widths.add(i),
+                *surface_heights.add(i),
+            )
+        };
+        if surface.is_null() || w <= 0 || hh <= 0 {
+            return -3;
+        }
+        match handle
+            .compositor
+            .import_iosurface_cached(handle.ctx, surface, w as u32, hh as u32)
+        {
+            Ok(t) => textures.push(t),
+            Err(_) => return -3,
+        }
+    }
+
+    let scene = Scene {
+        canvas_width: h[0],
+        canvas_height: h[1],
+        background_rgba: [h[2] as f32, h[3] as f32, h[4] as f32, h[5] as f32],
+        output_width: h[6] as u32,
+        output_height: h[7] as u32,
+        bars_rgba: [h[8] as f32, h[9] as f32, h[10] as f32, h[11] as f32],
+        quads: q
+            .chunks_exact(QUAD_DOUBLES)
+            .map(|c| SceneQuad {
+                texture: if c[0] < 0.0 { None } else { Some(c[0] as usize) },
+                rect: [c[1], c[2], c[3], c[4]],
+                rotation_deg: c[5],
+                corner_radius: c[6],
+                border_width: c[7],
+                border_rgba: [c[8] as f32, c[9] as f32, c[10] as f32, c[11] as f32],
+                solid_rgba: [c[12] as f32, c[13] as f32, c[14] as f32, c[15] as f32],
+                opacity: c[16] as f32,
+            })
+            .collect(),
+    };
     match handle
         .compositor
         .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
@@ -218,6 +319,78 @@ mod tests {
         assert_eq!(at(1, 5), [255, 0, 0, 255], "left bar blue");
         assert_eq!(at(6, 1), [0, 255, 0, 255], "canvas green");
         assert_eq!(at(10, 5), [0, 0, 255, 255], "quad red");
+
+        promo_compositor_free(handle);
+    }
+
+    /// The binary scene path must render exactly what the JSON path renders.
+    #[test]
+    fn compose_raw_matches_json() {
+        let handle = promo_compositor_new();
+        assert!(!handle.is_null(), "compositor");
+
+        let input = OwnedIoSurface::new_bgra(4, 4).expect("input");
+        input.write_pixels(&[0u8, 0, 255, 255].repeat(16)).unwrap(); // red
+        let output = OwnedIoSurface::new_bgra(20, 10).expect("output");
+
+        // Same scene as compose_through_ffi, flat-encoded.
+        let header: [f64; HEADER_DOUBLES] = [
+            10.0, 10.0, // canvas
+            0.0, 1.0, 0.0, 1.0, // background green
+            20.0, 10.0, // output
+            0.0, 0.0, 1.0, 1.0, // bars blue
+        ];
+        let mut quad = [0.0f64; QUAD_DOUBLES];
+        quad[0] = 0.0; // texture 0
+        quad[1..5].copy_from_slice(&[2.5, 2.5, 5.0, 5.0]);
+        quad[16] = 1.0; // opacity
+
+        let surfaces = [input.raw()];
+        let widths = [4i32];
+        let heights = [4i32];
+        let rc = promo_compose_frame_raw(
+            handle,
+            header.as_ptr(),
+            quad.as_ptr(),
+            1,
+            surfaces.as_ptr(),
+            widths.as_ptr(),
+            heights.as_ptr(),
+            1,
+            output.raw(),
+        );
+        assert_eq!(rc, 0, "raw compose rc");
+
+        let px = output.read_pixels().unwrap();
+        let at = |x: usize, y: usize| {
+            let i = (y * 20 + x) * 4;
+            [px[i], px[i + 1], px[i + 2], px[i + 3]]
+        };
+        assert_eq!(at(1, 5), [255, 0, 0, 255], "left bar blue");
+        assert_eq!(at(6, 1), [0, 255, 0, 255], "canvas green");
+        assert_eq!(at(10, 5), [0, 0, 255, 255], "quad red");
+
+        // Solid quad (-1 texture) over the top-left corner.
+        let mut solid = [0.0f64; QUAD_DOUBLES];
+        solid[0] = -1.0;
+        solid[1..5].copy_from_slice(&[0.0, 0.0, 2.0, 2.0]);
+        solid[12..16].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]); // white
+        solid[16] = 1.0;
+        let rc = promo_compose_frame_raw(
+            handle,
+            header.as_ptr(),
+            solid.as_ptr(),
+            1,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+            output.raw(),
+        );
+        assert_eq!(rc, 0, "solid raw compose rc");
+        let px = output.read_pixels().unwrap();
+        let i = (1 * 20 + 6) * 4;
+        assert_eq!(&px[i..i + 4], &[255, 255, 255, 255], "solid white quad");
 
         promo_compositor_free(handle);
     }

@@ -194,12 +194,15 @@ fn as_bytes<T: Copy>(v: &T) -> &[u8] {
 
 /// An input texture the compositor can sample (adopted zero-copy from an
 /// IOSurface on macOS, or uploaded from CPU bytes in tests / other hosts).
+/// Clonable (Arc-backed) because the compositor's adoption cache hands the
+/// same texture out across frames; wgpu 23 resources aren't Clone themselves.
+#[derive(Clone)]
 pub struct InputTexture {
-    view: wgpu::TextureView,
+    view: std::sync::Arc<wgpu::TextureView>,
     /// Identity for bind-group caching (monotonic, never reused).
     id: u64,
     // Keeps the wgpu texture (and through it the Metal adoption) alive.
-    _texture: wgpu::Texture,
+    _texture: std::sync::Arc<wgpu::Texture>,
 }
 
 fn next_texture_id() -> u64 {
@@ -234,6 +237,42 @@ pub struct Compositor {
     binds: std::collections::HashMap<u64, wgpu::BindGroup>,
     /// Insertion order for eviction.
     bind_order: std::collections::VecDeque<u64>,
+    /// IOSurface→texture adoption cache (macOS/iOS), keyed by IOSurfaceID +
+    /// render-attachment flag. Adopting is a per-call Metal object creation
+    /// (~100 µs each) that used to run for EVERY input surface of EVERY
+    /// frame; static images, the decoder's reusable conversion buffer, and
+    /// the writer pool's recycled output buffers all re-adopt the same
+    /// surfaces, so a cache turns per-frame imports into lookups — and keeps
+    /// texture ids stable so the bind-group cache survives across frames.
+    /// Cached surfaces are CFRetained until eviction (LRU, bounded).
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    imports: std::collections::HashMap<(u32, bool), CachedImport>,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    import_order: std::collections::VecDeque<(u32, bool)>,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    import_hits: u64,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    import_misses: u64,
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+struct CachedImport {
+    input: InputTexture,
+    /// The adopted texture again, for render-attachment entries.
+    texture: std::sync::Arc<wgpu::Texture>,
+    width: u32,
+    height: u32,
+    /// CFRetained; released on eviction/drop.
+    surface: crate::iosurface::IOSurfaceRef,
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+impl Drop for Compositor {
+    fn drop(&mut self) {
+        for (_, entry) in self.imports.drain() {
+            unsafe { core_foundation::base::CFRelease(entry.surface as _) };
+        }
+    }
 }
 
 impl Compositor {
@@ -382,6 +421,14 @@ impl Compositor {
             quad_capacity,
             binds: std::collections::HashMap::new(),
             bind_order: std::collections::VecDeque::new(),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            imports: std::collections::HashMap::new(),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            import_order: std::collections::VecDeque::new(),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            import_hits: 0,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            import_misses: 0,
         })
     }
 
@@ -494,9 +541,9 @@ impl Compositor {
         );
         let view = texture.create_view(&Default::default());
         Ok(InputTexture {
-            view,
+            view: std::sync::Arc::new(view),
             id: next_texture_id(),
-            _texture: texture,
+            _texture: std::sync::Arc::new(texture),
         })
     }
 
@@ -517,9 +564,9 @@ impl Compositor {
         )?;
         let view = texture.create_view(&Default::default());
         Ok(InputTexture {
-            view,
+            view: std::sync::Arc::new(view),
             id: next_texture_id(),
-            _texture: texture,
+            _texture: std::sync::Arc::new(texture),
         })
     }
 
@@ -676,14 +723,96 @@ impl Compositor {
         textures: &[&InputTexture],
         output: crate::iosurface::IOSurfaceRef,
     ) -> Result<(), GpuError> {
-        let texture = adopt_iosurface(
+        let texture = self.adopt_cached(
             ctx,
             output,
             scene.output_width,
             scene.output_height,
-            wgpu::TextureUsages::RENDER_ATTACHMENT,
-        )?;
+            true,
+        )?.1;
         self.compose_to_texture_borrowed(ctx, scene, textures, &texture)
+    }
+
+    /// Cached IOSurface adoption for sampling. Repeat calls with the same
+    /// surface return the SAME texture identity, so downstream bind groups
+    /// stay valid across frames; the adoption is zero-copy, so cached
+    /// textures always show the surface's current contents.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub fn import_iosurface_cached(
+        &mut self,
+        ctx: &GpuContext,
+        surface: crate::iosurface::IOSurfaceRef,
+        width: u32,
+        height: u32,
+    ) -> Result<InputTexture, GpuError> {
+        Ok(self.adopt_cached(ctx, surface, width, height, false)?.0)
+    }
+
+    /// (hits, misses) of the adoption cache — perf gates.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub fn import_cache_stats(&self) -> (u64, u64) {
+        (self.import_hits, self.import_misses)
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    fn adopt_cached(
+        &mut self,
+        ctx: &GpuContext,
+        surface: crate::iosurface::IOSurfaceRef,
+        width: u32,
+        height: u32,
+        render_attachment: bool,
+    ) -> Result<(InputTexture, std::sync::Arc<wgpu::Texture>), GpuError> {
+        // A cached ID can't be stale: entries CFRetain their surface, and the
+        // OS never recycles an ID while a retain is outstanding.
+        let key = (unsafe { crate::iosurface::IOSurfaceGetID(surface) }, render_attachment);
+        if let Some(entry) = self.imports.get(&key) {
+            if entry.width == width && entry.height == height {
+                self.import_hits += 1;
+                if let Some(pos) = self.import_order.iter().position(|k| *k == key) {
+                    self.import_order.remove(pos);
+                }
+                self.import_order.push_back(key);
+                return Ok((entry.input.clone(), entry.texture.clone()));
+            }
+        }
+        self.import_misses += 1;
+        let usage = if render_attachment {
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+        } else {
+            wgpu::TextureUsages::TEXTURE_BINDING
+        };
+        let texture = std::sync::Arc::new(adopt_iosurface(ctx, surface, width, height, usage)?);
+        let input = InputTexture {
+            view: std::sync::Arc::new(texture.create_view(&Default::default())),
+            id: next_texture_id(),
+            _texture: texture.clone(),
+        };
+        unsafe { core_foundation::base::CFRetain(surface as _) };
+        if let Some(old) = self.imports.insert(
+            key,
+            CachedImport {
+                input: input.clone(),
+                texture: texture.clone(),
+                width,
+                height,
+                surface,
+            },
+        ) {
+            // Same key, different size (surface was replaced): release the
+            // stale retain; the key is already in import_order.
+            unsafe { core_foundation::base::CFRelease(old.surface as _) };
+        } else {
+            self.import_order.push_back(key);
+        }
+        const MAX_IMPORTS: usize = 256;
+        while self.imports.len() > MAX_IMPORTS {
+            let Some(victim) = self.import_order.pop_front() else { break };
+            if let Some(entry) = self.imports.remove(&victim) {
+                unsafe { core_foundation::base::CFRelease(entry.surface as _) };
+            }
+        }
+        Ok((input, texture))
     }
 }
 
@@ -855,6 +984,54 @@ mod tests {
         };
         let pixels = compose(&scene, &[tex], &ctx);
         assert_eq!(px(&pixels, 10, 5, 5), [255, 0, 255, 255], "magenta sampled");
+    }
+
+    /// Re-composing with the same IOSurfaces must reuse cached adoptions
+    /// (input AND output) instead of re-creating Metal textures per frame,
+    /// while live surface contents still flow through the zero-copy wrap.
+    #[test]
+    fn iosurface_adoption_is_cached_across_frames() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut comp = Compositor::new(&ctx).expect("compositor");
+        let input = OwnedIoSurface::new_bgra(4, 4).expect("input");
+        input.write_pixels(&[255, 0, 255, 255].repeat(16)).expect("write");
+        let out = OwnedIoSurface::new_bgra(8, 8).expect("out");
+        let scene = Scene {
+            canvas_width: 8.0,
+            canvas_height: 8.0,
+            background_rgba: [0.0, 0.0, 0.0, 1.0],
+            output_width: 8,
+            output_height: 8,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                texture: Some(0),
+                rect: [0.0, 0.0, 8.0, 8.0],
+                ..Default::default()
+            }],
+        };
+
+        for frame in 0..3 {
+            let tex = comp
+                .import_iosurface_cached(&ctx, input.raw(), 4, 4)
+                .expect("import");
+            comp.compose_to_iosurface(&ctx, &scene, std::slice::from_ref(&tex), out.raw())
+                .expect("compose");
+            let px = out.read_pixels().expect("read");
+            assert_eq!(&px[0..4], &[255, 0, 255, 255], "frame {frame} magenta");
+        }
+        let (hits, misses) = comp.import_cache_stats();
+        assert_eq!(misses, 2, "one input + one output adoption, ever");
+        assert_eq!(hits, 4, "frames 2 and 3 reuse both adoptions");
+
+        // Contents written after caching must show through (live wrap).
+        input.write_pixels(&[0, 255, 0, 255].repeat(16)).expect("write2");
+        let tex = comp
+            .import_iosurface_cached(&ctx, input.raw(), 4, 4)
+            .expect("import");
+        comp.compose_to_iosurface(&ctx, &scene, std::slice::from_ref(&tex), out.raw())
+            .expect("compose");
+        let px = out.read_pixels().expect("read");
+        assert_eq!(&px[0..4], &[0, 255, 0, 255], "updated contents sampled");
     }
 
     /// The bind-group cache must not grow without bound: each entry retains
