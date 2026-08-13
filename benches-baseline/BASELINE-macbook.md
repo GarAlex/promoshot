@@ -136,3 +136,32 @@ release-built core, debug-built Swift test host, 20 000 calls of
 `layer.transform` on the synthetic fixture's 3-key video layer):
 Swift ~1.17 µs/call vs Rust-through-FFI ~0.22 µs/call — **Rust 5.2× faster**;
 the "Rust must not be slower" P1 gate holds with an asserted 1.5× ceiling.
+
+## Realistic composition soak — 3 h timeline, 30 min scrub (2026-08-12)
+
+The app's actual workload, not a single giant clip: a 4K canvas with 280
+layers — 75 instances of a 400×400 screen-recording clip (looped resource),
+112 static-image instances, 56 SVG-annotation instances (imported through
+the app's `SVGImporter`), and a soundtrack every 5 minutes — each visual
+instance living 1–5 minutes and keyframe-animated between random canvas
+positions with zoom and rotation. **~5.2 visual layers composited per
+frame.** Deterministic (seeded), assets cached.
+(ReVoice `PromoCoreCompositionSoakTests`, gate run:
+`TEST_RUNNER_PROMO_COMP_SOAK_SECONDS=1800`.)
+
+| Metric | Result | Gate |
+|---|---|---|
+| tier-1 seek (125 720 seeks) | p50 **6.1 ms**, p95 **18.6 ms**, max 77.6 ms | < 50 ms p95 ✓ |
+| tier-0 full-res refine | p50 7.9 ms, p95 22.8 ms | — |
+| memory high-water growth | **263 MB** | < 2.5 GB ✓ |
+| frame cache | 536 MB held, 341 677 evictions, **230 564 hits / 342 039 misses (40% hit rate)** | at budget ✓ |
+| 4K still export | 142 ms/frame | — |
+| GIF export | 40 frames / 359 KB | — |
+| video export slice (4K→1080p + audio mux) | 2.12× realtime, 9 MB growth | ≥ 2× ✓ |
+
+Versus the single-4K-clip soak: harder per frame (5 layers with keyframe
+interpolation vs 1) — p95 18.6 ms vs 12.2 ms — but far better cached
+(40% hit rate vs 0%), because overlapping layers reuse the same static
+images. Tier-0 refine is 10× cheaper here (7.9 ms vs 77 ms): the assets are
+small, so full resolution costs little; the earlier number was dominated by
+decoding one 4K source frame.
