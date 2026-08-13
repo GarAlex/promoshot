@@ -86,19 +86,36 @@ int32_t promo_compose_frame(PromoCompositor *compositor, const char *scene_json,
                             const int32_t *surface_heights,
                             size_t surface_count, void *output_surface);
 
+/* An in-flight GPU submission (opaque); see promo_compositor_set_defer. */
+typedef struct PromoSubmissionToken PromoSubmissionToken;
+
 /* Binary-scene variant of promo_compose_frame (the 30-calls-per-output-second
  * export path; skips JSON). header: 12 doubles — canvasW, canvasH,
  * backgroundRGBA[4], outputW, outputH, barsRGBA[4]. quads: quad_count x 18
  * doubles — textureIndex (-1 = solid), rect[4], rotation, cornerRadius,
  * borderWidth, borderRGBA[4], solidRGBA[4], opacity, color709 (non-zero:
  * texture is BT.709-encoded video; the shader converts to sRGB after
- * sampling). Same surface contract and return codes as promo_compose_frame. */
+ * sampling). out_token (optional, may be NULL): with deferred completion on,
+ * receives the GPU fence — pass it to promo_submission_wait before reading
+ * output_surface. Same surface contract and return codes as
+ * promo_compose_frame. */
 int32_t promo_compose_frame_raw(PromoCompositor *compositor,
                                 const double *header, const double *quads,
                                 size_t quad_count, const void *const *surfaces,
                                 const int32_t *surface_widths,
                                 const int32_t *surface_heights,
-                                size_t surface_count, void *output_surface);
+                                size_t surface_count, void *output_surface,
+                                PromoSubmissionToken **out_token);
+
+/* Deferred completion: compose submits and returns a token instead of
+ * blocking on the GPU, so the caller can do other work (decode the next
+ * frame) while it renders. Only for pipelines that render and read on
+ * different threads. 0 ok, -1 bad handle. */
+int32_t promo_compositor_set_defer(PromoCompositor *compositor, int32_t defer);
+
+/* Blocks until the submission finishes and frees the token. NULL is a
+ * no-op. 0 ok, -1 no GPU. */
+int32_t promo_submission_wait(PromoSubmissionToken *token);
 
 /* ---- Phase 3: preview engine (macOS) ------------------------------------ */
 

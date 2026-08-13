@@ -5,7 +5,7 @@
 
 #![cfg(any(target_os = "macos", target_os = "ios"))]
 
-use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
+use promo_gpu::compositor::{Compositor, Fence, InputTexture, Scene, SceneQuad};
 use promo_gpu::GpuContext;
 use serde::Deserialize;
 use std::ffi::{c_char, c_int, c_void, CStr};
@@ -175,6 +175,45 @@ pub extern "C" fn promo_compose_frame(
     }
 }
 
+/// An in-flight GPU submission. Owned by the host between
+/// `promo_compose_frame_raw_deferred` and `promo_submission_wait`; waiting
+/// consumes it. Deliberately independent of the compositor handle so the
+/// thread that waits never touches compositor state the producer is mutating.
+pub struct SubmissionToken(Fence);
+
+/// Enables/disables deferred completion on a compositor. With it on,
+/// `promo_compose_frame_raw_deferred` returns a token instead of blocking;
+/// the caller must wait on that token before reading the output surface.
+/// 0 ok, -1 bad handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_compositor_set_defer(
+    handle: *mut CompositorHandle,
+    defer: c_int,
+) -> c_int {
+    let Some(handle) = (unsafe { handle.as_mut() }) else {
+        return -1;
+    };
+    handle.compositor.set_defer_completion(defer != 0);
+    0
+}
+
+/// Blocks until the submission completes, then frees the token. Passing NULL
+/// is a no-op (a compose that produced no fence). 0 ok, -1 no GPU.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_submission_wait(token: *mut SubmissionToken) -> c_int {
+    if token.is_null() {
+        return 0;
+    }
+    let token = unsafe { Box::from_raw(token) };
+    let Some(ctx) = GpuContext::shared() else {
+        return -1;
+    };
+    token.0.wait(ctx);
+    0
+}
+
 /// Doubles per quad in `promo_compose_frame_raw`'s flat layout.
 pub const QUAD_DOUBLES: usize = 18;
 /// Doubles in the frame header.
@@ -190,6 +229,10 @@ pub const HEADER_DOUBLES: usize = 12;
 /// rect[4], rotation, cornerRadius, borderWidth, borderRGBA[4],
 /// solidRGBA[4], opacity, color709 (non-zero: the texture is BT.709-encoded
 /// video and the shader converts to sRGB after sampling).
+/// `out_token` (optional): when the compositor has deferred completion on,
+/// receives a `SubmissionToken*` the caller MUST pass to
+/// `promo_submission_wait` before reading `output_surface` (NULL when the
+/// compose already blocked).
 /// Surfaces/output and return codes as in `promo_compose_frame`.
 ///
 /// # Safety
@@ -207,6 +250,7 @@ pub extern "C" fn promo_compose_frame_raw(
     surface_heights: *const c_int,
     surface_count: usize,
     output_surface: *mut c_void,
+    out_token: *mut *mut SubmissionToken,
 ) -> c_int {
     let Some(handle) = (unsafe { handle.as_mut() }) else {
         return -1;
@@ -269,7 +313,17 @@ pub extern "C" fn promo_compose_frame_raw(
         .compositor
         .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
     {
-        Ok(()) => 0,
+        Ok(()) => {
+            if !out_token.is_null() {
+                let token = handle
+                    .compositor
+                    .take_fence()
+                    .map(|f| Box::into_raw(Box::new(SubmissionToken(f))))
+                    .unwrap_or(std::ptr::null_mut());
+                unsafe { *out_token = token };
+            }
+            0
+        }
         Err(promo_gpu::GpuError::Import(_)) => -3,
         Err(_) => -4,
     }
@@ -363,6 +417,7 @@ mod tests {
             heights.as_ptr(),
             1,
             output.raw(),
+            std::ptr::null_mut(),
         );
         assert_eq!(rc, 0, "raw compose rc");
 
@@ -391,12 +446,77 @@ mod tests {
             std::ptr::null(),
             0,
             output.raw(),
+            std::ptr::null_mut(),
         );
         assert_eq!(rc, 0, "solid raw compose rc");
         let px = output.read_pixels().unwrap();
-        let i = (1 * 20 + 6) * 4;
+        let i = (20 + 6) * 4;   // row 1, col 6
         assert_eq!(&px[i..i + 4], &[255, 255, 255, 255], "solid white quad");
 
+        promo_compositor_free(handle);
+    }
+
+    /// Deferred compose must hand back a fence and, once waited on, produce
+    /// exactly the pixels the blocking path produces.
+    #[test]
+    fn deferred_compose_matches_blocking_after_wait() {
+        let handle = promo_compositor_new();
+        assert!(!handle.is_null(), "compositor");
+
+        let input = OwnedIoSurface::new_bgra(4, 4).expect("input");
+        input.write_pixels(&[0u8, 0, 255, 255].repeat(16)).unwrap(); // red
+        let header: [f64; HEADER_DOUBLES] =
+            [10.0, 10.0, 0.0, 1.0, 0.0, 1.0, 20.0, 10.0, 0.0, 0.0, 1.0, 1.0];
+        let mut quad = [0.0f64; QUAD_DOUBLES];
+        quad[1..5].copy_from_slice(&[2.5, 2.5, 5.0, 5.0]);
+        quad[16] = 1.0;
+        let surfaces = [input.raw()];
+        let widths = [4i32];
+        let heights = [4i32];
+
+        let blocking_out = OwnedIoSurface::new_bgra(20, 10).expect("out");
+        let rc = promo_compose_frame_raw(
+            handle,
+            header.as_ptr(),
+            quad.as_ptr(),
+            1,
+            surfaces.as_ptr(),
+            widths.as_ptr(),
+            heights.as_ptr(),
+            1,
+            blocking_out.raw(),
+            std::ptr::null_mut(),
+        );
+        assert_eq!(rc, 0);
+        let expected = blocking_out.read_pixels().unwrap();
+
+        assert_eq!(promo_compositor_set_defer(handle, 1), 0);
+        let deferred_out = OwnedIoSurface::new_bgra(20, 10).expect("out");
+        let mut token: *mut SubmissionToken = std::ptr::null_mut();
+        let rc = promo_compose_frame_raw(
+            handle,
+            header.as_ptr(),
+            quad.as_ptr(),
+            1,
+            surfaces.as_ptr(),
+            widths.as_ptr(),
+            heights.as_ptr(),
+            1,
+            deferred_out.raw(),
+            &mut token,
+        );
+        assert_eq!(rc, 0);
+        assert!(!token.is_null(), "deferred compose must return a fence");
+        assert_eq!(promo_submission_wait(token), 0);
+        assert_eq!(
+            deferred_out.read_pixels().unwrap(),
+            expected,
+            "deferred pixels must match the blocking render"
+        );
+
+        // Waiting on NULL (a blocking compose produced no fence) is a no-op.
+        assert_eq!(promo_submission_wait(std::ptr::null_mut()), 0);
+        assert_eq!(promo_compositor_set_defer(handle, 0), 0);
         promo_compositor_free(handle);
     }
 

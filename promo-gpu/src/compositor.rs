@@ -232,6 +232,19 @@ fn next_texture_id() -> u64 {
     NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
+/// An in-flight GPU submission from a deferred compose. Wrapping wgpu's
+/// index keeps the wgpu types out of dependent crates (promo-ffi holds these
+/// as opaque tokens).
+pub struct Fence(wgpu::SubmissionIndex);
+
+impl Fence {
+    /// Blocks until this submission finishes.
+    pub fn wait(self, ctx: &GpuContext) {
+        ctx.device
+            .poll(wgpu::Maintain::WaitForSubmissionIndex(self.0));
+    }
+}
+
 /// Uniform stride for the per-quad block, padded to the alignment every
 /// backend accepts for dynamic offsets (256 B).
 const QUAD_STRIDE: u64 = 256;
@@ -274,6 +287,10 @@ pub struct Compositor {
     import_hits: u64,
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     import_misses: u64,
+    /// When set, compose submits without blocking and stashes the fence in
+    /// `last_submission` for the caller to wait on.
+    defer_completion: bool,
+    last_submission: Option<wgpu::SubmissionIndex>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -450,7 +467,23 @@ impl Compositor {
             import_hits: 0,
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             import_misses: 0,
+            defer_completion: false,
+            last_submission: None,
         })
+    }
+
+    /// Composes without blocking on GPU completion: each compose stashes its
+    /// fence, and `take_fence` hands it to whoever must see finished pixels.
+    /// Only for pipelines that separate rendering from reading (the export
+    /// producer/consumer split) — stills and preview read immediately and
+    /// must keep the default blocking behaviour.
+    pub fn set_defer_completion(&mut self, defer: bool) {
+        self.defer_completion = defer;
+    }
+
+    /// The pending fence for the last deferred compose, if any.
+    pub fn take_fence(&mut self) -> Option<Fence> {
+        self.last_submission.take().map(Fence)
     }
 
     /// Bind group for one input texture, created once and reused.
@@ -717,8 +750,16 @@ impl Compositor {
                 pass.draw(0..4, 0..1);
             }
         }
-        ctx.queue.submit([encoder.finish()]);
-        ctx.device.poll(wgpu::Maintain::Wait);
+        let index = ctx.queue.submit([encoder.finish()]);
+        if self.defer_completion {
+            // The caller takes the fence and waits later (export pipeline:
+            // the encoder thread waits just before it reads the frame, so
+            // the next frame's decode/compose overlaps this GPU work).
+            self.last_submission = Some(index);
+        } else {
+            ctx.device.poll(wgpu::Maintain::Wait);
+            self.last_submission = None;
+        }
         Ok(())
     }
 
