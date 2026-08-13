@@ -278,6 +278,21 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(), GpuError> {
+        self.render_with_overlay(time, output, output_width, output_height, None)
+    }
+
+    /// Renders with a host-rasterized overlay (captions + watermark) composited
+    /// last, over everything — the same final quad the export path adds, so a
+    /// preview built this way matches the exported frame instead of
+    /// approximating it with separate host-drawn text.
+    pub fn render_with_overlay(
+        &mut self,
+        time: f64,
+        output: IOSurfaceRef,
+        output_width: u32,
+        output_height: u32,
+        overlay: Option<(IOSurfaceRef, u32, u32)>,
+    ) -> Result<(), GpuError> {
         let settings = self.meta.composition_settings.clone();
         let canvas = Size::new(settings.canvas_width, settings.canvas_height);
 
@@ -380,7 +395,26 @@ impl PreviewEngine {
         for (i, quad) in quads.iter_mut().enumerate() {
             quad.texture = Some(i);
         }
-        let textures: Vec<&InputTexture> = used.iter().map(|id| &self.cache[id].texture).collect();
+        let mut textures: Vec<&InputTexture> = used
+            .iter()
+            .map(|id| &self.cache[id].texture)
+            .collect();
+
+        // Caption/watermark overlay: one canvas-sized quad on top. Adopted
+        // through the compositor's cache, so a stable overlay surface costs
+        // nothing per frame.
+        let overlay_texture;
+        if let Some((surface, width, height)) = overlay {
+            overlay_texture = self
+                .compositor
+                .import_iosurface_cached(self.ctx, surface, width, height)?;
+            quads.push(SceneQuad {
+                texture: Some(textures.len()),
+                rect: [0.0, 0.0, canvas.width(), canvas.height()],
+                ..Default::default()
+            });
+            textures.push(&overlay_texture);
+        }
 
         let scene = Scene {
             canvas_width: canvas.width(),
@@ -536,6 +570,35 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].0, "VID");
         assert!((requests[0].1 - 2.0).abs() < 1e-9, "got {}", requests[0].1);
+    }
+
+    #[test]
+    fn overlay_composites_on_top() {
+        let meta = fixture_meta(64.0);
+        let (mut engine, _state) = make_engine(
+            meta,
+            vec![("VID".into(), [255, 0, 0, 255], 32)], // blue video frame
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+
+        // Opaque white overlay covering the canvas hides everything below.
+        let overlay = OwnedIoSurface::new_bgra(64, 64).expect("overlay");
+        overlay.write_pixels(&[255, 255, 255, 255].repeat(64 * 64)).unwrap();
+        engine
+            .render_with_overlay(3.0, out.raw(), 64, 64, Some((overlay.raw(), 64, 64)))
+            .expect("render");
+        assert_eq!(pixel(&out, 30, 30), [255, 255, 255, 255], "overlay covers video");
+        assert_eq!(pixel(&out, 2, 2), [255, 255, 255, 255], "overlay covers bg");
+
+        // A transparent overlay leaves the composition untouched.
+        let clear = OwnedIoSurface::new_bgra(64, 64).expect("clear");
+        clear.write_pixels(&[0, 0, 0, 0].repeat(64 * 64)).unwrap();
+        engine
+            .render_with_overlay(3.0, out.raw(), 64, 64, Some((clear.raw(), 64, 64)))
+            .expect("render");
+        assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "video still visible");
+        assert_eq!(pixel(&out, 2, 2), [0, 51, 0, 255], "background still visible");
     }
 
     #[test]

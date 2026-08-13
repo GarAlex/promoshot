@@ -68,16 +68,59 @@ pub extern "C" fn promo_preview_render(
     width: c_int,
     height: c_int,
 ) -> c_int {
+    promo_preview_render_with_overlay(
+        handle,
+        time,
+        output_surface,
+        width,
+        height,
+        std::ptr::null_mut(),
+        0,
+        0,
+    )
+}
+
+/// `promo_preview_render` plus a host-rasterized caption/watermark overlay
+/// (BGRA IOSurface of overlay_width x overlay_height, canvas-space) drawn
+/// last — the same final quad the export path composites, so an in-app
+/// preview matches the exported frame. Pass NULL for no overlay.
+///
+/// Safety contract (C ABI): surfaces must be BGRA IOSurfaceRefs of the
+/// stated sizes.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_preview_render_with_overlay(
+    handle: *mut PreviewHandle,
+    time: c_double,
+    output_surface: *mut c_void,
+    width: c_int,
+    height: c_int,
+    overlay_surface: *mut c_void,
+    overlay_width: c_int,
+    overlay_height: c_int,
+) -> c_int {
     let Some(handle) = (unsafe { handle.as_mut() }) else {
         return -1;
     };
     if output_surface.is_null() || width <= 0 || height <= 0 {
         return -1;
     }
-    match handle
-        .engine
-        .render(time, output_surface, width as u32, height as u32)
-    {
+    let overlay = if overlay_surface.is_null() || overlay_width <= 0 || overlay_height <= 0 {
+        None
+    } else {
+        Some((
+            overlay_surface,
+            overlay_width as u32,
+            overlay_height as u32,
+        ))
+    };
+    match handle.engine.render_with_overlay(
+        time,
+        output_surface,
+        width as u32,
+        height as u32,
+        overlay,
+    ) {
         Ok(()) => 0,
         Err(_) => -4,
     }

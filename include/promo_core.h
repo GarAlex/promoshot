@@ -167,6 +167,17 @@ int32_t promo_preview_render(PromoPreview *preview, double time,
                              void *output_surface, int32_t width,
                              int32_t height);
 
+/* promo_preview_render plus a host-rasterized caption/watermark overlay
+ * (BGRA IOSurface in canvas space) composited last — the same final quad the
+ * export path adds, so an in-app preview matches the exported frame instead
+ * of approximating captions with host-drawn text. Pass NULL for none.
+ * 0 ok, -1 bad input, -4 render failed. */
+int32_t promo_preview_render_with_overlay(PromoPreview *preview, double time,
+                                          void *output_surface, int32_t width,
+                                          int32_t height, void *overlay_surface,
+                                          int32_t overlay_width,
+                                          int32_t overlay_height);
+
 /* Re-targets the frame-cache budget (bytes) — size it from the machine's
  * RAM and shrink it under memory pressure. 0 ok, -1 bad handle. */
 int32_t promo_preview_set_cache_budget(PromoPreview *preview, uint64_t bytes);
