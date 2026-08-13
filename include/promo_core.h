@@ -61,6 +61,22 @@ int32_t promo_resource_video_segment(const PromoProject *project,
 float promo_layer_gain(const PromoProject *project, int32_t layer_index,
                        double local_time, float default_gain);
 
+/* Clockwise rotation in degrees at a composition time. 0 on bad input. */
+double promo_layer_rotation(const PromoProject *project, int32_t layer_index,
+                            double time);
+
+/* Device-frame 2.5D tilt: out[2] = tiltX, tiltY (degrees). 0 when the layer
+ * has tilt keyframes, -1 otherwise (use the frame's static tilt). */
+int32_t promo_layer_tilt(const PromoProject *project, int32_t layer_index,
+                         double time, double *out);
+
+/* Background layer's resolved color at a time as straight RGBA 0..1:
+ * out[4]. Falls back to the composition settings' background color.
+ * 0 ok, -1 bad input. */
+int32_t promo_layer_background_rgba(const PromoProject *project,
+                                    int32_t layer_index, double time,
+                                    double *out);
+
 /* Index of the resource a layer references, or -1. */
 int32_t promo_layer_resource_index(const PromoProject *project,
                                    int32_t layer_index);

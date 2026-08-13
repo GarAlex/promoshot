@@ -369,6 +369,120 @@ pub extern "C" fn promo_layer_gain(
     tl::layer_gain(layer, local_time, default_gain)
 }
 
+/// Clockwise rotation in degrees at a composition time (keyframed, holding
+/// the first/last value outside the range). 0 on bad handle/index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_rotation(
+    handle: *const ProjectHandle,
+    layer_index: c_int,
+    time: c_double,
+) -> c_double {
+    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+        return 0.0;
+    };
+    tl::layer_rotation(layer, time)
+}
+
+/// Device-frame 2.5D tilt at a composition time: `out[2]` = tiltX, tiltY in
+/// degrees. Returns 0 when the layer has tilt keyframes, -1 otherwise (the
+/// caller then uses the frame's static tilt) or on bad handle/index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_tilt(
+    handle: *const ProjectHandle,
+    layer_index: c_int,
+    time: c_double,
+    out: *mut c_double,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+        return -1;
+    };
+    let Some((x, y)) = tl::layer_tilt_offset(layer, time) else {
+        return -1;
+    };
+    unsafe {
+        *out = x;
+        *out.add(1) = y;
+    }
+    0
+}
+
+/// The background layer's resolved color at a composition time as
+/// straight (non-premultiplied) RGBA in 0…1: `out[4]`. Falls back to the
+/// composition settings' background when the layer has no color keyframes.
+/// 0 ok, -1 bad handle/index/out.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_background_rgba(
+    handle: *const ProjectHandle,
+    layer_index: c_int,
+    time: c_double,
+    out: *mut c_double,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(handle_ref) = (unsafe { handle.as_ref() }) else {
+        return -1;
+    };
+    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+        return -1;
+    };
+    let hex = tl::layer_background_color_hex(
+        layer,
+        time,
+        &handle_ref.meta.composition_settings,
+    );
+    let rgba = rgba_from_hex(&hex);
+    unsafe {
+        for (i, c) in rgba.iter().enumerate() {
+            *out.add(i) = *c as f64;
+        }
+    }
+    0
+}
+
+/// Shared layer lookup for the hot-path queries above.
+///
+/// # Safety
+/// `handle` must be a live project handle or null.
+unsafe fn layer_at<'a>(
+    handle: *const ProjectHandle,
+    layer_index: c_int,
+) -> Option<&'a promo_model::ProjectLayer> {
+    if layer_index < 0 {
+        return None;
+    }
+    handle
+        .as_ref()?
+        .meta
+        .layers
+        .as_ref()?
+        .get(layer_index as usize)
+}
+
+/// `#RRGGBB` → straight RGBA 0…1 (opaque). Black on anything unparseable,
+/// matching the host's CGColor fallback.
+fn rgba_from_hex(hex: &str) -> [f32; 4] {
+    let value = hex.trim().trim_start_matches('#').to_uppercase();
+    if value.len() != 6 {
+        return [0.0, 0.0, 0.0, 1.0];
+    }
+    let Ok(parsed) = u32::from_str_radix(&value, 16) else {
+        return [0.0, 0.0, 0.0, 1.0];
+    };
+    [
+        ((parsed >> 16) & 0xFF) as f32 / 255.0,
+        ((parsed >> 8) & 0xFF) as f32 / 255.0,
+        (parsed & 0xFF) as f32 / 255.0,
+        1.0,
+    ]
+}
+
 /// Convenience for hosts: index of the resource a layer references, or -1.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
