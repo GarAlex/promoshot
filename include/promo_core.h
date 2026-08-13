@@ -61,6 +61,21 @@ int32_t promo_resource_video_segment(const PromoProject *project,
 float promo_layer_gain(const PromoProject *project, int32_t layer_index,
                        double local_time, float default_gain);
 
+/* Layer visibility at a composition time: 1 visible, 0 hidden. */
+int32_t promo_layer_is_visible(const PromoProject *project, int32_t layer_index,
+                               double time);
+
+/* Layout in canvas space, out[4] = x, y, width, height. Pure geometry — no
+ * project handle. 0 ok, -1 bad out. */
+int32_t promo_media_rect(double source_width, double source_height,
+                         double canvas_width, double canvas_height, double zoom,
+                         double horizontal_shift, double vertical_shift,
+                         double *out);
+int32_t promo_drawing_rect(double natural_width, double natural_height,
+                           double canvas_width, double canvas_height,
+                           double zoom, double horizontal_shift,
+                           double vertical_shift, double *out);
+
 /* Clockwise rotation in degrees at a composition time. 0 on bad input. */
 double promo_layer_rotation(const PromoProject *project, int32_t layer_index,
                             double time);

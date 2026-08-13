@@ -369,6 +369,90 @@ pub extern "C" fn promo_layer_gain(
     tl::layer_gain(layer, local_time, default_gain)
 }
 
+/// Layer visibility at a composition time (enabled, started, not yet ended).
+/// 1 visible, 0 hidden, 0 on bad handle/index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_is_visible(
+    handle: *const ProjectHandle,
+    layer_index: c_int,
+    time: c_double,
+) -> c_int {
+    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+        return 0;
+    };
+    tl::layer_is_visible(layer, time) as c_int
+}
+
+/// Layout for a media layer: `out[4]` = x, y, width, height in canvas space.
+/// Pure geometry — no project handle needed. 0 ok, -1 bad out pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn promo_media_rect(
+    source_width: c_double,
+    source_height: c_double,
+    canvas_width: c_double,
+    canvas_height: c_double,
+    zoom: c_double,
+    horizontal_shift: c_double,
+    vertical_shift: c_double,
+    out: *mut c_double,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let rect = tl::media_rect(
+        promo_model::Size::new(source_width, source_height),
+        promo_model::Size::new(canvas_width, canvas_height),
+        zoom,
+        horizontal_shift,
+        vertical_shift,
+    );
+    unsafe {
+        *out = rect.x();
+        *out.add(1) = rect.y();
+        *out.add(2) = rect.width();
+        *out.add(3) = rect.height();
+    }
+    0
+}
+
+/// Layout for a drawing layer (content bounds aspect-fit into the canvas,
+/// centered, then zoom + shift): `out[4]` = x, y, width, height.
+/// Pure geometry — no project handle needed. 0 ok, -1 bad out pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn promo_drawing_rect(
+    natural_width: c_double,
+    natural_height: c_double,
+    canvas_width: c_double,
+    canvas_height: c_double,
+    zoom: c_double,
+    horizontal_shift: c_double,
+    vertical_shift: c_double,
+    out: *mut c_double,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let rect = tl::drawing_rect(
+        promo_model::Size::new(natural_width, natural_height),
+        promo_model::Size::new(canvas_width, canvas_height),
+        zoom,
+        horizontal_shift,
+        vertical_shift,
+    );
+    unsafe {
+        *out = rect.x();
+        *out.add(1) = rect.y();
+        *out.add(2) = rect.width();
+        *out.add(3) = rect.height();
+    }
+    0
+}
+
 /// Clockwise rotation in degrees at a composition time (keyframed, holding
 /// the first/last value outside the range). 0 on bad handle/index.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
