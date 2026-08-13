@@ -166,6 +166,26 @@ impl PreviewEngine {
         self.meta.resources.as_ref()?.iter().find(|r| &r.id == rid)
     }
 
+    /// True when an image layer's device frame animates its tilt — the baked
+    /// bitmap then changes over time, so the layer can't be cached as static
+    /// content. Mirrors Swift `effectiveFrame(forCutID:)`: the layer's image
+    /// cut's frame wins over the resource-level frame.
+    fn image_has_animated_tilt(&self, layer: &ProjectLayer) -> bool {
+        if layer.kind != ProjectLayerKind::Image || !tl::layer_has_tilt_keyframes(layer) {
+            return false;
+        }
+        let Some(res) = self.resource_for(layer) else {
+            return false;
+        };
+        let frame = layer
+            .image_cut_id
+            .as_ref()
+            .and_then(|cid| res.image_cuts.iter().find(|c| &c.id == cid))
+            .and_then(|cut| cut.frame.as_ref())
+            .or(res.frame.as_ref());
+        matches!(frame, Some(f) if f.kind == promo_model::ResourceFrameKind::Device)
+    }
+
     /// Fetches (or serves from cache) the frame for `layer` at `source_time`.
     fn frame(&mut self, layer_id: &str, source_time: f64, tier: i32) -> Option<u64> {
         let key = (layer_id.to_string(), quantize(source_time), tier);
@@ -292,6 +312,11 @@ impl PreviewEngine {
                     Some(res) => tl::source_time_for_local(res, local),
                     None => local,
                 }
+            } else if self.image_has_animated_tilt(layer) {
+                // Animated-tilt device frame: the baked bitmap varies with
+                // time, so request per-time (the provider re-bakes with the
+                // interpolated tilt; the cache keys per quantized time).
+                time
             } else {
                 -1.0
             };
@@ -528,6 +553,83 @@ mod tests {
         assert_eq!(stats.hits, 2, "two cache hits");
         assert_eq!(state.lock().unwrap().requests.len(), 1);
         assert_eq!(stats.cached_bytes, 32 * 32 * 4);
+    }
+
+    /// A JSON fixture with two image layers: IMG (plain) and TILT (device
+    /// frame + tilt keyframes). Only the latter must be requested per-time.
+    fn tilt_fixture_meta(canvas: f64) -> ProjectMetadata {
+        let json = format!(
+            r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-000000000002",
+            "name": "tilt", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [],
+            "compositionSettings": {{
+                "canvasWidth": {canvas}, "canvasHeight": {canvas},
+                "backgroundColorHex": "003300"
+            }},
+            "layers": [
+                {{"id": "IMG", "name": "flat", "sortIndex": 0, "kind": "image",
+                  "isEnabled": true, "startTime": 0, "duration": 10,
+                  "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC01",
+                  "keyframes": []}},
+                {{"id": "TILT", "name": "framed", "sortIndex": 1, "kind": "image",
+                  "isEnabled": true, "startTime": 0, "duration": 10,
+                  "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC02",
+                  "keyframes": [
+                    {{"id": "K1", "time": 0, "zoom": 1, "verticalShift": 0,
+                      "horizontalShift": 0, "transitionDuration": 0,
+                      "tiltX": 0, "tiltY": 0}},
+                    {{"id": "K2", "time": 5, "zoom": 1, "verticalShift": 0,
+                      "horizontalShift": 0, "transitionDuration": 1,
+                      "tiltX": 20, "tiltY": -10}}
+                  ]}}
+            ],
+            "resources": [
+                {{"id": "AAAAAAAA-0000-0000-0000-00000000CC01", "kind": "image",
+                  "filename": "a.png", "displayName": "a", "addedAt": 0,
+                  "imageCuts": [], "disabledAudioTrackIndices": []}},
+                {{"id": "AAAAAAAA-0000-0000-0000-00000000CC02", "kind": "image",
+                  "filename": "b.png", "displayName": "b", "addedAt": 0,
+                  "imageCuts": [], "disabledAudioTrackIndices": [],
+                  "frame": {{"kind": "device"}}}}
+            ]}}"#,
+            canvas = canvas,
+        );
+        ProjectMetadata::from_json(&json).expect("tilt fixture")
+    }
+
+    #[test]
+    fn animated_tilt_image_is_requested_per_time() {
+        let meta = tilt_fixture_meta(64.0);
+        let (mut engine, state) = make_engine(
+            meta,
+            vec![
+                ("IMG".into(), [255, 0, 0, 255], 16),
+                ("TILT".into(), [0, 255, 0, 255], 16),
+            ],
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(1.0, out.raw(), 64, 64).unwrap();
+        engine.render(5.5, out.raw(), 64, 64).unwrap();
+
+        let requests = state.lock().unwrap().requests.clone();
+        let img: Vec<f64> = requests
+            .iter()
+            .filter(|(l, _)| l == "IMG")
+            .map(|(_, t)| *t)
+            .collect();
+        let tilt: Vec<f64> = requests
+            .iter()
+            .filter(|(l, _)| l == "TILT")
+            .map(|(_, t)| *t)
+            .collect();
+        // Plain image: one static request, cached across renders.
+        assert_eq!(img, vec![-1.0]);
+        // Device frame with tilt keyframes: requested at each render time so
+        // the provider can re-bake the interpolated tilt.
+        assert_eq!(tilt, vec![1.0, 5.5]);
     }
 
     #[test]
