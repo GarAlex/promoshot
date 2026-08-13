@@ -227,8 +227,13 @@ pub struct Compositor {
     quad_buf: wgpu::Buffer,
     quad_capacity: usize,
     /// One bind group per input texture (keyed by texture identity), valid
-    /// until `quad_buf` is reallocated.
+    /// until `quad_buf` is reallocated. BOUNDED: a bind group retains its
+    /// texture view — and therefore the IOSurface behind it — so an unbounded
+    /// map pins every frame's surfaces in memory (measured: +38 GB across a
+    /// 600-frame 4K export before this cap existed).
     binds: std::collections::HashMap<u64, wgpu::BindGroup>,
+    /// Insertion order for eviction.
+    bind_order: std::collections::VecDeque<u64>,
 }
 
 impl Compositor {
@@ -376,6 +381,7 @@ impl Compositor {
             quad_buf,
             quad_capacity,
             binds: std::collections::HashMap::new(),
+            bind_order: std::collections::VecDeque::new(),
         })
     }
 
@@ -407,8 +413,21 @@ impl Compositor {
                 ],
             });
             self.binds.insert(id, bind);
+            self.bind_order.push_back(id);
         }
         id
+    }
+
+    /// Drops cached bind groups BETWEEN frames once the map outgrows the
+    /// working set. Evicting mid-frame could remove an entry the frame in
+    /// flight still needs, so this runs only at frame boundaries; the few
+    /// textures a frame actually uses are re-cached on demand.
+    fn trim_bind_cache(&mut self) {
+        const MAX_BINDS: usize = 64;
+        if self.binds.len() > MAX_BINDS {
+            self.binds.clear();
+            self.bind_order.clear();
+        }
     }
 
     /// Grows the per-frame quad uniform buffer (invalidates cached bind
@@ -426,6 +445,7 @@ impl Compositor {
         });
         self.quad_capacity = capacity;
         self.binds.clear();
+        self.bind_order.clear();
     }
 
     /// Uploads tightly-packed premultiplied BGRA bytes as a sampleable
@@ -526,6 +546,7 @@ impl Compositor {
         textures: &[&InputTexture],
         output: &wgpu::Texture,
     ) -> Result<(), GpuError> {
+        self.trim_bind_cache();
         let (ow, oh) = (scene.output_width as f64, scene.output_height as f64);
         let (cw, ch) = (scene.canvas_width, scene.canvas_height);
         // Letterbox transform (same math as VideoComposer.letterboxTransform).
@@ -834,6 +855,40 @@ mod tests {
         };
         let pixels = compose(&scene, &[tex], &ctx);
         assert_eq!(px(&pixels, 10, 5, 5), [255, 0, 255, 255], "magenta sampled");
+    }
+
+    /// The bind-group cache must not grow without bound: each entry retains
+    /// a texture view (and its IOSurface). Regression for a measured +38 GB.
+    #[test]
+    fn bind_group_cache_is_bounded() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut comp = Compositor::new(&ctx).expect("compositor");
+        let out = OwnedIoSurface::new_bgra(16, 16).expect("out");
+        // 300 distinct one-off textures, as a long export would produce.
+        for i in 0..300 {
+            let tex = Compositor::upload_texture(
+                &ctx, &[(i % 255) as u8, 0, 0, 255], 1, 1).expect("tex");
+            let scene = Scene {
+                canvas_width: 16.0,
+                canvas_height: 16.0,
+                background_rgba: [0.0, 0.0, 0.0, 1.0],
+                output_width: 16,
+                output_height: 16,
+                bars_rgba: [0.0, 0.0, 0.0, 1.0],
+                quads: vec![SceneQuad {
+                    texture: Some(0),
+                    rect: [0.0, 0.0, 16.0, 16.0],
+                    ..Default::default()
+                }],
+            };
+            comp.compose_to_iosurface(&ctx, &scene, &[tex], out.raw())
+                .expect("compose");
+        }
+        assert!(
+            comp.binds.len() <= 64,
+            "bind cache unbounded: {} entries",
+            comp.binds.len()
+        );
     }
 
     #[test]
