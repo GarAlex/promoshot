@@ -80,6 +80,34 @@ pub extern "C" fn promo_preview_render(
     )
 }
 
+/// Replaces the engine's project with an edited one, keeping the GPU
+/// pipeline and every cached frame whose layer did not change. The editor
+/// calls this on each edit (a drag: every frame) instead of recreating the
+/// engine. 0 ok, -1 bad handle/JSON, -2 parse failed.
+///
+/// Safety contract (C ABI): `project_json` is NUL-terminated UTF-8.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_preview_set_project(
+    handle: *mut PreviewHandle,
+    project_json: *const c_char,
+) -> c_int {
+    let Some(handle) = (unsafe { handle.as_mut() }) else {
+        return -1;
+    };
+    if project_json.is_null() {
+        return -1;
+    }
+    let Ok(text) = unsafe { CStr::from_ptr(project_json) }.to_str() else {
+        return -1;
+    };
+    let Ok(meta) = promo_model::ProjectMetadata::from_json(text) else {
+        return -2;
+    };
+    handle.engine.set_project(meta);
+    0
+}
+
 /// `promo_preview_render` plus a host-rasterized caption/watermark overlay
 /// (BGRA IOSurface of overlay_width x overlay_height, canvas-space) drawn
 /// last — the same final quad the export path composites, so an in-app

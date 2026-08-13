@@ -133,6 +133,52 @@ impl PreviewEngine {
         })
     }
 
+    /// Swaps in an edited project without rebuilding the GPU pipeline.
+    ///
+    /// The editor re-syncs on every change (a drag does this per frame), and
+    /// recreating the engine there would recreate the compositor and drop the
+    /// whole frame cache. This keeps both, and evicts cached frames only for
+    /// layers that actually changed — the engine holds the old and new
+    /// metadata, so it can diff them precisely instead of guessing.
+    pub fn set_project(&mut self, meta: ProjectMetadata) {
+        let old = self.meta.layers.clone().unwrap_or_default();
+        let new = meta.layers.clone().unwrap_or_default();
+        let mut stale: Vec<String> = Vec::new();
+        for layer in &old {
+            match new.iter().find(|l| l.id == layer.id) {
+                Some(updated) if updated == layer => {}
+                // Changed or removed: its cached frames may no longer apply.
+                _ => stale.push(layer.id.clone()),
+            }
+        }
+        // Settings changes (canvas size, defaults) affect every layer's layout.
+        let settings_changed = meta.composition_settings != self.meta.composition_settings;
+        if settings_changed {
+            stale = old.iter().map(|l| l.id.clone()).collect();
+        }
+        for id in stale {
+            self.evict_layer(&id);
+        }
+        self.meta = meta;
+    }
+
+    /// Drops every cached frame belonging to `layer_id`.
+    fn evict_layer(&mut self, layer_id: &str) {
+        let victims: Vec<u64> = self
+            .id_of
+            .iter()
+            .filter(|(_, (id, _, _))| id == layer_id)
+            .map(|(entry, _)| *entry)
+            .collect();
+        for entry in victims {
+            if let Some(key) = self.id_of.remove(&entry) {
+                self.key_of.remove(&key);
+            }
+            self.governor.remove(entry);
+            self.cache.remove(&entry);
+        }
+    }
+
     /// Sets the proxy tier used for subsequent video-frame requests.
     pub fn set_preferred_tier(&mut self, tier: i32) {
         self.preferred_tier = tier.max(0);
@@ -599,6 +645,43 @@ mod tests {
             .expect("render");
         assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "video still visible");
         assert_eq!(pixel(&out, 2, 2), [0, 51, 0, 255], "background still visible");
+    }
+
+    #[test]
+    fn set_project_keeps_cache_for_untouched_layers() {
+        let meta = fixture_meta(64.0);
+        let (mut engine, _state) = make_engine(
+            meta.clone(),
+            vec![("VID".into(), [255, 0, 0, 255], 32)],
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(3.0, out.raw(), 64, 64).unwrap();
+        assert_eq!(engine.stats().misses, 1);
+
+        // An edit that leaves VID alone: its cached frame survives, so the
+        // next render is a hit and the provider is not called again.
+        let mut edited = meta.clone();
+        if let Some(layers) = edited.layers.as_mut() {
+            if let Some(bg) = layers.iter_mut().find(|l| l.id == "BG") {
+                bg.name = "renamed".into();
+            }
+        }
+        engine.set_project(edited);
+        engine.render(3.0, out.raw(), 64, 64).unwrap();
+        assert_eq!(engine.stats().misses, 1, "untouched layer keeps its frame");
+        assert!(engine.stats().hits >= 1);
+
+        // An edit that DOES touch VID drops its frames.
+        let mut retimed = meta.clone();
+        if let Some(layers) = retimed.layers.as_mut() {
+            if let Some(vid) = layers.iter_mut().find(|l| l.id == "VID") {
+                vid.start_time += 0.5;
+            }
+        }
+        engine.set_project(retimed);
+        engine.render(3.5, out.raw(), 64, 64).unwrap();
+        assert_eq!(engine.stats().misses, 2, "edited layer re-fetches");
     }
 
     #[test]
