@@ -32,6 +32,10 @@ pub struct SceneQuad {
     pub border_rgba: [f32; 4],
     pub solid_rgba: [f32; 4],
     pub opacity: f32,
+    /// Texture carries BT.709-encoded values (decoded video): the shader
+    /// re-encodes to sRGB after sampling, replacing the host's per-frame
+    /// CIContext conversion pass.
+    pub color_709: bool,
 }
 
 impl Default for SceneQuad {
@@ -45,6 +49,7 @@ impl Default for SceneQuad {
             border_rgba: [0.0; 4],
             solid_rgba: [0.0; 4],
             opacity: 1.0,
+            color_709: false,
         }
     }
 }
@@ -78,7 +83,7 @@ struct Quad {
     rot_radius_border: vec4<f32>,
     border_color: vec4<f32>,
     solid_color: vec4<f32>,
-    // x = opacity, y = 1 textured / 0 solid.
+    // x = opacity, y = 1 textured / 0 solid, z = 1 BT.709-encoded texture.
     params: vec4<f32>,
 };
 
@@ -125,6 +130,18 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
     return out;
 }
 
+// Rec.709 video -> sRGB, matching Apple's Rec. 709 ICC as ColorSync/CI
+// apply it: linearize with a PURE gamma 1.961 (measured against an actual
+// CIContext render of a 709-tagged gray ramp to sRGB — the piecewise
+// BT.709 OETF is NOT what CI uses and diverges by up to 13/255 in the
+// shadows), then the standard sRGB encode.
+fn bt709_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let lin = pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.961));
+    let lo = lin * 12.92;
+    let hi = 1.055 * pow(lin, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
+    return select(hi, lo, lin <= vec3<f32>(0.0031308));
+}
+
 // Signed distance to a rounded rect centered at `half_size` with `radius`.
 fn sd_round_rect(p: vec2<f32>, half_size: vec2<f32>, radius: f32) -> f32 {
     let q = abs(p - half_size) - half_size + vec2<f32>(radius, radius);
@@ -148,6 +165,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var color: vec4<f32>;
     if quad.params.y > 0.5 {
         color = textureSample(quad_tex, quad_samp, in.local / size);
+        if quad.params.z > 0.5 {
+            // Video frames are opaque (alpha 1), so premultiplied rgb == rgb.
+            color = vec4<f32>(bt709_to_srgb(color.rgb), color.a);
+        }
     } else {
         color = quad.solid_color;
         color = vec4<f32>(color.rgb * color.a, color.a);
@@ -644,7 +665,7 @@ impl Compositor {
                 params: [
                     q.opacity,
                     if q.texture.is_some() { 1.0 } else { 0.0 },
-                    0.0,
+                    if q.color_709 { 1.0 } else { 0.0 },
                     0.0,
                 ],
             };
@@ -1066,6 +1087,44 @@ mod tests {
             "bind cache unbounded: {} entries",
             comp.binds.len()
         );
+    }
+
+    #[test]
+    fn bt709_quad_converts_to_srgb() {
+        let ctx = GpuContext::new().expect("gpu");
+        // Mid-gray 128/255 in Rec.709 video encoding. CI's measured mapping
+        // (gamma-1.961 linearize, sRGB encode) sends 128 -> 139.
+        let tex = Compositor::upload_texture(&ctx, &[128, 128, 128, 255], 1, 1).expect("tex");
+        let scene = Scene {
+            canvas_width: 8.0,
+            canvas_height: 8.0,
+            background_rgba: [0.0, 0.0, 0.0, 1.0],
+            output_width: 8,
+            output_height: 8,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                texture: Some(0),
+                rect: [0.0, 0.0, 8.0, 8.0],
+                color_709: true,
+                ..Default::default()
+            }],
+        };
+        let pixels = compose(&scene, &[tex], &ctx);
+        let got = px(&pixels, 8, 4, 4);
+        for ch in 0..3 {
+            assert!(
+                (got[ch] as i32 - 139).abs() <= 2,
+                "709 mid-gray must map to sRGB ~139 (CI-measured), got {got:?}"
+            );
+        }
+        assert_eq!(got[3], 255);
+
+        // Without the flag the value passes through untouched.
+        let tex = Compositor::upload_texture(&ctx, &[128, 128, 128, 255], 1, 1).expect("tex");
+        let mut plain = scene.clone();
+        plain.quads[0].color_709 = false;
+        let pixels = compose(&plain, &[tex], &ctx);
+        assert_eq!(px(&pixels, 8, 4, 4), [128, 128, 128, 255]);
     }
 
     #[test]

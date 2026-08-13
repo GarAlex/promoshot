@@ -34,6 +34,8 @@ struct QuadWire {
     solid_rgba: [f32; 4],
     #[serde(default = "one")]
     opacity: f32,
+    #[serde(default)]
+    color709: bool,
 }
 
 fn one() -> f32 {
@@ -158,6 +160,7 @@ pub extern "C" fn promo_compose_frame(
                 border_rgba: q.border_rgba,
                 solid_rgba: q.solid_rgba,
                 opacity: q.opacity,
+                color_709: q.color709,
             })
             .collect(),
     };
@@ -173,7 +176,7 @@ pub extern "C" fn promo_compose_frame(
 }
 
 /// Doubles per quad in `promo_compose_frame_raw`'s flat layout.
-pub const QUAD_DOUBLES: usize = 17;
+pub const QUAD_DOUBLES: usize = 18;
 /// Doubles in the frame header.
 pub const HEADER_DOUBLES: usize = 12;
 
@@ -183,9 +186,10 @@ pub const HEADER_DOUBLES: usize = 12;
 ///
 /// `header`: 12 doubles — canvasW, canvasH, backgroundRGBA[4], outputW,
 /// outputH, barsRGBA[4].
-/// `quads`: `quad_count` × 17 doubles — textureIndex (-1 = solid fill),
+/// `quads`: `quad_count` × 18 doubles — textureIndex (-1 = solid fill),
 /// rect[4], rotation, cornerRadius, borderWidth, borderRGBA[4],
-/// solidRGBA[4], opacity.
+/// solidRGBA[4], opacity, color709 (non-zero: the texture is BT.709-encoded
+/// video and the shader converts to sRGB after sampling).
 /// Surfaces/output and return codes as in `promo_compose_frame`.
 ///
 /// # Safety
@@ -257,6 +261,7 @@ pub extern "C" fn promo_compose_frame_raw(
                 border_rgba: [c[8] as f32, c[9] as f32, c[10] as f32, c[11] as f32],
                 solid_rgba: [c[12] as f32, c[13] as f32, c[14] as f32, c[15] as f32],
                 opacity: c[16] as f32,
+                color_709: c[17] != 0.0,
             })
             .collect(),
     };

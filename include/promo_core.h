@@ -88,10 +88,11 @@ int32_t promo_compose_frame(PromoCompositor *compositor, const char *scene_json,
 
 /* Binary-scene variant of promo_compose_frame (the 30-calls-per-output-second
  * export path; skips JSON). header: 12 doubles — canvasW, canvasH,
- * backgroundRGBA[4], outputW, outputH, barsRGBA[4]. quads: quad_count x 17
+ * backgroundRGBA[4], outputW, outputH, barsRGBA[4]. quads: quad_count x 18
  * doubles — textureIndex (-1 = solid), rect[4], rotation, cornerRadius,
- * borderWidth, borderRGBA[4], solidRGBA[4], opacity. Same surface contract
- * and return codes as promo_compose_frame. */
+ * borderWidth, borderRGBA[4], solidRGBA[4], opacity, color709 (non-zero:
+ * texture is BT.709-encoded video; the shader converts to sRGB after
+ * sampling). Same surface contract and return codes as promo_compose_frame. */
 int32_t promo_compose_frame_raw(PromoCompositor *compositor,
                                 const double *header, const double *quads,
                                 size_t quad_count, const void *const *surfaces,
