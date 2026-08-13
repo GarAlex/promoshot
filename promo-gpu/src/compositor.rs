@@ -880,7 +880,7 @@ impl Compositor {
 
 /// Adopts an IOSurface as a wgpu texture with the given usage (macOS).
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn adopt_iosurface(
+pub(crate) fn adopt_iosurface(
     ctx: &GpuContext,
     surface: crate::iosurface::IOSurfaceRef,
     width: u32,

@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 wgpu.workspace = true
 thiserror.workspace = true
+lyon_tessellation = "1.0.20"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 # Must match the versions wgpu-hal's Metal backend uses, so raw-texture

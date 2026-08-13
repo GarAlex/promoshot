@@ -14,6 +14,7 @@ pub use surface::GpuSurface;
 pub mod iosurface;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod spike;
+pub mod vector;
 
 use thiserror::Error;
 

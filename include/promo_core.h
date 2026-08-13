@@ -117,6 +117,30 @@ int32_t promo_compositor_set_defer(PromoCompositor *compositor, int32_t defer);
  * no-op. 0 ok, -1 no GPU. */
 int32_t promo_submission_wait(PromoSubmissionToken *token);
 
+/* ---- Vector drawings (macOS): GPU tessellation --------------------------- */
+
+/* Opaque vector renderer (GPU context + mesh pipeline, reused). */
+typedef struct PromoVector PromoVector;
+
+/* NULL when no GPU. Free with promo_vector_free. */
+PromoVector *promo_vector_new(void);
+void promo_vector_free(PromoVector *renderer);
+
+/* Tessellates a DrawingDocument JSON payload and renders it into
+ * output_surface (BGRA IOSurface, width x height), content bounds scaled to
+ * fill. The surface is cleared to transparent first, edges are 4x MSAA
+ * antialiased, and the result composites over the frame as a quad — so a
+ * drawing can be re-rendered crisply at any size instead of magnifying a
+ * pre-baked bitmap. 0 ok, -1 bad input, -2 parse, -4 render. */
+int32_t promo_vector_render(PromoVector *renderer, const char *doc_json,
+                            void *output_surface, int32_t width,
+                            int32_t height);
+
+/* The drawing's natural bounds: out[4] = x, y, width, height (the
+ * 1080x1920 fallback for an empty document, matching the Swift model).
+ * 0 ok, -1 bad input, -2 parse. */
+int32_t promo_vector_content_bounds(const char *doc_json, double *out);
+
 /* ---- Phase 3: preview engine (macOS) ------------------------------------ */
 
 typedef struct PromoPreview PromoPreview;
