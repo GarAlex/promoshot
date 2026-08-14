@@ -5,12 +5,11 @@
 //! interface (see `../AUTOMATION-PLAN.md`), and this is the first tool to
 //! treat it that way.
 //!
-//! What renders today: backgrounds, image layers and drawings, with their
-//! keyframes — zoom, shift, rotation, tilt, opacity, corner radius, borders,
-//! letterboxing. What does not: video layers (no decoder yet, R2 in
-//! LINUX-READY-PLAN) and captions (text rasterization is still host-side).
-//! `promo inspect` says so per project rather than leaving you to infer it
-//! from a blank frame.
+//! What renders today: backgrounds, image layers, drawings and captions, with
+//! their keyframes — zoom, shift, rotation, tilt, opacity, corner radius,
+//! borders, letterboxing. What does not: video layers (no decoder yet, R2 in
+//! LINUX-READY-PLAN). `promo inspect` says so per project rather than leaving
+//! you to infer it from a blank frame.
 
 mod project;
 mod render;
@@ -38,8 +37,8 @@ NOTES:
     `video` pipes raw frames to `ffmpeg`, which must be on PATH. Frames are
     rendered on the GPU; ffmpeg only encodes them.
 
-    Video layers and captions are not rendered yet — `inspect` reports what a
-    given project would lose.
+    Video layers are not rendered yet — `inspect` reports what a given project
+    would lose.
 ";
 
 fn main() -> ExitCode {

@@ -139,6 +139,14 @@ pub fn layer_rotation(layer: &ProjectLayer, time: f64) -> f64 {
     layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.rotation).unwrap_or(0.0)
 }
 
+/// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
+/// keyframes, so an un-keyed layer is fully visible as before.
+pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {
+    layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.opacity)
+        .unwrap_or(1.0)
+        .clamp(0.0, 1.0)
+}
+
 /// Swift `ProjectLayer.hasTiltKeyframes`.
 pub fn layer_has_tilt_keyframes(layer: &ProjectLayer) -> bool {
     layer
@@ -338,4 +346,48 @@ fn rgb(hex: &str) -> Option<(f64, f64, f64)> {
         ((parsed & 0x00FF00) >> 8) as f64,
         (parsed & 0x0000FF) as f64,
     ))
+}
+
+#[cfg(test)]
+mod opacity_tests {
+    use super::*;
+
+    fn layer_with(keys: &str) -> ProjectLayer {
+        let json = format!(
+            r#"{{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "keyframes": [{keys}]}}"#
+        );
+        serde_json::from_str(&json).expect("layer")
+    }
+
+    /// The default matters most: every existing project has no opacity
+    /// keyframes and must keep rendering at full strength.
+    #[test]
+    fn an_unkeyed_layer_is_fully_opaque() {
+        let layer = layer_with(r#"{"id": "K", "time": 0, "zoom": 1, "transitionDuration": 0}"#);
+        assert_eq!(layer_opacity(&layer, 0.0), 1.0);
+        assert_eq!(layer_opacity(&layer, 5.0), 1.0);
+    }
+
+    #[test]
+    fn opacity_ramps_between_keyframes() {
+        let layer = layer_with(
+            r#"{"id": "A", "time": 0, "opacity": 0.0, "transitionDuration": 0},
+               {"id": "B", "time": 1, "opacity": 1.0, "transitionDuration": 1}"#,
+        );
+        assert_eq!(layer_opacity(&layer, 0.0), 0.0);
+        assert!((layer_opacity(&layer, 0.5) - 0.5).abs() < 1e-9, "midpoint");
+        assert_eq!(layer_opacity(&layer, 1.0), 1.0);
+        assert_eq!(layer_opacity(&layer, 9.0), 1.0, "holds after the last key");
+    }
+
+    #[test]
+    fn out_of_range_values_are_clamped() {
+        let layer = layer_with(
+            r#"{"id": "A", "time": 0, "opacity": -2.0, "transitionDuration": 0},
+               {"id": "B", "time": 1, "opacity": 5.0, "transitionDuration": 1}"#,
+        );
+        assert_eq!(layer_opacity(&layer, 0.0), 0.0);
+        assert_eq!(layer_opacity(&layer, 1.0), 1.0);
+    }
 }

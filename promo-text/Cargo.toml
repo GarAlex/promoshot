@@ -1,0 +1,11 @@
+[package]
+name = "promo-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+promo-model = { path = "../promo-model" }
+# Shaping + layout + system font discovery. The one honest way to put text on
+# a frame without a platform text stack.
+cosmic-text = "0.12"

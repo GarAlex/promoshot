@@ -577,6 +577,11 @@ pub struct ProjectLayerKeyframe {
     pub tilt_x: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub tilt_y: Option<f64>,
+    /// 0–1, 1 when unkeyed. Added 2026-08-14 so a composition can express a
+    /// fade; the compositor has always had per-quad opacity, only the
+    /// keyframe was missing.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub opacity: Option<f64>,
     pub transition_duration: f64,
 }
 

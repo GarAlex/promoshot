@@ -17,7 +17,7 @@ pub use audio::{
 };
 pub use interpolation::{
     interpolate_color_hex, layer_background_color_hex, layer_has_tilt_keyframes, layer_is_visible,
-    layer_local_time, layer_rotation, layer_tilt_offset, layer_transform,
+    layer_local_time, layer_opacity, layer_rotation, layer_tilt_offset, layer_transform,
     settings_background_color_hex, settings_interpolated_values, Transform,
 };
 pub use layout::{

@@ -15,9 +15,6 @@ pub enum Unsupported {
     /// Needs a video decoder. `promo-media` has no backend yet, so the CLI
     /// cannot open a `.mp4` at all — see LINUX-READY-PLAN R2.
     VideoDecode,
-    /// Needs text shaping and rasterization, which is still host-side
-    /// (CoreText on Apple) — see the egui plan, E5.
-    TextRasterization,
     /// Audio has no bearing on a rendered frame; it is skipped silently for
     /// images and noted for video.
     Audio,
@@ -28,7 +25,6 @@ impl std::fmt::Display for Unsupported {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Unsupported::VideoDecode => write!(f, "video decoding is not implemented yet"),
-            Unsupported::TextRasterization => write!(f, "text rendering is not implemented yet"),
             Unsupported::Audio => write!(f, "audio does not appear in a rendered frame"),
             Unsupported::MissingFile(p) => write!(f, "file missing: {}", p.display()),
         }
@@ -91,9 +87,10 @@ impl Project {
     /// Per-layer verdict: `None` = renderable.
     pub fn unsupported(&self, layer: &promo_model::ProjectLayer) -> Option<Unsupported> {
         match layer.kind {
+            // Captions render in the core now (promo-text).
             ProjectLayerKind::Background | ProjectLayerKind::Drawing => None,
+            ProjectLayerKind::Caption => None,
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
-            ProjectLayerKind::Caption => Some(Unsupported::TextRasterization),
             ProjectLayerKind::Video => Some(Unsupported::VideoDecode),
             ProjectLayerKind::Image => {
                 let resource = layer.resource_id.as_ref().and_then(|id| self.resource(id));

@@ -128,6 +128,9 @@ struct CachedFrame {
     /// Apple, nothing for an upload) — see `promo_gpu::ImportedFrame`.
     frame: ImportedFrame,
     flags: i32,
+    /// Captions only: canvas-space top-left, so a cache hit rebuilds the quad
+    /// without laying the text out again.
+    caption_origin: Option<(f64, f64)>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -339,7 +342,7 @@ impl PreviewEngine {
         }
         self.cache.insert(
             id,
-            CachedFrame { frame, flags },
+            CachedFrame { frame, flags, caption_origin: None },
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
@@ -444,6 +447,75 @@ impl PreviewEngine {
             .compose_to_texture_borrowed(self.ctx, &scene, &textures, output)
     }
 
+    /// Rasterizes a caption layer and returns its quad plus the cache id of
+    /// the texture.
+    ///
+    /// Cached under the frame cache like any other texture, keyed by the
+    /// layer id with a static source time: caption text does not change with
+    /// the playhead, so a 30-second title is shaped once, not 900 times.
+    fn caption_quad(
+        &mut self,
+        layer: &ProjectLayer,
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+    ) -> Option<(SceneQuad, u64)> {
+        let text = layer.caption_text.as_deref()?.trim();
+        if text.is_empty() {
+            return None;
+        }
+        let style = caption_style(layer, settings);
+        // Same key shape as frames: (id, quantized time, tier). Caption
+        // text does not vary with the playhead, so time and tier are fixed.
+        let key = (format!("caption:{}", layer.id), 0i64, 0i32);
+        if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            let frame = &self.cache[&id];
+            let (w, h) = (frame.frame.width as f64, frame.frame.height as f64);
+            let (x, y) = frame.caption_origin?;
+            return Some((caption_scene_quad(x, y, w, h), id));
+        }
+
+        let raster = promo_text::rasterize(text, canvas.width(), canvas.height(), &style)?;
+        // promo-text produces straight RGBA; the compositor samples BGRA.
+        let mut bgra = raster.rgba;
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        let surface = GpuSurface::CpuPixels {
+            data: bgra,
+            width: raster.width,
+            height: raster.height,
+            bytes_per_row: raster.width * 4,
+        };
+        let frame = Compositor::import(self.ctx, &surface).ok()?;
+        let bytes = frame.byte_size();
+
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        for victim in self.governor.admit(id, bytes) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(
+            id,
+            CachedFrame {
+                frame,
+                flags: 0,
+                caption_origin: Some((raster.x, raster.y)),
+            },
+        );
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some((
+            caption_scene_quad(raster.x, raster.y, raster.width as f64, raster.height as f64),
+            id,
+        ))
+    }
+
     /// Everything both render paths share: resolve the layers live at `time`,
     /// pull their frames through the provider, and describe the result. The
     /// only thing left to the caller is where it lands.
@@ -473,6 +545,16 @@ impl PreviewEngine {
 
         for layer in &layers {
             if !tl::layer_is_visible(layer, time) {
+                continue;
+            }
+            if layer.kind == ProjectLayerKind::Caption {
+                // Text is drawn by the core now (promo-text), not by a host
+                // overlay — so a headless render keeps its captions.
+                if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas) {
+                    quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    quads.push(quad);
+                    used.push(id);
+                }
                 continue;
             }
             let (is_media, is_drawing) = match layer.kind {
@@ -532,6 +614,7 @@ impl PreviewEngine {
                 texture: Some(0), // patched below
                 rect: [rect.x(), rect.y(), rect.width(), rect.height()],
                 rotation_deg: tl::layer_rotation(layer, time),
+                opacity: tl::layer_opacity(layer, time) as f32,
                 ..Default::default()
             };
             if is_media && !pre_framed {
@@ -569,6 +652,80 @@ impl PreviewEngine {
             used,
         ))
     }
+}
+
+/// A caption quad sits where promo-text put it, in canvas space.
+fn caption_scene_quad(x: f64, y: f64, w: f64, h: f64) -> SceneQuad {
+    SceneQuad {
+        texture: Some(0), // patched with the rest
+        rect: [x, y, w, h],
+        ..Default::default()
+    }
+}
+
+/// Bridges the project's subtitle style to promo-text, falling back to the
+/// composition defaults exactly as `SubtitleStyle.xxx(defaults:)` does.
+fn caption_style(
+    layer: &ProjectLayer,
+    settings: &promo_model::CompositionSettings,
+) -> promo_text::TextStyle {
+    let style = layer.caption_style.as_ref();
+    let get = |pick: fn(&promo_model::SubtitleStyle) -> Option<f64>, fallback: f64| -> f64 {
+        style.and_then(pick).unwrap_or(fallback)
+    };
+    let text_rgba = rgba_bytes(
+        &style
+            .and_then(|s| s.text_color_hex.clone())
+            .unwrap_or_else(|| settings.subtitle_color_hex.clone()),
+        1.0,
+    );
+    let bg_opacity = style
+        .and_then(|s| s.background_opacity)
+        .unwrap_or(settings.subtitle_background_opacity);
+    let background_rgba = rgba_bytes(
+        &style
+            .and_then(|s| s.background_color_hex.clone())
+            .unwrap_or_else(|| settings.subtitle_background_color_hex.clone()),
+        bg_opacity,
+    );
+    promo_text::TextStyle {
+        font_family: style
+            .and_then(|s| s.font_family.as_ref())
+            .map(|f| f.as_str().to_string())
+            .or_else(|| Some(settings.subtitle_font_family.as_str().to_string())),
+        font_size: get(|s| s.font_size, settings.subtitle_font_size),
+        bold: style
+            .and_then(|s| s.is_bold)
+            .unwrap_or(settings.subtitle_bold),
+        italic: style
+            .and_then(|s| s.is_italic)
+            .unwrap_or(settings.subtitle_italic),
+        align: promo_text::Align::parse(
+            style
+                .and_then(|s| s.alignment.as_ref())
+                .map(|a| a.as_str())
+                .unwrap_or("center"),
+        ),
+        text_rgba,
+        background_rgba,
+        padding: settings.subtitle_background_padding,
+        corner_radius: settings.subtitle_background_corner_radius,
+        left_margin: get(|s| s.left_margin, settings.subtitle_left_margin),
+        right_margin: get(|s| s.right_margin, settings.subtitle_right_margin),
+        vertical_margin: get(|s| s.vertical_margin, settings.subtitle_vertical_margin),
+        line_height: 1.25,
+    }
+}
+
+/// Hex + alpha as straight RGBA bytes.
+fn rgba_bytes(hex: &str, alpha: f64) -> [u8; 4] {
+    let c = rgba_from_hex(hex);
+    [
+        (c[0] * 255.0).round() as u8,
+        (c[1] * 255.0).round() as u8,
+        (c[2] * 255.0).round() as u8,
+        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
+    ]
 }
 
 fn rgba_from_hex(hex: &str) -> [f32; 4] {

@@ -20,6 +20,7 @@ fn layer_with_keyframes(count: usize, span: f64) -> ProjectLayer {
             rotation: Some((i % 13) as f64 * 3.0),
             tilt_x: None,
             tilt_y: None,
+            opacity: None,
             transition_duration: 0.5,
         })
         .collect();

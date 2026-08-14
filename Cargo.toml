@@ -4,6 +4,7 @@ members = [
     "promo-model",
     "promo-timeline",
     "promo-editor",
+    "promo-text",
     "promo-cli",
     "promo-gpu",
     "promo-media",
