@@ -98,6 +98,10 @@ before the suite exists — otherwise there is nothing to be correct *against*.
 
 ## 4. R3 — `promo-editor`
 
+**Expanded into its own document: [EDITOR-PLAN.md](EDITOR-PLAN.md).** Summary
+below; the decision it turns on (the core, not Swift, owns the document) and
+the staging are there.
+
 A headless editor crate: app state and commands, no rendering, no I/O. Both
 front ends drive it — the Mac app through `promo-ffi`, the egui app by direct
 dependency.
