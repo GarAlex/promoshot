@@ -73,11 +73,11 @@ Nothing about who owns the document changes. Only the *computed* and
 *ephemeral* editor state moves, so this is nearly risk-free and immediately
 useful to egui.
 
-| Slice | Moves | Parity fixture |
-|---|---|---|
-| 1.1 | Lane packing + viewport (`TimelineLanes.swift`, 195 lines) | `TimelineLanesTests` — already exists |
-| 1.2 | Selection + pinning + reveal-newly-added | this session's rules, already specified by their fixes |
-| 1.3 | Transport state machine (§5) | new table-driven tests |
+| Slice | Moves | Parity fixture | |
+|---|---|---|---|
+| 1.1 | Lane packing + viewport (`TimelineLanes.swift`, 195 lines) | `TimelineLanesTests` — already exists | **DONE 2026-08-14** |
+| 1.2 | Selection + pinning + reveal-newly-added | this session's rules, already specified by their fixes | |
+| 1.3 | Transport state machine (§5) | new table-driven tests | |
 
 After Stage 1, an egui app can render a correct, interactive timeline over a
 read-only document. That alone is most of E0–E2 of the egui plan.
@@ -189,7 +189,24 @@ command model, not as a feature request.
 
 ## Status
 
-Not started. First action: **Stage 1 slice 1.1** — port `TimelineLanes.swift`
-into `promo-editor::timeline`, with `TimelineLanesTests` as the parity fixture.
-It is 195 lines, already pure, already tested, and it proves the whole pattern
-end to end: crate, FFI, Swift adoption, flag, parity gate.
+**Slice 1.1 done** (2026-08-14). `promo-editor` exists — model + timeline deps
+only, so it builds anywhere — with `timeline.rs` carrying lane packing, the
+viewport and the width policy, and all 14 Swift cases ported.
+
+The whole pattern is proven end to end: crate → `promo-ffi::editor` (JSON in,
+JSON out, since editor calls are rare and small) → `PromoLanes` in Swift →
+`TimelineLanesParityTests`, which packs every shipped fixture both ways —
+fitted, with a gutter, at four window positions, and with a pinned selection —
+plus the synthetic shapes, row identity and the width policy.
+
+It earned its keep immediately: the gate failed on first run because serde's
+`camelCase` emits `rowId`/`layerIds` while this project's Swift-facing keys
+capitalise ID (`resourceID`, `imageCutID`). Swift's decoder silently yielded
+nothing rather than erroring — exactly the kind of mismatch that would have
+looked like "lanes just don't work" much later.
+
+Swift still owns the packing the app *uses*; the core agreeing is the
+precondition for deleting the Swift copy, which happens once slices 1.2–1.4
+land and `LaneTimelineView` reads lanes from the core.
+
+Next: **slice 1.2** — selection, pinning and reveal-newly-added.

@@ -10,6 +10,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [dependencies]
 promo-model = { path = "../promo-model" }
 promo-timeline = { path = "../promo-timeline" }
+promo-editor = { path = "../promo-editor" }
 promo-engine = { path = "../promo-engine" }
 promo-gpu = { path = "../promo-gpu" }
 serde_json.workspace = true

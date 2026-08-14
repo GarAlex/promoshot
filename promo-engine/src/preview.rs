@@ -1166,7 +1166,7 @@ mod portable_tests {
         assert!(Compositor::import(
             ctx,
             &GpuSurface::D3DSharedHandle {
-                raw: 1 as *mut c_void
+                raw: std::ptr::dangling_mut::<c_void>()
             }
         )
         .is_err());

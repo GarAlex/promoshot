@@ -27,6 +27,15 @@ macro_rules! tolerant_enum {
             $(#[serde(rename = $raw)] $variant,)+
         }
 
+        impl $name {
+            /// The wire string, from the same literal serde uses.
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $($name::$variant => $raw,)+
+                }
+            }
+        }
+
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
                 let raw = String::deserialize(d)?;
@@ -46,6 +55,15 @@ macro_rules! strict_enum {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
         pub enum $name {
             $(#[serde(rename = $raw)] $variant,)+
+        }
+
+        impl $name {
+            /// The wire string, from the same literal serde uses.
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $($name::$variant => $raw,)+
+                }
+            }
         }
     };
 }

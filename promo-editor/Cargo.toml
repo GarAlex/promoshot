@@ -1,0 +1,16 @@
+[package]
+name = "promo-editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Deliberately model + timeline only: no GPU, no I/O, no platform crates. This
+# crate has to build wherever a front end does — macOS through the FFI, Linux
+# and Windows by direct dependency — so anything that would pin it to one of
+# them belongs somewhere else.
+[dependencies]
+promo-model = { path = "../promo-model" }
+promo-timeline = { path = "../promo-timeline" }
+
+[dev-dependencies]
+serde_json.workspace = true

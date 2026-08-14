@@ -213,6 +213,23 @@ typedef int32_t (*PromoFrameProvider)(void *user, const char *layer_id,
                                       PromoHostSurface *out_surface,
                                       int32_t *out_flags);
 
+/* --- editor layer (promo-editor) ---------------------------------------
+ * Editor calls are rare and small, so they cross as JSON. Rust front ends
+ * depend on promo-editor directly and skip all of this.
+ *
+ * promo_lanes_pack input:
+ *   {"layers": [...], "totalDuration": s, "gutter": s,
+ *    "viewport": {"center": s, "span": s|null, "total": s}|null,
+ *    "alwaysInclude": ["id", ...]}
+ * output: [{"rowID", "kind", "indexWithinKind", "layerIDs"}] — free with
+ * promo_string_free. NULL on malformed input. */
+char *promo_lanes_pack(const char *params_json);
+/* Row holding layer_id after the same packing, or NULL if focus dropped it. */
+char *promo_lanes_row_id(const char *params_json, const char *layer_id);
+/* Lane policy, so every front end draws the same conclusion from a width. */
+int32_t promo_lanes_fit(double timeline_width);
+int32_t promo_lanes_compact_labels(double timeline_width);
+
 /* Field offsets of PromoHostSurface, so a host that mirrors the struct in
  * another language can assert its layout matches rather than assume it.
  * field: 0 = sizeof, 1 = kind, 2 = handle, 3 = fd, 4 = data, 5 = width,

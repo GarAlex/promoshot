@@ -2,6 +2,7 @@
 //! until Phase 5 (see RUST-CORE-PLAN.md §3/§7 in the app repo).
 
 pub mod compose;
+pub mod editor;
 pub mod vector;
 pub mod preview;
 pub mod project;

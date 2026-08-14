@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "promo-model",
     "promo-timeline",
+    "promo-editor",
     "promo-gpu",
     "promo-media",
     "promo-engine",
