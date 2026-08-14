@@ -1,0 +1,161 @@
+# Linux-readiness refactor: core + macapp (2026-08-14)
+
+The work that has to happen **before** the egui app (`../egui/PLAN.md`) is worth
+starting. Nothing here adds a feature; it moves the Apple boundary to where it
+belongs and gives the editor a home outside SwiftUI.
+
+## 0. Decisions locked
+
+- **Linux** — ffmpeg, free of charge, **no capture**.
+- **macOS** — unchanged: Metal, VideoToolbox, zero-copy IOSurface. This
+  refactor must not cost the Mac app a millisecond.
+- **Windows** — its own encoders (Media Foundation) and its own capture. Last.
+- **`promo-editor`** — a new crate in this workspace.
+
+*On ffmpeg licensing, one caveat and then it is settled:* free-of-charge does
+not by itself satisfy the GPL — that asks for source, not for a price. The
+route that costs nothing and closes the question is dynamic-linking the
+system's LGPL ffmpeg on Linux, which is what a `.deb` gets from the distro
+anyway. If you would rather publish the Linux app's source, static GPL is fine
+too. Either way it stops being a blocker.
+
+---
+
+## 1. Where the Apple boundary actually is
+
+Measured, per crate, for `x86_64-unknown-linux-gnu`:
+
+| Crate | Portable today | Apple-gated | Missing |
+|---|---|---|---|
+| `promo-model` | all | — | — |
+| `promo-timeline` | all | — | — |
+| `promo-gpu` | `compositor`, `vector`, `surface` | `iosurface`, `spike` | Linux import path |
+| `promo-engine` | `governor`, `mixer` | **`preview` — the entire preview engine** | — |
+| `promo-ffi` | `compose`, `vector`, `preview`, `project` | 2 modules | — |
+| `promo-media` | traits | — | **every backend** |
+
+**Correction to an earlier claim.** "The core compiles clean for Linux" is
+true, and misleading. It compiles because the non-portable parts are compiled
+*out*: `promo-engine/src/lib.rs` gates `pub mod preview` behind
+`cfg(any(target_os = "macos", target_os = "ios"))`. On Linux the crate today
+offers a memory governor and a PCM mixer, and no preview engine at all.
+
+Two specifics that decide the shape of R1:
+
+- `promo-engine::preview` is typed **directly** on `IOSurfaceRef` — its
+  `FrameProviderFn` writes an `IOSurfaceRef` out-param, and the module declares
+  and calls `CFRetain` / `CFRelease` / `IOSurfaceGetWidth` itself. CoreFoundation
+  knowledge has leaked out of `promo-gpu` and into the conductor.
+- `GpuSurface` — the enum designed for exactly this, with `IoSurface`,
+  `D3DSharedHandle`, `DmaBuf` and `CpuPixels` variants and a doc comment saying
+  "everything downstream sees only a wgpu texture" — **is exported and never
+  used**. The abstraction was designed in P0 and then bypassed.
+
+So the refactor is less "design a portability layer" than "finish wiring the
+one that is already there".
+
+---
+
+## 2. R1 — Wire `GpuSurface` (the gate for every Linux pixel)
+
+1. **Compositor gains a single import entry**: `Compositor::import(&GpuSurface)`
+   dispatching to
+   - `IoSurface` → the existing zero-copy adoption path **and its cache**,
+   - `CpuPixels` → the existing `upload_texture`,
+   - `DmaBuf` / `D3DSharedHandle` → `Err(Unsupported)` for now, with the
+     variants already named so capability negotiation can see them.
+2. **Provider becomes surface-agnostic**: `FrameProviderFn` yields a
+   `GpuSurface` instead of an `IOSurfaceRef`. The Swift side keeps handing over
+   IOSurfaces — it just names the variant.
+3. **CoreFoundation moves back into `promo-gpu::iosurface`**, the only module
+   that should know what a CFRetain is. `promo-engine` stops declaring Apple
+   externs.
+4. **Un-gate `promo-engine::preview`.**
+
+*Gates*: the preview engine compiles **and runs** on Linux against a
+`CpuPixels` provider (a still-image fixture is enough — no codec needed yet);
+on macOS the adoption cache still hits, and the committed compose baseline
+(≈0.45 ms/frame at 4K) does not regress. Both are existing benches.
+
+This is the highest-value slice in the document: after it, the Linux app can
+render a real composition of images, drawings and captions with no codec at
+all.
+
+## 3. R2 — `promo-media` stops being a skeleton
+
+1. Traits become a **registry with capability negotiation** — backends
+   register, the engine picks per asset.
+2. **VideoToolbox becomes a registered backend** rather than an ad-hoc host
+   arrangement. Behaviour on Mac is unchanged; what changes is that it now sits
+   behind the same contract ffmpeg will implement.
+3. **Conformance suite + fixtures**, written once and run against every
+   backend: display rotation (the `preferredTransform` lesson the trait doc
+   already flags), odd dimensions, variable frame rate, long files,
+   keyframe-aligned seek accuracy.
+
+The ffmpeg backend itself is E1 of the egui plan, and it should not start
+before the suite exists — otherwise there is nothing to be correct *against*.
+
+## 4. R3 — `promo-editor`
+
+A headless editor crate: app state and commands, no rendering, no I/O. Both
+front ends drive it — the Mac app through `promo-ffi`, the egui app by direct
+dependency.
+
+Today this logic lives inside three SwiftUI views totalling **8.6k lines**
+(`ResourcesView` 3545, `ProjectEditorView` 2712, `LayersManagementView` 2356).
+Not all of that is editor logic — much is genuinely view code — but everything
+that is, is trapped.
+
+Move in dependency order, one slice at a time:
+
+| Slice | What | Why first/last |
+|---|---|---|
+| 1 | Lane packing + timeline viewport (`TimelineLanes.swift`, 195 lines) | Already pure view-model logic with its own tests; `TimelineLanesTests` becomes the parity fixture. Proves the pattern cheaply. |
+| 2 | Selection, pinning, "reveal a newly added layer" | Small, rule-shaped, already specified by this session's fixes |
+| 3 | Transport: playhead, play/pause, **scrub semantics** | This session fixed the same scrub bug in four separate players in one app — the strongest argument in the document for a shared owner |
+| 4 | Timeline window / zoom | Depends on 1 |
+| 5 | Keyframe edit operations | The largest slice; do it once the pattern is proven |
+| 6 | Undo/redo | **New capability** — the Mac app has no `UndoManager` anywhere today. Design it in the crate rather than retrofitting it twice. |
+
+*Gates*: each slice is diffed against the Swift implementation over
+`fixtures/projects` before the Swift copy is deleted.
+
+## 5. R4 — macapp adopts it
+
+Strangler, exactly as the core migration was done: each slice lands behind a
+flag (the `PromoCoreTimeline` pattern), parity is asserted against the Swift
+path, then the Swift path is deleted and the flag retired. **The Mac app ships
+green after every slice** — that rule is what made the P1–P6 migration
+survivable and it applies unchanged here.
+
+---
+
+## 6. Order
+
+```
+R1 (GpuSurface)  ────────────►  unblocks Linux rendering
+      │
+      ├── R2 (promo-media)  ──►  unblocks Linux video      [independent of R3]
+      │
+      └── R3 (promo-editor) ──►  unblocks a non-forked UI  [independent of R2]
+                │
+                └── R4 (macapp adoption, per slice)
+```
+
+R1 first and alone: it is small, it is the gate for everything visual, and it
+removes an Apple leak that would otherwise get copied. R2 and R3 are
+independent of each other and can proceed in either order or in parallel.
+
+## 7. Explicitly not in this refactor
+
+Capture (any platform), Media Foundation, caption text shaping, audio playback,
+packaging, licensing enforcement. Those belong to the egui and Windows plans;
+listing them here is how they stay out.
+
+---
+
+## Status
+
+Not started. First action: **R1**, and its first commit is
+`Compositor::import(&GpuSurface)` with the IoSurface and CpuPixels arms.
