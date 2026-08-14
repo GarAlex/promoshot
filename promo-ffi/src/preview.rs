@@ -209,3 +209,29 @@ pub extern "C" fn promo_preview_stats(handle: *const PreviewHandle, out: *mut u6
     }
     0
 }
+
+/// Field offsets of [`HostSurface`], so a host can PROVE its mirrored struct
+/// matches instead of trusting that two languages agree on layout.
+///
+/// Swift structs are not C-representable, so `PromoCore.swift` declares its
+/// own `PromoHostSurface` and binds raw memory to it. That is an assumption
+/// about layout; `PromoCoreGateTests` turns it into a checked invariant by
+/// comparing every value here against `MemoryLayout`.
+///
+/// `field`: 0 = total size, 1 = kind, 2 = handle, 3 = fd, 4 = data,
+/// 5 = width, 6 = height, 7 = bytes_per_row. Returns `u64::MAX` if unknown.
+#[no_mangle]
+pub extern "C" fn promo_host_surface_layout(field: i32) -> u64 {
+    use promo_engine::HostSurface;
+    match field {
+        0 => std::mem::size_of::<HostSurface>() as u64,
+        1 => std::mem::offset_of!(HostSurface, kind) as u64,
+        2 => std::mem::offset_of!(HostSurface, handle) as u64,
+        3 => std::mem::offset_of!(HostSurface, fd) as u64,
+        4 => std::mem::offset_of!(HostSurface, data) as u64,
+        5 => std::mem::offset_of!(HostSurface, width) as u64,
+        6 => std::mem::offset_of!(HostSurface, height) as u64,
+        7 => std::mem::offset_of!(HostSurface, bytes_per_row) as u64,
+        _ => u64::MAX,
+    }
+}

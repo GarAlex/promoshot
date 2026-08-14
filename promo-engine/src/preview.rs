@@ -11,10 +11,12 @@
 //! - The engine owns timing (trim/pause/loop source-time mapping), keyframe
 //!   interpolation, layout, z-order, caching, and GPU composition.
 
-#![cfg(any(target_os = "macos", target_os = "ios"))]
 
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
+use promo_gpu::{GpuSurface, ImportedFrame};
+// Only the Apple-typed render entries name this; the provider no longer does.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use promo_gpu::iosurface::IOSurfaceRef;
 use promo_gpu::{GpuContext, GpuError};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, Size};
@@ -22,48 +24,110 @@ use promo_timeline as tl;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
 
-extern "C" {
-    fn CFRetain(cf: *const c_void) -> *const c_void;
-    fn CFRelease(cf: *const c_void);
-    fn IOSurfaceGetWidth(buffer: IOSurfaceRef) -> usize;
-    fn IOSurfaceGetHeight(buffer: IOSurfaceRef) -> usize;
-}
-
 /// Provider out-flag: the bitmap already carries its decorative frame —
 /// the engine must not apply corner radius or border over it.
 pub const FLAG_PRE_FRAMED: i32 = 1;
 
+/// How a host hands a frame over: one C-ABI struct covering every surface
+/// kind, so the provider contract does not name a platform.
+///
+/// The host fills `kind` and the fields that kind uses. Ownership: the engine
+/// retains an `IOSURFACE` for as long as it caches the frame, and **copies**
+/// `CPU_PIXELS` during the call — so a host may reuse its pixel buffer the
+/// moment the provider returns.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct HostSurface {
+    /// One of the `SURFACE_*` constants. 0 means "no frame".
+    pub kind: i32,
+    /// `SURFACE_IOSURFACE`: an `IOSurfaceRef`.
+    /// `SURFACE_D3D_HANDLE`: an NT shared handle.
+    pub handle: *mut c_void,
+    /// `SURFACE_DMABUF`: the DMA-BUF file descriptor.
+    pub fd: i32,
+    /// `SURFACE_CPU_PIXELS`: tightly-packed-or-padded BGRA rows.
+    pub data: *const u8,
+    pub width: u32,
+    pub height: u32,
+    /// `SURFACE_CPU_PIXELS`: row stride in bytes; `width * 4` when unpadded.
+    pub bytes_per_row: u32,
+}
+
+pub const SURFACE_NONE: i32 = 0;
+pub const SURFACE_IOSURFACE: i32 = 1;
+pub const SURFACE_D3D_HANDLE: i32 = 2;
+pub const SURFACE_DMABUF: i32 = 3;
+pub const SURFACE_CPU_PIXELS: i32 = 4;
+
+impl Default for HostSurface {
+    fn default() -> Self {
+        Self {
+            kind: SURFACE_NONE,
+            handle: std::ptr::null_mut(),
+            fd: -1,
+            data: std::ptr::null(),
+            width: 0,
+            height: 0,
+            bytes_per_row: 0,
+        }
+    }
+}
+
+impl HostSurface {
+    /// Borrowed view of what the host filled in. `None` when the descriptor
+    /// is empty or inconsistent — a bad descriptor skips the layer rather
+    /// than reading whatever the pointer happens to address.
+    ///
+    /// # Safety
+    /// For `SURFACE_CPU_PIXELS`, `data` must address at least
+    /// `bytes_per_row * height` readable bytes for the duration of the call.
+    unsafe fn to_gpu_surface(self) -> Option<GpuSurface> {
+        match self.kind {
+            SURFACE_IOSURFACE if !self.handle.is_null() => {
+                Some(GpuSurface::IoSurface { raw: self.handle })
+            }
+            SURFACE_D3D_HANDLE if !self.handle.is_null() => {
+                Some(GpuSurface::D3DSharedHandle { raw: self.handle })
+            }
+            SURFACE_DMABUF if self.fd >= 0 => Some(GpuSurface::DmaBuf { fd: self.fd }),
+            SURFACE_CPU_PIXELS if !self.data.is_null() && self.width > 0 && self.height > 0 => {
+                let stride = if self.bytes_per_row == 0 {
+                    self.width * 4
+                } else {
+                    self.bytes_per_row
+                };
+                let len = stride as usize * self.height as usize;
+                Some(GpuSurface::CpuPixels {
+                    data: std::slice::from_raw_parts(self.data, len).to_vec(),
+                    width: self.width,
+                    height: self.height,
+                    bytes_per_row: stride,
+                })
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Host frame provider. Called with the layer id (NUL-terminated), the
 /// source-media time in seconds (or a negative value for static content),
-/// and the proxy tier (0 = full resolution; higher = smaller proxies —
-/// unused in slice 1). On success returns 0 and writes a BGRA IOSurfaceRef
-/// (retained by the engine via CFRetain until eviction) and optional flags.
-/// Non-zero return = no frame (the layer is skipped this render).
+/// and the proxy tier (0 = full resolution; higher = smaller proxies).
+/// On success returns 0 and fills `out_surface` (see [`HostSurface`]) plus
+/// optional flags. Non-zero return = no frame (the layer is skipped).
 pub type FrameProviderFn = extern "C" fn(
     user: *mut c_void,
     layer_id: *const c_char,
     source_time: f64,
     tier: i32,
-    out_surface: *mut IOSurfaceRef,
+    out_surface: *mut HostSurface,
     out_flags: *mut i32,
 ) -> i32;
 
 struct CachedFrame {
-    surface: IOSurfaceRef,
-    texture: InputTexture,
-    width: usize,
-    height: usize,
+    /// Owns the texture and whatever must outlive it (the IOSurface retain on
+    /// Apple, nothing for an upload) — see `promo_gpu::ImportedFrame`.
+    frame: ImportedFrame,
     flags: i32,
-}
-
-// IOSurface refs are kernel objects; the engine is used from one thread at a
-// time through the FFI but the handle itself may move between threads.
-unsafe impl Send for CachedFrame {}
-
-impl Drop for CachedFrame {
-    fn drop(&mut self) {
-        unsafe { CFRelease(self.surface as *const c_void) }
-    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -242,7 +306,7 @@ impl PreviewEngine {
         }
 
         let c_id = CString::new(layer_id).ok()?;
-        let mut surface: IOSurfaceRef = std::ptr::null_mut();
+        let mut surface = HostSurface::default();
         let mut flags: i32 = 0;
         let rc = (self.provider)(
             self.user,
@@ -252,19 +316,17 @@ impl PreviewEngine {
             &mut surface,
             &mut flags,
         );
-        if rc != 0 || surface.is_null() {
+        if rc != 0 {
             return None;
         }
-        unsafe { CFRetain(surface as *const c_void) };
-        let (width, height) = unsafe { (IOSurfaceGetWidth(surface), IOSurfaceGetHeight(surface)) };
-        let texture =
-            match Compositor::import_iosurface(self.ctx, surface, width as u32, height as u32) {
-                Ok(t) => t,
-                Err(_) => {
-                    unsafe { CFRelease(surface as *const c_void) };
-                    return None;
-                }
-            };
+        // SAFETY: the provider contract requires a CPU_PIXELS descriptor to
+        // address bytes_per_row * height readable bytes for this call; the
+        // conversion copies them before returning.
+        let gpu_surface = unsafe { surface.to_gpu_surface() }?;
+        // One import entry point: retains and adopts on Apple, uploads
+        // elsewhere, and hands back something that owns what it needs.
+        let frame = Compositor::import(self.ctx, &gpu_surface).ok()?;
+        let (width, height) = (frame.width as usize, frame.height as usize);
 
         self.misses += 1;
         let id = self.next_id;
@@ -277,13 +339,7 @@ impl PreviewEngine {
         }
         self.cache.insert(
             id,
-            CachedFrame {
-                surface,
-                texture,
-                width,
-                height,
-                flags,
-            },
+            CachedFrame { frame, flags },
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
@@ -317,6 +373,7 @@ impl PreviewEngine {
 
     /// Renders the composition at `time` into `output` (BGRA IOSurface of
     /// `output_width` × `output_height`; the canvas is aspect-fit inside).
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn render(
         &mut self,
         time: f64,
@@ -331,6 +388,12 @@ impl PreviewEngine {
     /// last, over everything — the same final quad the export path adds, so a
     /// preview built this way matches the exported frame instead of
     /// approximating it with separate host-drawn text.
+    ///
+    /// Apple-only because the overlay arrives as an IOSurface and rides the
+    /// compositor's adoption cache (a stable overlay then costs nothing per
+    /// frame). The portable entry is [`render_to_texture`](Self::render_to_texture);
+    /// overlays reach it when caption rasterization is portable.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn render_with_overlay(
         &mut self,
         time: f64,
@@ -339,6 +402,57 @@ impl PreviewEngine {
         output_height: u32,
         overlay: Option<(IOSurfaceRef, u32, u32)>,
     ) -> Result<(), GpuError> {
+        let (mut scene, used) = self.build_scene(time, output_width, output_height)?;
+        let canvas = Size::new(
+            self.meta.composition_settings.canvas_width,
+            self.meta.composition_settings.canvas_height,
+        );
+        let mut textures: Vec<&InputTexture> =
+            used.iter().map(|id| &self.cache[id].frame.texture).collect();
+
+        let overlay_texture;
+        if let Some((surface, width, height)) = overlay {
+            overlay_texture = self
+                .compositor
+                .import_iosurface_cached(self.ctx, surface, width, height)?;
+            scene.quads.push(SceneQuad {
+                texture: Some(textures.len()),
+                rect: [0.0, 0.0, canvas.width(), canvas.height()],
+                ..Default::default()
+            });
+            textures.push(&overlay_texture);
+        }
+
+        self.compositor
+            .compose_to_iosurface_borrowed(self.ctx, &scene, &textures, output)
+    }
+
+    /// Renders into a wgpu texture — the portable path, and the one a Rust
+    /// front end wants: egui shares this device, so it samples the texture
+    /// directly instead of round-tripping pixels through the host.
+    pub fn render_to_texture(
+        &mut self,
+        time: f64,
+        output: &promo_gpu::wgpu::Texture,
+        output_width: u32,
+        output_height: u32,
+    ) -> Result<(), GpuError> {
+        let (scene, used) = self.build_scene(time, output_width, output_height)?;
+        let textures: Vec<&InputTexture> =
+            used.iter().map(|id| &self.cache[id].frame.texture).collect();
+        self.compositor
+            .compose_to_texture_borrowed(self.ctx, &scene, &textures, output)
+    }
+
+    /// Everything both render paths share: resolve the layers live at `time`,
+    /// pull their frames through the provider, and describe the result. The
+    /// only thing left to the caller is where it lands.
+    fn build_scene(
+        &mut self,
+        time: f64,
+        output_width: u32,
+        output_height: u32,
+    ) -> Result<(Scene, Vec<u64>), GpuError> {
         let settings = self.meta.composition_settings.clone();
         let canvas = Size::new(settings.canvas_width, settings.canvas_height);
 
@@ -391,7 +505,7 @@ impl PreviewEngine {
                 continue;
             };
             let frame = &self.cache[&frame_id];
-            let (fw, fh) = (frame.width as f64, frame.height as f64);
+            let (fw, fh) = (frame.frame.width as f64, frame.frame.height as f64);
             let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
             used.push(frame_id);
 
@@ -436,43 +550,24 @@ impl PreviewEngine {
             quads.push(quad);
         }
 
-        // Patch texture indices now that the used-frame list is final, and
-        // borrow the textures in the same order.
+        // Patch texture indices now that the used-frame list is final; the
+        // caller borrows the textures in this same order.
         for (i, quad) in quads.iter_mut().enumerate() {
             quad.texture = Some(i);
         }
-        let mut textures: Vec<&InputTexture> = used
-            .iter()
-            .map(|id| &self.cache[id].texture)
-            .collect();
 
-        // Caption/watermark overlay: one canvas-sized quad on top. Adopted
-        // through the compositor's cache, so a stable overlay surface costs
-        // nothing per frame.
-        let overlay_texture;
-        if let Some((surface, width, height)) = overlay {
-            overlay_texture = self
-                .compositor
-                .import_iosurface_cached(self.ctx, surface, width, height)?;
-            quads.push(SceneQuad {
-                texture: Some(textures.len()),
-                rect: [0.0, 0.0, canvas.width(), canvas.height()],
-                ..Default::default()
-            });
-            textures.push(&overlay_texture);
-        }
-
-        let scene = Scene {
-            canvas_width: canvas.width(),
-            canvas_height: canvas.height(),
-            background_rgba: background,
-            output_width,
-            output_height,
-            bars_rgba: background,
-            quads,
-        };
-        self.compositor
-            .compose_to_iosurface_borrowed(self.ctx, &scene, &textures, output)
+        Ok((
+            Scene {
+                canvas_width: canvas.width(),
+                canvas_height: canvas.height(),
+                background_rgba: background,
+                output_width,
+                output_height,
+                bars_rgba: background,
+                quads,
+            },
+            used,
+        ))
     }
 }
 
@@ -495,52 +590,14 @@ fn rgba_from_hex(hex: &str) -> [f32; 4] {
     ]
 }
 
+// Fixtures shared by both suites. Kept out of either module so the IOSurface
+// path and the portable path assert against the same composition — that is
+// what makes a disagreement between them meaningful.
 #[cfg(test)]
-mod tests {
+mod tests_support {
     use super::*;
-    use promo_gpu::iosurface::OwnedIoSurface;
-    use std::ffi::CStr;
-    use std::sync::Mutex;
 
-    /// Test provider state: per-layer BGRA fill color; keeps every surface it
-    /// hands out alive (the engine retains its own reference on top) and
-    /// records each request.
-    struct ProviderState {
-        colors: Vec<(String, [u8; 4], usize)>, // (layer id, BGRA, size px)
-        keep_alive: Vec<OwnedIoSurface>,
-        requests: Vec<(String, f64)>,
-    }
-
-    extern "C" fn test_provider(
-        user: *mut c_void,
-        layer_id: *const c_char,
-        source_time: f64,
-        _tier: i32,
-        out_surface: *mut IOSurfaceRef,
-        out_flags: *mut i32,
-    ) -> i32 {
-        let state = unsafe { &*(user as *const Mutex<ProviderState>) };
-        let mut state = state.lock().unwrap();
-        let id = unsafe { CStr::from_ptr(layer_id) }
-            .to_string_lossy()
-            .to_string();
-        state.requests.push((id.clone(), source_time));
-        let Some((_, color, size)) = state.colors.iter().find(|(l, _, _)| *l == id).cloned() else {
-            return 1;
-        };
-        let surface = OwnedIoSurface::new_bgra(size, size).expect("surface");
-        surface
-            .write_pixels(&color.repeat(size * size))
-            .expect("fill");
-        unsafe {
-            *out_surface = surface.raw();
-            *out_flags = 0;
-        }
-        state.keep_alive.push(surface);
-        0
-    }
-
-    fn fixture_meta(canvas: f64) -> ProjectMetadata {
+    pub(super) fn fixture_meta(canvas: f64) -> ProjectMetadata {
         let json = format!(
             r#"{{
             "id": "AAAAAAAA-0000-0000-0000-000000000001",
@@ -572,6 +629,58 @@ mod tests {
         );
         ProjectMetadata::from_json(&json).expect("fixture")
     }
+}
+
+// The IOSurface suite: still the reference for the Apple path.
+#[cfg(all(test, any(target_os = "macos", target_os = "ios")))]
+mod tests {
+    use super::*;
+    use promo_gpu::iosurface::OwnedIoSurface;
+    use std::ffi::CStr;
+    use std::sync::Mutex;
+
+    /// Test provider state: per-layer BGRA fill color; keeps every surface it
+    /// hands out alive (the engine retains its own reference on top) and
+    /// records each request.
+    struct ProviderState {
+        colors: Vec<(String, [u8; 4], usize)>, // (layer id, BGRA, size px)
+        keep_alive: Vec<OwnedIoSurface>,
+        requests: Vec<(String, f64)>,
+    }
+
+    extern "C" fn test_provider(
+        user: *mut c_void,
+        layer_id: *const c_char,
+        source_time: f64,
+        _tier: i32,
+        out_surface: *mut HostSurface,
+        out_flags: *mut i32,
+    ) -> i32 {
+        let state = unsafe { &*(user as *const Mutex<ProviderState>) };
+        let mut state = state.lock().unwrap();
+        let id = unsafe { CStr::from_ptr(layer_id) }
+            .to_string_lossy()
+            .to_string();
+        state.requests.push((id.clone(), source_time));
+        let Some((_, color, size)) = state.colors.iter().find(|(l, _, _)| *l == id).cloned() else {
+            return 1;
+        };
+        let surface = OwnedIoSurface::new_bgra(size, size).expect("surface");
+        surface
+            .write_pixels(&color.repeat(size * size))
+            .expect("fill");
+        unsafe {
+            *out_surface = HostSurface {
+                kind: SURFACE_IOSURFACE,
+                handle: surface.raw(),
+                ..Default::default()
+            };
+            *out_flags = 0;
+        }
+        state.keep_alive.push(surface);
+        0
+    }
+
 
     fn make_engine(
         meta: ProjectMetadata,
@@ -596,7 +705,7 @@ mod tests {
 
     #[test]
     fn renders_background_and_video_layer() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         let (mut engine, state) = make_engine(
             meta,
             vec![("VID".into(), [255, 0, 0, 255], 32)], // blue frame
@@ -620,7 +729,7 @@ mod tests {
 
     #[test]
     fn overlay_composites_on_top() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         let (mut engine, _state) = make_engine(
             meta,
             vec![("VID".into(), [255, 0, 0, 255], 32)], // blue video frame
@@ -649,7 +758,7 @@ mod tests {
 
     #[test]
     fn set_project_keeps_cache_for_untouched_layers() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         let (mut engine, _state) = make_engine(
             meta.clone(),
             vec![("VID".into(), [255, 0, 0, 255], 32)],
@@ -686,7 +795,7 @@ mod tests {
 
     #[test]
     fn caches_frames_and_reports_hits() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         let (mut engine, state) =
             make_engine(meta, vec![("VID".into(), [0, 255, 0, 255], 32)], 64 << 20);
         let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
@@ -780,7 +889,7 @@ mod tests {
 
     #[test]
     fn prefetch_makes_render_all_hits() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         let (mut engine, state) =
             make_engine(meta, vec![("VID".into(), [255, 128, 0, 255], 32)], 64 << 20);
         assert_eq!(engine.prefetch(3.0), 1, "one video frame fetched");
@@ -795,7 +904,7 @@ mod tests {
 
     #[test]
     fn tier_switch_keys_cache_separately() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         let (mut engine, state) =
             make_engine(meta, vec![("VID".into(), [0, 255, 0, 255], 32)], 64 << 20);
         let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
@@ -816,7 +925,7 @@ mod tests {
 
     #[test]
     fn governor_evicts_under_budget() {
-        let meta = fixture_meta(64.0);
+        let meta = tests_support::fixture_meta(64.0);
         // Budget = two 32×32 frames.
         let (mut engine, _state) = make_engine(
             meta,
@@ -839,5 +948,252 @@ mod tests {
         assert_eq!(engine.stats().hits, 1);
         engine.render(3.0, out.raw(), 64, 64).unwrap();
         assert_eq!(engine.stats().misses, 6);
+    }
+}
+
+/// The portable suite: the same composition, driven by a host that has no
+/// platform surfaces at all — plain BGRA pixels in, a wgpu texture out.
+///
+/// This is the R1 gate. It runs on every target, so it is what proves the
+/// preview engine is genuinely portable rather than merely compiling once the
+/// Apple parts are configured out. It renders the SAME fixture as the
+/// IOSurface suite and asserts the SAME pixels, so the two paths cannot drift.
+#[cfg(test)]
+mod portable_tests {
+    use super::tests_support;
+    use super::*;
+    use std::ffi::CStr;
+    use std::sync::Mutex;
+
+    struct CpuProviderState {
+        /// (layer id, BGRA fill, square size in px)
+        colors: Vec<(String, [u8; 4], usize)>,
+        /// Pixel buffers are reused between calls on purpose: the contract
+        /// says the engine copies during the call, and this is what would
+        /// catch it if it ever stopped.
+        scratch: Vec<u8>,
+        requests: Vec<(String, f64)>,
+    }
+
+    extern "C" fn cpu_provider(
+        user: *mut c_void,
+        layer_id: *const c_char,
+        source_time: f64,
+        _tier: i32,
+        out_surface: *mut HostSurface,
+        out_flags: *mut i32,
+    ) -> i32 {
+        let state = unsafe { &*(user as *const Mutex<CpuProviderState>) };
+        let mut state = state.lock().unwrap();
+        let id = unsafe { CStr::from_ptr(layer_id) }
+            .to_string_lossy()
+            .to_string();
+        state.requests.push((id.clone(), source_time));
+        let Some((_, color, size)) = state.colors.iter().find(|(l, _, _)| *l == id).cloned() else {
+            return 1;
+        };
+        state.scratch = color.repeat(size * size);
+        unsafe {
+            *out_surface = HostSurface {
+                kind: SURFACE_CPU_PIXELS,
+                data: state.scratch.as_ptr(),
+                width: size as u32,
+                height: size as u32,
+                bytes_per_row: (size * 4) as u32,
+                ..Default::default()
+            };
+            *out_flags = 0;
+        }
+        0
+    }
+
+    fn make_cpu_engine(
+        meta: ProjectMetadata,
+        colors: Vec<(String, [u8; 4], usize)>,
+    ) -> (PreviewEngine, Box<Mutex<CpuProviderState>>) {
+        let state = Box::new(Mutex::new(CpuProviderState {
+            colors,
+            scratch: Vec::new(),
+            requests: Vec::new(),
+        }));
+        let user = &*state as *const Mutex<CpuProviderState> as *mut c_void;
+        let engine = PreviewEngine::new(meta, cpu_provider, user, 64 << 20).expect("engine");
+        (engine, state)
+    }
+
+    /// Renders to a texture and reads it back as BGRA rows.
+    fn render_and_read(engine: &mut PreviewEngine, time: f64, size: u32) -> Vec<u8> {
+        let ctx = GpuContext::shared().expect("gpu");
+        let texture = ctx.device.create_texture(&promo_gpu::wgpu::TextureDescriptor {
+            label: Some("portable-test-target"),
+            size: promo_gpu::wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: promo_gpu::wgpu::TextureDimension::D2,
+            format: promo_gpu::wgpu::TextureFormat::Bgra8Unorm,
+            usage: promo_gpu::wgpu::TextureUsages::RENDER_ATTACHMENT
+                | promo_gpu::wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        engine
+            .render_to_texture(time, &texture, size, size)
+            .expect("render");
+        read_texture_bgra(ctx, &texture, size, size)
+    }
+
+    fn read_texture_bgra(
+        ctx: &GpuContext,
+        texture: &promo_gpu::wgpu::Texture,
+        width: u32,
+        height: u32,
+    ) -> Vec<u8> {
+        use promo_gpu::wgpu;
+        // wgpu requires 256-byte-aligned rows for a texture->buffer copy.
+        let unpadded = width * 4;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded = unpadded.div_ceil(align) * align;
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("portable-test-readback"),
+            size: (padded * height) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        ctx.queue.submit(Some(encoder.finish()));
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        ctx.device.poll(wgpu::Maintain::Wait);
+        let mapped = slice.get_mapped_range();
+        // Drop the row padding so callers index by width.
+        let mut out = Vec::with_capacity((unpadded * height) as usize);
+        for row in 0..height as usize {
+            let start = row * padded as usize;
+            out.extend_from_slice(&mapped[start..start + unpadded as usize]);
+        }
+        drop(mapped);
+        buffer.unmap();
+        out
+    }
+
+    fn pixel_at(px: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
+        let i = (y * width + x) * 4;
+        [px[i], px[i + 1], px[i + 2], px[i + 3]]
+    }
+
+    /// The same assertions as `tests::renders_background_and_video_layer`,
+    /// through the portable path. If these two ever disagree, one of the
+    /// import arms is wrong.
+    #[test]
+    fn cpu_pixels_render_the_same_composition() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let meta = tests_support::fixture_meta(64.0);
+        let (mut engine, state) = make_cpu_engine(meta, vec![("VID".into(), [255, 0, 0, 255], 32)]);
+        let px = render_and_read(&mut engine, 3.0, 64);
+
+        assert_eq!(pixel_at(&px, 64, 2, 2), [0, 51, 0, 255], "background");
+        assert_eq!(pixel_at(&px, 64, 30, 30), [255, 0, 0, 255], "video frame");
+
+        // Same trim mapping as the Apple suite: t=3 -> local 1 -> source 2.
+        let requests = &state.lock().unwrap().requests;
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].0, "VID");
+        assert!((requests[0].1 - 2.0).abs() < 1e-9, "got {}", requests[0].1);
+    }
+
+    /// A padded stride is what a real decoder hands over; the import repacks.
+    #[test]
+    fn padded_rows_are_repacked() {
+        let Some(ctx) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        // 2x2 image, rows padded to 12 bytes: [BGRA BGRA | 4 bytes junk]
+        let mut data = Vec::new();
+        for _ in 0..2 {
+            data.extend_from_slice(&[10, 20, 30, 255, 40, 50, 60, 255]);
+            data.extend_from_slice(&[99, 99, 99, 99]);
+        }
+        let surface = GpuSurface::CpuPixels {
+            data,
+            width: 2,
+            height: 2,
+            bytes_per_row: 12,
+        };
+        let frame = Compositor::import(ctx, &surface).expect("import");
+        assert_eq!((frame.width, frame.height), (2, 2));
+        assert_eq!(frame.byte_size(), 16);
+    }
+
+    /// The variants that exist for capability negotiation but have no import
+    /// yet must say so rather than silently rendering nothing.
+    #[test]
+    fn unimplemented_surface_kinds_are_reported() {
+        let Some(ctx) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        assert!(Compositor::import(ctx, &GpuSurface::DmaBuf { fd: 3 }).is_err());
+        assert!(Compositor::import(
+            ctx,
+            &GpuSurface::D3DSharedHandle {
+                raw: 1 as *mut c_void
+            }
+        )
+        .is_err());
+    }
+
+    /// An empty or malformed descriptor skips the layer instead of reading
+    /// whatever the pointer happens to address.
+    #[test]
+    fn empty_descriptor_yields_no_surface() {
+        assert!(unsafe { HostSurface::default().to_gpu_surface() }.is_none());
+        assert!(unsafe {
+            HostSurface {
+                kind: SURFACE_CPU_PIXELS,
+                width: 4,
+                height: 4,
+                ..Default::default()
+            }
+            .to_gpu_surface()
+        }
+        .is_none());
+        assert!(unsafe {
+            HostSurface {
+                kind: SURFACE_IOSURFACE,
+                ..Default::default()
+            }
+            .to_gpu_surface()
+        }
+        .is_none());
     }
 }

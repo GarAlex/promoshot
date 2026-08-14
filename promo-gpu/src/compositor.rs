@@ -601,6 +601,81 @@ impl Compositor {
         })
     }
 
+    /// Import any [`GpuSurface`](crate::GpuSurface) — the single entry point
+    /// the engine uses, so nothing above this layer names a platform surface.
+    ///
+    /// `IoSurface` adopts zero-copy and retains for the frame's lifetime;
+    /// `CpuPixels` uploads (repacking first if the rows are padded). The
+    /// remaining variants are named by the enum so capability negotiation can
+    /// see them, and rejected here until their platform lands.
+    pub fn import(
+        ctx: &GpuContext,
+        surface: &crate::GpuSurface,
+    ) -> Result<crate::ImportedFrame, GpuError> {
+        use crate::surface::KeepAlive;
+        match surface {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            crate::GpuSurface::IoSurface { raw } => {
+                let raw = *raw;
+                if raw.is_null() {
+                    return Err(GpuError::Import("import: null IOSurface".into()));
+                }
+                // Retain BEFORE adopting: the texture is a view onto these
+                // bytes, so the surface must not be freed under it.
+                unsafe { crate::iosurface::retain(raw) };
+                let (width, height) = unsafe { crate::iosurface::dimensions(raw) };
+                match Self::import_iosurface(ctx, raw, width, height) {
+                    Ok(texture) => Ok(crate::ImportedFrame::owning(
+                        texture,
+                        width,
+                        height,
+                        KeepAlive::IoSurface(raw),
+                    )),
+                    Err(e) => {
+                        unsafe { crate::iosurface::release(raw) };
+                        Err(e)
+                    }
+                }
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            crate::GpuSurface::IoSurface { .. } => Err(GpuError::Import(
+                "import: IOSurface is Apple-only".into(),
+            )),
+            crate::GpuSurface::CpuPixels {
+                data,
+                width,
+                height,
+                bytes_per_row,
+            } => {
+                let (w, h, stride) = (*width, *height, *bytes_per_row);
+                let tight = (w as usize) * 4;
+                if stride as usize == tight {
+                    let texture = Self::upload_texture(ctx, data, w, h)?;
+                    Ok(crate::ImportedFrame::owning(texture, w, h, KeepAlive::Nothing))
+                } else {
+                    // Padded rows (a decoder's natural stride) — repack once
+                    // rather than teaching every caller about alignment.
+                    if data.len() < stride as usize * h as usize {
+                        return Err(GpuError::Import("import: pixel buffer short".into()));
+                    }
+                    let mut packed = Vec::with_capacity(tight * h as usize);
+                    for row in 0..h as usize {
+                        let start = row * stride as usize;
+                        packed.extend_from_slice(&data[start..start + tight]);
+                    }
+                    let texture = Self::upload_texture(ctx, &packed, w, h)?;
+                    Ok(crate::ImportedFrame::owning(texture, w, h, KeepAlive::Nothing))
+                }
+            }
+            crate::GpuSurface::DmaBuf { .. } => Err(GpuError::Import(
+                "import: DMA-BUF import not implemented (Linux VAAPI path)".into(),
+            )),
+            crate::GpuSurface::D3DSharedHandle { .. } => Err(GpuError::Import(
+                "import: D3D shared-handle import not implemented (Windows path)".into(),
+            )),
+        }
+    }
+
     /// Adopts an IOSurface as a sampleable input texture (zero-copy, macOS).
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn import_iosurface(

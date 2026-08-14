@@ -56,7 +56,7 @@ one that is already there".
 
 ---
 
-## 2. R1 — Wire `GpuSurface` (the gate for every Linux pixel)
+## 2. R1 — Wire `GpuSurface` (the gate for every Linux pixel) — **DONE 2026-08-14**
 
 1. **Compositor gains a single import entry**: `Compositor::import(&GpuSurface)`
    dispatching to
@@ -72,14 +72,34 @@ one that is already there".
    externs.
 4. **Un-gate `promo-engine::preview`.**
 
-*Gates*: the preview engine compiles **and runs** on Linux against a
-`CpuPixels` provider (a still-image fixture is enough — no codec needed yet);
-on macOS the adoption cache still hits, and the committed compose baseline
-(≈0.45 ms/frame at 4K) does not regress. Both are existing benches.
+**Shipped.** The provider now fills a `HostSurface` descriptor (a C struct
+covering IOSurface / D3D handle / DMA-BUF / CPU pixels) instead of writing a
+bare `IOSurfaceRef`; `Compositor::import` is the single entry point;
+CoreFoundation is back inside `promo-gpu::iosurface`; `preview` is un-gated
+and the whole workspace — including `promo-ffi` — now checks for
+`x86_64-unknown-linux-gnu`.
 
-This is the highest-value slice in the document: after it, the Linux app can
-render a real composition of images, drawings and captions with no codec at
-all.
+Two things worth knowing for later:
+
+- The module carried **two** gates: the `pub mod preview` line *and* an inner
+  `#![cfg(...)]` at the top of `preview.rs`. Removing only the outer one gives
+  a confusing "unresolved import" rather than an error at the gate.
+- Swift structs are not C-representable, so the callback takes a raw pointer
+  and binds it. `promo_host_surface_layout` exposes the Rust offsets and
+  `testHostSurfaceLayoutMatchesRust` asserts every one of them — it caught a
+  real mismatch on its first run (Swift `size` 44 vs Rust `size_of` 48; the
+  Swift equivalent is `stride`).
+
+*Gates met*: `portable_tests::cpu_pixels_render_the_same_composition` renders
+the SAME fixture as the IOSurface suite through CPU pixels into a wgpu texture
+and asserts the SAME pixels. Mac 241 tests, iOS 212, core 21 + clippy clean.
+Perf, re-measured old-vs-new on one machine in one session: warm render
+1.5947 → 1.6041 ms (+0.6%, noise); cold 1.9437 → 2.1614 ms nominal, with
+overlapping confidence intervals and no added work on that path. Both far
+inside the 25% gate.
+
+After it, the Linux app can render a real composition of images, drawings and
+captions with no codec at all.
 
 ## 3. R2 — `promo-media` stops being a skeleton
 
@@ -161,5 +181,10 @@ listing them here is how they stay out.
 
 ## Status
 
-Not started. First action: **R1**, and its first commit is
-`Compositor::import(&GpuSurface)` with the IoSurface and CpuPixels arms.
+**R1 done** (2026-08-14). Next: R2 or R3 — independent of each other. R3 is
+expanded in [EDITOR-PLAN.md](EDITOR-PLAN.md); its first slice is the lane
+packer.
+
+Known debt, pre-existing and unrelated: `cargo fmt --check` in `check-all.sh`
+was already failing before this work — 23 diffs across 8 files. Left alone so
+this change is not buried in a repo-wide reformat; worth its own commit.

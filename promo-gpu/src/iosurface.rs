@@ -29,6 +29,41 @@ extern "C" {
     pub fn IOSurfaceGetID(buffer: IOSurfaceRef) -> u32;
 }
 
+// CoreFoundation retain/release. Declared here because this is the ONLY module
+// allowed to know what a CFRetain is — the engine used to declare its own
+// externs and call them directly, which is how CoreFoundation leaked into a
+// crate that is meant to be portable.
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    fn CFRetain(cf: *const c_void) -> *const c_void;
+    fn CFRelease(cf: *const c_void);
+}
+
+/// Retains `raw` for as long as the caller holds it. Pairs with [`release`].
+///
+/// # Safety
+/// `raw` must be a live IOSurfaceRef.
+pub unsafe fn retain(raw: IOSurfaceRef) {
+    CFRetain(raw as *const c_void);
+}
+
+/// # Safety
+/// `raw` must have been retained by [`retain`] and not yet released.
+pub unsafe fn release(raw: IOSurfaceRef) {
+    CFRelease(raw as *const c_void);
+}
+
+/// Pixel dimensions of a live surface.
+///
+/// # Safety
+/// `raw` must be a live IOSurfaceRef.
+pub unsafe fn dimensions(raw: IOSurfaceRef) -> (u32, u32) {
+    (
+        IOSurfaceGetWidth(raw) as u32,
+        IOSurfaceGetHeight(raw) as u32,
+    )
+}
+
 const K_IOSURFACE_LOCK_READ_ONLY: u32 = 1;
 
 /// An owned BGRA8 IOSurface (test/spike helper; production surfaces arrive

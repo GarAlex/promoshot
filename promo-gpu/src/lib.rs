@@ -8,7 +8,9 @@
 
 pub mod compositor;
 mod surface;
-pub use surface::GpuSurface;
+pub use surface::{GpuSurface, ImportedFrame};
+/// Re-exported so dependents use exactly this wgpu, not a second copy.
+pub use wgpu;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod iosurface;

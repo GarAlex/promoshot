@@ -7,8 +7,8 @@ use criterion::{criterion_group, criterion_main, Criterion};
 fn preview(c: &mut Criterion) {
     #[cfg(target_os = "macos")]
     {
-        use promo_engine::PreviewEngine;
-        use promo_gpu::iosurface::{IOSurfaceRef, OwnedIoSurface};
+        use promo_engine::{HostSurface, PreviewEngine, SURFACE_IOSURFACE};
+        use promo_gpu::iosurface::OwnedIoSurface;
         use promo_model::ProjectMetadata;
         use std::ffi::{c_char, c_void};
         use std::sync::Mutex;
@@ -22,7 +22,7 @@ fn preview(c: &mut Criterion) {
             _layer_id: *const c_char,
             _source_time: f64,
             _tier: i32,
-            out_surface: *mut IOSurfaceRef,
+            out_surface: *mut HostSurface,
             out_flags: *mut i32,
         ) -> i32 {
             let state = unsafe { &*(user as *const Mutex<State>) };
@@ -30,7 +30,11 @@ fn preview(c: &mut Criterion) {
             // 1080p frame, like a real decoded proxy/full frame.
             let s = OwnedIoSurface::new_bgra(1920, 1080).expect("surface");
             unsafe {
-                *out_surface = s.raw();
+                *out_surface = HostSurface {
+                    kind: SURFACE_IOSURFACE,
+                    handle: s.raw(),
+                    ..Default::default()
+                };
                 *out_flags = 0;
             }
             state.keep_alive.push(s);

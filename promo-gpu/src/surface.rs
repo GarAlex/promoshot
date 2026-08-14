@@ -33,3 +33,68 @@ pub enum GpuSurface {
 // The raw-handle variants are just numbers until an import module touches
 // them on the right thread; moving the enum between threads is safe.
 unsafe impl Send for GpuSurface {}
+
+/// A `GpuSurface` after import: the wgpu texture plus whatever must stay alive
+/// for that texture to remain valid.
+///
+/// Zero-copy adoption means the texture is a *view onto someone else's memory*
+/// — on Apple the IOSurface must outlive it, so the retain is held here and
+/// released on drop. CPU uploads own their pixels outright and keep nothing.
+/// Callers hold an `ImportedFrame` and never think about it again.
+pub struct ImportedFrame {
+    pub texture: crate::compositor::InputTexture,
+    pub width: u32,
+    pub height: u32,
+    /// Never read — it exists so its `Drop` runs when the frame dies.
+    #[allow(dead_code)]
+    keep_alive: KeepAlive,
+}
+
+impl ImportedFrame {
+    pub(crate) fn owning(
+        texture: crate::compositor::InputTexture,
+        width: u32,
+        height: u32,
+        keep_alive: KeepAlive,
+    ) -> Self {
+        Self { texture, width, height, keep_alive }
+    }
+
+    /// Bytes this frame occupies, for the memory governor.
+    pub fn byte_size(&self) -> usize {
+        self.width as usize * self.height as usize * 4
+    }
+}
+
+impl std::fmt::Debug for ImportedFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImportedFrame")
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .finish()
+    }
+}
+
+/// What an imported frame must keep alive. One variant per surface kind that
+/// has an ownership rule; everything else keeps nothing.
+pub(crate) enum KeepAlive {
+    /// Uploaded pixels — the texture owns its memory.
+    Nothing,
+    /// An adopted IOSurface, retained until this drops.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    IoSurface(*mut std::ffi::c_void),
+}
+
+impl Drop for KeepAlive {
+    fn drop(&mut self) {
+        match self {
+            KeepAlive::Nothing => {}
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            KeepAlive::IoSurface(raw) => unsafe { crate::iosurface::release(*raw) },
+        }
+    }
+}
+
+// Same reasoning as GpuSurface: the handle is a number until an import module
+// touches it, and the frame is used from one thread at a time.
+unsafe impl Send for ImportedFrame {}

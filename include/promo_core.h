@@ -176,14 +176,48 @@ int32_t promo_vector_content_bounds(const char *doc_json, double *out);
 
 typedef struct PromoPreview PromoPreview;
 
+/* How a host hands a frame over. Fill `kind` and the fields that kind uses;
+ * everything else stays zero. One struct for every platform, so the provider
+ * contract does not name one.
+ *
+ * Ownership: the engine retains an IOSURFACE for as long as it caches the
+ * frame, and COPIES cpu pixels during the call — so a host may reuse its
+ * pixel buffer as soon as the provider returns. */
+typedef struct {
+  int32_t kind;           /* PROMO_SURFACE_*; 0 = no frame                  */
+  void *handle;           /* IOSURFACE: IOSurfaceRef. D3D_HANDLE: NT handle */
+  int32_t fd;             /* DMABUF: file descriptor                        */
+  const uint8_t *data;    /* CPU_PIXELS: BGRA rows                          */
+  uint32_t width;
+  uint32_t height;
+  uint32_t bytes_per_row; /* CPU_PIXELS: stride; width * 4 when unpadded    */
+} PromoHostSurface;
+
+#define PROMO_SURFACE_NONE 0
+#define PROMO_SURFACE_IOSURFACE 1
+#define PROMO_SURFACE_D3D_HANDLE 2
+#define PROMO_SURFACE_DMABUF 3
+#define PROMO_SURFACE_CPU_PIXELS 4
+
 /* Host frame provider. layer_id is NUL-terminated; source_time < 0 means
- * static content (image/drawing layers). Write a BGRA IOSurfaceRef to
- * out_surface (the engine CFRetains it until eviction) and optional flags
- * (bit 1 = pre-framed: engine skips radius/border). Return 0 on success,
- * non-zero to skip the layer for this render. */
+ * static content (image/drawing layers). Fill *out_surface (see
+ * PromoHostSurface) and optional flags (bit 1 = pre-framed: engine skips
+ * radius/border). Return 0 on success, non-zero to skip the layer for this
+ * render.
+ *
+ * CHANGED (2026-08-14): out_surface was `void **` taking a bare IOSurfaceRef.
+ * Hosts must now fill the struct — writing a pointer through the old
+ * signature lands in `kind` and corrupts the descriptor. */
 typedef int32_t (*PromoFrameProvider)(void *user, const char *layer_id,
                                       double source_time, int32_t tier,
-                                      void **out_surface, int32_t *out_flags);
+                                      PromoHostSurface *out_surface,
+                                      int32_t *out_flags);
+
+/* Field offsets of PromoHostSurface, so a host that mirrors the struct in
+ * another language can assert its layout matches rather than assume it.
+ * field: 0 = sizeof, 1 = kind, 2 = handle, 3 = fd, 4 = data, 5 = width,
+ * 6 = height, 7 = bytes_per_row. UINT64_MAX if unknown. */
+uint64_t promo_host_surface_layout(int32_t field);
 
 /* Creates a preview engine for a metadata.json payload. budget_bytes caps
  * the frame cache (LRU eviction). NULL on parse/GPU failure. */
