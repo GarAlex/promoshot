@@ -230,6 +230,21 @@ char *promo_lanes_row_id(const char *params_json, const char *layer_id);
 int32_t promo_lanes_fit(double timeline_width);
 int32_t promo_lanes_compact_labels(double timeline_width);
 
+/* Selection rules (Stage 1 slice 1.2). Stateless: the front end still holds
+ * the selection and passes it in — the core owns the rules, not the state.
+ *
+ * promo_selection_reveal_anchor: promo_lanes_pack's JSON plus
+ *   {"target": "id", "usesLanes": bool}; returns
+ *   {"kind": "row"|"layer", "value": "..."} or NULL when focus dropped it.
+ * promo_selection_is_pinned_outside_window:
+ *   {"layer": {...}, "selectedID": "id"|null, "viewport": {...},
+ *    "windowActive": bool} -> 1 when on screen only because it is pinned.
+ * promo_selection_reconcile: {"orderedIDs": [...], "selectedID": "id"|null}
+ *   -> the selection after a list change, or NULL for an empty project. */
+char *promo_selection_reveal_anchor(const char *params_json);
+int32_t promo_selection_is_pinned_outside_window(const char *params_json);
+char *promo_selection_reconcile(const char *params_json);
+
 /* Field offsets of PromoHostSurface, so a host that mirrors the struct in
  * another language can assert its layout matches rather than assume it.
  * field: 0 = sizeof, 1 = kind, 2 = handle, 3 = fd, 4 = data, 5 = width,

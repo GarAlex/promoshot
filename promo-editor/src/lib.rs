@@ -6,8 +6,10 @@
 //! `../EDITOR-PLAN.md`; this is Stage 1, whose slices move only derived and
 //! ephemeral state and leave document ownership where it is.
 
+pub mod selection;
 pub mod timeline;
 
+pub use selection::{RevealAnchor, Selection};
 pub use timeline::{
     lane_count, pack, row_id_containing, visible_layers, TimelineLane, TimelineLanePolicy,
     TimelineViewport,

@@ -76,7 +76,7 @@ useful to egui.
 | Slice | Moves | Parity fixture | |
 |---|---|---|---|
 | 1.1 | Lane packing + viewport (`TimelineLanes.swift`, 195 lines) | `TimelineLanesTests` — already exists | **DONE 2026-08-14** |
-| 1.2 | Selection + pinning + reveal-newly-added | this session's rules, already specified by their fixes | |
+| 1.2 | Selection + pinning + reveal-newly-added | this session's rules, already specified by their fixes | **DONE 2026-08-14** |
 | 1.3 | Transport state machine (§5) | new table-driven tests | |
 
 After Stage 1, an egui app can render a correct, interactive timeline over a
@@ -209,4 +209,18 @@ Swift still owns the packing the app *uses*; the core agreeing is the
 precondition for deleting the Swift copy, which happens once slices 1.2–1.4
 land and `LaneTimelineView` reads lanes from the core.
 
-Next: **slice 1.2** — selection, pinning and reveal-newly-added.
+**Slice 1.2 done** (2026-08-14). `selection.rs` owns four rules that were
+three pieces of SwiftUI `@State` plus `ensureSelectedLayer`: what is selected,
+what must survive viewport filtering, when a layer is on screen *only* because
+it is pinned, and what a reveal scrolls to (a lane row or the layer's own row).
+Stateless across the FFI — Stage 1 moves rules, not ownership, so the view
+still holds `selectedLayerID` and passes it in.
+
+Note for every later slice: **`_id` fields need an explicit
+`#[serde(rename)]`.** serde's `camelCase` emits `selectedId`/`orderedIds`,
+this project writes `selectedID`/`orderedIDs`, and a Swift decoder answers a
+mismatch by yielding nothing rather than failing — so the feature silently does
+nothing. This cost two rounds of red tests across slices 1.1 and 1.2; the rule
+is now stated at the top of `promo-ffi/src/editor.rs`.
+
+Next: **slice 1.3** — the transport state machine (§5).

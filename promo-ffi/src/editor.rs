@@ -5,6 +5,13 @@
 //! flat binary. One boundary serves every non-Rust front end: Swift today,
 //! a Windows app later. Rust front ends depend on `promo-editor` directly and
 //! never come through here.
+//!
+//! **Key casing**: serde's `camelCase` renders `row_id` as `rowId`, but every
+//! key this project exchanges with Swift capitalises ID — `resourceID`,
+//! `imageCutID`, `selectedID`. Any field ending in `_id`/`_ids` therefore
+//! needs an explicit `#[serde(rename)]`. Getting it wrong is silent: a Swift
+//! decoder yields nothing rather than failing, so the feature simply does
+//! nothing. Both parity suites here exist partly to catch exactly that.
 
 use promo_editor::TimelineViewport;
 use promo_model::ProjectLayer;
@@ -153,4 +160,170 @@ pub extern "C" fn promo_lanes_fit(timeline_width: f64) -> i32 {
 #[no_mangle]
 pub extern "C" fn promo_lanes_compact_labels(timeline_width: f64) -> i32 {
     promo_editor::TimelineLanePolicy::uses_compact_labels(timeline_width) as i32
+}
+
+// --- selection, pinning, reveal (Stage 1 slice 1.2) ----------------------
+//
+// Stateless on purpose. Stage 1 does not move ownership: Swift still holds the
+// selection in `@State`, and passes it in. The core owns the *rules*, not the
+// state — which is the whole distinction Stage 1 rests on.
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RevealParams {
+    #[serde(flatten)]
+    pack: PackParams,
+    /// The layer to scroll to.
+    target: String,
+    /// True when the lane view is showing (anchor is a row), false for the
+    /// classic list (anchor is the layer itself).
+    uses_lanes: bool,
+}
+
+/// Resolves what to scroll to when revealing a layer. Input is
+/// [`promo_lanes_pack`]'s JSON plus `{"target": "id", "usesLanes": bool}`.
+///
+/// Returns `{"kind": "row"|"layer", "value": "…"}`, or NULL when focus has
+/// dropped the layer and there is nothing to scroll to. Free with
+/// `promo_string_free`.
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_selection_reveal_anchor(params_json: *const c_char) -> *mut c_char {
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(params) = serde_json::from_str::<RevealParams>(text) else {
+        return std::ptr::null_mut();
+    };
+
+    let mut selection = promo_editor::Selection::new();
+    selection.request_reveal(&params.target);
+
+    let anchor = if params.uses_lanes {
+        let viewport = params.pack.viewport.as_ref().map(|v| TimelineViewport {
+            center: v.center,
+            span: v.span.unwrap_or(f64::INFINITY),
+            total: v.total,
+        });
+        let lanes = promo_editor::pack(
+            &params.pack.layers,
+            params.pack.total_duration,
+            params.pack.gutter,
+            viewport.as_ref(),
+            &params.pack.always_include,
+        );
+        selection.take_reveal(Some(&lanes))
+    } else {
+        selection.take_reveal(None)
+    };
+
+    let (kind, value) = match anchor {
+        Some(promo_editor::RevealAnchor::Row(row)) => ("row", row),
+        Some(promo_editor::RevealAnchor::Layer(id)) => ("layer", id),
+        None => return std::ptr::null_mut(),
+    };
+    match serde_json::to_string(&serde_json::json!({"kind": kind, "value": value}))
+        .ok()
+        .and_then(|s| CString::new(s).ok())
+    {
+        Some(c) => c.into_raw(),
+        None => std::ptr::null_mut(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PinnedParams {
+    layer: ProjectLayer,
+    #[serde(rename = "selectedID")]
+    selected_id: Option<String>,
+    viewport: ViewportParams,
+    window_active: bool,
+}
+
+/// Is this layer on screen only because it is the pinned selection? 1 = yes.
+///
+/// Input: `{"layer": {...}, "selectedID": "id"|null,
+///          "viewport": {...}, "windowActive": bool}`.
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_selection_is_pinned_outside_window(params_json: *const c_char) -> i32 {
+    if params_json.is_null() {
+        return 0;
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+        return 0;
+    };
+    let Ok(params) = serde_json::from_str::<PinnedParams>(text) else {
+        return 0;
+    };
+    let mut selection = promo_editor::Selection::new();
+    if let Some(id) = &params.selected_id {
+        selection.select(id);
+    }
+    let viewport = TimelineViewport {
+        center: params.viewport.center,
+        span: params.viewport.span.unwrap_or(f64::INFINITY),
+        total: params.viewport.total,
+    };
+    selection.is_pinned_outside_window(&params.layer, &viewport, params.window_active) as i32
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReconcileParams {
+    /// Layer ids in display order.
+    #[serde(rename = "orderedIDs")]
+    ordered_ids: Vec<String>,
+    #[serde(rename = "selectedID")]
+    selected_id: Option<String>,
+}
+
+/// The selection after the layer list changed: unchanged if still present,
+/// otherwise the first layer, or NULL for an empty project. Free a non-NULL
+/// result with `promo_string_free`.
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_selection_reconcile(params_json: *const c_char) -> *mut c_char {
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(params) = serde_json::from_str::<ReconcileParams>(text) else {
+        return std::ptr::null_mut();
+    };
+    // reconcile() works on layers; ids are all it actually reads, so build the
+    // thinnest thing that carries them.
+    let ordered: Vec<ProjectLayer> = params
+        .ordered_ids
+        .iter()
+        .enumerate()
+        .filter_map(|(i, id)| {
+            serde_json::from_value(serde_json::json!({
+                "id": id, "name": id, "sortIndex": i, "kind": "image",
+                "isEnabled": true, "startTime": 0.0, "keyframes": []
+            }))
+            .ok()
+        })
+        .collect();
+    let mut selection = promo_editor::Selection::new();
+    if let Some(id) = &params.selected_id {
+        selection.select(id);
+    }
+    selection.reconcile(&ordered);
+    match selection.selected().and_then(|s| CString::new(s).ok()) {
+        Some(c) => c.into_raw(),
+        None => std::ptr::null_mut(),
+    }
 }
