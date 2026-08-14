@@ -77,7 +77,7 @@ useful to egui.
 |---|---|---|---|
 | 1.1 | Lane packing + viewport (`TimelineLanes.swift`, 195 lines) | `TimelineLanesTests` — already exists | **DONE 2026-08-14** |
 | 1.2 | Selection + pinning + reveal-newly-added | this session's rules, already specified by their fixes | **DONE 2026-08-14** |
-| 1.3 | Transport state machine (§5) | new table-driven tests | |
+| 1.3 | Transport state machine (§5) | new table-driven tests | **DONE 2026-08-14** |
 
 After Stage 1, an egui app can render a correct, interactive timeline over a
 read-only document. That alone is most of E0–E2 of the egui plan.
@@ -223,4 +223,22 @@ mismatch by yielding nothing rather than failing — so the feature silently doe
 nothing. This cost two rounds of red tests across slices 1.1 and 1.2; the rule
 is now stated at the top of `promo-ffi/src/editor.rs`.
 
-Next: **slice 1.3** — the transport state machine (§5).
+**Slice 1.3 done** (2026-08-14). `transport.rs` is the machine from §5, and
+the four invariants are four named tests in Rust and seven in Swift. It answers
+events with ordered `Effect`s rather than driving a player, so a host decides
+what a seek costs while the crate decides whether one is owed.
+
+Invariant 4 got the sharpest treatment, because it is the one that reads like a
+detail: seeks carry a **generation**, and `seek_completed` compares generations
+rather than trusting the host's "finished" flag — which AVFoundation sets false
+both for a superseded seek and for one whose item was not ready. Branching on
+that flag is what stranded playback. `promo_transport_seek_is_current` exists
+so the Swift call site stops asking the wrong question.
+
+**Stage 1 is complete.** An egui app can now drive a correct interactive
+timeline over a read-only document — packing, viewport, selection, pinning,
+reveal and transport — which is most of E0–E2 of the egui plan.
+
+Next: **Stage 2**, where the core takes the document. Its first slice decides
+per-layer revisions (§8) before any command lands, so the 100+-layer
+responsiveness is defended rather than repaired.

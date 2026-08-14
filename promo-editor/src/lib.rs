@@ -8,9 +8,11 @@
 
 pub mod selection;
 pub mod timeline;
+pub mod transport;
 
 pub use selection::{RevealAnchor, Selection};
 pub use timeline::{
     lane_count, pack, row_id_containing, visible_layers, TimelineLane, TimelineLanePolicy,
     TimelineViewport,
 };
+pub use transport::{Effect, Transport, TransportState};

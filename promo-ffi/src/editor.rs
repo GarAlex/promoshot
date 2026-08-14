@@ -327,3 +327,128 @@ pub extern "C" fn promo_selection_reconcile(params_json: *const c_char) -> *mut 
         None => std::ptr::null_mut(),
     }
 }
+
+// --- transport (Stage 1 slice 1.3) ---------------------------------------
+//
+// Stateless like the selection rules: the host holds the machine's state in
+// its own `@State` and hands it over per event. The core owns the decisions.
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransportEvent {
+    kind: String,
+    #[serde(default)]
+    time: Option<f64>,
+    #[serde(default)]
+    duration: Option<f64>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransportParams {
+    state: String,
+    time: f64,
+    duration: f64,
+    #[serde(default)]
+    resume_after_scrub: bool,
+    #[serde(default)]
+    seek_generation: u64,
+    event: TransportEvent,
+}
+
+/// Applies one event to the transport machine. Input JSON:
+/// `{"state": "idle"|"playing"|"scrubbing", "time": s, "duration": s,
+///   "resumeAfterScrub": bool, "seekGeneration": n,
+///   "event": {"kind": "...", "time": s?, "duration": s?}}`
+///
+/// Event kinds: `play`, `pause`, `toggle`, `tick` (needs `time`),
+/// `beginScrub`, `scrubTo` (needs `time`), `endScrub`, `seek` (needs `time`),
+/// `setDuration` (needs `duration`).
+///
+/// Returns the next state plus the effects the host should carry out, in
+/// order:
+/// `{"state", "time", "duration", "resumeAfterScrub", "seekGeneration",
+///   "effects": [{"kind": "seek", "time", "generation"} |
+///               {"kind": "startPlayback", "at"} | {"kind": "stopPlayback"}]}`
+/// Free with `promo_string_free`.
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_transport_step(params_json: *const c_char) -> *mut c_char {
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(params) = serde_json::from_str::<TransportParams>(text) else {
+        return std::ptr::null_mut();
+    };
+
+    let mut transport = promo_editor::Transport::restore(
+        promo_editor::TransportState::parse(&params.state),
+        params.time,
+        params.duration,
+        params.resume_after_scrub,
+        params.seek_generation,
+    );
+
+    let effects = match params.event.kind.as_str() {
+        "play" => transport.play(),
+        "pause" => transport.pause(),
+        "toggle" => transport.toggle(),
+        "tick" => transport.tick(params.event.time.unwrap_or(transport.time())),
+        "beginScrub" => transport.begin_scrub(),
+        "scrubTo" => {
+            transport.scrub_to(params.event.time.unwrap_or(transport.time()));
+            vec![]
+        }
+        "endScrub" => transport.end_scrub(),
+        "seek" => transport.seek(params.event.time.unwrap_or(transport.time())),
+        "setDuration" => {
+            transport.set_duration(params.event.duration.unwrap_or(transport.duration()));
+            vec![]
+        }
+        _ => return std::ptr::null_mut(),
+    };
+
+    let effects_json: Vec<serde_json::Value> = effects
+        .iter()
+        .map(|e| match e {
+            promo_editor::Effect::Seek { time, generation } => {
+                serde_json::json!({"kind": "seek", "time": time, "generation": generation})
+            }
+            promo_editor::Effect::StartPlayback { at } => {
+                serde_json::json!({"kind": "startPlayback", "at": at})
+            }
+            promo_editor::Effect::StopPlayback => serde_json::json!({"kind": "stopPlayback"}),
+        })
+        .collect();
+
+    let out = serde_json::json!({
+        "state": transport.state().as_str(),
+        "time": transport.time(),
+        "duration": transport.duration(),
+        "resumeAfterScrub": transport.resumes_after_scrub(),
+        "seekGeneration": transport.seek_generation(),
+        "effects": effects_json,
+    });
+    match serde_json::to_string(&out)
+        .ok()
+        .and_then(|s| CString::new(s).ok())
+    {
+        Some(c) => c.into_raw(),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// Is this seek completion the current one? 1 = yes.
+///
+/// Exists so hosts stop branching on the player's "finished" flag, which is
+/// false both for a superseded seek and for one whose item was not ready —
+/// the confusion that strands playback. The generation decides.
+#[no_mangle]
+pub extern "C" fn promo_transport_seek_is_current(generation: u64, current: u64) -> i32 {
+    (generation == current) as i32
+}

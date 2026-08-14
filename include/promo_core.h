@@ -245,6 +245,27 @@ char *promo_selection_reveal_anchor(const char *params_json);
 int32_t promo_selection_is_pinned_outside_window(const char *params_json);
 char *promo_selection_reconcile(const char *params_json);
 
+/* Transport state machine (Stage 1 slice 1.3). Stateless: the host holds the
+ * machine's state and hands it over per event.
+ *
+ * promo_transport_step input:
+ *   {"state": "idle"|"playing"|"scrubbing", "time": s, "duration": s,
+ *    "resumeAfterScrub": bool, "seekGeneration": n,
+ *    "event": {"kind": "play"|"pause"|"toggle"|"tick"|"beginScrub"|
+ *                      "scrubTo"|"endScrub"|"seek"|"setDuration",
+ *              "time": s?, "duration": s?}}
+ * output: the next state plus ordered effects —
+ *   {"state","time","duration","resumeAfterScrub","seekGeneration",
+ *    "effects":[{"kind":"seek","time","generation"} |
+ *               {"kind":"startPlayback","at"} | {"kind":"stopPlayback"}]}
+ * Free with promo_string_free; NULL on malformed input or unknown event.
+ *
+ * promo_transport_seek_is_current: use INSTEAD of the player's "finished"
+ * flag, which is false both for a superseded seek and for one whose item was
+ * not ready — branching on it is what strands playback. */
+char *promo_transport_step(const char *params_json);
+int32_t promo_transport_seek_is_current(uint64_t generation, uint64_t current);
+
 /* Field offsets of PromoHostSurface, so a host that mirrors the struct in
  * another language can assert its layout matches rather than assume it.
  * field: 0 = sizeof, 1 = kind, 2 = handle, 3 = fd, 4 = data, 5 = width,
