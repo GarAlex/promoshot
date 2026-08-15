@@ -478,3 +478,101 @@ mod cut_tests {
         assert!((source_time_for_local(&cut, 5.0) - 9.0).abs() < 1e-9);
     }
 }
+
+/// Where to read the source for a layer's local time, honouring what the
+/// layer does once its material runs out.
+///
+/// `None` means "draw nothing" — the `Hide` policy, and the only case a caller
+/// has to handle specially. `Hold` and `Loop` both answer with a time, so the
+/// existing render path is unchanged for them.
+///
+/// The policy lives on the layer rather than the resource because looping is
+/// not a property of a file: the same recording can loop under one layer and
+/// freeze under another. A layer that names no policy falls back to the
+/// resource's legacy `looped` flag, so existing projects behave exactly as
+/// before.
+pub fn source_time_for_layer(
+    resource: &ProjectResource,
+    local: f64,
+    policy: Option<promo_model::BeyondEnd>,
+) -> Option<f64> {
+    use promo_model::BeyondEnd;
+    let period = loop_period(resource);
+    let policy = policy.unwrap_or(if resource.is_looped() {
+        BeyondEnd::Loop
+    } else {
+        BeyondEnd::Hold
+    });
+    match policy {
+        BeyondEnd::Loop if period > 0.0 => {
+            let folded = loop_fold(local, period);
+            Some(source_time_for_unpaused_local(
+                resource,
+                playback_interval(folded.local, &extended_video_pauses(resource)).media_time,
+            ))
+        }
+        BeyondEnd::Hide if period > 0.0 && local >= period => None,
+        // Hold, and the degenerate cases: map straight through, which clamps
+        // at the end of the trimmed range and so freezes the last frame.
+        _ => Some(source_time_for_local(resource, local)),
+    }
+}
+
+#[cfg(test)]
+mod beyond_end_tests {
+    use super::*;
+    use promo_model::BeyondEnd;
+
+    fn clip() -> ProjectResource {
+        serde_json::from_value(serde_json::json!({
+            "id": "R1", "kind": "video", "filename": "c.mp4",
+            "displayName": "C", "addedAt": 0, "duration": 10.0,
+            "trimStart": 2.0, "trimEnd": 6.0,
+            "imageCuts": [], "disabledAudioTrackIndices": []
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn hold_freezes_on_the_last_frame() {
+        let res = clip();
+        // 4s of usable material; ask for 7s in.
+        let t = source_time_for_layer(&res, 7.0, Some(BeyondEnd::Hold)).unwrap();
+        assert!(
+            (t - 6.0).abs() < 1e-9,
+            "clamped to the end of the trim, got {t}"
+        );
+    }
+
+    #[test]
+    fn loop_starts_over() {
+        let res = clip();
+        let first = source_time_for_layer(&res, 1.0, Some(BeyondEnd::Loop)).unwrap();
+        let wrapped = source_time_for_layer(&res, 5.0, Some(BeyondEnd::Loop)).unwrap();
+        assert!(
+            (first - wrapped).abs() < 1e-9,
+            "4s period: 5s in should read the same frame as 1s in ({first} vs {wrapped})"
+        );
+    }
+
+    #[test]
+    fn hide_stops_drawing_rather_than_freezing() {
+        let res = clip();
+        assert!(source_time_for_layer(&res, 3.9, Some(BeyondEnd::Hide)).is_some());
+        assert!(source_time_for_layer(&res, 4.1, Some(BeyondEnd::Hide)).is_none());
+    }
+
+    #[test]
+    fn no_policy_honours_the_legacy_looped_flag() {
+        // Existing projects said "looped" on the resource; they must keep
+        // behaving that way when the layer says nothing.
+        let mut res = clip();
+        let held = source_time_for_layer(&res, 5.0, None).unwrap();
+        assert!((held - 6.0).abs() < 1e-9);
+
+        res.looped = Some(true);
+        let looped = source_time_for_layer(&res, 5.0, None).unwrap();
+        let first = source_time_for_layer(&res, 1.0, None).unwrap();
+        assert!((looped - first).abs() < 1e-9);
+    }
+}

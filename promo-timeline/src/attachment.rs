@@ -391,6 +391,7 @@ mod tests {
             image_filename: None,
             image_cut_id: None,
             media_cut_id: None,
+            beyond_end: None,
             image_orientation: None,
             image_border_color_hex: None,
             image_border_width: None,

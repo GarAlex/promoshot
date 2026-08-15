@@ -367,7 +367,7 @@ impl PreviewEngine {
             let source_time = match self.resource_for(layer) {
                 Some(res) => {
                     let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
-                    tl::source_time_for_local(&view, local)
+                    tl::source_time_for_layer(&view, local, layer.beyond_end).unwrap_or(local)
                 }
                 None => local,
             };
@@ -620,7 +620,12 @@ impl PreviewEngine {
                         // A layer naming a cut plays that sub-range; the
                         // mapping is the same code either way.
                         let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
-                        tl::source_time_for_local(&view, local)
+                        match tl::source_time_for_layer(&view, local, layer.beyond_end) {
+                            Some(time) => time,
+                            // `Hide`: the layer has outlived its material and
+                            // draws nothing rather than freezing on a still.
+                            None => continue,
+                        }
                     }
                     None => local,
                 }

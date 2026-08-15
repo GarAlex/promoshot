@@ -601,6 +601,30 @@ pub struct ProjectLayerKeyframe {
     pub opacity: Option<f64>,
     pub transition_duration: f64,
 }
+/// What a layer does once its local time runs past the end of its source.
+///
+/// One question rather than a family of features: looping is not a property of
+/// a file, it is what this layer does when it runs out of material. Putting it
+/// on the layer means the same recording can loop under one layer and freeze
+/// under another.
+///
+/// `PingPong` is deliberately absent. It is expressible — reverse the cut once
+/// with ffmpeg (about 0.3s for a few seconds of 1440x900) and play the reversed
+/// copy forward — but as a cached derived artifact, not as a playback mode:
+/// decoding an inter-frame codec backwards costs a seek per frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BeyondEnd {
+    /// Freeze on the last frame. The default, and what happens today.
+    Hold,
+    /// Start over. Replaces the resource-level `looped` flag for layers that
+    /// set it.
+    Loop,
+    /// Stop drawing. Useful when a layer is sized by something else — an
+    /// attachment, say — and should simply not be there once its material is
+    /// spent, rather than sitting on a frozen still.
+    Hide,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -623,6 +647,10 @@ pub struct ProjectLayer {
     /// the resource's own trim, which is what every existing project does.
     #[serde(default, skip_serializing_if = "is_none", rename = "mediaCutID")]
     pub media_cut_id: Option<String>,
+    /// What happens once the layer outlives its source material. `None` holds
+    /// the last frame, which is what every existing project does.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub beyond_end: Option<BeyondEnd>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub image_orientation: Option<SlideshowImageOrientation>,
     #[serde(default, skip_serializing_if = "is_none")]
