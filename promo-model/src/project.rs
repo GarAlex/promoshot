@@ -616,8 +616,50 @@ pub struct ProjectLayer {
     pub caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub audio_focus: Option<bool>,
+    /// Timing derived from the layer above instead of stated outright.
+    ///
+    /// `start_time` and `duration` remain the resolved answer — every renderer
+    /// keeps reading plain numbers, and this is only the rule that produced
+    /// them. That split is deliberate: two renderers interpreting one spec
+    /// differently is exactly how caption placement diverged.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub timing: Option<LayerTiming>,
     #[serde(default)]
     pub keyframes: Vec<ProjectLayerKeyframe>,
+}
+
+/// Where a layer's start and end come from, when they come from its
+/// neighbour.
+///
+/// Anchors point only at the PREVIOUS layer — the next-lower `sortIndex`,
+/// whatever kind it is. That restriction is what makes this cheap: a cycle
+/// cannot be expressed, so resolution is one ordered pass with no graph to
+/// walk, and a chain of attachments is always a contiguous run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerTiming {
+    /// Absent means the layer's own `start_time` stands.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub start: Option<TimingAnchor>,
+    /// Absent means the layer's own `duration` stands. When present, duration
+    /// is derived and whatever is stored is only a cache.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub end: Option<TimingAnchor>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimingAnchor {
+    pub from: TimingReference,
+    #[serde(default)]
+    pub offset: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimingReference {
+    PreviousStart,
+    PreviousEnd,
 }
 
 impl ProjectLayer {

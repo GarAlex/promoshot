@@ -6,11 +6,13 @@
 //! identical epsilons, clamps, walk order, and float widths — the Phase-1
 //! parity harness diffs them fixture-by-fixture.
 
+pub mod attachment;
 pub mod audio;
 pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 
+pub use attachment::{resolve_attachments, run_containing, AttachmentProblem};
 pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
