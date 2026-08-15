@@ -26,6 +26,7 @@ material plus the beats — around 42s for the five LightCell captures.
 
 import json
 import math
+import uuid
 import os
 import shutil
 import subprocess
@@ -49,6 +50,11 @@ WINDOW_BORDER_COLOR = "26364F"
 TITLE_CARD = 4.6             # the opener
 OUTRO = 3.2
 TITLE_BEAT = 2.5             # centred chapter title, before its clip
+# --zoomdown: the chapter title opens BIG in the centre and shrinks to the
+# headline size as it rides up. Caption keyframes animate font size via
+# `zoom` (the app's mapping), and the core re-rasterizes per size, so the
+# text stays crisp the whole way instead of being a scaled bitmap.
+BIG_TITLE = 96
 MOVE = 0.5                   # how long the title takes to travel up
 # The window must not arrive while the title is still crossing it: white text
 # over a white app window is invisible, which is exactly what the first render
@@ -148,6 +154,9 @@ def settings():
         "subtitleLeftMargin": 90,
         "subtitleRightMargin": 90,
         "subtitleVerticalMargin": VERTICAL_MARGIN,
+        # 60000/1001 matches what ScreenCaptureKit actually delivers, so the
+        # scroll stays as smooth as it was captured.
+        "fps": 60000 / 1001,
     }
 
 
@@ -196,8 +205,64 @@ def attach(start=None, end=None):
     return timing
 
 
+def chapter_title_keys(index, life, zoomdown):
+    """The chapter title's ride from centre stage to the headline slot.
+
+    With --zoomdown it also opens at BIG_TITLE and shrinks to HEADLINE_SIZE
+    during the move. Every keyframe carries every animated field: caption
+    values interpolate over the keyframes that define ANY of them, and an
+    omitted field falls back to the BASE style — a keyframe missing `zoom`
+    would yank the size back to 54 for its stretch of the timeline.
+    """
+    size_big = BIG_TITLE if zoomdown else HEADLINE_SIZE
+    centre = centre_shift(size_big)
+    top = VERTICAL_MARGIN
+    return [
+        {"id": f"HA{index}", "time": 0, "opacity": 0.0,
+         "verticalShift": centre, "zoom": size_big, "transitionDuration": 0},
+        {"id": f"HB{index}", "time": HEAD_FADE, "opacity": 1.0,
+         "verticalShift": centre, "zoom": size_big,
+         "transitionDuration": HEAD_FADE},
+        # Hold dead centre for the whole title beat...
+        {"id": f"HC{index}", "time": TITLE_BEAT, "opacity": 1.0,
+         "verticalShift": centre, "zoom": size_big, "transitionDuration": 0},
+        # ...then ride up (and shrink) while the clip fades in.
+        {"id": f"HD{index}", "time": TITLE_BEAT + MOVE, "opacity": 1.0,
+         "verticalShift": top, "zoom": HEADLINE_SIZE,
+         "transitionDuration": MOVE},
+        {"id": f"HE{index}", "time": life - HEAD_FADE, "opacity": 1.0,
+         "verticalShift": top, "zoom": HEADLINE_SIZE, "transitionDuration": 0},
+        {"id": f"HF{index}", "time": life, "opacity": 0.0,
+         "verticalShift": top, "zoom": HEADLINE_SIZE,
+         "transitionDuration": HEAD_FADE},
+    ]
+
+
+def uuidify(meta):
+    """Rewrite every id as a deterministic UUID.
+
+    The core stores ids as strings, but the APP decodes them as UUIDs — a
+    project with ids like "V0" validates in the core and then cannot be opened
+    in PromoShot at all. uuid5 keeps them stable across regenerations, so
+    reruns diff cleanly.
+    """
+    ns = uuid.uuid5(uuid.NAMESPACE_URL, "promoshot.chapters")
+    def m(value):
+        return str(uuid.uuid5(ns, str(value))).upper()
+    meta["id"] = m(meta["id"])
+    for resource in meta["resources"]:
+        resource["id"] = m(resource["id"])
+    for layer in meta["layers"]:
+        layer["id"] = m(layer["id"])
+        if "resourceID" in layer:
+            layer["resourceID"] = m(layer["resourceID"])
+        for key in layer.get("keyframes", []):
+            key["id"] = m(key["id"])
+
+
 def main():
     attached = "--attached" in sys.argv
+    zoomdown = "--zoomdown" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if len(args) < 3:
         raise SystemExit(__doc__)
@@ -315,22 +380,7 @@ def main():
         life = TITLE_BEAT + CLIP_LEAD + usable
         chapter_caption = caption_layer(
             f"H{index}", headline, headline, base + 1, cursor, life,
-            [
-                {"id": f"HA{index}", "time": 0, "opacity": 0.0,
-                 "verticalShift": dy_centre, "transitionDuration": 0},
-                {"id": f"HB{index}", "time": HEAD_FADE, "opacity": 1.0,
-                 "verticalShift": dy_centre, "transitionDuration": HEAD_FADE},
-                # Hold dead centre for the whole title beat...
-                {"id": f"HC{index}", "time": TITLE_BEAT, "opacity": 1.0,
-                 "verticalShift": dy_centre, "transitionDuration": 0},
-                # ...then ride up to the headline slot while the clip plays.
-                {"id": f"HD{index}", "time": TITLE_BEAT + MOVE, "opacity": 1.0,
-                 "verticalShift": 0, "transitionDuration": MOVE},
-                {"id": f"HE{index}", "time": life - HEAD_FADE, "opacity": 1.0,
-                 "verticalShift": 0, "transitionDuration": 0},
-                {"id": f"HF{index}", "time": life, "opacity": 0.0,
-                 "verticalShift": 0, "transitionDuration": HEAD_FADE},
-            ])
+            chapter_title_keys(index, life, zoomdown))
         if attached:
             # Its own clip is the layer directly above: begin a title beat
             # before it starts, and finish exactly when it does.
@@ -360,6 +410,7 @@ def main():
         "sourceType": "video", "compositionSettings": settings(),
         "resources": resources, "layers": layers,
     }
+    uuidify(meta)
     with open(os.path.join(out_dir, "metadata.json"), "w") as handle:
         json.dump(meta, handle, indent=2)
 
