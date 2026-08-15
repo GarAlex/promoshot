@@ -29,7 +29,10 @@ USAGE:
 
 OPTIONS:
     --time <s>     Timestamp for a still (default 0)
-    --fps <n>      Frames per second (default 30)
+    --fps <n>      Frames per second, overriding the project's own
+                   (default: the project's `fps`, else 30). Fractional rates
+                   are allowed — 59.94 matches a typical screen recording
+                   exactly, where 30 resamples it.
     --from/--to    Time range (default: the whole composition)
     --size <WxH>   Output size (default: the project's canvas size)
 
@@ -130,10 +133,6 @@ impl Options {
                 (s.canvas_height.max(1.0)) as u32,
             )
         })
-    }
-
-    fn fps(&self) -> f64 {
-        self.fps.unwrap_or(30.0).max(1.0)
     }
 }
 
@@ -270,7 +269,14 @@ fn video(project: &Project, opts: &Options) -> Result<(), String> {
 fn range(project: &Project, opts: &Options) -> (f64, f64, f64) {
     let start = opts.from.unwrap_or(0.0).max(0.0);
     let end = opts.to.unwrap_or_else(|| project.duration()).max(start);
-    (start, end, opts.fps())
+    // The project decides its own frame rate; --fps is an override for a
+    // one-off render, not the place the answer normally lives.
+    let fps = opts
+        .fps
+        .or(project.meta.composition_settings.fps)
+        .unwrap_or(30.0)
+        .max(1.0);
+    (start, end, fps)
 }
 
 fn frame_count(start: f64, end: f64, fps: f64) -> usize {

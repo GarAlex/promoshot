@@ -323,6 +323,15 @@ fn default_black() -> String {
 pub struct CompositionSettings {
     pub canvas_width: f64,
     pub canvas_height: f64,
+    /// Frames per second for video output. `None` renders at 30.
+    ///
+    /// It belongs with the canvas rather than on the command line: a project
+    /// that renders differently depending on which flag someone remembered is
+    /// not reproducible. Fractional rates are honoured, which matters more
+    /// than it sounds — screen recordings are commonly 60000/1001 (59.94), and
+    /// rendering those at exactly 30 resamples a source that would have gone
+    /// 2:1 into 29.97 untouched.
+    pub fps: Option<f64>,
     pub subtitle_left_margin: f64,
     pub subtitle_right_margin: f64,
     pub subtitle_vertical_margin: f64,
@@ -353,6 +362,7 @@ impl Default for CompositionSettings {
         CompositionSettings {
             canvas_width: 1920.0,
             canvas_height: 1080.0,
+            fps: None,
             subtitle_left_margin: 720.0,
             subtitle_right_margin: 60.0,
             subtitle_vertical_margin: 80.0,
@@ -396,6 +406,7 @@ impl Default for CompositionSettings {
 #[serde(rename_all = "camelCase", default)]
 struct CompositionSettingsWire {
     canvas_width: Option<f64>,
+    fps: Option<f64>,
     canvas_height: Option<f64>,
     subtitle_left_margin: Option<f64>,
     subtitle_right_margin: Option<f64>,
@@ -432,6 +443,9 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             .unwrap_or(dflt.background_color_hex.clone());
         Ok(CompositionSettings {
             canvas_width: w.canvas_width.unwrap_or(dflt.canvas_width),
+            // Absent means "renders at 30", which is not the same as 30 being
+            // written down — so it stays None rather than defaulting here.
+            fps: w.fps,
             canvas_height: w.canvas_height.unwrap_or(dflt.canvas_height),
             subtitle_left_margin: w.subtitle_left_margin.unwrap_or(dflt.subtitle_left_margin),
             subtitle_right_margin: w
@@ -493,6 +507,8 @@ impl Serialize for CompositionSettings {
         #[serde(rename_all = "camelCase")]
         struct Wire<'a> {
             canvas_width: f64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            fps: Option<f64>,
             canvas_height: f64,
             subtitle_left_margin: f64,
             subtitle_right_margin: f64,
@@ -523,6 +539,7 @@ impl Serialize for CompositionSettings {
         }
         Wire {
             canvas_width: self.canvas_width,
+            fps: self.fps,
             canvas_height: self.canvas_height,
             subtitle_left_margin: self.subtitle_left_margin,
             subtitle_right_margin: self.subtitle_right_margin,
@@ -1028,5 +1045,28 @@ impl ProjectMetadata {
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
+    }
+}
+
+#[cfg(test)]
+mod fps_tests {
+    use super::*;
+
+    #[test]
+    fn fps_round_trips_and_stays_absent_when_unset() {
+        // Absent means "render at 30", which is not the same as 30 written
+        // down — a project that never chose a rate should not start claiming
+        // one the moment it is saved.
+        let plain: CompositionSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(plain.fps, None);
+        assert!(!serde_json::to_string(&plain).unwrap().contains("fps"));
+
+        // Fractional rates survive: 60000/1001 is what a screen recording
+        // actually is, and rounding it to 60 would resample every frame.
+        let ntsc: CompositionSettings =
+            serde_json::from_str(r#"{"fps": 59.94005994005994}"#).unwrap();
+        assert_eq!(ntsc.fps, Some(59.94005994005994));
+        let text = serde_json::to_string(&ntsc).unwrap();
+        assert!(text.contains("59.94"), "{text}");
     }
 }
