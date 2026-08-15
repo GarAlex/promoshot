@@ -69,6 +69,46 @@ pub trait DecoderBackend: Send + Sync {
     fn open(&self, path: &Path) -> Result<Box<dyn VideoDecoder>, MediaError>;
 }
 
+/// Interleaved f32 PCM, and what it is.
+#[derive(Debug, Clone)]
+pub struct AudioBuffer {
+    pub samples: Vec<f32>,
+    pub channels: u16,
+    pub sample_rate: u32,
+}
+
+impl AudioBuffer {
+    pub fn frames(&self) -> usize {
+        if self.channels == 0 {
+            0
+        } else {
+            self.samples.len() / self.channels as usize
+        }
+    }
+
+    pub fn duration_s(&self) -> f64 {
+        if self.sample_rate == 0 {
+            0.0
+        } else {
+            self.frames() as f64 / self.sample_rate as f64
+        }
+    }
+}
+
+/// Reads an asset's audio as PCM. Whole-buffer rather than streaming: a
+/// composition's audio is minutes of f32 at most, and the mixer wants random
+/// access across overlapping layers anyway.
+pub trait AudioReader: Send + Sync {
+    /// `None` when the asset carries no audio track — which is not an error,
+    /// it is most screen recordings.
+    fn read(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+    ) -> Result<Option<AudioBuffer>, MediaError>;
+}
+
 /// What to write.
 #[derive(Debug, Clone)]
 pub struct EncodeSpec {
@@ -77,6 +117,8 @@ pub struct EncodeSpec {
     pub fps: f64,
     /// Lower is better quality; backends map it to their own scale.
     pub quality: u32,
+    /// Optional mixed soundtrack, muxed alongside the video.
+    pub audio: Option<AudioBuffer>,
 }
 
 /// An encode session. Frames arrive as tightly packed BGRA rows.
@@ -110,6 +152,11 @@ impl Registry {
             decoders: Vec::new(),
             encoders: Vec::new(),
         }
+    }
+
+    /// The audio reader for this build.
+    pub fn audio_reader(&self) -> &dyn AudioReader {
+        &ffmpeg::FfmpegAudioReader
     }
 
     /// Everything this build can offer. Today that is the ffmpeg backend;

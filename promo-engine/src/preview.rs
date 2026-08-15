@@ -11,7 +11,6 @@
 //! - The engine owns timing (trim/pause/loop source-time mapping), keyframe
 //!   interpolation, layout, z-order, caching, and GPU composition.
 
-
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
 use promo_gpu::{GpuSurface, ImportedFrame};
@@ -342,7 +341,11 @@ impl PreviewEngine {
         }
         self.cache.insert(
             id,
-            CachedFrame { frame, flags, caption_origin: None },
+            CachedFrame {
+                frame,
+                flags,
+                caption_origin: None,
+            },
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
@@ -410,8 +413,10 @@ impl PreviewEngine {
             self.meta.composition_settings.canvas_width,
             self.meta.composition_settings.canvas_height,
         );
-        let mut textures: Vec<&InputTexture> =
-            used.iter().map(|id| &self.cache[id].frame.texture).collect();
+        let mut textures: Vec<&InputTexture> = used
+            .iter()
+            .map(|id| &self.cache[id].frame.texture)
+            .collect();
 
         let overlay_texture;
         if let Some((surface, width, height)) = overlay {
@@ -441,8 +446,10 @@ impl PreviewEngine {
         output_height: u32,
     ) -> Result<(), GpuError> {
         let (scene, used) = self.build_scene(time, output_width, output_height)?;
-        let textures: Vec<&InputTexture> =
-            used.iter().map(|id| &self.cache[id].frame.texture).collect();
+        let textures: Vec<&InputTexture> = used
+            .iter()
+            .map(|id| &self.cache[id].frame.texture)
+            .collect();
         self.compositor
             .compose_to_texture_borrowed(self.ctx, &scene, &textures, output)
     }
@@ -477,10 +484,16 @@ impl PreviewEngine {
         }
 
         let raster = promo_text::rasterize(text, canvas.width(), canvas.height(), &style)?;
-        // promo-text produces straight RGBA; the compositor samples BGRA.
+        // promo-text produces straight RGBA; the compositor wants
+        // premultiplied BGRA. Without the premultiply, every antialiased
+        // glyph edge saturates and the text renders with binary edges.
         let mut bgra = raster.rgba;
         for px in bgra.chunks_exact_mut(4) {
             px.swap(0, 2);
+            let a = px[3] as u32;
+            for channel in px.iter_mut().take(3) {
+                *channel = ((*channel as u32 * a + 127) / 255) as u8;
+            }
         }
         let surface = GpuSurface::CpuPixels {
             data: bgra,
@@ -511,7 +524,12 @@ impl PreviewEngine {
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
         Some((
-            caption_scene_quad(raster.x, raster.y, raster.width as f64, raster.height as f64),
+            caption_scene_quad(
+                raster.x,
+                raster.y,
+                raster.width as f64,
+                raster.height as f64,
+            ),
             id,
         ))
     }
@@ -714,6 +732,8 @@ fn caption_style(
         right_margin: get(|s| s.right_margin, settings.subtitle_right_margin),
         vertical_margin: get(|s| s.vertical_margin, settings.subtitle_vertical_margin),
         line_height: 1.25,
+        // Let promo-text choose from the text colour.
+        smoothing: None,
     }
 }
 
@@ -838,7 +858,6 @@ mod tests {
         0
     }
 
-
     fn make_engine(
         meta: ProjectMetadata,
         colors: Vec<(String, [u8; 4], usize)>,
@@ -896,11 +915,17 @@ mod tests {
 
         // Opaque white overlay covering the canvas hides everything below.
         let overlay = OwnedIoSurface::new_bgra(64, 64).expect("overlay");
-        overlay.write_pixels(&[255, 255, 255, 255].repeat(64 * 64)).unwrap();
+        overlay
+            .write_pixels(&[255, 255, 255, 255].repeat(64 * 64))
+            .unwrap();
         engine
             .render_with_overlay(3.0, out.raw(), 64, 64, Some((overlay.raw(), 64, 64)))
             .expect("render");
-        assert_eq!(pixel(&out, 30, 30), [255, 255, 255, 255], "overlay covers video");
+        assert_eq!(
+            pixel(&out, 30, 30),
+            [255, 255, 255, 255],
+            "overlay covers video"
+        );
         assert_eq!(pixel(&out, 2, 2), [255, 255, 255, 255], "overlay covers bg");
 
         // A transparent overlay leaves the composition untouched.
@@ -910,7 +935,11 @@ mod tests {
             .render_with_overlay(3.0, out.raw(), 64, 64, Some((clear.raw(), 64, 64)))
             .expect("render");
         assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "video still visible");
-        assert_eq!(pixel(&out, 2, 2), [0, 51, 0, 255], "background still visible");
+        assert_eq!(
+            pixel(&out, 2, 2),
+            [0, 51, 0, 255],
+            "background still visible"
+        );
     }
 
     #[test]
@@ -1181,21 +1210,23 @@ mod portable_tests {
     /// Renders to a texture and reads it back as BGRA rows.
     fn render_and_read(engine: &mut PreviewEngine, time: f64, size: u32) -> Vec<u8> {
         let ctx = GpuContext::shared().expect("gpu");
-        let texture = ctx.device.create_texture(&promo_gpu::wgpu::TextureDescriptor {
-            label: Some("portable-test-target"),
-            size: promo_gpu::wgpu::Extent3d {
-                width: size,
-                height: size,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: promo_gpu::wgpu::TextureDimension::D2,
-            format: promo_gpu::wgpu::TextureFormat::Bgra8Unorm,
-            usage: promo_gpu::wgpu::TextureUsages::RENDER_ATTACHMENT
-                | promo_gpu::wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let texture = ctx
+            .device
+            .create_texture(&promo_gpu::wgpu::TextureDescriptor {
+                label: Some("portable-test-target"),
+                size: promo_gpu::wgpu::Extent3d {
+                    width: size,
+                    height: size,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: promo_gpu::wgpu::TextureDimension::D2,
+                format: promo_gpu::wgpu::TextureFormat::Bgra8Unorm,
+                usage: promo_gpu::wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | promo_gpu::wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
         engine
             .render_to_texture(time, &texture, size, size)
             .expect("render");

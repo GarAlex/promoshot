@@ -1095,6 +1095,7 @@ name = "promo-text"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
+ "image",
  "promo-model",
 ]
 

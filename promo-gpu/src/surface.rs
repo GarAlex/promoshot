@@ -22,6 +22,13 @@ pub enum GpuSurface {
     /// Universal fallback (software decode): tightly-packed pixels uploaded
     /// through the staging ring. The slow path — never used when a GPU
     /// surface is available.
+    ///
+    /// **BGRA with PREMULTIPLIED alpha.** The compositor blends premultiplied
+    /// (`One` / `OneMinusSrcAlpha`), so straight-alpha pixels make every
+    /// partially transparent edge saturate: half-covered white becomes fully
+    /// white, and antialiased text comes out with hard binary edges. Opaque
+    /// content is unaffected either way, which is why this went unnoticed
+    /// until the first texture with a soft edge arrived.
     CpuPixels {
         data: Vec<u8>,
         width: u32,
@@ -57,7 +64,12 @@ impl ImportedFrame {
         height: u32,
         keep_alive: KeepAlive,
     ) -> Self {
-        Self { texture, width, height, keep_alive }
+        Self {
+            texture,
+            width,
+            height,
+            keep_alive,
+        }
     }
 
     /// Bytes this frame occupies, for the memory governor.

@@ -638,9 +638,9 @@ impl Compositor {
                 }
             }
             #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-            crate::GpuSurface::IoSurface { .. } => Err(GpuError::Import(
-                "import: IOSurface is Apple-only".into(),
-            )),
+            crate::GpuSurface::IoSurface { .. } => {
+                Err(GpuError::Import("import: IOSurface is Apple-only".into()))
+            }
             crate::GpuSurface::CpuPixels {
                 data,
                 width,
@@ -651,7 +651,12 @@ impl Compositor {
                 let tight = (w as usize) * 4;
                 if stride as usize == tight {
                     let texture = Self::upload_texture(ctx, data, w, h)?;
-                    Ok(crate::ImportedFrame::owning(texture, w, h, KeepAlive::Nothing))
+                    Ok(crate::ImportedFrame::owning(
+                        texture,
+                        w,
+                        h,
+                        KeepAlive::Nothing,
+                    ))
                 } else {
                     // Padded rows (a decoder's natural stride) — repack once
                     // rather than teaching every caller about alignment.
@@ -664,7 +669,12 @@ impl Compositor {
                         packed.extend_from_slice(&data[start..start + tight]);
                     }
                     let texture = Self::upload_texture(ctx, &packed, w, h)?;
-                    Ok(crate::ImportedFrame::owning(texture, w, h, KeepAlive::Nothing))
+                    Ok(crate::ImportedFrame::owning(
+                        texture,
+                        w,
+                        h,
+                        KeepAlive::Nothing,
+                    ))
                 }
             }
             crate::GpuSurface::DmaBuf { .. } => Err(GpuError::Import(
@@ -860,13 +870,9 @@ impl Compositor {
         textures: &[&InputTexture],
         output: crate::iosurface::IOSurfaceRef,
     ) -> Result<(), GpuError> {
-        let texture = self.adopt_cached(
-            ctx,
-            output,
-            scene.output_width,
-            scene.output_height,
-            true,
-        )?.1;
+        let texture = self
+            .adopt_cached(ctx, output, scene.output_width, scene.output_height, true)?
+            .1;
         self.compose_to_texture_borrowed(ctx, scene, textures, &texture)
     }
 
@@ -902,7 +908,10 @@ impl Compositor {
     ) -> Result<(InputTexture, std::sync::Arc<wgpu::Texture>), GpuError> {
         // A cached ID can't be stale: entries CFRetain their surface, and the
         // OS never recycles an ID while a retain is outstanding.
-        let key = (unsafe { crate::iosurface::IOSurfaceGetID(surface) }, render_attachment);
+        let key = (
+            unsafe { crate::iosurface::IOSurfaceGetID(surface) },
+            render_attachment,
+        );
         if let Some(entry) = self.imports.get(&key) {
             if entry.width == width && entry.height == height {
                 self.import_hits += 1;
@@ -944,7 +953,9 @@ impl Compositor {
         }
         const MAX_IMPORTS: usize = 256;
         while self.imports.len() > MAX_IMPORTS {
-            let Some(victim) = self.import_order.pop_front() else { break };
+            let Some(victim) = self.import_order.pop_front() else {
+                break;
+            };
             if let Some(entry) = self.imports.remove(&victim) {
                 unsafe { core_foundation::base::CFRelease(entry.surface as _) };
             }
@@ -1131,7 +1142,9 @@ mod tests {
         let ctx = GpuContext::new().expect("gpu");
         let mut comp = Compositor::new(&ctx).expect("compositor");
         let input = OwnedIoSurface::new_bgra(4, 4).expect("input");
-        input.write_pixels(&[255, 0, 255, 255].repeat(16)).expect("write");
+        input
+            .write_pixels(&[255, 0, 255, 255].repeat(16))
+            .expect("write");
         let out = OwnedIoSurface::new_bgra(8, 8).expect("out");
         let scene = Scene {
             canvas_width: 8.0,
@@ -1161,7 +1174,9 @@ mod tests {
         assert_eq!(hits, 4, "frames 2 and 3 reuse both adoptions");
 
         // Contents written after caching must show through (live wrap).
-        input.write_pixels(&[0, 255, 0, 255].repeat(16)).expect("write2");
+        input
+            .write_pixels(&[0, 255, 0, 255].repeat(16))
+            .expect("write2");
         let tex = comp
             .import_iosurface_cached(&ctx, input.raw(), 4, 4)
             .expect("import");
@@ -1180,8 +1195,8 @@ mod tests {
         let out = OwnedIoSurface::new_bgra(16, 16).expect("out");
         // 300 distinct one-off textures, as a long export would produce.
         for i in 0..300 {
-            let tex = Compositor::upload_texture(
-                &ctx, &[(i % 255) as u8, 0, 0, 255], 1, 1).expect("tex");
+            let tex =
+                Compositor::upload_texture(&ctx, &[(i % 255) as u8, 0, 0, 255], 1, 1).expect("tex");
             let scene = Scene {
                 canvas_width: 16.0,
                 canvas_height: 16.0,
@@ -1241,6 +1256,40 @@ mod tests {
         plain.quads[0].color_709 = false;
         let pixels = compose(&plain, &[tex], &ctx);
         assert_eq!(px(&pixels, 8, 4, 4), [128, 128, 128, 255]);
+    }
+
+    /// A texture with a SOFT edge must blend, not saturate.
+    ///
+    /// The compositor blends premultiplied, so a straight-alpha texture makes
+    /// every half-covered pixel come out fully lit — which is what turned
+    /// antialiased captions into binary-edged text. Opaque textures hide the
+    /// bug entirely, so this uses a half-alpha one on purpose.
+    #[test]
+    fn a_half_transparent_texture_blends_instead_of_saturating() {
+        let ctx = GpuContext::new().expect("gpu");
+        // Premultiplied white at 50%: rgb and alpha both 128.
+        let pixels_in = vec![128u8; 4 * 4 * 4];
+        let tex = Compositor::upload_texture(&ctx, &pixels_in, 4, 4).expect("upload");
+        let scene = Scene {
+            canvas_width: 4.0,
+            canvas_height: 4.0,
+            background_rgba: [0.0, 0.0, 0.0, 1.0],
+            output_width: 4,
+            output_height: 4,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                texture: Some(0),
+                rect: [0.0, 0.0, 4.0, 4.0],
+                ..Default::default()
+            }],
+        };
+        let out = compose(&scene, &[tex], &ctx);
+        let p = px(&out, 4, 2, 2);
+        assert!(
+            (p[0] as i32 - 128).abs() <= 2,
+            "50% white over black should be mid grey, got {p:?} — a saturated \
+             255 means the texture path is not blending premultiplied"
+        );
     }
 
     #[test]

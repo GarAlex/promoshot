@@ -9,6 +9,14 @@
 //!
 //! Deliberately not a general text engine: one styled block, no rich runs, no
 //! bidi tailoring beyond what shaping gives for free.
+//!
+//! **Against CoreText.** Shaping and metrics match exactly — the same string
+//! at the same size lands in an identical glyph bounding box. Weight does
+//! not: CoreText dilates stems for light-on-dark text, so unsmoothed output
+//! is about 7% lighter. [`TextStyle::smoothing`] recovers roughly half of
+//! that by remapping coverage; the remainder would need real outline
+//! emboldening, which is the honest next step if captions ever have to match
+//! the Apple renderer pixel for pixel.
 
 use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight};
 use std::sync::{Mutex, OnceLock};
@@ -51,6 +59,26 @@ pub struct TextStyle {
     pub vertical_margin: f64,
     /// Line height as a multiple of font size.
     pub line_height: f64,
+    /// Coverage gamma — "font smoothing".
+    ///
+    /// Glyph antialiasing is blended in sRGB space by the compositor, but
+    /// sRGB is not linear: a 50%-covered edge pixel written as 127 carries
+    /// only about 21% of white's linear luminance, so light text on a dark
+    /// background renders visibly thinner than the outline. Measured against
+    /// CoreText on the same string, font and size, unsmoothed output had 7%
+    /// less ink for an identical glyph bounding box.
+    ///
+    /// `None` picks a value from the text colour: light text is thickened,
+    /// dark text left alone (dark-on-light has the opposite bias and is much
+    /// less pronounced). Set it explicitly to override.
+    ///
+    /// Measured on "Formulas without friction", Helvetica Neue Bold 54,
+    /// white on #0E1726, mean ink over an identical 640x40 glyph box:
+    /// unsmoothed 113.3, gamma 2.0 → 117.5, gamma 3.4 → 120.3, CoreText
+    /// 122.1. The default is 2.0: it recovers half the gap without hardening
+    /// edges. Closing the rest needs outline emboldening (stem darkening),
+    /// which coverage remapping cannot do — see the crate docs.
+    pub smoothing: Option<f64>,
 }
 
 impl Default for TextStyle {
@@ -69,6 +97,7 @@ impl Default for TextStyle {
             right_margin: 60.0,
             vertical_margin: 80.0,
             line_height: 1.25,
+            smoothing: None,
         }
     }
 }
@@ -124,9 +153,7 @@ fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFa
         // A named font that exists wins; one that does not falls through to
         // the UI sans below, rather than silently handing back whatever
         // fontdb happens to default to.
-        Some(name)
-            if name != "system" && !name.is_empty() && has_family(fonts, name) =>
-        {
+        Some(name) if name != "system" && !name.is_empty() && has_family(fonts, name) => {
             return ResolvedFamily::Named(name.to_string())
         }
         _ => {}
@@ -244,6 +271,16 @@ pub fn rasterize(
 
     // Text, drawn inside the padding. cosmic-text hands back coverage per
     // pixel; blend it over whatever the panel put there.
+    // Coverage gamma, chosen from the text colour unless the caller said.
+    let text_luma = (0.2126 * style.text_rgba[0] as f64
+        + 0.7152 * style.text_rgba[1] as f64
+        + 0.0722 * style.text_rgba[2] as f64)
+        / 255.0;
+    let gamma = style
+        .smoothing
+        .unwrap_or(if text_luma > 0.5 { 2.0 } else { 1.0 })
+        .max(0.1);
+
     let mut cache = swash_cache().lock().ok()?;
     let color = cosmic_text::Color::rgba(
         style.text_rgba[0],
@@ -255,10 +292,12 @@ pub fn rasterize(
     // text, so runs are nudged by the difference for multi-line blocks.
     let inner_width = bg_width - style.padding * 2.0;
     buffer.draw(&mut cache, color, |gx, gy, gw, gh, gcolor| {
-        let a = gcolor.a() as f64 / 255.0;
-        if a <= 0.0 {
+        let raw = gcolor.a() as f64 / 255.0;
+        if raw <= 0.0 {
             return;
         }
+        // Fully covered pixels are unaffected; only the partial edge changes.
+        let a = raw.powf(1.0 / gamma);
         for dy in 0..gh {
             for dx in 0..gw {
                 let px = gx + dx as i32;
@@ -475,5 +514,67 @@ mod tests {
             many.height,
             one.height
         );
+    }
+}
+
+#[cfg(test)]
+mod smoothing_tests {
+    use super::*;
+
+    fn ink(out: &RasterizedText) -> f64 {
+        // Mean alpha-weighted luminance over the whole panel.
+        let mut total = 0.0;
+        for px in out.rgba.chunks_exact(4) {
+            let a = px[3] as f64 / 255.0;
+            total += a * (0.2126 * px[0] as f64 + 0.7152 * px[1] as f64 + 0.0722 * px[2] as f64);
+        }
+        total / (out.width * out.height).max(1) as f64
+    }
+
+    /// Smoothing must add weight without moving a single glyph: it remaps
+    /// edge coverage, it does not re-lay-out anything.
+    #[test]
+    fn smoothing_thickens_light_text_without_changing_metrics() {
+        let plain = TextStyle {
+            font_size: 54.0,
+            smoothing: Some(1.0),
+            background_rgba: [0, 0, 0, 0],
+            ..Default::default()
+        };
+        let smoothed = TextStyle {
+            smoothing: Some(2.0),
+            ..plain.clone()
+        };
+        let a = rasterize("Formulas without friction", 1920.0, 200.0, &plain).unwrap();
+        let b = rasterize("Formulas without friction", 1920.0, 200.0, &smoothed).unwrap();
+
+        assert_eq!(
+            (a.width, a.height),
+            (b.width, b.height),
+            "smoothing must not change layout"
+        );
+        assert!(
+            ink(&b) > ink(&a),
+            "smoothed text should carry more ink: {} vs {}",
+            ink(&b),
+            ink(&a)
+        );
+    }
+
+    /// Dark text on a light background has the opposite bias, and much
+    /// weaker; leave it alone rather than making it blotchy.
+    #[test]
+    fn dark_text_is_not_smoothed_by_default() {
+        let dark = TextStyle {
+            text_rgba: [10, 20, 30, 255],
+            ..Default::default()
+        };
+        let forced = TextStyle {
+            smoothing: Some(1.0),
+            ..dark.clone()
+        };
+        let a = rasterize("Format every detail", 1440.0, 900.0, &dark).unwrap();
+        let b = rasterize("Format every detail", 1440.0, 900.0, &forced).unwrap();
+        assert_eq!(a.rgba, b.rgba, "default for dark text is no smoothing");
     }
 }

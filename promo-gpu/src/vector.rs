@@ -298,11 +298,7 @@ impl VectorRenderer {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
-        self.msaa = Some((
-            texture.create_view(&Default::default()),
-            width,
-            height,
-        ));
+        self.msaa = Some((texture.create_view(&Default::default()), width, height));
     }
 
     fn draw_mesh(
@@ -389,12 +385,7 @@ impl VectorRenderer {
 }
 
 fn vertices_as_bytes(v: &[MeshVertex]) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(
-            v.as_ptr() as *const u8,
-            std::mem::size_of_val(v),
-        )
-    }
+    unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
 }
 
 fn indices_as_bytes(v: &[u32]) -> &[u8] {
@@ -460,21 +451,22 @@ fn shape_path(shape: &VectorShape, scale: f64, dx: f64, dy: f64) -> Option<Path>
             let (ox, oy) = (rx * KAPPA, ry * KAPPA);
             let p = |x: f64, y: f64| point(x as f32, y as f32);
             builder.begin(p(cx + rx, cy));
-            builder.cubic_bezier_to(
-                p(cx + rx, cy + oy), p(cx + ox, cy + ry), p(cx, cy + ry));
-            builder.cubic_bezier_to(
-                p(cx - ox, cy + ry), p(cx - rx, cy + oy), p(cx - rx, cy));
-            builder.cubic_bezier_to(
-                p(cx - rx, cy - oy), p(cx - ox, cy - ry), p(cx, cy - ry));
-            builder.cubic_bezier_to(
-                p(cx + ox, cy - ry), p(cx + rx, cy - oy), p(cx + rx, cy));
+            builder.cubic_bezier_to(p(cx + rx, cy + oy), p(cx + ox, cy + ry), p(cx, cy + ry));
+            builder.cubic_bezier_to(p(cx - ox, cy + ry), p(cx - rx, cy + oy), p(cx - rx, cy));
+            builder.cubic_bezier_to(p(cx - rx, cy - oy), p(cx - ox, cy - ry), p(cx, cy - ry));
+            builder.cubic_bezier_to(p(cx + ox, cy - ry), p(cx + rx, cy - oy), p(cx + rx, cy));
             builder.end(true);
         }
     }
     Some(builder.build())
 }
 
-fn arrow_head(builder: &mut lyon_tessellation::path::path::Builder, tip: Point<f32>, base: Point<f32>, size: f32) {
+fn arrow_head(
+    builder: &mut lyon_tessellation::path::path::Builder,
+    tip: Point<f32>,
+    base: Point<f32>,
+    size: f32,
+) {
     let dx = tip.x - base.x;
     let dy = tip.y - base.y;
     let len = (dx * dx + dy * dy).sqrt().max(0.001);
@@ -576,7 +568,10 @@ mod tests {
 
     #[test]
     fn stroke_and_fill_produce_geometry() {
-        let mut shape = pen(vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 0.0)], 4.0);
+        let mut shape = pen(
+            vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 0.0)],
+            4.0,
+        );
         let stroke_only = tessellate(std::slice::from_ref(&shape), 1.0, 0.0, 0.0);
         assert!(!stroke_only.indices.is_empty(), "stroke tessellates");
 

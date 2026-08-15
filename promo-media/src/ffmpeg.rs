@@ -15,8 +15,8 @@
 //! traits and this one stays as the portable fallback.
 
 use crate::{
-    BackendCapabilities, DecoderBackend, EncodeSpec, EncoderBackend, MediaError, VideoDecoder,
-    VideoEncoder, VideoInfo,
+    AudioBuffer, AudioReader, BackendCapabilities, DecoderBackend, EncodeSpec, EncoderBackend,
+    MediaError, VideoDecoder, VideoEncoder, VideoInfo,
 };
 use promo_gpu::GpuSurface;
 use std::io::{Read, Write};
@@ -351,6 +351,88 @@ fn parse_rational(raw: &str) -> f64 {
     }
 }
 
+/// Reads audio by asking ffmpeg for raw f32 samples at the rate and channel
+/// count the mixer works in, so resampling is ffmpeg's problem rather than
+/// ours.
+pub struct FfmpegAudioReader;
+
+impl AudioReader for FfmpegAudioReader {
+    fn read(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+    ) -> Result<Option<AudioBuffer>, MediaError> {
+        if !has_audio_stream(path) {
+            return Ok(None);
+        }
+        let output = Command::new("ffmpeg")
+            .args(["-v", "error", "-nostdin", "-i"])
+            .arg(path)
+            .args([
+                "-vn",
+                "-f",
+                "f32le",
+                "-acodec",
+                "pcm_f32le",
+                "-ac",
+                &channels.to_string(),
+                "-ar",
+                &sample_rate.to_string(),
+                "-",
+            ])
+            .output()
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    MediaError::ToolMissing("ffmpeg", "not found on PATH".into())
+                }
+                _ => MediaError::Backend(format!("ffmpeg: {e}")),
+            })?;
+        if !output.status.success() {
+            return Err(MediaError::Backend(format!(
+                "{}: ffmpeg could not read its audio",
+                path.display()
+            )));
+        }
+        let samples: Vec<f32> = output
+            .stdout
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
+        if samples.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(AudioBuffer {
+            samples,
+            channels,
+            sample_rate,
+        }))
+    }
+}
+
+/// Does this asset have an audio track at all? Most screen recordings do not,
+/// and asking ffmpeg to decode a stream that is not there is an error rather
+/// than an empty answer.
+fn has_audio_stream(path: &Path) -> bool {
+    let Ok(output) = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(path)
+        .output()
+    else {
+        return false;
+    };
+    !String::from_utf8_lossy(&output.stdout).trim().is_empty()
+}
+
 pub struct FfmpegEncoderBackend;
 
 impl EncoderBackend for FfmpegEncoderBackend {
@@ -370,33 +452,54 @@ impl EncoderBackend for FfmpegEncoderBackend {
 
 pub struct FfmpegEncoder {
     child: Child,
+    /// The mixed soundtrack, written to a temp WAV that ffmpeg reads as a
+    /// second input. Two pipes into one process would have to be fed in
+    /// lockstep or ffmpeg blocks; a file sidesteps that for what is at most a
+    /// few minutes of audio.
+    audio_temp: Option<PathBuf>,
 }
 
 impl FfmpegEncoder {
     pub fn open(path: &Path, spec: &EncodeSpec) -> Result<Self, MediaError> {
-        let child = Command::new("ffmpeg")
-            .args([
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "bgra",
-                "-s",
-                &format!("{}x{}", spec.width, spec.height),
-                "-r",
-                &format!("{}", spec.fps),
-                "-i",
-                "-",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-crf",
-                &format!("{}", spec.quality),
-            ])
+        let audio_temp = match &spec.audio {
+            Some(audio) if !audio.samples.is_empty() => Some(write_wav(audio)?),
+            _ => None,
+        };
+
+        let mut command = Command::new("ffmpeg");
+        command.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgra",
+            "-s",
+            &format!("{}x{}", spec.width, spec.height),
+            "-r",
+            &format!("{}", spec.fps),
+            "-i",
+            "-",
+        ]);
+        if let Some(wav) = &audio_temp {
+            command.arg("-i").arg(wav);
+        }
+        command.args([
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-crf",
+            &format!("{}", spec.quality),
+        ]);
+        if audio_temp.is_some() {
+            // AAC for compatibility; -shortest so a soundtrack longer than
+            // the render cannot extend the file past its last frame.
+            command.args(["-c:a", "aac", "-b:a", "192k", "-shortest"]);
+        }
+        let child = command
             .arg(path)
             .stdin(Stdio::piped())
             .spawn()
@@ -407,8 +510,41 @@ impl FfmpegEncoder {
                 ),
                 _ => MediaError::Backend(format!("ffmpeg: {e}")),
             })?;
-        Ok(Self { child })
+        Ok(Self { child, audio_temp })
     }
+}
+
+/// Writes interleaved f32 PCM as a WAV (format 3, IEEE float).
+fn write_wav(audio: &AudioBuffer) -> Result<PathBuf, MediaError> {
+    let dir = std::env::temp_dir().join("promo-media");
+    std::fs::create_dir_all(&dir).map_err(|e| MediaError::Backend(format!("temp dir: {e}")))?;
+    let path = dir.join(format!(
+        "mix-{}-{}.wav",
+        std::process::id(),
+        audio.samples.len()
+    ));
+
+    let channels = audio.channels.max(1);
+    let bytes_per_frame = channels as u32 * 4;
+    let data_len = (audio.samples.len() * 4) as u32;
+    let mut out = Vec::with_capacity(data_len as usize + 44);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + data_len).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&3u16.to_le_bytes()); // IEEE float
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&audio.sample_rate.to_le_bytes());
+    out.extend_from_slice(&(audio.sample_rate * bytes_per_frame).to_le_bytes());
+    out.extend_from_slice(&(bytes_per_frame as u16).to_le_bytes());
+    out.extend_from_slice(&32u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data_len.to_le_bytes());
+    for sample in &audio.samples {
+        out.extend_from_slice(&sample.to_le_bytes());
+    }
+    std::fs::write(&path, out).map_err(|e| MediaError::Backend(format!("temp wav: {e}")))?;
+    Ok(path)
 }
 
 impl VideoEncoder for FfmpegEncoder {
@@ -430,6 +566,9 @@ impl VideoEncoder for FfmpegEncoder {
             .child
             .wait()
             .map_err(|e| MediaError::Backend(format!("ffmpeg: {e}")))?;
+        if let Some(wav) = &self.audio_temp {
+            let _ = std::fs::remove_file(wav);
+        }
         if !status.success() {
             return Err(MediaError::Backend(format!("ffmpeg exited with {status}")));
         }
@@ -627,6 +766,73 @@ mod tests {
         .expect("conformant on a rotated asset");
     }
 
+    /// A clip with a tone: audio must come back as PCM at the rate asked
+    /// for, and a clip without one must answer None rather than erroring —
+    /// most screen recordings have no audio track at all.
+    #[test]
+    fn reads_audio_when_there_is_some_and_none_when_there_is_not() {
+        let Some(silent) = fixture(2) else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        let reader = FfmpegAudioReader;
+        assert!(
+            reader.read(&silent, 48_000, 2).expect("read").is_none(),
+            "a video with no audio track is None, not an error"
+        );
+
+        let dir = std::env::temp_dir().join("promo-media-tests");
+        let toned = dir.join("tone.mp4");
+        if !toned.is_file() {
+            let ok = Command::new("ffmpeg")
+                .args([
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=64x48:rate=30:duration=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=2",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                ])
+                .arg(&toned)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !ok {
+                eprintln!("could not build the tone fixture; skipping");
+                return;
+            }
+        }
+        let audio = reader
+            .read(&toned, 48_000, 2)
+            .expect("read")
+            .expect("audio");
+        assert_eq!(audio.sample_rate, 48_000);
+        assert_eq!(audio.channels, 2);
+        assert!(
+            (audio.duration_s() - 2.0).abs() < 0.1,
+            "about two seconds, got {}",
+            audio.duration_s()
+        );
+        // ffmpeg's `sine` source is not full scale — this fixture peaks
+        // around 0.09 (≈ -20 dBFS), verified by decoding it directly. The
+        // point is that samples arrive and are not silence, not their level.
+        let peak = audio.samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!(
+            peak > 0.01,
+            "a 440 Hz tone should not be silence (peak {peak})"
+        );
+    }
+
     #[test]
     fn encodes_what_it_is_given() {
         let Some(_) = fixture(1) else {
@@ -640,6 +846,7 @@ mod tests {
             height: 48,
             fps: 30.0,
             quality: 23,
+            audio: None,
         };
         let mut encoder: Box<dyn VideoEncoder> =
             Box::new(FfmpegEncoder::open(&out, &spec).expect("open encoder"));

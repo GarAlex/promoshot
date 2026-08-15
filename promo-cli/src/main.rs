@@ -234,11 +234,16 @@ fn video(project: &Project, opts: &Options) -> Result<(), String> {
     // way — the CLI used to spawn ffmpeg itself, which would have left an
     // egui app to reinvent it.
     let registry = promo_media::Registry::with_defaults();
+    let audio = render::build_soundtrack(project, end - start)?;
+    if let Some(track) = &audio {
+        println!("  mixing {:.1}s of audio", track.duration_s());
+    }
     let spec = promo_media::EncodeSpec {
         width: w,
         height: h,
         fps,
         quality: 18,
+        audio,
     };
     let mut encoder = registry
         .open_encoder(out, &spec)

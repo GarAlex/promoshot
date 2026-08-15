@@ -9,3 +9,6 @@ promo-model = { path = "../promo-model" }
 # Shaping + layout + system font discovery. The one honest way to put text on
 # a frame without a platform text stack.
 cosmic-text = "0.12"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
