@@ -7,32 +7,88 @@
 
 use crate::project::Project;
 use promo_engine::{HostSurface, PreviewEngine, SURFACE_CPU_PIXELS};
-use promo_gpu::{wgpu, GpuContext};
+use promo_gpu::{wgpu, GpuContext, GpuSurface};
+use promo_media::{Registry, VideoDecoder};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::Mutex;
 
-/// Images decoded once and handed to the engine as often as it asks. The
-/// engine caches textures on its own; this only avoids re-decoding a PNG for
-/// every frame of a 30-second slideshow.
+/// What the host can answer with.
+///
+/// Images are decoded once up front — the engine caches textures itself, so
+/// this only avoids re-decoding a PNG for every frame of a slideshow. Video
+/// keeps an open decoder per layer, because a clip is far too big to hold as
+/// frames and the engine asks for one source time at a time.
 struct HostState {
     /// layer id → BGRA pixels + size
     frames: HashMap<String, (Vec<u8>, u32, u32)>,
+    /// layer id → decoder, plus the last frame it produced.
+    videos: HashMap<String, VideoLayer>,
+}
+
+struct VideoLayer {
+    decoder: Box<dyn VideoDecoder>,
+    /// The decoded frame, held so the provider can hand out a pointer to it.
+    /// The engine copies during the call, but the buffer must outlive the
+    /// call itself.
+    last: Option<(Vec<u8>, u32, u32)>,
 }
 
 extern "C" fn provider(
     user: *mut c_void,
     layer_id: *const c_char,
-    _source_time: f64,
+    source_time: f64,
     _tier: i32,
     out_surface: *mut HostSurface,
     out_flags: *mut i32,
 ) -> i32 {
     let state = unsafe { &*(user as *const Mutex<HostState>) };
-    let state = state.lock().unwrap();
-    let id = unsafe { CStr::from_ptr(layer_id) }.to_string_lossy();
-    let Some((pixels, width, height)) = state.frames.get(id.as_ref()) else {
+    let mut state = state.lock().unwrap();
+    let id = unsafe { CStr::from_ptr(layer_id) }
+        .to_string_lossy()
+        .to_string();
+
+    // A still image: the same pixels whatever the time.
+    if let Some((pixels, width, height)) = state.frames.get(&id) {
+        unsafe {
+            *out_surface = HostSurface {
+                kind: SURFACE_CPU_PIXELS,
+                data: pixels.as_ptr(),
+                width: *width,
+                height: *height,
+                bytes_per_row: width * 4,
+                ..Default::default()
+            };
+            *out_flags = 0;
+        }
+        return 0;
+    }
+
+    // A video layer: the engine has already mapped composition time through
+    // the resource's trim, so `source_time` is where to read the clip.
+    let Some(video) = state.videos.get_mut(&id) else {
         return 1; // Not ours to draw — the engine skips the layer.
+    };
+    match video.decoder.frame_at(source_time.max(0.0)) {
+        Ok(Some(GpuSurface::CpuPixels {
+            data,
+            width,
+            height,
+            ..
+        })) => {
+            video.last = Some((data, width, height));
+        }
+        // Past the end, or a decode hiccup: keep showing the last good frame
+        // rather than punching a hole in the composition.
+        Ok(_) | Err(_) if video.last.is_some() => {}
+        Ok(_) => return 1,
+        Err(e) => {
+            eprintln!("promo: {id}: {e}");
+            return 1;
+        }
+    }
+    let Some((pixels, width, height)) = video.last.as_ref() else {
+        return 1;
     };
     unsafe {
         *out_surface = HostSurface {
@@ -67,7 +123,9 @@ impl Renderer {
     pub fn new(project: &Project, width: u32, height: u32) -> Result<Self, String> {
         let ctx = GpuContext::shared().ok_or("no GPU adapter available")?;
 
+        let registry = Registry::with_defaults();
         let mut frames = HashMap::new();
+        let mut videos = HashMap::new();
         for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
             if project.unsupported(layer).is_some() {
                 continue;
@@ -82,6 +140,20 @@ impl Renderer {
             let Some(path) = project.resource_path(resource) else {
                 continue;
             };
+            // Video keeps a live decoder; only stills are preloaded.
+            if layer.kind == promo_model::ProjectLayerKind::Video {
+                let decoder = registry
+                    .open_decoder(&path)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                videos.insert(
+                    layer.id.clone(),
+                    VideoLayer {
+                        decoder,
+                        last: None,
+                    },
+                );
+                continue;
+            }
             let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             let rgba = decoded.to_rgba8();
             let (w, h) = rgba.dimensions();
@@ -94,7 +166,7 @@ impl Renderer {
             frames.insert(layer.id.clone(), (bgra, w, h));
         }
 
-        let state = Box::new(Mutex::new(HostState { frames }));
+        let state = Box::new(Mutex::new(HostState { frames, videos }));
         let user = &*state as *const Mutex<HostState> as *mut c_void;
         let engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
             .map_err(|e| format!("engine: {e:?}"))?;

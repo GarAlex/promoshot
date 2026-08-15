@@ -14,6 +14,7 @@ promo-timeline = { path = "../promo-timeline" }
 promo-editor = { path = "../promo-editor" }
 promo-gpu = { path = "../promo-gpu" }
 promo-engine = { path = "../promo-engine" }
+promo-media = { path = "../promo-media" }
 serde_json.workspace = true
 # PNG/JPEG only: this decodes project images and writes frames, it is not an
 # image-processing tool.

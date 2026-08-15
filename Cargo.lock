@@ -1018,6 +1018,7 @@ dependencies = [
  "promo-editor",
  "promo-engine",
  "promo-gpu",
+ "promo-media",
  "promo-model",
  "promo-timeline",
  "serde_json",
@@ -1076,6 +1077,7 @@ dependencies = [
 name = "promo-media"
 version = "0.1.0"
 dependencies = [
+ "promo-gpu",
  "promo-model",
  "thiserror 2.0.20",
 ]

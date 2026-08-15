@@ -5,11 +5,11 @@
 //! interface (see `../AUTOMATION-PLAN.md`), and this is the first tool to
 //! treat it that way.
 //!
-//! What renders today: backgrounds, image layers, drawings and captions, with
-//! their keyframes — zoom, shift, rotation, tilt, opacity, corner radius,
-//! borders, letterboxing. What does not: video layers (no decoder yet, R2 in
-//! LINUX-READY-PLAN). `promo inspect` says so per project rather than leaving
-//! you to infer it from a blank frame.
+//! Renders every layer kind the format has: backgrounds, video, images,
+//! drawings and captions, with their keyframes — zoom, shift, rotation, tilt,
+//! opacity, corner radius, borders, letterboxing. Codec I/O goes through
+//! `promo-media`, so what this tool can read and write, any front end can.
+//! `promo inspect` reports anything a given project would lose.
 
 mod project;
 mod render;
@@ -34,11 +34,8 @@ OPTIONS:
     --size <WxH>   Output size (default: the project's canvas size)
 
 NOTES:
-    `video` pipes raw frames to `ffmpeg`, which must be on PATH. Frames are
-    rendered on the GPU; ffmpeg only encodes them.
-
-    Video layers are not rendered yet — `inspect` reports what a given project
-    would lose.
+    Reading and writing video needs `ffmpeg` (and `ffprobe`) on PATH. Frames
+    are composited on the GPU; ffmpeg only decodes and encodes them.
 ";
 
 fn main() -> ExitCode {
@@ -224,9 +221,6 @@ fn frames(project: &Project, opts: &Options) -> Result<(), String> {
 /// ffmpeg is invoked as a separate program, not linked, so this borrows
 /// nothing from its licence.
 fn video(project: &Project, opts: &Options) -> Result<(), String> {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let (start, end, fps) = range(project, opts);
@@ -236,59 +230,31 @@ fn video(project: &Project, opts: &Options) -> Result<(), String> {
     }
 
     let mut renderer = render::Renderer::new(project, w, h)?;
-    let mut child = Command::new("ffmpeg")
-        .args([
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "bgra",
-            "-s",
-            &format!("{w}x{h}"),
-            "-r",
-            &fps.to_string(),
-            "-i",
-            "-",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-crf",
-            "18",
-        ])
-        .arg(out)
-        .stdin(Stdio::piped())
-        .spawn()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => {
-                "ffmpeg not found on PATH. Install it, or use `promo frames` and encode \
-                 the PNG sequence yourself."
-                    .to_string()
-            }
-            _ => format!("ffmpeg: {e}"),
-        })?;
+    // Encoding lives in promo-media, so every front end writes video the same
+    // way — the CLI used to spawn ffmpeg itself, which would have left an
+    // egui app to reinvent it.
+    let registry = promo_media::Registry::with_defaults();
+    let spec = promo_media::EncodeSpec {
+        width: w,
+        height: h,
+        fps,
+        quality: 18,
+    };
+    let mut encoder = registry
+        .open_encoder(out, &spec)
+        .map_err(|e| e.to_string())?;
 
-    let mut stdin = child.stdin.take().ok_or("ffmpeg: no stdin")?;
     for i in 0..count {
         let time = start + i as f64 / fps;
         let bgra = renderer.frame_bgra(time)?;
-        stdin
-            .write_all(&bgra)
-            .map_err(|e| format!("ffmpeg stdin (frame {i}): {e}"))?;
+        encoder.write_frame(&bgra).map_err(|e| e.to_string())?;
         if i % 30 == 0 || i + 1 == count {
             eprint!("\r  {}/{count} frames", i + 1);
         }
     }
     eprintln!();
-    drop(stdin);
+    encoder.finish().map_err(|e| e.to_string())?;
 
-    let status = child.wait().map_err(|e| format!("ffmpeg: {e}"))?;
-    if !status.success() {
-        return Err(format!("ffmpeg exited with {status}"));
-    }
     println!(
         "wrote {} ({w}x{h}, {count} frames @ {fps}fps)",
         out.display()

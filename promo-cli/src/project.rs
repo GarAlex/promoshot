@@ -1,5 +1,6 @@
 //! Opening a project folder, and answering "what can actually be rendered?"
 
+use promo_media::Registry;
 use promo_model::{ProjectLayerKind, ProjectMetadata, ProjectResource};
 use std::path::{Path, PathBuf};
 
@@ -12,9 +13,8 @@ pub struct Project {
 /// Why a layer cannot be rendered by this tool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Unsupported {
-    /// Needs a video decoder. `promo-media` has no backend yet, so the CLI
-    /// cannot open a `.mp4` at all — see LINUX-READY-PLAN R2.
-    VideoDecode,
+    /// The asset could not be opened by any registered backend.
+    Undecodable(String),
     /// Audio has no bearing on a rendered frame; it is skipped silently for
     /// images and noted for video.
     Audio,
@@ -24,7 +24,7 @@ pub enum Unsupported {
 impl std::fmt::Display for Unsupported {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Unsupported::VideoDecode => write!(f, "video decoding is not implemented yet"),
+            Unsupported::Undecodable(why) => write!(f, "{why}"),
             Unsupported::Audio => write!(f, "audio does not appear in a rendered frame"),
             Unsupported::MissingFile(p) => write!(f, "file missing: {}", p.display()),
         }
@@ -84,6 +84,26 @@ impl Project {
         from_layers.max(recorded)
     }
 
+    /// Is this layer's media present and openable? `None` = fine.
+    fn media_problem(&self, layer: &promo_model::ProjectLayer) -> Option<Unsupported> {
+        let resource = layer
+            .resource_id
+            .as_ref()
+            .and_then(|id| self.resource(id))?;
+        let Some(path) = self.resource_path(resource) else {
+            return Some(Unsupported::MissingFile(
+                self.dir.join("Resources").join(&resource.filename),
+            ));
+        };
+        // Actually open a decoder rather than just checking the file exists,
+        // so `inspect` can say "ffmpeg not found" or "no video stream"
+        // instead of letting the render discover it later.
+        match Registry::with_defaults().open_decoder(&path) {
+            Ok(_) => None,
+            Err(e) => Some(Unsupported::Undecodable(e.to_string())),
+        }
+    }
+
     /// Per-layer verdict: `None` = renderable.
     pub fn unsupported(&self, layer: &promo_model::ProjectLayer) -> Option<Unsupported> {
         match layer.kind {
@@ -91,7 +111,9 @@ impl Project {
             ProjectLayerKind::Background | ProjectLayerKind::Drawing => None,
             ProjectLayerKind::Caption => None,
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
-            ProjectLayerKind::Video => Some(Unsupported::VideoDecode),
+            // Video is decoded through promo-media now; the only question is
+            // whether the file is there and a backend will take it.
+            ProjectLayerKind::Video => self.media_problem(layer),
             ProjectLayerKind::Image => {
                 let resource = layer.resource_id.as_ref().and_then(|id| self.resource(id));
                 match resource {

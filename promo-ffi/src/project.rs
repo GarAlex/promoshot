@@ -499,10 +499,6 @@ pub extern "C" fn promo_layer_rotation(
     tl::layer_rotation(layer, time)
 }
 
-/// Device-frame 2.5D tilt at a composition time: `out[2]` = tiltX, tiltY in
-/// degrees. Returns 0 when the layer has tilt keyframes, -1 otherwise (the
-/// caller then uses the frame's static tilt) or on bad handle/index.
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 /// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
 /// keyframes. Mirrors `promo_layer_rotation`.
 ///
@@ -520,6 +516,10 @@ pub extern "C" fn promo_layer_opacity(
     tl::layer_opacity(layer, time)
 }
 
+/// Device-frame 2.5D tilt at a composition time: `out[2]` = tiltX, tiltY in
+/// degrees. Returns 0 when the layer has tilt keyframes, -1 otherwise (the
+/// caller then uses the frame's static tilt) or on bad handle/index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_layer_tilt(
     handle: *const ProjectHandle,

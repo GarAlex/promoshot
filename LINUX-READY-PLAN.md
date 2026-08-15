@@ -101,7 +101,7 @@ inside the 25% gate.
 After it, the Linux app can render a real composition of images, drawings and
 captions with no codec at all.
 
-## 3. R2 — `promo-media` stops being a skeleton
+## 3. R2 — `promo-media` stops being a skeleton — **STARTED 2026-08-14**
 
 1. Traits become a **registry with capability negotiation** — backends
    register, the engine picks per asset.
@@ -113,8 +113,25 @@ captions with no codec at all.
    already flags), odd dimensions, variable frame rate, long files,
    keyframe-aligned seek accuracy.
 
-The ffmpeg backend itself is E1 of the egui plan, and it should not start
-before the suite exists — otherwise there is nothing to be correct *against*.
+**Landed (2026-08-14):** the registry, `GpuSurface` hand-off (the placeholder
+`promo_gpu_surface::Frame` is gone), and an **ffmpeg backend driven as a
+separate process** — decode and encode both. Reading frames off a pipe rather
+than linking libav means no build dependency, no licence entanglement, and a
+small enough surface to get the trait shape right; a linked backend implements
+the same traits later and this one stays as the portable fallback.
+
+The decoder is built for how rendering actually asks: time walks forward, so
+one reader serves a whole clip, a backwards jump restarts it, and a forward
+jump beyond a second re-seeks rather than decoding everything in between.
+
+`promo-cli` now renders video layers and encodes through the same crate, so
+the CLI and a future egui app share one codec layer instead of each spawning
+ffmpeg for themselves.
+
+**Still open in R2**: VideoToolbox registered as a backend, and the
+cross-backend conformance suite — the fixtures exist per-backend but nothing
+yet diffs ffmpeg against VideoToolbox on the same asset. Rotation is honoured
+and probed but not yet fixture-tested against a rotated capture.
 
 ## 4. R3 — `promo-editor`
 
