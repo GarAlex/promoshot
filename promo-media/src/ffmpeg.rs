@@ -298,6 +298,13 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
         }
     }
     info.rotation_degrees = probe_rotation(path);
+    // ffprobe reports the STORED size; ffmpeg's decoder auto-applies the
+    // display matrix, so a quarter-turn comes out transposed. Report what
+    // will actually arrive — the pixel count is identical either way, so a
+    // mismatch here scrambles the picture instead of raising an error.
+    if info.rotation_degrees.rem_euclid(180) == 90 {
+        std::mem::swap(&mut info.width, &mut info.height);
+    }
     Ok(info)
 }
 
@@ -558,6 +565,66 @@ mod tests {
         };
         let mut decoder = FfmpegDecoder::open(&path).expect("open");
         assert!(decoder.frame_at(99.0).expect("decode").is_none());
+    }
+
+    /// A clip carrying a 90° display matrix — a portrait phone capture, in
+    /// miniature. Stored 320x240, displayed 240x320.
+    fn rotated_fixture() -> Option<PathBuf> {
+        let plain = fixture(2)?;
+        let path = plain.with_file_name("clip-rot90.mp4");
+        if path.is_file() {
+            return Some(path);
+        }
+        let status = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-display_rotation", "90", "-i"])
+            .arg(&plain)
+            .args(["-c", "copy"])
+            .arg(&path)
+            .status()
+            .ok()?;
+        status.success().then_some(path)
+    }
+
+    #[test]
+    fn meets_the_conformance_suite() {
+        let Some(path) = fixture(2) else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        crate::conformance::run(
+            &FfmpegDecoderBackend,
+            &path,
+            &crate::conformance::Expected {
+                display_width: 320,
+                display_height: 240,
+                rotation_degrees: 0,
+                duration_s: 2.0,
+            },
+        )
+        .expect("conformant");
+    }
+
+    /// The invariant most likely to be got wrong, and the most expensive to
+    /// discover late: a rotated asset must report and decode at its DISPLAY
+    /// size. The pixel count is unchanged by a 90° swap, so getting this
+    /// wrong produces a scrambled picture, not an error.
+    #[test]
+    fn meets_the_conformance_suite_on_a_rotated_clip() {
+        let Some(path) = rotated_fixture() else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        crate::conformance::run(
+            &FfmpegDecoderBackend,
+            &path,
+            &crate::conformance::Expected {
+                display_width: 240,
+                display_height: 320,
+                rotation_degrees: 90,
+                duration_s: 2.0,
+            },
+        )
+        .expect("conformant on a rotated asset");
     }
 
     #[test]

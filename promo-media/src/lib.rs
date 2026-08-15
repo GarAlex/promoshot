@@ -9,6 +9,7 @@
 //! pixels today and a zero-copy platform surface later without touching a
 //! single caller.
 
+pub mod conformance;
 pub mod ffmpeg;
 
 use promo_gpu::GpuSurface;

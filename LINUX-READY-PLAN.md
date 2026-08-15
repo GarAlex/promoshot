@@ -128,10 +128,22 @@ jump beyond a second re-seeks rather than decoding everything in between.
 the CLI and a future egui app share one codec layer instead of each spawning
 ffmpeg for themselves.
 
-**Still open in R2**: VideoToolbox registered as a backend, and the
-cross-backend conformance suite — the fixtures exist per-backend but nothing
-yet diffs ffmpeg against VideoToolbox on the same asset. Rotation is honoured
-and probed but not yet fixture-tested against a rotated capture.
+**The conformance suite exists** (`promo-media::conformance`) and runs over
+any `DecoderBackend`, so a new backend is judged against the same invariants
+rather than whatever its author thought to test: display dimensions, frame
+size matching what `info` promised, forward walking that actually advances,
+a repeatable rewind, and `None` past the end.
+
+It earned itself on the first run. The **rotation** case failed: ffprobe
+reports a clip's STORED size, ffmpeg's decoder auto-applies the display
+matrix, so a quarter-turned capture arrived transposed — and since a 90° swap
+leaves the pixel count identical, nothing errored, the picture was simply
+scrambled. Fixed by reporting display dimensions; pinned by a fixture built
+with `-display_rotation 90`.
+
+**Still open in R2**: VideoToolbox registered as a backend. Until it is, the
+suite proves each backend meets the contract but nothing diffs ffmpeg against
+VideoToolbox on the same asset — the cross-backend half of the gate.
 
 ## 4. R3 — `promo-editor`
 
