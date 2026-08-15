@@ -141,6 +141,19 @@ leaves the pixel count identical, nothing errored, the picture was simply
 scrambled. Fixed by reporting display dimensions; pinned by a fixture built
 with `-display_rotation 90`.
 
+**Audio (2026-08-14)**: `AudioReader` + `AudioBuffer` on the contract, an
+ffmpeg reader that returns `None` for an asset with no audio track (most
+screen recordings), and `EncodeSpec.audio` muxing a mixed soundtrack through
+a temp WAV — two pipes into one ffmpeg would have to be fed in lockstep or it
+blocks. The CLI mixes with `promo_engine::mix_chunk`, the same summing the
+app's preview and export use.
+
+**Decoder lifetime (2026-08-14)**: decoders follow the playhead rather than
+the composition — opened when a layer's window arrives, dropped once it has
+passed. Each one is a live ffmpeg process; five clips was fine, fifty would
+not have been. Pinned by a test that renders at two times and asserts only
+one decoder is ever open.
+
 **Still open in R2**: VideoToolbox registered as a backend. Until it is, the
 suite proves each backend meets the contract but nothing diffs ffmpeg against
 VideoToolbox on the same asset — the cross-backend half of the gate.
