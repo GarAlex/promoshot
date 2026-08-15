@@ -213,6 +213,10 @@ typedef int32_t (*PromoFrameProvider)(void *user, const char *layer_id,
                                       PromoHostSurface *out_surface,
                                       int32_t *out_flags);
 
+/* Layer opacity (0..1) at a composition time; 1 when unkeyed. */
+double promo_layer_opacity(const PromoProject *project, int32_t layer_index,
+                           double time);
+
 /* Validates a metadata.json payload: NULL when valid, else a message naming
  * the first problem (free with promo_string_free). promo_project_parse only
  * says yes or no, which is not something an editor can show a person. */

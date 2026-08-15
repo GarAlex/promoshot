@@ -503,6 +503,23 @@ pub extern "C" fn promo_layer_rotation(
 /// degrees. Returns 0 when the layer has tilt keyframes, -1 otherwise (the
 /// caller then uses the frame's static tilt) or on bad handle/index.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+/// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
+/// keyframes. Mirrors `promo_layer_rotation`.
+///
+/// Safety contract (C ABI): `handle` is a live project handle.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_opacity(
+    handle: *const ProjectHandle,
+    layer_index: c_int,
+    time: c_double,
+) -> c_double {
+    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+        return 1.0;
+    };
+    tl::layer_opacity(layer, time)
+}
+
 #[no_mangle]
 pub extern "C" fn promo_layer_tilt(
     handle: *const ProjectHandle,
