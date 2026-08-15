@@ -27,8 +27,12 @@ pub enum AttachmentProblem {
     /// open-ended layer is the end of the composition, and a layer beginning
     /// there has no time to exist.
     StartsAtTheEnd { layer: String },
-    /// The offsets put the end at or before the start.
-    NotPositive { layer: String, duration: f64 },
+    /// The offsets put the end at or before the start, so the layer resolves
+    /// to nothing. Clamped to zero rather than refused — resolution always
+    /// produces an answer — but said out loud, because layer visibility is
+    /// half-open (`time < start + duration`) and a zero-length layer therefore
+    /// renders NO frames at all. A one-frame flash needs a real duration.
+    ZeroLength { layer: String },
 }
 
 impl std::fmt::Display for AttachmentProblem {
@@ -44,10 +48,10 @@ impl std::fmt::Display for AttachmentProblem {
                  the composition, so it would never play — anchor its start to that \
                  layer's start instead, or its end to that end"
             ),
-            Self::NotPositive { layer, duration } => write!(
+            Self::ZeroLength { layer } => write!(
                 f,
-                "layer \"{layer}\" resolves to a duration of {duration:.3}s; \
-                 its end offset lands at or before its start"
+                "layer \"{layer}\" resolves to zero length — its end offset lands at or \
+                 before its start, so it renders no frames at all"
             ),
         }
     }
@@ -173,16 +177,17 @@ fn resolve_one(
         None => layer.duration.map(|d| start + d),
     };
 
-    if let Some(end) = end {
-        let duration = end - start;
-        if duration <= 0.0 {
-            problems.push(AttachmentProblem::NotPositive {
+    // Clamp rather than refuse: an answer always comes out, and the layer is
+    // simply empty. Reported so an invisible layer is not a mystery.
+    let end = match end {
+        Some(end) if end <= start => {
+            problems.push(AttachmentProblem::ZeroLength {
                 layer: layer.name.clone(),
-                duration,
             });
-            return None;
+            Some(start)
         }
-    }
+        other => other,
+    };
     Some(Window { start, end })
 }
 
@@ -367,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    fn an_end_before_its_start_is_reported_not_clamped() {
+    fn an_end_before_its_start_clamps_to_zero_and_says_so() {
         let a = layer("A", 0, 0.0, Some(4.0));
         let mut b = layer("B", 1, 0.0, None);
         b.timing = Some(LayerTiming {
@@ -378,8 +383,10 @@ mod tests {
         let problems = resolve_attachments(&mut p);
         assert!(matches!(
             problems.first(),
-            Some(AttachmentProblem::NotPositive { .. })
+            Some(AttachmentProblem::ZeroLength { .. })
         ));
+        // Clamped, not refused, and never negative.
+        assert_eq!(p.layers.unwrap()[1].duration, Some(0.0));
     }
 
     #[test]
