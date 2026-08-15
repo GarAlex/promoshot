@@ -36,8 +36,13 @@ impl Project {
         let meta_path = dir.join("metadata.json");
         let text = std::fs::read_to_string(&meta_path)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
-        let meta = ProjectMetadata::from_json(&text)
+        let mut meta = ProjectMetadata::from_json(&text)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
+        // Attached layers become plain numbers before anything reads them, so
+        // the renderer never has to know the difference.
+        for problem in promo_timeline::resolve_attachments(&mut meta) {
+            eprintln!("warning: {problem}");
+        }
         Ok(Self {
             dir: dir.to_path_buf(),
             meta,

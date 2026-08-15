@@ -773,3 +773,48 @@ mod tests {
         assert_eq!(promo_resource_source_time(std::ptr::null(), 0, 1.0), -1.0);
     }
 }
+
+/// Resolves attached layers, returning the project with concrete
+/// `startTime`/`duration` written in — free it with `promo_string_free`.
+///
+/// Swift calls this rather than reimplementing the walk. Two implementations
+/// of one rule is how caption placement came to mean different things in the
+/// app and the CLI; there is no reason to repeat that with timing.
+///
+/// Any problems are appended under a `timingProblems` key as plain sentences,
+/// so the caller can show them without knowing the enum. A project that
+/// cannot be resolved still comes back — resolution never refuses.
+///
+/// Safety contract (C ABI): `json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_project_resolve_timing(json: *const c_char) -> *mut c_char {
+    if json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(mut meta) = ProjectMetadata::from_json(text) else {
+        return std::ptr::null_mut();
+    };
+    let problems = promo_timeline::resolve_attachments(&mut meta);
+    let Ok(serde_json::Value::Object(mut object)) = serde_json::to_value(&meta) else {
+        return std::ptr::null_mut();
+    };
+    if !problems.is_empty() {
+        object.insert(
+            "timingProblems".to_string(),
+            serde_json::Value::Array(
+                problems
+                    .iter()
+                    .map(|p| serde_json::Value::String(p.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    match serde_json::to_string(&serde_json::Value::Object(object)) {
+        Ok(out) => to_c_string(&out),
+        Err(_) => std::ptr::null_mut(),
+    }
+}

@@ -180,7 +180,24 @@ def held_caption(lid, dy, life, size_prefix):
     ]
 
 
+def attach(start=None, end=None):
+    """A `timing` block: where this layer begins and ends, in terms of the one
+    above it.
+
+    Anchors reach only one layer back, which is why the chapter's clip is
+    keyed off the PREVIOUS chapter's caption, and its own caption is keyed off
+    the clip that follows it in z-order. Nothing here computes a cursor.
+    """
+    timing = {}
+    if start is not None:
+        timing["start"] = {"from": start[0], "offset": round(start[1], 3)}
+    if end is not None:
+        timing["end"] = {"from": end[0], "offset": round(end[1], 3)}
+    return timing
+
+
 def main():
+    attached = "--attached" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if len(args) < 3:
         raise SystemExit(__doc__)
@@ -251,6 +268,9 @@ def main():
 
     # ---- Chapters ---------------------------------------------------------
     cursor = TITLE_CARD - CHAPTER_OVERLAP
+    # The first chapter's clip hangs off the last title-card layer in z-order,
+    # which is the subtitle caption.
+    previous_end = 0.75 + (TITLE_CARD - 0.9)
     dy_centre = centre_shift(HEADLINE_SIZE)
 
     for index, (path, filename, headline, duration, size) in enumerate(found):
@@ -267,7 +287,7 @@ def main():
         geo = window_geometry(*size)
         clip_start = cursor + TITLE_BEAT + CLIP_LEAD
         base = 10 + index * 3
-        layers.append({
+        clip_layer = {
             "id": f"V{index}", "name": f"Clip {index + 1}",
             "sortIndex": base, "kind": "video", "isEnabled": True,
             "startTime": round(clip_start, 3), "duration": round(usable, 3),
@@ -282,10 +302,18 @@ def main():
                 {"id": f"D{index}", "time": usable, "opacity": 0.0,
                  "transitionDuration": FADE, **geo},
             ],
-        })
+        }
+        if attached:
+            # The previous chapter's caption ends with its clip, so "that end,
+            # less the overlap, plus this chapter's title beat" is the whole
+            # rule — the cursor arithmetic disappears.
+            lead = TITLE_BEAT + CLIP_LEAD - CHAPTER_OVERLAP
+            clip_layer["timing"] = attach(
+                start=("previousEnd", lead if index else clip_start - previous_end))
+        layers.append(clip_layer)
 
         life = TITLE_BEAT + CLIP_LEAD + usable
-        layers.append(caption_layer(
+        chapter_caption = caption_layer(
             f"H{index}", headline, headline, base + 1, cursor, life,
             [
                 {"id": f"HA{index}", "time": 0, "opacity": 0.0,
@@ -302,7 +330,15 @@ def main():
                  "verticalShift": 0, "transitionDuration": 0},
                 {"id": f"HF{index}", "time": life, "opacity": 0.0,
                  "verticalShift": 0, "transitionDuration": HEAD_FADE},
-            ]))
+            ])
+        if attached:
+            # Its own clip is the layer directly above: begin a title beat
+            # before it starts, and finish exactly when it does.
+            chapter_caption["timing"] = attach(
+                start=("previousStart", -(TITLE_BEAT + CLIP_LEAD)),
+                end=("previousEnd", 0.0))
+        layers.append(chapter_caption)
+        previous_end = clip_start + usable
 
         cursor += life - CHAPTER_OVERLAP
 
