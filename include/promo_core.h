@@ -213,6 +213,11 @@ typedef int32_t (*PromoFrameProvider)(void *user, const char *layer_id,
                                       PromoHostSurface *out_surface,
                                       int32_t *out_flags);
 
+/* Validates a metadata.json payload: NULL when valid, else a message naming
+ * the first problem (free with promo_string_free). promo_project_parse only
+ * says yes or no, which is not something an editor can show a person. */
+char *promo_project_validate(const char *json);
+
 /* --- editor layer (promo-editor) ---------------------------------------
  * Editor calls are rare and small, so they cross as JSON. Rust front ends
  * depend on promo-editor directly and skip all of this.

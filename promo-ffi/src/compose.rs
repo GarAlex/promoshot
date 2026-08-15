@@ -187,10 +187,7 @@ pub struct SubmissionToken(Fence);
 /// 0 ok, -1 bad handle.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub extern "C" fn promo_compositor_set_defer(
-    handle: *mut CompositorHandle,
-    defer: c_int,
-) -> c_int {
+pub extern "C" fn promo_compositor_set_defer(handle: *mut CompositorHandle, defer: c_int) -> c_int {
     let Some(handle) = (unsafe { handle.as_mut() }) else {
         return -1;
     };
@@ -297,7 +294,11 @@ pub extern "C" fn promo_compose_frame_raw(
         quads: q
             .chunks_exact(QUAD_DOUBLES)
             .map(|c| SceneQuad {
-                texture: if c[0] < 0.0 { None } else { Some(c[0] as usize) },
+                texture: if c[0] < 0.0 {
+                    None
+                } else {
+                    Some(c[0] as usize)
+                },
                 rect: [c[1], c[2], c[3], c[4]],
                 rotation_deg: c[5],
                 corner_radius: c[6],
@@ -450,7 +451,7 @@ mod tests {
         );
         assert_eq!(rc, 0, "solid raw compose rc");
         let px = output.read_pixels().unwrap();
-        let i = (20 + 6) * 4;   // row 1, col 6
+        let i = (20 + 6) * 4; // row 1, col 6
         assert_eq!(&px[i..i + 4], &[255, 255, 255, 255], "solid white quad");
 
         promo_compositor_free(handle);
@@ -465,8 +466,9 @@ mod tests {
 
         let input = OwnedIoSurface::new_bgra(4, 4).expect("input");
         input.write_pixels(&[0u8, 0, 255, 255].repeat(16)).unwrap(); // red
-        let header: [f64; HEADER_DOUBLES] =
-            [10.0, 10.0, 0.0, 1.0, 0.0, 1.0, 20.0, 10.0, 0.0, 0.0, 1.0, 1.0];
+        let header: [f64; HEADER_DOUBLES] = [
+            10.0, 10.0, 0.0, 1.0, 0.0, 1.0, 20.0, 10.0, 0.0, 0.0, 1.0, 1.0,
+        ];
         let mut quad = [0.0f64; QUAD_DOUBLES];
         quad[1..5].copy_from_slice(&[2.5, 2.5, 5.0, 5.0]);
         quad[16] = 1.0;

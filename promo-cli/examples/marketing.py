@@ -6,7 +6,7 @@ then leaves the rendering to `promo`. Everything about the design — background
 headline typography, window placement, corner radius, timing — is expressed in
 metadata.json; this script only computes numbers.
 
-    python3 marketing.py <screenshots-dir> <output-dir> [--title "App Name"]
+    python3 marketing.py <screenshots-dir> <output-dir> [--theme dark|brand|light]
     promo still <output-dir>/01 --out shot-01.png
     promo video <output-dir>/slideshow --out promo.mp4 --fps 30
 
@@ -28,8 +28,23 @@ import sys
 
 # --- design constants -------------------------------------------------------
 CANVAS_W, CANVAS_H = 1440, 900          # a valid Mac App Store screenshot size
-BACKGROUND = "0E1726"                    # deep navy; the white app window pops
-HEADLINE_COLOR = "FFFFFF"
+
+# Themes, chosen with --theme. The window art is identical in all three; only
+# the surround changes, which is the point of keeping design in the JSON.
+THEMES = {
+    # Deep navy. Maximum separation from a white app window, reads premium,
+    # stands out against the App Store's light gallery.
+    "dark":  {"bg": "0E1726", "headline": "FFFFFF", "border": "26364F"},
+    # The app's own accent (#2673E7) taken darker: branded rather than
+    # generic, still ample contrast for white bold text.
+    "brand": {"bg": "123A7A", "headline": "FFFFFF", "border": "2F5AA8"},
+    # Light. Matches the app's own surface, calmer — but the white window
+    # needs a real border or it dissolves into the background.
+    "light": {"bg": "F3F6FB", "headline": "0E1726", "border": "C2D2E8"},
+}
+THEME = THEMES["dark"]
+BACKGROUND = THEME["bg"]
+HEADLINE_COLOR = THEME["headline"]
 HEADLINE_SIZE = 52
 HEADLINE_PADDING = 14
 HEADLINE_TOP_GAP = 46                    # canvas top -> headline box top
@@ -38,7 +53,7 @@ WINDOW_TOP = 178                         # below the headline
 WINDOW_BOTTOM_GAP = 54
 WINDOW_CORNER_RADIUS = 18                # in canvas px, before zoom
 WINDOW_BORDER_WIDTH = 1
-WINDOW_BORDER_COLOR = "26364F"
+WINDOW_BORDER_COLOR = THEME["border"]
 
 SLIDE_SECONDS = 4.5
 FADE = 0.45
@@ -188,9 +203,24 @@ def write_project(out_dir, meta, assets):
 
 
 def main():
-    if len(sys.argv) < 3:
+    global THEME, BACKGROUND, HEADLINE_COLOR, WINDOW_BORDER_COLOR, WINDOW_BORDER_WIDTH
+    args = [a for a in sys.argv[1:]]
+    theme_name = "dark"
+    if "--theme" in args:
+        i = args.index("--theme")
+        theme_name = args[i + 1]
+        del args[i:i + 2]
+    if theme_name not in THEMES:
+        raise SystemExit(f"--theme must be one of {', '.join(THEMES)}")
+    THEME = THEMES[theme_name]
+    BACKGROUND = THEME["bg"]
+    HEADLINE_COLOR = THEME["headline"]
+    WINDOW_BORDER_COLOR = THEME["border"]
+    # A light surround needs a heavier edge or the white window has no shape.
+    WINDOW_BORDER_WIDTH = 2 if theme_name == "light" else 1
+    if len(args) < 2:
         raise SystemExit(__doc__)
-    src_dir, out_dir = sys.argv[1], sys.argv[2]
+    src_dir, out_dir = args[0], args[1]
 
     found = []
     for prefix, headline in SHOTS:

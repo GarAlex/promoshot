@@ -14,6 +14,37 @@ use promo_timeline as tl;
 use serde_json::json;
 use std::ffi::{c_char, c_double, c_float, c_int, CStr, CString};
 
+/// Validates a `metadata.json` payload. Returns NULL when it is valid, or a
+/// human-readable message describing the first problem — free it with
+/// `promo_string_free`.
+///
+/// `promo_project_parse` only says yes or no, which is useless in an editor:
+/// "invalid" without "line 42: unknown field `canvasWith`" is not a message a
+/// person can act on.
+///
+/// Safety contract (C ABI): `json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_project_validate(json: *const c_char) -> *mut c_char {
+    if json.is_null() {
+        return to_c_string("no JSON supplied");
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
+        return to_c_string("JSON is not valid UTF-8");
+    };
+    match ProjectMetadata::from_json(text) {
+        Ok(_) => std::ptr::null_mut(),
+        Err(e) => to_c_string(&e.to_string()),
+    }
+}
+
+fn to_c_string(message: &str) -> *mut c_char {
+    match CString::new(message) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Opaque to C. One fully parsed project.
 pub struct ProjectHandle {
     meta: ProjectMetadata,
@@ -516,11 +547,7 @@ pub extern "C" fn promo_layer_background_rgba(
     let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
         return -1;
     };
-    let hex = tl::layer_background_color_hex(
-        layer,
-        time,
-        &handle_ref.meta.composition_settings,
-    );
+    let hex = tl::layer_background_color_hex(layer, time, &handle_ref.meta.composition_settings);
     let rgba = rgba_from_hex(&hex);
     unsafe {
         for (i, c) in rgba.iter().enumerate() {

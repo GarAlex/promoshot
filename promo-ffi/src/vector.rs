@@ -92,10 +92,7 @@ pub extern "C" fn promo_vector_render(
 /// 0 ok, -1 bad input, -2 parse failed.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub extern "C" fn promo_vector_content_bounds(
-    doc_json: *const c_char,
-    out: *mut f64,
-) -> c_int {
+pub extern "C" fn promo_vector_content_bounds(doc_json: *const c_char, out: *mut f64) -> c_int {
     if doc_json.is_null() || out.is_null() {
         return -1;
     }

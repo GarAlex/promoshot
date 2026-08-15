@@ -136,11 +136,7 @@ pub extern "C" fn promo_preview_render_with_overlay(
     let overlay = if overlay_surface.is_null() || overlay_width <= 0 || overlay_height <= 0 {
         None
     } else {
-        Some((
-            overlay_surface,
-            overlay_width as u32,
-            overlay_height as u32,
-        ))
+        Some((overlay_surface, overlay_width as u32, overlay_height as u32))
     };
     match handle.engine.render_with_overlay(
         time,

@@ -3,9 +3,9 @@
 
 pub mod compose;
 pub mod editor;
-pub mod vector;
 pub mod preview;
 pub mod project;
+pub mod vector;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use compose::*;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
