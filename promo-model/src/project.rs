@@ -631,10 +631,17 @@ pub struct ProjectLayer {
 /// Where a layer's start and end come from, when they come from its
 /// neighbour.
 ///
-/// Anchors point only at the PREVIOUS layer — the next-lower `sortIndex`,
-/// whatever kind it is. That restriction is what makes this cheap: a cycle
-/// cannot be expressed, so resolution is one ordered pass with no graph to
-/// walk, and a chain of attachments is always a contiguous run.
+/// Anchors point at an ADJACENT layer — the next-lower or next-higher
+/// `sortIndex`, whatever kind it is. Reaching both ways matters because
+/// z-order is fixed by what has to draw on top: a caption sits above its
+/// clip, and without a forward anchor the relationship between them could
+/// only be written from one side.
+///
+/// Only neighbours, though, and that is what keeps it cheap. Every dependency
+/// joins adjacent layers, so a connected group of them is always a CONTIGUOUS
+/// run — a UI can treat one as a group without storing a group. Cycles become
+/// possible (two neighbours each waiting on the other) and are found while
+/// resolving rather than prevented by the shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerTiming {
@@ -660,6 +667,8 @@ pub struct TimingAnchor {
 pub enum TimingReference {
     PreviousStart,
     PreviousEnd,
+    NextStart,
+    NextEnd,
 }
 
 impl ProjectLayer {

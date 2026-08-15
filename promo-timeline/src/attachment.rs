@@ -15,7 +15,7 @@
 //! always a **contiguous run** of layers — which is what lets a UI treat one
 //! as a group without storing a group anywhere.
 
-use promo_model::{LayerTiming, ProjectLayer, ProjectMetadata, TimingReference};
+use promo_model::{ProjectLayer, ProjectMetadata, TimingReference};
 
 /// Why a layer's timing could not be worked out. Each names both layers,
 /// because "which one" is the first thing anyone asks.
@@ -27,6 +27,10 @@ pub enum AttachmentProblem {
     /// open-ended layer is the end of the composition, and a layer beginning
     /// there has no time to exist.
     StartsAtTheEnd { layer: String },
+    /// Two neighbours each waiting on the other. Only possible now that
+    /// anchors reach both ways; found while resolving rather than prevented
+    /// by the shape.
+    Circular { layer: String },
     /// The offsets put the end at or before the start, so the layer resolves
     /// to nothing. Clamped to zero rather than refused — resolution always
     /// produces an answer — but said out loud, because layer visibility is
@@ -48,33 +52,17 @@ impl std::fmt::Display for AttachmentProblem {
                  the composition, so it would never play — anchor its start to that \
                  layer's start instead, or its end to that end"
             ),
+            Self::Circular { layer } => write!(
+                f,
+                "layer \"{layer}\" and its neighbour each wait on the other — one of \
+                 them has to anchor to something already settled"
+            ),
             Self::ZeroLength { layer } => write!(
                 f,
                 "layer \"{layer}\" resolves to zero length — its end offset lands at or \
                  before its start, so it renders no frames at all"
             ),
         }
-    }
-}
-
-/// The resolved window of a layer, in composition time.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Window {
-    start: f64,
-    /// `None` for a layer that runs to the end of the composition.
-    end: Option<f64>,
-}
-
-/// `None` when the anchor asks for the end of a layer that has none.
-///
-/// The caller decides what that means, because it depends which end is
-/// asking: a layer ENDING with an open-ended background should run to the
-/// end of the composition, while a layer STARTING there would begin after
-/// everything is over.
-fn anchor_time(window: Window, reference: TimingReference) -> Option<f64> {
-    match reference {
-        TimingReference::PreviousStart => Some(window.start),
-        TimingReference::PreviousEnd => window.end,
     }
 }
 
@@ -88,19 +76,32 @@ fn composition_end(layers: &[ProjectLayer]) -> f64 {
         .fold(0.0, f64::max)
 }
 
-/// Resolves every attached layer in place, in `sortIndex` order.
+/// What is known about one layer's window while resolving.
 ///
-/// Layers are visited in the same order a person sees them, so an attachment
-/// chain resolves front to back in one pass: B settles before C, which asks
-/// about B. Returns every problem found rather than the first, so a person
-/// fixing a project sees all of it at once.
+/// `end` is doubly optional on purpose: not-yet-worked-out and runs-forever
+/// are different answers, and collapsing them would make an open-ended
+/// background look like a layer still waiting on a neighbour.
+#[derive(Debug, Clone, Copy, Default)]
+struct Slot {
+    start: Option<f64>,
+    end: Option<Option<f64>>,
+}
+
+/// Resolves every attached layer in place.
+///
+/// Anchors may point either way, so this is not a single ordered walk: it
+/// settles what it can and goes round again until a pass changes nothing.
+/// Dependencies only ever join adjacent layers, so the number of rounds is
+/// bounded by the number of layers, and anything still unresolved at the end
+/// is a cycle — two neighbours each waiting on the other. Those are named and
+/// left with their stored values, so the project still plays.
 pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProblem> {
     let Some(layers) = project.layers.as_mut() else {
         return Vec::new();
     };
 
-    // sortIndex decides who "previous" is, not array position — the array is
-    // free to be in any order and often is.
+    // sortIndex decides who the neighbours are, not array position — the
+    // array is free to be in any order and often is.
     let mut order: Vec<usize> = (0..layers.len()).collect();
     order.sort_by(|&a, &b| {
         layers[a]
@@ -111,84 +112,221 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
 
     let end_of_composition = composition_end(layers);
     let mut problems = Vec::new();
-    let mut previous: Option<Window> = None;
 
-    for &index in &order {
-        let window = {
+    // Everything not attached is known from the outset, and is what the
+    // attached layers hang off.
+    let mut slots: Vec<Slot> = order
+        .iter()
+        .map(|&index| {
             let layer = &layers[index];
-            match resolve_one(layer, previous, end_of_composition, &mut problems) {
-                Some(window) => window,
-                // Unresolvable: leave the stored values alone so the project
-                // still renders something, and report why.
-                None => Window {
-                    start: layer.start_time,
-                    end: layer.duration.map(|d| layer.start_time + d),
-                },
+            if is_attached(layer) {
+                Slot::default()
+            } else {
+                Slot {
+                    start: Some(layer.start_time),
+                    end: Some(layer.duration.map(|d| layer.start_time + d)),
+                }
             }
-        };
-        let layer = &mut layers[index];
-        if layer.timing.is_some() {
-            layer.start_time = window.start;
-            if let Some(end) = window.end {
-                layer.duration = Some(end - window.start);
+        })
+        .collect();
+
+    let mut stalled = vec![false; order.len()];
+    loop {
+        let mut progressed = false;
+        for position in 0..order.len() {
+            if stalled[position] {
+                continue;
+            }
+            let layer = &layers[order[position]];
+            let Some(timing) = layer.timing.as_ref() else {
+                continue;
+            };
+            if slots[position].start.is_some() && slots[position].end.is_some() {
+                continue;
+            }
+
+            // Start.
+            if slots[position].start.is_none() {
+                match timing.start.as_ref() {
+                    None => {
+                        slots[position].start = Some(layer.start_time);
+                        progressed = true;
+                    }
+                    Some(anchor) => match neighbour_time(&slots, position, anchor.from) {
+                        Known::Time(time) => {
+                            slots[position].start = Some(time + anchor.offset);
+                            progressed = true;
+                        }
+                        Known::OpenEnded => {
+                            // "Begin when a layer that never ends, ends."
+                            problems.push(AttachmentProblem::StartsAtTheEnd {
+                                layer: layer.name.clone(),
+                            });
+                            slots[position].start = Some(layer.start_time);
+                            stalled[position] = true;
+                            progressed = true;
+                        }
+                        Known::Missing => {
+                            problems.push(AttachmentProblem::NoPreviousLayer {
+                                layer: layer.name.clone(),
+                            });
+                            slots[position].start = Some(layer.start_time);
+                            stalled[position] = true;
+                            progressed = true;
+                        }
+                        Known::NotYet => {}
+                    },
+                }
+            }
+
+            // End, which may need the start first.
+            if slots[position].end.is_none() {
+                match timing.end.as_ref() {
+                    None => {
+                        if let Some(start) = slots[position].start {
+                            slots[position].end = Some(layer.duration.map(|d| start + d));
+                            progressed = true;
+                        }
+                    }
+                    Some(anchor) => match neighbour_time(&slots, position, anchor.from) {
+                        // An end anchored to an open-ended layer means "run to
+                        // the finish", which is what attaching to a background
+                        // should do.
+                        Known::Time(time) => {
+                            slots[position].end = Some(Some(time + anchor.offset));
+                            progressed = true;
+                        }
+                        Known::OpenEnded => {
+                            slots[position].end = Some(Some(end_of_composition + anchor.offset));
+                            progressed = true;
+                        }
+                        Known::Missing => {
+                            problems.push(AttachmentProblem::NoPreviousLayer {
+                                layer: layer.name.clone(),
+                            });
+                            slots[position].end =
+                                Some(layer.duration.map(|d| layer.start_time + d));
+                            stalled[position] = true;
+                            progressed = true;
+                        }
+                        Known::NotYet => {}
+                    },
+                }
             }
         }
-        previous = Some(window);
+        if !progressed {
+            break;
+        }
+    }
+
+    // Whatever never settled is waiting on something that is waiting on it.
+    for position in 0..order.len() {
+        let layer = &layers[order[position]];
+        if is_attached(layer) && (slots[position].start.is_none() || slots[position].end.is_none())
+        {
+            problems.push(AttachmentProblem::Circular {
+                layer: layer.name.clone(),
+            });
+            slots[position].start = Some(layer.start_time);
+            slots[position].end = Some(layer.duration.map(|d| layer.start_time + d));
+        }
+    }
+
+    // Clamp and write back.
+    for position in 0..order.len() {
+        let index = order[position];
+        if !is_attached(&layers[index]) {
+            continue;
+        }
+        let start = slots[position].start.unwrap_or(layers[index].start_time);
+        let end = slots[position].end.flatten();
+        let end = match end {
+            Some(end) if end <= start => {
+                problems.push(AttachmentProblem::ZeroLength {
+                    layer: layers[index].name.clone(),
+                });
+                Some(start)
+            }
+            other => other,
+        };
+        layers[index].start_time = start;
+        if let Some(end) = end {
+            layers[index].duration = Some(end - start);
+        }
     }
 
     problems
 }
 
-fn resolve_one(
-    layer: &ProjectLayer,
-    previous: Option<Window>,
-    end_of_composition: f64,
-    problems: &mut Vec<AttachmentProblem>,
-) -> Option<Window> {
-    let timing = layer.timing.as_ref()?;
-    if timing.start.is_none() && timing.end.is_none() {
-        return None;
-    }
-    let Some(previous) = previous else {
-        problems.push(AttachmentProblem::NoPreviousLayer {
-            layer: layer.name.clone(),
-        });
-        return None;
-    };
+fn is_attached(layer: &ProjectLayer) -> bool {
+    layer
+        .timing
+        .as_ref()
+        .is_some_and(|t| t.start.is_some() || t.end.is_some())
+}
 
-    let start = match timing.start.as_ref() {
-        Some(anchor) => match anchor_time(previous, anchor.from) {
-            Some(time) => time + anchor.offset,
-            None => {
-                problems.push(AttachmentProblem::StartsAtTheEnd {
-                    layer: layer.name.clone(),
-                });
-                return None;
+/// The answer to "what time is that anchor", which has four shapes.
+enum Known {
+    Time(f64),
+    /// The neighbour runs to the end of the composition.
+    OpenEnded,
+    /// There is no such neighbour.
+    Missing,
+    /// The neighbour has not been worked out yet — go round again.
+    NotYet,
+}
+
+fn neighbour_time(slots: &[Slot], position: usize, reference: TimingReference) -> Known {
+    let neighbour = match reference {
+        TimingReference::PreviousStart | TimingReference::PreviousEnd => position.checked_sub(1),
+        TimingReference::NextStart | TimingReference::NextEnd => {
+            let next = position + 1;
+            (next < slots.len()).then_some(next)
+        }
+    };
+    let Some(neighbour) = neighbour else {
+        return Known::Missing;
+    };
+    match reference {
+        TimingReference::PreviousStart | TimingReference::NextStart => {
+            match slots[neighbour].start {
+                Some(time) => Known::Time(time),
+                None => Known::NotYet,
             }
+        }
+        TimingReference::PreviousEnd | TimingReference::NextEnd => match slots[neighbour].end {
+            Some(Some(time)) => Known::Time(time),
+            Some(None) => Known::OpenEnded,
+            None => Known::NotYet,
         },
-        None => layer.start_time,
-    };
-    // An end anchored to an open-ended layer means "run to the finish", which
-    // is what attaching to a background should do.
-    let end = match timing.end.as_ref() {
-        Some(anchor) => {
-            Some(anchor_time(previous, anchor.from).unwrap_or(end_of_composition) + anchor.offset)
-        }
-        None => layer.duration.map(|d| start + d),
-    };
+    }
+}
 
-    // Clamp rather than refuse: an answer always comes out, and the layer is
-    // simply empty. Reported so an invisible layer is not a mystery.
-    let end = match end {
-        Some(end) if end <= start => {
-            problems.push(AttachmentProblem::ZeroLength {
-                layer: layer.name.clone(),
-            });
-            Some(start)
-        }
-        other => other,
+#[derive(Clone, Copy)]
+enum Direction {
+    Backward,
+    Forward,
+}
+
+fn anchors(layer: &ProjectLayer, direction: Direction) -> bool {
+    let Some(timing) = layer.timing.as_ref() else {
+        return false;
     };
-    Some(Window { start, end })
+    [timing.start.as_ref(), timing.end.as_ref()]
+        .into_iter()
+        .flatten()
+        .any(|anchor| {
+            matches!(
+                (direction, anchor.from),
+                (
+                    Direction::Backward,
+                    TimingReference::PreviousStart | TimingReference::PreviousEnd
+                ) | (
+                    Direction::Forward,
+                    TimingReference::NextStart | TimingReference::NextEnd
+                )
+            )
+        })
 }
 
 /// The contiguous run of layers a layer belongs to, as indices into the
@@ -210,19 +348,23 @@ pub fn run_containing(project: &ProjectMetadata, layer_id: &str) -> Vec<String> 
         return Vec::new();
     };
 
-    let attached = |layer: &ProjectLayer| {
-        layer
-            .timing
-            .as_ref()
-            .is_some_and(|t: &LayerTiming| t.start.is_some() || t.end.is_some())
+    // A layer joins its neighbour above if it anchors backwards, or if that
+    // neighbour anchors forwards at it — the link belongs to the pair, not to
+    // whichever side wrote it down.
+    let joined_to_the_one_above = |position: usize| -> bool {
+        if position == 0 {
+            return false;
+        }
+        anchors(ordered[position], Direction::Backward)
+            || anchors(ordered[position - 1], Direction::Forward)
     };
 
     let mut first = position;
-    while first > 0 && attached(ordered[first]) {
+    while joined_to_the_one_above(first) {
         first -= 1;
     }
     let mut last = position;
-    while last + 1 < ordered.len() && attached(ordered[last + 1]) {
+    while last + 1 < ordered.len() && joined_to_the_one_above(last + 1) {
         last += 1;
     }
     ordered[first..=last]
@@ -387,6 +529,52 @@ mod tests {
         ));
         // Clamped, not refused, and never negative.
         assert_eq!(p.layers.unwrap()[1].duration, Some(0.0));
+    }
+
+    #[test]
+    fn a_forward_anchor_reaches_the_layer_below() {
+        // A caption must draw ABOVE its clip, so z-order is not free. Reaching
+        // forward is what lets the relationship be written from either side.
+        let mut caption = layer("Caption", 0, 0.0, None);
+        caption.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::NextStart, -2.5)),
+            end: Some(anchor(TimingReference::NextEnd, 0.0)),
+        });
+        let clip = layer("Clip", 1, 10.0, Some(4.0));
+        let mut p = project(vec![caption, clip]);
+        let problems = resolve_attachments(&mut p);
+        assert!(problems.is_empty(), "{problems:?}");
+
+        let layers = p.layers.unwrap();
+        let caption = layers.iter().find(|l| l.id == "Caption").unwrap();
+        assert_eq!(caption.start_time, 7.5);
+        assert_eq!(caption.duration, Some(6.5)); // 7.5 → 14.0
+    }
+
+    #[test]
+    fn two_neighbours_waiting_on_each_other_are_reported() {
+        let mut a = layer("A", 0, 1.0, Some(1.0));
+        a.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::NextStart, -1.0)),
+            end: None,
+        });
+        let mut b = layer("B", 1, 2.0, Some(1.0));
+        b.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousStart, 1.0)),
+            end: None,
+        });
+        let mut p = project(vec![a, b]);
+        let problems = resolve_attachments(&mut p);
+        assert!(
+            problems
+                .iter()
+                .any(|p| matches!(p, AttachmentProblem::Circular { .. })),
+            "expected a cycle, got {problems:?}"
+        );
+        // Both keep what they had, so the project still plays.
+        let layers = p.layers.unwrap();
+        assert_eq!(layers[0].start_time, 1.0);
+        assert_eq!(layers[1].start_time, 2.0);
     }
 
     #[test]
