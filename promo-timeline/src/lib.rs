@@ -29,8 +29,8 @@ pub use layout::{
 pub use mapping::{
     effective_trimmed_media_duration, effective_video_playback_duration, extended_video_pauses,
     loop_folded, loop_period, output_time_for_source, playback_interval,
-    playback_video_trim_ranges, source_time_for_local, video_segment, video_trim_ranges,
-    ExtendedPause, PlaybackInterval, VideoSegment,
+    playback_video_trim_ranges, resource_for_cut, source_time_for_local, video_segment,
+    video_trim_ranges, ExtendedPause, PlaybackInterval, VideoSegment,
 };
 
 /// Result of folding a layer-local time into a looped resource's window.

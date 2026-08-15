@@ -365,7 +365,10 @@ impl PreviewEngine {
             }
             let local = tl::layer_local_time(layer, time);
             let source_time = match self.resource_for(layer) {
-                Some(res) => tl::source_time_for_local(res, local),
+                Some(res) => {
+                    let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
+                    tl::source_time_for_local(&view, local)
+                }
                 None => local,
             };
             let before = self.misses;
@@ -613,7 +616,12 @@ impl PreviewEngine {
             let source_time = if layer.kind == ProjectLayerKind::Video {
                 let local = tl::layer_local_time(layer, time);
                 match self.resource_for(layer) {
-                    Some(res) => tl::source_time_for_local(res, local),
+                    Some(res) => {
+                        // A layer naming a cut plays that sub-range; the
+                        // mapping is the same code either way.
+                        let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
+                        tl::source_time_for_local(&view, local)
+                    }
                     None => local,
                 }
             } else if self.image_has_animated_tilt(layer) {

@@ -390,6 +390,7 @@ mod tests {
             resource_id: None,
             image_filename: None,
             image_cut_id: None,
+            media_cut_id: None,
             image_orientation: None,
             image_border_color_hex: None,
             image_border_width: None,

@@ -383,3 +383,98 @@ fn base_video_segment(res: &ProjectResource, local: f64) -> VideoSegment {
         rate: 1.0,
     }
 }
+
+/// The resource as a layer playing `cut_id` sees it.
+///
+/// A cut shadows the resource's trim, so rather than threading a cut through
+/// every mapping function this hands back a resource with those fields already
+/// swapped. Layers with and without a cut then travel the SAME code — loop
+/// folding, extended pauses, include/exclude ranges and all — which is the
+/// only way to be sure a cut behaves exactly like the trim it replaces.
+///
+/// Borrowed when there is no cut, so the common case costs nothing.
+pub fn resource_for_cut<'a>(
+    resource: &'a ProjectResource,
+    cut_id: Option<&str>,
+) -> std::borrow::Cow<'a, ProjectResource> {
+    let Some(cut_id) = cut_id else {
+        return std::borrow::Cow::Borrowed(resource);
+    };
+    let Some(cut) = resource.media_cuts.iter().find(|c| c.id == cut_id) else {
+        // A layer naming a cut that no longer exists plays the whole resource
+        // rather than nothing. Losing a cut should not blank the layer.
+        return std::borrow::Cow::Borrowed(resource);
+    };
+    let mut view = resource.clone();
+    view.trim_start = cut.trim_start;
+    view.trim_end = cut.trim_end;
+    view.trim_keyframes = cut.trim_keyframes.clone();
+    std::borrow::Cow::Owned(view)
+}
+
+#[cfg(test)]
+mod cut_tests {
+    use super::*;
+    use promo_model::{MediaCut, ProjectResourceKind};
+
+    fn resource() -> ProjectResource {
+        let mut json = serde_json::json!({
+            "id": "R1", "kind": "video", "filename": "clip.mp4",
+            "displayName": "Clip", "addedAt": 0, "duration": 30.0,
+            "trimStart": 0.0, "trimEnd": 30.0,
+            "imageCuts": [], "disabledAudioTrackIndices": []
+        });
+        json["mediaCuts"] = serde_json::json!([
+            { "id": "C1", "name": "The formula bit", "trimStart": 12.0, "trimEnd": 18.0 }
+        ]);
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn a_cut_shadows_the_resource_trim() {
+        let res = resource();
+        assert_eq!(res.kind, ProjectResourceKind::Video);
+
+        let whole = resource_for_cut(&res, None);
+        assert_eq!(whole.trim_start, Some(0.0));
+        assert_eq!(whole.trim_end, Some(30.0));
+
+        let cut = resource_for_cut(&res, Some("C1"));
+        assert_eq!(cut.trim_start, Some(12.0));
+        assert_eq!(cut.trim_end, Some(18.0));
+        // Local time 0 in the cut is 12s into the source — the same mapping
+        // that a resource-level trim would give.
+        assert!((source_time_for_local(&cut, 0.0) - 12.0).abs() < 1e-9);
+        assert!((source_time_for_local(&cut, 2.0) - 14.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_missing_cut_plays_the_whole_resource() {
+        let res = resource();
+        let gone = resource_for_cut(&res, Some("deleted"));
+        assert_eq!(gone.trim_start, Some(0.0));
+        assert_eq!(gone.trim_end, Some(30.0));
+    }
+
+    #[test]
+    fn a_cut_carries_its_own_include_exclude_ranges() {
+        // The point of a cut over a plain in/out: it has the full trim model,
+        // so one cut can itself skip a dull stretch in the middle.
+        let mut res = resource();
+        res.media_cuts.push(MediaCut {
+            id: "C2".into(),
+            name: "Two takes".into(),
+            trim_start: Some(0.0),
+            trim_end: Some(20.0),
+            trim_keyframes: serde_json::from_str(
+                r#"[{"id":"K1","time":0,"isIncluded":true},
+                    {"id":"K2","time":5,"isIncluded":false},
+                    {"id":"K3","time":9,"isIncluded":true}]"#,
+            )
+            .unwrap(),
+        });
+        let cut = resource_for_cut(&res, Some("C2"));
+        // The excluded 5→9 stretch is skipped, so output 5s lands at 9s.
+        assert!((source_time_for_local(&cut, 5.0) - 9.0).abs() < 1e-9);
+    }
+}

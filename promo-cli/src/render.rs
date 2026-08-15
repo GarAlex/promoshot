@@ -395,8 +395,11 @@ pub fn build_soundtrack(
         let Some(mut audio) = decoded else { continue };
 
         // The layer plays a window of the source; cut the PCM to match rather
-        // than trusting the mixer to clip it.
-        let trim_start = resource.trim_start.unwrap_or(0.0).max(0.0);
+        // than trusting the mixer to clip it. A named cut shadows the
+        // resource's own trim, so audio cuts and video cuts mean the same
+        // thing and are resolved by the same helper.
+        let view = promo_timeline::resource_for_cut(resource, layer.media_cut_id.as_deref());
+        let trim_start = view.trim_start.unwrap_or(0.0).max(0.0);
         let layer_len = layer
             .duration
             .unwrap_or_else(|| audio.duration_s() - trim_start)

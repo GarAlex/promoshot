@@ -619,6 +619,10 @@ pub struct ProjectLayer {
     pub image_filename: Option<String>,
     #[serde(default, skip_serializing_if = "is_none", rename = "imageCutID")]
     pub image_cut_id: Option<String>,
+    /// Which named sub-range of the resource this layer plays. `None` plays
+    /// the resource's own trim, which is what every existing project does.
+    #[serde(default, skip_serializing_if = "is_none", rename = "mediaCutID")]
+    pub media_cut_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub image_orientation: Option<SlideshowImageOrientation>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -717,6 +721,29 @@ impl VideoTrimRange {
     pub fn duration(&self) -> f64 {
         (self.end - self.start).max(0.0)
     }
+}
+/// A named sub-range of a video or audio resource.
+///
+/// The same idea as an image cut, in time rather than space: one recording
+/// becomes several usable pieces without copying a file. A cut carries its own
+/// trim — including the keyframed include/exclude ranges — so "the part where
+/// the formula autocompletes" is a thing a layer can point at.
+///
+/// A cut's fields shadow the resource's. Nothing else changes: a layer that
+/// names one is mapped through exactly the same code as a layer that does
+/// not, because the cut is resolved into a resource before mapping sees it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaCut {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub trim_start: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub trim_end: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub trim_keyframes: Option<Vec<VideoTrimKeyframe>>,
 }
 
 /// Mirrors `ProjectImageCut` custom decode: `filename` defaults to "", the
@@ -871,6 +898,13 @@ pub struct ProjectResource {
     #[serde(skip_serializing_if = "is_none")]
     pub drawing: Option<DrawingDocument>,
     pub image_cuts: Vec<ProjectImageCut>,
+    /// Named sub-ranges of this video or audio. Empty for most resources.
+    ///
+    /// Always serialized, even when empty, because `imageCuts` is and the
+    /// Swift↔Rust parity harness compares key sets exactly — one side quietly
+    /// omitting a field is precisely what it exists to catch.
+    #[serde(default)]
+    pub media_cuts: Vec<MediaCut>,
     /// Swift `Float?` — legacy field, retained on the wire.
     #[serde(skip_serializing_if = "is_none")]
     pub audio_gain: Option<f32>,
@@ -914,6 +948,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     image_cuts: Option<Vec<ProjectImageCut>>,
     #[serde(default)]
+    media_cuts: Option<Vec<MediaCut>>,
+    #[serde(default)]
     audio_gain: Option<f32>,
     #[serde(default)]
     volume: Option<f32>,
@@ -944,6 +980,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
         Ok(ProjectResource {
             id: w.id,
             kind: w.kind,
+            media_cuts: w.media_cuts.unwrap_or_default(),
             filename: w.filename,
             display_name: w.display_name,
             added_at: w.added_at,
