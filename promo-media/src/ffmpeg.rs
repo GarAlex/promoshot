@@ -357,18 +357,22 @@ fn parse_rational(raw: &str) -> f64 {
 pub struct FfmpegAudioReader;
 
 impl AudioReader for FfmpegAudioReader {
-    fn read(
+    fn read_at_speed(
         &self,
         path: &Path,
         sample_rate: u32,
         channels: u16,
+        speed: f64,
     ) -> Result<Option<AudioBuffer>, MediaError> {
         if !has_audio_stream(path) {
             return Ok(None);
         }
-        let output = Command::new("ffmpeg")
-            .args(["-v", "error", "-nostdin", "-i"])
-            .arg(path)
+        let mut command = Command::new("ffmpeg");
+        command.args(["-v", "error", "-nostdin", "-i"]).arg(path);
+        if let Some(filter) = crate::atempo_chain(speed) {
+            command.args(["-filter:a", &filter]);
+        }
+        let output = command
             .args([
                 "-vn",
                 "-f",

@@ -409,6 +409,7 @@ pub fn resource_for_cut<'a>(
     view.trim_start = cut.trim_start;
     view.trim_end = cut.trim_end;
     view.trim_keyframes = cut.trim_keyframes.clone();
+    view.speed = cut.speed;
     std::borrow::Cow::Owned(view)
 }
 
@@ -466,6 +467,7 @@ mod cut_tests {
             name: "Two takes".into(),
             trim_start: Some(0.0),
             trim_end: Some(20.0),
+            speed: None,
             trim_keyframes: serde_json::from_str(
                 r#"[{"id":"K1","time":0,"isIncluded":true},
                     {"id":"K2","time":5,"isIncluded":false},
@@ -497,7 +499,14 @@ pub fn source_time_for_layer(
     policy: Option<promo_model::BeyondEnd>,
 ) -> Option<f64> {
     use promo_model::BeyondEnd;
-    let period = loop_period(resource);
+    // Speed converts between the two clocks: `local` is timeline seconds,
+    // the mapping below wants source seconds. Clamped because a zero or
+    // negative rate has no meaning and would divide the period to infinity.
+    let speed = resource.speed.unwrap_or(1.0).clamp(0.1, 10.0);
+    let content = loop_period(resource);
+    // How long the material lasts ON THE TIMELINE, which is what `Loop` and
+    // `Hide` are asking about.
+    let period = content / speed;
     let policy = policy.unwrap_or(if resource.is_looped() {
         BeyondEnd::Loop
     } else {
@@ -508,13 +517,14 @@ pub fn source_time_for_layer(
             let folded = loop_fold(local, period);
             Some(source_time_for_unpaused_local(
                 resource,
-                playback_interval(folded.local, &extended_video_pauses(resource)).media_time,
+                playback_interval(folded.local * speed, &extended_video_pauses(resource))
+                    .media_time,
             ))
         }
         BeyondEnd::Hide if period > 0.0 && local >= period => None,
         // Hold, and the degenerate cases: map straight through, which clamps
         // at the end of the trimmed range and so freezes the last frame.
-        _ => Some(source_time_for_local(resource, local)),
+        _ => Some(source_time_for_local(resource, local * speed)),
     }
 }
 
@@ -574,5 +584,72 @@ mod beyond_end_tests {
         let looped = source_time_for_layer(&res, 5.0, None).unwrap();
         let first = source_time_for_layer(&res, 1.0, None).unwrap();
         assert!((looped - first).abs() < 1e-9);
+    }
+}
+
+#[cfg(test)]
+mod speed_mapping_tests {
+    use super::*;
+    use promo_model::BeyondEnd;
+
+    fn clip(speed: Option<f64>) -> ProjectResource {
+        let mut res: ProjectResource = serde_json::from_value(serde_json::json!({
+            "id": "R1", "kind": "video", "filename": "c.mp4",
+            "displayName": "C", "addedAt": 0, "duration": 20.0,
+            "trimStart": 0.0, "trimEnd": 8.0,
+            "imageCuts": [], "disabledAudioTrackIndices": []
+        }))
+        .unwrap();
+        res.speed = speed;
+        res
+    }
+
+    #[test]
+    fn speed_scales_timeline_time_into_source_time() {
+        // Two seconds on the timeline at 1.5x is three seconds of source.
+        let fast = clip(Some(1.5));
+        let t = source_time_for_layer(&fast, 2.0, Some(BeyondEnd::Hold)).unwrap();
+        assert!((t - 3.0).abs() < 1e-9, "got {t}");
+
+        let slow = clip(Some(0.5));
+        let t = source_time_for_layer(&slow, 2.0, Some(BeyondEnd::Hold)).unwrap();
+        assert!((t - 1.0).abs() < 1e-9, "got {t}");
+    }
+
+    #[test]
+    fn the_material_runs_out_sooner_when_played_faster() {
+        // 8s of source at 2x lasts 4s on the timeline, so Hide must stop
+        // there rather than at 8.
+        let fast = clip(Some(2.0));
+        assert!(source_time_for_layer(&fast, 3.9, Some(BeyondEnd::Hide)).is_some());
+        assert!(source_time_for_layer(&fast, 4.1, Some(BeyondEnd::Hide)).is_none());
+    }
+
+    #[test]
+    fn a_faster_loop_wraps_sooner() {
+        let fast = clip(Some(2.0));
+        // Period is 4s of timeline; 4.5s in reads the same frame as 0.5s in.
+        let first = source_time_for_layer(&fast, 0.5, Some(BeyondEnd::Loop)).unwrap();
+        let wrapped = source_time_for_layer(&fast, 4.5, Some(BeyondEnd::Loop)).unwrap();
+        assert!((first - wrapped).abs() < 1e-9, "{first} vs {wrapped}");
+    }
+
+    #[test]
+    fn a_cut_carries_its_own_speed() {
+        let mut res = clip(None);
+        res.media_cuts = vec![promo_model::MediaCut {
+            id: "C1".into(),
+            name: "Quick".into(),
+            trim_start: Some(0.0),
+            trim_end: Some(8.0),
+            trim_keyframes: None,
+            speed: Some(2.0),
+        }];
+        let whole = resource_for_cut(&res, None);
+        assert_eq!(whole.speed, None);
+        let cut = resource_for_cut(&res, Some("C1"));
+        assert_eq!(cut.speed, Some(2.0));
+        let t = source_time_for_layer(&cut, 1.0, Some(BeyondEnd::Hold)).unwrap();
+        assert!((t - 2.0).abs() < 1e-9);
     }
 }

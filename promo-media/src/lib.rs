@@ -106,7 +106,47 @@ pub trait AudioReader: Send + Sync {
         path: &Path,
         sample_rate: u32,
         channels: u16,
+    ) -> Result<Option<AudioBuffer>, MediaError> {
+        self.read_at_speed(path, sample_rate, channels, 1.0)
+    }
+
+    /// Reads the asset time-stretched by `speed`, PITCH PRESERVED — 1.5 is
+    /// half again as fast and the voice is unchanged. Naive resampling would
+    /// be one line shorter and turn narration into a chipmunk.
+    fn read_at_speed(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        speed: f64,
     ) -> Result<Option<AudioBuffer>, MediaError>;
+}
+
+/// `atempo` handles 0.5–2.0 in one pass, so anything outside that is chained:
+/// 3.0 becomes 2.0 then 1.5. Returns None for a rate near enough to 1 that
+/// the filter would only cost a resample.
+pub fn atempo_chain(speed: f64) -> Option<String> {
+    if !(speed.is_finite()) || (speed - 1.0).abs() < 1e-6 || speed <= 0.0 {
+        return None;
+    }
+    let mut remaining = speed.clamp(0.1, 10.0);
+    let mut stages = Vec::new();
+    while remaining > 2.0 {
+        stages.push(2.0);
+        remaining /= 2.0;
+    }
+    while remaining < 0.5 {
+        stages.push(0.5);
+        remaining /= 0.5;
+    }
+    stages.push(remaining);
+    Some(
+        stages
+            .iter()
+            .map(|s| format!("atempo={s:.6}"))
+            .collect::<Vec<_>>()
+            .join(","),
+    )
 }
 
 /// What to write.
@@ -236,5 +276,57 @@ mod tests {
             err.to_string().contains("clip.mp4"),
             "the message must name the file: {err}"
         );
+    }
+}
+
+#[cfg(test)]
+mod speed_tests {
+    use super::atempo_chain;
+
+    #[test]
+    fn ordinary_rates_are_a_single_stage() {
+        // 0.5-2.0 is what one atempo instance accepts, and covers every rate
+        // a person actually reaches for.
+        assert_eq!(atempo_chain(1.2).unwrap(), "atempo=1.200000");
+        assert_eq!(atempo_chain(0.8).unwrap(), "atempo=0.800000");
+    }
+
+    #[test]
+    fn unity_asks_for_no_filter_at_all() {
+        assert!(atempo_chain(1.0).is_none(), "1x must not cost a resample");
+        assert!(atempo_chain(1.0000001).is_none());
+    }
+
+    #[test]
+    fn extreme_rates_chain_to_stay_inside_the_filter_limits() {
+        // 3x is outside one instance's range, so it becomes 2x then 1.5x —
+        // whose product is 3. A single atempo=3 would be rejected by ffmpeg.
+        let chain = atempo_chain(3.0).unwrap();
+        assert_eq!(chain.matches("atempo").count(), 2, "{chain}");
+        let product: f64 = chain
+            .split(',')
+            .map(|s| s.trim_start_matches("atempo=").parse::<f64>().unwrap())
+            .product();
+        assert!(
+            (product - 3.0).abs() < 1e-6,
+            "{chain} multiplies to {product}"
+        );
+
+        let slow = atempo_chain(0.25).unwrap();
+        let product: f64 = slow
+            .split(',')
+            .map(|s| s.trim_start_matches("atempo=").parse::<f64>().unwrap())
+            .product();
+        assert!(
+            (product - 0.25).abs() < 1e-6,
+            "{slow} multiplies to {product}"
+        );
+    }
+
+    #[test]
+    fn nonsense_rates_are_refused_rather_than_dividing_by_zero() {
+        assert!(atempo_chain(0.0).is_none());
+        assert!(atempo_chain(-1.0).is_none());
+        assert!(atempo_chain(f64::NAN).is_none());
     }
 }

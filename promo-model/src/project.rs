@@ -772,6 +772,15 @@ pub struct MediaCut {
     pub trim_end: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub trim_keyframes: Option<Vec<VideoTrimKeyframe>>,
+    /// Playback rate. 1.5 plays half again as fast, so the cut occupies
+    /// two thirds of the timeline it otherwise would. `None` is 1.0.
+    ///
+    /// Audio is stretched with pitch preserved, so a narration line can be
+    /// nudged to fit its beat without the voice changing — which beats
+    /// re-synthesizing it, since TTS returns a different duration each time
+    /// it is asked.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub speed: Option<f64>,
 }
 
 /// Mirrors `ProjectImageCut` custom decode: `filename` defaults to "", the
@@ -926,6 +935,10 @@ pub struct ProjectResource {
     #[serde(skip_serializing_if = "is_none")]
     pub drawing: Option<DrawingDocument>,
     pub image_cuts: Vec<ProjectImageCut>,
+    /// Playback rate for the resource's own trim, as `MediaCut::speed` is for
+    /// a cut. `None` is 1.0.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub speed: Option<f64>,
     /// Named sub-ranges of this video or audio. Empty for most resources.
     ///
     /// Always serialized, even when empty, because `imageCuts` is and the
@@ -978,6 +991,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     media_cuts: Option<Vec<MediaCut>>,
     #[serde(default)]
+    speed: Option<f64>,
+    #[serde(default)]
     audio_gain: Option<f32>,
     #[serde(default)]
     volume: Option<f32>,
@@ -1009,6 +1024,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             id: w.id,
             kind: w.kind,
             media_cuts: w.media_cuts.unwrap_or_default(),
+            speed: w.speed,
             filename: w.filename,
             display_name: w.display_name,
             added_at: w.added_at,

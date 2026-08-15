@@ -48,8 +48,10 @@ WINDOW_BORDER_WIDTH = 1
 WINDOW_BORDER_COLOR = "26364F"
 
 TITLE_CARD = 4.6             # the opener
-OUTRO = 3.2
-TITLE_BEAT = 2.5             # centred chapter title, before its clip
+OUTRO = 6.0    # long enough for the closing line, measured not guessed
+TITLE_BEAT = 3.3             # centred chapter title, before its clip
+# 3.3 rather than a round number: the narration was measured first and
+# the beats were widened to fit it, not the other way round.
 # --zoomdown: the chapter title opens BIG in the centre and shrinks to the
 # headline size as it rides up. Caption keyframes animate font size via
 # `zoom` (the app's mapping), and the core re-rasterizes per size, so the

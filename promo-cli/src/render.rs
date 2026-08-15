@@ -389,8 +389,10 @@ pub fn build_soundtrack(
         let Some(path) = project.resource_path(resource) else {
             continue;
         };
+        // Read through the cut's view so its speed (and trim) apply.
+        let view = promo_timeline::resource_for_cut(resource, layer.media_cut_id.as_deref());
         let decoded = reader
-            .read(&path, SAMPLE_RATE, CHANNELS)
+            .read_at_speed(&path, SAMPLE_RATE, CHANNELS, view.speed.unwrap_or(1.0))
             .map_err(|e| format!("{}: {e}", path.display()))?;
         let Some(mut audio) = decoded else { continue };
 
@@ -398,8 +400,10 @@ pub fn build_soundtrack(
         // than trusting the mixer to clip it. A named cut shadows the
         // resource's own trim, so audio cuts and video cuts mean the same
         // thing and are resolved by the same helper.
-        let view = promo_timeline::resource_for_cut(resource, layer.media_cut_id.as_deref());
-        let trim_start = view.trim_start.unwrap_or(0.0).max(0.0);
+        // The stretched stream has its own clock: a trim of 4s into a source
+        // played at 2x begins 2s into the stretched PCM.
+        let speed = view.speed.unwrap_or(1.0).clamp(0.1, 10.0);
+        let trim_start = view.trim_start.unwrap_or(0.0).max(0.0) / speed;
         let layer_len = layer
             .duration
             .unwrap_or_else(|| audio.duration_s() - trim_start)
