@@ -63,13 +63,19 @@ FADE = 0.45
 # one, so they hand over instead of blending.
 HEAD_FADE = 0.28
 
+# Headlines must describe what the screenshot actually shows — App Store
+# review reads them together, and a claim the image does not support is the
+# fastest way to look untrustworthy.
 SHOTS = [
-    ("01", "A faster spreadsheet for Mac"),
+    # "faster" invited a comparison nothing here supports.
+    ("01", "A fast spreadsheet for Mac"),
     ("02", "Built for large worksheets"),
     ("03", "Formulas without friction"),
     ("04", "Format every detail"),
-    ("05", "Open, edit, and export"),
-    ("06", "Focused, native, and offline"),
+    # The shot is a CSV IMPORT preview; the old headline promised export.
+    ("05", "Import CSV files with confidence"),
+    # The shot shows a clean single window, not offline or native behaviour.
+    ("06", "A clean, focused workspace"),
 ]
 
 
