@@ -16,9 +16,10 @@ pub use audio::{
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
 };
 pub use interpolation::{
-    interpolate_color_hex, layer_background_color_hex, layer_has_tilt_keyframes, layer_is_visible,
-    layer_local_time, layer_opacity, layer_rotation, layer_tilt_offset, layer_transform,
-    settings_background_color_hex, settings_interpolated_values, Transform,
+    interpolate_color_hex, layer_background_color_hex, layer_caption_values,
+    layer_has_tilt_keyframes, layer_is_visible, layer_local_time, layer_opacity, layer_rotation,
+    layer_tilt_offset, layer_transform, settings_background_color_hex,
+    settings_interpolated_values, CaptionValues, Transform,
 };
 pub use layout::{
     clamped_zoom, drawing_rect, letterbox_transform, media_corner_radius, media_rect,
@@ -229,6 +230,33 @@ mod tests {
     }
 
     #[test]
+    fn caption_values_are_none_without_style_keyframes() {
+        let p = fixture_project();
+        let base = CaptionValues {
+            font_size: 54.0,
+            vertical_margin: 34.0,
+            left_margin: 90.0,
+        };
+        let mut caption = p.layers.as_ref().unwrap()[1].clone();
+        for k in &mut caption.keyframes {
+            k.zoom = None;
+            k.horizontal_shift = None;
+            k.vertical_shift = None;
+        }
+        assert_eq!(
+            layer_caption_values(&caption, caption.start_time + 0.5, base),
+            None
+        );
+
+        // A layer that keys them eases, and zoom drives FONT SIZE — the app's
+        // mapping, not the media-layer one.
+        let moving = &p.layers.as_ref().unwrap()[1];
+        let got = layer_caption_values(moving, 2.5 + 5.25, base).expect("keys a style");
+        assert!((got.font_size - 1.6).abs() < 1e-12);
+        assert!((got.vertical_margin - 75.0).abs() < 1e-12);
+        assert!((got.left_margin - -40.0).abs() < 1e-12);
+    }
+
     fn rotation_and_tilt_interpolate() {
         let p = fixture_project();
         let layer = &p.layers.as_ref().unwrap()[1];

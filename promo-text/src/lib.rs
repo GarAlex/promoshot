@@ -55,7 +55,7 @@ pub struct TextStyle {
     pub corner_radius: f64,
     pub left_margin: f64,
     pub right_margin: f64,
-    /// Distance from the BOTTOM of the canvas, matching the app.
+    /// Distance from the TOP of the canvas, matching the app.
     pub vertical_margin: f64,
     /// Line height as a multiple of font size.
     pub line_height: f64,
@@ -320,9 +320,13 @@ pub fn rasterize(
         }
     });
 
-    // The app measures the vertical margin from the bottom; the compositor
-    // wants a top-left origin.
-    let y = canvas_height - style.vertical_margin - bg_height;
+    // Top-left origin, matching the app: both its SwiftUI preview
+    // (`.offset(y: verticalMargin)`) and its exporter (a bitmap context
+    // flipped to top-left in `makeBitmapContext`) treat the vertical margin as
+    // a distance from the TOP. This module used to measure from the bottom,
+    // which put every caption somewhere else than the app drew it.
+    let _ = canvas_height;
+    let y = style.vertical_margin;
 
     Some(RasterizedText {
         rgba,
@@ -479,16 +483,21 @@ mod tests {
     /// The app measures the vertical margin from the bottom; a caller reading
     /// this as "from the top" would put every caption in the wrong half.
     #[test]
-    fn vertical_margin_is_measured_from_the_bottom() {
+    fn vertical_margin_is_measured_from_the_top() {
+        // The app's own two renderers both place a caption's TOP edge at
+        // `verticalMargin`. This crate measured from the bottom, so the same
+        // project drew captions in one place in the app and another in the
+        // CLI — with nothing to catch it, because the app's parity tests
+        // compare its CoreText drawing against itself.
         let style = TextStyle {
             vertical_margin: 80.0,
             ..Default::default()
         };
-        let out = rasterize("Bottom", 1440.0, 900.0, &style).unwrap();
-        let bottom_gap = 900.0 - (out.y + out.height as f64);
+        let out = rasterize("Top", 1440.0, 900.0, &style).unwrap();
         assert!(
-            (bottom_gap - 80.0).abs() < 1.5,
-            "expected ~80 from the bottom, got {bottom_gap}"
+            (out.y - 80.0).abs() < 1.5,
+            "expected ~80 from the top, got {}",
+            out.y
         );
     }
 

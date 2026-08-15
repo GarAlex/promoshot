@@ -465,15 +465,44 @@ impl PreviewEngine {
         layer: &ProjectLayer,
         settings: &promo_model::CompositionSettings,
         canvas: Size,
+        time: f64,
     ) -> Option<(SceneQuad, u64)> {
         let text = layer.caption_text.as_deref()?.trim();
         if text.is_empty() {
             return None;
         }
-        let style = caption_style(layer, settings);
-        // Same key shape as frames: (id, quantized time, tier). Caption
-        // text does not vary with the playhead, so time and tier are fixed.
-        let key = (format!("caption:{}", layer.id), 0i64, 0i32);
+        let mut style = caption_style(layer, settings);
+        // A caption's keyframes change its SIZE and MARGINS (the app's
+        // mapping), so unlike a frame the raster does vary with the playhead —
+        // and it is re-rasterized per size rather than scaled, which is what
+        // keeps animated text crisp. The key carries the style, quantized to a
+        // tenth of a point so a slow ramp reuses rasters instead of making one
+        // per frame.
+        if let Some(values) = tl::layer_caption_values(
+            layer,
+            time,
+            tl::CaptionValues {
+                font_size: style.font_size,
+                vertical_margin: style.vertical_margin,
+                left_margin: style.left_margin,
+            },
+        ) {
+            style.font_size = values.font_size;
+            style.vertical_margin = values.vertical_margin;
+            style.left_margin = values.left_margin;
+        }
+        let stamp = |v: f64| (v * 10.0).round() as i64;
+        let key = (
+            format!(
+                "caption:{}:{}:{}:{}",
+                layer.id,
+                stamp(style.font_size),
+                stamp(style.vertical_margin),
+                stamp(style.left_margin)
+            ),
+            0i64,
+            0i32,
+        );
         if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
             self.hits += 1;
@@ -568,7 +597,7 @@ impl PreviewEngine {
             if layer.kind == ProjectLayerKind::Caption {
                 // Text is drawn by the core now (promo-text), not by a host
                 // overlay — so a headless render keeps its captions.
-                if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas) {
+                if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas, time) {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
                     quads.push(quad);
                     used.push(id);

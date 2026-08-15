@@ -71,8 +71,8 @@ def headline_box_height():
 
 
 def headline_vertical_margin():
-    """promo-text measures from the BOTTOM, matching the app."""
-    return CANVAS_H - HEADLINE_TOP_GAP - headline_box_height()
+    """The vertical margin is measured from the TOP, matching the app."""
+    return HEADLINE_TOP_GAP
 
 
 def window_geometry(src_w, src_h):

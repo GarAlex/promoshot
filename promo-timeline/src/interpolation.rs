@@ -168,6 +168,77 @@ pub fn layer_tilt_offset(layer: &ProjectLayer, time: f64) -> Option<(f64, f64)> 
     ))
 }
 
+/// The caption style values a layer's keyframes ask for at `time`.
+///
+/// Swift `ProjectLayer.captionStyle(at:defaults:)`. A caption keyframe reuses
+/// the media-layer fields for something else entirely, and this mapping is the
+/// app's, not an invention here:
+///
+///   zoom            -> font size
+///   verticalShift   -> vertical margin (from the TOP of the canvas)
+///   horizontalShift -> left margin
+///
+/// A field the keyframe omits falls back to the BASE style, not to the
+/// previous keyframe — again matching the app. `None` means the layer keys
+/// none of the three, so the caption is static and the base style stands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CaptionValues {
+    pub font_size: f64,
+    pub vertical_margin: f64,
+    pub left_margin: f64,
+}
+
+pub fn layer_caption_values(
+    layer: &ProjectLayer,
+    time: f64,
+    base: CaptionValues,
+) -> Option<CaptionValues> {
+    let sorted = sorted_by_time(&layer.keyframes, |k| {
+        k.zoom.is_some() || k.vertical_shift.is_some() || k.horizontal_shift.is_some()
+    });
+    if sorted.is_empty() {
+        return None;
+    }
+    let values = |k: &ProjectLayerKeyframe| CaptionValues {
+        font_size: k.zoom.unwrap_or(base.font_size),
+        vertical_margin: k.vertical_shift.unwrap_or(base.vertical_margin),
+        left_margin: k.horizontal_shift.unwrap_or(base.left_margin),
+    };
+    let local_time = layer_local_time(layer, time);
+    let first = sorted[0];
+    let last = sorted[sorted.len() - 1];
+    if local_time <= first.time {
+        return Some(values(first));
+    }
+    if local_time >= last.time {
+        return Some(values(last));
+    }
+    for pair in sorted.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if local_time >= a.time && local_time <= b.time {
+            let gap = b.time - a.time;
+            let effective_transition = b.transition_duration.min(gap);
+            let transition_start = b.time - effective_transition;
+            if local_time < transition_start {
+                return Some(values(a));
+            }
+            let progress = if effective_transition > 0.0 {
+                (local_time - transition_start) / effective_transition
+            } else {
+                1.0
+            };
+            let (av, bv) = (values(a), values(b));
+            let lerp = |x: f64, y: f64| x + (y - x) * progress;
+            return Some(CaptionValues {
+                font_size: lerp(av.font_size, bv.font_size),
+                vertical_margin: lerp(av.vertical_margin, bv.vertical_margin),
+                left_margin: lerp(av.left_margin, bv.left_margin),
+            });
+        }
+    }
+    Some(values(first))
+}
+
 /// Swift `ProjectLayer.backgroundColorHex(at:defaults:)`.
 pub fn layer_background_color_hex(
     layer: &ProjectLayer,

@@ -94,9 +94,8 @@ def headline_box_height():
 
 
 def headline_vertical_margin():
-    """promo-text measures the vertical margin from the BOTTOM of the canvas,
-    matching the app. Convert the top gap we actually care about."""
-    return CANVAS_H - HEADLINE_TOP_GAP - headline_box_height()
+    """The vertical margin is measured from the TOP, matching the app."""
+    return HEADLINE_TOP_GAP
 
 
 def window_geometry(src_w, src_h):
@@ -308,7 +307,7 @@ def main():
 
     print(f"wrote {len(found)} still projects + 1 slideshow to {out_dir}")
     print(f"  headline box: {headline_box_height()}px, "
-          f"verticalMargin {headline_vertical_margin()} (from the bottom)")
+          f"verticalMargin {headline_vertical_margin()} (from the top)")
     total = len(found) * (SLIDE_SECONDS - FADE) + FADE
     print(f"  slideshow:    {total:.1f}s "
           f"({SLIDE_SECONDS}s slides overlapping by {FADE}s)")
