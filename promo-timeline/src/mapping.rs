@@ -507,6 +507,11 @@ pub fn source_time_for_layer(
     // How long the material lasts ON THE TIMELINE, which is what `Loop` and
     // `Hide` are asking about.
     let period = content / speed;
+    // An explicit policy OVERRIDES the resource's legacy `looped` flag — that
+    // is the whole point of putting the policy on the layer. Routing Hold
+    // through `source_time_for_local` would re-apply the resource-level fold
+    // and quietly loop a layer that asked to freeze.
+    let explicit = policy.is_some();
     let policy = policy.unwrap_or(if resource.is_looped() {
         BeyondEnd::Loop
     } else {
@@ -524,6 +529,10 @@ pub fn source_time_for_layer(
         BeyondEnd::Hide if period > 0.0 && local >= period => None,
         // Hold, and the degenerate cases: map straight through, which clamps
         // at the end of the trimmed range and so freezes the last frame.
+        _ if explicit => Some(source_time_for_unpaused_local(
+            resource,
+            playback_interval(local * speed, &extended_video_pauses(resource)).media_time,
+        )),
         _ => Some(source_time_for_local(resource, local * speed)),
     }
 }
@@ -541,6 +550,16 @@ mod beyond_end_tests {
             "imageCuts": [], "disabledAudioTrackIndices": []
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn hold_overrides_a_looped_resource() {
+        // The legacy `looped` flag must lose to an explicit per-layer Hold —
+        // this used to fold 5.0 back to source 3.0 and loop instead of freeze.
+        let mut res = clip();
+        res.looped = Some(true);
+        let t = source_time_for_layer(&res, 5.0, Some(BeyondEnd::Hold)).unwrap();
+        assert!((t - 6.0).abs() < 1e-9, "held at the trim end, got {t}");
     }
 
     #[test]

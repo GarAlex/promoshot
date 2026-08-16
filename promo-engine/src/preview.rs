@@ -209,10 +209,24 @@ impl PreviewEngine {
     pub fn set_project(&mut self, meta: ProjectMetadata) {
         let old = self.meta.layers.clone().unwrap_or_default();
         let new = meta.layers.clone().unwrap_or_default();
+        let old_resources = self.meta.resources.clone().unwrap_or_default();
+        let new_resources = meta.resources.clone().unwrap_or_default();
+        // A layer whose RESOURCE changed is as stale as one that changed
+        // itself: an image cut's rect, a device frame's material, a caption
+        // resource's text all live there, and the layer struct is untouched
+        // when they move. Comparing only layers kept the old bake on screen.
+        let resource_changed = |layer: &ProjectLayer| -> bool {
+            let Some(rid) = layer.resource_id.as_ref() else {
+                return false;
+            };
+            let before = old_resources.iter().find(|r| &r.id == rid);
+            let after = new_resources.iter().find(|r| &r.id == rid);
+            before != after
+        };
         let mut stale: Vec<String> = Vec::new();
         for layer in &old {
             match new.iter().find(|l| l.id == layer.id) {
-                Some(updated) if updated == layer => {}
+                Some(updated) if updated == layer && !resource_changed(layer) => {}
                 // Changed or removed: its cached frames may no longer apply.
                 _ => stale.push(layer.id.clone()),
             }
@@ -228,12 +242,15 @@ impl PreviewEngine {
         self.meta = meta;
     }
 
-    /// Drops every cached frame belonging to `layer_id`.
+    /// Drops every cached frame belonging to `layer_id` — video/image frames
+    /// keyed by the bare id AND caption rasters keyed `caption:{id}:…`, which
+    /// a bare-id match silently skipped (stale captions survived every edit).
     fn evict_layer(&mut self, layer_id: &str) {
+        let caption_prefix = format!("caption:{layer_id}:");
         let victims: Vec<u64> = self
             .id_of
             .iter()
-            .filter(|(_, (id, _, _))| id == layer_id)
+            .filter(|(_, (id, _, _))| id == layer_id || id.starts_with(&caption_prefix))
             .map(|(entry, _)| *entry)
             .collect();
         for entry in victims {
@@ -299,7 +316,9 @@ impl PreviewEngine {
     }
 
     /// Fetches (or serves from cache) the frame for `layer` at `source_time`.
-    fn frame(&mut self, layer_id: &str, source_time: f64, tier: i32) -> Option<u64> {
+    /// `pinned`: ids the in-flight scene already holds — they must survive
+    /// this admit's eviction or the scene would point at freed frames.
+    fn frame(&mut self, layer_id: &str, source_time: f64, tier: i32, pinned: &[u64]) -> Option<u64> {
         let key = (layer_id.to_string(), quantize(source_time), tier);
         if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
@@ -333,7 +352,7 @@ impl PreviewEngine {
         self.misses += 1;
         let id = self.next_id;
         self.next_id += 1;
-        for victim in self.governor.admit(id, width * height * 4) {
+        for victim in self.governor.admit(id, width * height * 4, pinned) {
             if let Some(k) = self.id_of.remove(&victim) {
                 self.key_of.remove(&k);
             }
@@ -372,7 +391,7 @@ impl PreviewEngine {
                 None => local,
             };
             let before = self.misses;
-            let _ = self.frame(&layer.id, source_time, self.preferred_tier);
+            let _ = self.frame(&layer.id, source_time, self.preferred_tier, &[]);
             if self.misses > before {
                 fetched += 1;
             }
@@ -469,6 +488,7 @@ impl PreviewEngine {
         settings: &promo_model::CompositionSettings,
         canvas: Size,
         time: f64,
+        pinned: &[u64],
     ) -> Option<(SceneQuad, u64)> {
         // Resource first, layer second — the app's rule (`captionText(for:)`).
         // Captions authored in the app keep their words and style on the
@@ -502,20 +522,31 @@ impl PreviewEngine {
             style.left_margin = values.left_margin;
         }
         let stamp = |v: f64| (v * 10.0).round() as i64;
-        // The text is part of the key: with resource-held captions the same
-        // layer id can mean new words after an edit, and a style-only key
-        // would keep serving the old raster until eviction.
-        let text_stamp = {
+        // EVERYTHING that shapes the raster is in the key: the text (with
+        // resource-held captions the same layer id can mean new words after
+        // an edit) and the full resolved style — colors, family, weight,
+        // alignment. A key of just the geometric fields kept serving a white
+        // raster after the caption was recolored.
+        let content_stamp = {
             use std::hash::{Hash, Hasher};
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             text.hash(&mut hasher);
+            style.font_family.hash(&mut hasher);
+            style.bold.hash(&mut hasher);
+            style.italic.hash(&mut hasher);
+            format!("{:?}", style.align).hash(&mut hasher);
+            style.text_rgba.hash(&mut hasher);
+            style.background_rgba.hash(&mut hasher);
+            stamp(style.padding).hash(&mut hasher);
+            stamp(style.corner_radius).hash(&mut hasher);
+            stamp(style.right_margin).hash(&mut hasher);
             hasher.finish()
         };
         let key = (
             format!(
                 "caption:{}:{:x}:{}:{}:{}",
                 layer.id,
-                text_stamp,
+                content_stamp,
                 stamp(style.font_size),
                 stamp(style.vertical_margin),
                 stamp(style.left_margin)
@@ -556,7 +587,7 @@ impl PreviewEngine {
         self.misses += 1;
         let id = self.next_id;
         self.next_id += 1;
-        for victim in self.governor.admit(id, bytes) {
+        for victim in self.governor.admit(id, bytes, pinned) {
             if let Some(k) = self.id_of.remove(&victim) {
                 self.key_of.remove(&k);
             }
@@ -617,7 +648,7 @@ impl PreviewEngine {
             if layer.kind == ProjectLayerKind::Caption {
                 // Text is drawn by the core now (promo-text), not by a host
                 // overlay — so a headless render keeps its captions.
-                if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas, time) {
+                if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas, time, &used) {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
                     quads.push(quad);
                     used.push(id);
@@ -660,7 +691,7 @@ impl PreviewEngine {
             } else {
                 0
             };
-            let Some(frame_id) = self.frame(&layer.id, source_time, tier) else {
+            let Some(frame_id) = self.frame(&layer.id, source_time, tier, &used) else {
                 continue;
             };
             let frame = &self.cache[&frame_id];

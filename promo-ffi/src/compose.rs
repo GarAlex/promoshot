@@ -261,7 +261,13 @@ pub extern "C" fn promo_compose_frame_raw(
         return -1;
     }
     let h = unsafe { std::slice::from_raw_parts(header, HEADER_DOUBLES) };
-    let q = unsafe { std::slice::from_raw_parts(quads, quad_count * QUAD_DOUBLES) };
+    // A background-only frame has zero quads and may pass NULL — building a
+    // slice from a null pointer is UB even for length 0.
+    let q: &[f64] = if quad_count == 0 {
+        &[]
+    } else {
+        unsafe { std::slice::from_raw_parts(quads, quad_count * QUAD_DOUBLES) }
+    };
 
     let mut textures: Vec<InputTexture> = Vec::with_capacity(surface_count);
     for i in 0..surface_count {

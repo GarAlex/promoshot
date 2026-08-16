@@ -259,6 +259,7 @@ mod tests {
         assert!((got.left_margin - -40.0).abs() < 1e-12);
     }
 
+    #[test]
     fn rotation_and_tilt_interpolate() {
         let p = fixture_project();
         let layer = &p.layers.as_ref().unwrap()[1];

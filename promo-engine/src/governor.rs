@@ -73,19 +73,27 @@ impl MemoryGovernor {
     /// resources and MUST treat the returned ids as already unregistered.
     /// An entry larger than the whole budget is admitted alone — the video
     /// frame currently on screen must always be cacheable.
+    ///
+    /// `pinned` entries are never evicted: a scene being assembled holds ids
+    /// it fetched moments ago, and evicting one of those to make room for the
+    /// next would leave the scene pointing at a freed frame — under a tight
+    /// budget that was a panic per render. Pinning may leave the cache
+    /// transiently over budget; the next unpinned admit pays it back.
     #[must_use]
-    pub fn admit(&mut self, id: EntryId, bytes: usize) -> Vec<EntryId> {
+    pub fn admit(&mut self, id: EntryId, bytes: usize, pinned: &[EntryId]) -> Vec<EntryId> {
         self.tick += 1;
         if let Some(old) = self.entries.remove(&id) {
             self.used -= old.bytes;
         }
         let mut victims = Vec::new();
-        while self.used + bytes > self.budget && !self.entries.is_empty() {
-            let (&victim, _) = self
+        while self.used + bytes > self.budget {
+            let candidate = self
                 .entries
                 .iter()
+                .filter(|(eid, _)| !pinned.contains(eid))
                 .min_by_key(|(_, e)| e.last_used)
-                .expect("non-empty");
+                .map(|(&eid, _)| eid);
+            let Some(victim) = candidate else { break };
             let entry = self.entries.remove(&victim).expect("present");
             self.used -= entry.bytes;
             self.evictions += 1;
@@ -126,10 +134,10 @@ mod tests {
     #[test]
     fn evicts_lru_to_fit_budget() {
         let mut g = MemoryGovernor::new(100);
-        assert!(g.admit(1, 40).is_empty());
-        assert!(g.admit(2, 40).is_empty());
+        assert!(g.admit(1, 40, &[]).is_empty());
+        assert!(g.admit(2, 40, &[]).is_empty());
         g.touch(1); // 2 is now least-recently-used
-        let victims = g.admit(3, 40);
+        let victims = g.admit(3, 40, &[]);
         assert_eq!(victims, vec![2]);
         assert_eq!(g.used(), 80);
         assert_eq!(g.evictions(), 1);
@@ -138,8 +146,8 @@ mod tests {
     #[test]
     fn oversized_entry_admitted_alone() {
         let mut g = MemoryGovernor::new(100);
-        assert!(g.admit(1, 60).is_empty());
-        let victims = g.admit(2, 500);
+        assert!(g.admit(1, 60, &[]).is_empty());
+        let victims = g.admit(2, 500, &[]);
         assert_eq!(victims, vec![1]);
         assert_eq!(g.used(), 500);
     }
@@ -147,17 +155,17 @@ mod tests {
     #[test]
     fn re_admit_replaces_cost() {
         let mut g = MemoryGovernor::new(100);
-        assert!(g.admit(1, 90).is_empty());
-        assert!(g.admit(1, 30).is_empty());
+        assert!(g.admit(1, 90, &[]).is_empty());
+        assert!(g.admit(1, 30, &[]).is_empty());
         assert_eq!(g.used(), 30);
     }
 
     #[test]
     fn shrinking_budget_evicts_lru_immediately() {
         let mut g = MemoryGovernor::new(300);
-        assert!(g.admit(1, 100).is_empty());
-        assert!(g.admit(2, 100).is_empty());
-        assert!(g.admit(3, 100).is_empty());
+        assert!(g.admit(1, 100, &[]).is_empty());
+        assert!(g.admit(2, 100, &[]).is_empty());
+        assert!(g.admit(3, 100, &[]).is_empty());
         g.touch(3);
         g.touch(2);
         let victims = g.set_budget(200);
@@ -171,9 +179,22 @@ mod tests {
     #[test]
     fn remove_frees_bytes() {
         let mut g = MemoryGovernor::new(100);
-        let _ = g.admit(1, 70);
+        let _ = g.admit(1, 70, &[]);
         g.remove(1);
         assert_eq!(g.used(), 0);
-        assert!(g.admit(2, 100).is_empty());
+        assert!(g.admit(2, 100, &[]).is_empty());
+    }
+
+    #[test]
+    fn pinned_entries_survive_even_over_budget() {
+        let mut g = MemoryGovernor::new(100);
+        assert!(g.admit(1, 60, &[]).is_empty());
+        assert!(g.admit(2, 60, &[1]).is_empty(), "1 is pinned: nothing to evict");
+        assert!(g.used() > g.budget(), "transiently over budget by design");
+        // With the pin gone, the next admit pays the whole debt back, LRU
+        // first — both old entries go, because 60 is all the budget holds.
+        let victims = g.admit(3, 60, &[]);
+        assert_eq!(victims, vec![1, 2]);
+        assert_eq!(g.used(), 60);
     }
 }

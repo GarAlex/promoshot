@@ -23,6 +23,8 @@ use promo_model::{ProjectLayer, ProjectMetadata, TimingReference};
 pub enum AttachmentProblem {
     /// The topmost layer has nothing above it to attach to.
     NoPreviousLayer { layer: String },
+    /// The bottom layer has nothing below it, and anchors forward anyway.
+    NoNextLayer { layer: String },
     /// A START anchored to the end of a layer that never ends. The end of an
     /// open-ended layer is the end of the composition, and a layer beginning
     /// there has no time to exist.
@@ -45,6 +47,10 @@ impl std::fmt::Display for AttachmentProblem {
             Self::NoPreviousLayer { layer } => write!(
                 f,
                 "layer \"{layer}\" is attached to the previous layer, but nothing is above it"
+            ),
+            Self::NoNextLayer { layer } => write!(
+                f,
+                "layer \"{layer}\" is attached to the next layer, but nothing is below it"
             ),
             Self::StartsAtTheEnd { layer } => write!(
                 f,
@@ -85,6 +91,21 @@ fn composition_end(layers: &[ProjectLayer]) -> f64 {
 struct Slot {
     start: Option<f64>,
     end: Option<Option<f64>>,
+}
+
+/// The right "nothing there" report for an anchor's direction — a forward
+/// anchor at the bottom must not claim something is missing ABOVE.
+fn missing_neighbour(from: TimingReference, layer: &ProjectLayer) -> AttachmentProblem {
+    match from {
+        TimingReference::PreviousStart | TimingReference::PreviousEnd => {
+            AttachmentProblem::NoPreviousLayer {
+                layer: layer.name.clone(),
+            }
+        }
+        TimingReference::NextStart | TimingReference::NextEnd => AttachmentProblem::NoNextLayer {
+            layer: layer.name.clone(),
+        },
+    }
 }
 
 /// Resolves every attached layer in place.
@@ -167,9 +188,7 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
                             progressed = true;
                         }
                         Known::Missing => {
-                            problems.push(AttachmentProblem::NoPreviousLayer {
-                                layer: layer.name.clone(),
-                            });
+                            problems.push(missing_neighbour(anchor.from, layer));
                             slots[position].start = Some(layer.start_time);
                             stalled[position] = true;
                             progressed = true;
@@ -201,9 +220,11 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
                             progressed = true;
                         }
                         Known::Missing => {
-                            problems.push(AttachmentProblem::NoPreviousLayer {
-                                layer: layer.name.clone(),
-                            });
+                            // One report per layer: the start block may have
+                            // already said it this pass.
+                            if !stalled[position] {
+                                problems.push(missing_neighbour(anchor.from, layer));
+                            }
                             slots[position].end =
                                 Some(layer.duration.map(|d| layer.start_time + d));
                             stalled[position] = true;
