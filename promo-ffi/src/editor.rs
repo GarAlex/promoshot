@@ -162,6 +162,46 @@ pub extern "C" fn promo_lanes_compact_labels(timeline_width: f64) -> i32 {
     promo_editor::TimelineLanePolicy::uses_compact_labels(timeline_width) as i32
 }
 
+#[derive(serde::Deserialize)]
+struct RunsParams {
+    layers: Vec<ProjectLayer>,
+}
+
+/// The chained runs among the given layers — every group joined by
+/// attachments, each in `sortIndex` order, singletons omitted.
+///
+/// Input `{"layers": [...]}` where a layer needs only the required model
+/// fields plus `timing`. Returns `[["id", …], …]` as JSON; free with
+/// `promo_string_free`. NULL on malformed input.
+///
+/// The UI asks for all runs at once: chain marks need every row's membership,
+/// and reordering needs the dragged layer's whole group — one call serves
+/// both. Swift does not reimplement the link rule, for the same reason it does
+/// not reimplement resolution.
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_timing_runs(params_json: *const c_char) -> *mut c_char {
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(params) = serde_json::from_str::<RunsParams>(text) else {
+        return std::ptr::null_mut();
+    };
+    let runs = promo_timeline::runs(&params.layers);
+    match serde_json::to_string(&runs)
+        .ok()
+        .and_then(|s| CString::new(s).ok())
+    {
+        Some(c) => c.into_raw(),
+        None => std::ptr::null_mut(),
+    }
+}
+
 // --- selection, pinning, reveal (Stage 1 slice 1.2) ----------------------
 //
 // Stateless on purpose. Stage 1 does not move ownership: Swift still holds the

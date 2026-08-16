@@ -373,6 +373,39 @@ pub fn run_containing(project: &ProjectMetadata, layer_id: &str) -> Vec<String> 
         .collect()
 }
 
+/// Every run among `layers` at once, each in `sortIndex` order.
+///
+/// Same link rule as [`run_containing`], but computed in one pass so a UI can
+/// paint the chain marks and gate reordering without asking per layer.
+/// Singletons are omitted: a layer with no attachments is not in a run, and
+/// reporting it as a run of one would make every caller filter. Takes bare
+/// layers rather than a project because that is all it reads — and all the
+/// editor FFI sends.
+pub fn runs(layers: &[ProjectLayer]) -> Vec<Vec<String>> {
+    let mut ordered: Vec<&ProjectLayer> = layers.iter().collect();
+    ordered.sort_by_key(|layer| layer.sort_index);
+
+    let mut out: Vec<Vec<String>> = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+    for position in 0..ordered.len() {
+        let joined = position > 0
+            && (anchors(ordered[position], Direction::Backward)
+                || anchors(ordered[position - 1], Direction::Forward));
+        if !joined {
+            if current.len() > 1 {
+                out.push(std::mem::take(&mut current));
+            } else {
+                current.clear();
+            }
+        }
+        current.push(ordered[position].id.clone());
+    }
+    if current.len() > 1 {
+        out.push(current);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,5 +631,38 @@ mod tests {
         assert_eq!(run_containing(&p, "B"), vec!["A", "B", "C"]);
         assert_eq!(run_containing(&p, "A"), vec!["A", "B", "C"]);
         assert_eq!(run_containing(&p, "D"), vec!["D"]);
+    }
+
+    #[test]
+    fn runs_reports_every_group_and_skips_singletons() {
+        // A←B chained, C loose, D→E chained by D anchoring FORWARD — the link
+        // belongs to the pair no matter which side wrote it down.
+        let a = layer("A", 0, 0.0, Some(1.0));
+        let mut b = layer("B", 1, 0.0, Some(1.0));
+        b.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousEnd, 0.0)),
+            end: None,
+        });
+        let c = layer("C", 2, 5.0, Some(1.0));
+        let mut d = layer("D", 3, 0.0, Some(1.0));
+        d.timing = Some(LayerTiming {
+            start: None,
+            end: Some(anchor(TimingReference::NextStart, 0.0)),
+        });
+        let e = layer("E", 4, 8.0, Some(1.0));
+
+        assert_eq!(runs(&[a, b, c, d, e]), vec![vec!["A", "B"], vec!["D", "E"]]);
+    }
+
+    #[test]
+    fn runs_orders_by_sort_index_not_array_position() {
+        let mut b = layer("B", 1, 0.0, Some(1.0));
+        b.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousStart, 0.5)),
+            end: None,
+        });
+        let a = layer("A", 0, 0.0, Some(1.0));
+        // B stored before A: the run must still come out A-then-B.
+        assert_eq!(runs(&[b, a]), vec![vec!["A", "B"]]);
     }
 }
