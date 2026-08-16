@@ -470,11 +470,18 @@ impl PreviewEngine {
         canvas: Size,
         time: f64,
     ) -> Option<(SceneQuad, u64)> {
-        let text = layer.caption_text.as_deref()?.trim();
+        // Resource first, layer second — the app's rule (`captionText(for:)`).
+        // Captions authored in the app keep their words and style on the
+        // resource; reading only the layer left those invisible here, which is
+        // why the host once composited its own copy on top — and animated
+        // captions rendered twice.
+        let text_owned = self.meta.caption_text_for(layer)?;
+        let text = text_owned.trim();
         if text.is_empty() {
             return None;
         }
-        let mut style = caption_style(layer, settings);
+        let style_source = self.meta.caption_style_for(layer);
+        let mut style = caption_style(style_source.as_ref(), settings);
         // A caption's keyframes change its SIZE and MARGINS (the app's
         // mapping), so unlike a frame the raster does vary with the playhead —
         // and it is re-rasterized per size rather than scaled, which is what
@@ -495,10 +502,20 @@ impl PreviewEngine {
             style.left_margin = values.left_margin;
         }
         let stamp = |v: f64| (v * 10.0).round() as i64;
+        // The text is part of the key: with resource-held captions the same
+        // layer id can mean new words after an edit, and a style-only key
+        // would keep serving the old raster until eviction.
+        let text_stamp = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            text.hash(&mut hasher);
+            hasher.finish()
+        };
         let key = (
             format!(
-                "caption:{}:{}:{}:{}",
+                "caption:{}:{:x}:{}:{}:{}",
                 layer.id,
+                text_stamp,
                 stamp(style.font_size),
                 stamp(style.vertical_margin),
                 stamp(style.left_margin)
@@ -726,10 +743,9 @@ fn caption_scene_quad(x: f64, y: f64, w: f64, h: f64) -> SceneQuad {
 /// Bridges the project's subtitle style to promo-text, falling back to the
 /// composition defaults exactly as `SubtitleStyle.xxx(defaults:)` does.
 fn caption_style(
-    layer: &ProjectLayer,
+    style: Option<&promo_model::SubtitleStyle>,
     settings: &promo_model::CompositionSettings,
 ) -> promo_text::TextStyle {
-    let style = layer.caption_style.as_ref();
     let get = |pick: fn(&promo_model::SubtitleStyle) -> Option<f64>, fallback: f64| -> f64 {
         style.and_then(pick).unwrap_or(fallback)
     };

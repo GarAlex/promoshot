@@ -1127,6 +1127,116 @@ impl ProjectMetadata {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
+
+    /// The caption resource behind a layer, if the layer points at one.
+    /// Mirrors `RecordingProject.captionResource(for:)` — the id must match
+    /// AND the resource must actually be a caption.
+    fn caption_resource_for(&self, layer: &ProjectLayer) -> Option<&ProjectResource> {
+        let id = layer.resource_id.as_deref()?;
+        self.resources
+            .as_ref()?
+            .iter()
+            .find(|resource| resource.id == id && resource.kind == ProjectResourceKind::Caption)
+    }
+
+    /// Caption text the way the app resolves it: the layer's caption resource
+    /// first, the layer's own field second. Captions authored in the app keep
+    /// their text on the RESOURCE; a renderer that reads only the layer shows
+    /// nothing for them — which is how the preview once came to composite a
+    /// second, host-drawn copy on top of its own.
+    pub fn caption_text_for(&self, layer: &ProjectLayer) -> Option<String> {
+        self.caption_resource_for(layer)
+            .and_then(|resource| resource.caption_text.clone())
+            .or_else(|| layer.caption_text.clone())
+    }
+
+    /// Caption style, same precedence as [`caption_text_for`](Self::caption_text_for).
+    pub fn caption_style_for(&self, layer: &ProjectLayer) -> Option<SubtitleStyle> {
+        self.caption_resource_for(layer)
+            .and_then(|resource| resource.caption_style.clone())
+            .or_else(|| layer.caption_style.clone())
+    }
+}
+
+#[cfg(test)]
+mod caption_source_tests {
+    use super::*;
+
+    fn project(json: &str) -> ProjectMetadata {
+        ProjectMetadata::from_json(json).expect("test project parses")
+    }
+
+    #[test]
+    fn resource_text_wins_over_the_layer_field() {
+        // A caption authored in the app keeps its words on the resource; the
+        // layer may carry a stale copy from before the edit.
+        let p = project(
+            r#"{
+                "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+                "subtitles": [], "trimStart": 0, "trimEnd": 0,
+                "videoDuration": 0, "compositionSettings": {},
+                "resources": [{
+                    "id": "R", "kind": "caption", "filename": "",
+                    "displayName": "Cap", "addedAt": 0,
+                    "captionText": "from the resource",
+                    "captionStyle": {"fontSize": 96}
+                }],
+                "layers": [{
+                    "id": "L", "name": "Cap", "sortIndex": 1, "kind": "caption",
+                    "isEnabled": true, "startTime": 0, "keyframes": [],
+                    "resourceID": "R", "captionText": "stale layer copy"
+                }]
+            }"#,
+        );
+        let layer = &p.layers.as_ref().unwrap()[0];
+        assert_eq!(p.caption_text_for(layer).as_deref(), Some("from the resource"));
+        assert_eq!(p.caption_style_for(layer).unwrap().font_size, Some(96.0));
+    }
+
+    #[test]
+    fn layer_fields_stand_alone_when_there_is_no_resource() {
+        // CLI-generated projects put text straight on the layer.
+        let p = project(
+            r#"{
+                "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+                "subtitles": [], "trimStart": 0, "trimEnd": 0,
+                "videoDuration": 0, "compositionSettings": {},
+                "layers": [{
+                    "id": "L", "name": "Cap", "sortIndex": 1, "kind": "caption",
+                    "isEnabled": true, "startTime": 0, "keyframes": [],
+                    "captionText": "layer only"
+                }]
+            }"#,
+        );
+        let layer = &p.layers.as_ref().unwrap()[0];
+        assert_eq!(p.caption_text_for(layer).as_deref(), Some("layer only"));
+        assert_eq!(p.caption_style_for(layer), None);
+    }
+
+    #[test]
+    fn a_non_caption_resource_does_not_lend_its_fields() {
+        // A video resource that happens to share the id must not be mistaken
+        // for a caption source.
+        let p = project(
+            r#"{
+                "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+                "subtitles": [], "trimStart": 0, "trimEnd": 0,
+                "videoDuration": 0, "compositionSettings": {},
+                "resources": [{
+                    "id": "R", "kind": "video", "filename": "v.mp4",
+                    "displayName": "V", "addedAt": 0,
+                    "captionText": "not a caption"
+                }],
+                "layers": [{
+                    "id": "L", "name": "Cap", "sortIndex": 1, "kind": "caption",
+                    "isEnabled": true, "startTime": 0, "keyframes": [],
+                    "resourceID": "R", "captionText": "the layer's own"
+                }]
+            }"#,
+        );
+        let layer = &p.layers.as_ref().unwrap()[0];
+        assert_eq!(p.caption_text_for(layer).as_deref(), Some("the layer's own"));
+    }
 }
 
 #[cfg(test)]
