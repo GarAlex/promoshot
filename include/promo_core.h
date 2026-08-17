@@ -202,7 +202,8 @@ typedef struct {
 /* Host frame provider. layer_id is NUL-terminated; source_time < 0 means
  * static content (image/drawing layers). Fill *out_surface (see
  * PromoHostSurface) and optional flags (bit 1 = pre-framed: engine skips
- * radius/border). Return 0 on success, non-zero to skip the layer for this
+ * radius/border; bit 2 = BT.709-encoded video: the shader converts to sRGB
+ * while sampling). Return 0 on success, non-zero to skip the layer for this
  * render.
  *
  * CHANGED (2026-08-14): out_surface was `void **` taking a bare IOSurfaceRef.
@@ -298,12 +299,39 @@ int32_t promo_preview_render(PromoPreview *preview, double time,
  * (BGRA IOSurface in canvas space) composited last — the same final quad the
  * export path adds, so an in-app preview matches the exported frame instead
  * of approximating captions with host-drawn text. Pass NULL for none.
- * 0 ok, -1 bad input, -4 render failed. */
+ * 0 ok, -1 bad input, -4 render failed, -5 engine panicked (the panic is
+ * fenced at this boundary — a frame that cannot render must never abort the
+ * host process). */
 int32_t promo_preview_render_with_overlay(PromoPreview *preview, double time,
                                           void *output_surface, int32_t width,
                                           int32_t height, void *overlay_surface,
                                           int32_t overlay_width,
                                           int32_t overlay_height);
+
+/* Export mode: the export clock is monotonic, so per-time frames (video,
+ * animated-tilt bakes) bypass the LRU cache instead of poisoning it; static
+ * content stays cached. 0 ok, -1 bad handle. */
+int32_t promo_preview_set_export_mode(PromoPreview *preview, int32_t enabled);
+
+/* Density multiplier for engine-made canvas-space rasters (captions): pass
+ * the export's letterbox scale so text is rasterized at output resolution.
+ * 1.0 for preview. 0 ok, -1 bad handle. */
+int32_t promo_preview_set_raster_scale(PromoPreview *preview, double scale);
+
+/* Deferred completion for the engine's compose (the preview-engine twin of
+ * promo_compositor_set_defer). 0 ok, -1 bad handle. */
+int32_t promo_preview_set_defer(PromoPreview *preview, int32_t enabled);
+
+/* promo_preview_render_with_overlay for the export pipeline: with deferred
+ * completion on, *out_token receives the GPU fence — pass it to
+ * promo_submission_wait before reading output_surface (NULL when the compose
+ * already blocked). A NULL out_token makes the render block regardless. */
+int32_t promo_preview_render_export(PromoPreview *preview, double time,
+                                    void *output_surface, int32_t width,
+                                    int32_t height, void *overlay_surface,
+                                    int32_t overlay_width,
+                                    int32_t overlay_height,
+                                    PromoSubmissionToken **out_token);
 
 /* Re-targets the frame-cache budget (bytes) — size it from the machine's
  * RAM and shrink it under memory pressure. 0 ok, -1 bad handle. */

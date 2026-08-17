@@ -26,16 +26,21 @@ use std::ffi::{c_char, c_double, c_float, c_int, CStr, CString};
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_project_validate(json: *const c_char) -> *mut c_char {
-    if json.is_null() {
-        return to_c_string("no JSON supplied");
-    }
-    let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
-        return to_c_string("JSON is not valid UTF-8");
-    };
-    match ProjectMetadata::from_json(text) {
-        Ok(_) => std::ptr::null_mut(),
-        Err(e) => to_c_string(&e.to_string()),
-    }
+    crate::ffi_guard_else(
+        || to_c_string("internal error: the validator panicked"),
+        move || {
+            if json.is_null() {
+                return to_c_string("no JSON supplied");
+            }
+            let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
+                return to_c_string("JSON is not valid UTF-8");
+            };
+            match ProjectMetadata::from_json(text) {
+                Ok(_) => std::ptr::null_mut(),
+                Err(e) => to_c_string(&e.to_string()),
+            }
+        },
+    )
 }
 
 fn to_c_string(message: &str) -> *mut c_char {
@@ -58,17 +63,19 @@ pub struct ProjectHandle {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_project_parse(json: *const c_char) -> *mut ProjectHandle {
-    if json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let raw = unsafe { CStr::from_ptr(json) };
-    let Ok(text) = raw.to_str() else {
-        return std::ptr::null_mut();
-    };
-    match ProjectMetadata::from_json(text) {
-        Ok(meta) => Box::into_raw(Box::new(ProjectHandle { meta })),
-        Err(_) => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let raw = unsafe { CStr::from_ptr(json) };
+        let Ok(text) = raw.to_str() else {
+            return std::ptr::null_mut();
+        };
+        match ProjectMetadata::from_json(text) {
+            Ok(meta) => Box::into_raw(Box::new(ProjectHandle { meta })),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
 }
 
 /// Frees a handle returned by `promo_project_parse`. Null is a no-op.
@@ -78,9 +85,11 @@ pub extern "C" fn promo_project_parse(json: *const c_char) -> *mut ProjectHandle
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_project_free(handle: *mut ProjectHandle) {
-    if !handle.is_null() {
-        drop(unsafe { Box::from_raw(handle) });
-    }
+    crate::ffi_guard((), move || {
+        if !handle.is_null() {
+            drop(unsafe { Box::from_raw(handle) });
+        }
+    })
 }
 
 /// Re-encodes the handle's project as JSON. Caller frees the returned string
@@ -88,15 +97,17 @@ pub extern "C" fn promo_project_free(handle: *mut ProjectHandle) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_project_to_json(handle: *const ProjectHandle) -> *mut c_char {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return std::ptr::null_mut();
-    };
-    match handle.meta.to_json() {
-        Ok(s) => CString::new(s)
-            .map(CString::into_raw)
-            .unwrap_or(std::ptr::null_mut()),
-        Err(_) => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return std::ptr::null_mut();
+        };
+        match handle.meta.to_json() {
+            Ok(s) => CString::new(s)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
 }
 
 /// Frees a string returned by this library. Null is a no-op.
@@ -106,9 +117,11 @@ pub extern "C" fn promo_project_to_json(handle: *const ProjectHandle) -> *mut c_
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_string_free(s: *mut c_char) {
-    if !s.is_null() {
-        drop(unsafe { CString::from_raw(s) });
-    }
+    crate::ffi_guard((), move || {
+        if !s.is_null() {
+            drop(unsafe { CString::from_raw(s) });
+        }
+    })
 }
 
 /// Evaluates every timeline query at each of `times` (seconds, global
@@ -125,21 +138,23 @@ pub extern "C" fn promo_timeline_eval(
     times: *const c_double,
     times_len: usize,
 ) -> *mut c_char {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return std::ptr::null_mut();
-    };
-    let times: &[f64] = if times.is_null() || times_len == 0 {
-        &[]
-    } else {
-        unsafe { std::slice::from_raw_parts(times, times_len) }
-    };
-    let doc = eval(&handle.meta, times);
-    match serde_json::to_string(&doc) {
-        Ok(s) => CString::new(s)
-            .map(CString::into_raw)
-            .unwrap_or(std::ptr::null_mut()),
-        Err(_) => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return std::ptr::null_mut();
+        };
+        let times: &[f64] = if times.is_null() || times_len == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(times, times_len) }
+        };
+        let doc = eval(&handle.meta, times);
+        match serde_json::to_string(&doc) {
+            Ok(s) => CString::new(s)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
 }
 
 fn eval(meta: &ProjectMetadata, times: &[f64]) -> serde_json::Value {
@@ -288,27 +303,29 @@ pub extern "C" fn promo_layer_transform(
     time: c_double,
     out: *mut c_double,
 ) -> c_int {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return -1;
-    };
-    if out.is_null() || layer_index < 0 {
-        return -1;
-    }
-    let Some(layer) = handle
-        .meta
-        .layers
-        .as_ref()
-        .and_then(|l| l.get(layer_index as usize))
-    else {
-        return -1;
-    };
-    let tr = tl::layer_transform(layer, time, &handle.meta.composition_settings);
-    unsafe {
-        *out = tr.zoom;
-        *out.add(1) = tr.vertical_shift;
-        *out.add(2) = tr.horizontal_shift;
-    }
-    0
+    crate::ffi_guard(-1, move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return -1;
+        };
+        if out.is_null() || layer_index < 0 {
+            return -1;
+        }
+        let Some(layer) = handle
+            .meta
+            .layers
+            .as_ref()
+            .and_then(|l| l.get(layer_index as usize))
+        else {
+            return -1;
+        };
+        let tr = tl::layer_transform(layer, time, &handle.meta.composition_settings);
+        unsafe {
+            *out = tr.zoom;
+            *out.add(1) = tr.vertical_shift;
+            *out.add(2) = tr.horizontal_shift;
+        }
+        0
+    })
 }
 
 /// Source-media time for a resource-local TIMELINE time (trims + pauses +
@@ -321,21 +338,23 @@ pub extern "C" fn promo_resource_source_time(
     resource_index: c_int,
     local_time: c_double,
 ) -> c_double {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return -1.0;
-    };
-    if resource_index < 0 {
-        return -1.0;
-    }
-    let Some(res) = handle
-        .meta
-        .resources
-        .as_ref()
-        .and_then(|r| r.get(resource_index as usize))
-    else {
-        return -1.0;
-    };
-    tl::timeline_source_time(res, local_time)
+    crate::ffi_guard(-1.0, move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return -1.0;
+        };
+        if resource_index < 0 {
+            return -1.0;
+        }
+        let Some(res) = handle
+            .meta
+            .resources
+            .as_ref()
+            .and_then(|r| r.get(resource_index as usize))
+        else {
+            return -1.0;
+        };
+        tl::timeline_source_time(res, local_time)
+    })
 }
 
 /// Continuous playback segment containing a resource-local time: fills
@@ -351,28 +370,30 @@ pub extern "C" fn promo_resource_video_segment(
     local_time: c_double,
     out: *mut c_double,
 ) -> c_int {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return -1;
-    };
-    if out.is_null() || resource_index < 0 {
-        return -1;
-    }
-    let Some(res) = handle
-        .meta
-        .resources
-        .as_ref()
-        .and_then(|r| r.get(resource_index as usize))
-    else {
-        return -1;
-    };
-    let seg = tl::timeline_video_segment(res, local_time);
-    unsafe {
-        *out = seg.source_start;
-        *out.add(1) = seg.local_start;
-        *out.add(2) = seg.local_end;
-        *out.add(3) = seg.rate as f64;
-    }
-    0
+    crate::ffi_guard(-1, move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return -1;
+        };
+        if out.is_null() || resource_index < 0 {
+            return -1;
+        }
+        let Some(res) = handle
+            .meta
+            .resources
+            .as_ref()
+            .and_then(|r| r.get(resource_index as usize))
+        else {
+            return -1;
+        };
+        let seg = tl::timeline_video_segment(res, local_time);
+        unsafe {
+            *out = seg.source_start;
+            *out.add(1) = seg.local_start;
+            *out.add(2) = seg.local_end;
+            *out.add(3) = seg.rate as f64;
+        }
+        0
+    })
 }
 
 /// Resolved layer volume at a layer-local time. `default_gain` is the
@@ -386,21 +407,23 @@ pub extern "C" fn promo_layer_gain(
     local_time: c_double,
     default_gain: c_float,
 ) -> c_float {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return default_gain;
-    };
-    if layer_index < 0 {
-        return default_gain;
-    }
-    let Some(layer) = handle
-        .meta
-        .layers
-        .as_ref()
-        .and_then(|l| l.get(layer_index as usize))
-    else {
-        return default_gain;
-    };
-    tl::layer_gain(layer, local_time, default_gain)
+    crate::ffi_guard(default_gain, move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return default_gain;
+        };
+        if layer_index < 0 {
+            return default_gain;
+        }
+        let Some(layer) = handle
+            .meta
+            .layers
+            .as_ref()
+            .and_then(|l| l.get(layer_index as usize))
+        else {
+            return default_gain;
+        };
+        tl::layer_gain(layer, local_time, default_gain)
+    })
 }
 
 /// Layer visibility at a composition time (enabled, started, not yet ended).
@@ -412,10 +435,12 @@ pub extern "C" fn promo_layer_is_visible(
     layer_index: c_int,
     time: c_double,
 ) -> c_int {
-    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
-        return 0;
-    };
-    tl::layer_is_visible(layer, time) as c_int
+    crate::ffi_guard(0, move || {
+        let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+            return 0;
+        };
+        tl::layer_is_visible(layer, time) as c_int
+    })
 }
 
 /// Layout for a media layer: `out[4]` = x, y, width, height in canvas space.
@@ -433,23 +458,25 @@ pub extern "C" fn promo_media_rect(
     vertical_shift: c_double,
     out: *mut c_double,
 ) -> c_int {
-    if out.is_null() {
-        return -1;
-    }
-    let rect = tl::media_rect(
-        promo_model::Size::new(source_width, source_height),
-        promo_model::Size::new(canvas_width, canvas_height),
-        zoom,
-        horizontal_shift,
-        vertical_shift,
-    );
-    unsafe {
-        *out = rect.x();
-        *out.add(1) = rect.y();
-        *out.add(2) = rect.width();
-        *out.add(3) = rect.height();
-    }
-    0
+    crate::ffi_guard(-1, move || {
+        if out.is_null() {
+            return -1;
+        }
+        let rect = tl::media_rect(
+            promo_model::Size::new(source_width, source_height),
+            promo_model::Size::new(canvas_width, canvas_height),
+            zoom,
+            horizontal_shift,
+            vertical_shift,
+        );
+        unsafe {
+            *out = rect.x();
+            *out.add(1) = rect.y();
+            *out.add(2) = rect.width();
+            *out.add(3) = rect.height();
+        }
+        0
+    })
 }
 
 /// Layout for a drawing layer (content bounds aspect-fit into the canvas,
@@ -468,23 +495,25 @@ pub extern "C" fn promo_drawing_rect(
     vertical_shift: c_double,
     out: *mut c_double,
 ) -> c_int {
-    if out.is_null() {
-        return -1;
-    }
-    let rect = tl::drawing_rect(
-        promo_model::Size::new(natural_width, natural_height),
-        promo_model::Size::new(canvas_width, canvas_height),
-        zoom,
-        horizontal_shift,
-        vertical_shift,
-    );
-    unsafe {
-        *out = rect.x();
-        *out.add(1) = rect.y();
-        *out.add(2) = rect.width();
-        *out.add(3) = rect.height();
-    }
-    0
+    crate::ffi_guard(-1, move || {
+        if out.is_null() {
+            return -1;
+        }
+        let rect = tl::drawing_rect(
+            promo_model::Size::new(natural_width, natural_height),
+            promo_model::Size::new(canvas_width, canvas_height),
+            zoom,
+            horizontal_shift,
+            vertical_shift,
+        );
+        unsafe {
+            *out = rect.x();
+            *out.add(1) = rect.y();
+            *out.add(2) = rect.width();
+            *out.add(3) = rect.height();
+        }
+        0
+    })
 }
 
 /// Clockwise rotation in degrees at a composition time (keyframed, holding
@@ -496,10 +525,12 @@ pub extern "C" fn promo_layer_rotation(
     layer_index: c_int,
     time: c_double,
 ) -> c_double {
-    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
-        return 0.0;
-    };
-    tl::layer_rotation(layer, time)
+    crate::ffi_guard(0.0, move || {
+        let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+            return 0.0;
+        };
+        tl::layer_rotation(layer, time)
+    })
 }
 
 /// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
@@ -513,10 +544,12 @@ pub extern "C" fn promo_layer_opacity(
     layer_index: c_int,
     time: c_double,
 ) -> c_double {
-    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
-        return 1.0;
-    };
-    tl::layer_opacity(layer, time)
+    crate::ffi_guard(1.0, move || {
+        let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+            return 1.0;
+        };
+        tl::layer_opacity(layer, time)
+    })
 }
 
 /// Device-frame 2.5D tilt at a composition time: `out[2]` = tiltX, tiltY in
@@ -530,20 +563,22 @@ pub extern "C" fn promo_layer_tilt(
     time: c_double,
     out: *mut c_double,
 ) -> c_int {
-    if out.is_null() {
-        return -1;
-    }
-    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
-        return -1;
-    };
-    let Some((x, y)) = tl::layer_tilt_offset(layer, time) else {
-        return -1;
-    };
-    unsafe {
-        *out = x;
-        *out.add(1) = y;
-    }
-    0
+    crate::ffi_guard(-1, move || {
+        if out.is_null() {
+            return -1;
+        }
+        let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+            return -1;
+        };
+        let Some((x, y)) = tl::layer_tilt_offset(layer, time) else {
+            return -1;
+        };
+        unsafe {
+            *out = x;
+            *out.add(1) = y;
+        }
+        0
+    })
 }
 
 /// The background layer's resolved color at a composition time as
@@ -558,23 +593,26 @@ pub extern "C" fn promo_layer_background_rgba(
     time: c_double,
     out: *mut c_double,
 ) -> c_int {
-    if out.is_null() {
-        return -1;
-    }
-    let Some(handle_ref) = (unsafe { handle.as_ref() }) else {
-        return -1;
-    };
-    let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
-        return -1;
-    };
-    let hex = tl::layer_background_color_hex(layer, time, &handle_ref.meta.composition_settings);
-    let rgba = rgba_from_hex(&hex);
-    unsafe {
-        for (i, c) in rgba.iter().enumerate() {
-            *out.add(i) = *c as f64;
+    crate::ffi_guard(-1, move || {
+        if out.is_null() {
+            return -1;
         }
-    }
-    0
+        let Some(handle_ref) = (unsafe { handle.as_ref() }) else {
+            return -1;
+        };
+        let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
+            return -1;
+        };
+        let hex =
+            tl::layer_background_color_hex(layer, time, &handle_ref.meta.composition_settings);
+        let rgba = rgba_from_hex(&hex);
+        unsafe {
+            for (i, c) in rgba.iter().enumerate() {
+                *out.add(i) = *c as f64;
+            }
+        }
+        0
+    })
 }
 
 /// Shared layer lookup for the hot-path queries above.
@@ -621,28 +659,30 @@ pub extern "C" fn promo_layer_resource_index(
     handle: *const ProjectHandle,
     layer_index: c_int,
 ) -> c_int {
-    let Some(handle) = (unsafe { handle.as_ref() }) else {
-        return -1;
-    };
-    if layer_index < 0 {
-        return -1;
-    }
-    let Some(rid) = handle
-        .meta
-        .layers
-        .as_ref()
-        .and_then(|l| l.get(layer_index as usize))
-        .and_then(|l| l.resource_id.as_ref())
-    else {
-        return -1;
-    };
-    handle
-        .meta
-        .resources
-        .as_ref()
-        .and_then(|rs| rs.iter().position(|r| &r.id == rid))
-        .map(|i| i as c_int)
-        .unwrap_or(-1)
+    crate::ffi_guard(-1, move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return -1;
+        };
+        if layer_index < 0 {
+            return -1;
+        }
+        let Some(rid) = handle
+            .meta
+            .layers
+            .as_ref()
+            .and_then(|l| l.get(layer_index as usize))
+            .and_then(|l| l.resource_id.as_ref())
+        else {
+            return -1;
+        };
+        handle
+            .meta
+            .resources
+            .as_ref()
+            .and_then(|rs| rs.iter().position(|r| &r.id == rid))
+            .map(|i| i as c_int)
+            .unwrap_or(-1)
+    })
 }
 
 /// Audio mix-graph parity surface: computes the final per-track amplitude
@@ -655,49 +695,51 @@ pub extern "C" fn promo_layer_resource_index(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_audio_level_points(params_json: *const c_char) -> *mut c_char {
-    if params_json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
-        return std::ptr::null_mut();
-    };
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Params {
-        automation: Vec<(f64, f32)>,
-        track_start: f64,
-        track_end: f64,
-        #[serde(default)]
-        focus: Vec<(f64, f64)>,
-        #[serde(default)]
-        is_focused: bool,
-        duck_factor: f32,
-        ramp: f64,
-    }
-    let Ok(params) = serde_json::from_str::<Params>(text) else {
-        return std::ptr::null_mut();
-    };
-    let automation: Vec<tl::VolumePoint> = params
-        .automation
-        .iter()
-        .map(|&(time, volume)| tl::VolumePoint { time, volume })
-        .collect();
-    let points = tl::level_points(
-        &automation,
-        params.track_start,
-        params.track_end,
-        &params.focus,
-        params.is_focused,
-        params.duck_factor,
-        params.ramp,
-    );
-    let out: Vec<(f64, f32)> = points.iter().map(|p| (p.time, p.volume)).collect();
-    match serde_json::to_string(&out) {
-        Ok(s) => CString::new(s)
-            .map(CString::into_raw)
-            .unwrap_or(std::ptr::null_mut()),
-        Err(_) => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
+            return std::ptr::null_mut();
+        };
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Params {
+            automation: Vec<(f64, f32)>,
+            track_start: f64,
+            track_end: f64,
+            #[serde(default)]
+            focus: Vec<(f64, f64)>,
+            #[serde(default)]
+            is_focused: bool,
+            duck_factor: f32,
+            ramp: f64,
+        }
+        let Ok(params) = serde_json::from_str::<Params>(text) else {
+            return std::ptr::null_mut();
+        };
+        let automation: Vec<tl::VolumePoint> = params
+            .automation
+            .iter()
+            .map(|&(time, volume)| tl::VolumePoint { time, volume })
+            .collect();
+        let points = tl::level_points(
+            &automation,
+            params.track_start,
+            params.track_end,
+            &params.focus,
+            params.is_focused,
+            params.duck_factor,
+            params.ramp,
+        );
+        let out: Vec<(f64, f32)> = points.iter().map(|p| (p.time, p.volume)).collect();
+        match serde_json::to_string(&out) {
+            Ok(s) => CString::new(s)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
 }
 
 #[cfg(test)]
@@ -792,32 +834,34 @@ mod tests {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_project_resolve_timing(json: *const c_char) -> *mut c_char {
-    if json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(mut meta) = ProjectMetadata::from_json(text) else {
-        return std::ptr::null_mut();
-    };
-    let problems = promo_timeline::resolve_attachments(&mut meta);
-    let Ok(serde_json::Value::Object(mut object)) = serde_json::to_value(&meta) else {
-        return std::ptr::null_mut();
-    };
-    if !problems.is_empty() {
-        object.insert(
-            "timingProblems".to_string(),
-            serde_json::Value::Array(
-                problems
-                    .iter()
-                    .map(|p| serde_json::Value::String(p.to_string()))
-                    .collect(),
-            ),
-        );
-    }
-    match serde_json::to_string(&serde_json::Value::Object(object)) {
-        Ok(out) => to_c_string(&out),
-        Err(_) => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(mut meta) = ProjectMetadata::from_json(text) else {
+            return std::ptr::null_mut();
+        };
+        let problems = promo_timeline::resolve_attachments(&mut meta);
+        let Ok(serde_json::Value::Object(mut object)) = serde_json::to_value(&meta) else {
+            return std::ptr::null_mut();
+        };
+        if !problems.is_empty() {
+            object.insert(
+                "timingProblems".to_string(),
+                serde_json::Value::Array(
+                    problems
+                        .iter()
+                        .map(|p| serde_json::Value::String(p.to_string()))
+                        .collect(),
+                ),
+            );
+        }
+        match serde_json::to_string(&serde_json::Value::Object(object)) {
+            Ok(out) => to_c_string(&out),
+            Err(_) => std::ptr::null_mut(),
+        }
+    })
 }

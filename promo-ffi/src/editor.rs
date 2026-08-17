@@ -66,46 +66,48 @@ struct LaneOut {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_lanes_pack(params_json: *const c_char) -> *mut c_char {
-    if params_json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(params) = serde_json::from_str::<PackParams>(text) else {
-        return std::ptr::null_mut();
-    };
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(params) = serde_json::from_str::<PackParams>(text) else {
+            return std::ptr::null_mut();
+        };
 
-    let viewport = params.viewport.map(|v| TimelineViewport {
-        center: v.center,
-        span: v.span.unwrap_or(f64::INFINITY),
-        total: v.total,
-    });
-    let lanes = promo_editor::pack(
-        &params.layers,
-        params.total_duration,
-        params.gutter,
-        viewport.as_ref(),
-        &params.always_include,
-    );
+        let viewport = params.viewport.map(|v| TimelineViewport {
+            center: v.center,
+            span: v.span.unwrap_or(f64::INFINITY),
+            total: v.total,
+        });
+        let lanes = promo_editor::pack(
+            &params.layers,
+            params.total_duration,
+            params.gutter,
+            viewport.as_ref(),
+            &params.always_include,
+        );
 
-    let out: Vec<LaneOut> = lanes
-        .iter()
-        .map(|lane| LaneOut {
-            row_id: lane.row_id(),
-            kind: lane.kind.as_str().to_string(),
-            index_within_kind: lane.index_within_kind,
-            layer_ids: lane.layers.iter().map(|l| l.id.clone()).collect(),
-        })
-        .collect();
+        let out: Vec<LaneOut> = lanes
+            .iter()
+            .map(|lane| LaneOut {
+                row_id: lane.row_id(),
+                kind: lane.kind.as_str().to_string(),
+                index_within_kind: lane.index_within_kind,
+                layer_ids: lane.layers.iter().map(|l| l.id.clone()).collect(),
+            })
+            .collect();
 
-    match serde_json::to_string(&out)
-        .ok()
-        .and_then(|s| CString::new(s).ok())
-    {
-        Some(c) => c.into_raw(),
-        None => std::ptr::null_mut(),
-    }
+        match serde_json::to_string(&out)
+            .ok()
+            .and_then(|s| CString::new(s).ok())
+        {
+            Some(c) => c.into_raw(),
+            None => std::ptr::null_mut(),
+        }
+    })
 }
 
 /// The row holding `layer_id` after packing the same input, or NULL when the
@@ -119,34 +121,36 @@ pub extern "C" fn promo_lanes_row_id(
     params_json: *const c_char,
     layer_id: *const c_char,
 ) -> *mut c_char {
-    if params_json.is_null() || layer_id.is_null() {
-        return std::ptr::null_mut();
-    }
-    let (Ok(text), Ok(id)) = (
-        unsafe { CStr::from_ptr(params_json) }.to_str(),
-        unsafe { CStr::from_ptr(layer_id) }.to_str(),
-    ) else {
-        return std::ptr::null_mut();
-    };
-    let Ok(params) = serde_json::from_str::<PackParams>(text) else {
-        return std::ptr::null_mut();
-    };
-    let viewport = params.viewport.map(|v| TimelineViewport {
-        center: v.center,
-        span: v.span.unwrap_or(f64::INFINITY),
-        total: v.total,
-    });
-    let lanes = promo_editor::pack(
-        &params.layers,
-        params.total_duration,
-        params.gutter,
-        viewport.as_ref(),
-        &params.always_include,
-    );
-    match promo_editor::row_id_containing(id, &lanes).and_then(|s| CString::new(s).ok()) {
-        Some(c) => c.into_raw(),
-        None => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() || layer_id.is_null() {
+            return std::ptr::null_mut();
+        }
+        let (Ok(text), Ok(id)) = (
+            unsafe { CStr::from_ptr(params_json) }.to_str(),
+            unsafe { CStr::from_ptr(layer_id) }.to_str(),
+        ) else {
+            return std::ptr::null_mut();
+        };
+        let Ok(params) = serde_json::from_str::<PackParams>(text) else {
+            return std::ptr::null_mut();
+        };
+        let viewport = params.viewport.map(|v| TimelineViewport {
+            center: v.center,
+            span: v.span.unwrap_or(f64::INFINITY),
+            total: v.total,
+        });
+        let lanes = promo_editor::pack(
+            &params.layers,
+            params.total_duration,
+            params.gutter,
+            viewport.as_ref(),
+            &params.always_include,
+        );
+        match promo_editor::row_id_containing(id, &lanes).and_then(|s| CString::new(s).ok()) {
+            Some(c) => c.into_raw(),
+            None => std::ptr::null_mut(),
+        }
+    })
 }
 
 /// Whether lanes are worth offering at this timeline width, and whether their
@@ -154,12 +158,16 @@ pub extern "C" fn promo_lanes_row_id(
 /// from the same measurement instead of hardcoding its own breakpoints.
 #[no_mangle]
 pub extern "C" fn promo_lanes_fit(timeline_width: f64) -> i32 {
-    promo_editor::TimelineLanePolicy::lanes_fit(timeline_width) as i32
+    crate::ffi_guard(0, move || {
+        promo_editor::TimelineLanePolicy::lanes_fit(timeline_width) as i32
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn promo_lanes_compact_labels(timeline_width: f64) -> i32 {
-    promo_editor::TimelineLanePolicy::uses_compact_labels(timeline_width) as i32
+    crate::ffi_guard(0, move || {
+        promo_editor::TimelineLanePolicy::uses_compact_labels(timeline_width) as i32
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -183,23 +191,25 @@ struct RunsParams {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_timing_runs(params_json: *const c_char) -> *mut c_char {
-    if params_json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(params) = serde_json::from_str::<RunsParams>(text) else {
-        return std::ptr::null_mut();
-    };
-    let runs = promo_timeline::runs(&params.layers);
-    match serde_json::to_string(&runs)
-        .ok()
-        .and_then(|s| CString::new(s).ok())
-    {
-        Some(c) => c.into_raw(),
-        None => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = unsafe { CStr::from_ptr(params_json) }.to_str() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(params) = serde_json::from_str::<RunsParams>(text) else {
+            return std::ptr::null_mut();
+        };
+        let runs = promo_timeline::runs(&params.layers);
+        match serde_json::to_string(&runs)
+            .ok()
+            .and_then(|s| CString::new(s).ok())
+        {
+            Some(c) => c.into_raw(),
+            None => std::ptr::null_mut(),
+        }
+    })
 }
 
 // --- selection, pinning, reveal (Stage 1 slice 1.2) ----------------------
@@ -231,49 +241,51 @@ struct RevealParams {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_selection_reveal_anchor(params_json: *const c_char) -> *mut c_char {
-    if params_json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(params) = serde_json::from_str::<RevealParams>(text) else {
-        return std::ptr::null_mut();
-    };
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(params) = serde_json::from_str::<RevealParams>(text) else {
+            return std::ptr::null_mut();
+        };
 
-    let mut selection = promo_editor::Selection::new();
-    selection.request_reveal(&params.target);
+        let mut selection = promo_editor::Selection::new();
+        selection.request_reveal(&params.target);
 
-    let anchor = if params.uses_lanes {
-        let viewport = params.pack.viewport.as_ref().map(|v| TimelineViewport {
-            center: v.center,
-            span: v.span.unwrap_or(f64::INFINITY),
-            total: v.total,
-        });
-        let lanes = promo_editor::pack(
-            &params.pack.layers,
-            params.pack.total_duration,
-            params.pack.gutter,
-            viewport.as_ref(),
-            &params.pack.always_include,
-        );
-        selection.take_reveal(Some(&lanes))
-    } else {
-        selection.take_reveal(None)
-    };
+        let anchor = if params.uses_lanes {
+            let viewport = params.pack.viewport.as_ref().map(|v| TimelineViewport {
+                center: v.center,
+                span: v.span.unwrap_or(f64::INFINITY),
+                total: v.total,
+            });
+            let lanes = promo_editor::pack(
+                &params.pack.layers,
+                params.pack.total_duration,
+                params.pack.gutter,
+                viewport.as_ref(),
+                &params.pack.always_include,
+            );
+            selection.take_reveal(Some(&lanes))
+        } else {
+            selection.take_reveal(None)
+        };
 
-    let (kind, value) = match anchor {
-        Some(promo_editor::RevealAnchor::Row(row)) => ("row", row),
-        Some(promo_editor::RevealAnchor::Layer(id)) => ("layer", id),
-        None => return std::ptr::null_mut(),
-    };
-    match serde_json::to_string(&serde_json::json!({"kind": kind, "value": value}))
-        .ok()
-        .and_then(|s| CString::new(s).ok())
-    {
-        Some(c) => c.into_raw(),
-        None => std::ptr::null_mut(),
-    }
+        let (kind, value) = match anchor {
+            Some(promo_editor::RevealAnchor::Row(row)) => ("row", row),
+            Some(promo_editor::RevealAnchor::Layer(id)) => ("layer", id),
+            None => return std::ptr::null_mut(),
+        };
+        match serde_json::to_string(&serde_json::json!({"kind": kind, "value": value}))
+            .ok()
+            .and_then(|s| CString::new(s).ok())
+        {
+            Some(c) => c.into_raw(),
+            None => std::ptr::null_mut(),
+        }
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -295,25 +307,27 @@ struct PinnedParams {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_selection_is_pinned_outside_window(params_json: *const c_char) -> i32 {
-    if params_json.is_null() {
-        return 0;
-    }
-    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
-        return 0;
-    };
-    let Ok(params) = serde_json::from_str::<PinnedParams>(text) else {
-        return 0;
-    };
-    let mut selection = promo_editor::Selection::new();
-    if let Some(id) = &params.selected_id {
-        selection.select(id);
-    }
-    let viewport = TimelineViewport {
-        center: params.viewport.center,
-        span: params.viewport.span.unwrap_or(f64::INFINITY),
-        total: params.viewport.total,
-    };
-    selection.is_pinned_outside_window(&params.layer, &viewport, params.window_active) as i32
+    crate::ffi_guard(0, move || {
+        if params_json.is_null() {
+            return 0;
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+            return 0;
+        };
+        let Ok(params) = serde_json::from_str::<PinnedParams>(text) else {
+            return 0;
+        };
+        let mut selection = promo_editor::Selection::new();
+        if let Some(id) = &params.selected_id {
+            selection.select(id);
+        }
+        let viewport = TimelineViewport {
+            center: params.viewport.center,
+            span: params.viewport.span.unwrap_or(f64::INFINITY),
+            total: params.viewport.total,
+        };
+        selection.is_pinned_outside_window(&params.layer, &viewport, params.window_active) as i32
+    })
 }
 
 #[derive(serde::Deserialize)]
@@ -334,38 +348,40 @@ struct ReconcileParams {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_selection_reconcile(params_json: *const c_char) -> *mut c_char {
-    if params_json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(params) = serde_json::from_str::<ReconcileParams>(text) else {
-        return std::ptr::null_mut();
-    };
-    // reconcile() works on layers; ids are all it actually reads, so build the
-    // thinnest thing that carries them.
-    let ordered: Vec<ProjectLayer> = params
-        .ordered_ids
-        .iter()
-        .enumerate()
-        .filter_map(|(i, id)| {
-            serde_json::from_value(serde_json::json!({
-                "id": id, "name": id, "sortIndex": i, "kind": "image",
-                "isEnabled": true, "startTime": 0.0, "keyframes": []
-            }))
-            .ok()
-        })
-        .collect();
-    let mut selection = promo_editor::Selection::new();
-    if let Some(id) = &params.selected_id {
-        selection.select(id);
-    }
-    selection.reconcile(&ordered);
-    match selection.selected().and_then(|s| CString::new(s).ok()) {
-        Some(c) => c.into_raw(),
-        None => std::ptr::null_mut(),
-    }
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(params) = serde_json::from_str::<ReconcileParams>(text) else {
+            return std::ptr::null_mut();
+        };
+        // reconcile() works on layers; ids are all it actually reads, so build the
+        // thinnest thing that carries them.
+        let ordered: Vec<ProjectLayer> = params
+            .ordered_ids
+            .iter()
+            .enumerate()
+            .filter_map(|(i, id)| {
+                serde_json::from_value(serde_json::json!({
+                    "id": id, "name": id, "sortIndex": i, "kind": "image",
+                    "isEnabled": true, "startTime": 0.0, "keyframes": []
+                }))
+                .ok()
+            })
+            .collect();
+        let mut selection = promo_editor::Selection::new();
+        if let Some(id) = &params.selected_id {
+            selection.select(id);
+        }
+        selection.reconcile(&ordered);
+        match selection.selected().and_then(|s| CString::new(s).ok()) {
+            Some(c) => c.into_raw(),
+            None => std::ptr::null_mut(),
+        }
+    })
 }
 
 // --- transport (Stage 1 slice 1.3) ---------------------------------------
@@ -416,71 +432,73 @@ struct TransportParams {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_transport_step(params_json: *const c_char) -> *mut c_char {
-    if params_json.is_null() {
-        return std::ptr::null_mut();
-    }
-    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(params) = serde_json::from_str::<TransportParams>(text) else {
-        return std::ptr::null_mut();
-    };
-
-    let mut transport = promo_editor::Transport::restore(
-        promo_editor::TransportState::parse(&params.state),
-        params.time,
-        params.duration,
-        params.resume_after_scrub,
-        params.seek_generation,
-    );
-
-    let effects = match params.event.kind.as_str() {
-        "play" => transport.play(),
-        "pause" => transport.pause(),
-        "toggle" => transport.toggle(),
-        "tick" => transport.tick(params.event.time.unwrap_or(transport.time())),
-        "beginScrub" => transport.begin_scrub(),
-        "scrubTo" => {
-            transport.scrub_to(params.event.time.unwrap_or(transport.time()));
-            vec![]
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
         }
-        "endScrub" => transport.end_scrub(),
-        "seek" => transport.seek(params.event.time.unwrap_or(transport.time())),
-        "setDuration" => {
-            transport.set_duration(params.event.duration.unwrap_or(transport.duration()));
-            vec![]
+        let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(params) = serde_json::from_str::<TransportParams>(text) else {
+            return std::ptr::null_mut();
+        };
+
+        let mut transport = promo_editor::Transport::restore(
+            promo_editor::TransportState::parse(&params.state),
+            params.time,
+            params.duration,
+            params.resume_after_scrub,
+            params.seek_generation,
+        );
+
+        let effects = match params.event.kind.as_str() {
+            "play" => transport.play(),
+            "pause" => transport.pause(),
+            "toggle" => transport.toggle(),
+            "tick" => transport.tick(params.event.time.unwrap_or(transport.time())),
+            "beginScrub" => transport.begin_scrub(),
+            "scrubTo" => {
+                transport.scrub_to(params.event.time.unwrap_or(transport.time()));
+                vec![]
+            }
+            "endScrub" => transport.end_scrub(),
+            "seek" => transport.seek(params.event.time.unwrap_or(transport.time())),
+            "setDuration" => {
+                transport.set_duration(params.event.duration.unwrap_or(transport.duration()));
+                vec![]
+            }
+            _ => return std::ptr::null_mut(),
+        };
+
+        let effects_json: Vec<serde_json::Value> = effects
+            .iter()
+            .map(|e| match e {
+                promo_editor::Effect::Seek { time, generation } => {
+                    serde_json::json!({"kind": "seek", "time": time, "generation": generation})
+                }
+                promo_editor::Effect::StartPlayback { at } => {
+                    serde_json::json!({"kind": "startPlayback", "at": at})
+                }
+                promo_editor::Effect::StopPlayback => serde_json::json!({"kind": "stopPlayback"}),
+            })
+            .collect();
+
+        let out = serde_json::json!({
+            "state": transport.state().as_str(),
+            "time": transport.time(),
+            "duration": transport.duration(),
+            "resumeAfterScrub": transport.resumes_after_scrub(),
+            "seekGeneration": transport.seek_generation(),
+            "effects": effects_json,
+        });
+        match serde_json::to_string(&out)
+            .ok()
+            .and_then(|s| CString::new(s).ok())
+        {
+            Some(c) => c.into_raw(),
+            None => std::ptr::null_mut(),
         }
-        _ => return std::ptr::null_mut(),
-    };
-
-    let effects_json: Vec<serde_json::Value> = effects
-        .iter()
-        .map(|e| match e {
-            promo_editor::Effect::Seek { time, generation } => {
-                serde_json::json!({"kind": "seek", "time": time, "generation": generation})
-            }
-            promo_editor::Effect::StartPlayback { at } => {
-                serde_json::json!({"kind": "startPlayback", "at": at})
-            }
-            promo_editor::Effect::StopPlayback => serde_json::json!({"kind": "stopPlayback"}),
-        })
-        .collect();
-
-    let out = serde_json::json!({
-        "state": transport.state().as_str(),
-        "time": transport.time(),
-        "duration": transport.duration(),
-        "resumeAfterScrub": transport.resumes_after_scrub(),
-        "seekGeneration": transport.seek_generation(),
-        "effects": effects_json,
-    });
-    match serde_json::to_string(&out)
-        .ok()
-        .and_then(|s| CString::new(s).ok())
-    {
-        Some(c) => c.into_raw(),
-        None => std::ptr::null_mut(),
-    }
+    })
 }
 
 /// Is this seek completion the current one? 1 = yes.

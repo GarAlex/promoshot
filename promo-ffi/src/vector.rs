@@ -23,13 +23,15 @@ pub struct VectorHandle {
 /// Free with `promo_vector_free`.
 #[no_mangle]
 pub extern "C" fn promo_vector_new() -> *mut VectorHandle {
-    let Some(ctx) = GpuContext::shared() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(renderer) = VectorRenderer::new(ctx) else {
-        return std::ptr::null_mut();
-    };
-    Box::into_raw(Box::new(VectorHandle { ctx, renderer }))
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        let Some(ctx) = GpuContext::shared() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(renderer) = VectorRenderer::new(ctx) else {
+            return std::ptr::null_mut();
+        };
+        Box::into_raw(Box::new(VectorHandle { ctx, renderer }))
+    })
 }
 
 /// Frees a vector renderer. Null is a no-op.
@@ -39,9 +41,11 @@ pub extern "C" fn promo_vector_new() -> *mut VectorHandle {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_vector_free(handle: *mut VectorHandle) {
-    if !handle.is_null() {
-        drop(unsafe { Box::from_raw(handle) });
-    }
+    crate::ffi_guard((), move || {
+        if !handle.is_null() {
+            drop(unsafe { Box::from_raw(handle) });
+        }
+    })
 }
 
 /// Renders a drawing into `output_surface` (BGRA IOSurface, width×height).
@@ -62,29 +66,31 @@ pub extern "C" fn promo_vector_render(
     width: c_int,
     height: c_int,
 ) -> c_int {
-    let Some(handle) = (unsafe { handle.as_mut() }) else {
-        return -1;
-    };
-    if doc_json.is_null() || output_surface.is_null() || width <= 0 || height <= 0 {
-        return -1;
-    }
-    let Ok(text) = unsafe { CStr::from_ptr(doc_json) }.to_str() else {
-        return -1;
-    };
-    let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
-        return -2;
-    };
-    let shapes = vector_shapes(&doc);
-    match handle.renderer.render_to_iosurface(
-        handle.ctx,
-        &shapes,
-        output_surface,
-        width as u32,
-        height as u32,
-    ) {
-        Ok(()) => 0,
-        Err(_) => -4,
-    }
+    crate::ffi_guard(-4, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
+        };
+        if doc_json.is_null() || output_surface.is_null() || width <= 0 || height <= 0 {
+            return -1;
+        }
+        let Ok(text) = unsafe { CStr::from_ptr(doc_json) }.to_str() else {
+            return -1;
+        };
+        let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
+            return -2;
+        };
+        let shapes = vector_shapes(&doc);
+        match handle.renderer.render_to_iosurface(
+            handle.ctx,
+            &shapes,
+            output_surface,
+            width as u32,
+            height as u32,
+        ) {
+            Ok(()) => 0,
+            Err(_) => -4,
+        }
+    })
 }
 
 /// The drawing's natural size (content bounds), so the host can pick a
@@ -93,23 +99,25 @@ pub extern "C" fn promo_vector_render(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_vector_content_bounds(doc_json: *const c_char, out: *mut f64) -> c_int {
-    if doc_json.is_null() || out.is_null() {
-        return -1;
-    }
-    let Ok(text) = unsafe { CStr::from_ptr(doc_json) }.to_str() else {
-        return -1;
-    };
-    let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
-        return -2;
-    };
-    let (x, y, w, h) = promo_gpu::vector::content_bounds(&vector_shapes(&doc));
-    unsafe {
-        *out = x;
-        *out.add(1) = y;
-        *out.add(2) = w;
-        *out.add(3) = h;
-    }
-    0
+    crate::ffi_guard(-1, move || {
+        if doc_json.is_null() || out.is_null() {
+            return -1;
+        }
+        let Ok(text) = unsafe { CStr::from_ptr(doc_json) }.to_str() else {
+            return -1;
+        };
+        let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
+            return -2;
+        };
+        let (x, y, w, h) = promo_gpu::vector::content_bounds(&vector_shapes(&doc));
+        unsafe {
+            *out = x;
+            *out.add(1) = y;
+            *out.add(2) = w;
+            *out.add(3) = h;
+        }
+        0
+    })
 }
 
 /// Model shapes → renderer shapes, resolving hex colors and opacities the

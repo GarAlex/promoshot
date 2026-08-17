@@ -60,13 +60,15 @@ struct SceneWire {
 /// available. Free with `promo_compositor_free`.
 #[no_mangle]
 pub extern "C" fn promo_compositor_new() -> *mut CompositorHandle {
-    let Some(ctx) = GpuContext::shared() else {
-        return std::ptr::null_mut();
-    };
-    let Ok(compositor) = Compositor::new(ctx) else {
-        return std::ptr::null_mut();
-    };
-    Box::into_raw(Box::new(CompositorHandle { ctx, compositor }))
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        let Some(ctx) = GpuContext::shared() else {
+            return std::ptr::null_mut();
+        };
+        let Ok(compositor) = Compositor::new(ctx) else {
+            return std::ptr::null_mut();
+        };
+        Box::into_raw(Box::new(CompositorHandle { ctx, compositor }))
+    })
 }
 
 /// Frees a compositor. Null is a no-op.
@@ -76,9 +78,11 @@ pub extern "C" fn promo_compositor_new() -> *mut CompositorHandle {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_compositor_free(handle: *mut CompositorHandle) {
-    if !handle.is_null() {
-        drop(unsafe { Box::from_raw(handle) });
-    }
+    crate::ffi_guard((), move || {
+        if !handle.is_null() {
+            drop(unsafe { Box::from_raw(handle) });
+        }
+    })
 }
 
 /// Renders one frame. `scene_json` (NUL-terminated) describes the frame;
@@ -102,77 +106,79 @@ pub extern "C" fn promo_compose_frame(
     surface_count: usize,
     output_surface: *mut c_void,
 ) -> c_int {
-    let Some(handle) = (unsafe { handle.as_mut() }) else {
-        return -1;
-    };
-    if scene_json.is_null() || output_surface.is_null() {
-        return -1;
-    }
-    if surface_count > 0
-        && (surfaces.is_null() || surface_widths.is_null() || surface_heights.is_null())
-    {
-        return -1;
-    }
-    let Ok(text) = unsafe { CStr::from_ptr(scene_json) }.to_str() else {
-        return -1;
-    };
-    let Ok(wire) = serde_json::from_str::<SceneWire>(text) else {
-        return -2;
-    };
-
-    let mut textures: Vec<InputTexture> = Vec::with_capacity(surface_count);
-    for i in 0..surface_count {
-        let (surface, w, h) = unsafe {
-            (
-                *surfaces.add(i),
-                *surface_widths.add(i),
-                *surface_heights.add(i),
-            )
+    crate::ffi_guard(-4, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
         };
-        if surface.is_null() || w <= 0 || h <= 0 {
-            return -3;
+        if scene_json.is_null() || output_surface.is_null() {
+            return -1;
         }
+        if surface_count > 0
+            && (surfaces.is_null() || surface_widths.is_null() || surface_heights.is_null())
+        {
+            return -1;
+        }
+        let Ok(text) = unsafe { CStr::from_ptr(scene_json) }.to_str() else {
+            return -1;
+        };
+        let Ok(wire) = serde_json::from_str::<SceneWire>(text) else {
+            return -2;
+        };
+
+        let mut textures: Vec<InputTexture> = Vec::with_capacity(surface_count);
+        for i in 0..surface_count {
+            let (surface, w, h) = unsafe {
+                (
+                    *surfaces.add(i),
+                    *surface_widths.add(i),
+                    *surface_heights.add(i),
+                )
+            };
+            if surface.is_null() || w <= 0 || h <= 0 {
+                return -3;
+            }
+            match handle
+                .compositor
+                .import_iosurface_cached(handle.ctx, surface, w as u32, h as u32)
+            {
+                Ok(t) => textures.push(t),
+                Err(_) => return -3,
+            }
+        }
+
+        let scene = Scene {
+            canvas_width: wire.canvas_width,
+            canvas_height: wire.canvas_height,
+            background_rgba: wire.background_rgba,
+            output_width: wire.output_width,
+            output_height: wire.output_height,
+            bars_rgba: wire.bars_rgba,
+            quads: wire
+                .quads
+                .iter()
+                .map(|q| SceneQuad {
+                    texture: q.texture,
+                    rect: q.rect,
+                    rotation_deg: q.rotation,
+                    corner_radius: q.corner_radius,
+                    border_width: q.border_width,
+                    border_rgba: q.border_rgba,
+                    solid_rgba: q.solid_rgba,
+                    opacity: q.opacity,
+                    color_709: q.color709,
+                })
+                .collect(),
+        };
+        // Out-of-range texture indices fail the render below with Import.
         match handle
             .compositor
-            .import_iosurface_cached(handle.ctx, surface, w as u32, h as u32)
+            .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
         {
-            Ok(t) => textures.push(t),
-            Err(_) => return -3,
+            Ok(()) => 0,
+            Err(promo_gpu::GpuError::Import(_)) => -3,
+            Err(_) => -4,
         }
-    }
-
-    let scene = Scene {
-        canvas_width: wire.canvas_width,
-        canvas_height: wire.canvas_height,
-        background_rgba: wire.background_rgba,
-        output_width: wire.output_width,
-        output_height: wire.output_height,
-        bars_rgba: wire.bars_rgba,
-        quads: wire
-            .quads
-            .iter()
-            .map(|q| SceneQuad {
-                texture: q.texture,
-                rect: q.rect,
-                rotation_deg: q.rotation,
-                corner_radius: q.corner_radius,
-                border_width: q.border_width,
-                border_rgba: q.border_rgba,
-                solid_rgba: q.solid_rgba,
-                opacity: q.opacity,
-                color_709: q.color709,
-            })
-            .collect(),
-    };
-    // Out-of-range texture indices fail the render below with Import.
-    match handle
-        .compositor
-        .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
-    {
-        Ok(()) => 0,
-        Err(promo_gpu::GpuError::Import(_)) => -3,
-        Err(_) => -4,
-    }
+    })
 }
 
 /// An in-flight GPU submission. Owned by the host between
@@ -181,6 +187,15 @@ pub extern "C" fn promo_compose_frame(
 /// thread that waits never touches compositor state the producer is mutating.
 pub struct SubmissionToken(Fence);
 
+impl SubmissionToken {
+    /// Crate-internal: the preview engine's deferred export render hands its
+    /// fence out through the same token type, so the host has exactly one
+    /// wait primitive (`promo_submission_wait`).
+    pub(crate) fn new(fence: Fence) -> Self {
+        Self(fence)
+    }
+}
+
 /// Enables/disables deferred completion on a compositor. With it on,
 /// `promo_compose_frame_raw_deferred` returns a token instead of blocking;
 /// the caller must wait on that token before reading the output surface.
@@ -188,11 +203,13 @@ pub struct SubmissionToken(Fence);
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_compositor_set_defer(handle: *mut CompositorHandle, defer: c_int) -> c_int {
-    let Some(handle) = (unsafe { handle.as_mut() }) else {
-        return -1;
-    };
-    handle.compositor.set_defer_completion(defer != 0);
-    0
+    crate::ffi_guard(-1, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
+        };
+        handle.compositor.set_defer_completion(defer != 0);
+        0
+    })
 }
 
 /// Blocks until the submission completes, then frees the token. Passing NULL
@@ -200,15 +217,17 @@ pub extern "C" fn promo_compositor_set_defer(handle: *mut CompositorHandle, defe
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_submission_wait(token: *mut SubmissionToken) -> c_int {
-    if token.is_null() {
-        return 0;
-    }
-    let token = unsafe { Box::from_raw(token) };
-    let Some(ctx) = GpuContext::shared() else {
-        return -1;
-    };
-    token.0.wait(ctx);
-    0
+    crate::ffi_guard(-1, move || {
+        if token.is_null() {
+            return 0;
+        }
+        let token = unsafe { Box::from_raw(token) };
+        let Some(ctx) = GpuContext::shared() else {
+            return -1;
+        };
+        token.0.wait(ctx);
+        0
+    })
 }
 
 /// Doubles per quad in `promo_compose_frame_raw`'s flat layout.
@@ -249,91 +268,93 @@ pub extern "C" fn promo_compose_frame_raw(
     output_surface: *mut c_void,
     out_token: *mut *mut SubmissionToken,
 ) -> c_int {
-    let Some(handle) = (unsafe { handle.as_mut() }) else {
-        return -1;
-    };
-    if header.is_null() || output_surface.is_null() || (quad_count > 0 && quads.is_null()) {
-        return -1;
-    }
-    if surface_count > 0
-        && (surfaces.is_null() || surface_widths.is_null() || surface_heights.is_null())
-    {
-        return -1;
-    }
-    let h = unsafe { std::slice::from_raw_parts(header, HEADER_DOUBLES) };
-    // A background-only frame has zero quads and may pass NULL — building a
-    // slice from a null pointer is UB even for length 0.
-    let q: &[f64] = if quad_count == 0 {
-        &[]
-    } else {
-        unsafe { std::slice::from_raw_parts(quads, quad_count * QUAD_DOUBLES) }
-    };
-
-    let mut textures: Vec<InputTexture> = Vec::with_capacity(surface_count);
-    for i in 0..surface_count {
-        let (surface, w, hh) = unsafe {
-            (
-                *surfaces.add(i),
-                *surface_widths.add(i),
-                *surface_heights.add(i),
-            )
+    crate::ffi_guard(-4, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
         };
-        if surface.is_null() || w <= 0 || hh <= 0 {
-            return -3;
+        if header.is_null() || output_surface.is_null() || (quad_count > 0 && quads.is_null()) {
+            return -1;
         }
+        if surface_count > 0
+            && (surfaces.is_null() || surface_widths.is_null() || surface_heights.is_null())
+        {
+            return -1;
+        }
+        let h = unsafe { std::slice::from_raw_parts(header, HEADER_DOUBLES) };
+        // A background-only frame has zero quads and may pass NULL — building a
+        // slice from a null pointer is UB even for length 0.
+        let q: &[f64] = if quad_count == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(quads, quad_count * QUAD_DOUBLES) }
+        };
+
+        let mut textures: Vec<InputTexture> = Vec::with_capacity(surface_count);
+        for i in 0..surface_count {
+            let (surface, w, hh) = unsafe {
+                (
+                    *surfaces.add(i),
+                    *surface_widths.add(i),
+                    *surface_heights.add(i),
+                )
+            };
+            if surface.is_null() || w <= 0 || hh <= 0 {
+                return -3;
+            }
+            match handle
+                .compositor
+                .import_iosurface_cached(handle.ctx, surface, w as u32, hh as u32)
+            {
+                Ok(t) => textures.push(t),
+                Err(_) => return -3,
+            }
+        }
+
+        let scene = Scene {
+            canvas_width: h[0],
+            canvas_height: h[1],
+            background_rgba: [h[2] as f32, h[3] as f32, h[4] as f32, h[5] as f32],
+            output_width: h[6] as u32,
+            output_height: h[7] as u32,
+            bars_rgba: [h[8] as f32, h[9] as f32, h[10] as f32, h[11] as f32],
+            quads: q
+                .chunks_exact(QUAD_DOUBLES)
+                .map(|c| SceneQuad {
+                    texture: if c[0] < 0.0 {
+                        None
+                    } else {
+                        Some(c[0] as usize)
+                    },
+                    rect: [c[1], c[2], c[3], c[4]],
+                    rotation_deg: c[5],
+                    corner_radius: c[6],
+                    border_width: c[7],
+                    border_rgba: [c[8] as f32, c[9] as f32, c[10] as f32, c[11] as f32],
+                    solid_rgba: [c[12] as f32, c[13] as f32, c[14] as f32, c[15] as f32],
+                    opacity: c[16] as f32,
+                    color_709: c[17] != 0.0,
+                })
+                .collect(),
+        };
         match handle
             .compositor
-            .import_iosurface_cached(handle.ctx, surface, w as u32, hh as u32)
+            .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
         {
-            Ok(t) => textures.push(t),
-            Err(_) => return -3,
-        }
-    }
-
-    let scene = Scene {
-        canvas_width: h[0],
-        canvas_height: h[1],
-        background_rgba: [h[2] as f32, h[3] as f32, h[4] as f32, h[5] as f32],
-        output_width: h[6] as u32,
-        output_height: h[7] as u32,
-        bars_rgba: [h[8] as f32, h[9] as f32, h[10] as f32, h[11] as f32],
-        quads: q
-            .chunks_exact(QUAD_DOUBLES)
-            .map(|c| SceneQuad {
-                texture: if c[0] < 0.0 {
-                    None
-                } else {
-                    Some(c[0] as usize)
-                },
-                rect: [c[1], c[2], c[3], c[4]],
-                rotation_deg: c[5],
-                corner_radius: c[6],
-                border_width: c[7],
-                border_rgba: [c[8] as f32, c[9] as f32, c[10] as f32, c[11] as f32],
-                solid_rgba: [c[12] as f32, c[13] as f32, c[14] as f32, c[15] as f32],
-                opacity: c[16] as f32,
-                color_709: c[17] != 0.0,
-            })
-            .collect(),
-    };
-    match handle
-        .compositor
-        .compose_to_iosurface(handle.ctx, &scene, &textures, output_surface)
-    {
-        Ok(()) => {
-            if !out_token.is_null() {
-                let token = handle
-                    .compositor
-                    .take_fence()
-                    .map(|f| Box::into_raw(Box::new(SubmissionToken(f))))
-                    .unwrap_or(std::ptr::null_mut());
-                unsafe { *out_token = token };
+            Ok(()) => {
+                if !out_token.is_null() {
+                    let token = handle
+                        .compositor
+                        .take_fence()
+                        .map(|f| Box::into_raw(Box::new(SubmissionToken(f))))
+                        .unwrap_or(std::ptr::null_mut());
+                    unsafe { *out_token = token };
+                }
+                0
             }
-            0
+            Err(promo_gpu::GpuError::Import(_)) => -3,
+            Err(_) => -4,
         }
-        Err(promo_gpu::GpuError::Import(_)) => -3,
-        Err(_) => -4,
-    }
+    })
 }
 
 #[cfg(test)]

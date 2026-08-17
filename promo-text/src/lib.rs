@@ -170,7 +170,23 @@ fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFa
 /// costs tens of milliseconds — far too much to repeat per frame of a video.
 fn font_system() -> &'static Mutex<FontSystem> {
     static FONTS: OnceLock<Mutex<FontSystem>> = OnceLock::new();
-    FONTS.get_or_init(|| Mutex::new(FontSystem::new()))
+    FONTS.get_or_init(|| {
+        let mut fonts = FontSystem::new();
+        // fontdb has no iOS branch: on device and simulator alike its unix
+        // fallback scans /usr/share/fonts, which does not exist there, and an
+        // EMPTY font db makes cosmic-text's shaper panic ("no default font
+        // found") — which crossed the FFI and aborted the host app the first
+        // time an iOS test drew a caption. Load the Apple directories
+        // ourselves when discovery came up empty: /System/Library/Fonts
+        // holds the iOS fonts on a device and the macOS fonts under the
+        // simulator (simulated processes read the host filesystem).
+        if fonts.db().is_empty() {
+            for dir in ["/System/Library/Fonts", "/Library/Fonts"] {
+                fonts.db_mut().load_fonts_dir(dir);
+            }
+        }
+        Mutex::new(fonts)
+    })
 }
 
 fn swash_cache() -> &'static Mutex<SwashCache> {

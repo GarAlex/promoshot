@@ -27,6 +27,10 @@ use std::ffi::{c_char, c_void, CString};
 /// the engine must not apply corner radius or border over it.
 pub const FLAG_PRE_FRAMED: i32 = 1;
 
+/// Provider out-flag: the bitmap holds BT.709-encoded video — the shader
+/// converts to sRGB while sampling (the export decoder's zero-copy route).
+pub const FLAG_COLOR_709: i32 = 2;
+
 /// How a host hands a frame over: one C-ABI struct covering every surface
 /// kind, so the provider contract does not name a platform.
 ///
@@ -158,6 +162,19 @@ pub struct PreviewEngine {
     /// scrubbing/playing and drops it back to 0 for the paused refine
     /// (cache entries are keyed per tier, so both coexist).
     preferred_tier: i32,
+    /// Export mode: the clock is monotonic, so per-time frames (video,
+    /// animated-tilt bakes) are never requested twice — caching them only
+    /// evicts the static content that IS reused. They go into `scratch`
+    /// instead, which lives exactly one render.
+    export_mode: bool,
+    /// Per-time frames for the render in flight (export mode only). Cleared
+    /// at the START of the next build, not the end of this one, so a
+    /// deferred-fence compose still has live textures while the GPU works.
+    scratch: HashMap<u64, CachedFrame>,
+    /// Density multiplier for canvas-space rasters the engine creates
+    /// (captions). Export renders a small canvas into a large output; without
+    /// this the GPU magnifies the caption raster and text arrives soft.
+    raster_scale: f64,
 }
 
 // The raw `user` pointer is owned by the host and promised valid for the
@@ -196,7 +213,44 @@ impl PreviewEngine {
             hits: 0,
             misses: 0,
             preferred_tier: 0,
+            export_mode: false,
+            scratch: HashMap::new(),
+            raster_scale: 1.0,
         })
+    }
+
+    /// Export mode: per-time frames bypass the LRU cache (see `scratch`).
+    /// Static content — images, drawings, caption rasters — stays cached and
+    /// is what makes frame N+1 cheap.
+    pub fn set_export_mode(&mut self, enabled: bool) {
+        self.export_mode = enabled;
+        if !enabled {
+            self.scratch.clear();
+        }
+    }
+
+    /// Density for engine-made canvas-space rasters (captions): the export's
+    /// letterbox scale, so text is rasterized at output resolution. 1.0 for
+    /// preview. Values are clamped to a sane positive range.
+    pub fn set_raster_scale(&mut self, scale: f64) {
+        self.raster_scale = if scale.is_finite() {
+            scale.clamp(0.1, 8.0)
+        } else {
+            1.0
+        };
+    }
+
+    /// Deferred completion for the compose (see
+    /// `Compositor::set_defer_completion`): render returns as soon as the GPU
+    /// work is submitted and [`take_fence`](Self::take_fence) hands the caller
+    /// what to wait on before reading the output. Export-pipeline only.
+    pub fn set_defer_completion(&mut self, defer: bool) {
+        self.compositor.set_defer_completion(defer);
+    }
+
+    /// The pending fence for the last deferred render, if any.
+    pub fn take_fence(&mut self) -> Option<promo_gpu::compositor::Fence> {
+        self.compositor.take_fence()
     }
 
     /// Swaps in an edited project without rebuilding the GPU pipeline.
@@ -322,15 +376,28 @@ impl PreviewEngine {
         )
     }
 
+    /// A frame the scene refers to, whichever store it lives in.
+    fn cached_frame(&self, id: u64) -> &CachedFrame {
+        self.cache
+            .get(&id)
+            .or_else(|| self.scratch.get(&id))
+            .expect("scene refers to a frame the engine no longer holds")
+    }
+
     /// Fetches (or serves from cache) the frame for `layer` at `source_time`.
     /// `pinned`: ids the in-flight scene already holds — they must survive
     /// this admit's eviction or the scene would point at freed frames.
     fn frame(&mut self, layer_id: &str, source_time: f64, tier: i32, pinned: &[u64]) -> Option<u64> {
+        // Export mode: a per-time frame will never be asked for again (the
+        // export clock is monotonic), so it skips the cache entirely.
+        let transient = self.export_mode && source_time >= 0.0;
         let key = (layer_id.to_string(), quantize(source_time), tier);
-        if let Some(&id) = self.key_of.get(&key) {
-            self.governor.touch(id);
-            self.hits += 1;
-            return Some(id);
+        if !transient {
+            if let Some(&id) = self.key_of.get(&key) {
+                self.governor.touch(id);
+                self.hits += 1;
+                return Some(id);
+            }
         }
 
         let c_id = CString::new(layer_id).ok()?;
@@ -359,20 +426,22 @@ impl PreviewEngine {
         self.misses += 1;
         let id = self.next_id;
         self.next_id += 1;
+        let entry = CachedFrame {
+            frame,
+            flags,
+            caption_origin: None,
+        };
+        if transient {
+            self.scratch.insert(id, entry);
+            return Some(id);
+        }
         for victim in self.governor.admit(id, width * height * 4, pinned) {
             if let Some(k) = self.id_of.remove(&victim) {
                 self.key_of.remove(&k);
             }
             self.cache.remove(&victim);
         }
-        self.cache.insert(
-            id,
-            CachedFrame {
-                frame,
-                flags,
-                caption_origin: None,
-            },
-        );
+        self.cache.insert(id, entry);
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
         Some(id)
@@ -442,9 +511,19 @@ impl PreviewEngine {
             self.meta.composition_settings.canvas_width,
             self.meta.composition_settings.canvas_height,
         );
+        // Field-disjoint lookup (not the `cached_frame` helper): the closure
+        // may only borrow the two maps, because `self.compositor` is borrowed
+        // mutably for the compose below.
         let mut textures: Vec<&InputTexture> = used
             .iter()
-            .map(|id| &self.cache[id].frame.texture)
+            .map(|id| {
+                let frame = self
+                    .cache
+                    .get(id)
+                    .or_else(|| self.scratch.get(id))
+                    .expect("scene refers to a frame the engine no longer holds");
+                &frame.frame.texture
+            })
             .collect();
 
         let overlay_texture;
@@ -475,9 +554,17 @@ impl PreviewEngine {
         output_height: u32,
     ) -> Result<(), GpuError> {
         let (scene, used) = self.build_scene(time, output_width, output_height)?;
+        // Field-disjoint lookup, as in `render_with_overlay`.
         let textures: Vec<&InputTexture> = used
             .iter()
-            .map(|id| &self.cache[id].frame.texture)
+            .map(|id| {
+                let frame = self
+                    .cache
+                    .get(id)
+                    .or_else(|| self.scratch.get(id))
+                    .expect("scene refers to a frame the engine no longer holds");
+                &frame.frame.texture
+            })
             .collect();
         self.compositor
             .compose_to_texture_borrowed(self.ctx, &scene, &textures, output)
@@ -529,6 +616,10 @@ impl PreviewEngine {
             style.left_margin = values.left_margin;
         }
         let stamp = |v: f64| (v * 10.0).round() as i64;
+        // Raster density (1.0 in preview; the export's letterbox scale).
+        // Part of the key: the same caption at a different density is a
+        // different bitmap.
+        let scale = self.raster_scale;
         // EVERYTHING that shapes the raster is in the key: the text (with
         // resource-held captions the same layer id can mean new words after
         // an edit) and the full resolved style — colors, family, weight,
@@ -551,12 +642,13 @@ impl PreviewEngine {
         };
         let key = (
             format!(
-                "caption:{}:{:x}:{}:{}:{}",
+                "caption:{}:{:x}:{}:{}:{}:{}",
                 layer.id,
                 content_stamp,
                 stamp(style.font_size),
                 stamp(style.vertical_margin),
-                stamp(style.left_margin)
+                stamp(style.left_margin),
+                stamp(scale)
             ),
             0i64,
             0i32,
@@ -565,12 +657,28 @@ impl PreviewEngine {
             self.governor.touch(id);
             self.hits += 1;
             let frame = &self.cache[&id];
-            let (w, h) = (frame.frame.width as f64, frame.frame.height as f64);
+            // Dividing by the CURRENT scale is sound: it is part of the key,
+            // so a hit means the raster was made at this same density.
+            let (w, h) = (
+                frame.frame.width as f64 / scale,
+                frame.frame.height as f64 / scale,
+            );
             let (x, y) = frame.caption_origin?;
             return Some((caption_scene_quad(x, y, w, h), id));
         }
 
-        let raster = promo_text::rasterize(text, canvas.width(), canvas.height(), &style)?;
+        // Rasterize at `scale`× density: everything the layout reads scales
+        // together, so the quad below lands at the same canvas-space spot —
+        // the texture is just denser.
+        let mut dense = style.clone();
+        dense.font_size *= scale;
+        dense.padding *= scale;
+        dense.corner_radius *= scale;
+        dense.left_margin *= scale;
+        dense.right_margin *= scale;
+        dense.vertical_margin *= scale;
+        let raster =
+            promo_text::rasterize(text, canvas.width() * scale, canvas.height() * scale, &dense)?;
         // promo-text produces straight RGBA; the compositor wants
         // premultiplied BGRA. Without the premultiply, every antialiased
         // glyph edge saturates and the text renders with binary edges.
@@ -605,17 +713,19 @@ impl PreviewEngine {
             CachedFrame {
                 frame,
                 flags: 0,
-                caption_origin: Some((raster.x, raster.y)),
+                // Canvas-space origin (density divided back out), so a cache
+                // hit rebuilds the quad without knowing how dense it is.
+                caption_origin: Some((raster.x / scale, raster.y / scale)),
             },
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
         Some((
             caption_scene_quad(
-                raster.x,
-                raster.y,
-                raster.width as f64,
-                raster.height as f64,
+                raster.x / scale,
+                raster.y / scale,
+                raster.width as f64 / scale,
+                raster.height as f64 / scale,
             ),
             id,
         ))
@@ -630,6 +740,11 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(Scene, Vec<u64>), GpuError> {
+        // The PREVIOUS render's transient frames die here, not at its end: a
+        // deferred-fence compose may still have the GPU sampling them after
+        // render returns, and wgpu keeps submitted resources alive only once
+        // they are submitted — which the previous render has done by now.
+        self.scratch.clear();
         let settings = self.meta.composition_settings.clone();
         let canvas = Size::new(settings.canvas_width, settings.canvas_height);
 
@@ -701,9 +816,10 @@ impl PreviewEngine {
             let Some(frame_id) = self.frame(&layer.id, source_time, tier, &used) else {
                 continue;
             };
-            let frame = &self.cache[&frame_id];
+            let frame = self.cached_frame(frame_id);
             let (fw, fh) = (frame.frame.width as f64, frame.frame.height as f64);
             let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
+            let color_709 = frame.flags & FLAG_COLOR_709 != 0;
             used.push(frame_id);
 
             let tr = tl::layer_transform(layer, time, &settings);
@@ -730,6 +846,7 @@ impl PreviewEngine {
                 rect: [rect.x(), rect.y(), rect.width(), rect.height()],
                 rotation_deg: tl::layer_rotation(layer, time),
                 opacity: tl::layer_opacity(layer, time) as f32,
+                color_709,
                 ..Default::default()
             };
             if is_media && !pre_framed {
@@ -1311,6 +1428,101 @@ mod tests {
         assert_eq!(engine.stats().misses, 2);
         assert_eq!(engine.stats().hits, 1);
         assert_eq!(state.lock().unwrap().requests.len(), 2);
+    }
+
+    /// Raster scale (export density for captions): the same caption rendered
+    /// at scale 1 and scale 2 must land on the same canvas pixels — the
+    /// texture gets denser, the quad must not move or resize. A scale bug
+    /// (e.g. forgetting to divide the quad rect back down) doubles the
+    /// caption's size and blows the mean diff far past this gate.
+    #[test]
+    fn caption_raster_scale_densifies_without_moving_the_quad() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000003",
+            "name": "cap", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [],
+            "compositionSettings": {
+                "canvasWidth": 256, "canvasHeight": 128,
+                "backgroundColorHex": "000000",
+                "subtitleFontSize": 22,
+                "subtitleColorHex": "FFFFFF",
+                "subtitleVerticalMargin": 20,
+                "subtitleLeftMargin": 10,
+                "subtitleRightMargin": 10
+            },
+            "layers": [
+                {"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "captionText": "Scaled words", "keyframes": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("caption fixture");
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(256, 128).unwrap();
+
+        let mut render = |scale: f64| -> Vec<u8> {
+            engine.set_raster_scale(scale);
+            engine.render(1.0, out.raw(), 256, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        let at_1x = render(1.0);
+        let at_2x = render(2.0);
+
+        let ink = |px: &[u8]| px.chunks_exact(4).filter(|p| p[1] > 64).count();
+        let ink_1x = ink(&at_1x);
+        let ink_2x = ink(&at_2x);
+        assert!(ink_1x > 50, "caption must actually render ({ink_1x} lit px)");
+        // Same placement and size: ink counts within 25% of each other …
+        let ratio = ink_1x.max(ink_2x) as f64 / ink_1x.min(ink_2x).max(1) as f64;
+        assert!(ratio < 1.25, "ink {ink_1x} vs {ink_2x}: quad moved or resized");
+        // … and the frames differ only at glyph-edge level.
+        let mean = at_1x
+            .iter()
+            .zip(&at_2x)
+            .map(|(a, b)| (i32::from(*a) - i32::from(*b)).abs() as f64)
+            .sum::<f64>()
+            / at_1x.len() as f64;
+        assert!(mean < 4.0, "mean diff {mean} — scaled caption drifted");
+    }
+
+    /// Export mode: the clock is monotonic, so per-time (video) frames must
+    /// not enter the LRU cache — they would only evict the static content
+    /// that IS reused. Rendering still works, and turning the mode off
+    /// restores caching.
+    #[test]
+    fn export_mode_keeps_per_time_frames_out_of_the_cache() {
+        let meta = tests_support::fixture_meta(64.0);
+        let (mut engine, state) =
+            make_engine(meta, vec![("VID".into(), [255, 0, 0, 255], 32)], 64 << 20);
+        engine.set_export_mode(true);
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+
+        // A monotonic export clock: every frame decodes, nothing is cached.
+        for i in 0..4 {
+            engine
+                .render(3.0 + f64::from(i) * 0.1, out.raw(), 64, 64)
+                .unwrap();
+            // The frame still composes: the video quad is present.
+            assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "video frame");
+        }
+        let stats = engine.stats();
+        assert_eq!(stats.misses, 4, "every export frame decodes once");
+        assert_eq!(stats.cached_bytes, 0, "per-time frames must not be cached");
+        assert_eq!(state.lock().unwrap().requests.len(), 4);
+
+        // Same time twice IN export mode: decoded twice (no cache), by design.
+        engine.render(5.0, out.raw(), 64, 64).unwrap();
+        engine.render(5.0, out.raw(), 64, 64).unwrap();
+        assert_eq!(engine.stats().misses, 6);
+
+        // Off again: preview behaviour returns (second render is a hit).
+        engine.set_export_mode(false);
+        engine.render(6.0, out.raw(), 64, 64).unwrap();
+        engine.render(6.0, out.raw(), 64, 64).unwrap();
+        let stats = engine.stats();
+        assert_eq!(stats.misses, 7);
+        assert!(stats.hits >= 1, "cache works again outside export mode");
+        assert_eq!(stats.cached_bytes, 32 * 32 * 4);
     }
 
     #[test]
