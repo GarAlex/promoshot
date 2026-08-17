@@ -16,3 +16,5 @@ pub use preview::{
     SURFACE_D3D_HANDLE, SURFACE_DMABUF, SURFACE_IOSURFACE, SURFACE_NONE,
 };
 pub use promo_model::core_version;
+
+pub mod vector;

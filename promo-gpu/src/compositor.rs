@@ -601,6 +601,18 @@ impl Compositor {
         })
     }
 
+    /// Wraps an owned texture as an [`InputTexture`] the compositor can
+    /// sample. The texture must already carry `TEXTURE_BINDING`; ownership
+    /// moves in, so whatever drew into it can drop its handle.
+    pub fn adopt_owned_texture(texture: wgpu::Texture) -> InputTexture {
+        let view = texture.create_view(&Default::default());
+        InputTexture {
+            view: std::sync::Arc::new(view),
+            id: next_texture_id(),
+            _texture: std::sync::Arc::new(texture),
+        }
+    }
+
     /// Import any [`GpuSurface`](crate::GpuSurface) — the single entry point
     /// the engine uses, so nothing above this layer names a platform surface.
     ///

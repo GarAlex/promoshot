@@ -19,6 +19,7 @@ use promo_gpu::{GpuSurface, ImportedFrame};
 use promo_gpu::iosurface::IOSurfaceRef;
 use promo_gpu::{GpuContext, GpuError};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, Size};
+use crate::vector::vector_shapes;
 use promo_timeline as tl;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
@@ -175,6 +176,9 @@ pub struct PreviewEngine {
     /// (captions). Export renders a small canvas into a large output; without
     /// this the GPU magnifies the caption raster and text arrives soft.
     raster_scale: f64,
+    /// Vector rasterizer for drawing layers, built on first use — a project
+    /// without drawings never pays for the pipeline.
+    vector: Option<promo_gpu::vector::VectorRenderer>,
 }
 
 // The raw `user` pointer is owned by the host and promised valid for the
@@ -216,6 +220,7 @@ impl PreviewEngine {
             export_mode: false,
             scratch: HashMap::new(),
             raster_scale: 1.0,
+            vector: None,
         })
     }
 
@@ -731,6 +736,87 @@ impl PreviewEngine {
         ))
     }
 
+    /// Rasterizes a drawing layer's vector document and returns its quad plus
+    /// the cache id of the texture.
+    ///
+    /// Cached like a caption raster: keyed by layer id and the pixel size it
+    /// was drawn at, so a zoom keyframe re-rasterizes (vector content stays
+    /// crisp) while a hold costs nothing. The natural size comes from the
+    /// document's own content bounds, which is what makes this possible
+    /// without a host: nothing outside knows the drawing better than the
+    /// shapes do.
+    fn drawing_quad(
+        &mut self,
+        layer: &ProjectLayer,
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+        time: f64,
+        pinned: &[u64],
+    ) -> Option<(SceneQuad, u64)> {
+        let doc = self.resource_for(layer)?.drawing.as_ref()?;
+        let shapes = vector_shapes(doc);
+        if shapes.is_empty() {
+            return None;
+        }
+        let (_, _, bw, bh) = promo_gpu::vector::content_bounds(&shapes);
+        let tr = tl::layer_transform(layer, time, settings);
+        let rect = tl::drawing_rect(
+            Size::new(bw.max(1.0), bh.max(1.0)),
+            canvas,
+            tr.zoom,
+            tr.horizontal_shift,
+            tr.vertical_shift,
+        );
+        if rect.width() <= 0.0 || rect.height() <= 0.0 {
+            return None;
+        }
+        // Density follows the raster scale (export renders at output size),
+        // capped so a deep zoom cannot ask for an absurd texture — the same
+        // ceiling the host rasterizers used.
+        let cap = canvas.width().max(canvas.height()) * 2.0 * self.raster_scale;
+        let pixel_width = (rect.width() * self.raster_scale).min(cap).max(1.0);
+        let pixel_height = (rect.height() * self.raster_scale).min(cap).max(1.0);
+        let (pw, ph) = (pixel_width.round() as u32, pixel_height.round() as u32);
+
+        let key = (format!("drawing:{}:{}x{}", layer.id, pw, ph), 0i64, 0i32);
+        if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some((drawing_scene_quad(&rect), id));
+        }
+
+        let renderer = match self.vector.as_mut() {
+            Some(renderer) => renderer,
+            None => {
+                self.vector = Some(promo_gpu::vector::VectorRenderer::new(self.ctx).ok()?);
+                self.vector.as_mut()?
+            }
+        };
+        let frame = renderer.render_to_frame(self.ctx, &shapes, pw, ph).ok()?;
+        let bytes = frame.byte_size();
+
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        for victim in self.governor.admit(id, bytes, pinned) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(
+            id,
+            CachedFrame {
+                frame,
+                flags: 0,
+                caption_origin: None,
+            },
+        );
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some((drawing_scene_quad(&rect), id))
+    }
+
     /// Everything both render paths share: resolve the layers live at `time`,
     /// pull their frames through the provider, and describe the result. The
     /// only thing left to the caller is where it lands.
@@ -807,6 +893,23 @@ impl PreviewEngine {
             } else {
                 -1.0
             };
+
+            // Drawings are VECTOR content the engine can draw itself, so it
+            // does — no provider round trip. Every front end used to have to
+            // remember to tessellate and hand a bitmap over; the one that
+            // forgot (the CLI) rendered whole compositions with the strokes
+            // silently missing, while `inspect` still called the layer
+            // renderable. One producer, like captions.
+            if is_drawing {
+                if let Some((quad, id)) = self.drawing_quad(layer, &settings, canvas, time, &used) {
+                    let mut quad = quad;
+                    quad.rotation_deg = tl::layer_rotation(layer, time);
+                    quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    quads.push(quad);
+                    used.push(id);
+                }
+                continue;
+            }
 
             let tier = if layer.kind == ProjectLayerKind::Video {
                 self.preferred_tier
@@ -991,6 +1094,15 @@ mod border_style_tests {
         frame.border_width = 0.1; // 0.1 * 540/1080 = 0.05 → floors to 1
         let style = media_border_style(Some(&frame), &layer(), &settings, 2.0, 540.0);
         assert!((style.border_width - 2.0).abs() < 1e-9, "1px floor × zoom 2");
+    }
+}
+
+/// A drawing quad sits where `drawing_rect` put it, in canvas space.
+fn drawing_scene_quad(rect: &promo_model::Rect) -> SceneQuad {
+    SceneQuad {
+        texture: Some(0), // patched with the rest
+        rect: [rect.x(), rect.y(), rect.width(), rect.height()],
+        ..Default::default()
     }
 }
 
@@ -1222,6 +1334,57 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].0, "VID");
         assert!((requests[0].1 - 2.0).abs() < 1e-9, "got {}", requests[0].1);
+    }
+
+    #[test]
+    fn a_drawing_layer_renders_without_any_provider_frame() {
+        // The bug this pins: drawings used to be host-supplied, so a front
+        // end that did not rasterize them (the CLI) rendered compositions
+        // with the strokes silently missing while `inspect` still called the
+        // layer renderable. The engine draws them now — the provider here
+        // knows about no drawing at all, and a stroke must still appear.
+        let mut meta = tests_support::fixture_meta(64.0);
+        let mut resources = meta.resources.clone().unwrap_or_default();
+        let drawing: promo_model::ProjectResource = serde_json::from_value(serde_json::json!({
+            "id": "DRAW", "kind": "drawing", "filename": "d.json",
+            "displayName": "Marks", "addedAt": 0,
+            "drawing": {
+                "shapes": [{
+                    "id": "S1", "kind": "line",
+                    "points": [[0.0, 0.0], [100.0, 100.0]],
+                    "strokeColorHex": "FF0000", "strokeWidth": 24.0,
+                    "arrowStart": false, "arrowEnd": false
+                }]
+            }
+        }))
+        .unwrap();
+        resources.push(drawing);
+        meta.resources = Some(resources);
+        let mut layers = meta.layers.clone().unwrap_or_default();
+        let layer: ProjectLayer = serde_json::from_value(serde_json::json!({
+            "id": "DRAWL", "name": "Marks", "sortIndex": 9, "kind": "drawing",
+            "isEnabled": true, "startTime": 0.0, "duration": 100.0,
+            "resourceID": "DRAW", "keyframes": []
+        }))
+        .unwrap();
+        layers.push(layer);
+        meta.layers = Some(layers);
+
+        let (mut engine, state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(3.0, out.raw(), 64, 64).expect("render");
+
+        assert!(
+            !state.lock().unwrap().requests.iter().any(|r| r.0 == "DRAWL"),
+            "the engine must not ask a host for vector content"
+        );
+        // The stroke runs corner to corner: the centre pixel is on it, and
+        // red (not the 003300 background) proves it was actually drawn.
+        let centre = pixel(&out, 32, 32);
+        assert!(
+            centre[2] > 100 && centre[1] < 80,
+            "expected a red stroke at the centre, got {centre:?}"
+        );
     }
 
     #[test]

@@ -72,6 +72,17 @@ impl ImportedFrame {
         }
     }
 
+    /// An engine-drawn texture (vector rasters) as a frame: the texture owns
+    /// its own memory, so nothing outside has to be kept alive.
+    pub fn from_owned_texture(texture: wgpu::Texture, width: u32, height: u32) -> Self {
+        Self::owning(
+            crate::compositor::Compositor::adopt_owned_texture(texture),
+            width,
+            height,
+            KeepAlive::Nothing,
+        )
+    }
+
     /// Bytes this frame occupies, for the memory governor.
     pub fn byte_size(&self) -> usize {
         self.width as usize * self.height as usize * 4

@@ -258,6 +258,37 @@ impl VectorRenderer {
         self.draw_mesh(ctx, &mesh, output, width, height)
     }
 
+    /// Rasterizes `shapes` into a fresh `width`×`height` frame the compositor
+    /// can sample directly — no readback, no host surface. This is what lets
+    /// the ENGINE draw vector layers itself: every front end used to have to
+    /// remember to rasterize drawings and hand them over, and the one that
+    /// forgot (the CLI) rendered compositions with the strokes missing.
+    pub fn render_to_frame(
+        &mut self,
+        ctx: &GpuContext,
+        shapes: &[VectorShape],
+        width: u32,
+        height: u32,
+    ) -> Result<crate::ImportedFrame, GpuError> {
+        let (w, h) = (width.max(1), height.max(1));
+        let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("promo-vector-frame"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        self.render_to_texture(ctx, shapes, &texture, w, h)?;
+        Ok(crate::ImportedFrame::from_owned_texture(texture, w, h))
+    }
+
     /// Renders into a BGRA IOSurface (zero-copy adoption, macOS).
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn render_to_iosurface(
