@@ -27,10 +27,12 @@ pub use layout::{
     clamped_zoom, drawing_rect, letterbox_transform, media_corner_radius, media_rect,
 };
 pub use mapping::{
-    effective_trimmed_media_duration, effective_video_playback_duration, extended_video_pauses,
-    loop_folded, loop_period, output_time_for_source, playback_interval,
+    effective_speed, effective_trimmed_media_duration, effective_video_playback_duration,
+    extended_video_pauses, loop_folded, loop_period, output_time_for_source, playback_interval,
     playback_video_trim_ranges, resource_for_cut, source_time_for_layer, source_time_for_local,
-    video_segment, video_trim_ranges, ExtendedPause, PlaybackInterval, VideoSegment,
+    timeline_loop_period, timeline_output_time_for_source, timeline_source_time,
+    timeline_video_segment, video_segment, video_trim_ranges, ExtendedPause, PlaybackInterval,
+    VideoSegment,
 };
 
 /// Result of folding a layer-local time into a looped resource's window.

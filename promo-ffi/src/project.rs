@@ -216,20 +216,22 @@ fn eval(meta: &ProjectMetadata, times: &[f64]) -> serde_json::Value {
                 .iter()
                 .map(|p| json!([p.start_time, p.duration]))
                 .collect();
+            // Timeline-clock views (speed applied) — what the Swift resource
+            // extension answers, and what the parity harness diffs against.
             let source_times: Vec<_> = times
                 .iter()
-                .map(|&t| tl::source_time_for_local(res, t))
+                .map(|&t| tl::timeline_source_time(res, t))
                 .collect();
             let segments: Vec<_> = times
                 .iter()
                 .map(|&t| {
-                    let s = tl::video_segment(res, t);
+                    let s = tl::timeline_video_segment(res, t);
                     json!([s.source_start, s.local_start, s.local_end, s.rate])
                 })
                 .collect();
             let output_times: Vec<_> = times
                 .iter()
-                .map(|&t| match tl::output_time_for_source(res, t) {
+                .map(|&t| match tl::timeline_output_time_for_source(res, t) {
                     Some(v) => json!(v),
                     None => serde_json::Value::Null,
                 })
@@ -238,7 +240,7 @@ fn eval(meta: &ProjectMetadata, times: &[f64]) -> serde_json::Value {
                 "id": res.id,
                 "trimRanges": ranges,
                 "pauses": pauses,
-                "loopPeriod": tl::loop_period(res),
+                "loopPeriod": tl::timeline_loop_period(res),
                 "sourceTime": source_times,
                 "segment": segments,
                 "outputTime": output_times,
@@ -309,8 +311,9 @@ pub extern "C" fn promo_layer_transform(
     0
 }
 
-/// Source-media time for a resource-local output time (trims + pauses +
-/// looping). Returns the mapped time, or -1.0 on bad handle/index.
+/// Source-media time for a resource-local TIMELINE time (trims + pauses +
+/// looping + playback speed). Returns the mapped time, or -1.0 on bad
+/// handle/index.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn promo_resource_source_time(
@@ -332,7 +335,7 @@ pub extern "C" fn promo_resource_source_time(
     else {
         return -1.0;
     };
-    tl::source_time_for_local(res, local_time)
+    tl::timeline_source_time(res, local_time)
 }
 
 /// Continuous playback segment containing a resource-local time: fills
@@ -362,7 +365,7 @@ pub extern "C" fn promo_resource_video_segment(
     else {
         return -1;
     };
-    let seg = tl::video_segment(res, local_time);
+    let seg = tl::timeline_video_segment(res, local_time);
     unsafe {
         *out = seg.source_start;
         *out.add(1) = seg.local_start;

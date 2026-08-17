@@ -384,6 +384,76 @@ fn base_video_segment(res: &ProjectResource, local: f64) -> VideoSegment {
     }
 }
 
+/// The clamped playback rate (`speed`; `None` is 1.0) — the same 0.1…10
+/// window `source_time_for_layer` applies. Swift `effectiveSpeed`.
+pub fn effective_speed(res: &ProjectResource) -> f64 {
+    let s = res.speed.unwrap_or(1.0);
+    if !s.is_finite() {
+        return 1.0;
+    }
+    s.clamp(0.1, 10.0)
+}
+
+// --- Timeline-clock twins -------------------------------------------------
+//
+// The functions above run on the resource's 1x content clock; playback speed
+// is applied by `source_time_for_layer` at the layer boundary. The Swift app's
+// resource extension instead applies speed directly (its callers all pass
+// timeline seconds), so these wrappers expose the same scaled view for the
+// FFI hot path and the Swift↔Rust parity harness. For a `None` policy they
+// agree with `source_time_for_layer` by construction.
+
+/// Swift `loopPeriod` / `effectiveVideoPlaybackDuration`: one loop's TIMELINE
+/// length — content divided by speed.
+pub fn timeline_loop_period(res: &ProjectResource) -> f64 {
+    loop_period(res) / effective_speed(res)
+}
+
+/// Swift `sourceTime(forLocalTime:)` — trims, pauses, looping, and speed.
+pub fn timeline_source_time(res: &ProjectResource, local: f64) -> f64 {
+    // Policy `None` can never answer `Hide`, so the unwrap is unreachable.
+    source_time_for_layer(res, local, None).unwrap_or(local)
+}
+
+/// Swift `outputTime(forSourceTime:)` — the 1x output position divided by
+/// speed, so a frame 4s into the source lands at 2s of timeline at 2x.
+pub fn timeline_output_time_for_source(res: &ProjectResource, source_time: f64) -> Option<f64> {
+    output_time_for_source(res, source_time).map(|t| t / effective_speed(res))
+}
+
+/// Swift `videoSegment(forLocalTime:)` — the continuous segment in timeline
+/// seconds, its `rate` multiplied by the speed (what an `AVPlayer` slaved to
+/// the timeline clock must run at).
+pub fn timeline_video_segment(res: &ProjectResource, local: f64) -> VideoSegment {
+    let speed = effective_speed(res);
+    let period = timeline_loop_period(res);
+    let fold = if res.is_looped() {
+        loop_fold(local, period)
+    } else {
+        LoopFold { local, offset: 0.0 }
+    };
+    let inner = base_video_segment(res, fold.local * speed);
+    let scaled = VideoSegment {
+        source_start: inner.source_start,
+        local_start: inner.local_start / speed,
+        local_end: inner.local_end / speed,
+        rate: if inner.rate == 0.0 {
+            0.0
+        } else {
+            inner.rate * speed as f32
+        },
+    };
+    if !res.is_looped() || period <= 0.01 {
+        return scaled;
+    }
+    VideoSegment {
+        source_start: scaled.source_start,
+        local_start: scaled.local_start + fold.offset,
+        local_end: scaled.local_end.min(period) + fold.offset,
+        rate: scaled.rate,
+    }
+}
+
 /// The resource as a layer playing `cut_id` sees it.
 ///
 /// A cut shadows the resource's trim, so rather than threading a cut through
@@ -651,6 +721,50 @@ mod speed_mapping_tests {
         let first = source_time_for_layer(&fast, 0.5, Some(BeyondEnd::Loop)).unwrap();
         let wrapped = source_time_for_layer(&fast, 4.5, Some(BeyondEnd::Loop)).unwrap();
         assert!((first - wrapped).abs() < 1e-9, "{first} vs {wrapped}");
+    }
+
+    #[test]
+    fn timeline_twins_agree_with_the_layer_mapping() {
+        // The timeline-clock wrappers exist for the Swift parity surface; for
+        // a `None` policy they must answer exactly what the engine's
+        // layer-level mapping answers.
+        let fast = clip(Some(2.0));
+        for t in [0.0, 0.5, 1.7, 3.9, 4.1, 7.3] {
+            let layer = source_time_for_layer(&fast, t, None).unwrap();
+            assert!((timeline_source_time(&fast, t) - layer).abs() < 1e-12);
+        }
+        assert!((timeline_loop_period(&fast) - 4.0).abs() < 1e-12);
+        // 8s of source in 4s of timeline: source 6.0 plays at t=3.0.
+        assert!((timeline_output_time_for_source(&fast, 6.0).unwrap() - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn timeline_segment_scales_bounds_and_rate() {
+        let fast = clip(Some(2.0));
+        let seg = timeline_video_segment(&fast, 1.0);
+        assert!((seg.source_start - 0.0).abs() < 1e-12);
+        assert!((seg.local_start - 0.0).abs() < 1e-12);
+        // The 8s trim range spans 4 timeline seconds.
+        assert!((seg.local_end - 4.0).abs() < 1e-9, "{}", seg.local_end);
+        assert!((seg.rate - 2.0).abs() < 1e-6, "{}", seg.rate);
+
+        // At 1x the wrapper must be bit-for-bit the plain segment.
+        let plain = clip(None);
+        assert_eq!(timeline_video_segment(&plain, 1.0), video_segment(&plain, 1.0));
+    }
+
+    #[test]
+    fn a_looped_timeline_segment_reanchors_at_the_scaled_period() {
+        let mut fast = clip(Some(2.0));
+        fast.looped = Some(true);
+        // Period is 4 timeline seconds; 5s in sits in the second iteration.
+        let seg = timeline_video_segment(&fast, 5.0);
+        assert!((seg.local_start - 4.0).abs() < 1e-9, "{}", seg.local_start);
+        assert!((seg.local_end - 8.0).abs() < 1e-9, "{}", seg.local_end);
+        assert!((seg.rate - 2.0).abs() < 1e-6);
+        // And the frame it shows matches the folded source mapping.
+        let src = timeline_source_time(&fast, 5.0);
+        assert!((src - 2.0).abs() < 1e-9, "{src}");
     }
 
     #[test]
