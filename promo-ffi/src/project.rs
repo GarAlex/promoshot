@@ -43,6 +43,62 @@ pub extern "C" fn promo_project_validate(json: *const c_char) -> *mut c_char {
     )
 }
 
+/// What a project's media inventory looks like against a real folder:
+/// `{"resources": [{"id", "filename", "displayName", "kind", "origin"}],
+///   "missingLayers": ["id", …]}` — free with `promo_string_free`.
+///
+/// `filenames` is the `Resources/` listing as a JSON array of names; the
+/// caller does the directory read (it owns the sandbox/security scope), the
+/// core owns the RULE, so the app, the CLI and `promo_validate` cannot drift
+/// on what "the project has" means.
+///
+/// Safety contract (C ABI): both arguments are valid NUL-terminated strings.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_project_inventory(
+    json: *const c_char,
+    filenames_json: *const c_char,
+) -> *mut c_char {
+    if json.is_null() || filenames_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let (Ok(text), Ok(names_text)) = (
+        unsafe { CStr::from_ptr(json) }.to_str(),
+        unsafe { CStr::from_ptr(filenames_json) }.to_str(),
+    ) else {
+        return std::ptr::null_mut();
+    };
+    let Ok(meta) = ProjectMetadata::from_json(text) else {
+        return std::ptr::null_mut();
+    };
+    let names: Vec<String> = serde_json::from_str(names_text).unwrap_or_default();
+    let resolved = promo_model::effective_resources(&meta, &names);
+    let resources: Vec<serde_json::Value> = resolved
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.resource.id,
+                "filename": r.resource.filename,
+                "displayName": r.resource.display_name,
+                "kind": r.resource.kind.as_str(),
+                "origin": match r.origin {
+                    promo_model::ResourceOrigin::Declared => "declared",
+                    promo_model::ResourceOrigin::Derived => "derived",
+                    promo_model::ResourceOrigin::Missing => "missing",
+                },
+            })
+        })
+        .collect();
+    let out = serde_json::json!({
+        "resources": resources,
+        "missingLayers": promo_model::layers_with_missing_media(&meta, &names),
+    });
+    match serde_json::to_string(&out) {
+        Ok(text) => to_c_string(&text),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 fn to_c_string(message: &str) -> *mut c_char {
     match CString::new(message) {
         Ok(c) => c.into_raw(),
