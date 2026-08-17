@@ -71,7 +71,11 @@ fn kind_for_extension(name: &str) -> Option<ProjectResourceKind> {
 /// synthesized, and only then names a file.
 fn needs_file(resource: &ProjectResource) -> bool {
     match resource.kind {
-        ProjectResourceKind::Caption | ProjectResourceKind::Drawing => false,
+        // A caption is words, a drawing is shapes, a path is two anchors and
+        // a curve — all of them live entirely in metadata.json.
+        ProjectResourceKind::Caption
+        | ProjectResourceKind::Drawing
+        | ProjectResourceKind::Path => false,
         _ => !resource.filename.is_empty(),
     }
 }

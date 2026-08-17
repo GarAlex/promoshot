@@ -236,7 +236,11 @@ char *promo_project_inventory(const char *json, const char *filenames_json);
  * Params {"layerID": "...", "samples": 64}; returns
  * {"segments": [{"fromTime", "toTime", "points": [[x, y], ...]}]}, one entry
  * per keyframe pair carrying a motionPath, already fitted between that pair's
- * positions. Free with promo_string_free. */
+ * positions (and trimmed by its startAt/endAt). Free with promo_string_free.
+ *
+ * A motionPath names a `path` RESOURCE - two anchors and the curve between
+ * them, no colour, one per resource. A drawing is content and never answers
+ * as a route. */
 char *promo_layer_motion_paths(const PromoProject *project, const char *params_json);
 
 /* --- editor layer (promo-editor) ---------------------------------------

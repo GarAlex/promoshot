@@ -16,7 +16,7 @@
 //!   derive — there is no direction to aim at. A closed stroke (an oval) then
 //!   plays at its own drawn size, which is what an orbit needs.
 
-use promo_model::{DrawingShape, DrawingShapeKind, MotionPath, Point, ProjectResource};
+use promo_model::{MotionPath, PathDocument, Point, ProjectResource, ProjectResourceKind};
 
 /// A stroke resampled as a polyline, with the cumulative length of each point
 /// along it — what makes progress mean DISTANCE rather than raw curve
@@ -32,7 +32,9 @@ pub struct Polyline {
 /// How many segments a closed ellipse is sampled into. Fine enough that the
 /// arc-length table is smooth at any canvas size, cheap enough to build per
 /// render if a cache ever misses.
-const OVAL_SEGMENTS: usize = 96;
+/// Samples per curve. Uniform in the Bezier parameter; the arc-length table
+/// is what turns that into uniform motion.
+const CURVE_SAMPLES: usize = 128;
 /// Points closer than this are the same point: a pen stroke records many, and
 /// zero-length segments would put ties in the arc-length table.
 const MIN_SEGMENT: f64 = 1e-6;
@@ -144,43 +146,60 @@ fn distance(a: Point, b: Point) -> f64 {
     ((b.x() - a.x()).powi(2) + (b.y() - a.y()).powi(2)).sqrt()
 }
 
-/// The polyline a drawn shape means as a route, or `None` when it cannot be
-/// one. Paint — colour, width, fill, arrowheads — is ignored rather than
-/// rejected: none of it has any bearing on a trajectory.
-pub fn shape_polyline(shape: &DrawingShape) -> Option<Polyline> {
-    match shape.kind {
-        // A pen stroke is already a polyline; a line is its two ends.
-        DrawingShapeKind::Pen | DrawingShapeKind::Line => Polyline::new(shape.points.clone()),
-        // An oval is stored as the two corners of its bounding box. Sampled
-        // into a closed loop, it is an orbit.
-        DrawingShapeKind::Oval => {
-            let (a, b) = (*shape.points.first()?, *shape.points.get(1)?);
-            let (cx, cy) = ((a.x() + b.x()) / 2.0, (a.y() + b.y()) / 2.0);
-            let (rx, ry) = ((b.x() - a.x()).abs() / 2.0, (b.y() - a.y()).abs() / 2.0);
-            let points = (0..=OVAL_SEGMENTS)
+/// The polyline a path document means, sampled from its curve.
+///
+/// No controls is a straight line; one is quadratic, two cubic. Sampling is
+/// uniform in the curve parameter and the arc-length table above then makes
+/// motion uniform in DISTANCE — which is the part that has to be right, since
+/// a Bezier's parameter races through its flat stretches.
+pub fn path_document_polyline(document: &PathDocument) -> Option<Polyline> {
+    let (start, end) = (document.start, document.end);
+    let points: Vec<Point> = match document.controls.len() {
+        0 => vec![start, end],
+        1 => {
+            let c = document.controls[0];
+            (0..=CURVE_SAMPLES)
                 .map(|step| {
-                    let angle =
-                        std::f64::consts::TAU * (step as f64) / (OVAL_SEGMENTS as f64);
-                    Point(cx + rx * angle.cos(), cy + ry * angle.sin())
+                    let t = step as f64 / CURVE_SAMPLES as f64;
+                    let u = 1.0 - t;
+                    Point(
+                        u * u * start.x() + 2.0 * u * t * c.x() + t * t * end.x(),
+                        u * u * start.y() + 2.0 * u * t * c.y() + t * t * end.y(),
+                    )
                 })
-                .collect();
-            Polyline::new(points)
+                .collect()
         }
-    }
+        _ => {
+            let (c1, c2) = (document.controls[0], document.controls[1]);
+            (0..=CURVE_SAMPLES)
+                .map(|step| {
+                    let t = step as f64 / CURVE_SAMPLES as f64;
+                    let u = 1.0 - t;
+                    Point(
+                        u * u * u * start.x()
+                            + 3.0 * u * u * t * c1.x()
+                            + 3.0 * u * t * t * c2.x()
+                            + t * t * t * end.x(),
+                        u * u * u * start.y()
+                            + 3.0 * u * u * t * c1.y()
+                            + 3.0 * u * t * t * c2.y()
+                            + t * t * t * end.y(),
+                    )
+                })
+                .collect()
+        }
+    };
+    Polyline::new(points)
 }
 
-/// The stroke a `MotionPath` names, resolved through the project's resources.
+/// The path a `MotionPath` names, resolved through the project's resources.
+/// Only a `path` resource answers: a drawing is content, and content is not a
+/// route.
 pub fn path_polyline(resources: &[ProjectResource], path: &MotionPath) -> Option<Polyline> {
     let resource = resources
         .iter()
-        .find(|r| r.id == path.path_resource_id)?;
-    let shape = resource
-        .drawing
-        .as_ref()?
-        .shapes
-        .iter()
-        .find(|s| s.id == path.path_shape_id)?;
-    shape_polyline(shape)
+        .find(|r| r.id == path.path_resource_id && r.kind == ProjectResourceKind::Path)?;
+    path_document_polyline(resource.path.as_ref()?)
 }
 
 /// Where a layer sits at `progress` of the way from `from` to `to`, following
@@ -195,10 +214,29 @@ pub fn path_polyline(resources: &[ProjectResource], path: &MotionPath) -> Option
 /// start sits on `from`. That is the orbit case, and it is the one place the
 /// drawing's scale does matter.
 pub fn point_along(path: &Polyline, from: Point, to: Point, flipped: bool, progress: f64) -> Point {
-    let raw = path.point_at(progress.clamp(0.0, 1.0));
-    let origin = path.start();
-    // Local coordinates, with the stroke's own chord as the x axis.
-    let chord = Point(path.end().x() - origin.x(), path.end().y() - origin.y());
+    point_along_range(path, from, to, flipped, 0.0, 1.0, progress)
+}
+
+/// `point_along` over a stretch of the path: `start_at` above `end_at` runs
+/// it backwards, which is how reversal comes for free.
+#[allow(clippy::too_many_arguments)]
+pub fn point_along_range(
+    path: &Polyline,
+    from: Point,
+    to: Point,
+    flipped: bool,
+    start_at: f64,
+    end_at: f64,
+    progress: f64,
+) -> Point {
+    let (start_at, end_at) = (start_at.clamp(0.0, 1.0), end_at.clamp(0.0, 1.0));
+    let along = start_at + (end_at - start_at) * progress.clamp(0.0, 1.0);
+    let raw = path.point_at(along);
+    // The chord of the stretch in use — trimming changes which ends are
+    // being aimed at, so the fit has to follow.
+    let origin = path.point_at(start_at);
+    let finish = path.point_at(end_at);
+    let chord = Point(finish.x() - origin.x(), finish.y() - origin.y());
     let chord_length = (chord.x() * chord.x() + chord.y() * chord.y()).sqrt();
     let mut local = Point(raw.x() - origin.x(), raw.y() - origin.y());
     if flipped {
@@ -291,134 +329,92 @@ mod tests {
         assert_eq!(point_along(&drawn, a, b, true, 1.0).x().round(), b.x());
     }
 
-    #[test]
-    fn a_stroke_between_two_identical_points_keeps_its_drawn_size() {
-        // The orbit case: no direction to aim at, so the drawing's own scale
-        // is all there is to go on.
-        let oval = shape_polyline(&oval_shape(0.0, 0.0, 100.0, 60.0)).unwrap();
-        assert!(oval.is_closed());
-        let a = pt(500.0, 500.0);
-        let quarter = point_along(&oval, a, a, false, 0.25);
-        // A quarter around an ellipse 100 wide and 60 tall, from its right
-        // edge: down to the bottom, which is 30 below the centre.
-        assert!((quarter.y() - (a.y() + 30.0)).abs() < 1.0, "{quarter:?}");
+    fn path_resource(controls: serde_json::Value) -> Vec<ProjectResource> {
+        serde_json::from_value(serde_json::json!([{
+            "id": "P1", "kind": "path", "filename": "",
+            "displayName": "Swoop", "addedAt": 0,
+            "path": {"start": [0.0, 0.0], "end": [2.0, 0.0], "controls": controls}
+        }]))
+        .unwrap()
+    }
+
+    fn motion(resource: &str) -> MotionPath {
+        serde_json::from_value(serde_json::json!({"pathResourceID": resource})).unwrap()
     }
 
     #[test]
-    fn a_keyframe_with_a_path_bends_the_layer_route() {
-        // The whole feature end to end: two keyframes 0→800 across, and a
-        // drawn hump that carries the layer above the straight line without
-        // touching where it starts or ends.
-        use promo_model::{CompositionSettings, ProjectLayer};
-        let resources: Vec<ProjectResource> = serde_json::from_value(serde_json::json!([{
-            "id": "D1", "kind": "drawing", "filename": "path.json",
-            "displayName": "Swoop", "addedAt": 0,
+    fn a_path_resource_answers_and_a_drawing_does_not() {
+        // Exclusive by design: content is content, a route is a route.
+        let paths = path_resource(serde_json::json!([[1.0, -2.0]]));
+        assert!(path_polyline(&paths, &motion("P1")).is_some());
+
+        let drawing: Vec<ProjectResource> = serde_json::from_value(serde_json::json!([{
+            "id": "D1", "kind": "drawing", "filename": "d.json",
+            "displayName": "Art", "addedAt": 0,
             "drawing": {"shapes": [{
-                "id": "S1", "kind": "pen",
-                "points": [[0.0, 0.0], [1.0, -1.0], [2.0, 0.0]],
+                "id": "S1", "kind": "pen", "points": [[0.0, 0.0], [5.0, 5.0]],
                 "strokeColorHex": "FFFFFF", "strokeWidth": 2.0,
                 "arrowStart": false, "arrowEnd": false
             }]}
         }]))
         .unwrap();
-        let mut layer: ProjectLayer = serde_json::from_value(serde_json::json!({
-            "id": "L", "name": "Mover", "sortIndex": 1, "kind": "image",
-            "isEnabled": true, "startTime": 0.0, "duration": 4.0,
-            "keyframes": [
-                {"id": "K1", "time": 0.0, "horizontalShift": 0.0,
-                 "verticalShift": 0.0, "transitionDuration": 0.0},
-                // transitionDuration stays required by the wire format (it
-                // is non-optional in Swift too); the percentage overrides it.
-                {"id": "K2", "time": 4.0, "horizontalShift": 800.0,
-                 "verticalShift": 0.0, "transitionDuration": 0.0,
-                 "transitionPercent": 100.0}
-            ]
-        }))
-        .unwrap();
-        let defaults = CompositionSettings::default();
-
-        // Without a path: a straight line, so the midpoint sits on it.
-        let straight = layer_transform_along_paths(&layer, 2.0, &defaults, &resources);
-        assert!(straight.vertical_shift.abs() < 1e-9, "{straight:?}");
-        assert!((straight.horizontal_shift - 400.0).abs() < 1e-9);
-
-        // With it: same ends, lifted in between.
-        layer.keyframes[1].motion_path = Some(promo_model::MotionPath {
-            path_resource_id: "D1".into(),
-            path_shape_id: "S1".into(),
-            flipped: None,
-        });
-        let start = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
-        let mid = layer_transform_along_paths(&layer, 2.0, &defaults, &resources);
-        let end = layer_transform_along_paths(&layer, 4.0, &defaults, &resources);
-        assert!(start.horizontal_shift.abs() < 1e-9 && start.vertical_shift.abs() < 1e-9);
-        assert!((end.horizontal_shift - 800.0).abs() < 1e-9 && end.vertical_shift.abs() < 1e-9,
-                "the path never moves the endpoints: {end:?}");
-        assert!((mid.vertical_shift + 400.0).abs() < 1e-6,
-                "half way it rides the hump: {mid:?}");
-
-        // A path naming a stroke that is not there falls back to straight.
-        layer.keyframes[1].motion_path = Some(promo_model::MotionPath {
-            path_resource_id: "D1".into(),
-            path_shape_id: "GONE".into(),
-            flipped: None,
-        });
-        let fallback = layer_transform_along_paths(&layer, 2.0, &defaults, &resources);
-        assert!(fallback.vertical_shift.abs() < 1e-9, "{fallback:?}");
+        assert!(path_polyline(&drawing, &motion("D1")).is_none());
     }
 
     #[test]
-    fn transition_percent_is_the_ramp_share_of_the_gap() {
-        use promo_model::ProjectLayerKeyframe;
-        let mut k: ProjectLayerKeyframe = serde_json::from_value(serde_json::json!({
-            "id": "K", "time": 4.0, "transitionDuration": 0.0
-        }))
+    fn no_controls_is_a_straight_line_and_curves_bend() {
+        let straight = path_document_polyline(&PathDocument {
+            start: pt(0.0, 0.0),
+            end: pt(10.0, 0.0),
+            controls: vec![],
+        })
         .unwrap();
-        // 100% starts moving immediately: the ramp fills the whole gap.
-        k.transition_percent = Some(100.0);
-        assert!((crate::ramp_seconds(&k, 4.0) - 4.0).abs() < 1e-9);
-        // 0% holds still and is simply there when the keyframe lands.
-        k.transition_percent = Some(0.0);
-        assert!(crate::ramp_seconds(&k, 4.0).abs() < 1e-9);
-        // 25% moves through the last quarter.
-        k.transition_percent = Some(25.0);
-        assert!((crate::ramp_seconds(&k, 4.0) - 1.0).abs() < 1e-9);
-        // Out of range clamps rather than running past the keyframe.
-        k.transition_percent = Some(400.0);
-        assert!((crate::ramp_seconds(&k, 4.0) - 4.0).abs() < 1e-9);
-        // Without a percentage the seconds still rule, clamped to the gap.
-        k.transition_percent = None;
-        k.transition_duration = 9.0;
-        assert!((crate::ramp_seconds(&k, 4.0) - 4.0).abs() < 1e-9);
-    }
+        assert!(straight.point_at(0.5).y().abs() < 1e-9, "no controls, no bend");
 
-    fn oval_shape(x0: f64, y0: f64, x1: f64, y1: f64) -> DrawingShape {
-        serde_json::from_value(serde_json::json!({
-            "id": "S1", "kind": "oval",
-            "points": [[x0, y0], [x1, y1]],
-            "strokeColorHex": "FFFFFF", "strokeWidth": 2.0,
-            "arrowStart": false, "arrowEnd": false
-        }))
-        .unwrap()
+        // Quadratic: the curve reaches half of the control's offset.
+        let quad = path_document_polyline(&PathDocument {
+            start: pt(0.0, 0.0),
+            end: pt(10.0, 0.0),
+            controls: vec![pt(5.0, -10.0)],
+        })
+        .unwrap();
+        assert!((quad.point_at(0.5).y() + 5.0).abs() < 0.05, "{:?}", quad.point_at(0.5));
+
+        // Cubic takes two, and anything past them is ignored rather than
+        // refused — a future multi-segment path must not break today's files.
+        let cubic = path_document_polyline(&PathDocument {
+            start: pt(0.0, 0.0),
+            end: pt(10.0, 0.0),
+            controls: vec![pt(0.0, -10.0), pt(10.0, -10.0), pt(99.0, 99.0)],
+        })
+        .unwrap();
+        assert!(cubic.point_at(0.5).y() < -6.0, "{:?}", cubic.point_at(0.5));
     }
 
     #[test]
-    fn strokes_that_cannot_be_a_route_are_refused() {
-        assert!(Polyline::new(vec![pt(5.0, 5.0)]).is_none(), "one point");
-        assert!(
-            Polyline::new(vec![pt(5.0, 5.0), pt(5.0, 5.0), pt(5.0, 5.0)]).is_none(),
-            "a dot recorded many times"
-        );
-        assert!(
-            Polyline::new(vec![pt(0.0, 0.0), pt(f64::NAN, 1.0)]).is_none(),
-            "a non-finite coordinate — where an SVG arc approximation ends up"
-        );
-        // Paint is ignored, not rejected: a filled, arrow-headed stroke is
-        // still a perfectly good route.
-        let mut painted = oval_shape(0.0, 0.0, 10.0, 10.0);
-        painted.fill_color_hex = Some("FF0000".into());
-        painted.arrow_end = true;
-        assert!(shape_polyline(&painted).is_some());
+    fn trim_handles_reverse_and_shorten_without_extra_flags() {
+        let line = Polyline::new(vec![pt(0.0, 0.0), pt(100.0, 0.0)]).unwrap();
+        let (a, b) = (pt(0.0, 0.0), pt(100.0, 0.0));
+        // Backwards: start above end runs the path the other way. The fit
+        // still lands the ends on A and B, so this shows up as the ORDER the
+        // path is traversed, not as a different destination.
+        let forward = point_along_range(&line, a, b, false, 0.0, 1.0, 0.25);
+        let backward = point_along_range(&line, a, b, false, 1.0, 0.0, 0.25);
+        assert!((forward.x() - 25.0).abs() < 1e-6, "{forward:?}");
+        assert!((backward.x() - 25.0).abs() < 1e-6, "ends still fitted: {backward:?}");
+
+        // A half of a closed path is an arc rather than a degenerate loop:
+        // used 0→0.5, its two ends are far apart and the fit has a direction.
+        let circle: Vec<Point> = (0..=64)
+            .map(|i| {
+                let t = std::f64::consts::TAU * i as f64 / 64.0;
+                pt(50.0 * t.cos(), 50.0 * t.sin())
+            })
+            .collect();
+        let loop_line = Polyline::new(circle).unwrap();
+        assert!(loop_line.is_closed());
+        let half = point_along_range(&loop_line, a, b, false, 0.0, 0.5, 0.5);
+        assert!(half.y().abs() > 10.0, "the arc bulges off the chord: {half:?}");
     }
 
     #[test]

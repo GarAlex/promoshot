@@ -91,6 +91,13 @@ strict_enum!(
         (Caption, "caption"),
         (Drawing, "drawing"),
         (Audio, "audio"),
+        // A motion path. Never drawn — it is the route a layer takes, not
+        // content, which is why it is its own kind rather than a drawing
+        // that happens to be used as one. Adding a kind is why any project
+        // containing one carries a minReaderVersion: this enum decodes
+        // strictly, so an older binary must refuse the file rather than
+        // throw halfway through.
+        (Path, "path"),
     ]
 );
 tolerant_enum!(
@@ -638,28 +645,59 @@ pub enum BeyondEnd {
     Hide,
 }
 
-/// A drawn shape used as the SHAPE of a move — not its position.
+/// A motion path: two anchors and the curve between them.
 ///
-/// The endpoints stay whatever the keyframes already say: the stroke's first
-/// point is fitted onto the previous keyframe's position and its last onto
-/// this one's, which absorbs the drawing's own scale, rotation and place on
-/// the canvas. So one arc drawn anywhere is a swoop for any pair of
-/// keyframes, at any distance or angle, and removing it leaves a straight
-/// line — exactly today's behaviour.
+/// Deliberately the smallest thing that can be a route — a start, a finish,
+/// and up to two control points. No colour, no width, no fill: a path is a
+/// tool, not artwork, and every property that would only matter if it were
+/// drawn is one more thing to explain. One path per resource, so there is
+/// never a question of WHICH stroke a layer follows; drawing again replaces
+/// what was there.
+///
+/// With no controls it is a straight line (the same route a layer takes with
+/// no path at all, which makes "add a path" a safe, visible first step). One
+/// control is a quadratic curve, two a cubic — the pen-tool shape everyone
+/// already knows from vector editors.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathDocument {
+    pub start: Point,
+    pub end: Point,
+    /// 0, 1 or 2 control points. Anything beyond the first two is ignored
+    /// rather than refused — a future multi-segment path should not make
+    /// today's files unreadable.
+    #[serde(default)]
+    pub controls: Vec<Point>,
+}
+
+/// A path a layer follows between two keyframes — its SHAPE, not its place.
+///
+/// The endpoints stay whatever the keyframes already say: the path's start is
+/// fitted onto the previous keyframe's position and its end onto this one's,
+/// which absorbs the path's own scale, rotation and place on the canvas. So
+/// one curve is a swoop for any pair of keyframes, at any distance or angle,
+/// and removing it leaves a straight line — exactly today's behaviour.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MotionPath {
-    /// The drawing resource holding the stroke.
+    /// The `path` resource to follow.
     #[serde(rename = "pathResourceID")]
     pub path_resource_id: String,
-    /// Which stroke in it, by id — never by index, or deleting an earlier
-    /// stroke would silently re-point the layer at a different curve.
-    #[serde(rename = "pathShapeID")]
-    pub path_shape_id: String,
     /// Mirror the curve across the straight line between the keyframes, for
     /// when the arc bulges the wrong way and redrawing it is a chore.
     #[serde(default, skip_serializing_if = "is_none")]
     pub flipped: Option<bool>,
+    /// Which stretch of the path to use, as fractions of its length. Absent
+    /// is the whole of it (0 → 1).
+    ///
+    /// Two numbers instead of a pile of flags: `startAt` above `endAt` runs
+    /// it backwards, a partial range trims a tail, and a closed path used
+    /// from 0 to 0.5 is a half-circle arc rather than a degenerate loop. In
+    /// the editor they are the two handles you drag along the drawn curve.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub start_at: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub end_at: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -976,6 +1014,9 @@ pub struct ProjectResource {
     pub caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(skip_serializing_if = "is_none")]
     pub drawing: Option<DrawingDocument>,
+    /// Set on `path` resources, and only on them.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub path: Option<PathDocument>,
     pub image_cuts: Vec<ProjectImageCut>,
     /// Playback rate for the resource's own trim, as `MediaCut::speed` is for
     /// a cut. `None` is 1.0.
@@ -1032,6 +1073,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     drawing: Option<DrawingDocument>,
     #[serde(default)]
+    path: Option<PathDocument>,
+    #[serde(default)]
     image_cuts: Option<Vec<ProjectImageCut>>,
     #[serde(default)]
     media_cuts: Option<Vec<MediaCut>>,
@@ -1085,6 +1128,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             caption_style: w.caption_style,
             caption_voice_clip: w.caption_voice_clip,
             drawing: w.drawing,
+            path: w.path,
             image_cuts: w.image_cuts.unwrap_or_default(),
             audio_gain: w.audio_gain,
             volume,
@@ -1214,6 +1258,7 @@ impl ProjectResource {
             caption_style: None,
             caption_voice_clip: None,
             drawing: None,
+            path: None,
             image_cuts: Vec::new(),
             audio_gain: None,
             volume: None,

@@ -173,10 +173,13 @@ pub extern "C" fn promo_layer_motion_paths(
             b.vertical_shift.unwrap_or(0.0),
         );
         let flipped = path.flipped.unwrap_or(false);
+        let (start_at, end_at) = (path.start_at.unwrap_or(0.0), path.end_at.unwrap_or(1.0));
         let points: Vec<serde_json::Value> = (0..samples)
             .map(|step| {
                 let progress = step as f64 / (samples - 1) as f64;
-                let point = promo_timeline::point_along(&polyline, from, to, flipped, progress);
+                let point = promo_timeline::point_along_range(
+                    &polyline, from, to, flipped, start_at, end_at, progress,
+                );
                 serde_json::json!([point.x(), point.y()])
             })
             .collect();

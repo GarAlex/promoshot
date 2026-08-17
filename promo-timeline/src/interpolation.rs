@@ -121,11 +121,13 @@ pub fn layer_transform_along_paths(
             // independent scalars and become one point travelling a curve.
             if let Some(path) = b.motion_path.as_ref() {
                 if let Some(polyline) = crate::motion::path_polyline(resources, path) {
-                    let point = crate::motion::point_along(
+                    let point = crate::motion::point_along_range(
                         &polyline,
                         promo_model::Point(av.horizontal_shift, av.vertical_shift),
                         promo_model::Point(bv.horizontal_shift, bv.vertical_shift),
                         path.flipped.unwrap_or(false),
+                        path.start_at.unwrap_or(0.0),
+                        path.end_at.unwrap_or(1.0),
                         progress,
                     );
                     return Transform {

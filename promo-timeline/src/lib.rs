@@ -14,7 +14,9 @@ pub mod layout;
 pub mod mapping;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
-pub use motion::{path_polyline, point_along, shape_polyline, Polyline};
+pub use motion::{
+    path_document_polyline, path_polyline, point_along, point_along_range, Polyline,
+};
 pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
