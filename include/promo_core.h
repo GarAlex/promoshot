@@ -234,9 +234,12 @@ char *promo_project_inventory(const char *json, const char *filenames_json);
 /* The route a layer flies between its keyframes, as canvas points - what an
  * editor draws so a person can see a motion path before committing to it.
  * Params {"layerID": "...", "samples": 64}; returns
- * {"segments": [{"fromTime", "toTime", "points": [[x, y], ...]}]}, one entry
- * per keyframe pair carrying a motionPath, already fitted between that pair's
- * positions (and trimmed by its startAt/endAt). Free with promo_string_free.
+ * {"segments": [{"fromTime", "toTime", "hasPath", "points": [[x, y], ...]}]},
+ * one entry per keyframe pair the layer MOVES across, path or not: a pathed
+ * segment is the fitted curve (trimmed by its startAt/endAt), a plain one the
+ * straight line it really travels, as its two endpoints. Segments with no
+ * movement are omitted - nothing to draw, and an arrowhead there would have
+ * no direction. Free with promo_string_free.
  *
  * A motionPath names a `path` RESOURCE - two anchors and the curve between
  * them, no colour, one per resource. A drawing is content and never answers

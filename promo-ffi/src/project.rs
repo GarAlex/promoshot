@@ -104,9 +104,12 @@ pub extern "C" fn promo_project_inventory(
 /// committing to it.
 ///
 /// Input `{"layerID": "…", "samples": 64}`; returns
-/// `{"segments": [{"fromTime", "toTime", "points": [[x, y], …]}]}` with one
-/// entry per keyframe pair that carries a motionPath, already fitted between
-/// that pair's positions. Empty when the layer has no paths. Free with
+/// `{"segments": [{"fromTime", "toTime", "hasPath", "points": [[x, y], …]}]}`
+/// — one entry per keyframe pair the layer actually MOVES across, whether or
+/// not it follows a path. A pathed segment is the fitted curve; a plain one
+/// is the straight line it really travels, given as its two endpoints.
+/// Segments where the layer does not move are omitted: nothing to draw, and
+/// an arrowhead there would have no direction. Free with
 /// `promo_string_free`.
 ///
 /// Sampled rather than handed over raw: the fitted curve is what the layer
@@ -158,12 +161,6 @@ pub extern "C" fn promo_layer_motion_paths(
     let mut segments: Vec<serde_json::Value> = Vec::new();
     for pair in keyframes.windows(2) {
         let (a, b) = (pair[0], pair[1]);
-        let Some(path) = b.motion_path.as_ref() else {
-            continue;
-        };
-        let Some(polyline) = promo_timeline::path_polyline(resources, path) else {
-            continue;
-        };
         let from = promo_model::Point(
             a.horizontal_shift.unwrap_or(0.0),
             a.vertical_shift.unwrap_or(0.0),
@@ -172,20 +169,50 @@ pub extern "C" fn promo_layer_motion_paths(
             b.horizontal_shift.unwrap_or(0.0),
             b.vertical_shift.unwrap_or(0.0),
         );
-        let flipped = path.flipped.unwrap_or(false);
-        let (start_at, end_at) = (path.start_at.unwrap_or(0.0), path.end_at.unwrap_or(1.0));
-        let points: Vec<serde_json::Value> = (0..samples)
-            .map(|step| {
-                let progress = step as f64 / (samples - 1) as f64;
-                let point = promo_timeline::point_along_range(
-                    &polyline, from, to, flipped, start_at, end_at, progress,
-                );
-                serde_json::json!([point.x(), point.y()])
-            })
-            .collect();
+        // A segment with a path follows it; one without is still a route —
+        // a straight line the layer really travels — and the editor draws
+        // both, so a move is visible before anyone decides to bend it.
+        // `hasPath` lets the overlay style the two differently without
+        // deciding for itself what the shape should be.
+        let resolved = b
+            .motion_path
+            .as_ref()
+            .and_then(|path| promo_timeline::path_polyline(resources, path).map(|line| (path, line)));
+        let points: Vec<serde_json::Value> = match resolved.as_ref() {
+            Some((path, polyline)) => {
+                let flipped = path.flipped.unwrap_or(false);
+                let (start_at, end_at) =
+                    (path.start_at.unwrap_or(0.0), path.end_at.unwrap_or(1.0));
+                (0..samples)
+                    .map(|step| {
+                        let progress = step as f64 / (samples - 1) as f64;
+                        let point = promo_timeline::point_along_range(
+                            &polyline, from, to, flipped, start_at, end_at, progress,
+                        );
+                        serde_json::json!([point.x(), point.y()])
+                    })
+                    .collect()
+            }
+            // Two points are the whole of a straight line; sampling it
+            // further would only invite the overlay to smooth something
+            // that is not curved.
+            None => {
+                // A layer that does not move between these keyframes has no
+                // route to draw, and an arrowhead would have no direction.
+                let still = (to.x() - from.x()).abs() < 1e-9 && (to.y() - from.y()).abs() < 1e-9;
+                if still {
+                    continue;
+                }
+                vec![
+                    serde_json::json!([from.x(), from.y()]),
+                    serde_json::json!([to.x(), to.y()]),
+                ]
+            }
+        };
         segments.push(serde_json::json!({
             "fromTime": a.time,
             "toTime": b.time,
+            "hasPath": resolved.is_some(),
             "points": points,
         }));
     }
