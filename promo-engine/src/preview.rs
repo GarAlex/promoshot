@@ -759,7 +759,10 @@ impl PreviewEngine {
             return None;
         }
         let (_, _, bw, bh) = promo_gpu::vector::content_bounds(&shapes);
-        let tr = tl::layer_transform(layer, time, settings);
+        // Path-aware: a keyframe carrying a motionPath bends the route to
+        // it, and resolving that needs the drawing resource.
+        let tr = tl::layer_transform_along_paths(
+            layer, time, settings, self.meta.resources.as_deref().unwrap_or(&[]));
         let rect = tl::drawing_rect(
             Size::new(bw.max(1.0), bh.max(1.0)),
             canvas,
@@ -925,7 +928,8 @@ impl PreviewEngine {
             let color_709 = frame.flags & FLAG_COLOR_709 != 0;
             used.push(frame_id);
 
-            let tr = tl::layer_transform(layer, time, &settings);
+            let tr = tl::layer_transform_along_paths(
+                layer, time, &settings, self.meta.resources.as_deref().unwrap_or(&[]));
             let rect = if is_drawing {
                 tl::drawing_rect(
                     Size::new(fw, fh),

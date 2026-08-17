@@ -99,6 +99,99 @@ pub extern "C" fn promo_project_inventory(
     }
 }
 
+/// The route a layer takes between two of its keyframes, as points on the
+/// canvas — what the editor draws so a person can SEE the path before
+/// committing to it.
+///
+/// Input `{"layerID": "…", "samples": 64}`; returns
+/// `{"segments": [{"fromTime", "toTime", "points": [[x, y], …]}]}` with one
+/// entry per keyframe pair that carries a motionPath, already fitted between
+/// that pair's positions. Empty when the layer has no paths. Free with
+/// `promo_string_free`.
+///
+/// Sampled rather than handed over raw: the fitted curve is what the layer
+/// actually flies along, so the overlay cannot disagree with the render the
+/// way a separately-drawn approximation would.
+///
+/// Safety contract (C ABI): both arguments are valid NUL-terminated strings.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_motion_paths(
+    handle: *const ProjectHandle,
+    params_json: *const c_char,
+) -> *mut c_char {
+    let Some(handle) = (unsafe { handle.as_ref() }) else {
+        return std::ptr::null_mut();
+    };
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(params) = serde_json::from_str::<serde_json::Value>(text) else {
+        return std::ptr::null_mut();
+    };
+    let layer_id = params["layerID"].as_str().unwrap_or_default();
+    let samples = params["samples"].as_u64().unwrap_or(64).clamp(2, 512) as usize;
+
+    let empty: Vec<promo_model::ProjectLayer> = Vec::new();
+    let Some(layer) = handle
+        .meta
+        .layers
+        .as_deref()
+        .unwrap_or(&empty)
+        .iter()
+        .find(|l| l.id == layer_id)
+    else {
+        return to_c_string("{\"segments\":[]}");
+    };
+    let resources = handle.meta.resources.as_deref().unwrap_or(&[]);
+
+    let mut keyframes: Vec<&promo_model::ProjectLayerKeyframe> = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.zoom.is_some() || k.vertical_shift.is_some() || k.horizontal_shift.is_some())
+        .collect();
+    keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut segments: Vec<serde_json::Value> = Vec::new();
+    for pair in keyframes.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        let Some(path) = b.motion_path.as_ref() else {
+            continue;
+        };
+        let Some(polyline) = promo_timeline::path_polyline(resources, path) else {
+            continue;
+        };
+        let from = promo_model::Point(
+            a.horizontal_shift.unwrap_or(0.0),
+            a.vertical_shift.unwrap_or(0.0),
+        );
+        let to = promo_model::Point(
+            b.horizontal_shift.unwrap_or(0.0),
+            b.vertical_shift.unwrap_or(0.0),
+        );
+        let flipped = path.flipped.unwrap_or(false);
+        let points: Vec<serde_json::Value> = (0..samples)
+            .map(|step| {
+                let progress = step as f64 / (samples - 1) as f64;
+                let point = promo_timeline::point_along(&polyline, from, to, flipped, progress);
+                serde_json::json!([point.x(), point.y()])
+            })
+            .collect();
+        segments.push(serde_json::json!({
+            "fromTime": a.time,
+            "toTime": b.time,
+            "points": points,
+        }));
+    }
+    match serde_json::to_string(&serde_json::json!({ "segments": segments })) {
+        Ok(text) => to_c_string(&text),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 fn to_c_string(message: &str) -> *mut c_char {
     match CString::new(message) {
         Ok(c) => c.into_raw(),
@@ -232,7 +325,8 @@ fn eval(meta: &ProjectMetadata, times: &[f64]) -> serde_json::Value {
             let transforms: Vec<_> = times
                 .iter()
                 .map(|&t| {
-                    let tr = tl::layer_transform(layer, t, settings);
+                    let tr = tl::layer_transform_along_paths(
+                        layer, t, settings, meta.resources.as_deref().unwrap_or(&[]));
                     json!([tr.zoom, tr.vertical_shift, tr.horizontal_shift])
                 })
                 .collect();
@@ -374,7 +468,9 @@ pub extern "C" fn promo_layer_transform(
         else {
             return -1;
         };
-        let tr = tl::layer_transform(layer, time, &handle.meta.composition_settings);
+        let tr = tl::layer_transform_along_paths(
+            layer, time, &handle.meta.composition_settings,
+            handle.meta.resources.as_deref().unwrap_or(&[]));
         unsafe {
             *out = tr.zoom;
             *out.add(1) = tr.vertical_shift;

@@ -231,6 +231,14 @@ char *promo_project_validate(const char *json);
  * scope), the core owns the rule. */
 char *promo_project_inventory(const char *json, const char *filenames_json);
 
+/* The route a layer flies between its keyframes, as canvas points - what an
+ * editor draws so a person can see a motion path before committing to it.
+ * Params {"layerID": "...", "samples": 64}; returns
+ * {"segments": [{"fromTime", "toTime", "points": [[x, y], ...]}]}, one entry
+ * per keyframe pair carrying a motionPath, already fitted between that pair's
+ * positions. Free with promo_string_free. */
+char *promo_layer_motion_paths(const PromoProject *project, const char *params_json);
+
 /* --- editor layer (promo-editor) ---------------------------------------
  * Editor calls are rare and small, so they cross as JSON. Rust front ends
  * depend on promo-editor directly and skip all of this.

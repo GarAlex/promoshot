@@ -600,6 +600,18 @@ pub struct ProjectLayerKeyframe {
     #[serde(default, skip_serializing_if = "is_none")]
     pub opacity: Option<f64>,
     pub transition_duration: f64,
+    /// The share of the gap from the PREVIOUS keyframe spent moving, as a
+    /// percentage: 100 starts moving immediately and arrives exactly here,
+    /// 0 holds still and is simply at this value when the keyframe lands.
+    /// The same quantity as `transitionDuration` in units that survive
+    /// retiming — stretch the layer or swap in a longer take and a
+    /// percentage still means what it meant. Wins when both are present.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub transition_percent: Option<f64>,
+    /// The route taken to reach this keyframe. Without one the layer moves
+    /// in a straight line, which is what every project does today.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub motion_path: Option<MotionPath>,
 }
 /// What a layer does once its local time runs past the end of its source.
 ///
@@ -624,6 +636,30 @@ pub enum BeyondEnd {
     /// attachment, say — and should simply not be there once its material is
     /// spent, rather than sitting on a frozen still.
     Hide,
+}
+
+/// A drawn shape used as the SHAPE of a move — not its position.
+///
+/// The endpoints stay whatever the keyframes already say: the stroke's first
+/// point is fitted onto the previous keyframe's position and its last onto
+/// this one's, which absorbs the drawing's own scale, rotation and place on
+/// the canvas. So one arc drawn anywhere is a swoop for any pair of
+/// keyframes, at any distance or angle, and removing it leaves a straight
+/// line — exactly today's behaviour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionPath {
+    /// The drawing resource holding the stroke.
+    #[serde(rename = "pathResourceID")]
+    pub path_resource_id: String,
+    /// Which stroke in it, by id — never by index, or deleting an earlier
+    /// stroke would silently re-point the layer at a different curve.
+    #[serde(rename = "pathShapeID")]
+    pub path_shape_id: String,
+    /// Mirror the curve across the straight line between the keyframes, for
+    /// when the arc bulges the wrong way and redrawing it is a chore.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub flipped: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

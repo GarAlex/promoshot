@@ -28,6 +28,20 @@ where
 }
 
 /// Swift `ProjectLayer.localTime(for:)`.
+/// Seconds of ramp before `b`, from whichever unit the keyframe uses.
+///
+/// `transitionPercent` wins when present: it is the same quantity as
+/// `transitionDuration` in units that survive retiming — 100 starts moving
+/// immediately and arrives exactly at the keyframe, 0 holds still and is
+/// simply there when it lands. Seconds are the older spelling and still
+/// clamp to the gap.
+pub fn ramp_seconds(b: &ProjectLayerKeyframe, gap: f64) -> f64 {
+    match b.transition_percent {
+        Some(percent) if percent.is_finite() => gap * (percent.clamp(0.0, 100.0) / 100.0),
+        _ => b.transition_duration.min(gap),
+    }
+}
+
 pub fn layer_local_time(layer: &ProjectLayer, global_time: f64) -> f64 {
     (global_time - layer.start_time).max(0.0)
 }
@@ -48,6 +62,23 @@ pub fn layer_transform(
     layer: &ProjectLayer,
     time: f64,
     defaults: &CompositionSettings,
+) -> Transform {
+    layer_transform_along_paths(layer, time, defaults, &[])
+}
+
+/// `layer_transform`, with the project's resources on hand so a keyframe
+/// carrying a `motionPath` can bend the route to it.
+///
+/// The keyframes still decide WHERE the layer starts and ends and WHEN it
+/// moves; the path only replaces the straight line between two positions with
+/// a drawn one. Everything else — zoom, the hold-then-ease window,
+/// `transitionPercent` — is untouched, which is why a path needs no keyframe
+/// of its own.
+pub fn layer_transform_along_paths(
+    layer: &ProjectLayer,
+    time: f64,
+    defaults: &CompositionSettings,
+    resources: &[promo_model::ProjectResource],
 ) -> Transform {
     let local_time = layer_local_time(layer, time);
     let sorted = sorted_by_time(&layer.keyframes, |k| {
@@ -73,7 +104,7 @@ pub fn layer_transform(
         let (a, b) = (pair[0], pair[1]);
         if local_time >= a.time && local_time <= b.time {
             let gap = b.time - a.time;
-            let effective_transition = b.transition_duration.min(gap);
+            let effective_transition = ramp_seconds(b, gap);
             let transition_start = b.time - effective_transition;
             if local_time < transition_start {
                 return values(a);
@@ -85,8 +116,31 @@ pub fn layer_transform(
             };
             let av = values(a);
             let bv = values(b);
+            let zoom = av.zoom + (bv.zoom - av.zoom) * progress;
+            // A path moves the pair of shifts TOGETHER — they stop being two
+            // independent scalars and become one point travelling a curve.
+            if let Some(path) = b.motion_path.as_ref() {
+                if let Some(polyline) = crate::motion::path_polyline(resources, path) {
+                    let point = crate::motion::point_along(
+                        &polyline,
+                        promo_model::Point(av.horizontal_shift, av.vertical_shift),
+                        promo_model::Point(bv.horizontal_shift, bv.vertical_shift),
+                        path.flipped.unwrap_or(false),
+                        progress,
+                    );
+                    return Transform {
+                        zoom,
+                        horizontal_shift: point.x(),
+                        vertical_shift: point.y(),
+                    };
+                }
+                // A path that cannot be resolved (resource gone, stroke
+                // deleted, a shape that is not a route) falls back to the
+                // straight line rather than pinning the layer anywhere
+                // surprising.
+            }
             return Transform {
-                zoom: av.zoom + (bv.zoom - av.zoom) * progress,
+                zoom,
                 vertical_shift: av.vertical_shift
                     + (bv.vertical_shift - av.vertical_shift) * progress,
                 horizontal_shift: av.horizontal_shift
@@ -116,7 +170,7 @@ where
         let (a, b) = (pair[0], pair[1]);
         if local_time >= a.time && local_time <= b.time {
             let gap = b.time - a.time;
-            let effective_transition = b.transition_duration.min(gap);
+            let effective_transition = ramp_seconds(b, gap);
             let transition_start = b.time - effective_transition;
             if local_time < transition_start {
                 return select(a);
@@ -217,7 +271,7 @@ pub fn layer_caption_values(
         let (a, b) = (pair[0], pair[1]);
         if local_time >= a.time && local_time <= b.time {
             let gap = b.time - a.time;
-            let effective_transition = b.transition_duration.min(gap);
+            let effective_transition = ramp_seconds(b, gap);
             let transition_start = b.time - effective_transition;
             if local_time < transition_start {
                 return Some(values(a));
@@ -267,7 +321,7 @@ pub fn layer_background_color_hex(
         let (a, b) = (pair[0], pair[1]);
         if local_time >= a.time && local_time <= b.time {
             let gap = b.time - a.time;
-            let effective_transition = b.transition_duration.min(gap);
+            let effective_transition = ramp_seconds(b, gap);
             let transition_start = b.time - effective_transition;
             if local_time < transition_start {
                 return color(a);

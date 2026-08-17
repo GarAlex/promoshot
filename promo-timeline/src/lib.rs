@@ -7,12 +7,14 @@
 //! parity harness diffs them fixture-by-fixture.
 
 pub mod attachment;
+pub mod motion;
 pub mod audio;
 pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
+pub use motion::{path_polyline, point_along, shape_polyline, Polyline};
 pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
@@ -20,7 +22,8 @@ pub use audio::{
 pub use interpolation::{
     interpolate_color_hex, layer_background_color_hex, layer_caption_values,
     layer_has_tilt_keyframes, layer_is_visible, layer_local_time, layer_opacity, layer_rotation,
-    layer_tilt_offset, layer_transform, settings_background_color_hex,
+    layer_tilt_offset, layer_transform, layer_transform_along_paths, ramp_seconds,
+    settings_background_color_hex,
     settings_interpolated_values, CaptionValues, Transform,
 };
 pub use layout::{
