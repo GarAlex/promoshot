@@ -1102,6 +1102,13 @@ pub struct ProjectExport {
     pub kind: ProjectExportKind,
     pub created_at: f64,
     pub filenames: Vec<String>,
+    /// Whether the free-tier watermark was baked into these files (Swift
+    /// `ProjectExport.watermarked`; absent on records from before the field).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub watermarked: Option<bool>,
+    /// Unknown keys, preserved — see `ProjectMetadata::extra`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Top-level `metadata.json` (Swift `ProjectMetadata`).
