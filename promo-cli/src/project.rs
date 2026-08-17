@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 pub struct Project {
     pub dir: PathBuf,
     pub meta: ProjectMetadata,
+    /// Resources as RESOLVED against the folder: declared entries plus any
+    /// media sitting in `Resources/` that nothing declared, minus nothing —
+    /// an entry whose file is gone stays, marked missing, so a layer using it
+    /// can say so instead of rendering as an empty hole.
+    resolved: Vec<promo_model::ResolvedResource>,
 }
 
 /// Why a layer cannot be rendered by this tool.
@@ -19,6 +24,8 @@ pub enum Unsupported {
     /// images and noted for video.
     Audio,
     MissingFile(PathBuf),
+    /// The layer points at a resource the project no longer has.
+    MissingResource(String),
 }
 
 impl std::fmt::Display for Unsupported {
@@ -27,6 +34,9 @@ impl std::fmt::Display for Unsupported {
             Unsupported::Undecodable(why) => write!(f, "{why}"),
             Unsupported::Audio => write!(f, "audio does not appear in a rendered frame"),
             Unsupported::MissingFile(p) => write!(f, "file missing: {}", p.display()),
+            Unsupported::MissingResource(name) => {
+                write!(f, "media missing: nothing in Resources/ for \"{name}\"")
+            }
         }
     }
 }
@@ -43,18 +53,49 @@ impl Project {
         for problem in promo_timeline::resolve_attachments(&mut meta) {
             eprintln!("warning: {problem}");
         }
+        let resolved = promo_model::effective_resources(&meta, &Self::listing(dir));
         Ok(Self {
             dir: dir.to_path_buf(),
             meta,
+            resolved,
         })
     }
 
-    pub fn resources(&self) -> &[ProjectResource] {
-        self.meta.resources.as_deref().unwrap_or(&[])
+    /// Filenames in `Resources/` (and `Images/`, which slideshow stills use).
+    fn listing(dir: &Path) -> Vec<String> {
+        let mut names = Vec::new();
+        for sub in ["Resources", "Images"] {
+            let Ok(entries) = std::fs::read_dir(dir.join(sub)) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if entry.path().is_file() {
+                    names.push(entry.file_name().to_string_lossy().to_string());
+                }
+            }
+        }
+        names
+    }
+
+    /// Every resource the project effectively has — declared and derived.
+    /// This is what the renderer reads, so a file dropped into `Resources/`
+    /// is usable without being declared first.
+    pub fn resources(&self) -> Vec<ProjectResource> {
+        self.resolved.iter().map(|r| r.resource.clone()).collect()
+    }
+
+    /// True when this resource is declared but its file is gone.
+    pub fn is_missing(&self, id: &str) -> bool {
+        self.resolved
+            .iter()
+            .any(|r| r.resource.id == id && r.is_missing())
     }
 
     pub fn resource(&self, id: &str) -> Option<&ProjectResource> {
-        self.resources().iter().find(|r| r.id == id)
+        self.resolved
+            .iter()
+            .map(|r| &r.resource)
+            .find(|r| r.id == id)
     }
 
     /// Where a resource's file lives. The app writes media to `Resources/` and
@@ -111,9 +152,34 @@ impl Project {
 
     /// Per-layer verdict: `None` = renderable.
     pub fn unsupported(&self, layer: &promo_model::ProjectLayer) -> Option<Unsupported> {
+        // A layer pointing at media the project no longer has renders as
+        // nothing, whatever its kind — say so rather than counting it
+        // renderable. (Drawing layers were reported renderable for weeks
+        // while nothing of them reached a frame; a report that only checks
+        // "is this kind supported" is how that hid.)
+        if let Some(id) = layer.resource_id.as_deref() {
+            if self.is_missing(id) || self.resource(id).is_none() {
+                return Some(Unsupported::MissingResource(layer.name.clone()));
+            }
+        }
         match layer.kind {
+            ProjectLayerKind::Background => None,
+            // Vector content is drawn by the engine from the resource; a
+            // drawing layer with no document draws nothing.
+            ProjectLayerKind::Drawing => {
+                let has_shapes = layer
+                    .resource_id
+                    .as_deref()
+                    .and_then(|id| self.resource(id))
+                    .and_then(|r| r.drawing.as_ref())
+                    .is_some_and(|doc| !doc.shapes.is_empty());
+                if has_shapes {
+                    None
+                } else {
+                    Some(Unsupported::MissingResource(layer.name.clone()))
+                }
+            }
             // Captions render in the core now (promo-text).
-            ProjectLayerKind::Background | ProjectLayerKind::Drawing => None,
             ProjectLayerKind::Caption => None,
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
             // Video is decoded through promo-media now; the only question is
