@@ -544,6 +544,7 @@ mod cut_tests {
                     {"id":"K3","time":9,"isIncluded":true}]"#,
             )
             .unwrap(),
+            extra: Default::default(),
         });
         let cut = resource_for_cut(&res, Some("C2"));
         // The excluded 5→9 stretch is skipped, so output 5s lands at 9s.
@@ -777,6 +778,7 @@ mod speed_mapping_tests {
             trim_end: Some(8.0),
             trim_keyframes: None,
             speed: Some(2.0),
+            extra: Default::default(),
         }];
         let whole = resource_for_cut(&res, None);
         assert_eq!(whole.speed, None);

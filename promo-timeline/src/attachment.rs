@@ -455,6 +455,7 @@ mod tests {
             audio_focus: None,
             timing: None,
             keyframes: Vec::new(),
+            extra: Default::default(),
         }
     }
 

@@ -675,6 +675,9 @@ pub struct ProjectLayer {
     pub timing: Option<LayerTiming>,
     #[serde(default)]
     pub keyframes: Vec<ProjectLayerKeyframe>,
+    /// Unknown keys, preserved — see `ProjectMetadata::extra`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Where a layer's start and end come from, when they come from its
@@ -781,6 +784,9 @@ pub struct MediaCut {
     /// it is asked.
     #[serde(default, skip_serializing_if = "is_none")]
     pub speed: Option<f64>,
+    /// Unknown keys, preserved — see `ProjectMetadata::extra`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Mirrors `ProjectImageCut` custom decode: `filename` defaults to "", the
@@ -960,6 +966,9 @@ pub struct ProjectResource {
     pub frame: Option<ResourceFrame>,
     #[serde(skip_serializing_if = "is_none")]
     pub looped: Option<bool>,
+    /// Unknown keys, preserved — see `ProjectMetadata::extra`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -1006,6 +1015,10 @@ struct ProjectResourceWire {
     frame: Option<ResourceFrame>,
     #[serde(default)]
     looped: Option<bool>,
+    /// Unknown keys captured on decode; the conversion below carries them
+    /// into the model so encode preserves them.
+    #[serde(flatten)]
+    extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl<'de> Deserialize<'de> for ProjectResource {
@@ -1044,6 +1057,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             video_natural_height: w.video_natural_height,
             frame: w.frame,
             looped: w.looped,
+            extra: w.extra,
         })
     }
 }
@@ -1117,6 +1131,22 @@ pub struct ProjectMetadata {
     #[serde(default, skip_serializing_if = "is_none")]
     pub updated_at: Option<f64>,
     pub state: String,
+    /// Format version the writer produced. Absent means 1 — the era before
+    /// the field existed.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub format_version: Option<i64>,
+    /// Oldest reader allowed to open this file for WRITING. A reader below
+    /// this must refuse or open read-only: the Swift twin's Codable drops
+    /// fields it does not know, so saving from an old binary silently
+    /// destroys newer features — that is the data loss this gates.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub min_reader_version: Option<i64>,
+    /// Every key this version does not model, preserved through the round
+    /// trip. Tolerant-read PLUS lossy-write is how a project loses data to
+    /// an older writer; with this bag the Rust side is lossless, and can be
+    /// the single writer once the editor migration completes.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl ProjectMetadata {
@@ -1155,6 +1185,75 @@ impl ProjectMetadata {
         self.caption_resource_for(layer)
             .and_then(|resource| resource.caption_style.clone())
             .or_else(|| layer.caption_style.clone())
+    }
+}
+
+#[cfg(test)]
+mod forward_compat_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_keys_survive_the_round_trip_at_every_level() {
+        // Tolerant-read PLUS lossy-write is how a project loses features to
+        // an older writer. The Rust model is now lossless: what it does not
+        // model, it carries.
+        let json = r#"{
+            "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+            "subtitles": [], "trimStart": 0, "trimEnd": 0,
+            "videoDuration": 0, "compositionSettings": {},
+            "someFutureTopLevel": {"nested": true},
+            "layers": [{
+                "id": "L", "name": "L", "sortIndex": 0, "kind": "video",
+                "isEnabled": true, "startTime": 0, "keyframes": [],
+                "someFutureLayerField": 42
+            }],
+            "resources": [{
+                "id": "R", "kind": "video", "filename": "v.mp4",
+                "displayName": "V", "addedAt": 0,
+                "someFutureResourceField": "kept",
+                "mediaCuts": [{
+                    "id": "C", "name": "Cut",
+                    "someFutureCutField": [1, 2, 3]
+                }]
+            }]
+        }"#;
+        let meta = ProjectMetadata::from_json(json).expect("decodes");
+        let out = meta.to_json().expect("encodes");
+        let value: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(value["someFutureTopLevel"]["nested"], true);
+        assert_eq!(value["layers"][0]["someFutureLayerField"], 42);
+        assert_eq!(value["resources"][0]["someFutureResourceField"], "kept");
+        assert_eq!(
+            value["resources"][0]["mediaCuts"][0]["someFutureCutField"],
+            serde_json::json!([1, 2, 3])
+        );
+    }
+
+    #[test]
+    fn version_fields_round_trip_and_stay_absent_when_unset() {
+        let plain = r#"{
+            "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+            "subtitles": [], "trimStart": 0, "trimEnd": 0,
+            "videoDuration": 0, "compositionSettings": {}
+        }"#;
+        let meta = ProjectMetadata::from_json(plain).unwrap();
+        assert_eq!(meta.format_version, None);
+        assert_eq!(meta.min_reader_version, None);
+        let out = meta.to_json().unwrap();
+        assert!(!out.contains("formatVersion"), "absent stays absent");
+
+        let versioned = r#"{
+            "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+            "subtitles": [], "trimStart": 0, "trimEnd": 0,
+            "videoDuration": 0, "compositionSettings": {},
+            "formatVersion": 3, "minReaderVersion": 2
+        }"#;
+        let meta = ProjectMetadata::from_json(versioned).unwrap();
+        assert_eq!(meta.format_version, Some(3));
+        assert_eq!(meta.min_reader_version, Some(2));
+        let out = meta.to_json().unwrap();
+        assert!(out.contains("\"formatVersion\":3"));
+        assert!(out.contains("\"minReaderVersion\":2"));
     }
 }
 

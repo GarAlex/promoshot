@@ -299,20 +299,27 @@ impl PreviewEngine {
     /// bitmap then changes over time, so the layer can't be cached as static
     /// content. Mirrors Swift `effectiveFrame(forCutID:)`: the layer's image
     /// cut's frame wins over the resource-level frame.
-    fn image_has_animated_tilt(&self, layer: &ProjectLayer) -> bool {
-        if layer.kind != ProjectLayerKind::Image || !tl::layer_has_tilt_keyframes(layer) {
-            return false;
-        }
-        let Some(res) = self.resource_for(layer) else {
-            return false;
-        };
-        let frame = layer
+    /// The decorative frame a layer's content carries, if any. Mirrors Swift
+    /// `effectiveFrame(forCutID:)`: the layer's image cut's frame wins over
+    /// the resource-level frame.
+    fn effective_frame(&self, layer: &ProjectLayer) -> Option<&promo_model::ResourceFrame> {
+        let res = self.resource_for(layer)?;
+        layer
             .image_cut_id
             .as_ref()
             .and_then(|cid| res.image_cuts.iter().find(|c| &c.id == cid))
             .and_then(|cut| cut.frame.as_ref())
-            .or(res.frame.as_ref());
-        matches!(frame, Some(f) if f.kind == promo_model::ResourceFrameKind::Device)
+            .or(res.frame.as_ref())
+    }
+
+    fn image_has_animated_tilt(&self, layer: &ProjectLayer) -> bool {
+        if layer.kind != ProjectLayerKind::Image || !tl::layer_has_tilt_keyframes(layer) {
+            return false;
+        }
+        matches!(
+            self.effective_frame(layer),
+            Some(f) if f.kind == promo_model::ResourceFrameKind::Device
+        )
     }
 
     /// Fetches (or serves from cache) the frame for `layer` at `source_time`.
@@ -726,17 +733,16 @@ impl PreviewEngine {
                 ..Default::default()
             };
             if is_media && !pre_framed {
-                let zoom = tl::clamped_zoom(tr.zoom);
-                quad.corner_radius = settings.video_corner_radius * zoom;
-                quad.border_width = layer
-                    .image_border_width
-                    .unwrap_or(settings.video_border_width);
-                quad.border_rgba = rgba_from_hex(
-                    layer
-                        .image_border_color_hex
-                        .as_deref()
-                        .unwrap_or(&settings.video_border_color_hex),
+                let style = media_border_style(
+                    self.effective_frame(layer),
+                    layer,
+                    &settings,
+                    tr.zoom,
+                    canvas.width(),
                 );
+                quad.corner_radius = style.corner_radius;
+                quad.border_width = style.border_width;
+                quad.border_rgba = style.border_rgba;
             }
             quads.push(quad);
         }
@@ -759,6 +765,115 @@ impl PreviewEngine {
             },
             used,
         ))
+    }
+}
+
+/// Corner radius, border width, and border color for a media quad.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MediaBorderStyle {
+    corner_radius: f64,
+    border_width: f64,
+    border_rgba: [f32; 4],
+}
+
+/// The export path's rule, now the engine's too: a BORDER-kind
+/// `ResourceFrame` supplies the radius, thickness, and color — authored
+/// against a 1080-wide reference, floored, then scaled by zoom (the exact
+/// order `ResourceFrame.borderPixels`/`cornerRadiusPixels` use). Without a
+/// border frame, the settings/layer fallbacks apply as before. This used to
+/// exist only in `VideoComposer`, so a border-framed video rendered
+/// differently in preview and export.
+fn media_border_style(
+    frame: Option<&promo_model::ResourceFrame>,
+    layer: &ProjectLayer,
+    settings: &promo_model::CompositionSettings,
+    zoom: f64,
+    canvas_width: f64,
+) -> MediaBorderStyle {
+    let zoom = tl::clamped_zoom(zoom);
+    if let Some(frame) = frame {
+        if frame.kind == promo_model::ResourceFrameKind::Border {
+            return MediaBorderStyle {
+                corner_radius: (frame.corner_radius * canvas_width / 1080.0).max(0.0) * zoom,
+                border_width: (frame.border_width * canvas_width / 1080.0).max(1.0) * zoom,
+                border_rgba: rgba_from_hex(&frame.border_color_hex),
+            };
+        }
+    }
+    MediaBorderStyle {
+        corner_radius: settings.video_corner_radius * zoom,
+        border_width: layer
+            .image_border_width
+            .unwrap_or(settings.video_border_width),
+        border_rgba: rgba_from_hex(
+            layer
+                .image_border_color_hex
+                .as_deref()
+                .unwrap_or(&settings.video_border_color_hex),
+        ),
+    }
+}
+
+#[cfg(test)]
+mod border_style_tests {
+    use super::*;
+
+    fn layer() -> ProjectLayer {
+        serde_json::from_value(serde_json::json!({
+            "id": "L", "name": "L", "sortIndex": 1, "kind": "video",
+            "isEnabled": true, "startTime": 0.0, "keyframes": []
+        }))
+        .unwrap()
+    }
+
+    fn border_frame() -> promo_model::ResourceFrame {
+        serde_json::from_value(serde_json::json!({
+            "kind": "border", "borderColorHex": "FF0000",
+            "borderWidth": 6.0, "cornerRadius": 24.0,
+            "material": "spaceBlack", "tiltY": 0.0, "tiltX": 0.0,
+            "bezelFraction": 0.03, "depthFraction": 0.06
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_border_frame_supplies_radius_thickness_and_color() {
+        let settings = promo_model::CompositionSettings::default();
+        let style = media_border_style(
+            Some(&border_frame()),
+            &layer(),
+            &settings,
+            1.0,
+            1920.0,
+        );
+        // Authored at 1080-wide: 24 * 1920/1080, 6 * 1920/1080 — the exact
+        // Swift math, floor applied before zoom.
+        assert!((style.corner_radius - 24.0 * 1920.0 / 1080.0).abs() < 1e-9);
+        assert!((style.border_width - 6.0 * 1920.0 / 1080.0).abs() < 1e-9);
+        assert!(style.border_rgba[0] > 0.99 && style.border_rgba[1] < 0.01);
+    }
+
+    #[test]
+    fn no_frame_keeps_the_settings_fallback() {
+        let settings = promo_model::CompositionSettings::default();
+        let with_none = media_border_style(None, &layer(), &settings, 1.0, 1920.0);
+        let mut device = border_frame();
+        device.kind = promo_model::ResourceFrameKind::Device;
+        let with_device =
+            media_border_style(Some(&device), &layer(), &settings, 1.0, 1920.0);
+        // A device frame is pre-baked by the provider; the quad falls back to
+        // the settings path, same as no frame at all.
+        assert_eq!(with_none, with_device);
+        assert!((with_none.corner_radius - settings.video_corner_radius).abs() < 1e-9);
+    }
+
+    #[test]
+    fn thin_frame_borders_floor_at_one_pixel_before_zoom() {
+        let settings = promo_model::CompositionSettings::default();
+        let mut frame = border_frame();
+        frame.border_width = 0.1; // 0.1 * 540/1080 = 0.05 → floors to 1
+        let style = media_border_style(Some(&frame), &layer(), &settings, 2.0, 540.0);
+        assert!((style.border_width - 2.0).abs() < 1e-9, "1px floor × zoom 2");
     }
 }
 

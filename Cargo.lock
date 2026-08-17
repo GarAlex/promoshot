@@ -1043,6 +1043,7 @@ dependencies = [
  "promo-model",
  "promo-text",
  "promo-timeline",
+ "serde_json",
 ]
 
 [[package]]
