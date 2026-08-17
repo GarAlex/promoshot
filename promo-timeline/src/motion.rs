@@ -270,7 +270,8 @@ pub fn point_along_range(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layer_transform_along_paths;
+    use crate::{layer_transform, layer_transform_along_paths};
+    use promo_model::{CompositionSettings, ProjectLayer};
 
     fn pt(x: f64, y: f64) -> Point {
         Point(x, y)
@@ -415,6 +416,106 @@ mod tests {
         assert!(loop_line.is_closed());
         let half = point_along_range(&loop_line, a, b, false, 0.0, 0.5, 0.5);
         assert!(half.y().abs() > 10.0, "the arc bulges off the chord: {half:?}");
+    }
+
+    /// Everything above tests the geometry in isolation. This is the contract
+    /// the feature actually rests on: a keyframe carrying a `motionPath`
+    /// bends the route between two positions, and NOTHING else changes —
+    /// the layer still departs from A, still arrives at B, still on the same
+    /// timing. Without this the maths can be perfect while the wiring points
+    /// at the wrong keyframe pair and only the app would show it.
+    #[test]
+    fn a_keyframe_with_a_path_bends_the_route_and_moves_neither_end() {
+        let layer: ProjectLayer = serde_json::from_str(
+            r#"{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                "isEnabled": true, "startTime": 0, "keyframes": [
+                  {"id": "A", "time": 0, "zoom": 1,
+                   "horizontalShift": 0, "verticalShift": 0,
+                   "transitionDuration": 0},
+                  {"id": "B", "time": 2, "zoom": 1,
+                   "horizontalShift": 200, "verticalShift": 0,
+                   "transitionDuration": 2,
+                   "motionPath": {"pathResourceID": "P1"}}]}"#,
+        )
+        .expect("layer");
+        // Drawn small and pointing elsewhere on purpose: the fit is what
+        // places it, so its own coordinates must not reach the answer.
+        let paths = path_resource(serde_json::json!([[1.0, -4.0]]));
+        let defaults = CompositionSettings::default();
+
+        let at = |t: f64| layer_transform_along_paths(&layer, t, &defaults, &paths);
+        let straight = |t: f64| layer_transform(&layer, t, &defaults);
+
+        // Both ends are the keyframes' own positions, path or no path.
+        for edge in [0.0, 2.0] {
+            let (curved, plain) = (at(edge), straight(edge));
+            assert!((curved.horizontal_shift - plain.horizontal_shift).abs() < 1e-6, "{edge}");
+            assert!((curved.vertical_shift - plain.vertical_shift).abs() < 1e-6, "{edge}");
+        }
+
+        // In between it leaves the straight line — the whole point.
+        let mid = at(1.0);
+        assert!(
+            mid.vertical_shift.abs() > 10.0,
+            "the route should bow off the chord: {mid:?}"
+        );
+        assert!(
+            straight(1.0).vertical_shift.abs() < 1e-9,
+            "and the same layer without the resources is still a straight line"
+        );
+
+        // A path names a route, not a schedule: zoom and timing are untouched.
+        assert!((mid.zoom - straight(1.0).zoom).abs() < 1e-9);
+    }
+
+    /// A `motionPath` naming a resource the project does not have must fall
+    /// back to the straight line. Anything else means a deleted path resource
+    /// takes the layer's movement down with it.
+    #[test]
+    fn a_path_that_is_not_there_is_simply_a_straight_line() {
+        let layer: ProjectLayer = serde_json::from_str(
+            r#"{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                "isEnabled": true, "startTime": 0, "keyframes": [
+                  {"id": "A", "time": 0, "zoom": 1,
+                   "horizontalShift": 0, "verticalShift": 0,
+                   "transitionDuration": 0},
+                  {"id": "B", "time": 2, "zoom": 1,
+                   "horizontalShift": 200, "verticalShift": 0,
+                   "transitionDuration": 2,
+                   "motionPath": {"pathResourceID": "GONE"}}]}"#,
+        )
+        .expect("layer");
+        let defaults = CompositionSettings::default();
+        let missing = layer_transform_along_paths(
+            &layer, 1.0, &defaults, &path_resource(serde_json::json!([[1.0, -4.0]])));
+        let plain = layer_transform(&layer, 1.0, &defaults);
+        assert!((missing.horizontal_shift - plain.horizontal_shift).abs() < 1e-9);
+        assert!(missing.vertical_shift.abs() < 1e-9, "{missing:?}");
+    }
+
+    /// A closed stroke has no chord, so there is nothing to aim at the
+    /// keyframes: it plays at its DRAWN size around the first position and
+    /// never reaches the second. That is what an orbit needs and what the
+    /// docs promise — worth pinning, because it is the one case where the
+    /// path does not land the layer on the keyframe it is attached to.
+    #[test]
+    fn a_closed_path_orbits_the_first_position_rather_than_reaching_the_second() {
+        let circle: Vec<Point> = (0..=64)
+            .map(|i| {
+                let t = std::f64::consts::TAU * i as f64 / 64.0;
+                pt(10.0 * t.cos(), 10.0 * t.sin())
+            })
+            .collect();
+        let closed = Polyline::new(circle).unwrap();
+        let (a, b) = (pt(0.0, 0.0), pt(500.0, 0.0));
+
+        let end = point_along(&closed, a, b, false, 1.0);
+        assert!((end.x() - a.x()).abs() < 1e-6 && (end.y() - a.y()).abs() < 1e-6,
+                "back where it started, not at B: {end:?}");
+        let quarter = point_along(&closed, a, b, false, 0.25);
+        assert!(quarter.y().abs() > 5.0, "and it has been away in between: {quarter:?}");
+        // Drawn size, not scaled to the 500pt gap it was given.
+        assert!(quarter.x().abs() <= 20.0 && quarter.y().abs() <= 20.0, "{quarter:?}");
     }
 
     #[test]
