@@ -923,9 +923,33 @@ impl PreviewEngine {
                 continue;
             };
             let frame = self.cached_frame(frame_id);
-            let (fw, fh) = (frame.frame.width as f64, frame.frame.height as f64);
+            let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
             let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
             let color_709 = frame.flags & FLAG_COLOR_709 != 0;
+
+            // A sprite sheet arrives as ONE texture and shows one cell of it.
+            // The cell size replaces the sheet size here, before any layout
+            // happens, so a walk cycle lays out as its 64×64 frame rather
+            // than as the 256×128 image the frames are stored in.
+            let resource = self.resource_for(layer);
+            let mut uv_rect = [0.0f32, 0.0, 1.0, 1.0];
+            if let Some(sheet) = resource.and_then(tl::sheet_for) {
+                let local = tl::layer_local_time(layer, time);
+                let Some(cell) =
+                    tl::sprite_frame_at(sheet, layer, local, Size::new(fw, fh))
+                else {
+                    // `hide`: the cycle is spent and the layer asked to go.
+                    continue;
+                };
+                fw = cell.cell.width();
+                fh = cell.cell.height();
+                uv_rect = [
+                    cell.uv_rect[0] as f32,
+                    cell.uv_rect[1] as f32,
+                    cell.uv_rect[2] as f32,
+                    cell.uv_rect[3] as f32,
+                ];
+            }
             used.push(frame_id);
 
             let tr = tl::layer_transform_along_paths(
@@ -954,6 +978,8 @@ impl PreviewEngine {
                 rotation_deg: tl::layer_rotation(layer, time),
                 opacity: tl::layer_opacity(layer, time) as f32,
                 color_709,
+                uv_rect,
+                nearest: tl::is_nearest(resource),
                 ..Default::default()
             };
             if is_media && !pre_framed {
@@ -1761,14 +1787,34 @@ mod portable_tests {
         let Some((_, color, size)) = state.colors.iter().find(|(l, _, _)| *l == id).cloned() else {
             return 1;
         };
-        state.scratch = color.repeat(size * size);
+        // Size 0 is the sprite fixture: a 4x1 sheet of 16px cells in red,
+        // green, blue and white, so a test can tell which cell was drawn.
+        let (width, height) = if size == 0 { (64, 16) } else { (size, size) };
+        if size == 0 {
+            let cells: [[u8; 4]; 4] = [
+                [0, 0, 255, 255],
+                [0, 255, 0, 255],
+                [255, 0, 0, 255],
+                [255, 255, 255, 255],
+            ];
+            state.scratch = Vec::with_capacity(width * height * 4);
+            for _ in 0..height {
+                for cell in cells {
+                    for _ in 0..16 {
+                        state.scratch.extend_from_slice(&cell);
+                    }
+                }
+            }
+        } else {
+            state.scratch = color.repeat(size * size);
+        }
         unsafe {
             *out_surface = HostSurface {
                 kind: SURFACE_CPU_PIXELS,
                 data: state.scratch.as_ptr(),
-                width: size as u32,
-                height: size as u32,
-                bytes_per_row: (size * 4) as u32,
+                width: width as u32,
+                height: height as u32,
+                bytes_per_row: (width * 4) as u32,
                 ..Default::default()
             };
             *out_flags = 0;
@@ -1899,6 +1945,62 @@ mod portable_tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].0, "VID");
         assert!((requests[0].1 - 2.0).abs() < 1e-9, "got {}", requests[0].1);
+    }
+
+    /// A sprite sheet arrives as ONE image and animates by showing a
+    /// different part of it — while the layer goes on moving.
+    ///
+    /// That independence is the whole design: the frame is chosen when
+    /// SAMPLING and the movement happens in the geometry, so neither has to
+    /// know about the other. This asserts both at once, because either one
+    /// working alone would be a broken feature.
+    #[test]
+    fn a_sprite_animates_while_the_layer_moves() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        // A 4x1 sheet of 16px cells: red, green, blue, white. At 1fps the
+        // frame index IS the second. The layer slides 32px right over 2s.
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000001",
+            "name": "sprite", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "SPR", "name": "hero", "sortIndex": 1, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-0000000000S1",
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "zoom": 0.25,
+                    "horizontalShift": 0, "verticalShift": 0,
+                    "transitionDuration": 0},
+                   {"id": "K1", "time": 2, "zoom": 0.25,
+                    "horizontalShift": 32, "verticalShift": 0,
+                    "transitionPercent": 100, "transitionDuration": 2}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-0000000000S1", "kind": "image",
+                 "filename": "hero.png", "displayName": "hero", "addedAt": 0,
+                 "imageCuts": [], "disabledAudioTrackIndices": [],
+                 "sampling": "nearest",
+                 "sprite": {"columns": 4, "rows": 1, "fps": 1}}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![("SPR".into(), [0, 0, 0, 0], 0)]);
+
+        // At t=0 the cell is red and the layer sits at the left edge.
+        let start = render_and_read(&mut engine, 0.0, 64);
+        assert_eq!(pixel_at(&start, 64, 8, 8), [0, 0, 255, 255], "frame 0 is red");
+        assert_eq!(pixel_at(&start, 64, 40, 8), [0, 51, 0, 255], "nothing there yet");
+
+        // At t=2 it has moved 32px right AND advanced to the third frame.
+        let later = render_and_read(&mut engine, 2.0, 64);
+        assert_eq!(pixel_at(&later, 64, 40, 8), [255, 0, 0, 255], "frame 2 is blue");
+        assert_eq!(pixel_at(&later, 64, 8, 8), [0, 51, 0, 255], "left behind");
     }
 
     /// A padded stride is what a real decoder hands over; the import repacks.

@@ -670,6 +670,132 @@ pub struct PathDocument {
     pub controls: Vec<Point>,
 }
 
+/// How a resource's pixels are sampled when the renderer scales them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResourceSampling {
+    /// Bilinear. The default everywhere, and what a photograph wants.
+    Smooth,
+    /// Nearest-neighbour: a pixel stays a pixel however far it is scaled up.
+    /// Pixel art needs this to look like itself, and a sprite sheet needs it
+    /// so a cell's edge does not blend in the frame beside it.
+    Nearest,
+}
+
+/// An image read as a GRID OF FRAMES rather than one picture.
+///
+/// A sprite sheet is not a new kind of media — it is an image plus the
+/// arithmetic for which part of it to show. That is deliberate: the layer
+/// path, the inventory rules and the still-image cache all keep working
+/// unchanged, and a sprite layer moves, zooms, rotates and follows a motion
+/// path exactly as any image layer does, because the frame is chosen when
+/// SAMPLING and the movement happens in the geometry. The two never meet.
+///
+/// Frames run left to right, top to bottom — the order every exporter writes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteSheet {
+    pub columns: u32,
+    pub rows: u32,
+    /// Frames actually used, for a sheet whose last row is short. `None`
+    /// means the whole grid.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub frame_count: Option<u32>,
+    /// Frames per second. `None` plays at 12, the rate hand-drawn animation
+    /// has used for a century and a sane default for a sprite.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub fps: Option<f64>,
+    /// Per-frame durations in seconds, when the source did not use a uniform
+    /// rate — a GIF holding one frame for a beat says so here rather than
+    /// having the hold averaged away. Length must match the frame count to
+    /// be used; anything else falls back to `fps`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub frame_durations: Option<Vec<f64>>,
+}
+
+impl SpriteSheet {
+    pub const DEFAULT_FPS: f64 = 12.0;
+
+    /// Frames in the sheet: the declared count, clamped to what the grid can
+    /// actually hold, and never zero — a malformed sheet still has to render
+    /// something rather than divide by zero.
+    pub fn frames(&self) -> u32 {
+        let capacity = self.columns.max(1).saturating_mul(self.rows.max(1));
+        self.frame_count.unwrap_or(capacity).clamp(1, capacity)
+    }
+
+    /// Seconds for one full cycle.
+    pub fn cycle_duration(&self) -> f64 {
+        match self.durations() {
+            Some(durations) => durations.iter().sum(),
+            None => self.frames() as f64 / self.effective_fps(),
+        }
+    }
+
+    pub fn effective_fps(&self) -> f64 {
+        match self.fps {
+            Some(fps) if fps.is_finite() && fps > 0.0 => fps,
+            _ => Self::DEFAULT_FPS,
+        }
+    }
+
+    /// Per-frame durations, only when they are usable: right length, all
+    /// finite and positive, summing to something. A half-written array is
+    /// worse than none, so it is ignored rather than partially honoured.
+    fn durations(&self) -> Option<&[f64]> {
+        let durations = self.frame_durations.as_deref()?;
+        if durations.len() != self.frames() as usize {
+            return None;
+        }
+        if durations.iter().any(|d| !d.is_finite() || *d <= 0.0) {
+            return None;
+        }
+        Some(durations)
+    }
+
+    /// The frame showing at `elapsed` seconds into the animation, looping.
+    /// Negative time reads as the first frame rather than wrapping backwards.
+    pub fn frame_at(&self, elapsed: f64) -> u32 {
+        let frames = self.frames();
+        if frames <= 1 || !elapsed.is_finite() || elapsed <= 0.0 {
+            return 0;
+        }
+        match self.durations() {
+            Some(durations) => {
+                let cycle: f64 = durations.iter().sum();
+                let mut remaining = elapsed % cycle;
+                for (index, duration) in durations.iter().enumerate() {
+                    if remaining < *duration {
+                        return index as u32;
+                    }
+                    remaining -= duration;
+                }
+                frames - 1
+            }
+            None => {
+                let index = (elapsed * self.effective_fps()).floor();
+                // The modulo is taken on the FRAME index, not the time: at
+                // 12fps a layer 3600s in is frame 43200, which stays exact in
+                // f64 where `elapsed % cycle` would have drifted by then.
+                let wrapped = index.rem_euclid(frames as f64);
+                wrapped as u32
+            }
+        }
+    }
+
+    /// The part of the sheet frame `index` occupies, as `[u, v, w, h]` in
+    /// 0…1 — what the compositor's `uv_rect` takes.
+    pub fn uv_rect(&self, index: u32) -> [f64; 4] {
+        let columns = self.columns.max(1);
+        let rows = self.rows.max(1);
+        let index = index.min(self.frames().saturating_sub(1));
+        let (w, h) = (1.0 / columns as f64, 1.0 / rows as f64);
+        let column = index % columns;
+        let row = (index / columns).min(rows - 1);
+        [column as f64 * w, row as f64 * h, w, h]
+    }
+}
+
 /// A path a layer follows between two keyframes — its SHAPE, not its place.
 ///
 /// The endpoints stay whatever the keyframes already say: the path's start is
@@ -1017,6 +1143,14 @@ pub struct ProjectResource {
     /// Set on `path` resources, and only on them.
     #[serde(default, skip_serializing_if = "is_none")]
     pub path: Option<PathDocument>,
+    /// Present when an IMAGE is a sprite sheet: the same file, read as a grid
+    /// of frames that cycle over the layer's local time.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub sprite: Option<SpriteSheet>,
+    /// How the renderer samples this resource. `None` is smooth, which is
+    /// right for photographs and screen captures and wrong for pixel art.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub sampling: Option<ResourceSampling>,
     pub image_cuts: Vec<ProjectImageCut>,
     /// Playback rate for the resource's own trim, as `MediaCut::speed` is for
     /// a cut. `None` is 1.0.
@@ -1075,6 +1209,10 @@ struct ProjectResourceWire {
     #[serde(default)]
     path: Option<PathDocument>,
     #[serde(default)]
+    sprite: Option<SpriteSheet>,
+    #[serde(default)]
+    sampling: Option<ResourceSampling>,
+    #[serde(default)]
     image_cuts: Option<Vec<ProjectImageCut>>,
     #[serde(default)]
     media_cuts: Option<Vec<MediaCut>>,
@@ -1129,6 +1267,8 @@ impl<'de> Deserialize<'de> for ProjectResource {
             caption_voice_clip: w.caption_voice_clip,
             drawing: w.drawing,
             path: w.path,
+            sprite: w.sprite,
+            sampling: w.sampling,
             image_cuts: w.image_cuts.unwrap_or_default(),
             audio_gain: w.audio_gain,
             volume,
@@ -1259,6 +1399,8 @@ impl ProjectResource {
             caption_voice_clip: None,
             drawing: None,
             path: None,
+            sprite: None,
+            sampling: None,
             image_cuts: Vec::new(),
             audio_gain: None,
             volume: None,
@@ -1481,5 +1623,113 @@ mod fps_tests {
         assert_eq!(ntsc.fps, Some(59.94005994005994));
         let text = serde_json::to_string(&ntsc).unwrap();
         assert!(text.contains("59.94"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod sprite_tests {
+    use super::*;
+
+    fn sheet(columns: u32, rows: u32, frames: Option<u32>, fps: Option<f64>) -> SpriteSheet {
+        SpriteSheet {
+            columns,
+            rows,
+            frame_count: frames,
+            fps,
+            frame_durations: None,
+        }
+    }
+
+    #[test]
+    fn frames_run_left_to_right_then_down() {
+        let s = sheet(3, 2, None, None);
+        assert_eq!(s.frames(), 6);
+        // Frame 0 is the top-left cell, one third wide and one half tall.
+        assert_eq!(s.uv_rect(0), [0.0, 0.0, 1.0 / 3.0, 0.5]);
+        // Frame 3 has wrapped onto the second row.
+        assert_eq!(s.uv_rect(3), [0.0, 0.5, 1.0 / 3.0, 0.5]);
+        assert_eq!(s.uv_rect(5), [2.0 / 3.0, 0.5, 1.0 / 3.0, 0.5]);
+    }
+
+    /// A sheet's last row is often short — 10 frames in a 4×3 grid. The count
+    /// is what cycles, so the animation must not step into the two empty
+    /// cells at the end and flash blank.
+    #[test]
+    fn a_short_last_row_cycles_on_the_count_not_the_grid() {
+        let s = sheet(4, 3, Some(10), Some(10.0));
+        assert_eq!(s.frames(), 10);
+        assert_eq!(s.frame_at(0.9), 9, "last real frame");
+        assert_eq!(s.frame_at(1.0), 0, "wraps past the empty cells");
+        // A count bigger than the grid is a malformed sheet, not a licence to
+        // sample outside the texture.
+        assert_eq!(sheet(2, 2, Some(99), None).frames(), 4);
+    }
+
+    #[test]
+    fn a_degenerate_sheet_still_renders_something() {
+        let s = sheet(0, 0, Some(0), Some(0.0));
+        assert_eq!(s.frames(), 1);
+        assert_eq!(s.frame_at(5.0), 0);
+        assert_eq!(s.uv_rect(0), [0.0, 0.0, 1.0, 1.0], "the whole image");
+        assert!(s.cycle_duration() > 0.0, "no division by zero");
+    }
+
+    /// The reason the modulo is taken on the frame INDEX rather than on the
+    /// time: an hour into a 12fps loop the index is 43200, exact in f64,
+    /// while `elapsed % cycle` accumulates error in the remainder.
+    #[test]
+    fn a_long_running_loop_does_not_drift() {
+        let s = sheet(4, 1, None, Some(12.0));
+        assert_eq!(s.frame_at(3600.0), 0);
+        assert_eq!(s.frame_at(3600.0 + 1.0 / 12.0), 1);
+        assert_eq!(s.frame_at(3600.0 + 3.0 / 12.0), 3);
+    }
+
+    /// A GIF that holds one frame for a beat says so per frame. Averaging it
+    /// into a single fps is what loses the hold, so the array wins when it is
+    /// usable — and is ignored, not half-applied, when it is not.
+    #[test]
+    fn per_frame_durations_beat_a_uniform_rate_but_only_when_sound() {
+        let mut s = sheet(3, 1, None, Some(10.0));
+        s.frame_durations = Some(vec![1.0, 0.1, 0.1]);
+        assert_eq!(s.frame_at(0.0), 0);
+        assert_eq!(s.frame_at(0.99), 0, "still holding the first frame");
+        assert_eq!(s.frame_at(1.05), 1);
+        assert_eq!(s.frame_at(1.15), 2);
+        assert_eq!(s.frame_at(1.25), 0, "wraps after 1.2s");
+        assert!((s.cycle_duration() - 1.2).abs() < 1e-9);
+
+        // Wrong length, or a zero, and the array is discarded whole.
+        s.frame_durations = Some(vec![1.0, 0.1]);
+        assert_eq!(s.frame_at(0.99), 9 % 3, "back to 10fps");
+        s.frame_durations = Some(vec![1.0, 0.0, 0.1]);
+        assert_eq!(s.frame_at(0.99), 9 % 3, "a zero-length frame is not a hold");
+    }
+
+    #[test]
+    fn a_sprite_survives_a_round_trip_and_absent_stays_absent() {
+        let json = r#"{"id":"R","kind":"image","filename":"walk.png",
+            "displayName":"Walk","addedAt":0,"imageCuts":[],
+            "disabledAudioTrackIndices":[],
+            "sampling":"nearest",
+            "sprite":{"columns":4,"rows":2,"frameCount":7,"fps":15}}"#;
+        let resource: ProjectResource = serde_json::from_str(json).unwrap();
+        let sprite = resource.sprite.clone().expect("sprite");
+        assert_eq!(sprite.frames(), 7);
+        assert_eq!(resource.sampling, Some(ResourceSampling::Nearest));
+        let text = serde_json::to_string(&resource).unwrap();
+        assert!(text.contains(r#""columns":4"#), "{text}");
+        assert!(text.contains(r#""sampling":"nearest""#), "{text}");
+
+        // An ordinary image writes neither key, so existing projects do not
+        // grow fields the moment they are saved.
+        let plain: ProjectResource = serde_json::from_str(
+            r#"{"id":"R","kind":"image","filename":"a.png","displayName":"A",
+                "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]}"#,
+        )
+        .unwrap();
+        let text = serde_json::to_string(&plain).unwrap();
+        assert!(!text.contains("sprite"), "{text}");
+        assert!(!text.contains("sampling"), "{text}");
     }
 }

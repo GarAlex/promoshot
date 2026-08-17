@@ -1119,3 +1119,70 @@ pub extern "C" fn promo_project_resolve_timing(json: *const c_char) -> *mut c_ch
         }
     })
 }
+
+/// The sprite frame showing `elapsed` seconds into a layer, for a UI that
+/// wants to draw the animation itself — the resource preview.
+///
+/// `sheet_json` is a `SpriteSheet` object; `beyond_end` is `""`, `"hold"`,
+/// `"loop"` or `"hide"`. Returns `{"frame": n, "uvRect": [u, v, w, h]}`, or
+/// `{"frame": -1}` when a spent `hide` means nothing is drawn. NULL only when
+/// the arguments cannot be read at all.
+///
+/// It exists so the preview and the render cannot disagree about which cell
+/// is showing. A preview that computed its own frame would be a second
+/// implementation of the rule, and the first thing anyone would notice is
+/// that the loop looks right in the inspector and wrong in the export.
+///
+/// Safety contract (C ABI): both arguments are valid NUL-terminated strings.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_sprite_frame(
+    sheet_json: *const c_char,
+    elapsed: f64,
+    beyond_end: *const c_char,
+) -> *mut c_char {
+    if sheet_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(sheet_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(sheet) = serde_json::from_str::<promo_model::SpriteSheet>(text) else {
+        return std::ptr::null_mut();
+    };
+    let mode = if beyond_end.is_null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(beyond_end) }
+            .to_string_lossy()
+            .to_string()
+    };
+    // A layer is the only thing that carries `beyondEnd`, and the rule lives
+    // on layers, so the caller's mode is expressed as the layer it would be.
+    let clause = if mode.is_empty() {
+        String::new()
+    } else {
+        format!(r#""beyondEnd": "{mode}","#)
+    };
+    let Ok(layer) = serde_json::from_str::<promo_model::ProjectLayer>(&format!(
+        r#"{{"id": "S", "name": "S", "sortIndex": 0, "kind": "image",
+             "isEnabled": true, "startTime": 0, {clause} "keyframes": []}}"#
+    )) else {
+        return std::ptr::null_mut();
+    };
+    // The uv rect is what it is regardless of pixel size; a unit sheet keeps
+    // this call free of a size the caller would have to supply twice.
+    let answer = match promo_timeline::sprite_frame_at(
+        &sheet,
+        &layer,
+        elapsed,
+        promo_model::Size::new(1.0, 1.0),
+    ) {
+        Some(frame) => serde_json::json!({
+            "frame": frame.index,
+            "uvRect": frame.uv_rect,
+        }),
+        None => serde_json::json!({ "frame": -1 }),
+    };
+    to_c_string(&answer.to_string())
+}

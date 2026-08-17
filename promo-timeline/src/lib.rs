@@ -12,6 +12,7 @@ pub mod audio;
 pub mod interpolation;
 pub mod layout;
 pub mod mapping;
+pub mod sprite;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
 pub use motion::{
@@ -28,6 +29,7 @@ pub use interpolation::{
     settings_background_color_hex,
     settings_interpolated_values, CaptionValues, Transform,
 };
+pub use sprite::{frame_at as sprite_frame_at, is_nearest, sheet_for, SpriteFrame};
 pub use layout::{
     clamped_zoom, drawing_rect, letterbox_transform, media_corner_radius, media_rect,
 };
