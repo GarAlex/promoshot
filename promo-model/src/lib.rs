@@ -4,9 +4,13 @@
 //! are the parity gate — see `fixtures/projects/`).
 
 pub mod geometry;
+pub mod inventory;
 pub mod project;
 
 pub use geometry::{Point, Rect, Size};
+pub use inventory::{
+    derived_id, effective_resources, layers_with_missing_media, ResolvedResource, ResourceOrigin,
+};
 pub use project::*;
 
 /// The `metadata.json` schema this crate targets. Bumped only when the Swift

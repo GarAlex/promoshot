@@ -1156,6 +1156,41 @@ pub struct ProjectMetadata {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+impl ProjectResource {
+    /// A resource with nothing but its kind decided — the defaults a file
+    /// gets when it is adopted from `Resources/` without an entry. Fields the
+    /// app fills in on demand (duration, natural size) stay `None`: absent
+    /// means "not measured yet", which the render paths already handle.
+    pub fn placeholder(kind: ProjectResourceKind) -> Self {
+        ProjectResource {
+            id: String::new(),
+            kind,
+            media_cuts: Vec::new(),
+            speed: None,
+            filename: String::new(),
+            display_name: String::new(),
+            added_at: 0.0,
+            duration: None,
+            trim_start: None,
+            trim_end: None,
+            trim_keyframes: None,
+            caption_text: None,
+            caption_style: None,
+            caption_voice_clip: None,
+            drawing: None,
+            image_cuts: Vec::new(),
+            audio_gain: None,
+            volume: None,
+            disabled_audio_track_indices: Vec::new(),
+            video_natural_width: None,
+            video_natural_height: None,
+            frame: None,
+            looped: None,
+            extra: Default::default(),
+        }
+    }
+}
+
 impl ProjectMetadata {
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
