@@ -36,6 +36,16 @@ pub struct SceneQuad {
     /// re-encodes to sRGB after sampling, replacing the host's per-frame
     /// CIContext conversion pass.
     pub color_709: bool,
+    /// The part of the texture this quad shows, as `[u, v, width, height]`
+    /// in 0…1. The whole texture by default; a sprite sheet's current cell
+    /// otherwise, which is what lets one resident texture animate without a
+    /// re-upload per frame.
+    pub uv_rect: [f32; 4],
+    /// Sample without smoothing. Pixel art needs it to stay crisp when
+    /// scaled, and a sprite sheet needs it for CORRECTNESS: bilinear
+    /// sampling near a cell's edge reaches into the neighbouring frame and
+    /// bleeds it in.
+    pub nearest: bool,
 }
 
 impl Default for SceneQuad {
@@ -50,6 +60,8 @@ impl Default for SceneQuad {
             solid_rgba: [0.0; 4],
             opacity: 1.0,
             color_709: false,
+            uv_rect: [0.0, 0.0, 1.0, 1.0],
+            nearest: false,
         }
     }
 }
@@ -85,6 +97,8 @@ struct Quad {
     solid_color: vec4<f32>,
     // x = opacity, y = 1 textured / 0 solid, z = 1 BT.709-encoded texture.
     params: vec4<f32>,
+    // xy = uv origin, zw = uv size. Whole texture is (0,0,1,1).
+    uv_rect: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -164,7 +178,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     var color: vec4<f32>;
     if quad.params.y > 0.5 {
-        color = textureSample(quad_tex, quad_samp, in.local / size);
+        let uv = quad.uv_rect.xy + (in.local / size) * quad.uv_rect.zw;
+        color = textureSample(quad_tex, quad_samp, uv);
         if quad.params.z > 0.5 {
             // Video frames are opaque (alpha 1), so premultiplied rgb == rgb.
             color = vec4<f32>(bt709_to_srgb(color.rgb), color.a);
@@ -207,6 +222,7 @@ struct QuadRaw {
     border_color: [f32; 4],
     solid_color: [f32; 4],
     params: [f32; 4],
+    uv_rect: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -257,6 +273,7 @@ pub struct Compositor {
     pipeline: wgpu::RenderPipeline,
     quad_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    nearest_sampler: wgpu::Sampler,
     dummy: InputTexture,
     globals_buf: wgpu::Buffer,
     globals_bind: wgpu::BindGroup,
@@ -423,6 +440,17 @@ impl Compositor {
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             ..Default::default()
         });
+        // The unsmoothed twin. Pixel art scaled up stays pixels, and a sprite
+        // sheet's cells stop bleeding into each other at their edges.
+        let nearest_sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("compositor-nearest"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            ..Default::default()
+        });
 
         let dummy = Self::upload_texture(ctx, &[255, 255, 255, 255], 1, 1)?;
 
@@ -452,6 +480,7 @@ impl Compositor {
             pipeline,
             quad_layout,
             sampler,
+            nearest_sampler,
             dummy,
             globals_buf,
             globals_bind,
@@ -487,10 +516,24 @@ impl Compositor {
     }
 
     /// Bind group for one input texture, created once and reused.
-    fn bind_group_for(&mut self, ctx: &GpuContext, texture: Option<&InputTexture>) -> u64 {
+    ///
+    /// Keyed by texture AND filter, since the sampler is part of the bind
+    /// group: the same sheet drawn smoothed and unsmoothed in one scene needs
+    /// two. The low bit carries the filter, so ids stay dense.
+    fn bind_group_for(
+        &mut self,
+        ctx: &GpuContext,
+        texture: Option<&InputTexture>,
+        nearest: bool,
+    ) -> u64 {
         let texture = texture.unwrap_or(&self.dummy);
-        let id = texture.id;
+        let id = (texture.id << 1) | u64::from(nearest);
         if !self.binds.contains_key(&id) {
+            let sampler = if nearest {
+                &self.nearest_sampler
+            } else {
+                &self.sampler
+            };
             let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("quad"),
                 layout: &self.quad_layout,
@@ -509,7 +552,7 @@ impl Compositor {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                        resource: wgpu::BindingResource::Sampler(sampler),
                     },
                 ],
             });
@@ -798,6 +841,7 @@ impl Compositor {
                     if q.color_709 { 1.0 } else { 0.0 },
                     0.0,
                 ],
+                uv_rect: q.uv_rect,
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -808,7 +852,7 @@ impl Compositor {
                 })?),
                 None => None,
             };
-            binds.push(self.bind_group_for(ctx, texture));
+            binds.push(self.bind_group_for(ctx, texture, q.nearest));
         }
         ctx.queue.write_buffer(&self.quad_buf, 0, &staging);
 
@@ -1075,6 +1119,70 @@ mod tests {
         assert_eq!(px(&pixels, 200, 190, 50), [0, 0, 255, 255], "right bar red");
         assert_eq!(px(&pixels, 200, 60, 10), [0, 255, 0, 255], "canvas green");
         assert_eq!(px(&pixels, 200, 100, 50), [255, 0, 0, 255], "quad blue");
+    }
+
+    /// The sprite-sheet contract in one frame: a uv rect shows ONE cell, and
+    /// `nearest` is what keeps the cell next door out of it.
+    ///
+    /// With smoothing on, a pixel near the cell's edge samples across the
+    /// boundary and blends in the neighbouring frame — the classic
+    /// sprite-sheet artifact. That is why `nearest` is a correctness flag
+    /// here and not a matter of taste, and this test fails on exactly that
+    /// pixel if the two are ever decoupled.
+    #[test]
+    fn a_uv_rect_shows_one_cell_and_nearest_keeps_the_neighbour_out() {
+        let ctx = GpuContext::new().expect("gpu");
+        // A 2×2 "sheet" of four one-texel cells. Premultiplied BGRA.
+        let sheet: Vec<u8> = vec![
+            0, 0, 255, 255, /* red   */ 0, 255, 0, 255, /* green */
+            255, 0, 0, 255, /* blue  */ 255, 255, 255, 255, /* white */
+        ];
+        let tex = Compositor::upload_texture(&ctx, &sheet, 2, 2).expect("tex");
+
+        let render = |uv: [f32; 4], nearest: bool| {
+            let scene = Scene {
+                canvas_width: 100.0,
+                canvas_height: 100.0,
+                background_rgba: [0.0, 0.0, 0.0, 1.0],
+                output_width: 100,
+                output_height: 100,
+                bars_rgba: [0.0, 0.0, 0.0, 1.0],
+                quads: vec![SceneQuad {
+                    texture: Some(0),
+                    rect: [0.0, 0.0, 100.0, 100.0],
+                    uv_rect: uv,
+                    nearest,
+                    ..Default::default()
+                }],
+            };
+            compose(&scene, &[tex.clone()], &ctx)
+        };
+
+        // The top-left cell, blown up to the whole canvas.
+        let crisp = render([0.0, 0.0, 0.5, 0.5], true);
+        assert_eq!(px(&crisp, 100, 50, 50), [0, 0, 255, 255], "cell is red");
+        // The last column maps to the very edge of the cell. Unsmoothed, it
+        // is still that cell and nothing else.
+        assert_eq!(
+            px(&crisp, 100, 99, 50),
+            [0, 0, 255, 255],
+            "no green from the cell next door"
+        );
+
+        // The same quad smoothed: the edge pixel is half the neighbouring
+        // frame. This is the artifact, asserted so the flag cannot quietly
+        // stop being applied.
+        let smoothed = render([0.0, 0.0, 0.5, 0.5], false);
+        let edge = px(&smoothed, 100, 99, 50);
+        assert!(edge[1] > 60, "smoothing bleeds green in, got {edge:?}");
+
+        // The origin is honoured too, not just the size.
+        let second = render([0.5, 0.0, 0.5, 0.5], true);
+        assert_eq!(
+            px(&second, 100, 50, 50),
+            [0, 255, 0, 255],
+            "the next cell along is green"
+        );
     }
 
     #[test]

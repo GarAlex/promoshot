@@ -166,6 +166,7 @@ pub extern "C" fn promo_compose_frame(
                     solid_rgba: q.solid_rgba,
                     opacity: q.opacity,
                     color_709: q.color709,
+                    ..Default::default()
                 })
                 .collect(),
         };
@@ -333,6 +334,7 @@ pub extern "C" fn promo_compose_frame_raw(
                     solid_rgba: [c[12] as f32, c[13] as f32, c[14] as f32, c[15] as f32],
                     opacity: c[16] as f32,
                     color_709: c[17] != 0.0,
+                    ..Default::default()
                 })
                 .collect(),
         };
