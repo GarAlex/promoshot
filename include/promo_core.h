@@ -223,6 +223,14 @@ double promo_layer_opacity(const PromoProject *project, int32_t layer_index,
  * says yes or no, which is not something an editor can show a person. */
 char *promo_project_validate(const char *json);
 
+/* The project's resources resolved against a real Resources/ folder:
+ * {"resources": [{"id", "filename", "displayName", "kind", "origin"}],
+ *  "missingLayers": ["id", ...]} - free with promo_string_free, NULL on
+ * malformed input. `filenames_json` is that directory's listing as a JSON
+ * array of names: the caller does the directory read (it owns the sandbox
+ * scope), the core owns the rule. */
+char *promo_project_inventory(const char *json, const char *filenames_json);
+
 /* --- editor layer (promo-editor) ---------------------------------------
  * Editor calls are rare and small, so they cross as JSON. Rust front ends
  * depend on promo-editor directly and skip all of this.
