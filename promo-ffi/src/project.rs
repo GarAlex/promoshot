@@ -195,6 +195,78 @@ pub extern "C" fn promo_layer_motion_paths(
     }
 }
 
+/// How a path WOULD look applied between two points — the hint an editor
+/// draws while someone is choosing one, before anything is committed.
+///
+/// Params: `{"pathResourceID": "…", "from": [x, y], "to": [x, y],
+///           "flipped": false, "startAt": 0, "endAt": 1, "samples": 64}`.
+/// Returns `{"points": [[x, y], …]}`; free with `promo_string_free`, NULL
+/// when the path cannot be resolved or is not a usable route.
+///
+/// A pure function of (path, from, to): nothing is written to the project, so
+/// hovering a list of paths costs no edits and no undo entries. It runs the
+/// SAME fit the renderer runs, which is the point — a hint drawn any other
+/// way would promise something the render then does not deliver.
+///
+/// Safety contract (C ABI): both arguments are valid NUL-terminated strings.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_path_preview(
+    handle: *const ProjectHandle,
+    params_json: *const c_char,
+) -> *mut c_char {
+    let Some(handle) = (unsafe { handle.as_ref() }) else {
+        return std::ptr::null_mut();
+    };
+    if params_json.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let Ok(params) = serde_json::from_str::<serde_json::Value>(text) else {
+        return std::ptr::null_mut();
+    };
+    let point_of = |value: &serde_json::Value| -> Option<promo_model::Point> {
+        let array = value.as_array()?;
+        Some(promo_model::Point(
+            array.first()?.as_f64()?,
+            array.get(1)?.as_f64()?,
+        ))
+    };
+    let (Some(from), Some(to)) = (point_of(&params["from"]), point_of(&params["to"])) else {
+        return std::ptr::null_mut();
+    };
+    let path = promo_model::MotionPath {
+        path_resource_id: params["pathResourceID"].as_str().unwrap_or_default().to_string(),
+        flipped: params["flipped"].as_bool(),
+        start_at: params["startAt"].as_f64(),
+        end_at: params["endAt"].as_f64(),
+    };
+    let Some(polyline) = promo_timeline::path_polyline(
+        handle.meta.resources.as_deref().unwrap_or(&[]),
+        &path,
+    ) else {
+        return std::ptr::null_mut();
+    };
+    let samples = params["samples"].as_u64().unwrap_or(64).clamp(2, 512) as usize;
+    let flipped = path.flipped.unwrap_or(false);
+    let (start_at, end_at) = (path.start_at.unwrap_or(0.0), path.end_at.unwrap_or(1.0));
+    let points: Vec<serde_json::Value> = (0..samples)
+        .map(|step| {
+            let progress = step as f64 / (samples - 1) as f64;
+            let point = promo_timeline::point_along_range(
+                &polyline, from, to, flipped, start_at, end_at, progress,
+            );
+            serde_json::json!([point.x(), point.y()])
+        })
+        .collect();
+    match serde_json::to_string(&serde_json::json!({ "points": points })) {
+        Ok(text) => to_c_string(&text),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 fn to_c_string(message: &str) -> *mut c_char {
     match CString::new(message) {
         Ok(c) => c.into_raw(),

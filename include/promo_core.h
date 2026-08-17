@@ -243,6 +243,14 @@ char *promo_project_inventory(const char *json, const char *filenames_json);
  * as a route. */
 char *promo_layer_motion_paths(const PromoProject *project, const char *params_json);
 
+/* How a path WOULD look applied between two points - the hint an editor draws
+ * while someone is choosing one, before anything is committed. Params
+ * {"pathResourceID": "...", "from": [x, y], "to": [x, y], "flipped": false,
+ *  "startAt": 0, "endAt": 1, "samples": 64}; returns {"points": [[x, y], ...]}.
+ * Pure: nothing is written to the project, and it runs the same fit the
+ * renderer runs. Free with promo_string_free. */
+char *promo_path_preview(const PromoProject *project, const char *params_json);
+
 /* --- editor layer (promo-editor) ---------------------------------------
  * Editor calls are rare and small, so they cross as JSON. Rust front ends
  * depend on promo-editor directly and skip all of this.
