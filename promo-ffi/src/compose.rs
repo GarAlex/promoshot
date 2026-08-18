@@ -152,6 +152,7 @@ pub extern "C" fn promo_compose_frame(
             background_rgba: wire.background_rgba,
             output_width: wire.output_width,
             output_height: wire.output_height,
+            background_gradient: None,
             bars_rgba: wire.bars_rgba,
             quads: wire
                 .quads
@@ -317,6 +318,7 @@ pub extern "C" fn promo_compose_frame_raw(
             background_rgba: [h[2] as f32, h[3] as f32, h[4] as f32, h[5] as f32],
             output_width: h[6] as u32,
             output_height: h[7] as u32,
+            background_gradient: None,
             bars_rgba: [h[8] as f32, h[9] as f32, h[10] as f32, h[11] as f32],
             quads: q
                 .chunks_exact(QUAD_DOUBLES)

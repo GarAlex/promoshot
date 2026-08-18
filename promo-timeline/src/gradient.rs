@@ -1,0 +1,248 @@
+//! The background gradient showing at a given time.
+//!
+//! It follows `layer_background_color_hex` exactly — a background layer's
+//! keyframes override the composition's default, on the same hold-then-ramp
+//! timing — because a background that animated its colour by one rule and its
+//! gradient by another would be impossible to reason about.
+//!
+//! What is new is that the thing being interpolated has SHAPE. Two gradients
+//! can only be blended when they agree on kind, repeat mode and stop count;
+//! anything else is a cut at the later keyframe. Blending a three-stop linear
+//! into a five-stop radial has no meaning, and inventing one would produce
+//! something nobody asked for at every frame in between.
+
+use promo_model::{
+    BackgroundGradient, CompositionSettings, GradientStop, ProjectLayer, ProjectLayerKeyframe,
+};
+
+use crate::interpolation::{interpolate_color_hex, layer_local_time, ramp_seconds};
+
+/// Linearly between two gradients of the same shape. `progress` outside 0…1
+/// is clamped by the caller.
+fn blend(a: &BackgroundGradient, b: &BackgroundGradient, progress: f64) -> BackgroundGradient {
+    let lerp = |x: f64, y: f64| x + (y - x) * progress;
+    let (from, to) = (a.resolved_stops(), b.resolved_stops());
+    BackgroundGradient {
+        kind: b.kind,
+        repeat: b.repeat,
+        start: promo_model::Point(
+            lerp(a.start.x(), b.start.x()),
+            lerp(a.start.y(), b.start.y()),
+        ),
+        end: promo_model::Point(lerp(a.end.x(), b.end.x()), lerp(a.end.y(), b.end.y())),
+        stops: from
+            .iter()
+            .zip(to.iter())
+            .map(|(x, y)| GradientStop {
+                color_hex: interpolate_color_hex(&x.color_hex, &y.color_hex, progress),
+                at: lerp(x.at, y.at),
+            })
+            .collect(),
+    }
+}
+
+/// The gradient a background layer shows at `time`, or `None` when the
+/// background is a flat colour.
+pub fn layer_background_gradient(
+    layer: &ProjectLayer,
+    time: f64,
+    defaults: &CompositionSettings,
+) -> Option<BackgroundGradient> {
+    let local_time = layer_local_time(layer, time);
+    let keyed: Vec<&ProjectLayerKeyframe> = {
+        let mut keyed: Vec<&ProjectLayerKeyframe> = layer
+            .keyframes
+            .iter()
+            .filter(|k| k.gradient.is_some())
+            .collect();
+        keyed.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+        keyed
+    };
+    if keyed.is_empty() {
+        return defaults.background_gradient.clone();
+    }
+    let at = |k: &ProjectLayerKeyframe| k.gradient.clone().expect("filtered");
+
+    let first = keyed[0];
+    let last = keyed[keyed.len() - 1];
+    if local_time <= first.time {
+        return Some(at(first));
+    }
+    if local_time >= last.time {
+        return Some(at(last));
+    }
+    for pair in keyed.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if local_time < a.time || local_time > b.time {
+            continue;
+        }
+        let (from, to) = (at(a), at(b));
+        let gap = b.time - a.time;
+        let transition = ramp_seconds(b, gap);
+        let ramp_start = b.time - transition;
+        if local_time < ramp_start {
+            return Some(from);
+        }
+        // Shapes that cannot blend simply change over at the keyframe, the
+        // way a colour would if it were unreadable.
+        if !from.is_compatible_with(&to) {
+            return Some(if local_time >= b.time { to } else { from });
+        }
+        let progress = if transition > 0.0 {
+            ((local_time - ramp_start) / transition).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        return Some(blend(&from, &to, progress));
+    }
+    Some(at(first))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use promo_model::{GradientKind, GradientRepeat, Point};
+
+    fn gradient(json: &str) -> BackgroundGradient {
+        serde_json::from_str(json).expect("gradient")
+    }
+
+    fn two_stop(from: &str, to: &str, start: [f64; 2], end: [f64; 2]) -> String {
+        format!(
+            r#"{{"kind": "linear", "repeat": "repeat",
+                 "start": [{}, {}], "end": [{}, {}],
+                 "stops": [{{"colorHex": "{from}", "at": 0}},
+                           {{"colorHex": "{to}", "at": 1}}]}}"#,
+            start[0], start[1], end[0], end[1]
+        )
+    }
+
+    fn layer_with(keyframes: &str) -> ProjectLayer {
+        serde_json::from_str(&format!(
+            r#"{{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": [{keyframes}]}}"#
+        ))
+        .expect("layer")
+    }
+
+    fn settings() -> CompositionSettings {
+        CompositionSettings::default()
+    }
+
+    #[test]
+    fn no_keyframes_falls_back_to_the_projects_own_gradient() {
+        let layer = layer_with("");
+        assert!(layer_background_gradient(&layer, 1.0, &settings()).is_none());
+
+        let mut defaults = settings();
+        defaults.background_gradient = Some(gradient(&two_stop("000000", "FFFFFF", [0.0, 0.0], [1.0, 0.0])));
+        let answer = layer_background_gradient(&layer, 1.0, &defaults).expect("gradient");
+        assert_eq!(answer.stops.len(), 2);
+    }
+
+    /// The scroll, which is the reason the geometry animates at all: with a
+    /// repeating ramp, shifting start and end by exactly one period lands on
+    /// a pattern identical to where it began — so a loop has no seam.
+    #[test]
+    fn shifting_a_repeating_ramp_by_one_period_is_seamless() {
+        let layer = layer_with(&format!(
+            r#"{{"id": "A", "time": 0, "transitionDuration": 0,
+                 "gradient": {}}},
+               {{"id": "B", "time": 4, "transitionPercent": 100,
+                 "transitionDuration": 4, "gradient": {}}}"#,
+            two_stop("112244", "AACCFF", [0.0, 0.0], [0.25, 0.0]),
+            two_stop("112244", "AACCFF", [0.25, 0.0], [0.5, 0.0]),
+        ));
+        let start = layer_background_gradient(&layer, 0.0, &settings()).expect("start");
+        let end = layer_background_gradient(&layer, 4.0, &settings()).expect("end");
+        // One period along: the axis has moved by its own length.
+        assert!((end.start.x() - start.end.x()).abs() < 1e-9);
+        assert_eq!(start.effective_repeat(), GradientRepeat::Repeat);
+
+        // Halfway, the axis is halfway — the geometry is what animates, not
+        // the colours, which is what makes it read as motion rather than as
+        // a cross-fade.
+        let middle = layer_background_gradient(&layer, 2.0, &settings()).expect("middle");
+        assert!((middle.start.x() - 0.125).abs() < 1e-9, "{:?}", middle.start);
+        assert_eq!(middle.stops[0].color_hex, "112244", "colours unchanged");
+    }
+
+    #[test]
+    fn colours_and_positions_blend_when_the_shape_matches() {
+        let layer = layer_with(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0, "gradient":
+                 {"kind": "linear", "start": [0, 0], "end": [1, 0],
+                  "stops": [{"colorHex": "000000", "at": 0},
+                            {"colorHex": "FFFFFF", "at": 1}]}},
+               {"id": "B", "time": 2, "transitionDuration": 2, "transitionPercent": 100,
+                "gradient":
+                 {"kind": "linear", "start": [0, 0], "end": [1, 0],
+                  "stops": [{"colorHex": "FFFFFF", "at": 0},
+                            {"colorHex": "000000", "at": 1}]}}"#,
+        );
+        let middle = layer_background_gradient(&layer, 1.0, &settings()).expect("middle");
+        assert_eq!(middle.stops[0].color_hex, "808080", "halfway between the ends");
+        assert_eq!(middle.stops[1].color_hex, "808080");
+    }
+
+    /// Shapes that cannot be blended must CUT, not produce something halfway
+    /// that nobody wrote. A three-stop linear has no meaningful midpoint with
+    /// a two-stop radial.
+    #[test]
+    fn an_incompatible_change_cuts_at_the_keyframe() {
+        let layer = layer_with(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0, "gradient":
+                 {"kind": "linear", "start": [0, 0], "end": [1, 0],
+                  "stops": [{"colorHex": "000000", "at": 0},
+                            {"colorHex": "888888", "at": 0.5},
+                            {"colorHex": "FFFFFF", "at": 1}]}},
+               {"id": "B", "time": 2, "transitionDuration": 2, "transitionPercent": 100,
+                "gradient":
+                 {"kind": "radial", "start": [0.5, 0.5], "end": [1, 0.5],
+                  "stops": [{"colorHex": "FF0000", "at": 0},
+                            {"colorHex": "0000FF", "at": 1}]}}"#,
+        );
+        let before = layer_background_gradient(&layer, 1.9, &settings()).expect("before");
+        assert_eq!(before.kind, GradientKind::Linear);
+        assert_eq!(before.stops.len(), 3, "still the first, whole");
+        let after = layer_background_gradient(&layer, 2.0, &settings()).expect("after");
+        assert_eq!(after.kind, GradientKind::Radial);
+    }
+
+    #[test]
+    fn a_malformed_gradient_still_draws_something() {
+        let none = gradient(r#"{"kind": "linear", "start": [0, 0], "end": [1, 0], "stops": []}"#);
+        assert_eq!(none.resolved_stops().len(), 2, "never an empty ramp");
+        let one = gradient(
+            r#"{"kind": "linear", "start": [0, 0], "end": [1, 0],
+                "stops": [{"colorHex": "123456", "at": 0.4}]}"#,
+        );
+        let resolved = one.resolved_stops();
+        assert_eq!(resolved.len(), 2, "one colour is a flat fill");
+        assert_eq!(resolved[0].color_hex, "123456");
+        assert_eq!(resolved[0].at, 0.0);
+        assert_eq!(resolved[1].at, 1.0);
+
+        // Out of order and out of range: sorted and clamped, not refused.
+        let messy = gradient(
+            r#"{"kind": "linear", "start": [0, 0], "end": [1, 0],
+                "stops": [{"colorHex": "FFFFFF", "at": 2.5},
+                          {"colorHex": "000000", "at": -1}]}"#,
+        );
+        let resolved = messy.resolved_stops();
+        assert_eq!(resolved[0].color_hex, "000000");
+        assert_eq!(resolved[0].at, 0.0);
+        assert_eq!(resolved[1].at, 1.0);
+    }
+
+    #[test]
+    fn point_accessors_match_the_wire_order() {
+        let g = gradient(
+            r#"{"kind": "radial", "start": [0.25, 0.75], "end": [1, 0.5],
+                "stops": [{"colorHex": "000000", "at": 0},
+                          {"colorHex": "FFFFFF", "at": 1}]}"#,
+        );
+        assert_eq!(g.start, Point(0.25, 0.75));
+        assert_eq!(g.end, Point(1.0, 0.5));
+    }
+}

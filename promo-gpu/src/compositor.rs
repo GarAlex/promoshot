@@ -46,6 +46,9 @@ pub struct SceneQuad {
     /// sampling near a cell's edge reaches into the neighbouring frame and
     /// bleeds it in.
     pub nearest: bool,
+    /// Fill from the frame's background gradient rather than `solid_rgba`.
+    /// Set on the background quad alone.
+    pub gradient_fill: bool,
 }
 
 impl Default for SceneQuad {
@@ -62,6 +65,7 @@ impl Default for SceneQuad {
             color_709: false,
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             nearest: false,
+            gradient_fill: false,
         }
     }
 }
@@ -74,11 +78,35 @@ pub struct Scene {
     pub canvas_width: f64,
     pub canvas_height: f64,
     pub background_rgba: [f32; 4],
+    /// The background's gradient, already resolved for this frame. `None` is
+    /// a flat `background_rgba`, which is what every project has until it
+    /// asks for otherwise.
+    pub background_gradient: Option<SceneGradient>,
     pub output_width: u32,
     pub output_height: u32,
     pub bars_rgba: [f32; 4],
     pub quads: Vec<SceneQuad>,
 }
+
+/// A resolved gradient: canvas-space axis, straight-alpha stops in order.
+/// The compositor makes no decisions about it — sorting, clamping and the
+/// two-stop minimum are the model's job, so the renderer and the editor
+/// cannot disagree about what a malformed gradient means.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneGradient {
+    /// False for linear, true for radial.
+    pub radial: bool,
+    /// 0 clamp, 1 repeat, 2 mirror.
+    pub repeat: u32,
+    /// Canvas px. Radial: `start` is the centre and `end` a point on the rim.
+    pub start: [f32; 2],
+    pub end: [f32; 2],
+    /// Up to `MAX_GRADIENT_STOPS`, ascending by position.
+    pub stops: Vec<([f32; 4], f32)>,
+}
+
+/// Matches `BackgroundGradient::MAX_STOPS`.
+pub const MAX_GRADIENT_STOPS: usize = 8;
 
 const SHADER: &str = r#"
 struct Globals {
@@ -86,6 +114,18 @@ struct Globals {
     fit: vec4<f32>,
     // xy = output size in px.
     output_size: vec4<f32>,
+    // A frame has exactly one background, so its gradient lives here rather
+    // than on every quad.
+    // x = kind (0 none, 1 linear, 2 radial), y = stop count,
+    // z = repeat (0 clamp, 1 repeat, 2 mirror), w = unused.
+    grad: vec4<f32>,
+    // xy = start (canvas px), zw = end (canvas px; radial: a point on the
+    // rim, so the distance is the radius).
+    grad_axis: vec4<f32>,
+    // Stop positions, four to a vector.
+    grad_at: array<vec4<f32>, 2>,
+    // Stop colours, straight (not premultiplied) sRGB.
+    grad_color: array<vec4<f32>, 8>,
 };
 
 struct Quad {
@@ -156,6 +196,58 @@ fn bt709_to_srgb(c: vec3<f32>) -> vec3<f32> {
     return select(hi, lo, lin <= vec3<f32>(0.0031308));
 }
 
+/// Where a canvas point falls along the gradient, before the repeat mode.
+fn gradient_t(p: vec2<f32>) -> f32 {
+    let origin = globals.grad_axis.xy;
+    let rim = globals.grad_axis.zw;
+    let axis = rim - origin;
+    let span = dot(axis, axis);
+    if (span < 1e-9) {
+        return 0.0;
+    }
+    if (globals.grad.x > 1.5) {
+        // Radial: distance from the centre over the radius.
+        return length(p - origin) / sqrt(span);
+    }
+    return dot(p - origin, axis) / span;
+}
+
+/// Clamp, repeat or mirror — the choice that decides whether animating the
+/// axis scrolls the pattern or just drags two flat regions across it.
+fn gradient_wrap(t: f32) -> f32 {
+    if (globals.grad.z > 1.5) {
+        let two = fract(t * 0.5) * 2.0;
+        return select(two, 2.0 - two, two > 1.0);
+    }
+    if (globals.grad.z > 0.5) {
+        return fract(t);
+    }
+    return clamp(t, 0.0, 1.0);
+}
+
+fn gradient_stop_at(index: i32) -> f32 {
+    return globals.grad_at[index / 4][index % 4];
+}
+
+/// The colour of the ramp at a canvas point. Straight alpha; the caller
+/// premultiplies, exactly as the solid path does.
+fn gradient_color(p: vec2<f32>) -> vec4<f32> {
+    let count = i32(globals.grad.y);
+    let t = gradient_wrap(gradient_t(p));
+    if (t <= gradient_stop_at(0)) {
+        return globals.grad_color[0];
+    }
+    for (var i = 1; i < count; i = i + 1) {
+        let hi = gradient_stop_at(i);
+        if (t <= hi) {
+            let lo = gradient_stop_at(i - 1);
+            let span = max(hi - lo, 1e-6);
+            return mix(globals.grad_color[i - 1], globals.grad_color[i], (t - lo) / span);
+        }
+    }
+    return globals.grad_color[count - 1];
+}
+
 // Signed distance to a rounded rect centered at `half_size` with `radius`.
 fn sd_round_rect(p: vec2<f32>, half_size: vec2<f32>, radius: f32) -> f32 {
     let q = abs(p - half_size) - half_size + vec2<f32>(radius, radius);
@@ -184,6 +276,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             // Video frames are opaque (alpha 1), so premultiplied rgb == rgb.
             color = vec4<f32>(bt709_to_srgb(color.rgb), color.a);
         }
+    } else if (quad.params.w > 0.5 && globals.grad.x > 0.5) {
+        // The background quad, filled from the frame's gradient. `in.local`
+        // is already canvas-space, which is where the axis is expressed.
+        color = gradient_color(in.local + quad.rect.xy);
+        color = vec4<f32>(color.rgb * color.a, color.a);
     } else {
         color = quad.solid_color;
         color = vec4<f32>(color.rgb * color.a, color.a);
@@ -212,6 +309,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 struct GlobalsRaw {
     fit: [f32; 4],
     output_size: [f32; 4],
+    grad: [f32; 4],
+    grad_axis: [f32; 4],
+    grad_at: [[f32; 4]; 2],
+    grad_color: [[f32; 4]; MAX_GRADIENT_STOPS],
 }
 
 #[repr(C)]
@@ -797,10 +898,35 @@ impl Compositor {
         } else {
             (1.0, 0.0, 0.0)
         };
-        let globals = GlobalsRaw {
+        let mut globals = GlobalsRaw {
             fit: [scale as f32, scale as f32, off_x as f32, off_y as f32],
             output_size: [ow as f32, oh as f32, 0.0, 0.0],
+            grad: [0.0; 4],
+            grad_axis: [0.0; 4],
+            grad_at: [[0.0; 4]; 2],
+            grad_color: [[0.0; 4]; MAX_GRADIENT_STOPS],
         };
+        if let Some(gradient) = &scene.background_gradient {
+            let stops = gradient.stops.len().min(MAX_GRADIENT_STOPS);
+            if stops >= 2 {
+                globals.grad = [
+                    if gradient.radial { 2.0 } else { 1.0 },
+                    stops as f32,
+                    gradient.repeat as f32,
+                    0.0,
+                ];
+                globals.grad_axis = [
+                    gradient.start[0],
+                    gradient.start[1],
+                    gradient.end[0],
+                    gradient.end[1],
+                ];
+                for (index, (color, at)) in gradient.stops.iter().take(stops).enumerate() {
+                    globals.grad_at[index / 4][index % 4] = *at;
+                    globals.grad_color[index] = *color;
+                }
+            }
+        }
         ctx.queue
             .write_buffer(&self.globals_buf, 0, as_bytes(&globals));
 
@@ -810,6 +936,9 @@ impl Compositor {
             texture: None,
             rect: [0.0, 0.0, cw, ch],
             solid_rgba: scene.background_rgba,
+            // Only this quad reads the frame's gradient; every other solid
+            // keeps its own colour.
+            gradient_fill: scene.background_gradient.is_some(),
             ..Default::default()
         });
         quads.extend_from_slice(&scene.quads);
@@ -839,7 +968,7 @@ impl Compositor {
                     q.opacity,
                     if q.texture.is_some() { 1.0 } else { 0.0 },
                     if q.color_709 { 1.0 } else { 0.0 },
-                    0.0,
+                    if q.gradient_fill { 1.0 } else { 0.0 },
                 ],
                 uv_rect: q.uv_rect,
             };
@@ -1106,6 +1235,7 @@ mod tests {
             background_rgba: [0.0, 1.0, 0.0, 1.0], // green canvas
             output_width: 200,
             output_height: 100,
+            background_gradient: None,
             bars_rgba: [1.0, 0.0, 0.0, 1.0], // red bars
             quads: vec![SceneQuad {
                 rect: [25.0, 25.0, 50.0, 50.0],
@@ -1119,6 +1249,111 @@ mod tests {
         assert_eq!(px(&pixels, 200, 190, 50), [0, 0, 255, 255], "right bar red");
         assert_eq!(px(&pixels, 200, 60, 10), [0, 255, 0, 255], "canvas green");
         assert_eq!(px(&pixels, 200, 100, 50), [255, 0, 0, 255], "quad blue");
+    }
+
+    fn gradient_scene(gradient: SceneGradient) -> Scene {
+        Scene {
+            canvas_width: 100.0,
+            canvas_height: 100.0,
+            background_rgba: [1.0, 0.0, 1.0, 1.0], // magenta: must never show
+            background_gradient: Some(gradient),
+            output_width: 100,
+            output_height: 100,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![],
+        }
+    }
+
+    /// Black on the left, white on the right, and grey exactly halfway — the
+    /// whole of a linear ramp. The flat `background_rgba` is magenta, so if
+    /// the gradient is not applied the test does not merely drift, it screams.
+    #[test]
+    fn a_linear_gradient_ramps_across_the_canvas() {
+        let ctx = GpuContext::new().expect("gpu");
+        let scene = gradient_scene(SceneGradient {
+            radial: false,
+            repeat: 0,
+            start: [0.0, 0.0],
+            end: [100.0, 0.0],
+            stops: vec![([0.0, 0.0, 0.0, 1.0], 0.0), ([1.0, 1.0, 1.0, 1.0], 1.0)],
+        });
+        let px = compose(&scene, &[], &ctx);
+        // Sampled at pixel CENTRES, so the first pixel is 1.5px along a
+        // 100px axis rather than at zero — hence a couple of levels, not none.
+        assert!(px_(&px, 1, 50)[2] <= 6, "black at the left, got {}", px_(&px, 1, 50)[2]);
+        assert!(px_(&px, 98, 50)[2] >= 248, "white at the right, got {}", px_(&px, 98, 50)[2]);
+        let middle = px_(&px, 50, 50)[2];
+        assert!((middle as i32 - 128).abs() <= 3, "grey halfway, got {middle}");
+        // It runs along the AXIS, so the ramp does not vary down the canvas.
+        assert_eq!(px_(&px, 50, 10)[2], middle, "constant across the axis");
+    }
+
+    /// Radial measures distance from the centre, so the corners are the far
+    /// end of the ramp and the middle is the near end.
+    #[test]
+    fn a_radial_gradient_runs_outward_from_its_centre() {
+        let ctx = GpuContext::new().expect("gpu");
+        let scene = gradient_scene(SceneGradient {
+            radial: true,
+            repeat: 0,
+            start: [50.0, 50.0],
+            end: [100.0, 50.0], // radius 50
+            stops: vec![([1.0, 1.0, 1.0, 1.0], 0.0), ([0.0, 0.0, 0.0, 1.0], 1.0)],
+        });
+        let px = compose(&scene, &[], &ctx);
+        assert!(px_(&px, 50, 50)[2] > 250, "white at the centre");
+        assert_eq!(px_(&px, 1, 1)[2], 0, "clamped to black in the corner");
+        // Equidistant points match: it is a distance, not a projection.
+        assert_eq!(px_(&px, 25, 50)[2], px_(&px, 50, 25)[2]);
+    }
+
+    /// The reason `repeat` exists: it TILES, so animating the axis scrolls
+    /// the pattern instead of dragging two flat regions across the canvas.
+    #[test]
+    fn repeat_tiles_the_ramp_and_mirror_reverses_each_tile() {
+        let ctx = GpuContext::new().expect("gpu");
+        let make = |repeat: u32| {
+            gradient_scene(SceneGradient {
+                radial: false,
+                repeat,
+                start: [0.0, 0.0],
+                end: [50.0, 0.0], // half the canvas: exactly two periods
+                stops: vec![([0.0, 0.0, 0.0, 1.0], 0.0), ([1.0, 1.0, 1.0, 1.0], 1.0)],
+            })
+        };
+        let repeated = compose(&make(1), &[], &ctx);
+        // Two identical ramps: a point and the same point one period along
+        // are the same colour, which is what makes a scroll seamless.
+        assert_eq!(px_(&repeated, 10, 50)[2], px_(&repeated, 60, 50)[2]);
+        assert!(px_(&repeated, 49, 50)[2] > 240, "end of the first tile");
+        assert!(px_(&repeated, 51, 50)[2] < 40, "and straight back to black");
+
+        // Mirror turns that hard return into a fold, so the ends never meet.
+        let mirrored = compose(&make(2), &[], &ctx);
+        assert!(mirrored[51 * 4 + 2] > 200 || px_(&mirrored, 51, 50)[2] > 200,
+                "the second tile runs backwards from white");
+        assert!(px_(&mirrored, 99, 50)[2] < 40, "and reaches black at the far end");
+    }
+
+    /// No gradient means the flat colour, unchanged — every project that has
+    /// never heard of gradients renders exactly as before.
+    #[test]
+    fn without_a_gradient_the_flat_background_still_wins() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut scene = gradient_scene(SceneGradient {
+            radial: false,
+            repeat: 0,
+            start: [0.0, 0.0],
+            end: [100.0, 0.0],
+            stops: vec![([0.0, 0.0, 0.0, 1.0], 0.0), ([1.0, 1.0, 1.0, 1.0], 1.0)],
+        });
+        scene.background_gradient = None;
+        let px = compose(&scene, &[], &ctx);
+        assert_eq!(px_(&px, 50, 50), [255, 0, 255, 255], "the magenta fill");
+    }
+
+    fn px_(pixels: &[u8], x: usize, y: usize) -> [u8; 4] {
+        px(pixels, 100, x, y)
     }
 
     /// The sprite-sheet contract in one frame: a uv rect shows ONE cell, and
@@ -1146,6 +1381,7 @@ mod tests {
                 background_rgba: [0.0, 0.0, 0.0, 1.0],
                 output_width: 100,
                 output_height: 100,
+                background_gradient: None,
                 bars_rgba: [0.0, 0.0, 0.0, 1.0],
                 quads: vec![SceneQuad {
                     texture: Some(0),
@@ -1196,6 +1432,7 @@ mod tests {
             background_rgba: [0.0, 0.0, 0.0, 1.0],
             output_width: 100,
             output_height: 100,
+            background_gradient: None,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],
             quads: vec![SceneQuad {
                 texture: Some(0),
@@ -1243,6 +1480,7 @@ mod tests {
             background_rgba: [0.0, 0.0, 0.0, 1.0],
             output_width: 10,
             output_height: 10,
+            background_gradient: None,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],
             quads: vec![SceneQuad {
                 texture: Some(0),
@@ -1272,6 +1510,7 @@ mod tests {
             background_rgba: [0.0, 0.0, 0.0, 1.0],
             output_width: 8,
             output_height: 8,
+            background_gradient: None,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],
             quads: vec![SceneQuad {
                 texture: Some(0),
@@ -1323,6 +1562,7 @@ mod tests {
                 background_rgba: [0.0, 0.0, 0.0, 1.0],
                 output_width: 16,
                 output_height: 16,
+                background_gradient: None,
                 bars_rgba: [0.0, 0.0, 0.0, 1.0],
                 quads: vec![SceneQuad {
                     texture: Some(0),
@@ -1352,6 +1592,7 @@ mod tests {
             background_rgba: [0.0, 0.0, 0.0, 1.0],
             output_width: 8,
             output_height: 8,
+            background_gradient: None,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],
             quads: vec![SceneQuad {
                 texture: Some(0),
@@ -1396,6 +1637,7 @@ mod tests {
             background_rgba: [0.0, 0.0, 0.0, 1.0],
             output_width: 4,
             output_height: 4,
+            background_gradient: None,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],
             quads: vec![SceneQuad {
                 texture: Some(0),
@@ -1421,6 +1663,7 @@ mod tests {
             background_rgba: [0.0, 0.0, 0.0, 1.0],
             output_width: 10,
             output_height: 10,
+            background_gradient: None,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],
             quads: vec![SceneQuad {
                 rect: [0.0, 0.0, 10.0, 10.0],

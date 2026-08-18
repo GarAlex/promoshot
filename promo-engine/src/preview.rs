@@ -849,6 +849,35 @@ impl PreviewEngine {
             .unwrap_or_else(|| settings.background_color_hex.clone());
         let background = rgba_from_hex(&bg_hex);
 
+        // The gradient comes from the same background layer, on the same
+        // hold-then-ramp timing as its colour — resolved here and converted
+        // from unit canvas coordinates to the canvas pixels the shader works
+        // in, so the model never has to know the output size.
+        let background_gradient = layers
+            .iter()
+            .find(|l| l.kind == ProjectLayerKind::Background && tl::layer_is_visible(l, time))
+            .and_then(|layer| tl::layer_background_gradient(layer, time, &settings))
+            .or_else(|| settings.background_gradient.clone())
+            .map(|gradient| {
+                let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
+                let point = |p: promo_model::Point| [p.x() as f32 * cw, p.y() as f32 * ch];
+                promo_gpu::compositor::SceneGradient {
+                    radial: gradient.kind == promo_model::GradientKind::Radial,
+                    repeat: match gradient.effective_repeat() {
+                        promo_model::GradientRepeat::Clamp => 0,
+                        promo_model::GradientRepeat::Repeat => 1,
+                        promo_model::GradientRepeat::Mirror => 2,
+                    },
+                    start: point(gradient.start),
+                    end: point(gradient.end),
+                    stops: gradient
+                        .resolved_stops()
+                        .iter()
+                        .map(|stop| (rgba_from_hex(&stop.color_hex), stop.at as f32))
+                        .collect(),
+                }
+            });
+
         let mut quads: Vec<SceneQuad> = Vec::new();
         let mut used: Vec<u64> = Vec::new();
 
@@ -1008,6 +1037,7 @@ impl PreviewEngine {
                 canvas_width: canvas.width(),
                 canvas_height: canvas.height(),
                 background_rgba: background,
+                background_gradient,
                 output_width,
                 output_height,
                 bars_rgba: background,

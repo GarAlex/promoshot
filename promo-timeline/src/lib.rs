@@ -7,6 +7,7 @@
 //! parity harness diffs them fixture-by-fixture.
 
 pub mod attachment;
+pub mod gradient;
 pub mod motion;
 pub mod audio;
 pub mod interpolation;
@@ -22,6 +23,7 @@ pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
 };
+pub use gradient::layer_background_gradient;
 pub use interpolation::{
     interpolate_color_hex, layer_background_color_hex, layer_caption_values,
     layer_has_tilt_keyframes, layer_is_visible, layer_local_time, layer_opacity, layer_rotation,

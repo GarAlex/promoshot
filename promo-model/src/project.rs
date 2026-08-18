@@ -348,6 +348,10 @@ pub struct CompositionSettings {
     pub subtitle_italic: bool,
     pub subtitle_color_hex: String,
     pub background_color_hex: String,
+    /// The project's default background. When present it replaces the flat
+    /// `background_color_hex` — which stays as the fallback, so a project
+    /// that never wanted a gradient is unaffected.
+    pub background_gradient: Option<BackgroundGradient>,
     pub subtitle_background_color_hex: String,
     pub subtitle_background_opacity: f64,
     pub subtitle_background_padding: f64,
@@ -379,6 +383,7 @@ impl Default for CompositionSettings {
             subtitle_italic: false,
             subtitle_color_hex: "FFFFFF".into(),
             background_color_hex: "000000".into(),
+            background_gradient: None,
             subtitle_background_color_hex: "000000".into(),
             subtitle_background_opacity: 0.7,
             subtitle_background_padding: 16.0,
@@ -412,6 +417,7 @@ impl Default for CompositionSettings {
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 struct CompositionSettingsWire {
+    background_gradient: Option<BackgroundGradient>,
     canvas_width: Option<f64>,
     fps: Option<f64>,
     canvas_height: Option<f64>,
@@ -449,6 +455,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             .background_color_hex
             .unwrap_or(dflt.background_color_hex.clone());
         Ok(CompositionSettings {
+            background_gradient: w.background_gradient,
             canvas_width: w.canvas_width.unwrap_or(dflt.canvas_width),
             // Absent means "renders at 30", which is not the same as 30 being
             // written down — so it stays None rather than defaulting here.
@@ -526,6 +533,8 @@ impl Serialize for CompositionSettings {
             subtitle_italic: bool,
             subtitle_color_hex: &'a str,
             background_color_hex: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            background_gradient: &'a Option<BackgroundGradient>,
             subtitle_background_color_hex: &'a str,
             subtitle_background_opacity: f64,
             subtitle_background_padding: f64,
@@ -557,6 +566,7 @@ impl Serialize for CompositionSettings {
             subtitle_italic: self.subtitle_italic,
             subtitle_color_hex: &self.subtitle_color_hex,
             background_color_hex: &self.background_color_hex,
+            background_gradient: &self.background_gradient,
             subtitle_background_color_hex: &self.subtitle_background_color_hex,
             subtitle_background_opacity: self.subtitle_background_opacity,
             subtitle_background_padding: self.subtitle_background_padding,
@@ -592,6 +602,12 @@ pub struct ProjectLayerKeyframe {
     pub horizontal_shift: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub color_hex: Option<String>,
+    /// A background layer's gradient at this keyframe. Animating it is how a
+    /// gradient scrolls: shift `start` and `end` along the axis with a
+    /// repeating or mirrored ramp and the pattern travels without an edge
+    /// ever showing.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub gradient: Option<BackgroundGradient>,
     /// Swift `Float` — absolute playback volume 0…1 (legacy name `gain`).
     #[serde(default, skip_serializing_if = "is_none")]
     pub gain: Option<f32>,
@@ -668,6 +684,117 @@ pub struct PathDocument {
     /// today's files unreadable.
     #[serde(default)]
     pub controls: Vec<Point>,
+}
+
+/// The shape of a background gradient.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GradientKind {
+    /// Colours run along the line from `start` to `end`.
+    Linear,
+    /// Colours run outward from `start`, reaching the last stop at the
+    /// distance of `end`.
+    Radial,
+}
+
+/// What happens outside the 0…1 span of the gradient.
+///
+/// `Repeat` and `Mirror` are what make a gradient SCROLL: with either of
+/// them, animating `start` and `end` along the axis by exactly one period
+/// moves the pattern without the ends ever coming into view. Under `Clamp`
+/// the same animation just drags two flat regions across the canvas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GradientRepeat {
+    /// The end colours extend outward forever. The default.
+    Clamp,
+    /// The ramp tiles. Seamless only if the first and last stop match.
+    Repeat,
+    /// The ramp tiles, reversing each time, so it is seamless whatever the
+    /// end colours are — the cheap way to a scroll that cannot band.
+    Mirror,
+}
+
+/// One colour along a gradient.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GradientStop {
+    pub color_hex: String,
+    /// Where it sits, 0…1 along the gradient.
+    pub at: f64,
+}
+
+/// A multi-stop background gradient.
+///
+/// `start` and `end` are in UNIT canvas coordinates — (0,0) is the top-left
+/// corner and (1,1) the bottom-right — so a gradient survives a change of
+/// canvas size, and an App Store set rendered at several sizes keeps one
+/// look. They also make a scroll expressible as a number rather than a pixel
+/// count: shifting `start` and `end` by 1.0 along the axis is exactly one
+/// period.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundGradient {
+    pub kind: GradientKind,
+    /// Ordered by position. Two or more; a gradient of one colour is a fill,
+    /// and should be written as `backgroundColorHex` instead.
+    pub stops: Vec<GradientStop>,
+    /// Linear: where the ramp begins. Radial: the centre.
+    pub start: Point,
+    /// Linear: where it ends. Radial: a point at the outer edge, so the
+    /// distance between the two is the radius.
+    pub end: Point,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub repeat: Option<GradientRepeat>,
+}
+
+impl BackgroundGradient {
+    /// The most stops the renderer carries. Eight is far past what a
+    /// background wants and keeps the per-frame uniform a fixed size.
+    pub const MAX_STOPS: usize = 8;
+
+    pub fn effective_repeat(&self) -> GradientRepeat {
+        self.repeat.unwrap_or(GradientRepeat::Clamp)
+    }
+
+    /// Stops as the renderer needs them: sorted, clamped into 0…1, capped,
+    /// and never fewer than two — a malformed gradient still has to draw
+    /// something rather than divide by an empty range.
+    pub fn resolved_stops(&self) -> Vec<GradientStop> {
+        let mut stops: Vec<GradientStop> = self
+            .stops
+            .iter()
+            .take(Self::MAX_STOPS)
+            .map(|stop| GradientStop {
+                color_hex: stop.color_hex.clone(),
+                at: stop.at.clamp(0.0, 1.0),
+            })
+            .collect();
+        stops.sort_by(|a, b| a.at.partial_cmp(&b.at).unwrap_or(std::cmp::Ordering::Equal));
+        match stops.len() {
+            0 => vec![
+                GradientStop { color_hex: "000000".into(), at: 0.0 },
+                GradientStop { color_hex: "000000".into(), at: 1.0 },
+            ],
+            1 => {
+                let only = stops[0].clone();
+                vec![
+                    GradientStop { color_hex: only.color_hex.clone(), at: 0.0 },
+                    GradientStop { color_hex: only.color_hex, at: 1.0 },
+                ]
+            }
+            _ => stops,
+        }
+    }
+
+    /// Whether two gradients can be interpolated into one another, rather
+    /// than cut between. Shape has to match: a three-stop linear cannot
+    /// become a five-stop radial halfway.
+    pub fn is_compatible_with(&self, other: &BackgroundGradient) -> bool {
+        self.kind == other.kind
+            && self.effective_repeat() == other.effective_repeat()
+            && self.resolved_stops().len() == other.resolved_stops().len()
+    }
 }
 
 /// How a resource's pixels are sampled when the renderer scales them.
