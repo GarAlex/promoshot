@@ -121,6 +121,10 @@ impl HostSurface {
 pub type FrameProviderFn = extern "C" fn(
     user: *mut c_void,
     layer_id: *const c_char,
+    // resource_id: the resource showing at this time. A layer's keyframes
+    // may swap it, so the layer alone no longer says what to hand over;
+    // empty when the layer names none.
+    resource_id: *const c_char,
     source_time: f64,
     tier: i32,
     out_surface: *mut HostSurface,
@@ -301,15 +305,25 @@ impl PreviewEngine {
         self.meta = meta;
     }
 
-    /// Drops every cached frame belonging to `layer_id` — video/image frames
-    /// keyed by the bare id AND caption rasters keyed `caption:{id}:…`, which
-    /// a bare-id match silently skipped (stale captions survived every edit).
+    /// Drops every cached frame belonging to `layer_id` — media frames keyed
+    /// `{id}\u{1f}{resource}` AND caption rasters keyed `caption:{id}:…`.
+    ///
+    /// Both suffixes have caught this function out. A bare-id match once
+    /// skipped the captions, so stale text survived every edit; then the
+    /// media key gained a resource suffix (a keyframe can swap what a layer
+    /// shows) and the same exact match stopped finding those too. Anything
+    /// keyed by a layer has to be matched as a PREFIX.
     fn evict_layer(&mut self, layer_id: &str) {
         let caption_prefix = format!("caption:{layer_id}:");
+        let media_prefix = format!("{layer_id}\u{1f}");
         let victims: Vec<u64> = self
             .id_of
             .iter()
-            .filter(|(_, (id, _, _))| id == layer_id || id.starts_with(&caption_prefix))
+            .filter(|(_, (id, _, _))| {
+                id == layer_id
+                    || id.starts_with(&media_prefix)
+                    || id.starts_with(&caption_prefix)
+            })
             .map(|(entry, _)| *entry)
             .collect();
         for entry in victims {
@@ -392,11 +406,26 @@ impl PreviewEngine {
     /// Fetches (or serves from cache) the frame for `layer` at `source_time`.
     /// `pinned`: ids the in-flight scene already holds — they must survive
     /// this admit's eviction or the scene would point at freed frames.
-    fn frame(&mut self, layer_id: &str, source_time: f64, tier: i32, pinned: &[u64]) -> Option<u64> {
+    fn frame(
+        &mut self,
+        layer_id: &str,
+        resource_id: &str,
+        source_time: f64,
+        tier: i32,
+        pinned: &[u64],
+    ) -> Option<u64> {
         // Export mode: a per-time frame will never be asked for again (the
         // export clock is monotonic), so it skips the cache entirely.
         let transient = self.export_mode && source_time >= 0.0;
-        let key = (layer_id.to_string(), quantize(source_time), tier);
+        // Keyed by RESOURCE as well as layer: a keyframe can swap what a
+        // layer shows, and an image asks at a fixed source time, so a
+        // layer-only key would answer every frame after the swap with the
+        // bitmap from before it.
+        let key = (
+            format!("{layer_id}\u{1f}{resource_id}"),
+            quantize(source_time),
+            tier,
+        );
         if !transient {
             if let Some(&id) = self.key_of.get(&key) {
                 self.governor.touch(id);
@@ -406,11 +435,13 @@ impl PreviewEngine {
         }
 
         let c_id = CString::new(layer_id).ok()?;
+        let c_resource = CString::new(resource_id).ok()?;
         let mut surface = HostSurface::default();
         let mut flags: i32 = 0;
         let rc = (self.provider)(
             self.user,
             c_id.as_ptr(),
+            c_resource.as_ptr(),
             source_time,
             tier,
             &mut surface,
@@ -472,7 +503,11 @@ impl PreviewEngine {
                 None => local,
             };
             let before = self.misses;
-            let _ = self.frame(&layer.id, source_time, self.preferred_tier, &[]);
+            let resource_id = tl::layer_resource_id(
+                layer, time, self.meta.resources.as_deref().unwrap_or(&[]))
+                .unwrap_or_default()
+                .to_string();
+            let _ = self.frame(&layer.id, &resource_id, source_time, self.preferred_tier, &[]);
             if self.misses > before {
                 fetched += 1;
             }
@@ -948,7 +983,13 @@ impl PreviewEngine {
             } else {
                 0
             };
-            let Some(frame_id) = self.frame(&layer.id, source_time, tier, &used) else {
+            // What this layer shows right now — its own resource, unless a
+            // keyframe has swapped it.
+            let resources = self.meta.resources.clone().unwrap_or_default();
+            let showing = tl::layer_resource_id(layer, time, &resources)
+                .unwrap_or_default()
+                .to_string();
+            let Some(frame_id) = self.frame(&layer.id, &showing, source_time, tier, &used) else {
                 continue;
             };
             let frame = self.cached_frame(frame_id);
@@ -960,7 +1001,7 @@ impl PreviewEngine {
             // The cell size replaces the sheet size here, before any layout
             // happens, so a walk cycle lays out as its 64×64 frame rather
             // than as the 256×128 image the frames are stored in.
-            let resource = self.resource_for(layer);
+            let resource = resources.iter().find(|r| r.id == showing);
             let mut uv_rect = [0.0f32, 0.0, 1.0, 1.0];
             if let Some(sheet) = resource.and_then(tl::sheet_for) {
                 let local = tl::layer_local_time(layer, time);
@@ -1321,6 +1362,7 @@ mod tests {
     extern "C" fn test_provider(
         user: *mut c_void,
         layer_id: *const c_char,
+        _resource_id: *const c_char,
         source_time: f64,
         _tier: i32,
         out_surface: *mut HostSurface,
@@ -1803,6 +1845,7 @@ mod portable_tests {
     extern "C" fn cpu_provider(
         user: *mut c_void,
         layer_id: *const c_char,
+        resource_id: *const c_char,
         source_time: f64,
         _tier: i32,
         out_surface: *mut HostSurface,
@@ -1813,8 +1856,19 @@ mod portable_tests {
         let id = unsafe { CStr::from_ptr(layer_id) }
             .to_string_lossy()
             .to_string();
+        let resource = unsafe { CStr::from_ptr(resource_id) }
+            .to_string_lossy()
+            .to_string();
         state.requests.push((id.clone(), source_time));
-        let Some((_, color, size)) = state.colors.iter().find(|(l, _, _)| *l == id).cloned() else {
+        // Keyed by RESOURCE first so a swap test can tell two sources apart,
+        // falling back to the layer for fixtures that name neither.
+        let Some((_, color, size)) = state
+            .colors
+            .iter()
+            .find(|(l, _, _)| *l == resource)
+            .or_else(|| state.colors.iter().find(|(l, _, _)| *l == id))
+            .cloned()
+        else {
             return 1;
         };
         // Size 0 is the sprite fixture: a 4x1 sheet of 16px cells in red,
@@ -2031,6 +2085,75 @@ mod portable_tests {
         let later = render_and_read(&mut engine, 2.0, 64);
         assert_eq!(pixel_at(&later, 64, 40, 8), [255, 0, 0, 255], "frame 2 is blue");
         assert_eq!(pixel_at(&later, 64, 8, 8), [0, 51, 0, 255], "left behind");
+    }
+
+    /// A keyframe swaps what the layer shows, and the layer goes on moving
+    /// through it.
+    ///
+    /// The interesting half is the CACHE. Frames were keyed by layer and
+    /// source time, and an image asks at a fixed source time — so before the
+    /// key carried the resource, every frame after the swap was answered out
+    /// of cache with the bitmap from before it, and the picture never changed.
+    #[test]
+    fn a_keyframe_swaps_the_resource_and_the_cache_notices() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000001",
+            "name": "swap", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "IMG", "name": "img", "sortIndex": 1, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "RED",
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "zoom": 0.5,
+                    "horizontalShift": 0, "verticalShift": 0,
+                    "transitionDuration": 0},
+                   {"id": "K1", "time": 2, "resourceID": "BLUE",
+                    "transitionDuration": 0},
+                   {"id": "K2", "time": 4, "zoom": 0.5,
+                    "horizontalShift": 24, "verticalShift": 0,
+                    "transitionPercent": 100, "transitionDuration": 4}]}
+            ],
+            "resources": [
+                {"id": "RED", "kind": "image", "filename": "r.png",
+                 "displayName": "r", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": []},
+                {"id": "BLUE", "kind": "image", "filename": "b.png",
+                 "displayName": "b", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(
+            meta,
+            vec![
+                ("RED".into(), [0, 0, 255, 255], 32),
+                ("BLUE".into(), [255, 0, 0, 255], 32),
+            ],
+        );
+
+        // Before the swap: red, at the left.
+        let before = render_and_read(&mut engine, 1.0, 64);
+        assert_eq!(pixel_at(&before, 64, 8, 8), [0, 0, 255, 255], "red first");
+
+        // After it: blue — and this is the assertion the cache used to fail,
+        // since nothing about the request changed except the resource.
+        // Sampled at x=30 because the layer is mid-glide by now and has left
+        // x=8 behind; the swap and the movement are independent, which is
+        // exactly what the next assertions check.
+        let after = render_and_read(&mut engine, 3.0, 64);
+        assert_eq!(pixel_at(&after, 64, 30, 8), [255, 0, 0, 255], "swapped to blue");
+
+        // And the layer kept moving through the swap: by t=4 it has slid
+        // right, still showing the new resource.
+        let moved = render_and_read(&mut engine, 4.0, 64);
+        assert_eq!(pixel_at(&moved, 64, 40, 8), [255, 0, 0, 255], "moved, still blue");
+        assert_eq!(pixel_at(&moved, 64, 8, 8), [0, 51, 0, 255], "left where it was");
     }
 
     /// A padded stride is what a real decoder hands over; the import repacks.

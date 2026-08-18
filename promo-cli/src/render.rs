@@ -76,6 +76,7 @@ impl HostState {
 extern "C" fn provider(
     user: *mut c_void,
     layer_id: *const c_char,
+    resource_id: *const c_char,
     source_time: f64,
     _tier: i32,
     out_surface: *mut HostSurface,
@@ -87,8 +88,13 @@ extern "C" fn provider(
         .to_string_lossy()
         .to_string();
 
-    // A still image: the same pixels whatever the time.
-    if let Some((pixels, width, height)) = state.frames.get(&id) {
+    // A still image: the same pixels whatever the time — but WHICH still can
+    // change, since a keyframe may swap what the layer shows, so these are
+    // keyed by resource rather than by layer.
+    let resource = unsafe { CStr::from_ptr(resource_id) }
+        .to_string_lossy()
+        .to_string();
+    if let Some((pixels, width, height)) = state.frames.get(&resource) {
         unsafe {
             *out_surface = HostSurface {
                 kind: SURFACE_CPU_PIXELS,
@@ -174,11 +180,13 @@ impl Renderer {
             if project.unsupported(layer).is_some() {
                 continue;
             }
-            let Some(resource) = layer
-                .resource_id
-                .as_ref()
-                .and_then(|id| project.resource(id))
-            else {
+            // Every resource this layer can show: its own, plus anything a
+            // keyframe swaps to. Loading only the first would leave the rest
+            // of the layer blank.
+            let mut candidates: Vec<String> = layer.resource_id.iter().cloned().collect();
+            candidates.extend(layer.keyframes.iter().filter_map(|k| k.resource_id.clone()));
+            candidates.dedup();
+            let Some(resource) = candidates.first().and_then(|id| project.resource(id)) else {
                 continue;
             };
             let Some(path) = project.resource_path(resource) else {
@@ -205,6 +213,12 @@ impl Renderer {
                 );
                 continue;
             }
+            for candidate in &candidates {
+                let Some(resource) = project.resource(candidate) else { continue };
+                let Some(path) = project.resource_path(resource) else { continue };
+                if frames.contains_key(candidate) {
+                    continue;
+                }
             let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             let rgba = decoded.to_rgba8();
             let (w, h) = rgba.dimensions();
@@ -219,7 +233,8 @@ impl Renderer {
                     *channel = ((*channel as u32 * a + 127) / 255) as u8;
                 }
             }
-            frames.insert(layer.id.clone(), (bgra, w, h));
+            frames.insert(candidate.clone(), (bgra, w, h));
+            }
         }
 
         let state = Box::new(Mutex::new(HostState { frames, videos }));

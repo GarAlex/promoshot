@@ -76,6 +76,55 @@ pub fn frame_at(
     })
 }
 
+/// What a layer SHOWS at a given time.
+///
+/// A keyframe may carry a `resourceID`, swapping the layer's source without
+/// touching anything else: position, zoom, rotation and opacity go on ramping
+/// straight through it, which is the whole point — the alternative is a second
+/// layer with every keyframe duplicated.
+///
+/// Three rules, all of them refusals:
+///
+/// - The swap is a STEP. It lands at the keyframe's own time, not at the
+///   start of a ramp, and no transition applies to it.
+/// - Only image and caption layers honour swaps. On video or audio the
+///   layer's local time maps to source time through trims, speed and cuts, so
+///   a mid-layer swap would have to answer "where does the second clip
+///   start" — a sequence model, not a keyframe field.
+/// - The new resource must be of the layer's OWN kind. Anything else is
+///   ignored rather than drawn, because an image layer handed a video has no
+///   sensible thing to do with it.
+pub fn layer_resource_id<'a>(
+    layer: &'a ProjectLayer,
+    time: f64,
+    resources: &[ProjectResource],
+) -> Option<&'a str> {
+    let base = layer.resource_id.as_deref();
+    let wanted = match layer.kind {
+        promo_model::ProjectLayerKind::Image => promo_model::ProjectResourceKind::Image,
+        promo_model::ProjectLayerKind::Caption => promo_model::ProjectResourceKind::Caption,
+        _ => return base,
+    };
+    let local = crate::layer_local_time(layer, time);
+    let mut swaps: Vec<&promo_model::ProjectLayerKeyframe> = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.resource_id.is_some())
+        .collect();
+    swaps.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    swaps
+        .iter()
+        .rev()
+        .find(|k| {
+            k.time <= local
+                && k.resource_id.as_deref().is_some_and(|id| {
+                    resources.iter().any(|r| r.id == id && r.kind == wanted)
+                })
+        })
+        .and_then(|k| k.resource_id.as_deref())
+        .or(base)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,6 +195,90 @@ mod tests {
                  "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],{sprite}}}"#
         ));
         assert!(sheet_for(&video).is_none());
+    }
+
+    /// The swap, and the three things it refuses to do.
+    #[test]
+    fn a_keyframe_can_change_what_a_layer_shows() {
+        let resources: Vec<ProjectResource> = serde_json::from_str(
+            r#"[{"id":"A","kind":"image","filename":"a.png","displayName":"A",
+                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]},
+                {"id":"B","kind":"image","filename":"b.png","displayName":"B",
+                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]},
+                {"id":"V","kind":"video","filename":"v.mp4","displayName":"V",
+                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]}]"#,
+        )
+        .unwrap();
+        let swapping: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"resourceID":"A","keyframes":[
+                  {"id":"K0","time":0,"zoom":1,"horizontalShift":0,
+                   "verticalShift":0,"transitionDuration":0},
+                  {"id":"K1","time":2,"resourceID":"B","transitionDuration":0},
+                  {"id":"K2","time":4,"zoom":2,"horizontalShift":400,
+                   "verticalShift":0,"transitionDuration":2}]}"#,
+        )
+        .unwrap();
+
+        // The layer's own resource holds until the swap, which lands at the
+        // keyframe's OWN time rather than at the start of any ramp.
+        assert_eq!(layer_resource_id(&swapping, 0.0, &resources), Some("A"));
+        assert_eq!(layer_resource_id(&swapping, 1.999, &resources), Some("A"));
+        assert_eq!(layer_resource_id(&swapping, 2.0, &resources), Some("B"));
+        assert_eq!(layer_resource_id(&swapping, 99.0, &resources), Some("B"));
+
+        // A swap to the wrong KIND is ignored, not drawn: an image layer
+        // handed a video has nothing sensible to do with it.
+        let mismatched: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"resourceID":"A","keyframes":[
+                  {"id":"K","time":1,"resourceID":"V","transitionDuration":0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(layer_resource_id(&mismatched, 5.0, &resources), Some("A"));
+
+        // Video and audio layers do not honour swaps at all — that would make
+        // the layer a playlist and leave "where does the second clip start"
+        // unanswered.
+        let video: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"video","isEnabled":true,
+                "startTime":0,"resourceID":"V","keyframes":[
+                  {"id":"K","time":1,"resourceID":"A","transitionDuration":0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(layer_resource_id(&video, 5.0, &resources), Some("V"));
+
+        // A swap naming something the project does not have falls back rather
+        // than drawing nothing.
+        let gone: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"resourceID":"A","keyframes":[
+                  {"id":"K","time":1,"resourceID":"GONE","transitionDuration":0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(layer_resource_id(&gone, 5.0, &resources), Some("A"));
+    }
+
+    /// The layer's start time shifts the swap with it: keyframe times are
+    /// LOCAL, and a layer dragged along the timeline must not change what it
+    /// shows when.
+    #[test]
+    fn swap_times_are_local_to_the_layer() {
+        let resources: Vec<ProjectResource> = serde_json::from_str(
+            r#"[{"id":"A","kind":"image","filename":"a.png","displayName":"A",
+                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]},
+                {"id":"B","kind":"image","filename":"b.png","displayName":"B",
+                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]}]"#,
+        )
+        .unwrap();
+        let layer: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":10,"resourceID":"A","keyframes":[
+                  {"id":"K","time":2,"resourceID":"B","transitionDuration":0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(layer_resource_id(&layer, 11.0, &resources), Some("A"));
+        assert_eq!(layer_resource_id(&layer, 12.0, &resources), Some("B"));
     }
 
     #[test]

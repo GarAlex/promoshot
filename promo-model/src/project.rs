@@ -602,6 +602,19 @@ pub struct ProjectLayerKeyframe {
     pub horizontal_shift: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub color_hex: Option<String>,
+    /// What the layer shows from this keyframe on — a SWAP, not a ramp.
+    ///
+    /// The layer's own `resource_id` is the value before the first of these,
+    /// so a project with no swaps is untouched. Deliberately a step: there is
+    /// no halfway between two images, and dissolving needs both drawn at
+    /// once, which one layer cannot do. Honoured on image and caption layers
+    /// only — for video and audio a mid-layer swap would silently turn the
+    /// layer into a playlist and force an answer to "where does the second
+    /// clip start", which is a sequence model rather than a keyframe.
+    /// Spelled `resourceID` on the wire, matching the layer's own field —
+    /// camelCase would give `resourceId`, which is not what the format says.
+    #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
+    pub resource_id: Option<String>,
     /// A background layer's gradient at this keyframe. Animating it is how a
     /// gradient scrolls: shift `start` and `end` along the axis with a
     /// repeating or mirrored ramp and the pattern travels without an edge
