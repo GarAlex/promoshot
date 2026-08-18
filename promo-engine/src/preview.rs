@@ -1177,7 +1177,7 @@ fn caption_scene_quad(x: f64, y: f64, w: f64, h: f64) -> SceneQuad {
 
 /// Bridges the project's subtitle style to promo-text, falling back to the
 /// composition defaults exactly as `SubtitleStyle.xxx(defaults:)` does.
-fn caption_style(
+pub fn caption_style(
     style: Option<&promo_model::SubtitleStyle>,
     settings: &promo_model::CompositionSettings,
 ) -> promo_text::TextStyle {

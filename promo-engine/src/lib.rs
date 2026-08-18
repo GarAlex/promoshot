@@ -11,6 +11,7 @@ pub mod preview;
 
 pub use governor::MemoryGovernor;
 pub use mixer::{mix_chunk, MixInput};
+pub use preview::caption_style;
 pub use preview::{
     FrameProviderFn, HostSurface, PreviewEngine, PreviewStats, FLAG_PRE_FRAMED, SURFACE_CPU_PIXELS,
     SURFACE_D3D_HANDLE, SURFACE_DMABUF, SURFACE_IOSURFACE, SURFACE_NONE,

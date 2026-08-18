@@ -1055,6 +1055,7 @@ dependencies = [
  "promo-engine",
  "promo-gpu",
  "promo-model",
+ "promo-text",
  "promo-timeline",
  "serde",
  "serde_json",

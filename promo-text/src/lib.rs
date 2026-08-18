@@ -114,6 +114,8 @@ pub struct RasterizedText {
     /// so no caller has to remember which way is up.
     pub x: f64,
     pub y: f64,
+    /// How many lines it wrapped to.
+    pub lines: u32,
 }
 
 /// What `resolve_family` settled on.
@@ -194,15 +196,81 @@ fn swash_cache() -> &'static Mutex<SwashCache> {
     CACHE.get_or_init(|| Mutex::new(SwashCache::new()))
 }
 
+/// Where a caption's box lands, without drawing it.
+///
+/// The editing canvas needs this and only this: it draws captions with the
+/// host's own text stack for live editing, and used to guess the box by
+/// measuring at INFINITE width — so a headline long enough to wrap showed as
+/// one overflowing line in the editor and two lines in the export. Same
+/// layout, one answer, no guessing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextBox {
+    /// The panel's size in canvas px, padding included.
+    pub width: f64,
+    pub height: f64,
+    /// Top-left in canvas coordinates, y down.
+    pub x: f64,
+    pub y: f64,
+    /// The width the text itself wraps within — panel minus padding.
+    pub text_width: f64,
+    pub lines: u32,
+}
+
+/// Lays out `text` and reports its box. `None` for empty text.
+pub fn measure(
+    text: &str,
+    canvas_width: f64,
+    canvas_height: f64,
+    style: &TextStyle,
+) -> Option<TextBox> {
+    layout(text, canvas_width, canvas_height, style).map(|l| l.box_)
+}
+
 /// Lays out and draws `text` for a canvas of `canvas_width` × `canvas_height`.
 ///
 /// Returns `None` for empty text — an empty caption is not a zero-sized image,
 /// it is nothing to draw at all.
+struct Layout {
+    box_: TextBox,
+}
+
+/// Everything both entry points need, computed once. `rasterize` then draws
+/// into the box this decided; `measure` just reports it.
+fn layout(
+    text: &str,
+    canvas_width: f64,
+    canvas_height: f64,
+    style: &TextStyle,
+) -> Option<Layout> {
+    let raster = rasterize_inner(text, canvas_width, canvas_height, style, false)?;
+    Some(Layout {
+        box_: TextBox {
+            width: raster.width as f64,
+            height: raster.height as f64,
+            x: raster.x,
+            y: raster.y,
+            text_width: (canvas_width - style.left_margin - style.right_margin).max(10.0)
+                - style.padding * 2.0,
+            lines: raster.lines,
+        },
+    })
+}
+
 pub fn rasterize(
     text: &str,
     canvas_width: f64,
     canvas_height: f64,
     style: &TextStyle,
+) -> Option<RasterizedText> {
+    rasterize_inner(text, canvas_width, canvas_height, style, true)
+}
+
+fn rasterize_inner(
+    text: &str,
+    canvas_width: f64,
+    canvas_height: f64,
+    style: &TextStyle,
+    draw: bool,
 ) -> Option<RasterizedText> {
     let text = text.trim();
     if text.is_empty() {
@@ -272,6 +340,19 @@ pub fn rasterize(
 
     let width = bg_width.round().max(1.0) as u32;
     let height = bg_height.round().max(1.0) as u32;
+    if !draw {
+        // Measuring only: the box is decided, and glyph rasterization is the
+        // expensive half. An editor overlay asks for this on every layout
+        // pass, so it must not pay for pixels it throws away.
+        return Some(RasterizedText {
+            rgba: Vec::new(),
+            width,
+            height,
+            x: bg_x,
+            y: style.vertical_margin,
+            lines: line_count.max(1) as u32,
+        });
+    }
     let mut rgba = vec![0u8; (width * height * 4) as usize];
 
     // Background panel, with anti-aliased rounded corners.
@@ -350,6 +431,7 @@ pub fn rasterize(
         height,
         x: bg_x,
         y,
+        lines: line_count.max(1) as u32,
     })
 }
 
@@ -515,6 +597,38 @@ mod tests {
             "expected ~80 from the top, got {}",
             out.y
         );
+    }
+
+    #[test]
+    /// The editor asks `measure`, the renderer calls `rasterize`; if those
+    /// two ever disagree the canvas draws a caption somewhere the export does
+    /// not. They share a layout precisely so this test can be short.
+    #[test]
+    fn measuring_agrees_with_drawing() {
+        let style = TextStyle {
+            font_size: 64.0,
+            left_margin: 300.0,
+            right_margin: 300.0,
+            ..Default::default()
+        };
+        for text in [
+            "Short",
+            "Two\nlines",
+            "A considerably longer headline that cannot possibly fit on one line",
+        ] {
+            let drawn = rasterize(text, 1440.0, 900.0, &style).expect(text);
+            let measured = measure(text, 1440.0, 900.0, &style).expect(text);
+            assert_eq!(measured.width, drawn.width as f64, "{text}");
+            assert_eq!(measured.height, drawn.height as f64, "{text}");
+            assert_eq!(measured.x, drawn.x, "{text}");
+            assert_eq!(measured.y, drawn.y, "{text}");
+            assert_eq!(measured.lines, drawn.lines, "{text}");
+        }
+        // And it really is measuring more than one line.
+        assert_eq!(measure("Two\nlines", 1440.0, 900.0, &style).unwrap().lines, 2);
+        assert!(measure(
+            "A considerably longer headline that cannot possibly fit on one line",
+            1440.0, 900.0, &style).unwrap().lines >= 2);
     }
 
     #[test]

@@ -1186,3 +1186,86 @@ pub extern "C" fn promo_sprite_frame(
     };
     to_c_string(&answer.to_string())
 }
+
+/// Where a caption's box lands, for an editor that draws its own text.
+///
+/// Takes the project handle, a caption LAYER's id and a time — not a style —
+/// so the app never has to know how a `SubtitleStyle` plus the composition
+/// defaults become the text style the renderer uses. That mapping is exactly
+/// where a preview drifts from a render.
+///
+/// Returns `{"width","height","x","y","textWidth","lines"}` in canvas px, or
+/// NULL for an empty caption: nothing to draw is not a zero-sized box.
+///
+/// The app's editing canvas draws captions with the host's own text stack and
+/// was measuring them at INFINITE width, so a headline long enough to wrap
+/// showed as one overflowing line while the export wrapped it to two. One
+/// layout now answers both.
+///
+/// Safety contract (C ABI): `layer_id` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_caption_measure(
+    handle: *const ProjectHandle,
+    layer_id: *const c_char,
+    time: f64,
+) -> *mut c_char {
+    let Some(handle) = (unsafe { handle.as_ref() }) else {
+        return std::ptr::null_mut();
+    };
+    if layer_id.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(layer_id) = (unsafe { CStr::from_ptr(layer_id) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let empty: Vec<promo_model::ProjectLayer> = Vec::new();
+    let Some(layer) = handle
+        .meta
+        .layers
+        .as_deref()
+        .unwrap_or(&empty)
+        .iter()
+        .find(|l| l.id == layer_id)
+    else {
+        return std::ptr::null_mut();
+    };
+    let settings = &handle.meta.composition_settings;
+    let text = handle.meta.caption_text_for(layer).unwrap_or_default();
+    let style = promo_engine::caption_style(
+        handle.meta.caption_style_for(layer).as_ref(),
+        settings,
+    );
+    // The keyframed values — size and margins animate on a caption, so
+    // measuring at a TIME rather than statically is the difference between a
+    // box that tracks the caption and one that lags it. No keyframes means
+    // the base style stands.
+    let base = tl::CaptionValues {
+        font_size: style.font_size,
+        vertical_margin: style.vertical_margin,
+        left_margin: style.left_margin,
+    };
+    let values = tl::layer_caption_values(layer, time, base).unwrap_or(base);
+    let style = promo_text::TextStyle {
+        font_size: values.font_size,
+        left_margin: values.left_margin,
+        vertical_margin: values.vertical_margin,
+        ..style
+    };
+    let Some(box_) = promo_text::measure(
+        &text,
+        settings.canvas_width,
+        settings.canvas_height,
+        &style,
+    ) else {
+        return std::ptr::null_mut();
+    };
+    to_c_string(
+        &serde_json::json!({
+            "width": box_.width, "height": box_.height,
+            "x": box_.x, "y": box_.y,
+            "textWidth": box_.text_width, "lines": box_.lines,
+        })
+        .to_string(),
+    )
+}

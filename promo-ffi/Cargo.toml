@@ -13,6 +13,7 @@ promo-timeline = { path = "../promo-timeline" }
 promo-editor = { path = "../promo-editor" }
 promo-engine = { path = "../promo-engine" }
 promo-gpu = { path = "../promo-gpu" }
+promo-text = { path = "../promo-text" }
 serde_json.workspace = true
 serde.workspace = true
 
