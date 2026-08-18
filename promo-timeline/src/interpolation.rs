@@ -671,6 +671,67 @@ mod tests {
         assert_eq!((t.zoom, t.vertical_shift), (0.5, 7.0));
     }
 
+    /// The whole point of per-type tracks: RAMPS OVERLAP. While a
+    /// thirty-second glide is mid-flight, rotation runs its own ramp inside
+    /// it, opacity fades on a third clock, zoom dives late, and the viewport
+    /// pans on a fourth — five transitions in the air at once, none
+    /// disturbing another. Every value below is sampled at the same instant
+    /// and checked mid-ITS-own-ramp with exact arithmetic.
+    #[test]
+    fn transitions_of_different_types_overlap_freely() {
+        let l = layer(
+            r#"{"id": "p0", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 0, "verticalShift": 0},
+               {"id": "p1", "time": 30, "transitionPercent": 100,
+                "transitionDuration": 0,
+                "horizontalShift": 300, "verticalShift": 0},
+               {"id": "r0", "time": 2, "transitionDuration": 0, "rotation": 0},
+               {"id": "r1", "time": 8, "transitionDuration": 6, "rotation": 90},
+               {"id": "o0", "time": 5, "transitionDuration": 0, "opacity": 1.0},
+               {"id": "o1", "time": 12, "transitionDuration": 7, "opacity": 0.3},
+               {"id": "z0", "time": 0, "transitionDuration": 0, "zoom": 1.0},
+               {"id": "z1", "time": 30, "transitionDuration": 1, "zoom": 2.0},
+               {"id": "v0", "time": 0, "transitionDuration": 0,
+                "viewport": [0, 0, 1, 1]},
+               {"id": "v1", "time": 20, "transitionDuration": 10,
+                "viewport": [0.5, 0.5, 0.5, 0.5]}"#,
+        );
+
+        // t = 6.5: the move is 6.5/30 done, rotation is 4.5/6 through its
+        // 2..8 ramp, opacity 1.5/7 through its 5..12 fade, zoom has not
+        // begun, and the viewport has not begun (its ramp starts at 10).
+        let t = 6.5;
+        let tr = transform(&l, t);
+        assert_eq!(tr.horizontal_shift, 65.0);
+        assert_eq!(tr.zoom, 1.0, "zoom holds until 29");
+        assert_eq!(layer_rotation(&l, t), 67.5);
+        let o = layer_opacity(&l, t);
+        assert!((o - (1.0 - 0.7 * 1.5 / 7.0)).abs() < 1e-9, "got {o}");
+        assert_eq!(crate::viewport::layer_viewport(&l, t), Some([0.0, 0.0, 1.0, 1.0]));
+
+        // t = 15: rotation and opacity have LANDED mid-glide, the viewport
+        // is half way through its pan, the move still going, zoom still
+        // waiting.
+        let t = 15.0;
+        let tr = transform(&l, t);
+        assert_eq!(tr.horizontal_shift, 150.0);
+        assert_eq!(tr.zoom, 1.0);
+        assert_eq!(layer_rotation(&l, t), 90.0);
+        assert_eq!(layer_opacity(&l, t), 0.3);
+        assert_eq!(
+            crate::viewport::layer_viewport(&l, t),
+            Some([0.25, 0.25, 0.75, 0.75])
+        );
+
+        // t = 29.5: everything else is done or landing; zoom is half way
+        // through the one-second dive it saved for the end.
+        let t = 29.5;
+        let tr = transform(&l, t);
+        assert_eq!(tr.zoom, 1.5);
+        assert_eq!(tr.horizontal_shift, 295.0);
+        assert_eq!(layer_rotation(&l, t), 90.0);
+    }
+
     /// A hold has no chord for a motion path to fit onto, so the path only
     /// bends the RAMP. Before the ramp begins the layer sits exactly at the
     /// previous keyframe — not somewhere on an unanchored curve.
