@@ -69,11 +69,19 @@ pub fn layer_transform(
 /// `layer_transform`, with the project's resources on hand so a keyframe
 /// carrying a `motionPath` can bend the route to it.
 ///
-/// The keyframes still decide WHERE the layer starts and ends and WHEN it
-/// moves; the path only replaces the straight line between two positions with
-/// a drawn one. Everything else — zoom, the hold-then-ease window,
-/// `transitionPercent` — is untouched, which is why a path needs no keyframe
-/// of its own.
+/// Zoom and position are SEPARATE tracks: a keyframe speaks only for the
+/// fields it carries, so zoom keyed at 0/60/120 coexists with movement keyed
+/// at 0/0.5/1.5 on one layer, each ramp using its own keyframe's
+/// `transitionDuration`/`transitionPercent`. Two keyframes may share a time —
+/// one per type — which is how a zoom ramps through only the last second of
+/// a thirty-second move. Within ONE track a tie resolves by ARRAY ORDER, the
+/// later keyframe winning from that instant on: the list is authoritative
+/// the same way layer order is for z. (The two shifts stay one track — a
+/// position is a point, and a motion path moves it as one.)
+///
+/// A keyframe carrying zoom but no shifts used to be a position waypoint at
+/// the DEFAULTS (0,0) — it yanked the layer and split the chord a motion
+/// path fits onto. Now it simply is not on the position track.
 pub fn layer_transform_along_paths(
     layer: &ProjectLayer,
     time: f64,
@@ -81,24 +89,90 @@ pub fn layer_transform_along_paths(
     resources: &[promo_model::ProjectResource],
 ) -> Transform {
     let local_time = layer_local_time(layer, time);
-    let sorted = sorted_by_time(&layer.keyframes, |k| {
-        k.zoom.is_some() || k.vertical_shift.is_some() || k.horizontal_shift.is_some()
+    let zoom_track = sorted_by_time(&layer.keyframes, |k| k.zoom.is_some());
+    let position_track = sorted_by_time(&layer.keyframes, |k| {
+        k.vertical_shift.is_some() || k.horizontal_shift.is_some()
     });
-    if sorted.is_empty() {
+    // No keyframe carries any of the three: the legacy settings timeline
+    // stands, exactly as before the split. One EMPTY track falls back to its
+    // constant (zoom 1, position 0,0) — the same numbers the fused track
+    // produced for it — so a zoom-only or move-only layer renders
+    // bit-identically to before.
+    if zoom_track.is_empty() && position_track.is_empty() {
         return settings_interpolated_values(defaults, local_time);
     }
-    let values = |k: &ProjectLayerKeyframe| Transform {
-        zoom: k.zoom.unwrap_or(1.0),
-        vertical_shift: k.vertical_shift.unwrap_or(0.0),
-        horizontal_shift: k.horizontal_shift.unwrap_or(0.0),
+    let zoom = match track_window(&zoom_track, local_time) {
+        None => 1.0,
+        Some((a, b, progress)) => {
+            let av = a.zoom.unwrap_or(1.0);
+            av + (b.zoom.unwrap_or(1.0) - av) * progress
+        }
     };
-    let first = sorted[0];
-    let last = sorted[sorted.len() - 1];
+    let (horizontal_shift, vertical_shift) = match track_window(&position_track, local_time) {
+        None => (0.0, 0.0),
+        Some((a, b, progress)) => {
+            let (ah, av) = (
+                a.horizontal_shift.unwrap_or(0.0),
+                a.vertical_shift.unwrap_or(0.0),
+            );
+            let (bh, bv) = (
+                b.horizontal_shift.unwrap_or(0.0),
+                b.vertical_shift.unwrap_or(0.0),
+            );
+            // A path moves the pair of shifts TOGETHER — they stop being two
+            // independent scalars and become one point travelling a curve.
+            // Only a genuine ramp between two keyframes takes it: a hold or
+            // an end clamp (a == b) has no chord to fit the stroke onto.
+            let path_point = if !std::ptr::eq(a, b) {
+                b.motion_path.as_ref().and_then(|path| {
+                    crate::motion::path_polyline(resources, path).map(|polyline| {
+                        crate::motion::point_along_range(
+                            &polyline,
+                            promo_model::Point(ah, av),
+                            promo_model::Point(bh, bv),
+                            path.flipped.unwrap_or(false),
+                            path.start_at.unwrap_or(0.0),
+                            path.end_at.unwrap_or(1.0),
+                            progress,
+                        )
+                    })
+                    // A path that cannot be resolved (resource gone, stroke
+                    // deleted, a shape that is not a route) falls back to the
+                    // straight line rather than pinning the layer anywhere
+                    // surprising.
+                })
+            } else {
+                None
+            };
+            match path_point {
+                Some(point) => (point.x(), point.y()),
+                None => (ah + (bh - ah) * progress, av + (bv - av) * progress),
+            }
+        }
+    };
+    Transform {
+        zoom,
+        vertical_shift,
+        horizontal_shift,
+    }
+}
+
+/// One track's hold-then-ramp scan: the pair of keyframes bracketing
+/// `local_time` and the ramp progress between them. Before the first
+/// keyframe, after the last, and during a hold the pair degenerates to
+/// `(k, k, 1.0)` — the value simply IS that keyframe's. `None` on an empty
+/// track, so the caller owns the track's resting constant.
+fn track_window<'a>(
+    sorted: &[&'a ProjectLayerKeyframe],
+    local_time: f64,
+) -> Option<(&'a ProjectLayerKeyframe, &'a ProjectLayerKeyframe, f64)> {
+    let first = *sorted.first()?;
+    let last = *sorted.last()?;
     if local_time <= first.time {
-        return values(first);
+        return Some((first, first, 1.0));
     }
     if local_time >= last.time {
-        return values(last);
+        return Some((last, last, 1.0));
     }
     for pair in sorted.windows(2) {
         let (a, b) = (pair[0], pair[1]);
@@ -107,50 +181,17 @@ pub fn layer_transform_along_paths(
             let effective_transition = ramp_seconds(b, gap);
             let transition_start = b.time - effective_transition;
             if local_time < transition_start {
-                return values(a);
+                return Some((a, a, 1.0));
             }
             let progress = if effective_transition > 0.0 {
                 (local_time - transition_start) / effective_transition
             } else {
                 1.0
             };
-            let av = values(a);
-            let bv = values(b);
-            let zoom = av.zoom + (bv.zoom - av.zoom) * progress;
-            // A path moves the pair of shifts TOGETHER — they stop being two
-            // independent scalars and become one point travelling a curve.
-            if let Some(path) = b.motion_path.as_ref() {
-                if let Some(polyline) = crate::motion::path_polyline(resources, path) {
-                    let point = crate::motion::point_along_range(
-                        &polyline,
-                        promo_model::Point(av.horizontal_shift, av.vertical_shift),
-                        promo_model::Point(bv.horizontal_shift, bv.vertical_shift),
-                        path.flipped.unwrap_or(false),
-                        path.start_at.unwrap_or(0.0),
-                        path.end_at.unwrap_or(1.0),
-                        progress,
-                    );
-                    return Transform {
-                        zoom,
-                        horizontal_shift: point.x(),
-                        vertical_shift: point.y(),
-                    };
-                }
-                // A path that cannot be resolved (resource gone, stroke
-                // deleted, a shape that is not a route) falls back to the
-                // straight line rather than pinning the layer anywhere
-                // surprising.
-            }
-            return Transform {
-                zoom,
-                vertical_shift: av.vertical_shift
-                    + (bv.vertical_shift - av.vertical_shift) * progress,
-                horizontal_shift: av.horizontal_shift
-                    + (bv.horizontal_shift - av.horizontal_shift) * progress,
-            };
+            return Some((a, b, progress));
         }
     }
-    values(first)
+    Some((first, first, 1.0))
 }
 
 /// Swift `ProjectLayer.interpolatedScalar(atLocalTime:_:)` — interpolates one
@@ -516,5 +557,149 @@ mod opacity_tests {
         );
         assert_eq!(layer_opacity(&layer, 0.0), 0.0);
         assert_eq!(layer_opacity(&layer, 1.0), 1.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn layer(keyframes: &str) -> ProjectLayer {
+        serde_json::from_str(&format!(
+            r#"{{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "keyframes": [{keyframes}]}}"#
+        ))
+        .expect("layer")
+    }
+
+    fn settings(json: &str) -> CompositionSettings {
+        serde_json::from_str(json).expect("settings")
+    }
+
+    fn transform(l: &ProjectLayer, t: f64) -> Transform {
+        layer_transform(l, t, &settings(r#"{"canvasWidth": 64, "canvasHeight": 64}"#))
+    }
+
+    /// The user-facing promise: zoom keyed sparsely over a long move, each
+    /// ramp on its own clock. Two keyframes SHARE t=30 — one carries the
+    /// move's end (ramping the whole thirty seconds), one the zoom's end
+    /// (ramping only the last one) — and neither speaks for the other.
+    #[test]
+    fn zoom_and_position_are_independent_tracks() {
+        let l = layer(
+            r#"{"id": "p0", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 0, "verticalShift": 0},
+               {"id": "z0", "time": 0, "transitionDuration": 0, "zoom": 1.0},
+               {"id": "p1", "time": 30, "transitionPercent": 100,
+                "transitionDuration": 0,
+                "horizontalShift": 300, "verticalShift": 0},
+               {"id": "z1", "time": 30, "transitionDuration": 1, "zoom": 2.0}"#,
+        );
+        // Mid-move: the layer has travelled half way and zoom has not begun.
+        let mid = transform(&l, 15.0);
+        assert_eq!(mid.horizontal_shift, 150.0);
+        assert_eq!(mid.zoom, 1.0);
+        // Last second: zoom is half way through ITS ramp, the move nearly done.
+        let late = transform(&l, 29.5);
+        assert_eq!(late.zoom, 1.5);
+        assert_eq!(late.horizontal_shift, 295.0);
+        let end = transform(&l, 30.0);
+        assert_eq!((end.zoom, end.horizontal_shift), (2.0, 300.0));
+    }
+
+    /// The bug the split kills: a zoom-only keyframe between two move
+    /// keyframes used to be a position waypoint at the DEFAULTS (0,0),
+    /// yanking the layer through the origin mid-glide.
+    #[test]
+    fn a_zoom_only_keyframe_is_not_a_position_waypoint() {
+        let l = layer(
+            r#"{"id": "p0", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 0, "verticalShift": 0},
+               {"id": "z", "time": 5, "transitionDuration": 0, "zoom": 3.0},
+               {"id": "p1", "time": 10, "transitionPercent": 100,
+                "transitionDuration": 0,
+                "horizontalShift": 100, "verticalShift": 0}"#,
+        );
+        let at5 = transform(&l, 5.0);
+        assert_eq!(at5.horizontal_shift, 50.0, "half way, not yanked to 0");
+        assert_eq!(at5.zoom, 3.0);
+    }
+
+    /// Two keyframes of ONE track at one instant: array order is
+    /// authoritative, the later winning from that moment on — the same rule
+    /// layer order plays for z.
+    #[test]
+    fn same_time_keys_in_one_track_resolve_by_list_order() {
+        let l = layer(
+            r#"{"id": "a", "time": 5, "transitionDuration": 0, "zoom": 2.0},
+               {"id": "b", "time": 5, "transitionDuration": 0, "zoom": 4.0}"#,
+        );
+        assert_eq!(transform(&l, 5.1).zoom, 4.0, "later in the list wins");
+        assert_eq!(transform(&l, 9.0).zoom, 4.0);
+    }
+
+    /// One empty track rests at its constant — the same numbers the fused
+    /// track produced — so a zoom-only or move-only layer is unchanged.
+    #[test]
+    fn an_empty_track_rests_at_its_constant() {
+        let zoom_only = layer(
+            r#"{"id": "z", "time": 0, "transitionDuration": 0, "zoom": 2.0}"#,
+        );
+        let t = transform(&zoom_only, 3.0);
+        assert_eq!((t.zoom, t.horizontal_shift, t.vertical_shift), (2.0, 0.0, 0.0));
+
+        let move_only = layer(
+            r#"{"id": "p", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 40, "verticalShift": 8}"#,
+        );
+        let t = transform(&move_only, 3.0);
+        assert_eq!((t.zoom, t.horizontal_shift, t.vertical_shift), (1.0, 40.0, 8.0));
+    }
+
+    /// A layer whose keyframes carry NEITHER zoom nor shifts still falls
+    /// back to the legacy settings timeline — the pre-layer model keeps
+    /// rendering. Non-vacuous because the settings here answer 0.5, not the
+    /// constants' 1.0.
+    #[test]
+    fn layers_without_trio_keys_still_use_the_settings_timeline() {
+        let l = layer(r#"{"id": "o", "time": 0, "transitionDuration": 0, "opacity": 0.5}"#);
+        let s = settings(
+            r#"{"canvasWidth": 64, "canvasHeight": 64,
+                "videoKeyframes": [{"time": 0, "zoom": 0.5, "verticalShift": 7}]}"#,
+        );
+        let t = layer_transform(&l, 3.0, &s);
+        assert_eq!((t.zoom, t.vertical_shift), (0.5, 7.0));
+    }
+
+    /// A hold has no chord for a motion path to fit onto, so the path only
+    /// bends the RAMP. Before the ramp begins the layer sits exactly at the
+    /// previous keyframe — not somewhere on an unanchored curve.
+    #[test]
+    fn a_motion_path_bends_only_the_ramp() {
+        let l: ProjectLayer = serde_json::from_str(
+            r#"{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "keyframes": [
+                   {"id": "p0", "time": 0, "transitionDuration": 0,
+                    "horizontalShift": 0, "verticalShift": 0},
+                   {"id": "p1", "time": 10, "transitionPercent": 50,
+                    "transitionDuration": 0,
+                    "horizontalShift": 100, "verticalShift": 0,
+                    "motionPath": {"pathResourceID": "PATH"}}]}"#,
+        )
+        .expect("layer");
+        let resources: Vec<promo_model::ProjectResource> = vec![serde_json::from_str(
+            r#"{"id": "PATH", "kind": "path", "filename": "", "displayName": "arc",
+                "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+                "path": {"start": [0, 0], "end": [100, 0],
+                         "controls": [[50, -60]]}}"#,
+        )
+        .expect("path resource")];
+        let defaults = settings(r#"{"canvasWidth": 64, "canvasHeight": 64}"#);
+        // Holding (ramp runs 5..10): exactly at the start, no curve applied.
+        let held = layer_transform_along_paths(&l, 3.0, &defaults, &resources);
+        assert_eq!((held.horizontal_shift, held.vertical_shift), (0.0, 0.0));
+        // Mid-ramp the path pulls the layer OFF the straight line.
+        let bent = layer_transform_along_paths(&l, 7.5, &defaults, &resources);
+        assert!(bent.vertical_shift < -1.0, "curved above the chord, got {}", bent.vertical_shift);
     }
 }
