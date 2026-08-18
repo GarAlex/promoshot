@@ -340,6 +340,27 @@ impl PreviewEngine {
         self.preferred_tier = tier.max(0);
     }
 
+    /// The decode tier a layer needs at `time`. Stills always decode once at
+    /// full resolution; video follows the host's preferred tier — except
+    /// when a keyframe viewport magnifies the source past what the 540p
+    /// scrub proxy can supply. The host sets its tier from canvas scale and
+    /// knows nothing about per-layer windows, so at 2× the user would be
+    /// aiming a precision rectangle at proxy blur blown up 2×. Past 1.5×
+    /// the layer escalates to tier 0 and pays the full decode (~77 ms
+    /// uncached on 4K) rather than showing mush.
+    fn tier_for(&self, layer: &ProjectLayer, time: f64) -> i32 {
+        if layer.kind != ProjectLayerKind::Video {
+            return 0;
+        }
+        if self.preferred_tier > 0 {
+            let magnified = tl::layer_viewport(layer, time).is_some_and(|vp| vp[3] < 1.0 / 1.5);
+            if magnified {
+                return 0;
+            }
+        }
+        self.preferred_tier
+    }
+
     pub fn preferred_tier(&self) -> i32 {
         self.preferred_tier
     }
@@ -507,7 +528,7 @@ impl PreviewEngine {
                 layer, time, self.meta.resources.as_deref().unwrap_or(&[]))
                 .unwrap_or_default()
                 .to_string();
-            let _ = self.frame(&layer.id, &resource_id, source_time, self.preferred_tier, &[]);
+            let _ = self.frame(&layer.id, &resource_id, source_time, self.tier_for(layer, time), &[]);
             if self.misses > before {
                 fetched += 1;
             }
@@ -978,11 +999,7 @@ impl PreviewEngine {
                 continue;
             }
 
-            let tier = if layer.kind == ProjectLayerKind::Video {
-                self.preferred_tier
-            } else {
-                0
-            };
+            let tier = self.tier_for(layer, time);
             // What this layer shows right now — its own resource, unless a
             // keyframe has swapped it.
             let resources = self.meta.resources.clone().unwrap_or_default();
@@ -1019,6 +1036,28 @@ impl PreviewEngine {
                     cell.uv_rect[2] as f32,
                     cell.uv_rect[3] as f32,
                 ];
+            }
+
+            // A keyframe viewport windows the source further — inside the
+            // sprite cell when there is one, which is why it composes with
+            // the uv rather than assigning it. The window's size then drives
+            // layout exactly the way a cell's does: the layer lays out as
+            // what it SHOWS, so drawn height stays canvasHeight × zoom and
+            // width follows the window's aspect — the fixed frame the
+            // feature promises.
+            if let Some(vp) = tl::layer_viewport(layer, time) {
+                let uv = tl::compose_uv(
+                    [
+                        uv_rect[0] as f64,
+                        uv_rect[1] as f64,
+                        uv_rect[2] as f64,
+                        uv_rect[3] as f64,
+                    ],
+                    vp,
+                );
+                uv_rect = [uv[0] as f32, uv[1] as f32, uv[2] as f32, uv[3] as f32];
+                fw *= vp[2];
+                fh *= vp[3];
             }
             used.push(frame_id);
 
@@ -2154,6 +2193,164 @@ mod portable_tests {
         let moved = render_and_read(&mut engine, 4.0, 64);
         assert_eq!(pixel_at(&moved, 64, 40, 8), [255, 0, 0, 255], "moved, still blue");
         assert_eq!(pixel_at(&moved, 64, 8, 8), [0, 51, 0, 255], "left where it was");
+    }
+
+    /// A viewport windows the source and RAMPS — the pan travels through the
+    /// picture while the layer's own rect on the canvas never moves.
+    ///
+    /// The fixture bitmap is the 4-cell strip (red, green, blue, white, 16px
+    /// each) used as a PLAIN image, so the window's position is legible in
+    /// colour: x=0 red, x=0.25 exactly green, x=0.5 blue.
+    #[test]
+    fn a_viewport_windows_the_source_and_ramps() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000001",
+            "name": "viewport", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "IMG", "name": "img", "sortIndex": 1, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "STRIP",
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "zoom": 0.25,
+                    "horizontalShift": 0, "verticalShift": 0,
+                    "transitionDuration": 0,
+                    "viewport": [0, 0, 0.25, 1]},
+                   {"id": "K1", "time": 2,
+                    "transitionPercent": 100, "transitionDuration": 2,
+                    "viewport": [0.5, 0, 0.25, 1]}]}
+            ],
+            "resources": [
+                {"id": "STRIP", "kind": "image", "filename": "strip.png",
+                 "displayName": "strip", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![("IMG".into(), [0, 0, 0, 0], 0)]);
+
+        // The window is 16x16 source pixels, so at zoom 0.25 the layer draws
+        // 16x16 at the origin — NOT the 64px-wide strip the whole image
+        // would lay out as. The pixel past the window proves the rect
+        // followed the window, not the source.
+        let start = render_and_read(&mut engine, 0.0, 64);
+        assert_eq!(pixel_at(&start, 64, 8, 8), [0, 0, 255, 255], "window on red");
+        assert_eq!(pixel_at(&start, 64, 40, 8), [0, 51, 0, 255], "frame is 16px, not 64");
+
+        // Halfway through the ramp the window has slid to x=0.25 — exactly
+        // the green cell. This is the pan being a RAMP, not a step.
+        let mid = render_and_read(&mut engine, 1.0, 64);
+        assert_eq!(pixel_at(&mid, 64, 8, 8), [0, 255, 0, 255], "mid-ramp on green");
+
+        let end = render_and_read(&mut engine, 2.0, 64);
+        assert_eq!(pixel_at(&end, 64, 8, 8), [255, 0, 0, 255], "landed on blue");
+    }
+
+    /// A viewport windows the sprite CELL, not the sheet.
+    ///
+    /// The composition order is the assertion: at t=0 the cell is red, and a
+    /// window into that cell is still red everywhere. If the viewport
+    /// replaced the cell's uv instead of composing with it, [0.5,0.5,0.5,0.5]
+    /// would address the sheet itself — the blue/white bottom-right — and
+    /// both sampled pixels would change colour. (Verified: with the compose
+    /// deliberately broken to an assignment, this fails drawing blue.)
+    #[test]
+    fn a_viewport_windows_the_sprite_cell_not_the_sheet() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000001",
+            "name": "spritevp", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "SPR", "name": "hero", "sortIndex": 1, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "SHEET",
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "zoom": 0.25,
+                    "horizontalShift": 0, "verticalShift": 0,
+                    "transitionDuration": 0,
+                    "viewport": [0.5, 0.5, 0.5, 0.5]}]}
+            ],
+            "resources": [
+                {"id": "SHEET", "kind": "image", "filename": "hero.png",
+                 "displayName": "hero", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": [],
+                 "sampling": "nearest",
+                 "sprite": {"columns": 4, "rows": 1, "fps": 1}}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![("SPR".into(), [0, 0, 0, 0], 0)]);
+
+        // Cell 0 is red; a window inside it is red at both ends.
+        let t0 = render_and_read(&mut engine, 0.0, 64);
+        assert_eq!(pixel_at(&t0, 64, 4, 8), [0, 0, 255, 255], "inside cell 0: red");
+        assert_eq!(pixel_at(&t0, 64, 12, 8), [0, 0, 255, 255], "still red at the right");
+
+        // And the sprite goes on animating with the window applied.
+        let t1 = render_and_read(&mut engine, 1.0, 64);
+        assert_eq!(pixel_at(&t1, 64, 4, 8), [0, 255, 0, 255], "cell 1: green");
+    }
+
+    /// A magnifying viewport escalates a video layer to tier 0.
+    ///
+    /// The host picks its tier from canvas scale and knows nothing about
+    /// per-layer windows — at 2x the user would otherwise be aiming a
+    /// precision rectangle at 540p proxy blur blown up 2x.
+    #[test]
+    fn viewport_magnification_escalates_the_tier() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000001",
+            "name": "tiers", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "ZOOMED", "name": "z", "sortIndex": 0, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "transitionDuration": 0,
+                    "viewport": [0.25, 0.25, 0.5, 0.5]}]},
+                {"id": "PLAIN", "name": "p", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "keyframes": []},
+                {"id": "WIDE", "name": "w", "sortIndex": 2, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "transitionDuration": 0,
+                    "viewport": [0, 0, 1, 0.8]}]}
+            ],
+            "resources": []}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let layers = engine.meta.layers.clone().unwrap_or_default();
+        let by_id = |id: &str| layers.iter().find(|l| l.id == id).unwrap();
+
+        engine.set_preferred_tier(1);
+        assert_eq!(engine.tier_for(by_id("ZOOMED"), 0.0), 0, "2x window: full res");
+        assert_eq!(engine.tier_for(by_id("PLAIN"), 0.0), 1, "no window: host tier");
+        assert_eq!(engine.tier_for(by_id("WIDE"), 0.0), 1, "1.25x: proxy still fine");
+
+        // Tier 0 is already the best there is; a window changes nothing.
+        engine.set_preferred_tier(0);
+        assert_eq!(engine.tier_for(by_id("ZOOMED"), 0.0), 0);
     }
 
     /// A padded stride is what a real decoder hands over; the import repacks.

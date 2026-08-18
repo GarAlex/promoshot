@@ -648,6 +648,17 @@ pub struct ProjectLayerKeyframe {
     /// in a straight line, which is what every project does today.
     #[serde(default, skip_serializing_if = "is_none")]
     pub motion_path: Option<MotionPath>,
+    /// Which part of the source this layer shows — `[x, y, w, h]` in UNIT
+    /// source coordinates (0…1), absent meaning the whole frame. Unit rather
+    /// than pixels so the window survives a re-recorded source at another
+    /// resolution, or a resource swap. Unlike a swap it RAMPS: the four
+    /// numbers interpolate on the ordinary hold-then-ramp rule, and that
+    /// ramp IS the zoom-and-pan. The layer's own rect on the canvas is
+    /// untouched — a framed video window keeps its place, corner radius and
+    /// border while its content travels. Image and video layers only;
+    /// `promo-timeline`'s `layer_viewport` owns clamping and the rule.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub viewport: Option<[f64; 4]>,
 }
 /// What a layer does once its local time runs past the end of its source.
 ///

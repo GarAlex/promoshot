@@ -14,6 +14,7 @@ pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 pub mod sprite;
+pub mod viewport;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
 pub use motion::{
@@ -32,6 +33,7 @@ pub use interpolation::{
     settings_interpolated_values, CaptionValues, Transform,
 };
 pub use sprite::{frame_at as sprite_frame_at, layer_resource_id, is_nearest, sheet_for, SpriteFrame};
+pub use viewport::{compose_uv, layer_viewport};
 pub use layout::{
     clamped_zoom, drawing_rect, letterbox_transform, media_corner_radius, media_rect,
 };

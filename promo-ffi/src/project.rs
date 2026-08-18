@@ -1269,3 +1269,45 @@ pub extern "C" fn promo_caption_measure(
         .to_string(),
     )
 }
+
+/// The layer's resolved viewport at `time` as JSON `[x, y, w, h]` (unit
+/// source coordinates, clamped), or NULL when the layer has no viewport
+/// keyframes — or is not the kind that honours one. The editor draws its
+/// drag box from THIS rather than re-running the interpolation in Swift:
+/// the resolver owns the hold-then-ramp rule and the clamping, and two
+/// implementations of "where is the window right now" would drift exactly
+/// the way caption wrapping once did.
+///
+/// Safety contract (C ABI): `layer_id` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_layer_viewport(
+    handle: *const ProjectHandle,
+    layer_id: *const c_char,
+    time: f64,
+) -> *mut c_char {
+    let Some(handle) = (unsafe { handle.as_ref() }) else {
+        return std::ptr::null_mut();
+    };
+    if layer_id.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(layer_id) = (unsafe { CStr::from_ptr(layer_id) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+    let empty: Vec<promo_model::ProjectLayer> = Vec::new();
+    let Some(layer) = handle
+        .meta
+        .layers
+        .as_deref()
+        .unwrap_or(&empty)
+        .iter()
+        .find(|l| l.id == layer_id)
+    else {
+        return std::ptr::null_mut();
+    };
+    let Some(vp) = tl::layer_viewport(layer, time) else {
+        return std::ptr::null_mut();
+    };
+    to_c_string(&serde_json::json!(vp).to_string())
+}
