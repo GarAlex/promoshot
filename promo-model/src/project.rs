@@ -387,6 +387,8 @@ pub struct CompositionSettings {
     /// `background_color_hex` — which stays as the fallback, so a project
     /// that never wanted a gradient is unaffected.
     pub background_gradient: Option<BackgroundGradient>,
+    /// Named colours any colour field may reference as `@name`.
+    pub palette: Option<Vec<PaletteColor>>,
     pub subtitle_background_color_hex: String,
     pub subtitle_background_opacity: f64,
     pub subtitle_background_padding: f64,
@@ -419,6 +421,7 @@ impl Default for CompositionSettings {
             subtitle_color_hex: "FFFFFF".into(),
             background_color_hex: "000000".into(),
             background_gradient: None,
+            palette: None,
             subtitle_background_color_hex: "000000".into(),
             subtitle_background_opacity: 0.7,
             subtitle_background_padding: 16.0,
@@ -453,6 +456,7 @@ impl Default for CompositionSettings {
 #[serde(rename_all = "camelCase", default)]
 struct CompositionSettingsWire {
     background_gradient: Option<BackgroundGradient>,
+    palette: Option<Vec<PaletteColor>>,
     canvas_width: Option<f64>,
     fps: Option<f64>,
     canvas_height: Option<f64>,
@@ -491,6 +495,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             .unwrap_or(dflt.background_color_hex.clone());
         Ok(CompositionSettings {
             background_gradient: w.background_gradient,
+            palette: w.palette,
             canvas_width: w.canvas_width.unwrap_or(dflt.canvas_width),
             // Absent means "renders at 30", which is not the same as 30 being
             // written down — so it stays None rather than defaulting here.
@@ -570,6 +575,8 @@ impl Serialize for CompositionSettings {
             background_color_hex: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             background_gradient: &'a Option<BackgroundGradient>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            palette: &'a Option<Vec<PaletteColor>>,
             subtitle_background_color_hex: &'a str,
             subtitle_background_opacity: f64,
             subtitle_background_padding: f64,
@@ -602,6 +609,7 @@ impl Serialize for CompositionSettings {
             subtitle_color_hex: &self.subtitle_color_hex,
             background_color_hex: &self.background_color_hex,
             background_gradient: &self.background_gradient,
+            palette: &self.palette,
             subtitle_background_color_hex: &self.subtitle_background_color_hex,
             subtitle_background_opacity: self.subtitle_background_opacity,
             subtitle_background_padding: self.subtitle_background_padding,
@@ -751,6 +759,27 @@ pub struct PathDocument {
     /// today's files unreadable.
     #[serde(default)]
     pub controls: Vec<Point>,
+}
+
+impl CompositionSettings {
+    /// Turns `@name` into the colour it names; anything else passes through.
+    ///
+    /// The ONE place a reference becomes a value, so every colour in the
+    /// document gains palette support at once and none of them can disagree
+    /// about what `@accent` means. An unknown name passes through unchanged
+    /// and therefore fails to parse as hex, landing on whatever fallback the
+    /// site already had — `promo_validate` is what names it, rather than the
+    /// renderer guessing a colour nobody chose.
+    pub fn resolve_color<'a>(&'a self, value: &'a str) -> &'a str {
+        let Some(name) = value.strip_prefix('@') else { return value };
+        self.palette
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .find(|entry| entry.name.eq_ignore_ascii_case(name))
+            .map(|entry| entry.color_hex.as_str())
+            .unwrap_or(value)
+    }
 }
 
 /// The shape of a background gradient.
@@ -1502,6 +1531,26 @@ pub struct SlideshowImage {
     pub orientation: SlideshowImageOrientation,
 }
 
+/// A colour with a name, so a project can say a thing ONCE.
+///
+/// Ten hand-authored templates carried 106 colour values between them, 40 of
+/// them distinct, spread across gradient stops, borders, caption styles and
+/// background keyframes. Re-skinning one meant finding every occurrence.
+/// A palette entry is the indirection that turns that into a single edit.
+///
+/// Deliberately NOT a resource: resources are things a LAYER points at by id
+/// and that mostly have files. A colour is referenced by fields all over the
+/// document, and giving six characters of hex a UUID and a row next to the
+/// videos would be noise.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaletteColor {
+    /// Referenced as `@name`. Matched case-insensitively, because a person
+    /// typing `@Accent` after naming it `accent` means the same colour.
+    pub name: String,
+    pub color_hex: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SlideshowSettings {
@@ -1817,6 +1866,45 @@ mod fps_tests {
         assert_eq!(ntsc.fps, Some(59.94005994005994));
         let text = serde_json::to_string(&ntsc).unwrap();
         assert!(text.contains("59.94"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    use super::*;
+
+    #[test]
+    fn a_palette_round_trips_and_resolves() {
+        let json = r#"{"canvasWidth": 64, "canvasHeight": 64,
+            "backgroundColorHex": "@ink",
+            "palette": [{"name": "accent", "colorHex": "5B8CFF"},
+                        {"name": "ink", "colorHex": "0B1020"}]}"#;
+        let settings: CompositionSettings = serde_json::from_str(json).expect("settings");
+        assert_eq!(settings.resolve_color("@accent"), "5B8CFF");
+        // Case-insensitive: naming it `accent` and typing `@Accent` is the
+        // same colour to a person, so it had better be to the renderer.
+        assert_eq!(settings.resolve_color("@ACCENT"), "5B8CFF");
+        // A literal is untouched, with or without the hash.
+        assert_eq!(settings.resolve_color("FF0000"), "FF0000");
+        assert_eq!(settings.resolve_color("#FF0000"), "#FF0000");
+        // An unknown name passes through rather than becoming a colour
+        // nobody chose; validation is what should name it.
+        assert_eq!(settings.resolve_color("@nope"), "@nope");
+        // And it survives the manual Wire round trip, which is the trap:
+        // CompositionSettings has hand-written Serialize/Deserialize, so a
+        // field added in only three of the four places would vanish on save.
+        let back: CompositionSettings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(back.palette, settings.palette);
+        assert_eq!(back.background_color_hex, "@ink");
+    }
+
+    #[test]
+    fn a_project_without_a_palette_grows_no_key() {
+        let settings: CompositionSettings =
+            serde_json::from_str(r#"{"canvasWidth": 64, "canvasHeight": 64}"#).unwrap();
+        assert!(settings.palette.is_none());
+        assert!(!serde_json::to_string(&settings).unwrap().contains("palette"));
     }
 }
 

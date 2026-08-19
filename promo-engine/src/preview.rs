@@ -903,7 +903,9 @@ impl PreviewEngine {
             .find(|l| l.kind == ProjectLayerKind::Background && tl::layer_is_visible(l, time))
             .map(|l| tl::layer_background_color_hex(l, time, &settings))
             .unwrap_or_else(|| settings.background_color_hex.clone());
-        let background = rgba_from_hex(&bg_hex);
+        // `@name` becomes a colour here and nowhere else, so every field
+        // in the document gains the palette at once.
+        let background = rgba_from_hex(settings.resolve_color(&bg_hex));
 
         // The gradient comes from the same background layer, on the same
         // hold-then-ramp timing as its colour — resolved here and converted
@@ -929,7 +931,8 @@ impl PreviewEngine {
                     stops: gradient
                         .resolved_stops()
                         .iter()
-                        .map(|stop| (rgba_from_hex(&stop.color_hex), stop.at as f32))
+                        .map(|stop| (rgba_from_hex(settings.resolve_color(&stop.color_hex)),
+                                     stop.at as f32))
                         .collect(),
                 }
             });
@@ -1156,7 +1159,7 @@ fn media_border_style(
             return MediaBorderStyle {
                 corner_radius: (frame.corner_radius * canvas_width / 1080.0).max(0.0) * zoom,
                 border_width: (frame.border_width * canvas_width / 1080.0).max(1.0) * zoom,
-                border_rgba: rgba_from_hex(&frame.border_color_hex),
+                border_rgba: rgba_from_hex(settings.resolve_color(&frame.border_color_hex)),
             };
         }
     }
@@ -1166,10 +1169,11 @@ fn media_border_style(
             .image_border_width
             .unwrap_or(settings.video_border_width),
         border_rgba: rgba_from_hex(
-            layer
-                .image_border_color_hex
-                .as_deref()
-                .unwrap_or(&settings.video_border_color_hex),
+            settings.resolve_color(
+                layer
+                    .image_border_color_hex
+                    .as_deref()
+                    .unwrap_or(&settings.video_border_color_hex)),
         ),
     }
 }
@@ -1265,18 +1269,20 @@ pub fn caption_style(
         style.and_then(pick).unwrap_or(fallback)
     };
     let text_rgba = rgba_bytes(
-        &style
-            .and_then(|s| s.text_color_hex.clone())
-            .unwrap_or_else(|| settings.subtitle_color_hex.clone()),
+        settings.resolve_color(
+            &style
+                .and_then(|s| s.text_color_hex.clone())
+                .unwrap_or_else(|| settings.subtitle_color_hex.clone())),
         1.0,
     );
     let bg_opacity = style
         .and_then(|s| s.background_opacity)
         .unwrap_or(settings.subtitle_background_opacity);
     let background_rgba = rgba_bytes(
-        &style
-            .and_then(|s| s.background_color_hex.clone())
-            .unwrap_or_else(|| settings.subtitle_background_color_hex.clone()),
+        settings.resolve_color(
+            &style
+                .and_then(|s| s.background_color_hex.clone())
+                .unwrap_or_else(|| settings.subtitle_background_color_hex.clone())),
         bg_opacity,
     );
     promo_text::TextStyle {
@@ -2351,6 +2357,44 @@ mod portable_tests {
         // Tier 0 is already the best there is; a window changes nothing.
         engine.set_preferred_tier(0);
         assert_eq!(engine.tier_for(by_id("ZOOMED"), 0.0), 0);
+    }
+
+    /// Every colour field may name a palette entry instead of a value —
+    /// and the proof has to be a rendered PIXEL, because resolution happens
+    /// deep in the scene build where a unit test on the model cannot see.
+    #[test]
+    fn palette_names_resolve_to_colours_on_screen() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000001",
+            "name": "palette", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "@ink",
+              "palette": [{"name": "ink", "colorHex": "FF0000"},
+                          {"name": "accent", "colorHex": "00FF00"}]},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []}
+            ],
+            "resources": []}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let px = render_and_read(&mut engine, 0.0, 64);
+        // BGRA: @ink is FF0000, so blue=0, green=0, red=255.
+        assert_eq!(pixel_at(&px, 64, 32, 32), [0, 0, 255, 255], "@ink drew red");
+
+        // An unknown name must NOT become a colour nobody chose. It falls
+        // through to the site's own fallback rather than being guessed at.
+        let unknown = json.replace("\"@ink\"", "\"@missing\"");
+        let meta = ProjectMetadata::from_json(&unknown).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let px = render_and_read(&mut engine, 0.0, 64);
+        assert_ne!(pixel_at(&px, 64, 32, 32), [0, 0, 255, 255],
+                   "an unknown name must not silently keep the old colour");
     }
 
     /// A padded stride is what a real decoder hands over; the import repacks.
