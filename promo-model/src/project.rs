@@ -105,6 +105,41 @@ tolerant_enum!(
     Images,
     [(Video, "video"), (Images, "images"), (Gif, "gif")]
 );
+/// The shape of a ramp.
+///
+/// Tolerant, and falling back to `Linear`: a file written by a newer build
+/// that knows more curves should still play here, and playing it with the
+/// wrong FEEL is a far better failure than refusing to open it. That is also
+/// why no reader-version gate goes with this — an older reader dropping
+/// `easing` changes how a move looks, never what the composition contains.
+tolerant_enum!(
+    Easing,
+    Linear,
+    [
+        (Linear, "linear"),
+        (EaseIn, "easeIn"),
+        (EaseOut, "easeOut"),
+        (EaseInOut, "easeInOut"),
+    ]
+);
+
+impl Easing {
+    /// Reshapes ramp progress. In at 0, out at 1, monotonic between — a
+    /// curve that overshot would let a layer arrive somewhere its keyframes
+    /// never mention.
+    pub fn apply(self, t: f64) -> f64 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            Easing::Linear => t,
+            // Quadratic rather than cubic: gentle enough to be the answer to
+            // "this looks mechanical" without becoming a gesture of its own.
+            Easing::EaseIn => t * t,
+            Easing::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
+            // Smoothstep — the workhorse for camera moves.
+            Easing::EaseInOut => t * t * (3.0 - 2.0 * t),
+        }
+    }
+}
 strict_enum!(
     SlideshowImageOrientation,
     [
@@ -648,6 +683,14 @@ pub struct ProjectLayerKeyframe {
     /// in a straight line, which is what every project does today.
     #[serde(default, skip_serializing_if = "is_none")]
     pub motion_path: Option<MotionPath>,
+    /// The shape of the ramp INTO this keyframe — absent means linear, which
+    /// is what every ramp was before this existed. It applies to whatever
+    /// this keyframe carries: zoom, position (including along a motion path,
+    /// where it eases the SPEED through the curve), viewport, rotation,
+    /// opacity, gradient. One keyframe can ease while its neighbour on
+    /// another track does not, since each track's ramp is its own.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub easing: Option<Easing>,
     /// Which part of the source this layer shows — `[x, y, w, h]` in UNIT
     /// source coordinates (0…1), absent meaning the whole frame. Unit rather
     /// than pixels so the window survives a re-recorded source at another

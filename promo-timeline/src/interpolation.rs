@@ -4,7 +4,7 @@
 //! B. Mirrors `ProjectLayer.transform(at:)` / `interpolatedScalar` /
 //! `backgroundColorHex(at:)` and the `CompositionSettings` twins.
 
-use promo_model::{CompositionSettings, ProjectLayer, ProjectLayerKeyframe};
+use promo_model::{CompositionSettings, Easing, ProjectLayer, ProjectLayerKeyframe};
 
 /// (zoom, verticalShift, horizontalShift) — Swift's transform tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -188,7 +188,12 @@ fn track_window<'a>(
             } else {
                 1.0
             };
-            return Some((a, b, progress));
+            // Eased HERE, once, so every consumer of this window shares one
+            // clock: the zoom lerp, the position lerp and the arc-length walk
+            // along a motion path all move together. Easing them separately
+            // is how a layer ends up sliding along its curve at a different
+            // rate than it grows.
+            return Some((a, b, b.easing.unwrap_or(Easing::Linear).apply(progress)));
         }
     }
     Some((first, first, 1.0))
@@ -200,35 +205,14 @@ pub fn layer_interpolated_scalar<F>(layer: &ProjectLayer, local_time: f64, selec
 where
     F: Fn(&ProjectLayerKeyframe) -> Option<f64>,
 {
+    // The same scan the transform tracks use — including the tie rule and
+    // the easing — rather than a second copy of hold-then-ramp that would
+    // have to be kept in step by hand.
     let sorted = sorted_by_time(&layer.keyframes, |k| select(k).is_some());
-    let first = *sorted.first()?;
-    let last = *sorted.last()?;
-    if local_time <= first.time {
-        return select(first);
-    }
-    if local_time >= last.time {
-        return select(last);
-    }
-    for pair in sorted.windows(2) {
-        let (a, b) = (pair[0], pair[1]);
-        if local_time >= a.time && local_time <= b.time {
-            let gap = b.time - a.time;
-            let effective_transition = ramp_seconds(b, gap);
-            let transition_start = b.time - effective_transition;
-            if local_time < transition_start {
-                return select(a);
-            }
-            let progress = if effective_transition > 0.0 {
-                (local_time - transition_start) / effective_transition
-            } else {
-                1.0
-            };
-            let av = select(a).unwrap_or(0.0);
-            let bv = select(b).unwrap_or(0.0);
-            return Some(av + (bv - av) * progress);
-        }
-    }
-    select(first)
+    let (a, b, progress) = track_window(&sorted, local_time)?;
+    let av = select(a).unwrap_or(0.0);
+    let bv = select(b).unwrap_or(0.0);
+    Some(av + (bv - av) * progress)
 }
 
 /// Swift `ProjectLayer.rotation(at:)` — degrees, 0 when unkeyed.
@@ -730,6 +714,121 @@ mod tests {
         assert_eq!(tr.zoom, 1.5);
         assert_eq!(tr.horizontal_shift, 295.0);
         assert_eq!(layer_rotation(&l, t), 90.0);
+    }
+
+    /// The curves themselves: in at 0, out at 1, and the shape between.
+    #[test]
+    fn easing_curves_are_monotonic_and_pinned_at_the_ends() {
+        use promo_model::Easing::*;
+        for e in [Linear, EaseIn, EaseOut, EaseInOut] {
+            assert_eq!(e.apply(0.0), 0.0, "{e:?} starts at 0");
+            assert_eq!(e.apply(1.0), 1.0, "{e:?} ends at 1");
+            // Out of range cannot send a layer past its own keyframe.
+            assert_eq!(e.apply(-1.0), 0.0);
+            assert_eq!(e.apply(2.0), 1.0);
+            let mut prev = -1.0;
+            for i in 0..=20 {
+                let v = e.apply(i as f64 / 20.0);
+                assert!(v >= prev, "{e:?} went backwards at {i}");
+                prev = v;
+            }
+        }
+        assert_eq!(EaseIn.apply(0.5), 0.25, "slow start");
+        assert_eq!(EaseOut.apply(0.5), 0.75, "fast start");
+        assert_eq!(EaseInOut.apply(0.5), 0.5, "symmetric");
+        assert_eq!(EaseInOut.apply(0.25), 0.15625, "smoothstep");
+    }
+
+    /// Absent easing is linear — every project written before this existed
+    /// renders exactly as it did.
+    #[test]
+    fn an_unkeyed_ramp_is_still_linear() {
+        let l = layer(
+            r#"{"id": "a", "time": 0, "transitionDuration": 0, "zoom": 1},
+               {"id": "b", "time": 10, "transitionDuration": 0, "transitionPercent": 100, "zoom": 3}"#,
+        );
+        assert_eq!(transform(&l, 2.5).zoom, 1.5);
+        assert_eq!(transform(&l, 5.0).zoom, 2.0);
+        assert_eq!(transform(&l, 7.5).zoom, 2.5);
+    }
+
+    /// A value an older writer never heard of must not fail the file.
+    #[test]
+    fn an_unknown_easing_falls_back_to_linear() {
+        let l = layer(
+            r#"{"id": "a", "time": 0, "transitionDuration": 0, "zoom": 1},
+               {"id": "b", "time": 10, "transitionDuration": 0, "transitionPercent": 100,
+                "zoom": 3, "easing": "bounceOutElasticWhatever"}"#,
+        );
+        assert_eq!(transform(&l, 5.0).zoom, 2.0);
+    }
+
+    /// Easing rides the TRACK, so one property can ease while another on the
+    /// same layer does not — the whole point of per-type ramps.
+    #[test]
+    fn easing_is_per_track() {
+        let l = layer(
+            r#"{"id": "z0", "time": 0, "transitionDuration": 0, "zoom": 1},
+               {"id": "z1", "time": 10, "transitionDuration": 0, "transitionPercent": 100,
+                "zoom": 3, "easing": "easeInOut"},
+               {"id": "p0", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 0, "verticalShift": 0},
+               {"id": "p1", "time": 10, "transitionDuration": 0, "transitionPercent": 100,
+                "horizontalShift": 100, "verticalShift": 0}"#,
+        );
+        // At a quarter through: zoom on smoothstep, position still straight.
+        let t = transform(&l, 2.5);
+        assert_eq!(t.zoom, 1.0 + 2.0 * 0.15625);
+        assert_eq!(t.horizontal_shift, 25.0, "position is not eased");
+    }
+
+    /// THE failure this feature could have shipped: an eased layer must
+    /// travel its motion path on the SAME clock it zooms on. Easing the
+    /// scalars but not the arc-length walk would slide the layer along the
+    /// curve at one rate while it grew at another.
+    #[test]
+    fn an_eased_move_and_its_path_share_one_clock() {
+        let l: ProjectLayer = serde_json::from_str(
+            r#"{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "keyframes": [
+                   {"id": "a", "time": 0, "transitionDuration": 0,
+                    "zoom": 1, "horizontalShift": 0, "verticalShift": 0},
+                   {"id": "b", "time": 10, "transitionDuration": 0, "transitionPercent": 100,
+                    "zoom": 3, "horizontalShift": 100, "verticalShift": 0,
+                    "easing": "easeInOut",
+                    "motionPath": {"pathResourceID": "PATH"}}]}"#,
+        )
+        .expect("layer");
+        let resources: Vec<promo_model::ProjectResource> = vec![serde_json::from_str(
+            r#"{"id": "PATH", "kind": "path", "filename": "", "displayName": "arc",
+                "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+                "path": {"start": [0, 0], "end": [100, 0],
+                         "controls": [[50, -60]]}}"#,
+        )
+        .expect("path")];
+        let defaults = settings(r#"{"canvasWidth": 64, "canvasHeight": 64}"#);
+
+        // A quarter of the way through the ramp, smoothstep says 0.15625.
+        let at = layer_transform_along_paths(&l, 2.5, &defaults, &resources);
+        assert_eq!(at.zoom, 1.0 + 2.0 * 0.15625, "zoom on the eased clock");
+
+        // The layer sits where a LINEAR ramp would put it at exactly that
+        // eased progress — same clock, both properties.
+        let polyline = crate::motion::path_polyline(&resources, &promo_model::MotionPath {
+            path_resource_id: "PATH".into(), flipped: None, start_at: None, end_at: None,
+        })
+        .expect("polyline");
+        let expected = crate::motion::point_along_range(
+            &polyline,
+            promo_model::Point(0.0, 0.0),
+            promo_model::Point(100.0, 0.0),
+            false, 0.0, 1.0, 0.15625);
+        assert!((at.horizontal_shift - expected.x()).abs() < 1e-9,
+                "x {} vs {}", at.horizontal_shift, expected.x());
+        assert!((at.vertical_shift - expected.y()).abs() < 1e-9,
+                "y {} vs {}", at.vertical_shift, expected.y());
+        // And it is genuinely off the straight line, so the check has teeth.
+        assert!(at.vertical_shift < -1.0, "curved, got {}", at.vertical_shift);
     }
 
     /// A hold has no chord for a motion path to fit onto, so the path only

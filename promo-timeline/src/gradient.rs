@@ -93,7 +93,10 @@ pub fn layer_background_gradient(
         } else {
             1.0
         };
-        return Some(blend(&from, &to, progress));
+        // Same easing rule as every other track: a background that eases
+        // while the layers over it do not would read as two different scenes.
+        let eased = b.easing.unwrap_or(promo_model::Easing::Linear).apply(progress);
+        return Some(blend(&from, &to, eased));
     }
     Some(at(first))
 }
