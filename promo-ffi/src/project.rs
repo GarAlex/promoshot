@@ -857,9 +857,12 @@ pub extern "C" fn promo_layer_background_rgba(
         let Some(layer) = (unsafe { layer_at(handle, layer_index) }) else {
             return -1;
         };
-        let hex =
-            tl::layer_background_color_hex(layer, time, &handle_ref.meta.composition_settings);
-        let rgba = rgba_from_hex(&hex);
+        let settings = &handle_ref.meta.composition_settings;
+        let hex = tl::layer_background_color_hex(layer, time, settings);
+        // Resolved here too: this is what the canvas overlay asks, and an
+        // overlay that disagrees with the render is the whole problem the
+        // palette's single resolver exists to avoid.
+        let rgba = rgba_from_hex(settings.resolve_color(&hex));
         unsafe {
             for (i, c) in rgba.iter().enumerate() {
                 *out.add(i) = *c as f64;

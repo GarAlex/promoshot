@@ -80,7 +80,11 @@ pub extern "C" fn promo_vector_render(
         let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
             return -2;
         };
-        let shapes = vector_shapes(&doc);
+        // A drawing rendered on its own has no composition around it, so a
+        // `@name` in a stroke cannot resolve here — the shape falls back the
+        // same way an undefined name does anywhere else. Inside a
+        // composition the engine passes the real settings and it resolves.
+        let shapes = vector_shapes(&doc, &promo_model::CompositionSettings::default());
         match handle.renderer.render_to_iosurface(
             handle.ctx,
             &shapes,
@@ -110,7 +114,8 @@ pub extern "C" fn promo_vector_content_bounds(doc_json: *const c_char, out: *mut
         let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
             return -2;
         };
-        let (x, y, w, h) = promo_gpu::vector::content_bounds(&vector_shapes(&doc));
+        let (x, y, w, h) = promo_gpu::vector::content_bounds(
+            &vector_shapes(&doc, &promo_model::CompositionSettings::default()));
         unsafe {
             *out = x;
             *out.add(1) = y;

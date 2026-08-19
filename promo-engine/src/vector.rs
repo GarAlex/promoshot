@@ -8,7 +8,14 @@
 use promo_gpu::vector::{VectorShape, VectorShapeKind};
 use promo_model::{DrawingDocument, DrawingShapeKind};
 
-pub fn vector_shapes(doc: &DrawingDocument) -> Vec<VectorShape> {
+/// Tessellates a drawing's shapes.
+///
+/// `settings` is here only to resolve `@name` colours: a drawing's stroke and
+/// fill are document colours like any other, so they follow the palette too.
+pub fn vector_shapes(
+    doc: &DrawingDocument,
+    settings: &promo_model::CompositionSettings,
+) -> Vec<VectorShape> {
     doc.shapes
         .iter()
         .map(|s| {
@@ -21,13 +28,14 @@ pub fn vector_shapes(doc: &DrawingDocument) -> Vec<VectorShape> {
                     DrawingShapeKind::Oval => VectorShapeKind::Oval,
                 },
                 points: s.points.iter().map(|p| (p.x(), p.y())).collect(),
-                stroke_rgba: rgba_from_hex(&s.stroke_color_hex)
+                stroke_rgba: rgba_from_hex(settings.resolve_color(&s.stroke_color_hex))
                     .map(|c| [c[0], c[1], c[2], stroke_alpha])
                     .unwrap_or([1.0, 1.0, 1.0, stroke_alpha]),
                 stroke_width: s.stroke_width,
                 fill_rgba: s
                     .fill_color_hex
                     .as_deref()
+                    .map(|hex| settings.resolve_color(hex))
                     .and_then(rgba_from_hex)
                     .map(|c| [c[0], c[1], c[2], fill_alpha]),
                 arrow_start: s.arrow_start,

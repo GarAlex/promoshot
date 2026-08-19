@@ -810,7 +810,7 @@ impl PreviewEngine {
         pinned: &[u64],
     ) -> Option<(SceneQuad, u64)> {
         let doc = self.resource_for(layer)?.drawing.as_ref()?;
-        let shapes = vector_shapes(doc);
+        let shapes = vector_shapes(doc, &settings);
         if shapes.is_empty() {
             return None;
         }
