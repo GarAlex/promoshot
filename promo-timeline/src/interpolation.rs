@@ -1089,4 +1089,133 @@ mod tests {
         assert!((tr.horizontal_shift - 250.0).abs() < 1e-9);
         assert!((tr.vertical_shift - 750.0).abs() < 1e-9);
     }
+
+    /// THE regression test for placement: the feature moved this arithmetic
+    /// out of the author's hands and into the engine, so the thing to prove
+    /// is that the engine computes what the author used to compute.
+    ///
+    /// The author's formula — documented in the skill, and used by every
+    /// template written before `placement` existed:
+    ///
+    ///     zoom   = desiredHeight / canvasHeight
+    ///     drawnW = sourceWidth * (canvasHeight / sourceHeight) * zoom
+    ///     hShift = (canvasWidth - drawnW) / 2          // to centre
+    ///
+    /// `hShift` is the line that needed the SOURCE's pixel width, which the
+    /// author usually did not have — the whole reason the rule exists.
+    fn author_maths(canvas: (f64, f64), source: (f64, f64), desired_h: f64) -> (f64, f64, f64) {
+        let zoom = desired_h / canvas.1;
+        let drawn_w = source.0 * (canvas.1 / source.1) * zoom;
+        ((canvas.0 - drawn_w) / 2.0, (canvas.1 - desired_h) / 2.0, zoom)
+    }
+
+    fn ruled_layer(rule: &str, resource_px: (f64, f64)) -> (ProjectLayer, Vec<promo_model::ProjectResource>) {
+        let mut layer = layer(&format!(
+            r#"{{"id": "A", "time": 0, "transitionDuration": 0, "placement": {rule}}}"#
+        ));
+        layer.resource_id = Some("IMG".into());
+        let resources = serde_json::from_str(&format!(
+            r#"[{{"id": "IMG", "kind": "image", "filename": "i.png",
+                  "displayName": "I", "addedAt": 0,
+                  "pixelWidth": {}, "pixelHeight": {}}}]"#,
+            resource_px.0, resource_px.1
+        ))
+        .unwrap();
+        (layer, resources)
+    }
+
+    #[test]
+    fn a_centred_rule_computes_what_the_author_used_to_compute() {
+        // The two real fixtures are the first rows: canvas and source sizes
+        // taken from templates 01 and 02, whose hand-written JSON carried
+        // horizontalShift 224 and 352 respectively.
+        let cases = [
+            ((1440.0, 900.0), (1216.0, 760.0), 620.0, Some(224.0)),
+            ((1920.0, 1080.0), (2560.0, 1600.0), 760.0, Some(352.0)),
+            // ...and a matrix around them, so this is not two lucky numbers.
+            ((1920.0, 1080.0), (1920.0, 1080.0), 1080.0, None),
+            ((1920.0, 1080.0), (1170.0, 2532.0), 900.0, None),
+            ((1080.0, 1920.0), (1216.0, 760.0), 300.0, None),
+            ((2560.0, 1600.0), (800.0, 800.0), 512.0, None),
+        ];
+        for (canvas, source, desired_h, recorded) in cases {
+            let (want_h, want_v, want_zoom) = author_maths(canvas, source, desired_h);
+            let defaults = settings(&format!(
+                r#"{{"canvasWidth": {}, "canvasHeight": {}}}"#, canvas.0, canvas.1));
+            let (layer, resources) = ruled_layer(
+                &format!(r#"{{"height": {desired_h}, "anchor": "center"}}"#), source);
+            let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
+            assert!((tr.zoom - want_zoom).abs() < 1e-12,
+                    "zoom for {canvas:?}/{source:?}: {} vs {want_zoom}", tr.zoom);
+            assert!((tr.horizontal_shift - want_h).abs() < 1e-9,
+                    "hShift for {canvas:?}/{source:?}: {} vs {want_h}", tr.horizontal_shift);
+            assert!((tr.vertical_shift - want_v).abs() < 1e-9,
+                    "vShift for {canvas:?}/{source:?}: {} vs {want_v}", tr.vertical_shift);
+            // Where a real project recorded the number by hand, the engine
+            // must land on that exact value — not merely on its own formula.
+            if let Some(recorded) = recorded {
+                assert!((tr.horizontal_shift - recorded).abs() < 1e-9,
+                        "the hand-written project said {recorded}, engine says {}",
+                        tr.horizontal_shift);
+            }
+        }
+    }
+
+    /// The nine anchors are the same arithmetic with the divisor changed, so
+    /// they are pinned against it rather than against copied constants.
+    #[test]
+    fn every_anchor_agrees_with_the_arithmetic_it_replaces() {
+        let canvas = (1920.0, 1080.0);
+        let source = (1216.0, 760.0);
+        let desired_h = 620.0;
+        let (centre_h, centre_v, _) = author_maths(canvas, source, desired_h);
+        let drawn_w = canvas.0 - 2.0 * centre_h;
+        let defaults = settings(r#"{"canvasWidth": 1920, "canvasHeight": 1080}"#);
+        for (anchor, want_h, want_v) in [
+            ("topLeft", 0.0, 0.0),
+            ("top", centre_h, 0.0),
+            ("topRight", canvas.0 - drawn_w, 0.0),
+            ("left", 0.0, centre_v),
+            ("center", centre_h, centre_v),
+            ("right", canvas.0 - drawn_w, centre_v),
+            ("bottomLeft", 0.0, canvas.1 - desired_h),
+            ("bottom", centre_h, canvas.1 - desired_h),
+            ("bottomRight", canvas.0 - drawn_w, canvas.1 - desired_h),
+        ] {
+            let (layer, resources) = ruled_layer(
+                &format!(r#"{{"height": {desired_h}, "anchor": "{anchor}"}}"#), source);
+            let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
+            assert!((tr.horizontal_shift - want_h).abs() < 1e-9, "{anchor} h");
+            assert!((tr.vertical_shift - want_v).abs() < 1e-9, "{anchor} v");
+        }
+    }
+
+    /// And the half the author's arithmetic could NOT do: the numbers were
+    /// baked against one source, so swapping the media for another aspect
+    /// left them wrong. The rule is resolved against whatever is actually
+    /// there, so it stays centred.
+    #[test]
+    fn the_rule_re_resolves_when_the_source_changes_where_baked_numbers_would_not() {
+        let canvas = (1920.0, 1080.0);
+        let defaults = settings(r#"{"canvasWidth": 1920, "canvasHeight": 1080}"#);
+        let wide = (1216.0, 760.0);
+        let tall = (1170.0, 2532.0);
+        let baked_for_wide = author_maths(canvas, wide, 620.0).0;
+
+        for source in [wide, tall] {
+            let (layer, resources) = ruled_layer(
+                r#"{"height": 620, "anchor": "center"}"#, source);
+            let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
+            let drawn_w = source.0 * (canvas.1 / source.1) * tr.zoom;
+            // Centred against THIS source, whatever it is.
+            assert!((tr.horizontal_shift - (canvas.0 - drawn_w) / 2.0).abs() < 1e-9);
+            assert!((tr.zoom - 620.0 / canvas.1).abs() < 1e-12, "height is honoured either way");
+        }
+        // The baked number, meanwhile, is wrong by hundreds of pixels on the
+        // second source — which is the failure this feature exists to remove.
+        let (layer, resources) = ruled_layer(r#"{"height": 620, "anchor": "center"}"#, tall);
+        let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
+        assert!((tr.horizontal_shift - baked_for_wide).abs() > 300.0,
+                "the two sources must genuinely disagree for this test to mean anything");
+    }
 }
