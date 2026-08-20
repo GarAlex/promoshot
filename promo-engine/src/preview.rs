@@ -1323,9 +1323,13 @@ pub fn caption_style(
                 .unwrap_or(settings.subtitle_shadow_opacity),
         ),
         shadow_radius: get(|s| s.shadow_radius, settings.subtitle_shadow_radius),
-        shadow_offset: style
-            .and_then(|s| s.shadow_offset)
-            .unwrap_or([0.0, settings.subtitle_shadow_radius / 2.0]),
+        // Default the drop from the EFFECTIVE radius, not the composition's.
+        // Deriving it from the settings value gave a caption that set its own
+        // radius an offset of zero, so its shadow sat directly under the
+        // glyphs where they hid it.
+        shadow_offset: style.and_then(|s| s.shadow_offset).unwrap_or_else(|| {
+            [0.0, get(|s| s.shadow_radius, settings.subtitle_shadow_radius) / 2.0]
+        }),
         padding: settings.subtitle_background_padding,
         corner_radius: settings.subtitle_background_corner_radius,
         left_margin: get(|s| s.left_margin, settings.subtitle_left_margin),

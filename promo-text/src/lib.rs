@@ -164,7 +164,11 @@ fn distance_to_ink(mask: &[f32], width: usize, height: usize) -> Vec<f32> {
 /// A separable box blur, run three times — close enough to a gaussian for a
 /// shadow, and linear in the radius rather than quadratic.
 fn blur_mask(mask: &[f32], width: usize, height: usize, radius: f64) -> Vec<f32> {
-    let r = radius.round().max(0.0) as usize;
+    // THREE passes approximate a gaussian of sigma ≈ radius only when each
+    // pass is a THIRD of it. Running each pass at the full radius spreads
+    // the alpha roughly 1.7x too far and collapses the peak, which is why a
+    // "radius 10" shadow read as a barely-there smudge instead of a shadow.
+    let r = (radius / 3.0).round().max(0.0) as usize;
     if r == 0 || width == 0 || height == 0 {
         return mask.to_vec();
     }
