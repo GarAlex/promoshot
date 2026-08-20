@@ -545,8 +545,32 @@ fn rasterize_inner(
     // in. Each is derived from the one mask above.
     if !mask.is_empty() {
         let (w, h) = (width as usize, height as usize);
+        // The outline's coverage, needed before the shadow: a shadow is cast
+        // by the SILHOUETTE — glyph plus outline — not by the glyph alone.
+        // Casting it from the glyph buried its strongest part under the
+        // stroke that was painted over it, leaving only the weak outer tail,
+        // and a stroked caption looked as though it had no shadow at all
+        // (measured: a third of the effect of the same shadow unstroked).
+        let stroked = style.stroke_width > 0.0 && style.stroke_rgba[3] > 0;
+        let dist = if stroked || style.shadow_rgba[3] > 0 {
+            distance_to_ink(&mask, w, h)
+        } else {
+            Vec::new()
+        };
+        let stroke_coverage = |index: usize| -> f32 {
+            if !stroked { return 0.0; }
+            (style.stroke_width as f32 + 0.5 - dist[index]).clamp(0.0, 1.0)
+        };
         if style.shadow_rgba[3] > 0 {
-            let blurred = blur_mask(&mask, w, h, style.shadow_radius);
+            let silhouette: Vec<f32> = if stroked {
+                mask.iter()
+                    .enumerate()
+                    .map(|(i, &a)| a.max(stroke_coverage(i)))
+                    .collect()
+            } else {
+                mask.clone()
+            };
+            let blurred = blur_mask(&silhouette, w, h, style.shadow_radius);
             let (dx, dy) = (style.shadow_offset[0], style.shadow_offset[1]);
             let alpha = style.shadow_rgba[3] as f64 / 255.0;
             for y in 0..h {
@@ -563,15 +587,13 @@ fn rasterize_inner(
                 }
             }
         }
-        if style.stroke_width > 0.0 && style.stroke_rgba[3] > 0 {
-            let dist = distance_to_ink(&mask, w, h);
+        if stroked {
             let alpha = style.stroke_rgba[3] as f64 / 255.0;
             for y in 0..h {
                 for x in 0..w {
                     // Anti-aliased at the outer edge: the half-pixel is what
                     // keeps a thin outline from looking like a staircase.
-                    let coverage = (style.stroke_width as f32 + 0.5
-                        - dist[y * w + x]).clamp(0.0, 1.0);
+                    let coverage = stroke_coverage(y * w + x);
                     if coverage <= 0.001 { continue; }
                     blend(&mut rgba, width, x as u32, y as u32,
                           [style.stroke_rgba[0], style.stroke_rgba[1], style.stroke_rgba[2]],
@@ -992,5 +1014,50 @@ mod smoothing_tests {
             stroke_rgba: [255, 0, 0, 255], stroke_width: 0.0, ..TextStyle::default()
         }).expect("b");
         assert_eq!(a.rgba, b.rgba, "a zero-width stroke changes nothing");
+    }
+
+    /// A shadow is cast by the SILHOUETTE — glyph plus outline — not by the
+    /// glyph alone. Casting it from the glyph buries its strongest part
+    /// under the stroke painted over it, and a stroked caption then looks
+    /// as though it has no shadow: measured at a third of the effect the
+    /// same shadow has on unstroked text, which is what a reviewer spotted
+    /// by eye.
+    #[test]
+    fn a_shadow_is_cast_by_the_outline_too() {
+        let base = TextStyle {
+            text_rgba: [255, 255, 255, 255],
+            background_rgba: [0, 0, 0, 0],
+            padding: 30.0,
+            ..TextStyle::default()
+        };
+        let shadow = |st: TextStyle| TextStyle {
+            shadow_rgba: [0, 0, 0, 220],
+            shadow_radius: 12.0,
+            shadow_offset: [0.0, 6.0],
+            ..st
+        };
+        let ink = |r: &RasterizedText| -> f64 {
+            r.rgba.chunks_exact(4).map(|px| px[3] as f64).sum()
+        };
+        let plain = rasterize("Hold", 1920.0, 1080.0, &base).expect("plain");
+        let plain_shadowed = rasterize("Hold", 1920.0, 1080.0, &shadow(base.clone()))
+            .expect("plain shadowed");
+
+        let stroked_style = TextStyle {
+            stroke_rgba: [0, 0, 0, 255],
+            stroke_width: 5.0,
+            ..base.clone()
+        };
+        let stroked = rasterize("Hold", 1920.0, 1080.0, &stroked_style).expect("stroked");
+        let stroked_shadowed = rasterize("Hold", 1920.0, 1080.0, &shadow(stroked_style))
+            .expect("stroked shadowed");
+
+        let plain_gain = ink(&plain_shadowed) - ink(&plain);
+        let stroked_gain = ink(&stroked_shadowed) - ink(&stroked);
+        assert!(plain_gain > 0.0, "the shadow does something on plain text");
+        assert!(
+            stroked_gain > plain_gain * 0.6,
+            "the outline swallowed the shadow: {stroked_gain} vs {plain_gain} unstroked"
+        );
     }
 }
