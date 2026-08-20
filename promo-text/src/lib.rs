@@ -59,6 +59,21 @@ pub struct TextStyle {
     pub vertical_margin: f64,
     /// Line height as a multiple of font size.
     pub line_height: f64,
+    /// Outline drawn around the glyphs, in canvas pixels. Zero width is no
+    /// outline.
+    ///
+    /// This is what lets a caption sit straight on FOOTAGE with no plate
+    /// behind it — the social-caption look — where plain text is grey mush
+    /// the moment the frame behind it is bright. It lives inside the
+    /// padding: the raster is exactly text-plus-padding, so a stroke wider
+    /// than the padding is clipped rather than growing the box (which would
+    /// move the caption and resize any plate).
+    pub stroke_rgba: [u8; 4],
+    pub stroke_width: f64,
+    /// A soft drop shadow under everything else. Same padding budget.
+    pub shadow_rgba: [u8; 4],
+    pub shadow_radius: f64,
+    pub shadow_offset: [f64; 2],
     /// Coverage gamma — "font smoothing".
     ///
     /// Glyph antialiasing is blended in sRGB space by the compositor, but
@@ -85,6 +100,11 @@ impl Default for TextStyle {
     fn default() -> Self {
         Self {
             font_family: None,
+            stroke_rgba: [0, 0, 0, 0],
+            stroke_width: 0.0,
+            shadow_rgba: [0, 0, 0, 0],
+            shadow_radius: 0.0,
+            shadow_offset: [0.0, 0.0],
             font_size: 72.0,
             bold: true,
             italic: false,
@@ -100,6 +120,81 @@ impl Default for TextStyle {
             smoothing: None,
         }
     }
+}
+
+/// Distance from every pixel to the nearest covered one, by two chamfer
+/// passes. O(w·h) and round enough for an outline; a separable max filter
+/// would give square corners on round letters.
+fn distance_to_ink(mask: &[f32], width: usize, height: usize) -> Vec<f32> {
+    const NEAR: f32 = 1.0;
+    const DIAG: f32 = 1.4142136;
+    let far = (width + height) as f32;
+    let mut dist: Vec<f32> = mask
+        .iter()
+        .map(|&a| if a >= 0.5 { 0.0 } else { far })
+        .collect();
+    let at = |x: usize, y: usize| y * width + x;
+    for y in 0..height {
+        for x in 0..width {
+            let mut d = dist[at(x, y)];
+            if y > 0 {
+                d = d.min(dist[at(x, y - 1)] + NEAR);
+                if x > 0 { d = d.min(dist[at(x - 1, y - 1)] + DIAG); }
+                if x + 1 < width { d = d.min(dist[at(x + 1, y - 1)] + DIAG); }
+            }
+            if x > 0 { d = d.min(dist[at(x - 1, y)] + NEAR); }
+            dist[at(x, y)] = d;
+        }
+    }
+    for y in (0..height).rev() {
+        for x in (0..width).rev() {
+            let mut d = dist[at(x, y)];
+            if y + 1 < height {
+                d = d.min(dist[at(x, y + 1)] + NEAR);
+                if x + 1 < width { d = d.min(dist[at(x + 1, y + 1)] + DIAG); }
+                if x > 0 { d = d.min(dist[at(x - 1, y + 1)] + DIAG); }
+            }
+            if x + 1 < width { d = d.min(dist[at(x + 1, y)] + NEAR); }
+            dist[at(x, y)] = d;
+        }
+    }
+    dist
+}
+
+/// A separable box blur, run three times — close enough to a gaussian for a
+/// shadow, and linear in the radius rather than quadratic.
+fn blur_mask(mask: &[f32], width: usize, height: usize, radius: f64) -> Vec<f32> {
+    let r = radius.round().max(0.0) as usize;
+    if r == 0 || width == 0 || height == 0 {
+        return mask.to_vec();
+    }
+    let mut src = mask.to_vec();
+    let mut dst = vec![0.0f32; src.len()];
+    for _ in 0..3 {
+        for y in 0..height {
+            for x in 0..width {
+                let (mut sum, mut n) = (0.0f32, 0.0f32);
+                for k in x.saturating_sub(r)..=(x + r).min(width - 1) {
+                    sum += src[y * width + k];
+                    n += 1.0;
+                }
+                dst[y * width + x] = sum / n.max(1.0);
+            }
+        }
+        std::mem::swap(&mut src, &mut dst);
+        for x in 0..width {
+            for y in 0..height {
+                let (mut sum, mut n) = (0.0f32, 0.0f32);
+                for k in y.saturating_sub(r)..=(y + r).min(height - 1) {
+                    sum += src[k * width + x];
+                    n += 1.0;
+                }
+                dst[y * width + x] = sum / n.max(1.0);
+            }
+        }
+        std::mem::swap(&mut src, &mut dst);
+    }
+    src
 }
 
 /// A rasterized caption and where it belongs on the canvas.
@@ -385,6 +480,20 @@ fn rasterize_inner(
         style.text_rgba[2],
         style.text_rgba[3],
     );
+    // Coverage is collected into a mask FIRST when there is a stroke or a
+    // shadow, because both are derived from the glyph shapes: cosmic-text
+    // hands back coverage per pixel and no outlines, so the outline is a
+    // dilation of that mask and the shadow is a blur of it. Drawing the
+    // glyphs straight into the buffer, as the plain path does, throws the
+    // shape away before either can be built.
+    let wants_effects = (style.stroke_width > 0.0 && style.stroke_rgba[3] > 0)
+        || (style.shadow_rgba[3] > 0 && (style.shadow_radius > 0.0
+            || style.shadow_offset != [0.0, 0.0]));
+    let mut mask: Vec<f32> = if wants_effects {
+        vec![0.0; (width * height) as usize]
+    } else {
+        Vec::new()
+    };
     // Horizontal alignment inside the box: the box is already sized to the
     // text, so runs are nudged by the difference for multi-line blocks.
     let inner_width = bg_width - style.padding * 2.0;
@@ -405,6 +514,17 @@ fn rasterize_inner(
                 if x < 0.0 || y < 0.0 || x >= width as f64 || y >= height as f64 {
                     continue;
                 }
+                if !mask.is_empty() {
+                    // Effects on: only the SHAPE is recorded here. Blending
+                    // the glyph now would put the fill under the stroke that
+                    // is derived from it, and the outline would swallow the
+                    // letter.
+                    let index = y as usize * width as usize + x as usize;
+                    if let Some(slot) = mask.get_mut(index) {
+                        *slot = slot.max(a as f32);
+                    }
+                    continue;
+                }
                 blend(
                     &mut rgba,
                     width,
@@ -416,6 +536,54 @@ fn rasterize_inner(
             }
         }
     });
+
+    // Shadow, then outline, then the letters — the order they must be read
+    // in. Each is derived from the one mask above.
+    if !mask.is_empty() {
+        let (w, h) = (width as usize, height as usize);
+        if style.shadow_rgba[3] > 0 {
+            let blurred = blur_mask(&mask, w, h, style.shadow_radius);
+            let (dx, dy) = (style.shadow_offset[0], style.shadow_offset[1]);
+            let alpha = style.shadow_rgba[3] as f64 / 255.0;
+            for y in 0..h {
+                for x in 0..w {
+                    let sx = x as f64 - dx;
+                    let sy = y as f64 - dy;
+                    if sx < 0.0 || sy < 0.0 || sx >= w as f64 || sy >= h as f64 {
+                        continue;
+                    }
+                    let a = blurred[sy as usize * w + sx as usize] as f64 * alpha;
+                    if a <= 0.001 { continue; }
+                    blend(&mut rgba, width, x as u32, y as u32,
+                          [style.shadow_rgba[0], style.shadow_rgba[1], style.shadow_rgba[2]], a);
+                }
+            }
+        }
+        if style.stroke_width > 0.0 && style.stroke_rgba[3] > 0 {
+            let dist = distance_to_ink(&mask, w, h);
+            let alpha = style.stroke_rgba[3] as f64 / 255.0;
+            for y in 0..h {
+                for x in 0..w {
+                    // Anti-aliased at the outer edge: the half-pixel is what
+                    // keeps a thin outline from looking like a staircase.
+                    let coverage = (style.stroke_width as f32 + 0.5
+                        - dist[y * w + x]).clamp(0.0, 1.0);
+                    if coverage <= 0.001 { continue; }
+                    blend(&mut rgba, width, x as u32, y as u32,
+                          [style.stroke_rgba[0], style.stroke_rgba[1], style.stroke_rgba[2]],
+                          coverage as f64 * alpha);
+                }
+            }
+        }
+        for y in 0..h {
+            for x in 0..w {
+                let a = mask[y * w + x] as f64;
+                if a <= 0.001 { continue; }
+                blend(&mut rgba, width, x as u32, y as u32,
+                      [style.text_rgba[0], style.text_rgba[1], style.text_rgba[2]], a);
+            }
+        }
+    }
 
     // Top-left origin, matching the app: both its SwiftUI preview
     // (`.offset(y: verticalMargin)`) and its exporter (a bitmap context
@@ -715,5 +883,110 @@ mod smoothing_tests {
         let a = rasterize("Format every detail", 1440.0, 900.0, &dark).unwrap();
         let b = rasterize("Format every detail", 1440.0, 900.0, &forced).unwrap();
         assert_eq!(a.rgba, b.rgba, "default for dark text is no smoothing");
+    }
+
+    /// A caption with no plate over bright footage is unreadable without an
+    /// outline — that is the whole reason this exists. White text with a
+    /// black stroke must therefore put DARK pixels immediately around the
+    /// light ones, so the letters survive whatever is behind them.
+    #[test]
+    fn a_stroke_puts_dark_pixels_around_light_letters() {
+        let mut style = TextStyle {
+            text_rgba: [255, 255, 255, 255],
+            background_rgba: [0, 0, 0, 0], // no plate: the social-caption look
+            padding: 24.0,
+            ..TextStyle::default()
+        };
+        let plain = rasterize("Hold", 1920.0, 1080.0, &style).expect("plain");
+        style.stroke_rgba = [0, 0, 0, 255];
+        style.stroke_width = 6.0;
+        let stroked = rasterize("Hold", 1920.0, 1080.0, &style).expect("stroked");
+
+        // Same box: the outline lives inside the padding and must not move
+        // the caption or resize it.
+        assert_eq!((plain.width, plain.height), (stroked.width, stroked.height));
+        assert_eq!((plain.x, plain.y), (stroked.x, stroked.y));
+
+        let dark_opaque = |r: &RasterizedText| {
+            r.rgba.chunks_exact(4)
+                .filter(|px| px[3] > 128 && px[0] < 60 && px[1] < 60 && px[2] < 60)
+                .count()
+        };
+        assert_eq!(dark_opaque(&plain), 0, "no plate, no stroke: nothing dark");
+        assert!(dark_opaque(&stroked) > 200,
+                "the stroke drew {} dark pixels", dark_opaque(&stroked));
+
+        // And the letters are still white on top — an outline that swallowed
+        // the fill would be worse than none.
+        let white = |r: &RasterizedText| {
+            r.rgba.chunks_exact(4)
+                .filter(|px| px[3] > 200 && px[0] > 220 && px[1] > 220 && px[2] > 220)
+                .count()
+        };
+        let (before, after) = (white(&plain), white(&stroked));
+        assert!(after as f64 > before as f64 * 0.7,
+                "fill survives the outline: {before} -> {after}");
+    }
+
+    /// A stroke wider than the padding is CLIPPED, not grown into: the box
+    /// is text-plus-padding, and letting it grow would move every caption
+    /// and resize any plate behind it.
+    #[test]
+    fn a_stroke_never_moves_the_caption() {
+        let base = TextStyle { padding: 8.0, ..TextStyle::default() };
+        let plain = rasterize("Ship", 1920.0, 1080.0, &base).expect("plain");
+        let huge = TextStyle {
+            stroke_rgba: [255, 0, 0, 255],
+            stroke_width: 40.0,
+            ..base
+        };
+        let stroked = rasterize("Ship", 1920.0, 1080.0, &huge).expect("stroked");
+        assert_eq!((plain.width, plain.height), (stroked.width, stroked.height));
+        assert_eq!((plain.x, plain.y), (stroked.x, stroked.y));
+    }
+
+    /// The shadow sits UNDER the letters and is offset from them, so it
+    /// darkens what is behind the caption without dulling the text.
+    #[test]
+    fn a_shadow_darkens_below_without_touching_the_letters() {
+        let style = TextStyle {
+            text_rgba: [255, 255, 255, 255],
+            background_rgba: [0, 0, 0, 0],
+            padding: 28.0,
+            shadow_rgba: [0, 0, 0, 220],
+            shadow_radius: 6.0,
+            shadow_offset: [0.0, 6.0],
+            ..TextStyle::default()
+        };
+        let out = rasterize("Now", 1920.0, 1080.0, &style).expect("shadowed");
+        let w = out.width as usize;
+        let rows = |from: usize, to: usize| {
+            out.rgba[from * w * 4..to * w * 4]
+                .chunks_exact(4)
+                .filter(|px| px[3] > 20 && px[0] < 80)
+                .count()
+        };
+        let h = out.height as usize;
+        // More shadow below the text than above it, because it is offset down.
+        assert!(rows(h / 2, h) > rows(0, h / 4),
+                "the shadow falls below: {} vs {}", rows(h / 2, h), rows(0, h / 4));
+        let white = out.rgba.chunks_exact(4)
+            .filter(|px| px[3] > 200 && px[0] > 220).count();
+        assert!(white > 0, "the letters are still white");
+    }
+
+    /// Neither effect is on by default, so every project that existed before
+    /// them renders exactly as it did.
+    #[test]
+    fn effects_are_off_unless_asked_for() {
+        let style = TextStyle::default();
+        assert_eq!(style.stroke_width, 0.0);
+        assert_eq!(style.stroke_rgba[3], 0);
+        assert_eq!(style.shadow_rgba[3], 0);
+        let a = rasterize("Same", 1920.0, 1080.0, &style).expect("a");
+        let b = rasterize("Same", 1920.0, 1080.0, &TextStyle {
+            stroke_rgba: [255, 0, 0, 255], stroke_width: 0.0, ..TextStyle::default()
+        }).expect("b");
+        assert_eq!(a.rgba, b.rgba, "a zero-width stroke changes nothing");
     }
 }

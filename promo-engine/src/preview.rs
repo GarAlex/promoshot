@@ -1305,6 +1305,27 @@ pub fn caption_style(
         ),
         text_rgba,
         background_rgba,
+        stroke_rgba: rgba_bytes(
+            settings.resolve_color(
+                &style
+                    .and_then(|s| s.stroke_color_hex.clone())
+                    .unwrap_or_else(|| settings.subtitle_stroke_color_hex.clone())),
+            1.0,
+        ),
+        stroke_width: get(|s| s.stroke_width, settings.subtitle_stroke_width),
+        shadow_rgba: rgba_bytes(
+            settings.resolve_color(
+                &style
+                    .and_then(|s| s.shadow_color_hex.clone())
+                    .unwrap_or_else(|| settings.subtitle_shadow_color_hex.clone())),
+            style
+                .and_then(|s| s.shadow_opacity)
+                .unwrap_or(settings.subtitle_shadow_opacity),
+        ),
+        shadow_radius: get(|s| s.shadow_radius, settings.subtitle_shadow_radius),
+        shadow_offset: style
+            .and_then(|s| s.shadow_offset)
+            .unwrap_or([0.0, settings.subtitle_shadow_radius / 2.0]),
         padding: settings.subtitle_background_padding,
         corner_radius: settings.subtitle_background_corner_radius,
         left_margin: get(|s| s.left_margin, settings.subtitle_left_margin),

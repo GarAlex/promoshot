@@ -310,6 +310,24 @@ pub struct SubtitleStyle {
     pub background_color_hex: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub background_opacity: Option<f64>,
+    /// Outline round the glyphs, in canvas pixels. What lets a caption sit
+    /// on FOOTAGE with no plate — the social-caption look — where plain
+    /// text turns to mush over a bright frame. Drawn inside the padding, so
+    /// a stroke wider than `subtitleBackgroundPadding` is clipped rather
+    /// than moving the caption.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub stroke_color_hex: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub stroke_width: Option<f64>,
+    /// A soft shadow under everything else, on the same padding budget.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shadow_color_hex: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shadow_opacity: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shadow_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shadow_offset: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -458,6 +476,13 @@ pub struct CompositionSettings {
     pub subtitle_background_color_hex: String,
     pub subtitle_background_opacity: f64,
     pub subtitle_background_padding: f64,
+    /// Composition-wide caption outline and shadow — the defaults a caption
+    /// falls back to, exactly like the colours above.
+    pub subtitle_stroke_color_hex: String,
+    pub subtitle_stroke_width: f64,
+    pub subtitle_shadow_color_hex: String,
+    pub subtitle_shadow_opacity: f64,
+    pub subtitle_shadow_radius: f64,
     pub subtitle_background_corner_radius: f64,
     pub video_border_color_hex: String,
     pub video_border_width: f64,
@@ -491,6 +516,13 @@ impl Default for CompositionSettings {
             subtitle_background_color_hex: "000000".into(),
             subtitle_background_opacity: 0.7,
             subtitle_background_padding: 16.0,
+            // Off by default: a stroke appearing on every existing caption
+            // would change what every project already renders.
+            subtitle_stroke_color_hex: "000000".into(),
+            subtitle_stroke_width: 0.0,
+            subtitle_shadow_color_hex: "000000".into(),
+            subtitle_shadow_opacity: 0.0,
+            subtitle_shadow_radius: 0.0,
             subtitle_background_corner_radius: 8.0,
             video_border_color_hex: "FFFFFF".into(),
             video_border_width: 0.0,
@@ -538,6 +570,11 @@ struct CompositionSettingsWire {
     subtitle_background_color_hex: Option<String>,
     subtitle_background_opacity: Option<f64>,
     subtitle_background_padding: Option<f64>,
+    subtitle_stroke_color_hex: Option<String>,
+    subtitle_stroke_width: Option<f64>,
+    subtitle_shadow_color_hex: Option<String>,
+    subtitle_shadow_opacity: Option<f64>,
+    subtitle_shadow_radius: Option<f64>,
     subtitle_background_corner_radius: Option<f64>,
     video_border_color_hex: Option<String>,
     video_border_width: Option<f64>,
@@ -588,6 +625,21 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             subtitle_background_padding: w
                 .subtitle_background_padding
                 .unwrap_or(dflt.subtitle_background_padding),
+            subtitle_stroke_color_hex: w
+                .subtitle_stroke_color_hex
+                .unwrap_or(dflt.subtitle_stroke_color_hex.clone()),
+            subtitle_stroke_width: w
+                .subtitle_stroke_width
+                .unwrap_or(dflt.subtitle_stroke_width),
+            subtitle_shadow_color_hex: w
+                .subtitle_shadow_color_hex
+                .unwrap_or(dflt.subtitle_shadow_color_hex.clone()),
+            subtitle_shadow_opacity: w
+                .subtitle_shadow_opacity
+                .unwrap_or(dflt.subtitle_shadow_opacity),
+            subtitle_shadow_radius: w
+                .subtitle_shadow_radius
+                .unwrap_or(dflt.subtitle_shadow_radius),
             subtitle_background_corner_radius: w
                 .subtitle_background_corner_radius
                 .unwrap_or(dflt.subtitle_background_corner_radius),
@@ -646,6 +698,11 @@ impl Serialize for CompositionSettings {
             subtitle_background_color_hex: &'a str,
             subtitle_background_opacity: f64,
             subtitle_background_padding: f64,
+            subtitle_stroke_color_hex: &'a str,
+            subtitle_stroke_width: f64,
+            subtitle_shadow_color_hex: &'a str,
+            subtitle_shadow_opacity: f64,
+            subtitle_shadow_radius: f64,
             subtitle_background_corner_radius: f64,
             video_border_color_hex: &'a str,
             video_border_width: f64,
@@ -679,6 +736,11 @@ impl Serialize for CompositionSettings {
             subtitle_background_color_hex: &self.subtitle_background_color_hex,
             subtitle_background_opacity: self.subtitle_background_opacity,
             subtitle_background_padding: self.subtitle_background_padding,
+            subtitle_stroke_color_hex: &self.subtitle_stroke_color_hex,
+            subtitle_stroke_width: self.subtitle_stroke_width,
+            subtitle_shadow_color_hex: &self.subtitle_shadow_color_hex,
+            subtitle_shadow_opacity: self.subtitle_shadow_opacity,
+            subtitle_shadow_radius: self.subtitle_shadow_radius,
             subtitle_background_corner_radius: self.subtitle_background_corner_radius,
             video_border_color_hex: &self.video_border_color_hex,
             video_border_width: self.video_border_width,
@@ -2000,6 +2062,38 @@ mod placement_model_tests {
         let back: ProjectResource =
             serde_json::from_str(&serde_json::to_string(&resource).unwrap()).unwrap();
         assert_eq!(back.pixel_height, Some(2532.0));
+    }
+
+    #[test]
+    fn caption_stroke_and_shadow_survive_the_hand_written_wire() {
+        // CompositionSettings has hand-written Serialize/Deserialize, so a
+        // field added to the struct but not to all four wire sites is
+        // accepted, ignored, and dropped on the next save — which is
+        // exactly how `backgroundGradient` once vanished.
+        let json = r#"{"canvasWidth": 1080, "canvasHeight": 1920,
+            "subtitleStrokeColorHex": "0B1020", "subtitleStrokeWidth": 8,
+            "subtitleShadowColorHex": "000000", "subtitleShadowOpacity": 0.5,
+            "subtitleShadowRadius": 12}"#;
+        let settings: CompositionSettings = serde_json::from_str(json).expect("settings");
+        assert_eq!(settings.subtitle_stroke_width, 8.0);
+        assert_eq!(settings.subtitle_shadow_radius, 12.0);
+        let back: CompositionSettings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert_eq!(back.subtitle_stroke_color_hex, "0B1020");
+        assert_eq!(back.subtitle_stroke_width, 8.0);
+        assert_eq!(back.subtitle_shadow_opacity, 0.5);
+        assert_eq!(back.subtitle_shadow_radius, 12.0);
+
+        // Per-caption overrides round-trip too, and a caption that names
+        // none keeps none on the wire.
+        let styled: SubtitleStyle = serde_json::from_str(
+            r#"{"strokeColorHex": "@ink", "strokeWidth": 6,
+                "shadowOpacity": 0.4, "shadowOffset": [0, 4]}"#).expect("style");
+        assert_eq!(styled.stroke_width, Some(6.0));
+        assert_eq!(styled.shadow_offset, Some([0.0, 4.0]));
+        let plain: SubtitleStyle = serde_json::from_str("{}").unwrap();
+        let wire = serde_json::to_string(&plain).unwrap();
+        assert!(!wire.contains("stroke"), "{wire}");
     }
 }
 
