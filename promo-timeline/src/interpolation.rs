@@ -89,9 +89,57 @@ pub fn layer_transform_along_paths(
     resources: &[promo_model::ProjectResource],
 ) -> Transform {
     let local_time = layer_local_time(layer, time);
-    let zoom_track = sorted_by_time(&layer.keyframes, |k| k.zoom.is_some());
+    // A placement rule resolves against what the layer SHOWS at this
+    // instant: the active resource's pixels (swap-aware), windowed by the
+    // viewport — the same box the renderer lays out. A source the model has
+    // no size for reads as square; `promo_validate` names that. Resolution
+    // happens HERE, before the lerp, so ramps, easing and motion paths blend
+    // plain numbers — the rule itself is never baked anywhere.
+    let canvas = promo_model::Size::new(defaults.canvas_width, defaults.canvas_height);
+    let uses_placement = layer.keyframes.iter().any(|k| k.placement.is_some());
+    let aspect = if uses_placement {
+        let source = crate::sprite::layer_resource_id(layer, time, resources)
+            .and_then(|id| resources.iter().find(|r| r.id == id))
+            .or_else(|| {
+                layer
+                    .resource_id
+                    .as_ref()
+                    .and_then(|id| resources.iter().find(|r| &r.id == id))
+            })
+            .and_then(crate::layout::resource_source_size);
+        let mut aspect = source.map_or(1.0, |s| s.width() / s.height().max(f64::EPSILON));
+        if let Some(vp) = crate::viewport::layer_viewport(layer, time) {
+            aspect *= vp[2] / vp[3].max(f64::EPSILON);
+        }
+        aspect
+    } else {
+        1.0
+    };
+    // What each keyframe SAYS, resolved: a placement wins over raw numbers
+    // on the same keyframe. A position-only rule (no height/width/mode)
+    // keeps the keyframe's own zoom for its box.
+    let zoom_of = |k: &ProjectLayerKeyframe| -> f64 {
+        k.placement
+            .as_ref()
+            .and_then(|p| crate::layout::placement_zoom(p, aspect, canvas))
+            .or(k.zoom)
+            .unwrap_or(1.0)
+    };
+    let position_of = |k: &ProjectLayerKeyframe| -> (f64, f64) {
+        match &k.placement {
+            Some(p) => crate::layout::placement_position(p, zoom_of(k), aspect, canvas),
+            None => (
+                k.horizontal_shift.unwrap_or(0.0),
+                k.vertical_shift.unwrap_or(0.0),
+            ),
+        }
+    };
+    let zoom_track = sorted_by_time(&layer.keyframes, |k| {
+        k.zoom.is_some()
+            || k.placement.as_ref().is_some_and(promo_model::Placement::sizes)
+    });
     let position_track = sorted_by_time(&layer.keyframes, |k| {
-        k.vertical_shift.is_some() || k.horizontal_shift.is_some()
+        k.vertical_shift.is_some() || k.horizontal_shift.is_some() || k.placement.is_some()
     });
     // No keyframe carries any of the three: the legacy settings timeline
     // stands, exactly as before the split. One EMPTY track falls back to its
@@ -104,21 +152,15 @@ pub fn layer_transform_along_paths(
     let zoom = match track_window(&zoom_track, local_time) {
         None => 1.0,
         Some((a, b, progress)) => {
-            let av = a.zoom.unwrap_or(1.0);
-            av + (b.zoom.unwrap_or(1.0) - av) * progress
+            let av = zoom_of(a);
+            av + (zoom_of(b) - av) * progress
         }
     };
     let (horizontal_shift, vertical_shift) = match track_window(&position_track, local_time) {
         None => (0.0, 0.0),
         Some((a, b, progress)) => {
-            let (ah, av) = (
-                a.horizontal_shift.unwrap_or(0.0),
-                a.vertical_shift.unwrap_or(0.0),
-            );
-            let (bh, bv) = (
-                b.horizontal_shift.unwrap_or(0.0),
-                b.vertical_shift.unwrap_or(0.0),
-            );
+            let (ah, av) = position_of(a);
+            let (bh, bv) = position_of(b);
             // A path moves the pair of shifts TOGETHER — they stop being two
             // independent scalars and become one point travelling a curve.
             // Only a genuine ramp between two keyframes takes it: a hold or
@@ -929,5 +971,122 @@ mod tests {
         // Off the ramp the reference passes through for the draw site to
         // resolve, same contract as everywhere else.
         assert_eq!(settings_background_color_hex(&defaults, 0.0), "@night");
+    }
+
+    /// The canonical placement example: "620 tall, centered" on a portrait
+    /// screenshot must land on exactly the zoom/shift numbers an author
+    /// computes by hand today — placement is those numbers as a rule.
+    #[test]
+    fn a_placement_is_the_same_box_the_numbers_describe() {
+        let defaults = settings(r#"{"canvasWidth": 1080, "canvasHeight": 1920}"#);
+        let resources: Vec<promo_model::ProjectResource> = serde_json::from_str(
+            r#"[{"id": "IMG", "kind": "image", "filename": "i.png",
+                 "displayName": "I", "addedAt": 0,
+                 "pixelWidth": 1170, "pixelHeight": 2532}]"#,
+        )
+        .unwrap();
+        let mut ruled = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "placement": {"height": 620, "anchor": "center"}}"#,
+        );
+        ruled.resource_id = Some("IMG".into());
+
+        let zoom = 620.0 / 1920.0;
+        let drawn_width = 1170.0 * (1920.0 / 2532.0) * zoom;
+        let tr = layer_transform_along_paths(&ruled, 1.0, &defaults, &resources);
+        assert!((tr.zoom - zoom).abs() < 1e-12);
+        assert!((tr.horizontal_shift - (1080.0 - drawn_width) / 2.0).abs() < 1e-9);
+        assert!((tr.vertical_shift - (1920.0 - 620.0) / 2.0).abs() < 1e-9);
+    }
+
+    /// Rules resolve BEFORE the lerp: halfway between two placements is
+    /// halfway between their resolved numbers — same clock, same ramps as
+    /// everything else.
+    #[test]
+    fn a_ramp_between_two_placements_blends_their_numbers() {
+        let defaults = settings(r#"{"canvasWidth": 1000, "canvasHeight": 2000}"#);
+        let resources: Vec<promo_model::ProjectResource> = serde_json::from_str(
+            r#"[{"id": "IMG", "kind": "image", "filename": "i.png",
+                 "displayName": "I", "addedAt": 0,
+                 "pixelWidth": 100, "pixelHeight": 100}]"#,
+        )
+        .unwrap();
+        let mut ruled = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "placement": {"height": 400, "anchor": "topLeft"}},
+               {"id": "B", "time": 4, "transitionDuration": 4,
+                "placement": {"height": 800, "anchor": "bottomRight"}}"#,
+        );
+        ruled.resource_id = Some("IMG".into());
+        let mid = layer_transform_along_paths(&ruled, 2.0, &defaults, &resources);
+        // Zoom: (0.2 + 0.4) / 2. Box at each end: 400x400 at (0,0), 800x800
+        // at (200, 1200); midway is their average.
+        assert!((mid.zoom - 0.3).abs() < 1e-12);
+        assert!((mid.horizontal_shift - 100.0).abs() < 1e-9);
+        assert!((mid.vertical_shift - 600.0).abs() < 1e-9);
+    }
+
+    /// A placement outranks raw numbers written on the same keyframe, and a
+    /// position-only rule keeps the keyframe's own zoom for its box.
+    #[test]
+    fn a_placement_wins_over_the_numbers_beside_it() {
+        let defaults = settings(r#"{"canvasWidth": 1000, "canvasHeight": 2000}"#);
+        let resources: Vec<promo_model::ProjectResource> = serde_json::from_str(
+            r#"[{"id": "IMG", "kind": "image", "filename": "i.png",
+                 "displayName": "I", "addedAt": 0,
+                 "pixelWidth": 100, "pixelHeight": 100}]"#,
+        )
+        .unwrap();
+        let mut ruled = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "zoom": 0.5, "horizontalShift": 111, "verticalShift": 222,
+                "placement": {"anchor": "bottomRight"}}"#,
+        );
+        ruled.resource_id = Some("IMG".into());
+        let tr = layer_transform_along_paths(&ruled, 0.0, &defaults, &resources);
+        // Position-only rule: zoom stays the keyframe's own 0.5 -> box
+        // 1000x1000, hung bottom-right of a 1000x2000 canvas.
+        assert_eq!(tr.zoom, 0.5);
+        assert!((tr.horizontal_shift - 0.0).abs() < 1e-9);
+        assert!((tr.vertical_shift - 1000.0).abs() < 1e-9);
+    }
+
+    /// The rule anchors what the layer SHOWS: a viewport that windows half
+    /// the width halves the drawn box, and centering follows that.
+    #[test]
+    fn placement_follows_the_viewport_window() {
+        let defaults = settings(r#"{"canvasWidth": 1000, "canvasHeight": 1000}"#);
+        let resources: Vec<promo_model::ProjectResource> = serde_json::from_str(
+            r#"[{"id": "IMG", "kind": "image", "filename": "i.png",
+                 "displayName": "I", "addedAt": 0,
+                 "pixelWidth": 100, "pixelHeight": 100}]"#,
+        )
+        .unwrap();
+        let mut ruled = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "viewport": [0, 0, 0.5, 1],
+                "placement": {"height": 500, "anchor": "center"}}"#,
+        );
+        ruled.resource_id = Some("IMG".into());
+        let tr = layer_transform_along_paths(&ruled, 0.0, &defaults, &resources);
+        // Windowed aspect 0.5: the box is 250 wide, 500 tall, centered.
+        assert!((tr.horizontal_shift - 375.0).abs() < 1e-9);
+        assert!((tr.vertical_shift - 250.0).abs() < 1e-9);
+    }
+
+    /// No stored size: the rule still resolves, assuming a square source —
+    /// a degraded answer validation names, never a refusal.
+    #[test]
+    fn an_unmeasured_source_resolves_as_square() {
+        let defaults = settings(r#"{"canvasWidth": 1000, "canvasHeight": 2000}"#);
+        let ruled = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "placement": {"height": 500, "anchor": "center"}}"#,
+        );
+        let tr = layer_transform_along_paths(&ruled, 0.0, &defaults, &[]);
+        assert!((tr.zoom - 0.25).abs() < 1e-12);
+        // Square assumption: 500x500, centered on 1000x2000.
+        assert!((tr.horizontal_shift - 250.0).abs() < 1e-9);
+        assert!((tr.vertical_shift - 750.0).abs() < 1e-9);
     }
 }

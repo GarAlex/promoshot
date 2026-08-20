@@ -140,6 +140,72 @@ impl Easing {
         }
     }
 }
+
+// The nine places a drawn box can hang from.
+tolerant_enum!(
+    Anchor,
+    Center,
+    [
+        (TopLeft, "topLeft"),
+        (Top, "top"),
+        (TopRight, "topRight"),
+        (Left, "left"),
+        (Center, "center"),
+        (Right, "right"),
+        (BottomLeft, "bottomLeft"),
+        (Bottom, "bottom"),
+        (BottomRight, "bottomRight"),
+    ]
+);
+
+// Sizing relative to the whole canvas.
+tolerant_enum!(
+    PlacementMode,
+    Fit,
+    [(Fit, "fit"), (Fill, "fill")]
+);
+
+/// Where a layer's drawn box sits and how big it is — as a RULE, not as
+/// numbers. `height`/`width` are the drawn size in canvas pixels (`mode`
+/// sizes against the whole canvas instead); `anchor` hangs the box on a
+/// nine-point grid, `offset` nudges it in pixels from there.
+///
+/// The rule is stored and resolved at every read, never baked into
+/// zoom/shift — the same contract as a `@name` colour: swap the screenshot
+/// for one of another aspect and "centered, 620 tall" is still exactly
+/// that. Resolution needs the source's aspect, which comes from the model
+/// (`pixelWidth`/`videoNaturalWidth` on the resource, a sprite's cell), so
+/// every reader computes the same numbers. A placement with none of
+/// `height`/`width`/`mode` is a position-only rule: the box keeps the
+/// keyframe's own zoom and only hangs from the anchor.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Placement {
+    /// Drawn height in canvas pixels.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub height: Option<f64>,
+    /// Drawn width in canvas pixels. Needs the source aspect.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub width: Option<f64>,
+    /// Contain/cover the canvas. Wins under `height`, which wins under
+    /// `width`, when more than one is given (validation names the conflict).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mode: Option<PlacementMode>,
+    /// Absent means `center`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub anchor: Option<Anchor>,
+    /// Pixels from the anchor, `[x, y]`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub offset: Option<[f64; 2]>,
+}
+
+impl Placement {
+    /// Whether this rule decides the box's SIZE (and so carries the zoom
+    /// track) or only where it hangs.
+    pub fn sizes(&self) -> bool {
+        self.height.is_some() || self.width.is_some() || self.mode.is_some()
+    }
+}
 strict_enum!(
     SlideshowImageOrientation,
     [
@@ -710,6 +776,12 @@ pub struct ProjectLayerKeyframe {
     /// `promo-timeline`'s `layer_viewport` owns clamping and the rule.
     #[serde(default, skip_serializing_if = "is_none")]
     pub viewport: Option<[f64; 4]>,
+    /// Where and how big the drawn box is, as a rule resolved at every read
+    /// (see `Placement`). Wins over raw `zoom`/shifts on the same keyframe.
+    /// Reader-gated: an older save would drop the field and bake nothing in
+    /// its place. Image and video layers (sprites included).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub placement: Option<Placement>,
 }
 /// What a layer does once its local time runs past the end of its source.
 ///
@@ -1396,6 +1468,15 @@ pub struct ProjectResource {
     pub video_natural_width: Option<f64>,
     #[serde(skip_serializing_if = "is_none")]
     pub video_natural_height: Option<f64>,
+    /// Pixel size of an IMAGE resource, stamped at import. Placement intents
+    /// resolve width/anchoring against it (videos use `videoNatural*`, a
+    /// sprite divides by its grid). Optional — a hand-written project may
+    /// omit it, and placement then assumes a square source, which
+    /// `promo_validate` names.
+    #[serde(skip_serializing_if = "is_none")]
+    pub pixel_width: Option<f64>,
+    #[serde(skip_serializing_if = "is_none")]
+    pub pixel_height: Option<f64>,
     #[serde(skip_serializing_if = "is_none")]
     pub frame: Option<ResourceFrame>,
     #[serde(skip_serializing_if = "is_none")]
@@ -1450,6 +1531,10 @@ struct ProjectResourceWire {
     #[serde(default)]
     video_natural_width: Option<f64>,
     #[serde(default)]
+    pixel_width: Option<f64>,
+    #[serde(default)]
+    pixel_height: Option<f64>,
+    #[serde(default)]
     video_natural_height: Option<f64>,
     #[serde(default)]
     frame: Option<ResourceFrame>,
@@ -1497,6 +1582,8 @@ impl<'de> Deserialize<'de> for ProjectResource {
             volume,
             disabled_audio_track_indices: indices,
             video_natural_width: w.video_natural_width,
+            pixel_width: w.pixel_width,
+            pixel_height: w.pixel_height,
             video_natural_height: w.video_natural_height,
             frame: w.frame,
             looped: w.looped,
@@ -1649,6 +1736,8 @@ impl ProjectResource {
             volume: None,
             disabled_audio_track_indices: Vec::new(),
             video_natural_width: None,
+            pixel_width: None,
+            pixel_height: None,
             video_natural_height: None,
             frame: None,
             looped: None,
@@ -1866,6 +1955,51 @@ mod fps_tests {
         assert_eq!(ntsc.fps, Some(59.94005994005994));
         let text = serde_json::to_string(&ntsc).unwrap();
         assert!(text.contains("59.94"), "{text}");
+    }
+}
+
+#[cfg(test)]
+#[cfg(test)]
+mod placement_model_tests {
+    use super::*;
+
+    #[test]
+    fn a_placement_round_trips_and_tolerates_the_future() {
+        let json = r#"{"id": "A", "time": 0, "transitionDuration": 0,
+            "placement": {"height": 620, "anchor": "topRight", "offset": [-40, 12]}}"#;
+        let keyframe: ProjectLayerKeyframe = serde_json::from_str(json).expect("keyframe");
+        let rule = keyframe.placement.clone().expect("placement");
+        assert_eq!(rule.height, Some(620.0));
+        assert_eq!(rule.anchor, Some(Anchor::TopRight));
+        assert_eq!(rule.offset, Some([-40.0, 12.0]));
+        assert!(rule.sizes());
+        let back: ProjectLayerKeyframe =
+            serde_json::from_str(&serde_json::to_string(&keyframe).unwrap()).unwrap();
+        assert_eq!(back.placement, keyframe.placement);
+
+        // An anchor from a newer build reads as center rather than refusing
+        // the file; the box hangs somewhere sensible and the feel is wrong,
+        // not the document.
+        let future: Placement =
+            serde_json::from_str(r#"{"height": 10, "anchor": "goldenSpiral"}"#).unwrap();
+        assert_eq!(future.anchor, Some(Anchor::Center));
+
+        // A keyframe without one stays without one on the wire.
+        let plain: ProjectLayerKeyframe =
+            serde_json::from_str(r#"{"id": "B", "time": 0, "transitionDuration": 0}"#).unwrap();
+        let wire = serde_json::to_string(&plain).unwrap();
+        assert!(!wire.contains("placement"), "{wire}");
+    }
+
+    #[test]
+    fn resource_pixel_size_round_trips() {
+        let json = r#"{"id": "I", "kind": "image", "filename": "i.png",
+            "displayName": "I", "addedAt": 0, "pixelWidth": 1170, "pixelHeight": 2532}"#;
+        let resource: ProjectResource = serde_json::from_str(json).expect("resource");
+        assert_eq!(resource.pixel_width, Some(1170.0));
+        let back: ProjectResource =
+            serde_json::from_str(&serde_json::to_string(&resource).unwrap()).unwrap();
+        assert_eq!(back.pixel_height, Some(2532.0));
     }
 }
 
