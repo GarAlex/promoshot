@@ -529,4 +529,43 @@ mod tests {
         assert!((line.start().x() - 0.0).abs() < 1e-9);
         assert!((line.end().x() - 4999.5).abs() < 1e-9);
     }
+
+    /// Flip and reverse are different mirrors and must compose. The fit
+    /// always carries the walked stretch onto from->to, so NO combination
+    /// moves the ends; what changes is the route. Flip mirrors it across the
+    /// chord. Reverse walks the stroke end-for-end and the re-aim lands the
+    /// bulge on the other side too - so on a stroke SYMMETRIC about its
+    /// chord midpoint the two are the same mirror, and applying both cancels
+    /// back to the plain route. On an asymmetric stroke they differ, because
+    /// reverse also mirrors the route in time.
+    #[test]
+    fn flip_and_reverse_compose_without_interfering() {
+        let (a, b) = (pt(0.0, 0.0), pt(200.0, 0.0));
+        let near = |x: Point, y: Point| (x.x() - y.x()).abs() < 1e-9 && (x.y() - y.y()).abs() < 1e-9;
+
+        let symmetric = Polyline::new(vec![pt(0.0, 0.0), pt(1.0, 1.0), pt(2.0, 0.0)]).unwrap();
+        for p in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let flipped = point_along_range(&symmetric, a, b, true, 0.0, 1.0, p);
+            let reversed = point_along_range(&symmetric, a, b, false, 1.0, 0.0, p);
+            let both = point_along_range(&symmetric, a, b, true, 1.0, 0.0, p);
+            let plain = point_along_range(&symmetric, a, b, false, 0.0, 1.0, p);
+            assert!(near(flipped, reversed), "one mirror at {p}: {flipped:?} {reversed:?}");
+            assert!(near(both, plain), "two mirrors cancel at {p}: {both:?} {plain:?}");
+        }
+        // Ends are keyframe positions, whatever the switches say.
+        for (flip, range) in [(false, (1.0, 0.0)), (true, (0.0, 1.0)), (true, (1.0, 0.0))] {
+            assert!(near(point_along_range(&symmetric, a, b, flip, range.0, range.1, 0.0), a));
+            assert!(near(point_along_range(&symmetric, a, b, flip, range.0, range.1, 1.0), b));
+        }
+
+        // An early bulge tells flip and reverse apart: flip keeps it early,
+        // reverse plays it late.
+        let lopsided = Polyline::new(vec![pt(0.0, 0.0), pt(0.5, 1.0), pt(2.0, 0.0)]).unwrap();
+        let flipped = point_along_range(&lopsided, a, b, true, 0.0, 1.0, 0.25);
+        let reversed = point_along_range(&lopsided, a, b, false, 1.0, 0.0, 0.25);
+        assert!(
+            (flipped.x() - reversed.x()).abs() > 1.0,
+            "different mirrors: {flipped:?} {reversed:?}"
+        );
+    }
 }

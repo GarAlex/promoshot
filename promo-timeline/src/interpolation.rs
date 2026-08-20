@@ -358,7 +358,16 @@ pub fn layer_background_color_hex(
             } else {
                 1.0
             };
-            return interpolate_color_hex(&color(a), &color(b), progress);
+            // Resolved BEFORE mixing: a `@name` cannot be averaged, and the
+            // unparseable fallback would hold-then-snap where literals fade.
+            // The plateau returns above keep the reference untouched — draw
+            // sites resolve those, and editors read them as written.
+            let (from, to) = (color(a), color(b));
+            return interpolate_color_hex(
+                defaults.resolve_color(&from),
+                defaults.resolve_color(&to),
+                progress,
+            );
         }
     }
     color(first)
@@ -457,7 +466,13 @@ pub fn settings_background_color_hex(settings: &CompositionSettings, time: f64) 
             }
             let span = effective_transition.max(0.0001);
             let t = (time - transition_start) / span;
-            return interpolate_color_hex(&a.color_hex, &b.color_hex, t);
+            // Same rule as the layer variant: resolve before mixing, so a
+            // fade between named colours blends instead of snapping.
+            return interpolate_color_hex(
+                settings.resolve_color(&a.color_hex),
+                settings.resolve_color(&b.color_hex),
+                t,
+            );
         }
     }
     first.color_hex.clone()
@@ -861,5 +876,58 @@ mod tests {
         // Mid-ramp the path pulls the layer OFF the straight line.
         let bent = layer_transform_along_paths(&l, 7.5, &defaults, &resources);
         assert!(bent.vertical_shift < -1.0, "curved above the chord, got {}", bent.vertical_shift);
+    }
+
+    /// The palette fix that matters at 2.5s, not at the keyframes: endpoints
+    /// were always resolvable downstream, but a blend of two `@names` has to
+    /// resolve BEFORE it averages. Before the fix this held the first colour
+    /// and snapped — a fade for literals, a cut for named colours.
+    #[test]
+    fn a_named_background_fade_blends_like_a_literal_one() {
+        let defaults = settings(
+            r#"{"canvasWidth": 64, "canvasHeight": 64,
+                "palette": [{"name": "night", "colorHex": "000000"},
+                            {"name": "day", "colorHex": "FFFFFF"}]}"#,
+        );
+        let named = layer(
+            r#"{"id": "A", "time": 0, "colorHex": "@night", "transitionDuration": 0},
+               {"id": "B", "time": 4, "colorHex": "@day", "transitionDuration": 4}"#,
+        );
+        let literal = layer(
+            r#"{"id": "A", "time": 0, "colorHex": "000000", "transitionDuration": 0},
+               {"id": "B", "time": 4, "colorHex": "FFFFFF", "transitionDuration": 4}"#,
+        );
+        for time in [0.0, 1.0, 2.0, 3.0, 4.0] {
+            let named_hex = layer_background_color_hex(&named, time, &defaults);
+            let literal_hex = layer_background_color_hex(&literal, time, &defaults);
+            assert_eq!(
+                defaults.resolve_color(&named_hex),
+                literal_hex,
+                "at {time}s"
+            );
+        }
+        // And the middle really is a mix, or the equality above proves nothing.
+        assert_eq!(layer_background_color_hex(&literal, 2.0, &defaults), "808080");
+        // Plateaus still hand back the reference itself: editors read those.
+        assert_eq!(layer_background_color_hex(&named, 0.0, &defaults), "@night");
+    }
+
+    /// The settings-level twin (`backgroundKeyframes`) blends by the same rule.
+    #[test]
+    fn named_settings_background_keyframes_blend_too() {
+        let defaults = settings(
+            r#"{"canvasWidth": 64, "canvasHeight": 64,
+                "backgroundKeyframes": [
+                    {"id": "00000000-0000-0000-0000-000000000001",
+                     "time": 0, "colorHex": "@night", "transitionDuration": 0},
+                    {"id": "00000000-0000-0000-0000-000000000002",
+                     "time": 4, "colorHex": "@day", "transitionDuration": 4}],
+                "palette": [{"name": "night", "colorHex": "000000"},
+                            {"name": "day", "colorHex": "FFFFFF"}]}"#,
+        );
+        assert_eq!(settings_background_color_hex(&defaults, 2.0), "808080");
+        // Off the ramp the reference passes through for the draw site to
+        // resolve, same contract as everywhere else.
+        assert_eq!(settings_background_color_hex(&defaults, 0.0), "@night");
     }
 }

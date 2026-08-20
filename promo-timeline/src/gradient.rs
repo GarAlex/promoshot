@@ -19,7 +19,12 @@ use crate::interpolation::{interpolate_color_hex, layer_local_time, ramp_seconds
 
 /// Linearly between two gradients of the same shape. `progress` outside 0…1
 /// is clamped by the caller.
-fn blend(a: &BackgroundGradient, b: &BackgroundGradient, progress: f64) -> BackgroundGradient {
+fn blend(
+    a: &BackgroundGradient,
+    b: &BackgroundGradient,
+    progress: f64,
+    settings: &CompositionSettings,
+) -> BackgroundGradient {
     let lerp = |x: f64, y: f64| x + (y - x) * progress;
     let (from, to) = (a.resolved_stops(), b.resolved_stops());
     BackgroundGradient {
@@ -34,7 +39,14 @@ fn blend(a: &BackgroundGradient, b: &BackgroundGradient, progress: f64) -> Backg
             .iter()
             .zip(to.iter())
             .map(|(x, y)| GradientStop {
-                color_hex: interpolate_color_hex(&x.color_hex, &y.color_hex, progress),
+                // Resolve before mixing, like every colour lerp: a `@name`
+                // cannot be averaged. The blended stop is a literal, so the
+                // re-resolve at the scene builder is a no-op.
+                color_hex: interpolate_color_hex(
+                    settings.resolve_color(&x.color_hex),
+                    settings.resolve_color(&y.color_hex),
+                    progress,
+                ),
                 at: lerp(x.at, y.at),
             })
             .collect(),
@@ -96,7 +108,7 @@ pub fn layer_background_gradient(
         // Same easing rule as every other track: a background that eases
         // while the layers over it do not would read as two different scenes.
         let eased = b.easing.unwrap_or(promo_model::Easing::Linear).apply(progress);
-        return Some(blend(&from, &to, eased));
+        return Some(blend(&from, &to, eased, defaults));
     }
     Some(at(first))
 }
@@ -247,5 +259,38 @@ mod tests {
         );
         assert_eq!(g.start, Point(0.25, 0.75));
         assert_eq!(g.end, Point(1.0, 0.5));
+    }
+
+    /// Stops that name palette colours blend exactly like written-out ones.
+    /// The blend averages colours, and an average of two `@names` is only
+    /// possible after resolving them.
+    #[test]
+    fn named_stops_blend_like_literal_ones() {
+        let mut defaults = settings();
+        defaults.palette = Some(
+            serde_json::from_str(
+                r#"[{"name": "night", "colorHex": "000000"},
+                    {"name": "day", "colorHex": "FFFFFF"}]"#,
+            )
+            .expect("palette"),
+        );
+        let keyframes = |from: &str, to: &str| {
+            format!(
+                r#"{{"id": "A", "time": 0, "transitionDuration": 0, "gradient": {}}},
+                   {{"id": "B", "time": 4, "transitionDuration": 4, "gradient": {}}}"#,
+                two_stop(from, from, [0.0, 0.0], [1.0, 0.0]),
+                two_stop(to, to, [0.0, 0.0], [1.0, 0.0]),
+            )
+        };
+        let named = layer_with(&keyframes("@night", "@day"));
+        let literal = layer_with(&keyframes("000000", "FFFFFF"));
+        let named_mid = layer_background_gradient(&named, 2.0, &defaults).expect("named");
+        let literal_mid = layer_background_gradient(&literal, 2.0, &defaults).expect("literal");
+        assert_eq!(named_mid.stops[0].color_hex, literal_mid.stops[0].color_hex);
+        assert_eq!(named_mid.stops[0].color_hex, "808080", "a real mix");
+        // On a plateau the stored gradient passes through untouched, stops
+        // still carrying their references for the scene builder to resolve.
+        let plateau = layer_background_gradient(&named, 0.0, &defaults).expect("plateau");
+        assert_eq!(plateau.stops[0].color_hex, "@night");
     }
 }
