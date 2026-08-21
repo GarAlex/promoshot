@@ -731,13 +731,7 @@ impl PreviewEngine {
         // Rasterize at `scale`× density: everything the layout reads scales
         // together, so the quad below lands at the same canvas-space spot —
         // the texture is just denser.
-        let mut dense = style.clone();
-        dense.font_size *= scale;
-        dense.padding *= scale;
-        dense.corner_radius *= scale;
-        dense.left_margin *= scale;
-        dense.right_margin *= scale;
-        dense.vertical_margin *= scale;
+        let dense = style.scaled_lengths(scale);
         let raster =
             promo_text::rasterize(text, canvas.width() * scale, canvas.height() * scale, &dense)?;
         // promo-text produces straight RGBA; the compositor wants
@@ -1784,7 +1778,12 @@ mod tests {
                 "subtitleColorHex": "FFFFFF",
                 "subtitleVerticalMargin": 20,
                 "subtitleLeftMargin": 10,
-                "subtitleRightMargin": 10
+                "subtitleRightMargin": 10,
+                "subtitleStrokeColorHex": "FF0000",
+                "subtitleStrokeWidth": 5,
+                "subtitleShadowColorHex": "0000FF",
+                "subtitleShadowOpacity": 0.9,
+                "subtitleShadowRadius": 9
             },
             "layers": [
                 {"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
@@ -1803,6 +1802,21 @@ mod tests {
         let at_1x = render(1.0);
         let at_2x = render(2.0);
 
+        // BGRA: the stroke is pure red, the shadow pure blue.
+        let count = |px: &[u8], f: fn(&[u8]) -> bool| px.chunks_exact(4).filter(|p| f(p)).count();
+        let red = |p: &[u8]| p[2] > 80 && p[1] < 60 && p[0] < 60;
+        let blue = |p: &[u8]| p[0] > 40 && p[1] < 60 && p[2] < 60;
+        // The outline and the shadow are lengths too. Rasterizing denser
+        // without scaling them drew a 5px outline at 1135 lit pixels instead
+        // of 1857, and halved the shadow — a 4K export of a 1080p canvas
+        // quietly lost the very effects that keep a caption readable.
+        for (name, f, floor) in [("outline", red as fn(&[u8]) -> bool, 500usize),
+                                 ("shadow", blue as fn(&[u8]) -> bool, 400usize)] {
+            let (one, two) = (count(&at_1x, f), count(&at_2x, f));
+            assert!(one > floor, "{name} did not render at 1x ({one} px)");
+            let ratio = one.max(two) as f64 / one.min(two).max(1) as f64;
+            assert!(ratio < 1.25, "{name}: {one} px at 1x vs {two} px at 2x");
+        }
         let ink = |px: &[u8]| px.chunks_exact(4).filter(|p| p[1] > 64).count();
         let ink_1x = ink(&at_1x);
         let ink_2x = ink(&at_2x);

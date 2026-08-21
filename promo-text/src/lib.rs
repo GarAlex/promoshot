@@ -96,6 +96,64 @@ pub struct TextStyle {
     pub smoothing: Option<f64>,
 }
 
+impl TextStyle {
+    /// Every LENGTH in this style multiplied by `factor`, for rasterizing the
+    /// same caption at a denser texture size.
+    ///
+    /// Destructured WITHOUT `..` on purpose: a new field on `TextStyle` stops
+    /// this function compiling until someone decides whether it is a length.
+    /// The last two added without that decision — `stroke_width` and
+    /// `shadow_radius` — were left out of the caller's hand-written list, and
+    /// an export denser than the canvas drew the outline and the shadow at a
+    /// fraction of their size while the glyphs scaled correctly.
+    pub fn scaled_lengths(&self, factor: f64) -> Self {
+        let TextStyle {
+            font_family,
+            font_size,
+            bold,
+            italic,
+            align,
+            text_rgba,
+            background_rgba,
+            padding,
+            corner_radius,
+            left_margin,
+            right_margin,
+            vertical_margin,
+            line_height,
+            stroke_rgba,
+            stroke_width,
+            shadow_rgba,
+            shadow_radius,
+            shadow_offset,
+            smoothing,
+        } = self;
+        TextStyle {
+            font_family: font_family.clone(),
+            font_size: font_size * factor,
+            bold: *bold,
+            italic: *italic,
+            align: *align,
+            text_rgba: *text_rgba,
+            background_rgba: *background_rgba,
+            padding: padding * factor,
+            corner_radius: corner_radius * factor,
+            left_margin: left_margin * factor,
+            right_margin: right_margin * factor,
+            vertical_margin: vertical_margin * factor,
+            // A multiple of the font size, which already scaled.
+            line_height: *line_height,
+            stroke_rgba: *stroke_rgba,
+            stroke_width: stroke_width * factor,
+            shadow_rgba: *shadow_rgba,
+            shadow_radius: shadow_radius * factor,
+            shadow_offset: [shadow_offset[0] * factor, shadow_offset[1] * factor],
+            // Coverage gamma — dimensionless.
+            smoothing: *smoothing,
+        }
+    }
+}
+
 impl Default for TextStyle {
     fn default() -> Self {
         Self {
@@ -168,10 +226,38 @@ fn blur_mask(mask: &[f32], width: usize, height: usize, radius: f64) -> Vec<f32>
     // pass is a THIRD of it. Running each pass at the full radius spreads
     // the alpha roughly 1.7x too far and collapses the peak, which is why a
     // "radius 10" shadow read as a barely-there smudge instead of a shadow.
-    let r = (radius / 3.0).round().max(0.0) as usize;
-    if r == 0 || width == 0 || height == 0 {
+    let per_pass = (radius / 3.0).max(0.0);
+    if per_pass <= 0.0 || width == 0 || height == 0 {
         return mask.to_vec();
     }
+    // A box radius has to be a whole number of pixels, and ROUNDING it made
+    // the control coarse in a way nothing on screen explained: 8, 9 and 10
+    // all rounded to 3 and blurred identically, so two steps in every three
+    // did nothing while the number above the slider kept moving. Blend the
+    // two neighbouring box radii instead — the softness then follows the
+    // value, and a radius that lands exactly on a whole box (9 → 3) still
+    // renders exactly as it did before.
+    let lower_radius = per_pass.floor();
+    let fraction = (per_pass - lower_radius) as f32;
+    let lower_radius = lower_radius as usize;
+    let lower = if lower_radius == 0 {
+        mask.to_vec()
+    } else {
+        box_blur3(mask, width, height, lower_radius)
+    };
+    if fraction < 1e-4 {
+        return lower;
+    }
+    let upper = box_blur3(mask, width, height, lower_radius + 1);
+    lower
+        .iter()
+        .zip(&upper)
+        .map(|(a, b)| a + (b - a) * fraction)
+        .collect()
+}
+
+/// Three box passes at radius `r`, horizontal then vertical each time.
+fn box_blur3(mask: &[f32], width: usize, height: usize, r: usize) -> Vec<f32> {
     let mut src = mask.to_vec();
     let mut dst = vec![0.0f32; src.len()];
     for _ in 0..3 {
@@ -999,6 +1085,45 @@ mod smoothing_tests {
         let white = out.rgba.chunks_exact(4)
             .filter(|px| px[3] > 200 && px[0] > 220).count();
         assert!(white > 0, "the letters are still white");
+    }
+
+    /// Every step of the blur control has to do something. The box radius is
+    /// a whole number of pixels and used to be ROUNDED, so 8, 9 and 10 all
+    /// blurred identically: the slider moved, the number moved, the render
+    /// did not.
+    #[test]
+    fn every_step_of_the_blur_softens_the_shadow_a_little_more() {
+        // Total shadow alpha is constant under blur; its SPREAD is what
+        // grows, so measure how far the faint edge reaches.
+        let spread = |radius: f64| -> usize {
+            let style = TextStyle {
+                text_rgba: [255, 255, 255, 255],
+                background_rgba: [0, 0, 0, 0],
+                padding: 40.0,
+                shadow_rgba: [0, 0, 0, 220],
+                shadow_radius: radius,
+                shadow_offset: [0.0, 0.0],
+                ..TextStyle::default()
+            };
+            let out = rasterize("Now", 1920.0, 1080.0, &style).expect("shadowed");
+            out.rgba
+                .chunks_exact(4)
+                .filter(|px| px[3] > 4 && px[0] < 80)
+                .count()
+        };
+
+        let (at_8, at_9, at_10) = (spread(8.0), spread(9.0), spread(10.0));
+        assert!(at_8 != at_9 && at_9 != at_10,
+                "8/9/10 must not render the same: {at_8}, {at_9}, {at_10}");
+
+        // And more blur is always softer, never less.
+        let mut previous = 0;
+        for step in 0..=8 {
+            let here = spread(f64::from(step) * 3.0);
+            assert!(here >= previous,
+                    "radius {} narrowed the shadow: {here} after {previous}", step * 3);
+            previous = here;
+        }
     }
 
     /// Neither effect is on by default, so every project that existed before
