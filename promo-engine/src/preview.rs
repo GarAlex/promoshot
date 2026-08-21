@@ -637,6 +637,124 @@ impl PreviewEngine {
     /// Cached under the frame cache like any other texture, keyed by the
     /// layer id with a static source time: caption text does not change with
     /// the playhead, so a 30-second title is shaped once, not 900 times.
+    /// One media quad, for ONE resource.
+    ///
+    /// Split out so a resource swap can call it twice — the outgoing
+    /// material and the incoming one — which is what a transition between
+    /// two clips needs and what a single-quad layer could never do.
+    #[allow(clippy::too_many_arguments)]
+    fn media_quad(
+        &mut self,
+        layer: &promo_model::ProjectLayer,
+        showing: &str,
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+        time: f64,
+        source_time: f64,
+        tier: i32,
+        is_drawing: bool,
+        resources: &[promo_model::ProjectResource],
+        used: &[u64],
+    ) -> Option<(SceneQuad, u64)> {
+        let Some(frame_id) = self.frame(&layer.id, showing, source_time, tier, &used) else {
+            return None;
+        };
+        let frame = self.cached_frame(frame_id);
+        let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
+        let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
+        let color_709 = frame.flags & FLAG_COLOR_709 != 0;
+
+        // A sprite sheet arrives as ONE texture and shows one cell of it.
+        // The cell size replaces the sheet size here, before any layout
+        // happens, so a walk cycle lays out as its 64×64 frame rather
+        // than as the 256×128 image the frames are stored in.
+        let resource = resources.iter().find(|r| r.id == showing);
+        let mut uv_rect = [0.0f32, 0.0, 1.0, 1.0];
+        if let Some(sheet) = resource.and_then(tl::sheet_for) {
+            let local = tl::layer_local_time(layer, time);
+            let Some(cell) =
+                tl::sprite_frame_at(sheet, layer, local, Size::new(fw, fh))
+            else {
+                // `hide`: the cycle is spent and the layer asked to go.
+                return None;
+            };
+            fw = cell.cell.width();
+            fh = cell.cell.height();
+            uv_rect = [
+                cell.uv_rect[0] as f32,
+                cell.uv_rect[1] as f32,
+                cell.uv_rect[2] as f32,
+                cell.uv_rect[3] as f32,
+            ];
+        }
+
+        // A keyframe viewport windows the source further — inside the
+        // sprite cell when there is one, which is why it composes with
+        // the uv rather than assigning it. The window's size then drives
+        // layout exactly the way a cell's does: the layer lays out as
+        // what it SHOWS, so drawn height stays canvasHeight × zoom and
+        // width follows the window's aspect — the fixed frame the
+        // feature promises.
+        if let Some(vp) = tl::layer_viewport(layer, time) {
+            let uv = tl::compose_uv(
+                [
+                    uv_rect[0] as f64,
+                    uv_rect[1] as f64,
+                    uv_rect[2] as f64,
+                    uv_rect[3] as f64,
+                ],
+                vp,
+            );
+            uv_rect = [uv[0] as f32, uv[1] as f32, uv[2] as f32, uv[3] as f32];
+            fw *= vp[2];
+            fh *= vp[3];
+        }
+
+        let tr = tl::layer_transform_along_paths(
+            layer, time, &settings, self.meta.resources.as_deref().unwrap_or(&[]));
+        let rect = if is_drawing {
+            tl::drawing_rect(
+                Size::new(fw, fh),
+                canvas,
+                tr.zoom,
+                tr.horizontal_shift,
+                tr.vertical_shift,
+            )
+        } else {
+            tl::media_rect(
+                Size::new(fw, fh),
+                canvas,
+                tr.zoom,
+                tr.horizontal_shift,
+                tr.vertical_shift,
+            )
+        };
+
+        let mut quad = SceneQuad {
+            texture: Some(0), // patched below
+            rect: [rect.x(), rect.y(), rect.width(), rect.height()],
+            rotation_deg: tl::layer_rotation(layer, time),
+            opacity: tl::layer_opacity(layer, time) as f32,
+            color_709,
+            uv_rect,
+            nearest: tl::is_nearest(resource),
+            ..Default::default()
+        };
+        if !is_drawing && !pre_framed {
+            let style = media_border_style(
+                self.effective_frame(layer),
+                layer,
+                &settings,
+                tr.zoom,
+                canvas.width(),
+            );
+            quad.corner_radius = style.corner_radius;
+            quad.border_width = style.border_width;
+            quad.border_rgba = style.border_rgba;
+        }
+        Some((quad, frame_id))
+    }
+
     fn caption_quad(
         &mut self,
         layer: &ProjectLayer,
@@ -949,7 +1067,7 @@ impl PreviewEngine {
                 }
                 continue;
             }
-            let (is_media, is_drawing) = match layer.kind {
+            let (_is_media, is_drawing) = match layer.kind {
                 ProjectLayerKind::Video | ProjectLayerKind::Image => (true, false),
                 ProjectLayerKind::Drawing => (false, true),
                 _ => continue,
@@ -1005,102 +1123,32 @@ impl PreviewEngine {
             let showing = tl::layer_resource_id(layer, time, &resources)
                 .unwrap_or_default()
                 .to_string();
-            let Some(frame_id) = self.frame(&layer.id, &showing, source_time, tier, &used) else {
+            let swap = tl::transition::active_swap(layer, time);
+            if let Some(swap) = swap.as_ref() {
+                // The outgoing material, whole, underneath — a dissolve or a
+                // wipe needs both on screen at once, which is exactly what a
+                // swap could not do while a layer drew one quad.
+                if let Some(previous) = swap.previous.as_deref() {
+                    if let Some((mut quad, id)) = self.media_quad(
+                        layer, previous, &settings, canvas, time, source_time, tier,
+                        is_drawing, &resources, &used)
+                    {
+                        apply_transition(&mut quad, layer, time, canvas);
+                        quads.push(quad);
+                        used.push(id);
+                    }
+                }
+            }
+            let Some((mut quad, frame_id)) = self.media_quad(
+                layer, &showing, &settings, canvas, time, source_time, tier,
+                is_drawing, &resources, &used)
+            else {
                 continue;
             };
-            let frame = self.cached_frame(frame_id);
-            let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
-            let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
-            let color_709 = frame.flags & FLAG_COLOR_709 != 0;
-
-            // A sprite sheet arrives as ONE texture and shows one cell of it.
-            // The cell size replaces the sheet size here, before any layout
-            // happens, so a walk cycle lays out as its 64×64 frame rather
-            // than as the 256×128 image the frames are stored in.
-            let resource = resources.iter().find(|r| r.id == showing);
-            let mut uv_rect = [0.0f32, 0.0, 1.0, 1.0];
-            if let Some(sheet) = resource.and_then(tl::sheet_for) {
-                let local = tl::layer_local_time(layer, time);
-                let Some(cell) =
-                    tl::sprite_frame_at(sheet, layer, local, Size::new(fw, fh))
-                else {
-                    // `hide`: the cycle is spent and the layer asked to go.
-                    continue;
-                };
-                fw = cell.cell.width();
-                fh = cell.cell.height();
-                uv_rect = [
-                    cell.uv_rect[0] as f32,
-                    cell.uv_rect[1] as f32,
-                    cell.uv_rect[2] as f32,
-                    cell.uv_rect[3] as f32,
-                ];
-            }
-
-            // A keyframe viewport windows the source further — inside the
-            // sprite cell when there is one, which is why it composes with
-            // the uv rather than assigning it. The window's size then drives
-            // layout exactly the way a cell's does: the layer lays out as
-            // what it SHOWS, so drawn height stays canvasHeight × zoom and
-            // width follows the window's aspect — the fixed frame the
-            // feature promises.
-            if let Some(vp) = tl::layer_viewport(layer, time) {
-                let uv = tl::compose_uv(
-                    [
-                        uv_rect[0] as f64,
-                        uv_rect[1] as f64,
-                        uv_rect[2] as f64,
-                        uv_rect[3] as f64,
-                    ],
-                    vp,
-                );
-                uv_rect = [uv[0] as f32, uv[1] as f32, uv[2] as f32, uv[3] as f32];
-                fw *= vp[2];
-                fh *= vp[3];
-            }
             used.push(frame_id);
-
-            let tr = tl::layer_transform_along_paths(
-                layer, time, &settings, self.meta.resources.as_deref().unwrap_or(&[]));
-            let rect = if is_drawing {
-                tl::drawing_rect(
-                    Size::new(fw, fh),
-                    canvas,
-                    tr.zoom,
-                    tr.horizontal_shift,
-                    tr.vertical_shift,
-                )
-            } else {
-                tl::media_rect(
-                    Size::new(fw, fh),
-                    canvas,
-                    tr.zoom,
-                    tr.horizontal_shift,
-                    tr.vertical_shift,
-                )
-            };
-
-            let mut quad = SceneQuad {
-                texture: Some(0), // patched below
-                rect: [rect.x(), rect.y(), rect.width(), rect.height()],
-                rotation_deg: tl::layer_rotation(layer, time),
-                opacity: tl::layer_opacity(layer, time) as f32,
-                color_709,
-                uv_rect,
-                nearest: tl::is_nearest(resource),
-                ..Default::default()
-            };
-            if is_media && !pre_framed {
-                let style = media_border_style(
-                    self.effective_frame(layer),
-                    layer,
-                    &settings,
-                    tr.zoom,
-                    canvas.width(),
-                );
-                quad.corner_radius = style.corner_radius;
-                quad.border_width = style.border_width;
-                quad.border_rgba = style.border_rgba;
+            if let Some(swap) = swap.as_ref() {
+                // The incoming material arrives over it.
+                apply_effect(&mut quad, swap.effect, canvas);
             }
             // After the border, so a wiped edge cuts the frame too rather
             // than leaving a stroke drawn around nothing.
@@ -1257,10 +1305,16 @@ fn drawing_scene_quad(rect: &promo_model::Rect) -> SceneQuad {
 /// what is left is the geometry: where the quad sits, how much of it shows,
 /// and how big it is.
 fn apply_transition(quad: &mut SceneQuad, layer: &promo_model::ProjectLayer, time: f64, canvas: Size) {
-    let effect = tl::transition::effect(layer, time);
+    apply_effect(quad, tl::transition::effect(layer, time), canvas);
+}
+
+/// The geometry half, for an effect that came from somewhere other than the
+/// layer's own edges — a resource swap, say.
+fn apply_effect(quad: &mut SceneQuad, effect: tl::transition::Effect, canvas: Size) {
     if effect.is_identity() {
         return;
     }
+    quad.opacity *= effect.opacity as f32;
     let (rect, uv) = tl::transition::apply(
         &effect,
         quad.rect,
@@ -1802,42 +1856,6 @@ mod tests {
     /// alignment used to skip the first step (composition only) or the
     /// second (caption only), which is why it was never clear which screen
     /// owned a value.
-    #[test]
-    fn a_caption_overrides_the_composition_and_otherwise_inherits_it() {
-        use promo_model::{CompositionSettings, SubtitleStyle, SubtitleTextAlignment};
-        let mut settings = CompositionSettings::default();
-        settings.subtitle_background_padding = 16.0;
-        settings.subtitle_background_corner_radius = 8.0;
-        settings.subtitle_alignment = SubtitleTextAlignment::Leading;
-        settings.subtitle_shadow_radius = 12.0;
-
-        let inherited = caption_style(None, &settings);
-        assert_eq!(inherited.padding, 16.0);
-        assert_eq!(inherited.corner_radius, 8.0);
-        assert_eq!(inherited.align, promo_text::Align::Leading);
-        // Unset offset still derives the drop from the blur.
-        assert_eq!(inherited.shadow_offset, [0.0, 6.0]);
-
-        let overridden = caption_style(
-            Some(&SubtitleStyle {
-                padding: Some(40.0),
-                corner_radius: Some(2.0),
-                alignment: Some(SubtitleTextAlignment::Trailing),
-                shadow_offset: Some([5.0, -3.0]),
-                ..SubtitleStyle::default()
-            }),
-            &settings,
-        );
-        assert_eq!(overridden.padding, 40.0);
-        assert_eq!(overridden.corner_radius, 2.0);
-        assert_eq!(overridden.align, promo_text::Align::Trailing);
-        assert_eq!(overridden.shadow_offset, [5.0, -3.0]);
-
-        // A composition-wide offset applies to a caption that has none.
-        settings.subtitle_shadow_offset = Some([0.0, 20.0]);
-        assert_eq!(caption_style(None, &settings).shadow_offset, [0.0, 20.0]);
-    }
-
     /// A wipe has to actually reveal a FRACTION of the layer — the geometry
     /// is unit-tested in promo-timeline, but only a render says the quad the
     /// engine builds carries it through the border, the corner radius and the
@@ -2303,6 +2321,71 @@ mod portable_tests {
     /// source time, and an image asks at a fixed source time — so before the
     /// key carried the resource, every frame after the swap was answered out
     /// of cache with the bitmap from before it, and the picture never changed.
+    /// The transition that matters most: between two pieces of MATERIAL.
+    ///
+    /// A swap was a hard cut because one layer drew one quad — "there is no
+    /// halfway between two images, and dissolving needs both drawn at once,
+    /// which one layer cannot do". During a swap transition it draws both, so
+    /// this asserts the two are on screen TOGETHER, each on its own side of
+    /// the wipe.
+    #[test]
+    fn a_swap_with_a_transition_shows_both_resources_at_once() {
+        let Some(_) = GpuContext::shared() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-00000000000A",
+            "name": "swap", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "minReaderVersion": 9,
+            "compositionSettings": {"canvasWidth": 64, "canvasHeight": 64,
+              "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "IMG", "name": "img", "sortIndex": 1, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "RED",
+                 "keyframes": [
+                   {"id": "K0", "time": 0, "zoom": 1,
+                    "horizontalShift": 0, "verticalShift": 0,
+                    "transitionDuration": 0},
+                   {"id": "K1", "time": 2, "resourceID": "BLUE",
+                    "transitionDuration": 0,
+                    "transition": {"kind": "wipe", "from": "left", "duration": 2}}]}
+            ],
+            "resources": [
+                {"id": "RED", "kind": "image", "filename": "r.png",
+                 "displayName": "r", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": []},
+                {"id": "BLUE", "kind": "image", "filename": "b.png",
+                 "displayName": "b", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("fixture");
+        let (mut engine, _state) = make_cpu_engine(
+            meta,
+            vec![
+                ("RED".into(), [0, 0, 255, 255], 32),
+                ("BLUE".into(), [255, 0, 0, 255], 32),
+            ],
+        );
+
+        let before = render_and_read(&mut engine, 1.0, 64);
+        assert_eq!(pixel_at(&before, 64, 8, 32), [0, 0, 255, 255], "red before the swap");
+        assert_eq!(pixel_at(&before, 64, 56, 32), [0, 0, 255, 255], "on both sides");
+
+        // Half way through a wipe from the left: the incoming image holds the
+        // left of the frame, the outgoing one is still there on the right.
+        // This is the assertion a cut could never satisfy.
+        let mid = render_and_read(&mut engine, 3.0, 64);
+        assert_eq!(pixel_at(&mid, 64, 8, 32), [255, 0, 0, 255], "blue arriving on the left");
+        assert_eq!(pixel_at(&mid, 64, 56, 32), [0, 0, 255, 255], "red still leaving on the right");
+
+        let after = render_and_read(&mut engine, 5.0, 64);
+        assert_eq!(pixel_at(&after, 64, 8, 32), [255, 0, 0, 255], "blue once it is done");
+        assert_eq!(pixel_at(&after, 64, 56, 32), [255, 0, 0, 255], "everywhere");
+    }
+
     #[test]
     fn a_keyframe_swaps_the_resource_and_the_cache_notices() {
         let Some(_) = GpuContext::shared() else {

@@ -141,6 +141,55 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
     }
 }
 
+/// A resource swap caught mid-transition: what the layer is coming FROM, and
+/// how far through it is.
+///
+/// A swap has always been a step — "there is no halfway between two images,
+/// and dissolving needs both drawn at once, which one layer cannot do". That
+/// last part is what this lifts: for the transition's duration the layer
+/// draws BOTH, the outgoing one whole and the incoming one arriving over it,
+/// which is the transition between two clips rather than at a layer's edge.
+#[derive(Debug, Clone)]
+pub struct Swap {
+    /// The resource being replaced. `None` when the layer's own resource is
+    /// what is going away.
+    pub previous: Option<String>,
+    pub effect: Effect,
+}
+
+/// The swap in force at `time`, if it is still arriving.
+pub fn active_swap(layer: &ProjectLayer, time: f64) -> Option<Swap> {
+    let local = crate::layer_local_time(layer, time);
+    let mut swaps: Vec<&promo_model::ProjectLayerKeyframe> = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.resource_id.is_some())
+        .collect();
+    swaps.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+
+    // The swap in force is the last one at or before now — the same rule the
+    // resource resolver uses, so the pair can never disagree about which
+    // swap is current.
+    let index = swaps.iter().rposition(|k| k.time <= local)?;
+    let current = swaps[index];
+    let transition = current.transition.as_ref().filter(|t| t.duration > 0.0)?;
+
+    let progress = ((local - current.time) / transition.duration).clamp(0.0, 1.0);
+    if progress >= 1.0 {
+        return None;
+    }
+    // What it is replacing: the swap before it, else the layer's own.
+    let previous = if index == 0 {
+        layer.resource_id.clone()
+    } else {
+        swaps[index - 1].resource_id.clone()
+    };
+    Some(Swap {
+        previous,
+        effect: shape(transition, progress),
+    })
+}
+
 /// The quad's rect and texture window after `effect`.
 ///
 /// `canvas` is what a slide travels across: a layer slides in from beyond the

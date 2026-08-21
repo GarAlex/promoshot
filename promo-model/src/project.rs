@@ -864,6 +864,17 @@ pub struct ProjectLayerKeyframe {
     /// camelCase would give `resourceId`, which is not what the format says.
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
+    /// How the swap above happens. Absent, it is a cut — which is what every
+    /// swap was before this field existed.
+    ///
+    /// This is the transition BETWEEN two pieces of material, as opposed to
+    /// `transitionIn`/`transitionOut`, which are how the whole layer arrives
+    /// and leaves. For its duration the layer draws both resources: the
+    /// outgoing one whole, and the incoming one wiping, sliding or fading in
+    /// over it. Distinct from `transitionDuration`, which is the ramp between
+    /// two keyframes' VALUES and has nothing to do with material.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub transition: Option<LayerTransition>,
     /// A background layer's gradient at this keyframe. Animating it is how a
     /// gradient scrolls: shift `start` and `end` along the axis with a
     /// repeating or mirrored ramp and the pattern travels without an edge
@@ -1921,8 +1932,8 @@ impl ProjectMetadata {
     /// reader would DESTROY by saving — a field it drops on the way through —
     /// not for one it merely ignores while rendering.
     ///
-    /// 9 layer transitions (dropped, the layer cuts in instead of wiping or
-    /// sliding),
+    /// 9 transitions — a layer's own entry and exit, and the one at a
+    /// resource swap (dropped, they all become cuts),
     /// 8 layer fades (an older reader drops `fadeIn`/`fadeOut` on save and
     /// the ramp is simply gone),
     /// 7 placement (a rule an older reader replaces with zoom 1 in a corner),
@@ -1944,10 +1955,11 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
-        if layers
-            .iter()
-            .any(|l| l.transition_in.is_some() || l.transition_out.is_some())
-        {
+        if layers.iter().any(|l| {
+            l.transition_in.is_some()
+                || l.transition_out.is_some()
+                || l.keyframes.iter().any(|k| k.transition.is_some())
+        }) {
             return 9;
         }
         if layers.iter().any(|l| l.fade_in.is_some() || l.fade_out.is_some()) {
