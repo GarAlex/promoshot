@@ -7,7 +7,6 @@
   "trimStart": 0,
   "trimEnd": 0,
   "videoDuration": 0,
-  "sourceType": "video",
   "subtitles": [
     {
       "id": "AAAAAAAA-0000-0000-0000-0000000000A1",
@@ -21,12 +20,25 @@
         "textColorHex": "FFEE00",
         "backgroundOpacity": 0.5
       },
-      "voiceClip": { "filename": "voice-1.m4a", "kind": "recorded" }
+      "voiceClip": {
+        "filename": "voice-1.m4a",
+        "kind": "recorded"
+      }
     },
-    { "id": "AAAAAAAA-0000-0000-0000-0000000000A2", "text": "legacy", "startTime": 4.5, "endTime": 6.5, "style": {} }
+    {
+      "id": "AAAAAAAA-0000-0000-0000-0000000000A2",
+      "text": "legacy",
+      "startTime": 4.5,
+      "endTime": 6.5,
+      "style": {}
+    }
   ],
   "trimKeyframes": [
-    { "id": "AAAAAAAA-0000-0000-0000-0000000000B1", "time": 0, "isIncluded": true }
+    {
+      "id": "AAAAAAAA-0000-0000-0000-0000000000B1",
+      "time": 0,
+      "isIncluded": true
+    }
   ],
   "compositionSettings": {
     "canvasWidth": 1080,
@@ -48,24 +60,42 @@
     "videoBorderWidth": 4,
     "videoCornerRadius": 24,
     "videoKeyframes": [
-      { "id": "AAAAAAAA-0000-0000-0000-0000000000C1", "time": 0, "zoom": 1, "verticalShift": 0, "horizontalShift": 0, "transitionDuration": 0.5 },
-      { "id": "AAAAAAAA-0000-0000-0000-0000000000C2", "time": 5, "zoom": 1.8, "verticalShift": -120, "horizontalShift": 60, "transitionDuration": 1.2 }
+      {
+        "id": "AAAAAAAA-0000-0000-0000-0000000000C1",
+        "time": 0,
+        "zoom": 1,
+        "verticalShift": 0,
+        "horizontalShift": 0,
+        "transitionDuration": 0.5
+      },
+      {
+        "id": "AAAAAAAA-0000-0000-0000-0000000000C2",
+        "time": 5,
+        "zoom": 1.8,
+        "verticalShift": -120,
+        "horizontalShift": 60,
+        "transitionDuration": 1.2
+      }
     ],
     "backgroundKeyframes": [
-      { "id": "AAAAAAAA-0000-0000-0000-0000000000D1", "time": 0, "colorHex": "112233", "transitionDuration": 0.5 },
-      { "id": "AAAAAAAA-0000-0000-0000-0000000000D2", "time": 8, "colorHex": "FFAA00", "transitionDuration": 2 }
+      {
+        "id": "AAAAAAAA-0000-0000-0000-0000000000D1",
+        "time": 0,
+        "colorHex": "112233",
+        "transitionDuration": 0.5
+      },
+      {
+        "id": "AAAAAAAA-0000-0000-0000-0000000000D2",
+        "time": 8,
+        "colorHex": "FFAA00",
+        "transitionDuration": 2
+      }
     ],
     "imageExportScalePercent": 50,
     "gifExportScalePercent": 25,
     "gifExportFPS": 15,
     "videoExportWidth": 3840,
     "videoExportHeight": 2160
-  },
-  "slideshow": {
-    "images": [
-      { "id": "AAAAAAAA-0000-0000-0000-0000000000E1", "filename": "image-1.jpg", "sortIndex": 0, "isEnabled": true, "duration": 3, "transitionDuration": 0.35, "orientation": "rotateLeft" }
-    ],
-    "transitionEffect": "crossfade"
   },
   "layers": [
     {
@@ -77,8 +107,18 @@
       "startTime": 0,
       "duration": 30,
       "keyframes": [
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA01", "time": 0, "colorHex": "112233", "transitionDuration": 0.5 },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA02", "time": 10, "colorHex": "445566", "transitionDuration": 3 }
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA01",
+          "time": 0,
+          "colorHex": "112233",
+          "transitionDuration": 0.5
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA02",
+          "time": 10,
+          "colorHex": "445566",
+          "transitionDuration": 3
+        }
       ]
     },
     {
@@ -92,9 +132,36 @@
       "resourceID": "AAAAAAAA-0000-0000-0000-00000000BB01",
       "audioFocus": true,
       "keyframes": [
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA03", "time": 0, "zoom": 1, "verticalShift": 0, "horizontalShift": 0, "gain": 0.75, "transitionDuration": 0.5 },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA04", "time": 6, "zoom": 2.2, "verticalShift": 150, "horizontalShift": -80, "gain": 0.25, "rotation": 45, "transitionDuration": 1.5 },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA05", "time": 12, "zoom": 1.4, "verticalShift": 40, "horizontalShift": 10, "rotation": -30, "tiltX": 12, "tiltY": -20, "transitionDuration": 0 }
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA03",
+          "time": 0,
+          "zoom": 1,
+          "verticalShift": 0,
+          "horizontalShift": 0,
+          "gain": 0.75,
+          "transitionDuration": 0.5
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA04",
+          "time": 6,
+          "zoom": 2.2,
+          "verticalShift": 150,
+          "horizontalShift": -80,
+          "gain": 0.25,
+          "rotation": 45,
+          "transitionDuration": 1.5
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA05",
+          "time": 12,
+          "zoom": 1.4,
+          "verticalShift": 40,
+          "horizontalShift": 10,
+          "rotation": -30,
+          "tiltX": 12,
+          "tiltY": -20,
+          "transitionDuration": 0
+        }
       ]
     },
     {
@@ -112,8 +179,23 @@
       "imageBorderColorHex": "00FF00",
       "imageBorderWidth": 8,
       "keyframes": [
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA06", "time": 0, "zoom": 0.9, "verticalShift": 20, "horizontalShift": 30, "tiltX": 0, "tiltY": 0, "transitionDuration": 0.5 },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA07", "time": 5, "tiltX": 18, "tiltY": -25, "transitionDuration": 2 }
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA06",
+          "time": 0,
+          "zoom": 0.9,
+          "verticalShift": 20,
+          "horizontalShift": 30,
+          "tiltX": 0,
+          "tiltY": 0,
+          "transitionDuration": 0.5
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA07",
+          "time": 5,
+          "tiltX": 18,
+          "tiltY": -25,
+          "transitionDuration": 2
+        }
       ]
     },
     {
@@ -126,8 +208,18 @@
       "duration": 20,
       "resourceID": "AAAAAAAA-0000-0000-0000-00000000BB03",
       "keyframes": [
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA08", "time": 3, "gain": 0.4, "transitionDuration": 1 },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000AA09", "time": 9, "gain": 1, "transitionDuration": 0 }
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA08",
+          "time": 3,
+          "gain": 0.4,
+          "transitionDuration": 1
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000AA09",
+          "time": 9,
+          "gain": 1,
+          "transitionDuration": 0
+        }
       ]
     }
   ],
@@ -142,14 +234,36 @@
       "trimStart": 0,
       "trimEnd": 0,
       "trimKeyframes": [
-        { "id": "AAAAAAAA-0000-0000-0000-00000000CC01", "time": 0, "isIncluded": true },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000CC02", "time": 3, "isIncluded": false },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000CC03", "time": 5, "isIncluded": true, "extendedPauseDuration": 2 },
-        { "id": "AAAAAAAA-0000-0000-0000-00000000CC04", "time": 10, "isIncluded": false }
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000CC01",
+          "time": 0,
+          "isIncluded": true
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000CC02",
+          "time": 3,
+          "isIncluded": false
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000CC03",
+          "time": 5,
+          "isIncluded": true,
+          "extendedPauseDuration": 2
+        },
+        {
+          "id": "AAAAAAAA-0000-0000-0000-00000000CC04",
+          "time": 10,
+          "isIncluded": false
+        }
       ],
       "imageCuts": [],
       "audioGain": 2.5,
-      "disabledAudioTrackIndices": [2, 0, 2, -1],
+      "disabledAudioTrackIndices": [
+        2,
+        0,
+        2,
+        -1
+      ],
       "videoNaturalWidth": 1920,
       "videoNaturalHeight": 1080,
       "looped": true
@@ -163,14 +277,43 @@
       "imageCuts": [
         {
           "id": "AAAAAAAA-0000-0000-0000-00000000DD01",
-          "rect": [[0.1, -0.2], [0.5, 1.6]],
+          "rect": [
+            [
+              0.1,
+              -0.2
+            ],
+            [
+              0.5,
+              1.6
+            ]
+          ],
           "filename": "cut-1.png",
           "createdAt": 800000030,
-          "frame": { "kind": "phone", "material": "gold", "tiltX": 10, "tiltY": -5, "bezelFraction": 0.04, "depthFraction": 0.08, "borderColorHex": "FFFFFF", "borderWidth": 12, "cornerRadius": 0 }
+          "frame": {
+            "kind": "phone",
+            "material": "gold",
+            "tiltX": 10,
+            "tiltY": -5,
+            "bezelFraction": 0.04,
+            "depthFraction": 0.08,
+            "borderColorHex": "FFFFFF",
+            "borderWidth": 12,
+            "cornerRadius": 0
+          }
         }
       ],
       "disabledAudioTrackIndices": [],
-      "frame": { "kind": "border", "borderColorHex": "0088FF", "borderWidth": 20, "cornerRadius": 36, "material": "spaceBlack", "tiltX": 0, "tiltY": 0, "bezelFraction": 0.03, "depthFraction": 0.06 }
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "0088FF",
+        "borderWidth": 20,
+        "cornerRadius": 36,
+        "material": "spaceBlack",
+        "tiltX": 0,
+        "tiltY": 0,
+        "bezelFraction": 0.03,
+        "depthFraction": 0.06
+      }
     },
     {
       "id": "AAAAAAAA-0000-0000-0000-00000000BB03",
@@ -198,7 +341,16 @@
           {
             "id": "AAAAAAAA-0000-0000-0000-00000000EE01",
             "kind": "line",
-            "points": [[100.5, 200.25], [800, 900]],
+            "points": [
+              [
+                100.5,
+                200.25
+              ],
+              [
+                800,
+                900
+              ]
+            ],
             "strokeColorHex": "FF0000",
             "strokeWidth": 6,
             "strokeOpacity": 0.9,
@@ -209,7 +361,16 @@
           {
             "id": "AAAAAAAA-0000-0000-0000-00000000EE02",
             "kind": "oval",
-            "points": [[300, 300], [500, 450]],
+            "points": [
+              [
+                300,
+                300
+              ],
+              [
+                500,
+                450
+              ]
+            ],
             "strokeColorHex": "00FF00",
             "strokeWidth": 4,
             "fillColorHex": "0000FF",
@@ -224,7 +385,21 @@
     }
   ],
   "exports": [
-    { "id": "AAAAAAAA-0000-0000-0000-00000000AB01", "kind": "gif", "createdAt": 800000060, "filenames": ["export-1.gif"] },
-    { "id": "AAAAAAAA-0000-0000-0000-00000000AB02", "kind": "hologram", "createdAt": 800000070, "filenames": ["future.bin"] }
+    {
+      "id": "AAAAAAAA-0000-0000-0000-00000000AB01",
+      "kind": "gif",
+      "createdAt": 800000060,
+      "filenames": [
+        "export-1.gif"
+      ]
+    },
+    {
+      "id": "AAAAAAAA-0000-0000-0000-00000000AB02",
+      "kind": "hologram",
+      "createdAt": 800000070,
+      "filenames": [
+        "future.bin"
+      ]
+    }
   ]
 }

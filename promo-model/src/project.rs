@@ -69,10 +69,6 @@ macro_rules! strict_enum {
 }
 
 strict_enum!(
-    ProjectSourceType,
-    [(Video, "video"), (Slideshow, "slideshow")]
-);
-strict_enum!(
     ProjectLayerKind,
     [
         (Background, "background"),
@@ -207,17 +203,13 @@ impl Placement {
     }
 }
 strict_enum!(
-    SlideshowImageOrientation,
+    ImageOrientation,
     [
         (Original, "original"),
         (RotateLeft, "rotateLeft"),
         (RotateRight, "rotateRight"),
         (UpsideDown, "upsideDown"),
     ]
-);
-strict_enum!(
-    SlideshowTransitionEffect,
-    [(None, "none"), (Crossfade, "crossfade")]
 );
 tolerant_enum!(
     TransitionKind,
@@ -1453,7 +1445,7 @@ pub struct ProjectLayer {
     #[serde(default, skip_serializing_if = "is_none")]
     pub beyond_end: Option<BeyondEnd>,
     #[serde(default, skip_serializing_if = "is_none")]
-    pub image_orientation: Option<SlideshowImageOrientation>,
+    pub image_orientation: Option<ImageOrientation>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub image_border_color_hex: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -1910,19 +1902,7 @@ impl ProjectResource {
 }
 
 // ---------------------------------------------------------------------------
-// Slideshow + exports + top level
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SlideshowImage {
-    pub id: String,
-    pub filename: String,
-    pub sort_index: i64,
-    pub is_enabled: bool,
-    pub duration: f64,
-    pub transition_duration: f64,
-    pub orientation: SlideshowImageOrientation,
-}
+// Palette + exports + top level
 
 /// A colour with a name, so a project can say a thing ONCE.
 ///
@@ -1942,13 +1922,6 @@ pub struct PaletteColor {
     /// typing `@Accent` after naming it `accent` means the same colour.
     pub name: String,
     pub color_hex: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SlideshowSettings {
-    pub images: Vec<SlideshowImage>,
-    pub transition_effect: SlideshowTransitionEffect,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1981,10 +1954,6 @@ pub struct ProjectMetadata {
     pub trim_keyframes: Option<Vec<VideoTrimKeyframe>>,
     pub video_duration: f64,
     pub composition_settings: CompositionSettings,
-    #[serde(default, skip_serializing_if = "is_none")]
-    pub source_type: Option<ProjectSourceType>,
-    #[serde(default, skip_serializing_if = "is_none")]
-    pub slideshow: Option<SlideshowSettings>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub layers: Option<Vec<ProjectLayer>>,
     #[serde(default, skip_serializing_if = "is_none")]
