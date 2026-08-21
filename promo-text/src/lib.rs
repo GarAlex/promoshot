@@ -326,11 +326,46 @@ const UI_SANS: &[&str] = &[
     "Arial",
 ];
 
+/// Lowercased with spaces, hyphens and underscores removed, so the name a
+/// project stores can be compared with the name the system installed.
+fn normalized_family(name: &str) -> String {
+    name.chars()
+        .filter(|c| !c.is_whitespace() && *c != '-' && *c != '_')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The installed family matching `name`, if any.
+///
+/// Projects store the app's wire spelling — "georgia", "markerFelt",
+/// "timesNewRoman" — while the installed families are "Georgia", "Marker
+/// Felt", "Times New Roman". An exact comparison missed EVERY curated font,
+/// which then fell through to the UI sans below: the picker previewed
+/// Georgia and the video rendered Helvetica, with no error anywhere. The
+/// prefix pass is for names that carry a suffix the wire spelling omits,
+/// such as "chalkboard" against "Chalkboard SE".
+fn matching_family(fonts: &FontSystem, name: &str) -> Option<String> {
+    let wanted = normalized_family(name);
+    if wanted.is_empty() {
+        return None;
+    }
+    let mut prefix_match: Option<String> = None;
+    for face in fonts.db().faces() {
+        for (family, _) in face.families.iter() {
+            let candidate = normalized_family(family);
+            if candidate == wanted {
+                return Some(family.clone());
+            }
+            if prefix_match.is_none() && candidate.starts_with(&wanted) {
+                prefix_match = Some(family.clone());
+            }
+        }
+    }
+    prefix_match
+}
+
 fn has_family(fonts: &FontSystem, name: &str) -> bool {
-    fonts
-        .db()
-        .faces()
-        .any(|face| face.families.iter().any(|(family, _)| family == name))
+    matching_family(fonts, name).is_some()
 }
 
 fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFamily {
@@ -340,8 +375,10 @@ fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFa
         // A named font that exists wins; one that does not falls through to
         // the UI sans below, rather than silently handing back whatever
         // fontdb happens to default to.
-        Some(name) if name != "system" && !name.is_empty() && has_family(fonts, name) => {
-            return ResolvedFamily::Named(name.to_string())
+        Some(name) if name != "system" && !name.is_empty() => {
+            if let Some(family) = matching_family(fonts, name) {
+                return ResolvedFamily::Named(family);
+            }
         }
         _ => {}
     }
@@ -1087,6 +1124,39 @@ mod smoothing_tests {
         assert!(white > 0, "the letters are still white");
     }
 
+    /// The font picker writes the app's wire spelling into the project, so a
+    /// caption asking for "georgia" or "markerFelt" has to reach the same
+    /// face the picker showed. It used to reach none of them: an exact
+    /// comparison against the installed "Georgia" failed and every curated
+    /// font silently rendered in the UI sans.
+    ///
+    /// Measured against the SANS, not against the installed name — asking
+    /// for "Georgia" goes down the same resolution path, so using it as the
+    /// reference made this test pass with that path disabled entirely.
+    #[test]
+    fn a_caption_gets_the_font_the_picker_named() {
+        let width_of = |family: &str| -> f64 {
+            let style = TextStyle {
+                font_family: Some(family.into()),
+                font_size: 72.0,
+                ..TextStyle::default()
+            };
+            measure("Handgloves", 1920.0, 1080.0, &style)
+                .map(|b| b.width)
+                .unwrap_or(0.0)
+        };
+        let sans = width_of("system");
+        let measured: Vec<(&str, f64)> = ["georgia", "markerFelt", "futura", "timesNewRoman"]
+            .iter()
+            .map(|name| (*name, width_of(name)))
+            .collect();
+        assert!(
+            measured.iter().any(|(_, width)| (width - sans).abs() > 0.5),
+            "every curated font measured exactly like the fallback sans ({sans}): \
+             {measured:?} — the picker's font is not reaching the renderer"
+        );
+    }
+
     /// Every step of the blur control has to do something. The box radius is
     /// a whole number of pixels and used to be ROUNDED, so 8, 9 and 10 all
     /// blurred identically: the slider moved, the number moved, the render
@@ -1186,3 +1256,4 @@ mod smoothing_tests {
         );
     }
 }
+
