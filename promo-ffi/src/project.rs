@@ -294,6 +294,39 @@ pub extern "C" fn promo_path_preview(
     }
 }
 
+/// Everything the renderer would quietly correct in this project, as a JSON
+/// array of sentences — the same list `promo validate` prints, so the CLI and
+/// the app's `promo_validate` cannot disagree about what is wrong.
+#[no_mangle]
+pub extern "C" fn promo_project_warnings(json: *const c_char) -> *mut c_char {
+    crate::ffi_guard_else(
+        || to_c_string("[]"),
+        move || {
+            if json.is_null() {
+                return to_c_string("[]");
+            }
+            let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
+                return to_c_string("[]");
+            };
+            let Ok(meta) = ProjectMetadata::from_json(text) else {
+                return to_c_string("[]");
+            };
+            let warnings = promo_timeline::validate::warnings(&meta);
+            to_c_string(&serde_json::to_string(&warnings).unwrap_or_else(|_| "[]".into()))
+        },
+    )
+}
+
+/// The project format, described for whoever writes one by hand.
+///
+/// One copy, in the core: the CLI prints it as `promo schema` and the app's
+/// `promo_schema` tool serves this same text, so the two cannot drift into
+/// describing different formats.
+#[no_mangle]
+pub extern "C" fn promo_schema_text() -> *mut c_char {
+    to_c_string(promo_model::SCHEMA)
+}
+
 fn to_c_string(message: &str) -> *mut c_char {
     match CString::new(message) {
         Ok(c) => c.into_raw(),

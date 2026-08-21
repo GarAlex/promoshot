@@ -265,9 +265,32 @@ pub fn layer_rotation(layer: &ProjectLayer, time: f64) -> f64 {
 /// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
 /// keyframes, so an un-keyed layer is fully visible as before.
 pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {
-    layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.opacity)
-        .unwrap_or(1.0)
-        .clamp(0.0, 1.0)
+    let keyed = layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.opacity)
+        .unwrap_or(1.0);
+    (keyed * fade_envelope(layer, time)).clamp(0.0, 1.0)
+}
+
+/// `fadeIn`/`fadeOut` as a multiplier on whatever the keyframes said.
+///
+/// Multiplying rather than replacing is what lets the shorthand and hand-set
+/// opacity keyframes coexist: a layer that fades in AND dips to 50% in the
+/// middle does both, and neither has to know about the other.
+fn fade_envelope(layer: &ProjectLayer, time: f64) -> f64 {
+    let mut factor = 1.0f64;
+    if let Some(fade_in) = layer.fade_in.filter(|seconds| *seconds > 0.0) {
+        factor = factor.min(((time - layer.start_time) / fade_in).clamp(0.0, 1.0));
+    }
+    // A fade-out needs an end to count back from. A layer with no duration
+    // runs to the end of the project, which the layer cannot see from here,
+    // so it simply does not fade out rather than guessing.
+    if let (Some(fade_out), Some(duration)) = (
+        layer.fade_out.filter(|seconds| *seconds > 0.0),
+        layer.duration,
+    ) {
+        let remaining = (layer.start_time + duration) - time;
+        factor = factor.min((remaining / fade_out).clamp(0.0, 1.0));
+    }
+    factor
 }
 
 /// Swift `ProjectLayer.hasTiltKeyframes`.
@@ -567,6 +590,53 @@ mod opacity_tests {
                  "isEnabled": true, "startTime": 0, "keyframes": [{keys}]}}"#
         );
         serde_json::from_str(&json).expect("layer")
+    }
+
+    /// Four opacity keyframes per fading layer was ~40% of every hand-written
+    /// project. The shorthand says the same thing in two numbers.
+    #[test]
+    fn a_layer_fades_in_and_out_without_keyframes() {
+        let mut layer = layer_with(r#"{"id": "K", "time": 0, "transitionDuration": 0}"#);
+        layer.start_time = 2.0;
+        layer.duration = Some(10.0); // ends at 12
+        layer.fade_in = Some(1.0);
+        layer.fade_out = Some(2.0);
+
+        assert_eq!(layer_opacity(&layer, 2.0), 0.0, "transparent at the start");
+        assert_eq!(layer_opacity(&layer, 2.5), 0.5, "halfway up");
+        assert_eq!(layer_opacity(&layer, 3.0), 1.0, "fully in after a second");
+        assert_eq!(layer_opacity(&layer, 8.0), 1.0, "and stays there");
+        assert_eq!(layer_opacity(&layer, 11.0), 0.5, "halfway down");
+        assert_eq!(layer_opacity(&layer, 12.0), 0.0, "transparent at the end");
+    }
+
+    /// An ENVELOPE, not a replacement: a layer that fades in and also dips in
+    /// the middle does both. If the shorthand won outright, adding a fade to
+    /// a layer would quietly erase its opacity keyframes.
+    #[test]
+    fn a_fade_multiplies_the_keyframes_rather_than_replacing_them() {
+        let mut layer = layer_with(
+            r#"{"id": "A", "time": 0, "opacity": 1.0, "transitionDuration": 0},
+               {"id": "B", "time": 4, "opacity": 0.5, "transitionDuration": 0}"#,
+        );
+        layer.duration = Some(8.0);
+        layer.fade_in = Some(2.0);
+
+        assert_eq!(layer_opacity(&layer, 1.0), 0.5, "half a fade over full opacity");
+        assert_eq!(layer_opacity(&layer, 4.0), 0.5, "past the fade the keys speak alone");
+    }
+
+    /// A layer with no duration runs to the end of the project, which the
+    /// layer cannot see — so it fades in and simply does not fade out,
+    /// rather than guessing an end and going transparent early.
+    #[test]
+    fn a_layer_with_no_end_does_not_fade_out() {
+        let mut layer = layer_with(r#"{"id": "K", "time": 0, "transitionDuration": 0}"#);
+        layer.duration = None;
+        layer.fade_in = Some(1.0);
+        layer.fade_out = Some(1.0);
+        assert_eq!(layer_opacity(&layer, 0.5), 0.5);
+        assert_eq!(layer_opacity(&layer, 100.0), 1.0);
     }
 
     /// The default matters most: every existing project has no opacity

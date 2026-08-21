@@ -14,6 +14,7 @@ pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 pub mod sprite;
+pub mod validate;
 pub mod viewport;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};

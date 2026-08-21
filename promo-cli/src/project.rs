@@ -13,6 +13,10 @@ pub struct Project {
     /// an entry whose file is gone stays, marked missing, so a layer using it
     /// can say so instead of rendering as an empty hole.
     resolved: Vec<promo_model::ResolvedResource>,
+    /// Attachments that could not be resolved. `open` prints them for the
+    /// render commands; `validate` reports them with everything else instead
+    /// of letting them scroll past in stderr.
+    pub attachment_problems: Vec<String>,
 }
 
 /// Why a layer cannot be rendered by this tool.
@@ -50,14 +54,16 @@ impl Project {
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
         // Attached layers become plain numbers before anything reads them, so
         // the renderer never has to know the difference.
-        for problem in promo_timeline::resolve_attachments(&mut meta) {
-            eprintln!("warning: {problem}");
-        }
+        let attachment_problems: Vec<String> = promo_timeline::resolve_attachments(&mut meta)
+            .into_iter()
+            .map(|problem| problem.to_string())
+            .collect();
         let resolved = promo_model::effective_resources(&meta, &Self::listing(dir));
         Ok(Self {
             dir: dir.to_path_buf(),
             meta,
             resolved,
+            attachment_problems,
         })
     }
 

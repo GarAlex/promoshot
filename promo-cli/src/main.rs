@@ -22,6 +22,8 @@ const USAGE: &str = "\
 promo — render a PromoShot project folder
 
 USAGE:
+    promo validate <project-dir>
+    promo schema
     promo inspect <project-dir>
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
     promo frames  <project-dir> --out <dir> [--fps <n>] [--from <s>] [--to <s>] [--size <WxH>]
@@ -35,6 +37,13 @@ OPTIONS:
                    exactly, where 30 resamples it.
     --from/--to    Time range (default: the whole composition)
     --size <WxH>   Output size (default: the project's canvas size)
+
+    `validate` decodes the project, resolves its attachments and reports what
+    the renderer would silently correct. Exit 0 when it is clean, 2 when the
+    project cannot be decoded at all.
+
+    `schema` prints the format — the same text the app's `promo_schema` tool
+    serves, read from one file in the core so the two cannot disagree.
 
 NOTES:
     Reading and writing video needs `ffmpeg` (and `ffprobe`) on PATH. Frames
@@ -59,6 +68,12 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> Result<(), String> {
     let command = args[0].as_str();
     let rest = &args[1..];
+    // Describes the FORMAT, not a project, so it takes no directory — and
+    // must be answered before the prelude below demands one.
+    if command == "schema" {
+        print!("{}", promo_model::SCHEMA);
+        return Ok(());
+    }
     let dir = rest
         .first()
         .filter(|a| !a.starts_with("--"))
@@ -68,6 +83,7 @@ fn run(args: &[String]) -> Result<(), String> {
 
     match command {
         "inspect" => inspect(&project),
+        "validate" => validate(&project),
         "still" => still(&project, &opts),
         "frames" => frames(&project, &opts),
         "video" => video(&project, &opts),
@@ -142,6 +158,28 @@ fn parse_f64(raw: &str, flag: &str) -> Result<f64, String> {
 }
 
 /// What is in this project, and what this tool would drop.
+/// Everything wrong with a project that still renders.
+///
+/// A decode failure already came back from `Project::open`; what is left is
+/// the quiet stuff — a window the renderer slides back inside the source, a
+/// viewport on a layer kind that ignores it, an attachment that could not
+/// resolve, a file that uses features it does not declare a reader version
+/// for. Each of those changes what you see and none of them said so.
+fn validate(project: &Project) -> Result<(), String> {
+    let mut warnings = project.attachment_problems.clone();
+    warnings.extend(promo_timeline::validate::warnings(&project.meta));
+
+    if warnings.is_empty() {
+        println!("ok — nothing the renderer would quietly correct");
+        return Ok(());
+    }
+    println!("ok — the project decodes, with {} warning(s):", warnings.len());
+    for warning in &warnings {
+        println!("  - {warning}");
+    }
+    Ok(())
+}
+
 fn inspect(project: &Project) -> Result<(), String> {
     let layers = project.meta.layers.as_deref().unwrap_or(&[]);
     let (w, h) = (

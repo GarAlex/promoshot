@@ -52,6 +52,18 @@ pub fn layer_viewport(layer: &ProjectLayer, time: f64) -> Option<[f64; 4]> {
 
 /// Clamp a window inside the unit square, size first so a window pushed
 /// against an edge slides back in rather than shrinking.
+/// The window a project ASKED for, when the renderer will not give it —
+/// `Some(what_it_becomes)`, or `None` when the request is already legal.
+///
+/// Deliberately expressed as "run the real clamp and see if it moved",
+/// rather than re-deriving the bounds: a second copy of the rule would drift
+/// from `clamped` the first time the rule changed, and then the warning
+/// would describe a correction that no longer happens.
+pub fn out_of_bounds(v: [f64; 4]) -> Option<[f64; 4]> {
+    let fixed = clamped(v);
+    (fixed != v).then_some(fixed)
+}
+
 fn clamped(v: [f64; 4]) -> [f64; 4] {
     let w = v[2].clamp(MIN_SIZE, 1.0);
     let h = v[3].clamp(MIN_SIZE, 1.0);
@@ -173,5 +185,26 @@ mod tests {
             compose_uv(cell, [0.5, 0.5, 0.5, 0.5]),
             [0.625, 0.25, 0.125, 0.25]
         );
+    }
+}
+
+#[cfg(test)]
+mod overhang_tests {
+    use super::*;
+
+    /// A window hanging off an edge slides back in at full size, and until
+    /// now did so silently — `promo_validate` had nothing to say about a
+    /// project whose framing the renderer was quietly rewriting.
+    #[test]
+    fn a_window_past_the_edge_is_reported_with_what_it_becomes() {
+        assert_eq!(out_of_bounds([0.0, 0.0, 1.0, 1.0]), None, "the whole frame is legal");
+        assert_eq!(out_of_bounds([0.25, 0.25, 0.5, 0.5]), None);
+
+        // Slides back in, size first — the same rule `clamped` applies.
+        assert_eq!(out_of_bounds([0.55, 0.1, 0.6, 0.4]), Some([0.4, 0.1, 0.6, 0.4]));
+        assert_eq!(out_of_bounds([-0.2, 0.0, 0.5, 0.5]), Some([0.0, 0.0, 0.5, 0.5]));
+        // Too big shrinks to the frame; too small grows to the floor.
+        assert_eq!(out_of_bounds([0.0, 0.0, 2.0, 1.0]), Some([0.0, 0.0, 1.0, 1.0]));
+        assert_eq!(out_of_bounds([0.0, 0.0, 0.0, 0.5]), Some([0.0, 0.0, MIN_SIZE, 0.5]));
     }
 }

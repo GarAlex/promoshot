@@ -439,6 +439,8 @@ mod tests {
             sort_index: sort,
             kind: ProjectLayerKind::Video,
             is_enabled: true,
+            fade_in: None,
+            fade_out: None,
             start_time: start,
             duration,
             resource_id: None,

@@ -1223,6 +1223,20 @@ pub struct ProjectLayer {
     pub start_time: f64,
     #[serde(default, skip_serializing_if = "is_none")]
     pub duration: Option<f64>,
+    /// Seconds of ramp from transparent at the layer's start, and to
+    /// transparent at its end. Four opacity keyframes per fading layer was
+    /// about 40% of every hand-written project, and they all said the same
+    /// thing.
+    ///
+    /// An ENVELOPE: it multiplies whatever the opacity keyframes resolve to,
+    /// so the two compose instead of one silently winning. A fade-out needs a
+    /// known end, so it does nothing on a layer with no `duration` — that
+    /// layer runs to the end of the project, which the layer itself cannot
+    /// see.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub fade_in: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub fade_out: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -1838,6 +1852,67 @@ impl ProjectResource {
 }
 
 impl ProjectMetadata {
+    /// The oldest reader that may open this project FOR WRITING.
+    ///
+    /// Per file, not per binary: a project using none of these features is
+    /// still a version-1 document, and stamping every save with the current
+    /// version would lock projects out of the previous release over a feature
+    /// they do not use. A version is claimed only for a change an older
+    /// reader would DESTROY by saving — a field it drops on the way through —
+    /// not for one it merely ignores while rendering.
+    ///
+    /// 8 layer fades (an older reader drops `fadeIn`/`fadeOut` on save and
+    /// the ramp is simply gone),
+    /// 7 placement (a rule an older reader replaces with zoom 1 in a corner),
+    /// 6 keyframe viewport (drops the window, un-zooming the edit),
+    /// 5 keyframe resource swap (turns a sequence back into one still),
+    /// 4 background gradient (falls back to the flat colour, then drops it),
+    /// 3 sprite sheets (draws the whole sheet as one still, then drops the
+    /// sprite fields), 2 motion paths (`path` is a resource KIND and kinds
+    /// decode strictly, so an older binary cannot open the file at all).
+    ///
+    /// The twin of `ProjectStore.minimumReaderVersion(for:)` in the app, so a
+    /// project written from the CLI carries the same stamp as one saved from
+    /// the editor; `a_project_is_stamped_by_what_it_uses` walks the same
+    /// ladder the Swift tests do.
+    pub fn minimum_reader_version(&self) -> i64 {
+        let layers = self.layers.as_deref().unwrap_or(&[]);
+        let resources = self.resources.as_deref().unwrap_or(&[]);
+        let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
+            layers.iter().any(|l| l.keyframes.iter().any(pick))
+        };
+
+        if layers.iter().any(|l| l.fade_in.is_some() || l.fade_out.is_some()) {
+            return 8;
+        }
+        if any_keyframe(|k| k.placement.is_some()) {
+            return 7;
+        }
+        if any_keyframe(|k| k.viewport.is_some()) {
+            return 6;
+        }
+        if any_keyframe(|k| k.resource_id.is_some()) {
+            return 5;
+        }
+        if self.composition_settings.background_gradient.is_some()
+            || any_keyframe(|k| k.gradient.is_some())
+        {
+            return 4;
+        }
+        if resources
+            .iter()
+            .any(|r| r.sprite.is_some() || r.sampling.is_some())
+        {
+            return 3;
+        }
+        if resources.iter().any(|r| r.kind == ProjectResourceKind::Path)
+            || any_keyframe(|k| k.motion_path.is_some() || k.transition_percent.is_some())
+        {
+            return 2;
+        }
+        1
+    }
+
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
     }
@@ -2123,6 +2198,58 @@ mod placement_model_tests {
         let plain: SubtitleStyle = serde_json::from_str("{}").unwrap();
         let wire = serde_json::to_string(&plain).unwrap();
         assert!(!wire.contains("stroke"), "{wire}");
+    }
+
+    /// The stamp is what the FILE uses, not what the binary can do — one
+    /// feature at a time, each claiming its own version and nothing more.
+    #[test]
+    fn a_project_is_stamped_by_what_it_uses() {
+        let meta = |body: &str| -> ProjectMetadata {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v",
+                     "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                     "videoDuration":0,"subtitles":[],
+                     "compositionSettings":{{"canvasWidth":1920,"canvasHeight":1080}},
+                     {body}}}"#
+            ))
+            .expect("fixture")
+        };
+        let layer = |keyframe: &str| {
+            format!(
+                r#""layers":[{{"id":"L","name":"l","sortIndex":0,"kind":"video",
+                   "isEnabled":true,"startTime":0,"duration":1,
+                   "keyframes":[{{"id":"K","time":0,"transitionDuration":0.5{keyframe}}}]}}]"#
+            )
+        };
+
+        assert_eq!(meta(&layer("")).minimum_reader_version(), 1, "plain project");
+        assert_eq!(meta(&layer(r#","motionPath":{"pathResourceID":"P"}"#)).minimum_reader_version(), 2);
+        assert_eq!(
+            meta(r#""resources":[{"id":"R","kind":"image","filename":"a.png",
+                  "displayName":"a","addedAt":0,"sprite":{"columns":2,"rows":2}}]"#)
+                .minimum_reader_version(),
+            3
+        );
+        assert_eq!(meta(&layer(r#","gradient":{"kind":"linear",
+                    "stops":[{"colorHex":"FF0000","at":0},{"colorHex":"0000FF","at":1}],
+                    "start":[0,0],"end":[1,1]}"#))
+                .minimum_reader_version(),
+            4);
+        assert_eq!(meta(&layer(r#","resourceID":"R2""#)).minimum_reader_version(), 5);
+        assert_eq!(meta(&layer(r#","viewport":[0,0,1,1]"#)).minimum_reader_version(), 6);
+        assert_eq!(
+            meta(&layer(r#","placement":{"height":540,"anchor":"center"}"#))
+                .minimum_reader_version(),
+            7
+        );
+
+        // The ladder is highest-wins: a project using both is stamped by the
+        // newer feature, or an older reader would open it and destroy that one.
+        assert_eq!(
+            meta(&layer(r#","viewport":[0,0,1,1],"placement":{"height":540,"anchor":"center"}"#))
+                .minimum_reader_version(),
+            7
+        );
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

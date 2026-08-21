@@ -16,6 +16,15 @@ pub use project::*;
 /// The `metadata.json` schema this crate targets. Bumped only when the Swift
 /// app changes its persisted format (both sides decode older payloads
 /// tolerantly, mirroring the Swift decoders).
+/// The project format, described for whoever is writing one by hand — an
+/// assistant, a generator script, or a person.
+///
+/// It lives here rather than in the Mac app because the CLI has to serve it
+/// too (`promo schema`), and two hand-maintained descriptions of one format
+/// is how they start disagreeing. `MCPTools.schemaText` reads this through
+/// the FFI, so the app and the CLI answer with the same bytes.
+pub const SCHEMA: &str = include_str!("schema.md");
+
 pub const METADATA_SCHEMA: u32 = 1;
 
 /// Core library version, surfaced through the FFI for the host gate test.
