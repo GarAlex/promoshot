@@ -42,6 +42,41 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        // Two ways to say one thing, saying different things. The renderer
+        // picks the richer one; nothing said so until now.
+        for (side, rich, fade) in [
+            ("transitionIn", &layer.transition_in, layer.fade_in),
+            ("transitionOut", &layer.transition_out, layer.fade_out),
+        ] {
+            let shorthand = if side == "transitionIn" { "fadeIn" } else { "fadeOut" };
+            if let (Some(rich), Some(seconds)) = (rich.as_ref(), fade) {
+                out.push(format!(
+                    "layer \"{}\": {shorthand} {seconds}s and {side} \"{}\" both set — \
+                     {side} wins and the {shorthand} is ignored",
+                    layer.name,
+                    rich.kind.as_str()
+                ));
+            }
+        }
+        if let Some(span) = layer.duration {
+            for (side, transition) in [
+                ("transitionIn", crate::transition::incoming(layer)),
+                ("transitionOut", crate::transition::outgoing(layer)),
+            ] {
+                if let Some(t) = transition {
+                    if t.duration > span {
+                        out.push(format!(
+                            "layer \"{}\": {side} lasts {}s but the layer is only {span}s — \
+                             it never finishes arriving",
+                            layer.name, t.duration
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     let required = meta.minimum_reader_version();
     match meta.min_reader_version {
         Some(declared) if declared >= required => {}

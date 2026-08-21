@@ -14,6 +14,7 @@ pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 pub mod sprite;
+pub mod transition;
 pub mod validate;
 pub mod viewport;
 

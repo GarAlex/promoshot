@@ -219,6 +219,55 @@ strict_enum!(
     SlideshowTransitionEffect,
     [(None, "none"), (Crossfade, "crossfade")]
 );
+tolerant_enum!(
+    TransitionKind,
+    Fade,
+    [
+        (Fade, "fade"),
+        (Wipe, "wipe"),
+        (Slide, "slide"),
+        (Scale, "scale"),
+    ]
+);
+tolerant_enum!(
+    TransitionEdge,
+    Left,
+    [
+        (Left, "left"),
+        (Right, "right"),
+        (Top, "top"),
+        (Bottom, "bottom"),
+    ]
+);
+
+/// How a layer ENTERS or LEAVES.
+///
+/// A wipe reveals the layer from an edge without moving it; a slide brings it
+/// in from off-canvas; a scale grows it into place; a fade is the same ramp
+/// `fadeIn`/`fadeOut` describe in one number. `from` is the edge the motion
+/// starts at and is ignored by fade and scale.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerTransition {
+    pub kind: TransitionKind,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub from: Option<TransitionEdge>,
+    /// Seconds. A transition longer than the layer is clamped to it.
+    pub duration: f64,
+}
+
+impl LayerTransition {
+    /// The edge the motion comes from, defaulting per kind: a wipe reads
+    /// left-to-right like text, a slide comes up from the bottom, which is
+    /// how a lower third arrives.
+    pub fn edge(&self) -> TransitionEdge {
+        self.from.unwrap_or(match self.kind {
+            TransitionKind::Slide => TransitionEdge::Bottom,
+            _ => TransitionEdge::Left,
+        })
+    }
+}
+
 strict_enum!(SubtitleVoiceKind, [(Recorded, "recorded")]);
 strict_enum!(
     SubtitleTextAlignment,
@@ -1237,6 +1286,17 @@ pub struct ProjectLayer {
     pub fade_in: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub fade_out: Option<f64>,
+    /// How the layer enters and leaves, when a plain fade is not it.
+    ///
+    /// `fadeIn: 0.3` and `transitionIn: {"kind": "fade", "duration": 0.3}`
+    /// say the same thing; the shorthand exists because that is what most
+    /// layers want and it is one number instead of an object. When a layer
+    /// carries both, this one wins and `promo validate` says so, rather than
+    /// two fields quietly fighting.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub transition_in: Option<LayerTransition>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub transition_out: Option<LayerTransition>,
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -1861,6 +1921,8 @@ impl ProjectMetadata {
     /// reader would DESTROY by saving — a field it drops on the way through —
     /// not for one it merely ignores while rendering.
     ///
+    /// 9 layer transitions (dropped, the layer cuts in instead of wiping or
+    /// sliding),
     /// 8 layer fades (an older reader drops `fadeIn`/`fadeOut` on save and
     /// the ramp is simply gone),
     /// 7 placement (a rule an older reader replaces with zoom 1 in a corner),
@@ -1882,6 +1944,12 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        if layers
+            .iter()
+            .any(|l| l.transition_in.is_some() || l.transition_out.is_some())
+        {
+            return 9;
+        }
         if layers.iter().any(|l| l.fade_in.is_some() || l.fade_out.is_some()) {
             return 8;
         }

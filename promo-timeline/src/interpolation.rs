@@ -267,31 +267,12 @@ pub fn layer_rotation(layer: &ProjectLayer, time: f64) -> f64 {
 pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {
     let keyed = layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.opacity)
         .unwrap_or(1.0);
-    (keyed * fade_envelope(layer, time)).clamp(0.0, 1.0)
+    // The transition multiplies rather than replaces, so a layer that fades
+    // in and also dips in the middle does both. `fadeIn`/`fadeOut` are the
+    // shorthand for a fade transition and resolve through the same path.
+    (keyed * crate::transition::effect(layer, time).opacity).clamp(0.0, 1.0)
 }
 
-/// `fadeIn`/`fadeOut` as a multiplier on whatever the keyframes said.
-///
-/// Multiplying rather than replacing is what lets the shorthand and hand-set
-/// opacity keyframes coexist: a layer that fades in AND dips to 50% in the
-/// middle does both, and neither has to know about the other.
-fn fade_envelope(layer: &ProjectLayer, time: f64) -> f64 {
-    let mut factor = 1.0f64;
-    if let Some(fade_in) = layer.fade_in.filter(|seconds| *seconds > 0.0) {
-        factor = factor.min(((time - layer.start_time) / fade_in).clamp(0.0, 1.0));
-    }
-    // A fade-out needs an end to count back from. A layer with no duration
-    // runs to the end of the project, which the layer cannot see from here,
-    // so it simply does not fade out rather than guessing.
-    if let (Some(fade_out), Some(duration)) = (
-        layer.fade_out.filter(|seconds| *seconds > 0.0),
-        layer.duration,
-    ) {
-        let remaining = (layer.start_time + duration) - time;
-        factor = factor.min((remaining / fade_out).clamp(0.0, 1.0));
-    }
-    factor
-}
 
 /// Swift `ProjectLayer.hasTiltKeyframes`.
 pub fn layer_has_tilt_keyframes(layer: &ProjectLayer) -> bool {

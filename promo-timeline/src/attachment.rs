@@ -441,6 +441,8 @@ mod tests {
             is_enabled: true,
             fade_in: None,
             fade_out: None,
+            transition_in: None,
+            transition_out: None,
             start_time: start,
             duration,
             resource_id: None,

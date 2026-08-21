@@ -943,6 +943,7 @@ impl PreviewEngine {
                 // overlay — so a headless render keeps its captions.
                 if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas, time, &used) {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    apply_transition(&mut quad, layer, time, canvas);
                     quads.push(quad);
                     used.push(id);
                 }
@@ -990,6 +991,7 @@ impl PreviewEngine {
                     let mut quad = quad;
                     quad.rotation_deg = tl::layer_rotation(layer, time);
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    apply_transition(&mut quad, layer, time, canvas);
                     quads.push(quad);
                     used.push(id);
                 }
@@ -1100,6 +1102,9 @@ impl PreviewEngine {
                 quad.border_width = style.border_width;
                 quad.border_rgba = style.border_rgba;
             }
+            // After the border, so a wiped edge cuts the frame too rather
+            // than leaving a stroke drawn around nothing.
+            apply_transition(&mut quad, layer, time, canvas);
             quads.push(quad);
         }
 
@@ -1245,6 +1250,27 @@ fn drawing_scene_quad(rect: &promo_model::Rect) -> SceneQuad {
 }
 
 /// A caption quad sits where promo-text put it, in canvas space.
+/// Applies the layer's entry/exit transition to a finished quad.
+///
+/// Every drawable kind goes through here, so a caption wipes exactly as a
+/// screenshot does. Opacity is already multiplied in by `layer_opacity` —
+/// what is left is the geometry: where the quad sits, how much of it shows,
+/// and how big it is.
+fn apply_transition(quad: &mut SceneQuad, layer: &promo_model::ProjectLayer, time: f64, canvas: Size) {
+    let effect = tl::transition::effect(layer, time);
+    if effect.is_identity() {
+        return;
+    }
+    let (rect, uv) = tl::transition::apply(
+        &effect,
+        quad.rect,
+        quad.uv_rect,
+        (canvas.width(), canvas.height()),
+    );
+    quad.rect = rect;
+    quad.uv_rect = uv;
+}
+
 fn caption_scene_quad(x: f64, y: f64, w: f64, h: f64) -> SceneQuad {
     SceneQuad {
         texture: Some(0), // patched with the rest
@@ -1810,6 +1836,57 @@ mod tests {
         // A composition-wide offset applies to a caption that has none.
         settings.subtitle_shadow_offset = Some([0.0, 20.0]);
         assert_eq!(caption_style(None, &settings).shadow_offset, [0.0, 20.0]);
+    }
+
+    /// A wipe has to actually reveal a FRACTION of the layer — the geometry
+    /// is unit-tested in promo-timeline, but only a render says the quad the
+    /// engine builds carries it through the border, the corner radius and the
+    /// texture patch loop.
+    #[test]
+    fn a_wipe_reveals_the_layer_a_piece_at_a_time() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000009",
+            "name": "wipe", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [],
+            "compositionSettings": {
+                "canvasWidth": 256, "canvasHeight": 128,
+                "backgroundColorHex": "000000",
+                "subtitleFontSize": 40, "subtitleColorHex": "FFFFFF",
+                "subtitleVerticalMargin": 30,
+                "subtitleLeftMargin": 10, "subtitleRightMargin": 10
+            },
+            "layers": [
+                {"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "captionText": "WIDE WIDE WIDE", "keyframes": [],
+                 "transitionIn": {"kind": "wipe", "from": "left", "duration": 2}}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("wipe fixture");
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(256, 128).unwrap();
+        let mut lit = |time: f64| -> usize {
+            engine.render(time, out.raw(), 256, 128).expect("render");
+            out.read_pixels()
+                .unwrap()
+                .chunks_exact(4)
+                .filter(|p| p[1] > 64)
+                .count()
+        };
+
+        let whole = lit(5.0);
+        assert!(whole > 200, "the caption must render at all ({whole} lit px)");
+        assert_eq!(lit(0.0), 0, "nothing is revealed at the very start");
+
+        let half = lit(1.0);
+        let ratio = half as f64 / whole as f64;
+        assert!(
+            (0.3..=0.7).contains(&ratio),
+            "half way through a wipe should show about half: {half} of {whole}"
+        );
+
+        // And it grows: a quarter in shows less than half.
+        assert!(lit(0.5) < half, "{} at 25% vs {half} at 50%", lit(0.5));
     }
 
     #[test]
