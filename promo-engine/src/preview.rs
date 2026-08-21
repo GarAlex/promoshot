@@ -1291,11 +1291,15 @@ pub fn caption_style(
         italic: style
             .and_then(|s| s.is_italic)
             .unwrap_or(settings.subtitle_italic),
+        // Per caption, then the composition's default. Nothing falls back to
+        // a constant here any more: the constant was "center" while the app
+        // assumed "leading", so an unaligned caption edited one way rendered
+        // another.
         align: promo_text::Align::parse(
             style
                 .and_then(|s| s.alignment.as_ref())
-                .map(|a| a.as_str())
-                .unwrap_or("center"),
+                .unwrap_or(&settings.subtitle_alignment)
+                .as_str(),
         ),
         text_rgba,
         background_rgba,
@@ -1321,11 +1325,14 @@ pub fn caption_style(
         // Deriving it from the settings value gave a caption that set its own
         // radius an offset of zero, so its shadow sat directly under the
         // glyphs where they hid it.
-        shadow_offset: style.and_then(|s| s.shadow_offset).unwrap_or_else(|| {
-            [0.0, get(|s| s.shadow_radius, settings.subtitle_shadow_radius) / 2.0]
-        }),
-        padding: settings.subtitle_background_padding,
-        corner_radius: settings.subtitle_background_corner_radius,
+        shadow_offset: style
+            .and_then(|s| s.shadow_offset)
+            .or(settings.subtitle_shadow_offset)
+            .unwrap_or_else(|| {
+                [0.0, get(|s| s.shadow_radius, settings.subtitle_shadow_radius) / 2.0]
+            }),
+        padding: get(|s| s.padding, settings.subtitle_background_padding),
+        corner_radius: get(|s| s.corner_radius, settings.subtitle_background_corner_radius),
         left_margin: get(|s| s.left_margin, settings.subtitle_left_margin),
         right_margin: get(|s| s.right_margin, settings.subtitle_right_margin),
         vertical_margin: get(|s| s.vertical_margin, settings.subtitle_vertical_margin),
@@ -1764,6 +1771,47 @@ mod tests {
     /// texture gets denser, the quad must not move or resize. A scale bug
     /// (e.g. forgetting to divide the quad rect back down) doubles the
     /// caption's size and blows the mean diff far past this gate.
+    /// Every caption look field resolves the same way: what this caption
+    /// says, then what the composition says. Padding, corner radius and
+    /// alignment used to skip the first step (composition only) or the
+    /// second (caption only), which is why it was never clear which screen
+    /// owned a value.
+    #[test]
+    fn a_caption_overrides_the_composition_and_otherwise_inherits_it() {
+        use promo_model::{CompositionSettings, SubtitleStyle, SubtitleTextAlignment};
+        let mut settings = CompositionSettings::default();
+        settings.subtitle_background_padding = 16.0;
+        settings.subtitle_background_corner_radius = 8.0;
+        settings.subtitle_alignment = SubtitleTextAlignment::Leading;
+        settings.subtitle_shadow_radius = 12.0;
+
+        let inherited = caption_style(None, &settings);
+        assert_eq!(inherited.padding, 16.0);
+        assert_eq!(inherited.corner_radius, 8.0);
+        assert_eq!(inherited.align, promo_text::Align::Leading);
+        // Unset offset still derives the drop from the blur.
+        assert_eq!(inherited.shadow_offset, [0.0, 6.0]);
+
+        let overridden = caption_style(
+            Some(&SubtitleStyle {
+                padding: Some(40.0),
+                corner_radius: Some(2.0),
+                alignment: Some(SubtitleTextAlignment::Trailing),
+                shadow_offset: Some([5.0, -3.0]),
+                ..SubtitleStyle::default()
+            }),
+            &settings,
+        );
+        assert_eq!(overridden.padding, 40.0);
+        assert_eq!(overridden.corner_radius, 2.0);
+        assert_eq!(overridden.align, promo_text::Align::Trailing);
+        assert_eq!(overridden.shadow_offset, [5.0, -3.0]);
+
+        // A composition-wide offset applies to a caption that has none.
+        settings.subtitle_shadow_offset = Some([0.0, 20.0]);
+        assert_eq!(caption_style(None, &settings).shadow_offset, [0.0, 20.0]);
+    }
+
     #[test]
     fn caption_raster_scale_densifies_without_moving_the_quad() {
         let json = r#"{

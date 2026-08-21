@@ -298,6 +298,13 @@ pub struct SubtitleStyle {
     pub font_size: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub alignment: Option<SubtitleTextAlignment>,
+    /// The plate around THIS caption. Composition-wide versions of both live
+    /// on `CompositionSettings`; these override them, the way every other
+    /// look field here does.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub padding: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub corner_radius: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub font_family: Option<SubtitleFontFamily>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -483,7 +490,14 @@ pub struct CompositionSettings {
     pub subtitle_shadow_color_hex: String,
     pub subtitle_shadow_opacity: f64,
     pub subtitle_shadow_radius: f64,
+    /// Where the shadow falls, in canvas pixels. `None` keeps the derived
+    /// drop — straight down by half the blur — which is what every project
+    /// authored before this field expects.
+    pub subtitle_shadow_offset: Option<[f64; 2]>,
     pub subtitle_background_corner_radius: f64,
+    /// What a caption that never chose an alignment gets. Centre, which is
+    /// what the renderer already fell back to.
+    pub subtitle_alignment: SubtitleTextAlignment,
     pub video_border_color_hex: String,
     pub video_border_width: f64,
     pub video_corner_radius: f64,
@@ -523,6 +537,8 @@ impl Default for CompositionSettings {
             subtitle_shadow_color_hex: "000000".into(),
             subtitle_shadow_opacity: 0.0,
             subtitle_shadow_radius: 0.0,
+            subtitle_shadow_offset: None,
+            subtitle_alignment: SubtitleTextAlignment::Center,
             subtitle_background_corner_radius: 8.0,
             video_border_color_hex: "FFFFFF".into(),
             video_border_width: 0.0,
@@ -575,7 +591,9 @@ struct CompositionSettingsWire {
     subtitle_shadow_color_hex: Option<String>,
     subtitle_shadow_opacity: Option<f64>,
     subtitle_shadow_radius: Option<f64>,
+    subtitle_shadow_offset: Option<[f64; 2]>,
     subtitle_background_corner_radius: Option<f64>,
+    subtitle_alignment: Option<SubtitleTextAlignment>,
     video_border_color_hex: Option<String>,
     video_border_width: Option<f64>,
     video_corner_radius: Option<f64>,
@@ -640,6 +658,8 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             subtitle_shadow_radius: w
                 .subtitle_shadow_radius
                 .unwrap_or(dflt.subtitle_shadow_radius),
+            subtitle_shadow_offset: w.subtitle_shadow_offset,
+            subtitle_alignment: w.subtitle_alignment.unwrap_or(dflt.subtitle_alignment),
             subtitle_background_corner_radius: w
                 .subtitle_background_corner_radius
                 .unwrap_or(dflt.subtitle_background_corner_radius),
@@ -703,7 +723,10 @@ impl Serialize for CompositionSettings {
             subtitle_shadow_color_hex: &'a str,
             subtitle_shadow_opacity: f64,
             subtitle_shadow_radius: f64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            subtitle_shadow_offset: &'a Option<[f64; 2]>,
             subtitle_background_corner_radius: f64,
+            subtitle_alignment: SubtitleTextAlignment,
             video_border_color_hex: &'a str,
             video_border_width: f64,
             video_corner_radius: f64,
@@ -741,6 +764,8 @@ impl Serialize for CompositionSettings {
             subtitle_shadow_color_hex: &self.subtitle_shadow_color_hex,
             subtitle_shadow_opacity: self.subtitle_shadow_opacity,
             subtitle_shadow_radius: self.subtitle_shadow_radius,
+            subtitle_shadow_offset: &self.subtitle_shadow_offset,
+            subtitle_alignment: self.subtitle_alignment,
             subtitle_background_corner_radius: self.subtitle_background_corner_radius,
             video_border_color_hex: &self.video_border_color_hex,
             video_border_width: self.video_border_width,
@@ -2094,6 +2119,53 @@ mod placement_model_tests {
         let plain: SubtitleStyle = serde_json::from_str("{}").unwrap();
         let wire = serde_json::to_string(&plain).unwrap();
         assert!(!wire.contains("stroke"), "{wire}");
+    }
+
+    /// Four hand-written sites decide whether a CompositionSettings field
+    /// survives a save: the struct, the default, the wire it decodes from and
+    /// the wire it encodes to. A field missing from the last one is dropped
+    /// silently — the session that set it looks right and the reopen does not.
+    #[test]
+    fn the_new_caption_defaults_survive_a_round_trip() {
+        let json = r#"{
+            "canvasWidth": 1920, "canvasHeight": 1080,
+            "subtitleAlignment": "trailing",
+            "subtitleShadowOffset": [6, -4]
+        }"#;
+        let settings: CompositionSettings = serde_json::from_str(json).expect("decode");
+        assert_eq!(settings.subtitle_alignment, SubtitleTextAlignment::Trailing);
+        assert_eq!(settings.subtitle_shadow_offset, Some([6.0, -4.0]));
+
+        let back: CompositionSettings =
+            serde_json::from_str(&serde_json::to_string(&settings).expect("encode"))
+                .expect("re-decode");
+        assert_eq!(back.subtitle_alignment, SubtitleTextAlignment::Trailing);
+        assert_eq!(back.subtitle_shadow_offset, Some([6.0, -4.0]));
+    }
+
+    /// An offset that was never set must stay unset, or every project made
+    /// before the field existed gains a hard [0,0] drop and loses its shadow
+    /// behind the glyphs.
+    #[test]
+    fn an_unset_shadow_offset_is_not_invented_on_save() {
+        let settings = CompositionSettings::default();
+        let encoded = serde_json::to_string(&settings).expect("encode");
+        assert!(!encoded.contains("subtitleShadowOffset"),
+                "an absent offset must not be written: {encoded}");
+    }
+
+    /// The per-caption half of the same gap.
+    #[test]
+    fn a_caption_can_override_the_plate() {
+        let style: SubtitleStyle = serde_json::from_str(
+            r#"{"padding": 30, "cornerRadius": 4}"#).expect("style");
+        assert_eq!(style.padding, Some(30.0));
+        assert_eq!(style.corner_radius, Some(4.0));
+        let back: SubtitleStyle =
+            serde_json::from_str(&serde_json::to_string(&style).expect("encode"))
+                .expect("re-decode");
+        assert_eq!(back.padding, Some(30.0));
+        assert_eq!(back.corner_radius, Some(4.0));
     }
 }
 
