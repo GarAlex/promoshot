@@ -1218,4 +1218,22 @@ mod tests {
         assert!((tr.horizontal_shift - baked_for_wide).abs() > 300.0,
                 "the two sources must genuinely disagree for this test to mean anything");
     }
+
+    /// New projects no longer seed the pre-layer timeline, so both readers
+    /// meet an empty list routinely rather than only in odd old files.
+    #[test]
+    fn an_empty_legacy_timeline_reads_as_no_timeline_at_all() {
+        let settings = promo_model::CompositionSettings::default();
+        assert!(settings.video_keyframes.is_empty(), "default must not seed one");
+        let transform = settings_interpolated_values(&settings, 3.0);
+        assert_eq!(transform.zoom, 1.0);
+        assert_eq!(transform.vertical_shift, 0.0);
+        assert_eq!(transform.horizontal_shift, 0.0);
+        assert_eq!(
+            settings_background_color_hex(&settings, 3.0),
+            settings.background_color_hex,
+            "with no keyframes the flat background colour is the answer"
+        );
+    }
+
 }

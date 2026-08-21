@@ -516,9 +516,19 @@ impl Default for CompositionSettings {
             canvas_width: 1920.0,
             canvas_height: 1080.0,
             fps: None,
-            subtitle_left_margin: 720.0,
-            subtitle_right_margin: 60.0,
-            subtitle_vertical_margin: 80.0,
+            // Symmetric, and low in the frame. The old defaults — 720 left
+            // against 60 right — came from captions set beside a phone
+            // screenshot: on a 1920 canvas they put the text panel at
+            // x=720..1860, centred 330px right of the frame's centre, with
+            // its top edge 80px down. Every one of the ten shipped templates
+            // corrected them to 120/120, and promo-text's own TextStyle
+            // default was symmetric all along.
+            subtitle_left_margin: 120.0,
+            subtitle_right_margin: 120.0,
+            // Measured from the TOP, so this is a position, not an inset:
+            // 880 on the default 1080-tall canvas is the lower third, where
+            // a caption belongs. 80 put it against the top edge.
+            subtitle_vertical_margin: 880.0,
             subtitle_font_size: 72.0,
             subtitle_font_family: SubtitleFontFamily::System,
             subtitle_bold: true,
@@ -543,20 +553,14 @@ impl Default for CompositionSettings {
             video_border_color_hex: "FFFFFF".into(),
             video_border_width: 0.0,
             video_corner_radius: 0.0,
-            video_keyframes: vec![VideoKeyframe {
-                id: String::new(),
-                time: 0.0,
-                zoom: 1.0,
-                vertical_shift: 0.0,
-                horizontal_shift: 0.0,
-                transition_duration: 0.5,
-            }],
-            background_keyframes: vec![BackgroundKeyframe {
-                id: String::new(),
-                time: 0.0,
-                color_hex: "000000".into(),
-                transition_duration: 0.5,
-            }],
+            // The layer timeline owns keyframes now, and SkillDriftTests
+            // lists these two as fields an assistant must not write — yet
+            // every new project was born carrying one of each. Empty is what
+            // a project with no legacy timeline should say; both readers
+            // already treat an empty list as "no legacy timeline" (identity
+            // transform, and the flat background colour).
+            video_keyframes: Vec::new(),
+            background_keyframes: Vec::new(),
             image_export_scale_percent: 100.0,
             gif_export_scale_percent: 33.0,
             gif_export_fps: 10.0,
@@ -2119,6 +2123,16 @@ mod placement_model_tests {
         let plain: SubtitleStyle = serde_json::from_str("{}").unwrap();
         let wire = serde_json::to_string(&plain).unwrap();
         assert!(!wire.contains("stroke"), "{wire}");
+    }
+
+    /// A new project must not be born carrying the pre-layer timeline, and
+    /// the readers must treat its absence as "no legacy timeline" rather
+    /// than as a project with no background and no transform.
+    #[test]
+    fn a_new_project_carries_no_legacy_timeline() {
+        let settings = CompositionSettings::default();
+        assert!(settings.video_keyframes.is_empty());
+        assert!(settings.background_keyframes.is_empty());
     }
 
     /// Four hand-written sites decide whether a CompositionSettings field
