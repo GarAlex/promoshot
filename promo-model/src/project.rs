@@ -226,6 +226,7 @@ tolerant_enum!(
         (Fade, "fade"),
         (Wipe, "wipe"),
         (Slide, "slide"),
+        (Push, "push"),
         (Scale, "scale"),
     ]
 );
@@ -240,12 +241,95 @@ tolerant_enum!(
     ]
 );
 
+tolerant_enum!(
+    RevealUnit,
+    Word,
+    [
+        (Character, "character"),
+        (Word, "word"),
+        (Line, "line"),
+    ]
+);
+tolerant_enum!(
+    RevealMode,
+    Wipe,
+    [
+        // Write-on: a wipe travelling across text that is already laid out.
+        (Wipe, "wipe"),
+        // Karaoke: everything is visible and the current unit is tinted.
+        (Highlight, "highlight"),
+    ]
+);
+
+/// Text arriving a piece at a time — a typewriter, a word-by-word caption,
+/// or a karaoke highlight walking the line.
+///
+/// A RULE, not keyframes. Baking a per-letter reveal would be dozens of
+/// keyframes per caption, would go stale the moment the text or the font
+/// changed, and would bloat exactly the JSON that automation writes.
+///
+/// The pace is `secondsPer` (per unit) or `seconds` (for the whole caption),
+/// one or the other; `promo validate` names the conflict when a caption
+/// states both. With neither, the reveal spreads across the layer's own
+/// duration, so it lands with the caption rather than at some fixed rate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextReveal {
+    #[serde(default = "reveal_unit_default")]
+    pub by: RevealUnit,
+    #[serde(default = "reveal_mode_default")]
+    pub mode: RevealMode,
+    /// Seconds per unit.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub seconds_per: Option<f64>,
+    /// Seconds for the whole reveal.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub seconds: Option<f64>,
+    /// The colour the active unit takes in `highlight` mode. Absent uses the
+    /// caption's own text colour, which makes the highlight invisible — so
+    /// it is worth stating.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub highlight_color_hex: Option<String>,
+    /// Shapes the walk across units, not each unit's own arrival.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub easing: Option<Easing>,
+}
+
+fn reveal_unit_default() -> RevealUnit {
+    RevealUnit::Word
+}
+
+fn reveal_mode_default() -> RevealMode {
+    RevealMode::Wipe
+}
+
+impl TextReveal {
+    /// How long the whole reveal takes, given how many units there are and
+    /// how long the caption is on screen.
+    pub fn total_seconds(&self, units: usize, layer_duration: Option<f64>) -> f64 {
+        if let Some(total) = self.seconds.filter(|s| *s > 0.0) {
+            return total;
+        }
+        if let Some(each) = self.seconds_per.filter(|s| *s > 0.0) {
+            return each * units.max(1) as f64;
+        }
+        // Neither stated: spread across the caption's life, so the last unit
+        // lands as the caption leaves rather than at an unrelated moment.
+        layer_duration.filter(|d| *d > 0.0).unwrap_or(1.0)
+    }
+}
+
 /// How a layer ENTERS or LEAVES.
 ///
 /// A wipe reveals the layer from an edge without moving it; a slide brings it
-/// in from off-canvas; a scale grows it into place; a fade is the same ramp
+/// in from off-canvas; a push does the same and shoves what it is replacing
+/// out the opposite side; a scale grows it into place; a fade is the same ramp
 /// `fadeIn`/`fadeOut` describe in one number. `from` is the edge the motion
 /// starts at and is ignored by fade and scale.
+///
+/// Push only has something to push at a resource SWAP, where the outgoing
+/// material is known. At a layer's own edge there is nothing underneath that
+/// belongs to it, so it behaves as a slide.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerTransition {
@@ -263,6 +347,9 @@ impl LayerTransition {
     pub fn edge(&self) -> TransitionEdge {
         self.from.unwrap_or(match self.kind {
             TransitionKind::Slide => TransitionEdge::Bottom,
+            // A push reads left-to-right, like reading: the new material
+            // comes in from the right and shoves the old one out to the left.
+            TransitionKind::Push => TransitionEdge::Right,
             _ => TransitionEdge::Left,
         })
     }
@@ -384,6 +471,12 @@ pub struct SubtitleStyle {
     pub shadow_radius: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub shadow_offset: Option<[f64; 2]>,
+    /// Text arriving a piece at a time. Absent means the caption appears
+    /// whole, which is what every caption did before this existed — so an
+    /// older reader dropping it degrades correctly and no version gate is
+    /// needed.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub reveal: Option<TextReveal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -543,6 +636,9 @@ pub struct CompositionSettings {
     /// drop — straight down by half the blur — which is what every project
     /// authored before this field expects.
     pub subtitle_shadow_offset: Option<[f64; 2]>,
+    /// The reveal every caption falls back to — a project that types all its
+    /// captions says it once here.
+    pub subtitle_reveal: Option<TextReveal>,
     pub subtitle_background_corner_radius: f64,
     /// What a caption that never chose an alignment gets. Centre, which is
     /// what the renderer already fell back to.
@@ -597,6 +693,7 @@ impl Default for CompositionSettings {
             subtitle_shadow_opacity: 0.0,
             subtitle_shadow_radius: 0.0,
             subtitle_shadow_offset: None,
+            subtitle_reveal: None,
             subtitle_alignment: SubtitleTextAlignment::Center,
             subtitle_background_corner_radius: 8.0,
             video_border_color_hex: "FFFFFF".into(),
@@ -645,6 +742,7 @@ struct CompositionSettingsWire {
     subtitle_shadow_opacity: Option<f64>,
     subtitle_shadow_radius: Option<f64>,
     subtitle_shadow_offset: Option<[f64; 2]>,
+    subtitle_reveal: Option<TextReveal>,
     subtitle_background_corner_radius: Option<f64>,
     subtitle_alignment: Option<SubtitleTextAlignment>,
     video_border_color_hex: Option<String>,
@@ -712,6 +810,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
                 .subtitle_shadow_radius
                 .unwrap_or(dflt.subtitle_shadow_radius),
             subtitle_shadow_offset: w.subtitle_shadow_offset,
+            subtitle_reveal: w.subtitle_reveal,
             subtitle_alignment: w.subtitle_alignment.unwrap_or(dflt.subtitle_alignment),
             subtitle_background_corner_radius: w
                 .subtitle_background_corner_radius
@@ -778,6 +877,8 @@ impl Serialize for CompositionSettings {
             subtitle_shadow_radius: f64,
             #[serde(skip_serializing_if = "Option::is_none")]
             subtitle_shadow_offset: &'a Option<[f64; 2]>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            subtitle_reveal: &'a Option<TextReveal>,
             subtitle_background_corner_radius: f64,
             subtitle_alignment: SubtitleTextAlignment,
             video_border_color_hex: &'a str,
@@ -818,6 +919,7 @@ impl Serialize for CompositionSettings {
             subtitle_shadow_opacity: self.subtitle_shadow_opacity,
             subtitle_shadow_radius: self.subtitle_shadow_radius,
             subtitle_shadow_offset: &self.subtitle_shadow_offset,
+            subtitle_reveal: &self.subtitle_reveal,
             subtitle_alignment: self.subtitle_alignment,
             subtitle_background_corner_radius: self.subtitle_background_corner_radius,
             video_border_color_hex: &self.video_border_color_hex,

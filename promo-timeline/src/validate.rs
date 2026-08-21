@@ -77,6 +77,38 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    // A reveal states its pace one way or the other. Both is not an error —
+    // the total wins — but it is certainly not what the author meant.
+    let mut reveal_conflict = |where_: String, reveal: &promo_model::TextReveal| {
+        if let (Some(per), Some(total)) = (reveal.seconds_per, reveal.seconds) {
+            out.push(format!(
+                "{where_}: reveal states secondsPer {per} AND seconds {total} — \
+                 the total wins and the rate is ignored"
+            ));
+        }
+    };
+    if let Some(reveal) = meta.composition_settings.subtitle_reveal.as_ref() {
+        reveal_conflict("compositionSettings.subtitleReveal".into(), reveal);
+    }
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        if let Some(reveal) = layer
+            .caption_style
+            .as_ref()
+            .and_then(|style| style.reveal.as_ref())
+        {
+            reveal_conflict(format!("layer \"{}\"", layer.name), reveal);
+        }
+    }
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        if let Some(reveal) = resource
+            .caption_style
+            .as_ref()
+            .and_then(|style| style.reveal.as_ref())
+        {
+            reveal_conflict(format!("caption \"{}\"", resource.display_name), reveal);
+        }
+    }
+
     let required = meta.minimum_reader_version();
     match meta.min_reader_version {
         Some(declared) if declared >= required => {}

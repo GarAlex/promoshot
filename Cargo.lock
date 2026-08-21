@@ -1107,6 +1107,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "promo-model",
+ "promo-text",
  "serde",
  "serde_json",
 ]

@@ -157,6 +157,12 @@ pub struct PreviewEngine {
     user: *mut c_void,
     governor: MemoryGovernor,
     cache: HashMap<u64, CachedFrame>,
+    /// Where every reveal unit sits, per caption raster key.
+    ///
+    /// Shaping the text is the expensive half and a typewriter asks for the
+    /// same answer every frame, so the geometry is cached beside the raster
+    /// it describes rather than recomputed 60 times a second.
+    reveal_cache: HashMap<String, Option<promo_text::RevealLayout>>,
     key_of: HashMap<(String, i64, i32), u64>,
     id_of: HashMap<u64, (String, i64, i32)>,
     next_id: u64,
@@ -215,6 +221,7 @@ impl PreviewEngine {
             user,
             governor: MemoryGovernor::new(budget_bytes),
             cache: HashMap::new(),
+            reveal_cache: HashMap::new(),
             key_of: HashMap::new(),
             id_of: HashMap::new(),
             next_id: 1,
@@ -755,6 +762,54 @@ impl PreviewEngine {
         Some((quad, frame_id))
     }
 
+    /// Where each reveal unit sits for the caption this layer shows, laid
+    /// out for the WHOLE string so revealing part of it cannot move it.
+    fn caption_reveal(
+        &mut self,
+        layer: &ProjectLayer,
+        showing: Option<&str>,
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+        time: f64,
+        by: promo_text::RevealBy,
+    ) -> Option<promo_text::RevealLayout> {
+        let text_owned = self.meta.caption_text_showing(layer, showing)?;
+        let text = text_owned.trim().to_string();
+        if text.is_empty() {
+            return None;
+        }
+        let style_source = self.meta.caption_style_showing(layer, showing);
+        let mut style = caption_style(style_source.as_ref(), settings);
+        if let Some(values) = tl::layer_caption_values(
+            layer,
+            time,
+            tl::CaptionValues {
+                font_size: style.font_size,
+                vertical_margin: style.vertical_margin,
+                left_margin: style.left_margin,
+            },
+        ) {
+            style.font_size = values.font_size;
+            style.vertical_margin = values.vertical_margin;
+            style.left_margin = values.left_margin;
+        }
+        let key = format!(
+            "{}|{:?}|{}|{}|{}",
+            text,
+            by,
+            (style.font_size * 10.0).round(),
+            (style.left_margin * 10.0).round(),
+            (style.right_margin * 10.0).round()
+        );
+        if let Some(cached) = self.reveal_cache.get(&key) {
+            return cached.clone();
+        }
+        let layout =
+            promo_text::reveal_layout(&text, canvas.width(), canvas.height(), &style, by);
+        self.reveal_cache.insert(key, layout.clone());
+        layout
+    }
+
     fn caption_quad(
         &mut self,
         layer: &ProjectLayer,
@@ -762,6 +817,25 @@ impl PreviewEngine {
         settings: &promo_model::CompositionSettings,
         canvas: Size,
         time: f64,
+        pinned: &[u64],
+    ) -> Option<(SceneQuad, u64)> {
+        self.caption_quad_colored(layer, showing, settings, canvas, time, None, pinned)
+    }
+
+    /// The caption raster, optionally in another colour.
+    ///
+    /// A karaoke highlight is the same words in a second colour, so it is a
+    /// second raster from the same layout rather than a shader trick: two
+    /// stable cache entries, and no per-frame text work for either.
+    #[allow(clippy::too_many_arguments)]
+    fn caption_quad_colored(
+        &mut self,
+        layer: &ProjectLayer,
+        showing: Option<&str>,
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+        time: f64,
+        color_override: Option<[u8; 4]>,
         pinned: &[u64],
     ) -> Option<(SceneQuad, u64)> {
         // Resource first, layer second — the app's rule (`captionText(for:)`).
@@ -781,6 +855,13 @@ impl PreviewEngine {
         }
         let style_source = self.meta.caption_style_showing(layer, showing);
         let mut style = caption_style(style_source.as_ref(), settings);
+        if let Some(rgba) = color_override {
+            style.text_rgba = rgba;
+            // The plate belongs to the base raster; a tinted copy draws the
+            // words alone or the highlight would paint a second plate over
+            // the first.
+            style.background_rgba = [0, 0, 0, 0];
+        }
         // A caption's keyframes change its SIZE and MARGINS (the app's
         // mapping), so unlike a frame the raster does vary with the playhead —
         // and it is re-rasterized per size rather than scaled, which is what
@@ -820,6 +901,7 @@ impl PreviewEngine {
             format!("{:?}", style.align).hash(&mut hasher);
             style.text_rgba.hash(&mut hasher);
             style.background_rgba.hash(&mut hasher);
+            color_override.hash(&mut hasher);
             stamp(style.padding).hash(&mut hasher);
             stamp(style.corner_radius).hash(&mut hasher);
             stamp(style.right_margin).hash(&mut hasher);
@@ -1084,6 +1166,10 @@ impl PreviewEngine {
                         layer, swap.previous.as_deref(), &settings, canvas, time, &used)
                     {
                         quad.opacity = tl::layer_opacity(layer, time) as f32;
+                        // A push shoves the outgoing material out the far
+                        // side; every other kind leaves it where it is and
+                        // arrives over it.
+                        apply_effect(&mut quad, swap.departing, canvas);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
@@ -1097,8 +1183,52 @@ impl PreviewEngine {
                         apply_effect(&mut quad, swap.effect, canvas);
                     }
                     apply_transition(&mut quad, layer, time, canvas);
-                    quads.push(quad);
-                    used.push(id);
+
+                    // A reveal draws the SAME raster as a set of bands — one
+                    // per line, cropped to what has arrived — rather than a
+                    // new picture per frame. Laid out whole, so revealing
+                    // part of it cannot move the caption.
+                    let rule = self
+                        .meta
+                        .caption_style_showing(layer, showing.as_deref())
+                        .and_then(|style| style.reveal)
+                        .or_else(|| settings.subtitle_reveal.clone());
+                    let bands = rule.as_ref().and_then(|rule| {
+                        let by = tl::reveal::unit_of(rule);
+                        let layout = self.caption_reveal(
+                            layer, showing.as_deref(), &settings, canvas, time, by)?;
+                        let progress = tl::reveal::progress(rule, layer, time, layout.units.len());
+                        Some((tl::reveal::bands(&layout, progress, rule.mode), rule.clone()))
+                    });
+
+                    match bands {
+                        Some((bands, rule)) if !bands.is_empty() => {
+                            let tinted = rule.highlight_color_hex.as_deref().and_then(|hex| {
+                                let rgba = rgba_bytes(&settings.resolve_color(hex), 1.0);
+                                self.caption_quad_colored(
+                                    layer, showing.as_deref(), &settings, canvas, time,
+                                    Some(rgba), &used)
+                            });
+                            for band in bands {
+                                let source = if band.active { tinted } else { None };
+                                let (mut piece, piece_id) = match source {
+                                    Some((tinted_quad, tinted_id)) => {
+                                        let mut copy = tinted_quad;
+                                        copy.opacity = quad.opacity;
+                                        (copy, tinted_id)
+                                    }
+                                    None => (quad, id),
+                                };
+                                crop_to_band(&mut piece, band.uv);
+                                quads.push(piece);
+                                used.push(piece_id);
+                            }
+                        }
+                        _ => {
+                            quads.push(quad);
+                            used.push(id);
+                        }
+                    }
                 }
                 continue;
             }
@@ -1149,6 +1279,7 @@ impl PreviewEngine {
                     {
                         quad.rotation_deg = tl::layer_rotation(layer, time);
                         quad.opacity = tl::layer_opacity(layer, time) as f32;
+                        apply_effect(&mut quad, swap.departing, canvas);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
@@ -1187,6 +1318,7 @@ impl PreviewEngine {
                         layer, previous, &settings, canvas, time, source_time, tier,
                         is_drawing, &resources, &used)
                     {
+                        apply_effect(&mut quad, swap.departing, canvas);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
@@ -1352,6 +1484,28 @@ fn drawing_scene_quad(rect: &promo_model::Rect) -> SceneQuad {
 }
 
 /// A caption quad sits where promo-text put it, in canvas space.
+/// Crops a quad to a band of its own texture, rect and uv together.
+///
+/// Same rule the transitions use: the picture must stay where it is while a
+/// piece of it is shown, so the drawn rect shrinks by exactly the fraction
+/// the texture window does.
+fn crop_to_band(quad: &mut SceneQuad, uv: [f64; 4]) {
+    let [x, y, w, h] = quad.rect;
+    quad.rect = [
+        x + w * uv[0],
+        y + h * uv[1],
+        w * uv[2],
+        h * uv[3],
+    ];
+    let base = quad.uv_rect;
+    quad.uv_rect = [
+        base[0] + base[2] * uv[0] as f32,
+        base[1] + base[3] * uv[1] as f32,
+        base[2] * uv[2] as f32,
+        base[3] * uv[3] as f32,
+    ];
+}
+
 /// Applies the layer's entry/exit transition to a finished quad.
 ///
 /// Every drawable kind goes through here, so a caption wipes exactly as a
@@ -1877,6 +2031,68 @@ mod tests {
         assert_eq!(stats.misses, 1, "render decoded nothing new");
         assert_eq!(stats.hits, 2, "prefetch re-check + render hit");
         assert_eq!(state.lock().unwrap().requests.len(), 1);
+    }
+
+    /// A word-by-word reveal must actually show fewer words early on — the
+    /// geometry is unit-tested in promo-timeline, but only a render says the
+    /// bands the engine emits crop the raster the way they describe.
+    #[test]
+    fn a_reveal_shows_the_caption_a_piece_at_a_time() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-00000000000C",
+            "name": "reveal", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {
+                "canvasWidth": 512, "canvasHeight": 128,
+                "backgroundColorHex": "000000",
+                "subtitleFontSize": 36, "subtitleColorHex": "FFFFFF",
+                "subtitleVerticalMargin": 30, "subtitleBackgroundOpacity": 0,
+                "subtitleLeftMargin": 10, "subtitleRightMargin": 10
+            },
+            "layers": [
+                {"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "captionText": "one two three four",
+                 "captionStyle": {"reveal": {"by": "word", "mode": "wipe"}},
+                 "keyframes": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("reveal fixture");
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let mut ink = |time: f64| -> usize {
+            engine.render(time, out.raw(), 512, 128).expect("render");
+            out.read_pixels()
+                .unwrap()
+                .chunks_exact(4)
+                .filter(|p| p[1] > 100)
+                .count()
+        };
+
+        let first = ink(0.0);
+        let half = ink(2.0);
+        let whole = ink(3.9);
+        assert!(first > 0, "the first word is there when the caption is ({first} px)");
+        assert!(half > first, "more words by the middle: {first} then {half}");
+        assert!(whole > half, "and all of them by the end: {half} then {whole}");
+
+        // The reveal must not MOVE the caption: laid out whole, the last
+        // word lands where it always was.
+        engine.render(3.9, out.raw(), 512, 128).expect("render");
+        let revealed = out.read_pixels().unwrap();
+        let plain = r#"{"reveal": null}"#;
+        let _ = plain;
+        let leftmost = |px: &[u8]| -> usize {
+            (0..512)
+                .find(|x| (0..128).any(|y| px[(y * 512 + x) * 4 + 1] > 100))
+                .unwrap_or(usize::MAX)
+        };
+        let x_when_revealed = leftmost(&revealed);
+        assert!(x_when_revealed < 512, "something rendered");
+        // The first word starts at the same x throughout — nothing re-flows.
+        engine.render(0.0, out.raw(), 512, 128).expect("render");
+        let at_start = out.read_pixels().unwrap();
+        assert_eq!(leftmost(&at_start), x_when_revealed,
+                   "a caption that re-flows as it types has been laid out per frame");
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as

@@ -287,6 +287,161 @@ fn box_blur3(mask: &[f32], width: usize, height: usize, r: usize) -> Vec<f32> {
     src
 }
 
+/// Where one reveal unit — a grapheme, a word, or a whole line — sits inside
+/// the raster.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UnitSpan {
+    /// Visual line, counting wrapped lines separately.
+    pub line: u32,
+    /// Raster-space x of the unit's left and right edges, padding included.
+    pub start_x: f64,
+    pub end_x: f64,
+}
+
+/// The geometry a reveal needs: where every unit is, in a raster laid out for
+/// the WHOLE string.
+///
+/// Laid out whole on purpose. Re-rasterizing a growing prefix would re-flow
+/// it — the measured width decides the box, the box decides the position — so
+/// a centred caption would slide as it typed, and every frame would miss the
+/// raster cache. The reveal is a crop of one stable picture.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RevealLayout {
+    pub units: Vec<UnitSpan>,
+    /// Raster-space y of each line's top, padding included.
+    pub line_tops: Vec<f64>,
+    pub line_height: f64,
+    /// Raster size, so a caller can turn spans into texture fractions.
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Where each reveal unit sits, for text laid out exactly as `rasterize`
+/// lays it out.
+pub fn reveal_layout(
+    text: &str,
+    canvas_width: f64,
+    canvas_height: f64,
+    style: &TextStyle,
+    by: RevealBy,
+) -> Option<RevealLayout> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let box_ = measure(text, canvas_width, canvas_height, style)?;
+    // Laid out exactly as `rasterize` lays it out — same font resolution,
+    // same metrics, same wrap width — or the spans would describe a picture
+    // nobody drew.
+    let mut fonts = FontSystem::new();
+    let resolved = resolve_family(&mut fonts, style.font_family.as_deref());
+    let metrics = Metrics::new(
+        style.font_size as f32,
+        (style.font_size * style.line_height) as f32,
+    );
+    let mut buffer = Buffer::new(&mut fonts, metrics);
+    let mut buffer = buffer.borrow_with(&mut fonts);
+    buffer.set_size(Some(box_.text_width as f32), None);
+    let family = match &resolved {
+        ResolvedFamily::Named(name) => Family::Name(name),
+        ResolvedFamily::Serif => Family::Serif,
+        ResolvedFamily::Monospace => Family::Monospace,
+        ResolvedFamily::SansSerif => Family::SansSerif,
+    };
+    let attrs = Attrs::new()
+        .family(family)
+        .weight(if style.bold { Weight::BOLD } else { Weight::NORMAL })
+        .style(if style.italic { Style::Italic } else { Style::Normal });
+    buffer.set_text(text, attrs, Shaping::Advanced);
+    buffer.shape_until_scroll(true);
+
+    let padding = style.padding;
+    let mut units: Vec<UnitSpan> = Vec::new();
+    let mut line_tops: Vec<f64> = Vec::new();
+
+    for (line, run) in buffer.layout_runs().enumerate() {
+        line_tops.push(padding + line as f64 * metrics.line_height as f64);
+        match by {
+            // One span for the whole line, left edge to right edge.
+            RevealBy::Line => units.push(UnitSpan {
+                line: line as u32,
+                start_x: padding,
+                end_x: padding + run.line_w as f64,
+            }),
+            RevealBy::Character => {
+                // By CLUSTER, not byte: a glyph carries the byte range of the
+                // cluster it belongs to, so an emoji or a combining accent is
+                // one tick of the typewriter rather than several.
+                let mut cluster = usize::MAX;
+                for glyph in run.glyphs {
+                    if glyph.start != cluster {
+                        cluster = glyph.start;
+                        units.push(UnitSpan {
+                            line: line as u32,
+                            start_x: padding + glyph.x as f64,
+                            end_x: padding + (glyph.x + glyph.w) as f64,
+                        });
+                    } else if let Some(last) = units.last_mut() {
+                        last.end_x = last.end_x.max(padding + (glyph.x + glyph.w) as f64);
+                    }
+                }
+            }
+            RevealBy::Word => {
+                // The shaper does not hand back word boundaries, so they come
+                // from the run's own text by byte range. Glyphs are matched by
+                // range rather than by counting: at a soft wrap the trailing
+                // space is dropped from the run entirely, so counts drift.
+                let mut current: Option<UnitSpan> = None;
+                for glyph in run.glyphs {
+                    let text_of = run.text.get(glyph.start..glyph.end).unwrap_or("");
+                    let is_space = !text_of.is_empty()
+                        && text_of.chars().all(|c| c.is_whitespace());
+                    if is_space {
+                        if let Some(span) = current.take() {
+                            units.push(span);
+                        }
+                        continue;
+                    }
+                    let left = padding + glyph.x as f64;
+                    let right = padding + (glyph.x + glyph.w) as f64;
+                    match current.as_mut() {
+                        Some(span) => {
+                            span.start_x = span.start_x.min(left);
+                            span.end_x = span.end_x.max(right);
+                        }
+                        None => {
+                            current = Some(UnitSpan {
+                                line: line as u32,
+                                start_x: left,
+                                end_x: right,
+                            })
+                        }
+                    }
+                }
+                if let Some(span) = current.take() {
+                    units.push(span);
+                }
+            }
+        }
+    }
+
+    Some(RevealLayout {
+        units,
+        line_tops,
+        line_height: metrics.line_height as f64,
+        width: box_.width,
+        height: box_.height,
+    })
+}
+
+/// Which unit a reveal walks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RevealBy {
+    Character,
+    Word,
+    Line,
+}
+
 /// A rasterized caption and where it belongs on the canvas.
 #[derive(Debug, Clone)]
 pub struct RasterizedText {
@@ -1257,3 +1412,76 @@ mod smoothing_tests {
     }
 }
 
+
+#[cfg(test)]
+mod reveal_layout_tests {
+    use super::*;
+
+    fn style() -> TextStyle {
+        TextStyle {
+            font_size: 48.0,
+            padding: 10.0,
+            left_margin: 40.0,
+            right_margin: 40.0,
+            ..TextStyle::default()
+        }
+    }
+
+    /// The spans have to describe the picture `rasterize` draws, so they are
+    /// laid out the same way — and they must march left to right without
+    /// gaps or overlaps, or a typewriter would stutter.
+    #[test]
+    fn word_spans_march_across_the_line_in_order() {
+        let layout = reveal_layout("one two three", 1920.0, 1080.0, &style(), RevealBy::Word)
+            .expect("layout");
+        assert_eq!(layout.units.len(), 3, "three words");
+        assert!(layout.units.iter().all(|u| u.line == 0), "all on one line");
+        for pair in layout.units.windows(2) {
+            assert!(pair[0].end_x <= pair[1].start_x,
+                    "words must not overlap: {:?}", pair);
+            assert!(pair[0].start_x < pair[1].start_x, "and must be in order");
+        }
+        let last = layout.units.last().unwrap();
+        assert!(last.end_x <= layout.width, "inside the raster");
+    }
+
+    /// A typewriter ticks per CLUSTER: an emoji or a combining accent is one
+    /// keystroke, not several.
+    #[test]
+    fn character_spans_are_clusters_not_bytes() {
+        let plain = reveal_layout("abc", 1920.0, 1080.0, &style(), RevealBy::Character)
+            .expect("layout");
+        assert_eq!(plain.units.len(), 3);
+
+        let accented = reveal_layout("e\u{0301}", 1920.0, 1080.0, &style(), RevealBy::Character)
+            .expect("layout");
+        assert_eq!(accented.units.len(), 1, "e + combining acute is one letter");
+    }
+
+    /// Wrapped text reveals one line at a time: the spans carry which line
+    /// they are on, and the line tops tile the raster.
+    #[test]
+    fn wrapped_text_reports_a_line_per_span() {
+        let long = "wrapping happens when the words no longer fit on a single line at all";
+        let layout = reveal_layout(long, 700.0, 1080.0, &style(), RevealBy::Word).expect("layout");
+        let lines: Vec<u32> = layout.units.iter().map(|u| u.line).collect();
+        assert!(lines.iter().max().copied().unwrap_or(0) > 0, "it wrapped");
+        assert!(lines.windows(2).all(|w| w[0] <= w[1]), "in reading order");
+        assert_eq!(layout.line_tops.len(), lines.iter().max().unwrap().to_owned() as usize + 1);
+        for pair in layout.line_tops.windows(2) {
+            assert!((pair[1] - pair[0] - layout.line_height).abs() < 0.001,
+                    "lines tile by exactly one line height");
+        }
+    }
+
+    /// A reveal must not move the caption: the layout it measures is the
+    /// same box `measure` reports for the whole string.
+    #[test]
+    fn the_reveal_layout_matches_the_measured_box() {
+        let text = "the box must not move";
+        let measured = measure(text, 1920.0, 1080.0, &style()).expect("measure");
+        let layout = reveal_layout(text, 1920.0, 1080.0, &style(), RevealBy::Word).expect("layout");
+        assert_eq!(layout.width, measured.width);
+        assert_eq!(layout.height, measured.height);
+    }
+}

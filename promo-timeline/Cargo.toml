@@ -6,6 +6,9 @@ license.workspace = true
 
 [dependencies]
 promo-model = { path = "../promo-model" }
+# For the reveal: where each word or letter sits in a laid-out caption. text
+# depends on model only, so there is no cycle.
+promo-text = { path = "../promo-text" }
 
 [dev-dependencies]
 criterion.workspace = true

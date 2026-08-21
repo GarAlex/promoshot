@@ -121,7 +121,7 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
             },
             ..Effect::IDENTITY
         },
-        TransitionKind::Slide => Effect {
+        TransitionKind::Slide | TransitionKind::Push => Effect {
             travel: match edge {
                 TransitionEdge::Left => [-(1.0 - progress), 0.0],
                 TransitionEdge::Right => [1.0 - progress, 0.0],
@@ -141,6 +141,28 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
     }
 }
 
+/// What the material being REPLACED does while the new material arrives.
+///
+/// Only a push moves it: a wipe is revealed OVER it, a fade dissolves over
+/// it, a slide travels over it. Push is the one kind where the outgoing
+/// material is part of the motion — which is why it only means anything at a
+/// swap, where there IS an outgoing.
+pub fn departing(transition: &LayerTransition, progress: f64) -> Effect {
+    match transition.kind {
+        TransitionKind::Push => Effect {
+            travel: match transition.edge() {
+                // Shoved out the far side: in from the right, out to the left.
+                TransitionEdge::Left => [progress, 0.0],
+                TransitionEdge::Right => [-progress, 0.0],
+                TransitionEdge::Top => [0.0, progress],
+                TransitionEdge::Bottom => [0.0, -progress],
+            },
+            ..Effect::IDENTITY
+        },
+        _ => Effect::IDENTITY,
+    }
+}
+
 /// A resource swap caught mid-transition: what the layer is coming FROM, and
 /// how far through it is.
 ///
@@ -154,7 +176,10 @@ pub struct Swap {
     /// The resource being replaced. `None` when the layer's own resource is
     /// what is going away.
     pub previous: Option<String>,
+    /// What the arriving material does.
     pub effect: Effect,
+    /// What the departing material does — identity for every kind but push.
+    pub departing: Effect,
 }
 
 /// The swap in force at `time`, if it is still arriving.
@@ -210,6 +235,7 @@ pub fn active_swap(
     Some(Swap {
         previous,
         effect: shape(transition, progress),
+        departing: departing(transition, progress),
     })
 }
 
@@ -286,6 +312,35 @@ mod tests {
                 {"id":"B","kind":"image","filename":"b.png","displayName":"b","addedAt":0}]"#,
         )
         .expect("resources")
+    }
+
+    /// A push is the one kind where BOTH sides move: the new material comes
+    /// in from its edge and shoves the old one out the far side. Every other
+    /// kind arrives over material that stays put.
+    #[test]
+    fn a_push_moves_the_material_it_replaces_and_nothing_else_does() {
+        let push = LayerTransition {
+            kind: TransitionKind::Push,
+            from: Some(TransitionEdge::Right),
+            duration: 1.0,
+        };
+        // A quarter in: the new one is still mostly off to the right, the old
+        // one has started leaving to the left.
+        let arriving = shape(&push, 0.25);
+        let leaving = departing(&push, 0.25);
+        assert_eq!(arriving.travel, [0.75, 0.0], "in from the right");
+        assert_eq!(leaving.travel, [-0.25, 0.0], "out to the left");
+
+        // At the end the old one is a full frame away and the new one home.
+        assert_eq!(shape(&push, 1.0).travel, [0.0, 0.0]);
+        assert_eq!(departing(&push, 1.0).travel, [-1.0, 0.0]);
+
+        for kind in [TransitionKind::Wipe, TransitionKind::Fade, TransitionKind::Slide,
+                     TransitionKind::Scale] {
+            let other = LayerTransition { kind, from: None, duration: 1.0 };
+            assert!(departing(&other, 0.5).is_identity(),
+                    "{kind:?} arrives OVER what it replaces, which does not move");
+        }
     }
 
     /// The swap resolver SKIPS a keyframe whose target has been deleted or is
