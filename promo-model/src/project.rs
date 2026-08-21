@@ -254,8 +254,14 @@ tolerant_enum!(
     RevealMode,
     Wipe,
     [
-        // Write-on: a wipe travelling across text that is already laid out.
+        // Write-on: each unit simply appears. The same walk as the others
+        // with an arrival of zero — a typewriter is a stagger that does not
+        // animate.
         (Wipe, "wipe"),
+        // Each unit arrives with its own little motion, one after another.
+        (Fade, "fade"),
+        (Rise, "rise"),
+        (Scale, "scale"),
         // Karaoke: everything is visible and the current unit is tinted.
         (Highlight, "highlight"),
     ]
@@ -285,6 +291,21 @@ pub struct TextReveal {
     /// Seconds for the whole reveal.
     #[serde(default, skip_serializing_if = "is_none")]
     pub seconds: Option<f64>,
+    /// How long ONE unit takes to arrive, for the animated modes.
+    ///
+    /// This is what separates a typewriter from kinetic type: `wipe` is this
+    /// at zero — the unit is simply there — and `rise`/`fade`/`scale` give
+    /// each unit its own overlapping little move. Absent, each unit overlaps
+    /// its neighbour by half an arrival, so several are in flight together —
+    /// which is what makes a stagger read as one motion rather than a queue.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub unit_seconds: Option<f64>,
+    /// How far a `rise` travels, in multiples of the line height — a
+    /// proportion rather than pixels, so it survives being drawn at any
+    /// density. Absent, half a line: far enough to read as movement, near
+    /// enough not to fly.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub rise: Option<f64>,
     /// The colour the active unit takes in `highlight` mode. Absent uses the
     /// caption's own text colour, which makes the highlight invisible — so
     /// it is worth stating.
@@ -304,6 +325,13 @@ fn reveal_mode_default() -> RevealMode {
 }
 
 impl TextReveal {
+    /// Whether each unit ANIMATES in, or simply appears. A typewriter is a
+    /// stagger whose units arrive instantly — the same walk, no motion.
+    pub fn animates(&self) -> bool {
+        matches!(self.mode,
+                 RevealMode::Fade | RevealMode::Rise | RevealMode::Scale)
+    }
+
     /// How long the whole reveal takes, given how many units there are and
     /// how long the caption is on screen.
     pub fn total_seconds(&self, units: usize, layer_duration: Option<f64>) -> f64 {
@@ -2057,11 +2085,23 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
-        if layers.iter().any(|l| {
-            l.transition_in.is_some()
-                || l.transition_out.is_some()
-                || l.keyframes.iter().any(|k| k.transition.is_some())
-        }) {
+        // A text reveal rides the same rung: it landed in the same
+        // unreleased batch as transitions, so no reader has ever understood
+        // 9 without it — and dropped, a typewriter becomes a caption that
+        // was simply there.
+        let has_reveal = |style: &Option<SubtitleStyle>| {
+            style.as_ref().is_some_and(|s| s.reveal.is_some())
+        };
+        let reveals = self.composition_settings.subtitle_reveal.is_some()
+            || layers.iter().any(|l| has_reveal(&l.caption_style))
+            || resources.iter().any(|r| has_reveal(&r.caption_style));
+        if reveals
+            || layers.iter().any(|l| {
+                l.transition_in.is_some()
+                    || l.transition_out.is_some()
+                    || l.keyframes.iter().any(|k| k.transition.is_some())
+            })
+        {
             return 9;
         }
         if layers.iter().any(|l| l.fade_in.is_some() || l.fade_out.is_some()) {

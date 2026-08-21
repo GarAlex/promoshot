@@ -23,6 +23,10 @@ pub struct Effect {
     pub travel: [f64; 2],
     /// Scale about the quad's own centre.
     pub scale: f64,
+    /// A plain offset in canvas pixels, unlike `travel`, which is measured
+    /// against the distance to the frame edge. A word rising 24px into place
+    /// wants this; a layer sliding in from off-canvas wants that.
+    pub offset: [f64; 2],
 }
 
 impl Effect {
@@ -31,6 +35,7 @@ impl Effect {
         reveal: [0.0, 0.0, 1.0, 1.0],
         travel: [0.0, 0.0],
         scale: 1.0,
+        offset: [0.0, 0.0],
     };
 
     pub fn is_identity(&self) -> bool {
@@ -276,6 +281,9 @@ pub fn apply(
         x = cx - w / 2.0;
         y = cy - h / 2.0;
     }
+
+    x += effect.offset[0];
+    y += effect.offset[1];
 
     // Travel is measured so that a full slide puts the quad entirely beyond
     // the frame edge it came from.

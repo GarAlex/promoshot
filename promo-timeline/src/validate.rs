@@ -86,6 +86,23 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                  the total wins and the rate is ignored"
             ));
         }
+        // An arrival time on a mode that has no arrival is a setting that
+        // does nothing, which reads as a broken feature rather than a
+        // mode that was never changed.
+        if reveal.unit_seconds.is_some() && !reveal.animates() {
+            out.push(format!(
+                "{where_}: reveal sets unitSeconds but mode {} has no arrival — \
+                 use fade, rise or scale, or drop it",
+                reveal.mode.as_str()
+            ));
+        }
+        if reveal.rise.is_some() && reveal.mode != promo_model::RevealMode::Rise {
+            out.push(format!(
+                "{where_}: reveal sets rise but mode is {} — it only travels in \
+                 rise mode",
+                reveal.mode.as_str()
+            ));
+        }
     };
     if let Some(reveal) = meta.composition_settings.subtitle_reveal.as_ref() {
         reveal_conflict("compositionSettings.subtitleReveal".into(), reveal);
@@ -190,6 +207,49 @@ mod tests {
         assert!(
             warnings.iter().any(|w| w.contains("minReaderVersion") && w.contains('6')),
             "{warnings:?}"
+        );
+    }
+
+    /// A knob that does nothing is worse than a missing one: it reads as a
+    /// broken feature. Both new reveal fields belong to particular modes.
+    #[test]
+    fn a_reveal_setting_its_mode_does_not_have_is_named() {
+        let caption = |reveal: &str| {
+            format!(
+                r#"{{"id":"L","name":"Words","sortIndex":0,"kind":"caption",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "captionText":"one two","captionStyle":{{"reveal":{reveal}}},
+                     "keyframes":[]}}"#
+            )
+        };
+        // Declared, because a reveal now claims rung 9 and an undeclared
+        // one would warn about that instead of about the field under test.
+        let warned =
+            |reveal: &str| warnings(&project(&caption(reveal), r#","minReaderVersion":9"#));
+
+        // That claim itself: a reveal an older reader would silently drop.
+        assert!(
+            warnings(&project(&caption(r#"{"by":"word","mode":"wipe"}"#), ""))
+                .iter()
+                .any(|w| w.contains("minReaderVersion") && w.contains("9")),
+            "an undeclared reveal is named, because a save would destroy it",
+        );
+
+        assert!(
+            warned(r#"{"by":"word","mode":"wipe","unitSeconds":0.3}"#)
+                .iter()
+                .any(|w| w.contains("unitSeconds") && w.contains("no arrival")),
+            "a type-on has no arrival to time",
+        );
+        assert!(
+            warned(r#"{"by":"word","mode":"fade","rise":1.5}"#)
+                .iter()
+                .any(|w| w.contains("rise") && w.contains("only travels")),
+            "and only a rise travels",
+        );
+        assert!(
+            warned(r#"{"by":"word","mode":"rise","unitSeconds":0.3,"rise":1.5}"#).is_empty(),
+            "a rise that states both is exactly what those fields are for",
         );
     }
 }

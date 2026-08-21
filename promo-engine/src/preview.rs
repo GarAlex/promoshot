@@ -1184,10 +1184,11 @@ impl PreviewEngine {
                     }
                     apply_transition(&mut quad, layer, time, canvas);
 
-                    // A reveal draws the SAME raster as a set of bands — one
-                    // per line, cropped to what has arrived — rather than a
-                    // new picture per frame. Laid out whole, so revealing
-                    // part of it cannot move the caption.
+                    // A reveal draws the SAME raster as a set of bands —
+                    // cropped to what has arrived — rather than a new picture
+                    // per frame. Laid out whole, so revealing part of it
+                    // cannot move the caption, and a word keeps the place the
+                    // layout gave it however it arrives.
                     let rule = self
                         .meta
                         .caption_style_showing(layer, showing.as_deref())
@@ -1198,7 +1199,7 @@ impl PreviewEngine {
                         let layout = self.caption_reveal(
                             layer, showing.as_deref(), &settings, canvas, time, by)?;
                         let progress = tl::reveal::progress(rule, layer, time, layout.units.len());
-                        Some((tl::reveal::bands(&layout, progress, rule.mode), rule.clone()))
+                        Some((tl::reveal::bands(&layout, progress, rule), rule.clone()))
                     });
 
                     match bands {
@@ -1219,7 +1220,9 @@ impl PreviewEngine {
                                     }
                                     None => (quad, id),
                                 };
+                                let full_height = piece.rect[3];
                                 crop_to_band(&mut piece, band.uv);
+                                apply_effect(&mut piece, band.effect_for(full_height), canvas);
                                 quads.push(piece);
                                 used.push(piece_id);
                             }
@@ -2093,6 +2096,121 @@ mod tests {
         let at_start = out.read_pixels().unwrap();
         assert_eq!(leftmost(&at_start), x_when_revealed,
                    "a caption that re-flows as it types has been laid out per frame");
+    }
+
+    /// A staggered reveal changes WHEN each word arrives, never where it
+    /// ends up: the words must flow the way the caption laid them out, not
+    /// stack one per line. The wipe is the oracle — it is known to keep the
+    /// layout, so once everything has landed the two must be pixel-alike.
+    #[test]
+    fn a_staggered_reveal_moves_each_word_and_keeps_the_layout() {
+        // Long enough to wrap, so "one unit per line" would be obvious.
+        let fixture = |text: &str, mode: &str, extra: &str| {
+            format!(
+                r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-00000000000D",
+            "name": "rise", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {{
+                "canvasWidth": 512, "canvasHeight": 256,
+                "backgroundColorHex": "000000",
+                "subtitleFontSize": 36, "subtitleColorHex": "FFFFFF",
+                "subtitleVerticalMargin": 30, "subtitleBackgroundOpacity": 0,
+                "subtitleLeftMargin": 10, "subtitleRightMargin": 10
+            }},
+            "layers": [
+                {{"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "captionText": "{text}",
+                 "captionStyle": {{"reveal":
+                    {{"by": "word", "mode": "{mode}"{extra}}}}},
+                 "keyframes": []}}
+            ]}}"#
+            )
+        };
+        const WRAPS: &str = "one two three four five six seven";
+        const RISE: &str = r#", "rise": 0.4"#;
+        let out = OwnedIoSurface::new_bgra(512, 256).unwrap();
+        // A low threshold on purpose: a word part-way through its arrival is
+        // dim, and the question is where it IS, not how solid.
+        let scan = |px: &[u8]| -> (Vec<usize>, Vec<usize>) {
+            let lit = |x: usize, y: usize| px[(y * 512 + x) * 4 + 1] > 40;
+            (
+                (0..256).filter(|y| (0..512).any(|x| lit(x, *y))).collect(),
+                (0..512).filter(|x| (0..256).any(|y| lit(*x, y))).collect(),
+            )
+        };
+        let mut render = |json: String, time: f64| {
+            let meta = ProjectMetadata::from_json(&json).expect("reveal fixture");
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            engine.render(time, out.raw(), 512, 256).expect("render");
+            scan(&out.read_pixels().unwrap())
+        };
+
+        // How many separate lines of text the ink falls on.
+        let lines =
+            |rows: &[usize]| rows.windows(2).filter(|pair| pair[1] > pair[0] + 1).count() + 1;
+        let (wipe_rows, wipe_cols) = render(fixture(WRAPS, "wipe", ""), 3.99);
+        let (rise_rows, rise_cols) = render(fixture(WRAPS, "rise", RISE), 3.99);
+        assert_eq!(lines(&wipe_rows), 2, "the fixture wraps onto two lines");
+        assert_eq!(
+            lines(&rise_rows),
+            2,
+            "so does the stagger — the words flow as laid out, not one per line",
+        );
+        // Not pixel-exact: cropping per word instead of per line moves the
+        // seams, which shifts the odd edge pixel by a level or two. The
+        // bounding box is what says the words landed where they belong.
+        let box_of = |rows: &[usize], cols: &[usize]| {
+            (
+                rows[0],
+                *rows.last().unwrap(),
+                cols[0],
+                *cols.last().unwrap(),
+            )
+        };
+        let wipe_box = box_of(&wipe_rows, &wipe_cols);
+        let rise_box = box_of(&rise_rows, &rise_cols);
+        let near = |a: usize, b: usize| a.abs_diff(b) <= 1;
+        assert!(
+            near(rise_box.0, wipe_box.0)
+                && near(rise_box.1, wipe_box.1)
+                && near(rise_box.2, wipe_box.2)
+                && near(rise_box.3, wipe_box.3),
+            "once every word has landed a stagger fills the same place as a \
+             wipe: {rise_box:?} against {wipe_box:?}",
+        );
+        assert!(
+            rise_cols.len().abs_diff(wipe_cols.len()) <= 2,
+            "and lights the same columns — words that piled up would leave gaps",
+        );
+
+        // Mid-flight, a rising word sits below where it lands. Measured
+        // against a FADE at the same instant, not against the finished
+        // frame: same word, same dimness, so the only thing that can move
+        // the ink is the rise itself.
+        let alone = |mode: &str, extra: &str| render(fixture("one", mode, extra), 1.6);
+        let (rising, rising_cols) = alone("rise", RISE);
+        let (fading, fading_cols) = alone("fade", "");
+        assert!(
+            !rising.is_empty() && !fading.is_empty(),
+            "the word is arriving"
+        );
+        assert!(
+            rising[0] > fading[0] + 2,
+            "a word on its way up sits LOWER than one merely fading in: {} \
+             against {}",
+            rising[0],
+            fading[0],
+        );
+        assert_eq!(
+            rising_cols, fading_cols,
+            "and does not drift sideways doing it"
+        );
+
+        // And a fade is exactly a rise that travels nowhere.
+        let (still, _) = render(fixture("one", "rise", r#", "rise": 0"#), 1.6);
+        assert_eq!(still, fading, "rise 0 is a fade");
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as
