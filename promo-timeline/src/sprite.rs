@@ -94,16 +94,43 @@ pub fn frame_at(
 /// - The new resource must be of the layer's OWN kind. Anything else is
 ///   ignored rather than drawn, because an image layer handed a video has no
 ///   sensible thing to do with it.
+/// The resource `id` names, if this layer could actually swap to it —
+/// it exists and is the kind this layer draws.
+///
+/// The one rule, so `layer_resource_id` and `transition::active_swap` cannot
+/// answer differently about the same keyframe.
+pub fn swappable<'a>(
+    layer: &ProjectLayer,
+    id: &str,
+    resources: &'a [ProjectResource],
+) -> Option<&'a ProjectResource> {
+    let wanted = swappable_kind(layer)?;
+    resources.iter().find(|r| r.id == id && r.kind == wanted)
+}
+
+/// The resource kind this layer's swaps must name, or `None` for a kind that
+/// does not swap at all.
+pub fn swappable_kind(layer: &ProjectLayer) -> Option<promo_model::ProjectResourceKind> {
+    match layer.kind {
+        promo_model::ProjectLayerKind::Image => Some(promo_model::ProjectResourceKind::Image),
+        promo_model::ProjectLayerKind::Caption => Some(promo_model::ProjectResourceKind::Caption),
+        promo_model::ProjectLayerKind::Drawing => Some(promo_model::ProjectResourceKind::Drawing),
+        _ => None,
+    }
+}
+
 pub fn layer_resource_id<'a>(
     layer: &'a ProjectLayer,
     time: f64,
     resources: &[ProjectResource],
 ) -> Option<&'a str> {
     let base = layer.resource_id.as_deref();
-    let wanted = match layer.kind {
-        promo_model::ProjectLayerKind::Image => promo_model::ProjectResourceKind::Image,
-        promo_model::ProjectLayerKind::Caption => promo_model::ProjectResourceKind::Caption,
-        _ => return base,
+    // A drawing swaps like an image: the vector document is just as
+    // replaceable as a bitmap. Video is deliberately absent — a mid-layer
+    // swap there is a playlist, and it would have to answer where the second
+    // clip starts and what happens to its audio.
+    let Some(wanted) = swappable_kind(layer) else {
+        return base;
     };
     let local = crate::layer_local_time(layer, time);
     let mut swaps: Vec<&promo_model::ProjectLayerKeyframe> = layer

@@ -758,6 +758,7 @@ impl PreviewEngine {
     fn caption_quad(
         &mut self,
         layer: &ProjectLayer,
+        showing: Option<&str>,
         settings: &promo_model::CompositionSettings,
         canvas: Size,
         time: f64,
@@ -768,12 +769,17 @@ impl PreviewEngine {
         // resource; reading only the layer left those invisible here, which is
         // why the host once composited its own copy on top — and animated
         // captions rendered twice.
-        let text_owned = self.meta.caption_text_for(layer)?;
+        //
+        // `showing` is WHICH caption resource, resolved for this instant: a
+        // keyframe can swap a caption layer's words the way it swaps an
+        // image, and reading `layer.resource_id` here meant every swap after
+        // the first rendered the original text.
+        let text_owned = self.meta.caption_text_showing(layer, showing)?;
         let text = text_owned.trim();
         if text.is_empty() {
             return None;
         }
-        let style_source = self.meta.caption_style_for(layer);
+        let style_source = self.meta.caption_style_showing(layer, showing);
         let mut style = caption_style(style_source.as_ref(), settings);
         // A caption's keyframes change its SIZE and MARGINS (the app's
         // mapping), so unlike a frame the raster does vary with the playhead —
@@ -916,12 +922,21 @@ impl PreviewEngine {
     fn drawing_quad(
         &mut self,
         layer: &ProjectLayer,
+        showing: Option<&str>,
         settings: &promo_model::CompositionSettings,
         canvas: Size,
         time: f64,
         pinned: &[u64],
     ) -> Option<(SceneQuad, u64)> {
-        let doc = self.resource_for(layer)?.drawing.as_ref()?;
+        // Which document, for this instant: a drawing swaps like an image.
+        let doc = self
+            .meta
+            .resources
+            .as_ref()?
+            .iter()
+            .find(|r| Some(r.id.as_str()) == showing)?
+            .drawing
+            .as_ref()?;
         let shapes = vector_shapes(doc, &settings);
         if shapes.is_empty() {
             return None;
@@ -1059,8 +1074,28 @@ impl PreviewEngine {
             if layer.kind == ProjectLayerKind::Caption {
                 // Text is drawn by the core now (promo-text), not by a host
                 // overlay — so a headless render keeps its captions.
-                if let Some((mut quad, id)) = self.caption_quad(layer, &settings, canvas, time, &used) {
+                let all = self.meta.resources.clone().unwrap_or_default();
+                let showing = tl::layer_resource_id(layer, time, &all).map(str::to_string);
+                let swap = tl::transition::active_swap(layer, time, &all);
+                // Words being replaced are still on screen while the new ones
+                // arrive — the same two-quad rule the media path uses.
+                if let Some(swap) = swap.as_ref() {
+                    if let Some((mut quad, id)) = self.caption_quad(
+                        layer, swap.previous.as_deref(), &settings, canvas, time, &used)
+                    {
+                        quad.opacity = tl::layer_opacity(layer, time) as f32;
+                        apply_transition(&mut quad, layer, time, canvas);
+                        quads.push(quad);
+                        used.push(id);
+                    }
+                }
+                if let Some((mut quad, id)) = self.caption_quad(
+                    layer, showing.as_deref(), &settings, canvas, time, &used)
+                {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    if let Some(swap) = swap.as_ref() {
+                        apply_effect(&mut quad, swap.effect, canvas);
+                    }
                     apply_transition(&mut quad, layer, time, canvas);
                     quads.push(quad);
                     used.push(id);
@@ -1105,10 +1140,29 @@ impl PreviewEngine {
             // silently missing, while `inspect` still called the layer
             // renderable. One producer, like captions.
             if is_drawing {
-                if let Some((quad, id)) = self.drawing_quad(layer, &settings, canvas, time, &used) {
+                let all = self.meta.resources.clone().unwrap_or_default();
+                let showing = tl::layer_resource_id(layer, time, &all).map(str::to_string);
+                let swap = tl::transition::active_swap(layer, time, &all);
+                if let Some(swap) = swap.as_ref() {
+                    if let Some((mut quad, id)) = self.drawing_quad(
+                        layer, swap.previous.as_deref(), &settings, canvas, time, &used)
+                    {
+                        quad.rotation_deg = tl::layer_rotation(layer, time);
+                        quad.opacity = tl::layer_opacity(layer, time) as f32;
+                        apply_transition(&mut quad, layer, time, canvas);
+                        quads.push(quad);
+                        used.push(id);
+                    }
+                }
+                if let Some((quad, id)) = self.drawing_quad(
+                    layer, showing.as_deref(), &settings, canvas, time, &used)
+                {
                     let mut quad = quad;
                     quad.rotation_deg = tl::layer_rotation(layer, time);
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    if let Some(swap) = swap.as_ref() {
+                        apply_effect(&mut quad, swap.effect, canvas);
+                    }
                     apply_transition(&mut quad, layer, time, canvas);
                     quads.push(quad);
                     used.push(id);
@@ -1123,7 +1177,7 @@ impl PreviewEngine {
             let showing = tl::layer_resource_id(layer, time, &resources)
                 .unwrap_or_default()
                 .to_string();
-            let swap = tl::transition::active_swap(layer, time);
+            let swap = tl::transition::active_swap(layer, time, &resources);
             if let Some(swap) = swap.as_ref() {
                 // The outgoing material, whole, underneath — a dissolve or a
                 // wipe needs both on screen at once, which is exactly what a
@@ -1823,6 +1877,67 @@ mod tests {
         assert_eq!(stats.misses, 1, "render decoded nothing new");
         assert_eq!(stats.hits, 2, "prefetch re-check + render hit");
         assert_eq!(state.lock().unwrap().requests.len(), 1);
+    }
+
+    /// A caption layer can have its WORDS replaced by a keyframe, exactly as
+    /// an image layer has its picture replaced — and until now the renderer
+    /// read the layer's own resource and showed the first caption forever.
+    /// With a transition, the outgoing words are still there while the new
+    /// ones arrive.
+    #[test]
+    fn a_caption_swap_replaces_the_words_and_can_transition() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-00000000000B",
+            "name": "words", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [], "minReaderVersion": 9,
+            "compositionSettings": {
+                "canvasWidth": 256, "canvasHeight": 128,
+                "backgroundColorHex": "000000",
+                "subtitleFontSize": 40, "subtitleVerticalMargin": 30,
+                "subtitleLeftMargin": 10, "subtitleRightMargin": 10
+            },
+            "resources": [
+                {"id": "ONE", "kind": "caption", "filename": "", "displayName": "one",
+                 "addedAt": 0, "captionText": "FIRST",
+                 "captionStyle": {"textColorHex": "FF0000"}},
+                {"id": "TWO", "kind": "caption", "filename": "", "displayName": "two",
+                 "addedAt": 0, "captionText": "SECOND",
+                 "captionStyle": {"textColorHex": "0000FF"}}
+            ],
+            "layers": [
+                {"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "ONE",
+                 "keyframes": [
+                   {"id": "K1", "time": 4, "transitionDuration": 0, "resourceID": "TWO",
+                    "transition": {"kind": "wipe", "from": "left", "duration": 2}}
+                 ]}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("caption swap fixture");
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(256, 128).unwrap();
+        let mut counts = |time: f64| -> (usize, usize) {
+            engine.render(time, out.raw(), 256, 128).expect("render");
+            let px = out.read_pixels().unwrap();
+            // BGRA: the first caption is red, the second blue.
+            let red = px.chunks_exact(4).filter(|p| p[2] > 100 && p[0] < 80).count();
+            let blue = px.chunks_exact(4).filter(|p| p[0] > 100 && p[2] < 80).count();
+            (red, blue)
+        };
+
+        let (before_red, before_blue) = counts(1.0);
+        assert!(before_red > 20, "the first caption renders ({before_red} px)");
+        assert_eq!(before_blue, 0, "and only it");
+
+        // Half way through the wipe: both sets of words on screen.
+        let (mid_red, mid_blue) = counts(5.0);
+        assert!(mid_red > 0, "the outgoing words are still there ({mid_red})");
+        assert!(mid_blue > 0, "while the new ones arrive ({mid_blue})");
+
+        let (after_red, after_blue) = counts(8.0);
+        assert!(after_blue > 20, "the second caption renders ({after_blue} px)");
+        assert_eq!(after_red, 0, "and the first is gone — the swap was ignored before");
     }
 
     #[test]

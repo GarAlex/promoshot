@@ -2005,7 +2005,17 @@ impl ProjectMetadata {
     /// Mirrors `RecordingProject.captionResource(for:)` — the id must match
     /// AND the resource must actually be a caption.
     fn caption_resource_for(&self, layer: &ProjectLayer) -> Option<&ProjectResource> {
-        let id = layer.resource_id.as_deref()?;
+        self.caption_resource_named(layer.resource_id.as_deref())
+    }
+
+    /// The caption resource with this id, if it is one.
+    ///
+    /// Separate from the layer so a caller that already knows WHICH resource
+    /// is showing — a keyframe swap resolves that per time — can ask for it
+    /// by name. Reading the layer's own id is only ever right before the
+    /// first swap.
+    fn caption_resource_named(&self, id: Option<&str>) -> Option<&ProjectResource> {
+        let id = id?;
         self.resources
             .as_ref()?
             .iter()
@@ -2018,14 +2028,33 @@ impl ProjectMetadata {
     /// nothing for them — which is how the preview once came to composite a
     /// second, host-drawn copy on top of its own.
     pub fn caption_text_for(&self, layer: &ProjectLayer) -> Option<String> {
-        self.caption_resource_for(layer)
+        self.caption_text_showing(layer, layer.resource_id.as_deref())
+    }
+
+    /// The text of the caption resource `showing`, falling back to the
+    /// layer's own words — what `caption_text_for` does, for a caller that
+    /// resolved the swap itself.
+    pub fn caption_text_showing(
+        &self,
+        layer: &ProjectLayer,
+        showing: Option<&str>,
+    ) -> Option<String> {
+        self.caption_resource_named(showing)
             .and_then(|resource| resource.caption_text.clone())
             .or_else(|| layer.caption_text.clone())
     }
 
     /// Caption style, same precedence as [`caption_text_for`](Self::caption_text_for).
     pub fn caption_style_for(&self, layer: &ProjectLayer) -> Option<SubtitleStyle> {
-        self.caption_resource_for(layer)
+        self.caption_style_showing(layer, layer.resource_id.as_deref())
+    }
+
+    pub fn caption_style_showing(
+        &self,
+        layer: &ProjectLayer,
+        showing: Option<&str>,
+    ) -> Option<SubtitleStyle> {
+        self.caption_resource_named(showing)
             .and_then(|resource| resource.caption_style.clone())
             .or_else(|| layer.caption_style.clone())
     }

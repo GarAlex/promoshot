@@ -158,18 +158,33 @@ pub struct Swap {
 }
 
 /// The swap in force at `time`, if it is still arriving.
-pub fn active_swap(layer: &ProjectLayer, time: f64) -> Option<Swap> {
+///
+/// Takes `resources` for the same reason [`crate::sprite::layer_resource_id`]
+/// does: a swap whose target has been deleted, or points at the wrong kind,
+/// is SKIPPED there. Resolving the pair by different rules is how the two
+/// come to disagree — and when they do the engine draws the surviving image
+/// twice, one copy ramping up over the other, which reads as a brightness
+/// pulse where a crossfade should be.
+pub fn active_swap(
+    layer: &ProjectLayer,
+    time: f64,
+    resources: &[promo_model::ProjectResource],
+) -> Option<Swap> {
     let local = crate::layer_local_time(layer, time);
+    let usable = |keyframe: &promo_model::ProjectLayerKeyframe| {
+        keyframe
+            .resource_id
+            .as_deref()
+            .and_then(|id| crate::sprite::swappable(layer, id, resources))
+            .is_some()
+    };
     let mut swaps: Vec<&promo_model::ProjectLayerKeyframe> = layer
         .keyframes
         .iter()
-        .filter(|k| k.resource_id.is_some())
+        .filter(|k| k.resource_id.is_some() && usable(k))
         .collect();
     swaps.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
 
-    // The swap in force is the last one at or before now — the same rule the
-    // resource resolver uses, so the pair can never disagree about which
-    // swap is current.
     let index = swaps.iter().rposition(|k| k.time <= local)?;
     let current = swaps[index];
     let transition = current.transition.as_ref().filter(|t| t.duration > 0.0)?;
@@ -178,12 +193,20 @@ pub fn active_swap(layer: &ProjectLayer, time: f64) -> Option<Swap> {
     if progress >= 1.0 {
         return None;
     }
-    // What it is replacing: the swap before it, else the layer's own.
+    // What it is replacing: the swap before it, else the layer's own. Also
+    // filtered, so a deleted predecessor falls back the way the resolver
+    // does rather than naming a resource nothing can draw.
     let previous = if index == 0 {
         layer.resource_id.clone()
     } else {
         swaps[index - 1].resource_id.clone()
     };
+    let previous = previous.filter(|id| crate::sprite::swappable(layer, id, resources).is_some());
+    // Nothing to fade FROM, and nothing to fade INTO that is not already
+    // showing: without a distinct predecessor this is a cut.
+    if previous.as_deref() == current.resource_id.as_deref() {
+        return None;
+    }
     Some(Swap {
         previous,
         effect: shape(transition, progress),
@@ -255,6 +278,48 @@ mod tests {
                  "startTime":2,"duration":10,"keyframes":[]{body}}}"#
         ))
         .expect("layer")
+    }
+
+    fn resources() -> Vec<promo_model::ProjectResource> {
+        serde_json::from_str(
+            r#"[{"id":"A","kind":"image","filename":"a.png","displayName":"a","addedAt":0},
+                {"id":"B","kind":"image","filename":"b.png","displayName":"b","addedAt":0}]"#,
+        )
+        .expect("resources")
+    }
+
+    /// The swap resolver SKIPS a keyframe whose target has been deleted or is
+    /// the wrong kind. If the transition does not skip it too, the two answer
+    /// differently: the engine ends up drawing the surviving image twice, one
+    /// copy ramping over the other, which reads as a brightness pulse where a
+    /// crossfade should be.
+    #[test]
+    fn a_swap_to_a_resource_that_is_gone_is_not_a_transition() {
+        let with_target = serde_json::from_str::<ProjectLayer>(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":10,"resourceID":"A",
+                "keyframes":[{"id":"K","time":2,"transitionDuration":0,"resourceID":"B",
+                  "transition":{"kind":"wipe","duration":2}}]}"#,
+        )
+        .expect("layer");
+        assert!(active_swap(&with_target, 3.0, &resources()).is_some(), "both exist");
+
+        // The same project after someone deleted the second image.
+        let only_a: Vec<promo_model::ProjectResource> =
+            resources().into_iter().filter(|r| r.id == "A").collect();
+        assert!(
+            active_swap(&with_target, 3.0, &only_a).is_none(),
+            "the resolver falls back to A here, so there is nothing to cross-fade"
+        );
+
+        // And a swap naming a resource of the wrong kind is ignored the same
+        // way the resolver ignores it.
+        let wrong_kind: Vec<promo_model::ProjectResource> = serde_json::from_str(
+            r#"[{"id":"A","kind":"image","filename":"a.png","displayName":"a","addedAt":0},
+                {"id":"B","kind":"audio","filename":"b.m4a","displayName":"b","addedAt":0}]"#,
+        )
+        .expect("resources");
+        assert!(active_swap(&with_target, 3.0, &wrong_kind).is_none());
     }
 
     #[test]
