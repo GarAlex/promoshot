@@ -77,6 +77,28 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    // A shutter is a fraction of one frame interval, open (0, 1]. Zero or
+    // negative does nothing, and more than 1 is a shutter open longer than
+    // the frame it exposes — the engine clamps it, so say so here rather
+    // than let two projects with different numbers render the same.
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        if let Some(blur) = &layer.motion_blur {
+            if blur.shutter <= 0.0 {
+                out.push(format!(
+                    "layer \"{}\": motionBlur shutter {} does nothing — use 0.5 \
+                     for the classic 180 degrees, or drop the field",
+                    layer.name, blur.shutter
+                ));
+            } else if blur.shutter > 1.0 {
+                out.push(format!(
+                    "layer \"{}\": motionBlur shutter {} is longer than the frame \
+                     — the renderer clamps it to 1 (360 degrees)",
+                    layer.name, blur.shutter
+                ));
+            }
+        }
+    }
+
     // A reveal states its pace one way or the other. Both is not an error —
     // the total wins — but it is certainly not what the author meant.
     let mut reveal_conflict = |where_: String, reveal: &promo_model::TextReveal| {
@@ -250,6 +272,34 @@ mod tests {
         assert!(
             warned(r#"{"by":"word","mode":"rise","unitSeconds":0.3,"rise":1.5}"#).is_empty(),
             "a rise that states both is exactly what those fields are for",
+        );
+    }
+
+    /// A shutter outside (0, 1] is either a no-op or quietly clamped —
+    /// both worth a sentence, neither worth guessing at.
+    #[test]
+    fn a_useless_or_clamped_shutter_is_named() {
+        let clip = |blur: &str| {
+            format!(
+                r#"{{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "motionBlur":{blur},"keyframes":[]}}"#
+            )
+        };
+        let warned = |blur: &str| {
+            warnings(&project(&clip(blur), r#","minReaderVersion":10"#))
+        };
+        assert!(warned(r#"{"shutter":0}"#)
+            .iter().any(|w| w.contains("does nothing")));
+        assert!(warned(r#"{"shutter":1.5}"#)
+            .iter().any(|w| w.contains("clamps")));
+        assert!(warned(r#"{"shutter":0.5}"#).is_empty(),
+                "the 180-degree default is exactly right");
+        assert!(
+            warnings(&project(&clip(r#"{"shutter":0.5}"#), ""))
+                .iter()
+                .any(|w| w.contains("minReaderVersion")),
+            "and an undeclared one is named, because a save would destroy it",
         );
     }
 }

@@ -339,6 +339,24 @@ impl TextReveal {
     }
 }
 
+/// A per-layer camera shutter.
+///
+/// `shutter` is the fraction of one frame interval the shutter stays open —
+/// 0.5 is the classic 180 degrees. Frame-relative rather than seconds,
+/// because that is the number that keeps the LOOK stable against judder:
+/// a cinematographer changing frame rate keeps the angle, not the exposure
+/// time. The engine samples the layer's resolved GEOMETRY across that
+/// window and averages; the source pixels are decoded once, at the frame's
+/// own time. That is a choice, not a shortcut — this blurs the motion the
+/// EDITOR added (moves, zooms, pans, rotations, rising words), which is
+/// what reads as "rendered" without it. Footage carries its own camera
+/// blur already, and re-deriving it would mean N decodes per output frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionBlur {
+    pub shutter: f64,
+}
+
 /// How a layer ENTERS or LEAVES.
 ///
 /// A wipe reveals the layer from an edge without moving it; a slide brings it
@@ -1430,6 +1448,13 @@ pub struct ProjectLayer {
     pub transition_in: Option<LayerTransition>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub transition_out: Option<LayerTransition>,
+    /// This layer's own camera shutter. Absent means sharp — nothing
+    /// inherits it, and a layer added tomorrow stays sharp until someone
+    /// asks. Per LAYER by design: a composite never shared one exposure,
+    /// and a caption that smears over sharp footage is the usual mistake,
+    /// not the usual intent.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub motion_blur: Option<MotionBlur>,
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2054,6 +2079,12 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 10 is a per-layer motion blur. Dropped by an older reader's
+        // save, the shot silently goes sharp — the same destruction test
+        // every rung on this ladder passed.
+        if layers.iter().any(|l| l.motion_blur.is_some()) {
+            return 10;
+        }
         // A text reveal rides the same rung: it landed in the same
         // unreleased batch as transitions, so no reader has ever understood
         // 9 without it — and dropped, a typewriter becomes a caption that
@@ -2469,6 +2500,18 @@ mod placement_model_tests {
             meta(&layer(r#","viewport":[0,0,1,1],"placement":{"height":540,"anchor":"center"}"#))
                 .minimum_reader_version(),
             7
+        );
+
+        // Motion blur is a LAYER field, not a keyframe one, and claims 10:
+        // dropped by an older reader's save, the shot silently goes sharp.
+        assert_eq!(
+            meta(
+                r#""layers":[{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "motionBlur":{"shutter":0.5},"keyframes":[]}]"#
+            )
+            .minimum_reader_version(),
+            10
         );
     }
 

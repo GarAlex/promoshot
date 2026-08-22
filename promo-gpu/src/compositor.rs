@@ -409,6 +409,24 @@ pub struct Compositor {
     /// `last_submission` for the caller to wait on.
     defer_completion: bool,
     last_submission: Option<wgpu::SubmissionIndex>,
+    /// The same shader aimed at an Rgba16Float target with ADDITIVE blending
+    /// — the accumulator half of motion blur. Averaging N samples by
+    /// repeated 8-bit source-over would re-quantise the running total every
+    /// pass; adding each sample once into 16-bit float and resolving at the
+    /// end quantises exactly once.
+    accum_pipeline: wgpu::RenderPipeline,
+    /// Lazily sized to the output: `scratch` receives each sub-sample's
+    /// ordinary compose, `accum` sums them.
+    accum_targets: Option<AccumTargets>,
+}
+
+struct AccumTargets {
+    width: u32,
+    height: u32,
+    scratch: InputTexture,
+    scratch_tex: std::sync::Arc<wgpu::Texture>,
+    accum: InputTexture,
+    accum_tex: std::sync::Arc<wgpu::Texture>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -532,6 +550,46 @@ impl Compositor {
             cache: None,
         });
 
+        let accum_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("compositor-accum"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba16Float,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("compositor"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -598,6 +656,8 @@ impl Compositor {
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             import_misses: 0,
             defer_completion: false,
+            accum_pipeline,
+            accum_targets: None,
             last_submission: None,
         })
     }
@@ -1059,6 +1119,190 @@ impl Compositor {
             .adopt_cached(ctx, output, scene.output_width, scene.output_height, true)?
             .1;
         self.compose_to_texture_borrowed(ctx, scene, textures, &texture)
+    }
+
+    fn ensure_accum_targets(&mut self, ctx: &GpuContext, width: u32, height: u32) {
+        if self
+            .accum_targets
+            .as_ref()
+            .is_some_and(|t| t.width == width && t.height == height)
+        {
+            return;
+        }
+        let make = |label: &str, format: wgpu::TextureFormat| {
+            let tex = std::sync::Arc::new(ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            }));
+            let input = InputTexture {
+                view: std::sync::Arc::new(tex.create_view(&Default::default())),
+                id: next_texture_id(),
+                _texture: tex.clone(),
+            };
+            (input, tex)
+        };
+        let (scratch, scratch_tex) = make("blur-scratch", wgpu::TextureFormat::Bgra8Unorm);
+        let (accum, accum_tex) = make("blur-accum", wgpu::TextureFormat::Rgba16Float);
+        self.accum_targets = Some(AccumTargets { width, height, scratch, scratch_tex, accum, accum_tex });
+    }
+
+    /// One fullscreen textured quad into `target` — the plumbing both halves
+    /// of the accumulator share. `weight` rides the quad's opacity, which the
+    /// shader multiplies into the premultiplied sample.
+    #[allow(clippy::too_many_arguments)]
+    fn fullscreen_source_pass(
+        &mut self,
+        ctx: &GpuContext,
+        source: InputTexture,
+        weight: f32,
+        target: &wgpu::TextureView,
+        additive: bool,
+        load: wgpu::LoadOp<wgpu::Color>,
+        width: u32,
+        height: u32,
+    ) {
+        let globals = GlobalsRaw {
+            fit: [1.0, 1.0, 0.0, 0.0],
+            output_size: [width as f32, height as f32, 0.0, 0.0],
+            grad: [0.0; 4],
+            grad_axis: [0.0; 4],
+            grad_at: [[0.0; 4]; 2],
+            grad_color: [[0.0; 4]; MAX_GRADIENT_STOPS],
+        };
+        ctx.queue
+            .write_buffer(&self.globals_buf, 0, as_bytes(&globals));
+        let raw = QuadRaw {
+            rect: [0.0, 0.0, width as f32, height as f32],
+            rot_radius_border: [1.0, 0.0, 0.0, 0.0],
+            border_color: [0.0; 4],
+            solid_color: [0.0; 4],
+            params: [weight, 1.0, 0.0, 0.0],
+            uv_rect: [0.0, 0.0, 1.0, 1.0],
+        };
+        self.ensure_quad_capacity(ctx, 1);
+        ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
+        let bind_id = self.bind_group_for(ctx, Some(&source), true);
+
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("blur-blend"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("blur-blend"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(if additive { &self.accum_pipeline } else { &self.pipeline });
+            pass.set_bind_group(0, &self.globals_bind, &[]);
+            let bind = self.binds.get(&bind_id).expect("bind group cached above");
+            pass.set_bind_group(1, bind, &[0u32]);
+            pass.draw(0..4, 0..1);
+        }
+        let index = ctx.queue.submit([encoder.finish()]);
+        if self.defer_completion {
+            self.last_submission = Some(index);
+        } else {
+            ctx.device.poll(wgpu::Maintain::Wait);
+            self.last_submission = None;
+        }
+    }
+
+    /// Motion blur, sample by sample: composes `scene` normally into an
+    /// internal scratch, then ADDS it into a 16-bit accumulator at
+    /// `1/sample_count`. The first sample clears the accumulator; after the
+    /// last, [`accumulate_resolve_to_texture`](Self::accumulate_resolve_to_texture)
+    /// writes the average out.
+    ///
+    /// Weighted this way — every sample at `1/N` into float, one resolve —
+    /// rather than a running source-over average, because the running form
+    /// re-quantises the total through 8 bits on every pass and bands.
+    pub fn accumulate_scene_to_texture_borrowed(
+        &mut self,
+        ctx: &GpuContext,
+        scene: &Scene,
+        textures: &[&InputTexture],
+        sample_index: usize,
+        sample_count: usize,
+    ) -> Result<(), GpuError> {
+        self.ensure_accum_targets(ctx, scene.output_width, scene.output_height);
+        let targets = self.accum_targets.as_ref().expect("ensured above");
+        let (scratch, scratch_tex) = (targets.scratch.clone(), targets.scratch_tex.clone());
+        let accum_view = targets.accum_tex.create_view(&Default::default());
+        self.compose_to_texture_borrowed(ctx, scene, textures, &scratch_tex)?;
+        let load = if sample_index == 0 {
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+        } else {
+            wgpu::LoadOp::Load
+        };
+        self.fullscreen_source_pass(
+            ctx,
+            scratch,
+            1.0 / sample_count.max(1) as f32,
+            &accum_view,
+            true,
+            load,
+            scene.output_width,
+            scene.output_height,
+        );
+        Ok(())
+    }
+
+    /// The accumulator's average, written to the real output. The summed
+    /// alpha is 1 (N samples at 1/N, each opaque), so source-over here is a
+    /// plain replace.
+    pub fn accumulate_resolve_to_texture(
+        &mut self,
+        ctx: &GpuContext,
+        output: &wgpu::Texture,
+        width: u32,
+        height: u32,
+    ) -> Result<(), GpuError> {
+        let accum = self
+            .accum_targets
+            .as_ref()
+            .ok_or_else(|| GpuError::Import("resolve with no accumulated samples".into()))?
+            .accum
+            .clone();
+        let view = output.create_view(&Default::default());
+        self.fullscreen_source_pass(
+            ctx,
+            accum,
+            1.0,
+            &view,
+            false,
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+            width,
+            height,
+        );
+        Ok(())
+    }
+
+    /// IOSurface-backed variant of the resolve (macOS/iOS).
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub fn accumulate_resolve_to_iosurface(
+        &mut self,
+        ctx: &GpuContext,
+        output: crate::iosurface::IOSurfaceRef,
+        width: u32,
+        height: u32,
+    ) -> Result<(), GpuError> {
+        let texture = self.adopt_cached(ctx, output, width, height, true)?.1;
+        self.accumulate_resolve_to_texture(ctx, &texture, width, height)
     }
 
     /// Cached IOSurface adoption for sampling. Repeat calls with the same

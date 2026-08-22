@@ -443,6 +443,7 @@ mod tests {
             fade_out: None,
             transition_in: None,
             transition_out: None,
+            motion_blur: None,
             start_time: start,
             duration,
             resource_id: None,

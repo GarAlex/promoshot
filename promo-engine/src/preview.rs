@@ -189,6 +189,26 @@ pub struct PreviewEngine {
     /// Vector rasterizer for drawing layers, built on first use — a project
     /// without drawings never pays for the pipeline.
     vector: Option<promo_gpu::vector::VectorRenderer>,
+    /// The sub-sample time a blurred layer's GEOMETRY resolves at, while a
+    /// motion-blur render walks the shutter. None outside that walk. Layers
+    /// without `motionBlur` ignore it entirely — that is what pins them
+    /// sharp — and source decode ALWAYS uses the frame's own time, so the
+    /// walk re-rasterises but never re-decodes.
+    blur_sample: Option<f64>,
+    /// Set for the second and later sub-builds of one render, so the scratch
+    /// (and the frames a just-submitted compose still samples) survives the
+    /// whole walk instead of dying at each sub-build.
+    retain_scratch: bool,
+    /// Scene builds since creation. The early-out's whole contract is
+    /// "a still frame pays one build, not a walk" — invisible in pixels
+    /// (the accumulator reproduces a still frame exactly), so the tests
+    /// read the cost instead.
+    builds: u64,
+    /// Key → id for scratch entries. Export mode skips the governed cache by
+    /// design (a monotonic clock never re-asks) — but a blur walk DOES
+    /// re-ask, N times, and without this memo each sub-build would decode
+    /// the same frame again.
+    scratch_key: HashMap<(String, i64, i32), u64>,
 }
 
 // The raw `user` pointer is owned by the host and promised valid for the
@@ -232,6 +252,10 @@ impl PreviewEngine {
             scratch: HashMap::new(),
             raster_scale: 1.0,
             vector: None,
+            blur_sample: None,
+            retain_scratch: false,
+            builds: 0,
+            scratch_key: HashMap::new(),
         })
     }
 
@@ -454,12 +478,18 @@ impl PreviewEngine {
             quantize(source_time),
             tier,
         );
-        if !transient {
-            if let Some(&id) = self.key_of.get(&key) {
-                self.governor.touch(id);
+        if transient {
+            // A blur walk asks for the same frame once per sub-build; the
+            // monotonic-clock argument for skipping the cache does not
+            // survive N sub-samples of one instant.
+            if let Some(&id) = self.scratch_key.get(&key) {
                 self.hits += 1;
                 return Some(id);
             }
+        } else if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some(id);
         }
 
         let c_id = CString::new(layer_id).ok()?;
@@ -497,6 +527,7 @@ impl PreviewEngine {
         };
         if transient {
             self.scratch.insert(id, entry);
+            self.scratch_key.insert(key, id);
             return Some(id);
         }
         for victim in self.governor.admit(id, width * height * 4, pinned) {
@@ -556,6 +587,101 @@ impl PreviewEngine {
         self.render_with_overlay(time, output, output_width, output_height, None)
     }
 
+    /// The widest shutter any visible blurred layer asks for, in seconds.
+    /// None when this instant needs no walk at all — the common case, and
+    /// the zero-cost one.
+    fn blur_shutter(&self, time: f64) -> Option<f64> {
+        let layers = self.meta.layers.as_deref()?;
+        let fps = self
+            .meta
+            .composition_settings
+            .fps
+            .filter(|f| *f > 0.0)
+            .unwrap_or(30.0);
+        let fraction = layers
+            .iter()
+            .filter(|l| tl::layer_is_visible(l, time))
+            .filter_map(|l| l.motion_blur.as_ref())
+            .map(|b| b.shutter.clamp(0.0, 1.0))
+            .fold(0.0f64, f64::max);
+        (fraction > 0.0).then_some(fraction / fps)
+    }
+
+    /// One sub-build of a blur walk: geometry at `sample`, identity at
+    /// `centre`, and the scratch retained so frames a submitted compose
+    /// still reads stay alive across the walk.
+    fn build_sub(
+        &mut self,
+        centre: f64,
+        sample: f64,
+        retain: bool,
+        output_width: u32,
+        output_height: u32,
+    ) -> Result<(Scene, Vec<u64>), GpuError> {
+        self.blur_sample = Some(sample);
+        self.retain_scratch = retain;
+        let out = self.build_scene(centre, output_width, output_height);
+        self.blur_sample = None;
+        self.retain_scratch = false;
+        out
+    }
+
+    /// The scenes one output frame needs: one, or a shutter's worth.
+    ///
+    /// The sample count is DERIVED, not authored: the shutter's two
+    /// endpoint scenes are built first, the furthest any blurred quad
+    /// travels between them is measured in output pixels, and the walk gets
+    /// a sample roughly every two. The author has no way to know that
+    /// number — it changes with the canvas, the output size and the move —
+    /// which is the placement lesson again. Too few samples is not "less
+    /// blur", it is N distinct ghosts.
+    fn build_scenes(
+        &mut self,
+        time: f64,
+        output_width: u32,
+        output_height: u32,
+    ) -> Result<Vec<(Scene, Vec<u64>)>, GpuError> {
+        let Some(shutter) = self.blur_shutter(time) else {
+            return Ok(vec![self.build_scene(time, output_width, output_height)?]);
+        };
+        // Centred on the frame, the way a renderer's -0.5 shutter offset
+        // is: the sharp position stays where a sharp frame would put it.
+        let start = time - shutter / 2.0;
+        let end = time + shutter / 2.0;
+        let first = self.build_sub(time, start, false, output_width, output_height)?;
+        let last = self.build_sub(time, end, true, output_width, output_height)?;
+
+        let cap = if self.export_mode { 24 } else { 8 };
+        let count = match scene_displacement(&first.0, &last.0) {
+            // Nothing moves as far as a pixel: the average IS the sharp
+            // frame, so render that and pay nothing. Retain the scratch —
+            // the walk's frames are this frame's frames.
+            Some(d) if d < 0.75 => {
+                return Ok(vec![self.build_sub(
+                    time,
+                    time,
+                    true,
+                    output_width,
+                    output_height,
+                )?]);
+            }
+            Some(d) => (((d / 2.0).ceil() as usize) + 1).clamp(3, cap),
+            // The endpoint scenes disagree about how many quads exist (a
+            // reveal unit arrived mid-shutter): no measurement, so take the
+            // cap rather than guess low.
+            None => cap,
+        };
+
+        let mut scenes = Vec::with_capacity(count);
+        scenes.push(first);
+        for j in 1..count - 1 {
+            let tau = start + shutter * j as f64 / (count - 1) as f64;
+            scenes.push(self.build_sub(time, tau, true, output_width, output_height)?);
+        }
+        scenes.push(last);
+        Ok(scenes)
+    }
+
     /// Renders with a host-rasterized overlay (captions + watermark) composited
     /// last, over everything — the same final quad the export path adds, so a
     /// preview built this way matches the exported frame instead of
@@ -574,41 +700,60 @@ impl PreviewEngine {
         output_height: u32,
         overlay: Option<(IOSurfaceRef, u32, u32)>,
     ) -> Result<(), GpuError> {
-        let (mut scene, used) = self.build_scene(time, output_width, output_height)?;
+        let mut scenes = self.build_scenes(time, output_width, output_height)?;
         let canvas = Size::new(
             self.meta.composition_settings.canvas_width,
             self.meta.composition_settings.canvas_height,
         );
-        // Field-disjoint lookup (not the `cached_frame` helper): the closure
-        // may only borrow the two maps, because `self.compositor` is borrowed
-        // mutably for the compose below.
-        let mut textures: Vec<&InputTexture> = used
-            .iter()
-            .map(|id| {
-                let frame = self
-                    .cache
-                    .get(id)
-                    .or_else(|| self.scratch.get(id))
-                    .expect("scene refers to a frame the engine no longer holds");
-                &frame.frame.texture
-            })
-            .collect();
-
-        let overlay_texture;
-        if let Some((surface, width, height)) = overlay {
-            overlay_texture = self
-                .compositor
-                .import_iosurface_cached(self.ctx, surface, width, height)?;
-            scene.quads.push(SceneQuad {
-                texture: Some(textures.len()),
-                rect: [0.0, 0.0, canvas.width(), canvas.height()],
-                ..Default::default()
-            });
-            textures.push(&overlay_texture);
+        // The overlay rides EVERY sub-sample identically. The average of N
+        // identical overlays over N varying scenes is the overlay over the
+        // average — exact, so blur needs no special casing here.
+        let overlay_texture = match overlay {
+            Some((surface, width, height)) => Some(
+                self.compositor
+                    .import_iosurface_cached(self.ctx, surface, width, height)?,
+            ),
+            None => None,
+        };
+        if overlay_texture.is_some() {
+            for (scene, used) in &mut scenes {
+                scene.quads.push(SceneQuad {
+                    texture: Some(used.len()),
+                    rect: [0.0, 0.0, canvas.width(), canvas.height()],
+                    ..Default::default()
+                });
+            }
         }
 
+        let count = scenes.len();
+        for (index, (scene, used)) in scenes.iter().enumerate() {
+            // Field-disjoint lookup (not the `cached_frame` helper): the
+            // closure may only borrow the two maps, because
+            // `self.compositor` is borrowed mutably for the compose below.
+            let mut textures: Vec<&InputTexture> = used
+                .iter()
+                .map(|id| {
+                    let frame = self
+                        .cache
+                        .get(id)
+                        .or_else(|| self.scratch.get(id))
+                        .expect("scene refers to a frame the engine no longer holds");
+                    &frame.frame.texture
+                })
+                .collect();
+            if let Some(overlay) = overlay_texture.as_ref() {
+                textures.push(overlay);
+            }
+            if count == 1 {
+                return self
+                    .compositor
+                    .compose_to_iosurface_borrowed(self.ctx, scene, &textures, output);
+            }
+            self.compositor
+                .accumulate_scene_to_texture_borrowed(self.ctx, scene, &textures, index, count)?;
+        }
         self.compositor
-            .compose_to_iosurface_borrowed(self.ctx, &scene, &textures, output)
+            .accumulate_resolve_to_iosurface(self.ctx, output, output_width, output_height)
     }
 
     /// Renders into a wgpu texture — the portable path, and the one a Rust
@@ -621,21 +766,31 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(), GpuError> {
-        let (scene, used) = self.build_scene(time, output_width, output_height)?;
-        // Field-disjoint lookup, as in `render_with_overlay`.
-        let textures: Vec<&InputTexture> = used
-            .iter()
-            .map(|id| {
-                let frame = self
-                    .cache
-                    .get(id)
-                    .or_else(|| self.scratch.get(id))
-                    .expect("scene refers to a frame the engine no longer holds");
-                &frame.frame.texture
-            })
-            .collect();
+        let scenes = self.build_scenes(time, output_width, output_height)?;
+        let count = scenes.len();
+        for (index, (scene, used)) in scenes.iter().enumerate() {
+            // Field-disjoint lookup, as in `render_with_overlay`.
+            let textures: Vec<&InputTexture> = used
+                .iter()
+                .map(|id| {
+                    let frame = self
+                        .cache
+                        .get(id)
+                        .or_else(|| self.scratch.get(id))
+                        .expect("scene refers to a frame the engine no longer holds");
+                    &frame.frame.texture
+                })
+                .collect();
+            if count == 1 {
+                return self
+                    .compositor
+                    .compose_to_texture_borrowed(self.ctx, scene, &textures, output);
+            }
+            self.compositor
+                .accumulate_scene_to_texture_borrowed(self.ctx, scene, &textures, index, count)?;
+        }
         self.compositor
-            .compose_to_texture_borrowed(self.ctx, &scene, &textures, output)
+            .accumulate_resolve_to_texture(self.ctx, output, output_width, output_height)
     }
 
     /// Rasterizes a caption layer and returns its quad plus the cache id of
@@ -1098,7 +1253,14 @@ impl PreviewEngine {
         // deferred-fence compose may still have the GPU sampling them after
         // render returns, and wgpu keeps submitted resources alive only once
         // they are submitted — which the previous render has done by now.
-        self.scratch.clear();
+        // A motion-blur walk is the exception: its sub-builds are one
+        // render, and the frames its earlier composes reference must live
+        // until the walk resolves.
+        self.builds += 1;
+        if !self.retain_scratch {
+            self.scratch.clear();
+            self.scratch_key.clear();
+        }
         let settings = self.meta.composition_settings.clone();
         let canvas = Size::new(settings.canvas_width, settings.canvas_height);
 
@@ -1153,12 +1315,23 @@ impl PreviewEngine {
             if !tl::layer_is_visible(layer, time) {
                 continue;
             }
+            // Motion blur: a blurred layer's GEOMETRY resolves at the walk's
+            // sub-sample; everything deciding IDENTITY — which resource
+            // shows, which source frame decodes, whether the layer is here
+            // at all — stays on the frame's own clock. That split is the
+            // whole feature: the editor's motion smears, a cut inside the
+            // shutter stays a cut, and no frame decodes twice.
+            let centre = time;
+            let time = match (&layer.motion_blur, self.blur_sample) {
+                (Some(_), Some(sample)) => sample,
+                _ => centre,
+            };
             if layer.kind == ProjectLayerKind::Caption {
                 // Text is drawn by the core now (promo-text), not by a host
                 // overlay — so a headless render keeps its captions.
                 let all = self.meta.resources.clone().unwrap_or_default();
-                let showing = tl::layer_resource_id(layer, time, &all).map(str::to_string);
-                let swap = tl::transition::active_swap(layer, time, &all);
+                let showing = tl::layer_resource_id(layer, centre, &all).map(str::to_string);
+                let swap = tl::transition::active_swap(layer, centre, &all);
                 // Words being replaced are still on screen while the new ones
                 // arrive — the same two-quad rule the media path uses.
                 if let Some(swap) = swap.as_ref() {
@@ -1242,7 +1415,7 @@ impl PreviewEngine {
             };
 
             let source_time = if layer.kind == ProjectLayerKind::Video {
-                let local = tl::layer_local_time(layer, time);
+                let local = tl::layer_local_time(layer, centre);
                 match self.resource_for(layer) {
                     Some(res) => {
                         // A layer naming a cut plays that sub-range; the
@@ -1261,7 +1434,9 @@ impl PreviewEngine {
                 // Animated-tilt device frame: the baked bitmap varies with
                 // time, so request per-time (the provider re-bakes with the
                 // interpolated tilt; the cache keys per quantized time).
-                time
+                // The frame's own time even under blur: the bake is source
+                // pixels, and source pixels decode once.
+                centre
             } else {
                 -1.0
             };
@@ -1274,8 +1449,8 @@ impl PreviewEngine {
             // renderable. One producer, like captions.
             if is_drawing {
                 let all = self.meta.resources.clone().unwrap_or_default();
-                let showing = tl::layer_resource_id(layer, time, &all).map(str::to_string);
-                let swap = tl::transition::active_swap(layer, time, &all);
+                let showing = tl::layer_resource_id(layer, centre, &all).map(str::to_string);
+                let swap = tl::transition::active_swap(layer, centre, &all);
                 if let Some(swap) = swap.as_ref() {
                     if let Some((mut quad, id)) = self.drawing_quad(
                         layer, swap.previous.as_deref(), &settings, canvas, time, &used)
@@ -1304,14 +1479,14 @@ impl PreviewEngine {
                 continue;
             }
 
-            let tier = self.tier_for(layer, time);
+            let tier = self.tier_for(layer, centre);
             // What this layer shows right now — its own resource, unless a
             // keyframe has swapped it.
             let resources = self.meta.resources.clone().unwrap_or_default();
-            let showing = tl::layer_resource_id(layer, time, &resources)
+            let showing = tl::layer_resource_id(layer, centre, &resources)
                 .unwrap_or_default()
                 .to_string();
-            let swap = tl::transition::active_swap(layer, time, &resources);
+            let swap = tl::transition::active_swap(layer, centre, &resources);
             if let Some(swap) = swap.as_ref() {
                 // The outgoing material, whole, underneath — a dissolve or a
                 // wipe needs both on screen at once, which is exactly what a
@@ -1492,6 +1667,56 @@ fn drawing_scene_quad(rect: &promo_model::Rect) -> SceneQuad {
 /// Same rule the transitions use: the picture must stay where it is while a
 /// piece of it is shown, so the drawn rect shrinks by exactly the fraction
 /// the texture window does.
+/// The furthest any quad travels between two scenes, in OUTPUT pixels —
+/// what decides how many samples a shutter needs. Corners, not origins
+/// (rotation and scale move corners while the centre sits still), plus the
+/// content shift a `uv_rect` pan produces inside a static rect. None when
+/// the scenes disagree about how many quads exist.
+fn scene_displacement(a: &Scene, b: &Scene) -> Option<f64> {
+    if a.quads.len() != b.quads.len() {
+        return None;
+    }
+    let scale = if a.canvas_width > 0.0 && a.canvas_height > 0.0 {
+        (a.output_width as f64 / a.canvas_width)
+            .min(a.output_height as f64 / a.canvas_height)
+    } else {
+        1.0
+    };
+    let mut max_d: f64 = 0.0;
+    for (qa, qb) in a.quads.iter().zip(&b.quads) {
+        let corners = |q: &SceneQuad| -> [[f64; 2]; 4] {
+            let [x, y, w, h] = q.rect;
+            let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+            let (sin, cos) = q.rotation_deg.to_radians().sin_cos();
+            let rot = |dx: f64, dy: f64| {
+                [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]
+            };
+            [
+                rot(-w / 2.0, -h / 2.0),
+                rot(w / 2.0, -h / 2.0),
+                rot(-w / 2.0, h / 2.0),
+                rot(w / 2.0, h / 2.0),
+            ]
+        };
+        for (ca, cb) in corners(qa).iter().zip(&corners(qb)) {
+            let d = ((ca[0] - cb[0]).powi(2) + (ca[1] - cb[1]).powi(2)).sqrt();
+            max_d = max_d.max(d * scale);
+        }
+        // A pan inside the window: the rect holds still while the texture
+        // slides under it. Screen speed = uv shift over window width times
+        // the rect's on-screen size.
+        let [ua, va, uwa, vha] = qa.uv_rect;
+        let [ub, vb, uwb, vhb] = qb.uv_rect;
+        if uwa > 0.0 && vha > 0.0 {
+            let du = ((ua - ub).abs() + (uwa - uwb).abs()) as f64 / uwa as f64;
+            let dv = ((va - vb).abs() + (vha - vhb).abs()) as f64 / vha as f64;
+            max_d = max_d.max(du * qa.rect[2] * scale);
+            max_d = max_d.max(dv * qa.rect[3] * scale);
+        }
+    }
+    Some(max_d)
+}
+
 fn crop_to_band(quad: &mut SceneQuad, uv: [f64; 4]) {
     let [x, y, w, h] = quad.rect;
     quad.rect = [
@@ -2211,6 +2436,174 @@ mod tests {
         // And a fade is exactly a rise that travels nowhere.
         let (still, _) = render(fixture("one", "rise", r#", "rise": 0"#), 1.6);
         assert_eq!(still, fading, "rise 0 is a fade");
+    }
+
+    /// Motion blur fixture: a caption on an opaque plate, sliding across a
+    /// black canvas via shift keyframes. The plate's edge is the
+    /// measurement: sharp, it steps from background to plate inside a pixel
+    /// or two of antialiasing; blurred, it ramps across the distance the
+    /// plate travels while the shutter is open.
+    fn blur_fixture(vertical: f64, plate_hex: &str, blur: &str) -> String {
+        format!(
+            r#"{{"id":"CAP-{plate_hex}", "name":"mover", "sortIndex": 1, "kind":"caption",
+                "isEnabled": true, "startTime": 0, "duration": 1,
+                "captionText": "MOTION"{blur},
+                "captionStyle": {{"backgroundColorHex": "{plate_hex}",
+                                  "backgroundOpacity": 1.0, "fontSize": 18}},
+                "keyframes": [
+                  {{"id":"K0-{plate_hex}", "time": 0,
+                    "horizontalShift": -200, "verticalShift": {vertical},
+                    "transitionDuration": 0}},
+                  {{"id":"K1-{plate_hex}", "time": 1,
+                    "horizontalShift": 200, "verticalShift": {vertical},
+                    "transitionDuration": 1}}
+                ]}}"#
+        )
+    }
+
+    fn blur_project(layers: &str) -> ProjectMetadata {
+        let json = format!(
+            r#"{{"id": "AAAAAAAA-0000-0000-0000-00000000000E",
+                 "name": "blur", "createdAt": 0, "state": "recorded",
+                 "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                 "compositionSettings": {{
+                    "canvasWidth": 512, "canvasHeight": 128,
+                    "backgroundColorHex": "000000",
+                    "subtitleFontSize": 18, "subtitleColorHex": "FFFFFF",
+                    "subtitleVerticalMargin": 8, "subtitleBackgroundOpacity": 1.0,
+                    "subtitleLeftMargin": 10, "subtitleRightMargin": 10
+                 }},
+                 "layers": [{layers}]}}"#
+        );
+        ProjectMetadata::from_json(&json).expect("blur fixture")
+    }
+
+    /// Columns at `row` where `channel` sits between clearly-background and
+    /// clearly-plate: the width of the edge ramp, which is what a shutter
+    /// widens.
+    fn ramp_columns(px: &[u8], row: usize, channel: usize) -> usize {
+        (0..512)
+            .filter(|x| {
+                let v = px[(row * 512 + x) * 4 + channel];
+                v > 40 && v < 215
+            })
+            .count()
+    }
+
+    /// The centre row of the horizontal band whose `channel` is dominant —
+    /// found by scanning, so the test does not hard-code caption layout.
+    fn band_centre_row(px: &[u8], channel: usize) -> usize {
+        let rows: Vec<usize> = (0..128)
+            .filter(|y| {
+                (0..512).any(|x| {
+                    let o = (y * 512 + x) * 4;
+                    px[o + channel] > 200
+                        && (0..4).all(|c| c == channel || c == 3 || px[o + c] <= px[o + channel])
+                })
+            })
+            .collect();
+        rows[rows.len() / 2]
+    }
+
+    /// A layer that asks for a shutter smears by the distance it travels
+    /// while the shutter is open; the same layer without the field keeps its
+    /// hard edge. The plate's edge ramp is the measurement, so the test
+    /// reads the OUTCOME — softened pixels — not the sample count.
+    #[test]
+    fn a_blurred_mover_smears_and_a_sharp_one_does_not() {
+        let sharp_meta = blur_project(&blur_fixture(0.0, "FF0000", ""));
+        let blurred_meta = blur_project(&blur_fixture(
+            0.0, "FF0000", r#", "motionBlur": {"shutter": 1.0}"#));
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let mut render = |meta: ProjectMetadata| {
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            engine.render(0.5, out.raw(), 512, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        let sharp = render(sharp_meta);
+        let blurred = render(blurred_meta);
+
+        let row = band_centre_row(&sharp, 2);
+        let sharp_ramp = ramp_columns(&sharp, row, 2);
+        let blurred_ramp = ramp_columns(&blurred, band_centre_row(&blurred, 2), 2);
+        // 400 canvas-px/s under a full-frame shutter at the default 30fps is
+        // a 13px smear; antialiasing alone is a pixel or two per edge.
+        assert!(
+            sharp_ramp <= 6,
+            "a sharp plate edge is antialiasing-wide, got {sharp_ramp} ramp columns",
+        );
+        assert!(
+            blurred_ramp >= sharp_ramp + 6,
+            "the shutter should widen the ramp well past antialiasing: \
+             {sharp_ramp} sharp, {blurred_ramp} blurred",
+        );
+    }
+
+    /// The blur is PER LAYER: two captions ride the same move, one asks for
+    /// a shutter, and only that one smears. The other resolves at the
+    /// frame's own time in every sub-sample — pinned by construction, and
+    /// this is the test that fails if the pin ever loosens.
+    #[test]
+    fn blur_is_per_layer_not_per_frame() {
+        let meta = blur_project(&format!(
+            "{},{}",
+            blur_fixture(64.0, "FF0000", r#", "motionBlur": {"shutter": 1.0}"#),
+            blur_fixture(0.0, "0000FF", "")
+        ));
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        engine.render(0.5, out.raw(), 512, 128).expect("render");
+        let px = out.read_pixels().unwrap();
+
+        let red_ramp = ramp_columns(&px, band_centre_row(&px, 2), 2);
+        let blue_ramp = ramp_columns(&px, band_centre_row(&px, 0), 0);
+        assert!(
+            red_ramp >= blue_ramp + 6,
+            "the blurred plate smears ({red_ramp}) while its sharp twin does \
+             not ({blue_ramp}) — anything else means the pin failed",
+        );
+        assert!(blue_ramp <= 6, "the sharp layer stays antialiasing-sharp: {blue_ramp}");
+    }
+
+    /// A blurred layer that is not actually moving costs nothing and changes
+    /// nothing: the walk measures the shutter's endpoints, sees no travel,
+    /// and renders the one sharp frame — bit-exact, which is what proves the
+    /// early-out ran instead of a 24-sample average of identical scenes.
+    #[test]
+    fn a_still_blurred_layer_renders_bit_exact_sharp() {
+        let still = |blur: &str| {
+            blur_project(&format!(
+                r#"{{"id":"CAP", "name":"still", "sortIndex": 1, "kind":"caption",
+                    "isEnabled": true, "startTime": 0, "duration": 1,
+                    "captionText": "STILL"{blur},
+                    "captionStyle": {{"backgroundColorHex": "FF0000",
+                                      "backgroundOpacity": 1.0, "fontSize": 18}},
+                    "keyframes": []}}"#
+            ))
+        };
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let mut render = |meta: ProjectMetadata| {
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            engine.render(0.5, out.raw(), 512, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        let sharp = render(still(""));
+        let blurred = render(still(r#", "motionBlur": {"shutter": 1.0}"#));
+        assert_eq!(sharp, blurred, "no motion, no difference — to the bit");
+
+        // And the cost: two endpoint probes plus one sharp frame. Honest
+        // scope: a minimal three-sample walk ALSO builds three scenes, so
+        // this pins the probe design (and documents the cost), not the
+        // early-out — whose saving is the skipped GPU accumulation, which
+        // no assertion here can see. The bit-exact check above is the
+        // correctness half; this is the ledger.
+        let (mut engine, _state) =
+            make_engine(still(r#", "motionBlur": {"shutter": 1.0}"#), vec![], 64 << 20);
+        engine.render(0.5, out.raw(), 512, 128).expect("render");
+        assert_eq!(
+            engine.builds, 3,
+            "two endpoint probes plus the sharp frame — the cap fallback would be 8",
+        );
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as
