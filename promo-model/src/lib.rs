@@ -192,3 +192,470 @@ mod tests {
         }
     }
 }
+
+/// The drift guard for `schema.md`. [`SCHEMA`] is the format description the
+/// CLI (`promo schema`) and the app's `promo_schema` tool both serve, and a
+/// field the model writes but the doc never names is a feature no assistant
+/// can author.
+///
+/// The kitchen-sink project below is built with EXHAUSTIVE struct literals —
+/// no `..Default::default()` — so the moment the model grows a field this
+/// module stops compiling, and whoever added the field decides right here:
+/// give it a value and a mention in schema.md, or set `None` with a comment
+/// saying why the doc deliberately leaves it out.
+#[cfg(test)]
+mod schema_doc_tests {
+    use super::*;
+
+    fn full_reveal() -> TextReveal {
+        TextReveal {
+            by: RevealUnit::Word,
+            mode: RevealMode::Highlight,
+            seconds_per: Some(0.12),
+            seconds: Some(2.0),
+            unit_seconds: Some(0.2),
+            rise: Some(0.5),
+            highlight_color_hex: Some("5B8CFF".into()),
+            easing: Some(Easing::EaseInOut),
+        }
+    }
+
+    fn full_caption_style() -> SubtitleStyle {
+        SubtitleStyle {
+            left_margin: Some(90.0),
+            right_margin: Some(90.0),
+            vertical_margin: Some(880.0),
+            font_size: Some(96.0),
+            alignment: Some(SubtitleTextAlignment::Trailing),
+            padding: Some(20.0),
+            corner_radius: Some(8.0),
+            font_family: Some(SubtitleFontFamily::Rounded),
+            is_bold: Some(true),
+            is_italic: Some(false),
+            text_color_hex: Some("FFFFFF".into()),
+            background_color_hex: Some("000000".into()),
+            background_opacity: Some(0.0),
+            stroke_color_hex: Some("0A0A0A".into()),
+            stroke_width: Some(6.0),
+            shadow_color_hex: Some("000000".into()),
+            shadow_opacity: Some(0.55),
+            shadow_radius: Some(10.0),
+            shadow_offset: Some([0.0, 4.0]),
+            reveal: Some(full_reveal()),
+        }
+    }
+
+    fn full_transition(kind: TransitionKind, from: TransitionEdge) -> LayerTransition {
+        LayerTransition {
+            kind,
+            from: Some(from),
+            duration: 0.5,
+            easing: Some(Easing::EaseOut),
+        }
+    }
+
+    fn full_gradient() -> BackgroundGradient {
+        BackgroundGradient {
+            kind: GradientKind::Linear,
+            stops: vec![
+                GradientStop {
+                    color_hex: "0B1026".into(),
+                    at: 0.0,
+                },
+                GradientStop {
+                    color_hex: "1B4A8B".into(),
+                    at: 1.0,
+                },
+            ],
+            start: Point(0.0, 0.0),
+            end: Point(1.0, 1.0),
+            repeat: Some(GradientRepeat::Mirror),
+        }
+    }
+
+    /// One keyframe carrying every track the format can animate.
+    fn full_keyframe() -> ProjectLayerKeyframe {
+        ProjectLayerKeyframe {
+            id: "K".into(),
+            time: 1.0,
+            zoom: Some(0.8),
+            vertical_shift: Some(150.0),
+            horizontal_shift: Some(240.0),
+            color_hex: Some("@accent".into()),
+            resource_id: Some("R2".into()),
+            transition: Some(full_transition(TransitionKind::Push, TransitionEdge::Right)),
+            gradient: Some(full_gradient()),
+            gain: Some(0.8),
+            rotation: Some(3.0),
+            tilt_x: Some(6.0),
+            tilt_y: Some(-4.0),
+            opacity: Some(1.0),
+            shutter: Some(0.5),
+            saturation: Some(0.0),
+            contrast: Some(1.1),
+            brightness: Some(0.05),
+            tint_amount: Some(0.4),
+            transition_duration: 0.5,
+            transition_percent: Some(80.0),
+            motion_path: Some(MotionPath {
+                path_resource_id: "P".into(),
+                flipped: Some(true),
+                start_at: Some(0.0),
+                end_at: Some(1.0),
+            }),
+            easing: Some(Easing::EaseInOut),
+            viewport: Some([0.25, 0.25, 0.5, 0.5]),
+            placement: Some(Placement {
+                height: Some(620.0),
+                width: Some(900.0),
+                mode: Some(PlacementMode::Fit),
+                anchor: Some(Anchor::BottomRight),
+                offset: Some([0.0, -40.0]),
+            }),
+        }
+    }
+
+    fn full_layer() -> ProjectLayer {
+        ProjectLayer {
+            id: "L".into(),
+            name: "Clip".into(),
+            sort_index: 1,
+            kind: ProjectLayerKind::Video,
+            is_enabled: true,
+            start_time: 0.0,
+            duration: Some(4.5),
+            fade_in: Some(0.3),
+            fade_out: Some(0.4),
+            transition_in: Some(full_transition(TransitionKind::Wipe, TransitionEdge::Left)),
+            transition_out: Some(full_transition(
+                TransitionKind::Slide,
+                TransitionEdge::Bottom,
+            )),
+            motion_blur: Some(MotionBlur { shutter: 0.5 }),
+            adjustments: Some(LayerAdjustments {
+                saturation: Some(0.0),
+                contrast: Some(1.15),
+                brightness: Some(0.06),
+                tint_hex: Some("E8B380".into()),
+                tint_amount: Some(0.4),
+            }),
+            blend_mode: Some(BlendMode::Screen),
+            mask_resource_id: Some("M".into()),
+            mask_inverted: Some(true),
+            resource_id: Some("R".into()),
+            // Legacy Swift bookkeeping, superseded by resourceID.
+            image_filename: None,
+            // Image cuts are app-made crops; the doc keeps them as opaque
+            // editing state, so the layer's pointer into them stays out too.
+            image_cut_id: None,
+            media_cut_id: Some("C".into()),
+            beyond_end: Some(BeyondEnd::Loop),
+            // App-managed rotate applied at import, not an authoring field.
+            image_orientation: None,
+            image_border_color_hex: Some("26364F".into()),
+            image_border_width: Some(1.0),
+            caption_text: Some("A fast spreadsheet for Mac".into()),
+            caption_style: Some(full_caption_style()),
+            // Narration the app records against a caption — its own workflow.
+            caption_voice_clip: None,
+            // App-side audio ducking toggle, undocumented on purpose.
+            audio_focus: None,
+            // Timing anchors are documented nowhere yet (skill doc included);
+            // when they are, this becomes Some and schema.md gains the field.
+            timing: None,
+            keyframes: vec![full_keyframe()],
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    fn full_resource() -> ProjectResource {
+        ProjectResource {
+            id: "R".into(),
+            kind: ProjectResourceKind::Image,
+            filename: "walk.png".into(),
+            display_name: "Walk".into(),
+            added_at: 0.0,
+            duration: Some(6.5),
+            trim_start: Some(0.15),
+            trim_end: Some(6.35),
+            // The key is documented (a cut can skip its dull middle); the
+            // entries' own fields are editor state the doc leaves opaque.
+            trim_keyframes: Some(vec![]),
+            caption_text: Some("Two lines, then two more".into()),
+            // The full style is exercised on the layer above.
+            caption_style: None,
+            caption_voice_clip: None,
+            drawing: Some(DrawingDocument {
+                shapes: vec![DrawingShape {
+                    id: "S".into(),
+                    kind: DrawingShapeKind::Oval,
+                    points: vec![Point(0.0, 0.0), Point(100.0, 100.0)],
+                    stroke_color_hex: "FFFFFF".into(),
+                    stroke_width: 1.0,
+                    stroke_opacity: Some(1.0),
+                    fill_color_hex: Some("FFFFFF".into()),
+                    fill_opacity: Some(0.5),
+                    arrow_start: false,
+                    arrow_end: false,
+                    even_odd_fill: Some(true),
+                    // Editor-side shape grouping, not an authoring field.
+                    group_id: None,
+                }],
+                // The drawing canvas backdrop the app's editor paints.
+                background_color_hex: None,
+            }),
+            path: Some(PathDocument {
+                start: Point(0.0, 0.0),
+                end: Point(100.0, 0.0),
+                controls: vec![Point(50.0, -60.0)],
+            }),
+            sprite: Some(SpriteSheet {
+                columns: 4,
+                rows: 2,
+                frame_count: Some(7),
+                fps: Some(12.0),
+                frame_durations: Some(vec![0.1; 7]),
+            }),
+            sampling: Some(ResourceSampling::Nearest),
+            image_cuts: vec![],
+            speed: Some(1.1),
+            media_cuts: vec![MediaCut {
+                id: "C".into(),
+                name: "The formula bit".into(),
+                trim_start: Some(12.0),
+                trim_end: Some(18.0),
+                trim_keyframes: Some(vec![]),
+                speed: Some(1.5),
+                extra: serde_json::Map::new(),
+            }],
+            // Legacy 0…4 gain, migrated into volume on decode.
+            audio_gain: None,
+            volume: Some(0.9),
+            disabled_audio_track_indices: vec![],
+            video_natural_width: Some(1920.0),
+            video_natural_height: Some(1080.0),
+            pixel_width: Some(1170.0),
+            pixel_height: Some(2532.0),
+            // Device-frame record the app builds from its own catalog.
+            frame: None,
+            looped: Some(true),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    fn full_settings() -> CompositionSettings {
+        CompositionSettings {
+            canvas_width: 1920.0,
+            canvas_height: 1080.0,
+            fps: Some(60.0),
+            subtitle_left_margin: 90.0,
+            subtitle_right_margin: 90.0,
+            subtitle_vertical_margin: 880.0,
+            subtitle_font_size: 54.0,
+            subtitle_font_family: SubtitleFontFamily::System,
+            subtitle_bold: true,
+            subtitle_italic: false,
+            subtitle_color_hex: "FFFFFF".into(),
+            background_color_hex: "@ink".into(),
+            background_gradient: Some(full_gradient()),
+            palette: Some(vec![PaletteColor {
+                name: "accent".into(),
+                color_hex: "5B8CFF".into(),
+            }]),
+            subtitle_background_color_hex: "000000".into(),
+            subtitle_background_opacity: 0.7,
+            subtitle_background_padding: 16.0,
+            subtitle_stroke_color_hex: "000000".into(),
+            subtitle_stroke_width: 0.0,
+            subtitle_shadow_color_hex: "000000".into(),
+            subtitle_shadow_opacity: 0.0,
+            subtitle_shadow_radius: 0.0,
+            subtitle_shadow_offset: Some([0.0, 4.0]),
+            subtitle_reveal: Some(full_reveal()),
+            subtitle_background_corner_radius: 8.0,
+            subtitle_alignment: SubtitleTextAlignment::Center,
+            video_border_color_hex: "26364F".into(),
+            video_border_width: 1.0,
+            video_corner_radius: 14.0,
+            video_keyframes: vec![],
+            background_keyframes: vec![],
+            image_export_scale_percent: 100.0,
+            gif_export_scale_percent: 33.0,
+            gif_export_fps: 10.0,
+            video_export_width: None,
+            video_export_height: None,
+        }
+    }
+
+    fn kitchen_sink() -> ProjectMetadata {
+        ProjectMetadata {
+            id: "T".into(),
+            name: "Everything".into(),
+            created_at: 0.0,
+            subtitles: vec![],
+            trim_start: 0.0,
+            trim_end: 0.0,
+            // The pre-layer whole-video trim, app bookkeeping.
+            trim_keyframes: None,
+            video_duration: 0.0,
+            composition_settings: full_settings(),
+            layers: Some(vec![full_layer()]),
+            resources: Some(vec![full_resource()]),
+            // Export history the app appends; never authored.
+            exports: None,
+            updated_at: None,
+            state: "recorded".into(),
+            // Writer bookkeeping; the doc teaches minReaderVersion only.
+            format_version: None,
+            min_reader_version: Some(13),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// Always-encoded keys the doc deliberately leaves out: the pre-layer
+    /// legacy timeline and export bookkeeping the app manages.
+    const UNDOCUMENTED: &[&str] = &[
+        "videoKeyframes",
+        "backgroundKeyframes",
+        "imageExportScalePercent",
+        "gifExportScalePercent",
+        "gifExportFPS",
+    ];
+
+    /// Enum wire values an author has to spell exactly. Extend alongside the
+    /// enums; every entry must appear in schema.md verbatim.
+    const VALUES: &[&str] = &[
+        // Layer and resource kinds.
+        "background",
+        "video",
+        "image",
+        "drawing",
+        "caption",
+        "audio",
+        "path",
+        // Transition kinds and edges.
+        "fade",
+        "wipe",
+        "slide",
+        "push",
+        "scale",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        // Easing.
+        "linear",
+        "easeIn",
+        "easeOut",
+        "easeInOut",
+        // Reveal units and modes.
+        "character",
+        "word",
+        "line",
+        "rise",
+        "highlight",
+        // Blend modes.
+        "normal",
+        "multiply",
+        "screen",
+        "add",
+        // beyondEnd.
+        "hold",
+        "loop",
+        "hide",
+        // Sampling.
+        "smooth",
+        "nearest",
+        // Placement anchors and modes.
+        "topLeft",
+        "topRight",
+        "center",
+        "bottomLeft",
+        "bottomRight",
+        "fit",
+        "fill",
+        // Gradients.
+        "radial",
+        "clamp",
+        "repeat",
+        "mirror",
+        // Caption alignment and font families.
+        "leading",
+        "trailing",
+        "system",
+        "rounded",
+        "serif",
+        "monospaced",
+        "helveticaNeue",
+        "avenirNext",
+        "gillSans",
+        "futura",
+        "trebuchetMS",
+        "georgia",
+        "palatino",
+        "timesNewRoman",
+        "americanTypewriter",
+        "courierNew",
+        "chalkboard",
+        "markerFelt",
+        "snellRoundhand",
+        // Drawing shapes.
+        "pen",
+        "oval",
+    ];
+
+    fn collect_keys(value: &serde_json::Value, keys: &mut std::collections::BTreeSet<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, inner) in map {
+                    keys.insert(key.clone());
+                    collect_keys(inner, keys);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for inner in items {
+                    collect_keys(inner, keys);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn schema_md_mentions_every_authorable_wire_field() {
+        let meta = kitchen_sink();
+        let value = serde_json::to_value(&meta).expect("kitchen sink encodes");
+        let mut keys = std::collections::BTreeSet::new();
+        collect_keys(&value, &mut keys);
+        // Guard the guard: if the walk ever sees a near-empty document, the
+        // test would pass by looking at nothing.
+        assert!(keys.len() > 120, "only {} keys collected", keys.len());
+
+        let mut missing: Vec<String> = keys
+            .iter()
+            .filter(|k| !UNDOCUMENTED.contains(&k.as_str()) && !SCHEMA.contains(k.as_str()))
+            .map(|k| format!("field \"{k}\""))
+            .collect();
+        missing.extend(
+            VALUES
+                .iter()
+                .filter(|v| !SCHEMA.contains(**v))
+                .map(|v| format!("value \"{v}\"")),
+        );
+        assert!(
+            missing.is_empty(),
+            "schema.md never mentions: {} — either document it there or mark \
+             it deliberately undocumented in this test",
+            missing.join(", ")
+        );
+    }
+
+    /// The richest project this crate can express round-trips exactly — the
+    /// same fixed-point contract the fixtures prove for real saves.
+    #[test]
+    fn the_kitchen_sink_round_trips() {
+        let meta = kitchen_sink();
+        let back = ProjectMetadata::from_json(&meta.to_json().expect("encodes")).expect("decodes");
+        assert_eq!(back, meta);
+    }
+}

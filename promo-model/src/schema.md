@@ -15,7 +15,8 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+  "minReaderVersion": 13, "trimStart": 0, "trimEnd": 0,
+  "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
     "backgroundColorHex": "0E1726",
@@ -26,7 +27,8 @@ metadata.json (only the fields that matter for authoring):
                  { "colorHex": "1B4A8B", "at": 1 } ] },
     "videoCornerRadius": 14, "videoBorderWidth": 1,
     "videoBorderColorHex": "26364F",
-    "subtitleFontSize": 54, "subtitleBold": true,
+    "subtitleFontFamily": "system", "subtitleFontSize": 54,
+    "subtitleBold": true,
     "subtitleColorHex": "FFFFFF", "subtitleBackgroundOpacity": 0.0,
     "subtitleLeftMargin": 90, "subtitleRightMargin": 90,
     "subtitleVerticalMargin": 950
@@ -61,10 +63,15 @@ metadata.json (only the fields that matter for authoring):
       "resourceID": "<the resource's uuid>", "keyframes": [ ... ] },
     { "id": "<uuid>", "name": "Headline", "sortIndex": 2, "kind": "caption",
       "isEnabled": true, "startTime": 0.45, "duration": 3.6,
+      "fadeIn": 0.28, "fadeOut": 0.4,
       "captionText": "A fast spreadsheet for Mac",
       "captionStyle": { "alignment": "center" }, "keyframes": [ ... ] }
   ]
 }
+
+The format is ONE version: stamp "minReaderVersion": 13 at the top
+level and think no more about it. promo_validate warns when a file
+claims a smaller number than its fields use.
 
 A keyframe animates a layer over its LOCAL time:
 
@@ -108,7 +115,8 @@ Semantics worth knowing:
   transitionPercent 100, one carrying zoom with transitionDuration 1.
   The two shifts are ONE track (a position is a point, and a motion
   path moves it as one); zoom, rotation, opacity, tilt, viewport,
-  gradient and gain are each their own. Within one track, two
+  gradient, gain, shutter and the grade scalars are each their own.
+  Within one track, two
   keyframes at the same time resolve by ARRAY ORDER — the later
   wins from that instant on, the same rule layer order plays for z.
 - `strokeColorHex` / `strokeWidth` put an OUTLINE round the glyphs, and
@@ -122,7 +130,8 @@ Semantics worth knowing:
   padding than a plain one. Composition-wide defaults are
   `subtitleStrokeColorHex` / `subtitleStrokeWidth` /
   `subtitleShadowColorHex` / `subtitleShadowOpacity` /
-  `subtitleShadowRadius`; both are OFF unless asked for.
+  `subtitleShadowRadius` / `subtitleShadowOffset`; both are OFF
+  unless asked for.
 - `placement` is the drawn box as a RULE instead of numbers, and it
   is the tool to reach for FIRST when sizing or positioning an image
   or video layer: one of `height`/`width` (drawn size in canvas px)
@@ -140,11 +149,10 @@ Semantics worth knowing:
   motion paths included. Width and anchoring need the source's
   aspect, which comes from the resource's stored `pixelWidth`/
   `pixelHeight` (images; app imports stamp them — include them when
-  authoring by hand) or `videoNaturalWidth`/`Height` (videos); a
-  sprite resolves against one cell. Without a stored size the rule
-  assumes a square source and promo_validate says so. Image and
-  video layers. Projects using placement stamp
-  `minReaderVersion: 7`.
+  authoring by hand) or `videoNaturalWidth`/`videoNaturalHeight`
+  (videos); a sprite resolves against one cell. Without a stored
+  size the rule assumes a square source and promo_validate says so.
+  Image and video layers.
 - `palette` in compositionSettings names colours the project can
   reuse: [{ "name": "accent", "colorHex": "5B8CFF" }, …]. ANY colour
   field may then hold "@accent" instead of a hex value — background,
@@ -207,16 +215,31 @@ Semantics worth knowing:
   cubic; anything past the second is ignored rather than refused.
 - A keyframe may carry `resourceID`, swapping what the layer shows
   while everything else animates through it — a sequence on ONE
-  layer instead of several with duplicated keyframes. It is a STEP:
-  it lands at the keyframe's own time, no transition applies, and
-  there is no cross-dissolve between two sources on one layer (that
-  is what two overlapping layers are for). The layer's own resourceID
-  shows before the first swap. Image and caption layers only — on
-  video or audio a mid-layer swap would have to say where the second
-  clip starts playing — and only to a resource of the layer's own
-  kind; anything else is ignored. Height is preserved across a swap
-  (it is canvasHeight * zoom) while width follows the new source's
-  aspect, anchored top-left.
+  layer instead of several with duplicated keyframes. By itself it
+  is a STEP landing at the keyframe's own time: there is no halfway
+  between two images, and on a keyframe that only swaps,
+  transitionDuration has nothing to ramp and does nothing. The
+  layer's own resourceID shows before the first swap. Image, caption
+  and drawing layers only — on video or audio a mid-layer swap would
+  have to say where the second clip starts playing — and only to a
+  resource of the layer's own kind; anything else is ignored. A
+  caption swap replaces the WORDS (each caption resource carries its
+  own text and style), a drawing swap the marks. Height is preserved
+  across a swap (it is canvasHeight * zoom) while width follows the
+  new source's aspect, anchored top-left.
+- Give a swap keyframe a `transition` and it stops being a cut:
+  { "time": 4, "resourceID": "<the next image>", "transition":
+  { "kind": "wipe", "from": "left", "duration": 0.6 } } draws BOTH
+  resources for those 0.6s — the outgoing one whole, the incoming
+  one wiping, sliding, pushing or fading in over it. That is the
+  crossfade between clips, and it needs no second layer. Same shape
+  as transitionIn, and the one place `push` has old material to push
+  out. A swap naming a missing or wrong-kind resource is skipped,
+  transition included, so a deleted image degrades to a cut rather
+  than cross-fading a picture with itself. Distinct from
+  transitionDuration on the same keyframe: that ramps VALUES (zoom,
+  position, opacity), this blends MATERIAL — a keyframe can carry
+  both and they do not interact.
 - `viewport` is the WINDOW a layer shows of its source: exactly
   [x, y, w, h] in UNIT source coordinates — [0,0,1,1] is the whole
   frame, [0.25,0.25,0.5,0.5] the middle at 2x. Image and video
@@ -256,8 +279,119 @@ Semantics worth knowing:
   art needs "nearest" to survive being scaled up, and a sprite sheet
   needs it for CORRECTNESS — smoothing samples across a cell's edge
   and blends in the frame beside it.
+- `adjustments` on a layer is its own colour grade — its pixels and
+  nobody else's. NOT an adjustment layer: nothing beneath is
+  touched, so the screenshot goes black-and-white while the canvas
+  around it keeps its colour.
+  { "saturation": 0, "tintHex": "@accent", "tintAmount": 0.4 }.
+  `saturation` 1 is untouched, 0 grey; `contrast` 1 is untouched;
+  `brightness` is additive around 0; `tintHex` + `tintAmount`
+  multiply a gel in (1 is fully gelled) — both halves or it does
+  nothing and promo_validate says so. Applied in that order, so
+  saturation 0 plus a warm tint reads as a duotone: mono is
+  saturation 0 alone, sepia is saturation 0 with tintHex E8B380 at
+  0.4. The scalars are keyframe tracks too — `saturation`,
+  `contrast`, `brightness` and `tintAmount` on keyframes hold and
+  ramp like any other value ("fade to grey"), and a keyframed field
+  beats the layer constant of the same name. tintHex itself does not
+  animate; a keyframed tintAmount ramps the one gel.
+- `blendMode` says how a layer's pixels COMBINE with what is beneath
+  them: "multiply" darkens (white drops out — vignettes, shadows,
+  paper grain), "screen" lightens (black drops out — glows, flares
+  and light leaks ship on black, and this is what makes them usable),
+  "add" is pure light, hotter than screen and clipping sooner.
+  Absent means ordinary source-over ("normal"). Static, not
+  keyframable — nothing interpolates between two blend functions;
+  animate the layer's opacity or its grade instead. Only layers that
+  draw pixels combine; promo_validate names a blend on a background
+  or audio layer.
+- `motionBlur` gives a layer its own camera shutter:
+  { "shutter": 0.5 }. `shutter` is the fraction of one frame
+  interval the shutter stays open — 0.5 is the classic 180 degrees,
+  1.0 a full 360; above 1 is clamped, zero or less does nothing, and
+  promo_validate names both. What smears is the EDITOR's motion —
+  position and zoom ramps, viewport pans, motion paths, rotation, a
+  caption's travel, a swap transition's slide — never the footage's
+  interior motion, which carries its own camera blur: each source
+  frame is decoded once, and which resource shows never smears (a
+  cut inside the shutter stays a cut). Per LAYER, absent means
+  sharp, and there is deliberately no composition-wide default — a
+  composite never shared one exposure, and the usual mistake is a
+  smeared caption over sharp footage. The sample count is derived
+  from how far things actually move, so a still moment costs nothing
+  and renders bit-exact sharp. For a blur that RAMPS, put `shutter`
+  on keyframes instead: it holds and eases like every other scalar
+  track (the whip-pan idiom — blur arriving with the speed and
+  leaving with it), and when any keyframe carries one the keyframes
+  WIN over the layer constant, which promo_validate names if both
+  are present.
+- `maskResourceID` on a video or image layer windows it by a
+  DRAWING: the drawing's ink is the mask, and the layer only shows
+  where that drawing has ink — a filled oval for a porthole, a
+  pen-tool star, an imported SVG shape. The mask is rasterized and
+  stretched corner-to-corner over the layer's rect (a circle on a
+  16:9 layer becomes an ellipse filling it; make the layer square,
+  or draw the ellipse you mean, to get a circle), and it does NOT
+  move with the content: a keyframe viewport pans and zooms the
+  footage BEHIND the window while the window holds still. Ink is
+  ink — fills and strokes both count, and the ink's own opacity
+  carries through: 50%-opacity ink shows the layer at 50%; a shape
+  with `evenOddFill` makes a ring or a donut hole. `maskInverted:
+  true` flips it — the ink becomes the HOLE (a cut-out) instead of
+  the window. Static per layer, like blendMode; swaps, transitions,
+  grades, blends and motion blur all happen INSIDE the window.
+  promo_validate names a mask on any other layer kind, one pointing
+  at nothing or at a non-drawing, and an inkless mask drawing. Known
+  limit: `imageBorderWidth` / `imageBorderColorHex` still trace the
+  rounded rect, not the mask outline, so a border on a masked layer
+  is clipped by the window rather than following it. A mask is an
+  ordinary drawing resource:
+    { "id": "<uuid>", "kind": "drawing", "filename": "m.json",
+      "displayName": "Oval mask", "addedAt": 0, "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "drawing": { "shapes": [ { "id": "<uuid>", "kind": "oval",
+        "points": [[0, 0], [100, 100]], "strokeColorHex": "FFFFFF",
+        "strokeWidth": 1, "fillColorHex": "FFFFFF",
+        "arrowStart": false, "arrowEnd": false } ] } }
+  Shape `kind` is pen, line or oval; `fillOpacity` / `strokeOpacity`
+  are optional 0..1.
+- `tiltX` / `tiltY` (degrees) on an image layer's keyframes tilt a
+  device-framed screenshot in 2.5D. They animate like any other
+  track; leaving them out keeps the frame's own static tilt.
 - opacity is 0..1 and defaults to 1. Cross-dissolve by overlapping two
   layers in time and fading one down as the other comes up.
+- `fadeIn` / `fadeOut` on a LAYER, in seconds, are the shorthand for
+  the four opacity keyframes every fading layer otherwise repeats.
+  They are an ENVELOPE, not a replacement: the fade multiplies
+  whatever the opacity keyframes resolve to, so a layer can fade in
+  AND dip to 50% in the middle, and neither has to know about the
+  other. A fadeOut counts back from the layer's end, so it does
+  nothing on a layer with no `duration` — that layer runs to the end
+  of the project, which the layer itself cannot see.
+- `transitionIn` / `transitionOut` are how a layer ENTERS and LEAVES
+  when a plain fade is not it: { "kind": "wipe", "from": "left",
+  "duration": 0.5, "easing": "easeOut" }. Five kinds. `wipe` reveals
+  the picture from an edge without moving it — the picture stays put
+  and its edge travels. `slide` brings it in from beyond that edge
+  of the FRAME, so a layer already near an edge still starts fully
+  outside. `push` slides the new material in and shoves the old out
+  the opposite side — it only has something to push at a resource
+  swap, so at a layer's own edge it behaves as a slide. `scale`
+  grows the layer into place, with a short fade so it does not pop.
+  `fade` is fadeIn/fadeOut as an object. `from` is left / right /
+  top / bottom, the edge the motion starts at; on the way OUT what
+  remains collapses towards it. Absent, a wipe comes from the left,
+  a slide from the bottom, a push from the right; fade and scale
+  ignore it. `easing` shapes the ramp — the fadeIn/fadeOut shorthand
+  is linear by definition, so a fade with a curve is written as the
+  full object. fadeIn: 0.3 and transitionIn: { "kind": "fade",
+  "duration": 0.3 } say the same thing — prefer the shorthand; a
+  layer carrying both renders the transitionIn and promo_validate
+  says so. Transitions MULTIPLY with opacity keyframes rather than
+  replacing them; a transition longer than the layer is clamped to
+  it; a transitionOut, like a fadeOut, needs the layer to have a
+  `duration`. Background layers are the frame itself and do not
+  transition.
 - Layer placement: a media layer's rect has its TOP-LEFT at
   (horizontalShift, verticalShift) in canvas coordinates, and is scaled
   by (canvasHeight / sourceHeight) * zoom. So zoom = scale *
@@ -270,8 +404,56 @@ Semantics worth knowing:
   value, so a title can start centred and animate into place. An
   omitted field falls back to the base style, not to the previous
   keyframe.
-- captionStyle may carry fontSize, so one caption can be far larger
-  than the composition default.
+- Every caption look field follows one rule: what THIS caption's
+  captionStyle says, then what the composition says. Leaving a field
+  out is how a caption follows the project; there is no separate
+  "inherit" value. The pairs, per-caption first: `fontSize`
+  (`subtitleFontSize` — one caption can be far larger than the
+  composition default), `fontFamily` (`subtitleFontFamily`),
+  `isBold` / `isItalic` (`subtitleBold` / `subtitleItalic`),
+  `textColorHex` (`subtitleColorHex`), `alignment`
+  (`subtitleAlignment`) — "leading" / "center" / "trailing",
+  defaulting to center; `backgroundColorHex` / `backgroundOpacity` /
+  `padding` / `cornerRadius` (`subtitleBackgroundColorHex`,
+  `subtitleBackgroundOpacity`, `subtitleBackgroundPadding`,
+  `subtitleBackgroundCornerRadius`), `leftMargin` / `rightMargin` /
+  `verticalMargin` (the subtitle margins), the stroke and shadow
+  fields above, and `reveal` (`subtitleReveal`). Font families:
+  "system", "rounded", "serif", "monospaced", "helveticaNeue",
+  "avenirNext", "gillSans", "futura", "trebuchetMS", "georgia",
+  "palatino", "timesNewRoman", "americanTypewriter", "courierNew",
+  "chalkboard", "markerFelt", "snellRoundhand".
+- `reveal` in a caption's style makes the text arrive a piece at a
+  time — a typewriter, word-by-word kinetic type, a karaoke
+  highlight. A RULE, not keyframes, so it survives editing the words
+  or the font: { "by": "word", "mode": "wipe" }. `by` is "character"
+  (grapheme clusters — an emoji is one keystroke), "word" or "line".
+  `mode` is one walk across the units, differing in what a unit does
+  as its turn comes: "wipe" types it on (the unit is simply there);
+  "fade", "rise" and "scale" give each unit its own little arrival,
+  several in flight at once, so the caption assembles itself;
+  "highlight" shows the whole caption and tints the current unit —
+  karaoke — and wants a `highlightColorHex`, or the tint is the text
+  colour and invisible. `unitSeconds` is how long ONE unit's arrival
+  takes, and is the only difference between kinetic type and a
+  typewriter: wipe is unitSeconds at zero. Absent, each unit
+  overlaps its neighbour by half an arrival, which is what makes a
+  stagger read as one motion rather than a queue. `rise` is how far
+  a rise travels, in line heights (0.5 when absent — a proportion,
+  so it survives any rendering density). Pace is `secondsPer` (per
+  unit) or `seconds` (the whole caption), one or the other —
+  promo_validate names the conflict; with NEITHER, the reveal
+  spreads across the layer's own duration and lands with the
+  caption. `easing` here shapes the walk across units, not each
+  unit's own arrival. The caption is laid out WHOLE and then
+  revealed: it never re-flows as it types, a wrapped caption
+  finishes one line before starting the next, and a staggered word
+  arrives in the place the layout gave it. A wipe crops the plate
+  along with the text, so a caption with a background appears to
+  grow its box — set subtitleBackgroundOpacity: 0 for the plate-less
+  look most typewriters want. `subtitleReveal` in
+  compositionSettings is the default every caption falls back to; a
+  caption's own reveal overrides it.
 - speed on a resource or a cut is the playback rate; 1.5 plays half
   again as fast, so the material occupies two thirds of the timeline.
   Audio keeps its pitch, which makes it the cheap way to fit a
