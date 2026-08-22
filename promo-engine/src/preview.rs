@@ -1406,7 +1406,16 @@ impl PreviewEngine {
                                 used.push(piece_id);
                             }
                         }
-                        _ => {
+                        // A reveal is ACTIVE but nothing has arrived yet —
+                        // the staggered modes' honest first frames. Drawing
+                        // nothing is what the rule says; falling through to
+                        // the whole caption flashed the full text at rest
+                        // for a frame before every rise, which read as a
+                        // glitch on every caption in a template.
+                        Some((_, _)) => {}
+                        // No reveal on this caption (or it could not be
+                        // measured): the whole quad, as always.
+                        None => {
                             quads.push(quad);
                             used.push(id);
                         }
@@ -2769,6 +2778,46 @@ mod tests {
             ramp(&sharp, 0),
             ramp(&blurred, 0),
         );
+    }
+
+    /// The staggered modes' first frame is EMPTY — nothing has arrived —
+    /// and it must render that way. The engine used to fall through to the
+    /// whole caption when the reveal produced no bands, which flashed the
+    /// full text at rest for a frame before every rise: a blink at the top
+    /// of every caption in a template, found by watching one.
+    #[test]
+    fn a_staggered_reveal_does_not_flash_the_whole_caption_first() {
+        let fixture = |reveal: &str| {
+            blur_project(&format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0D01", "name":"riser",
+                    "sortIndex": 1, "kind":"caption",
+                    "isEnabled": true, "startTime": 0.5, "duration": 2,
+                    "captionText": "RISE UP NOW"{reveal},
+                    "captionStyle": {{"backgroundColorHex": "FF0000",
+                                      "backgroundOpacity": 1.0, "fontSize": 18{reveal_style}}},
+                    "keyframes": []}}"#,
+                reveal = "",
+                reveal_style = reveal,
+            ))
+        };
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let mut ink = |meta: ProjectMetadata, time: f64| -> usize {
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            engine.render(time, out.raw(), 512, 128).expect("render");
+            out.read_pixels()
+                .unwrap()
+                .chunks_exact(4)
+                .filter(|p| p[2] > 60)
+                .count()
+        };
+        let rise = |t: f64| {
+            ink(fixture(r#", "reveal": {"by": "word", "mode": "rise"}"#), t)
+        };
+        assert_eq!(rise(0.5), 0, "at the first frame nothing has arrived");
+        assert!(rise(1.2) > 0, "and the words duly arrive");
+        // The no-reveal caption still draws whole from its first frame —
+        // the fallback arm is for it, not for an active reveal.
+        assert!(ink(fixture(""), 0.5) > 0, "a plain caption is simply there");
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as
