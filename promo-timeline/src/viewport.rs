@@ -167,7 +167,10 @@ mod tests {
             r#"{"id": "k", "time": 0, "transitionDuration": 0,
                 "viewport": [0.5, 0.5, 0.0, -1.0]}"#,
         );
-        assert_eq!(layer_viewport(&l, 0.0), Some([0.5, 0.5, MIN_SIZE, MIN_SIZE]));
+        assert_eq!(
+            layer_viewport(&l, 0.0),
+            Some([0.5, 0.5, MIN_SIZE, MIN_SIZE])
+        );
     }
 
     #[test]
@@ -205,14 +208,30 @@ mod overhang_tests {
     /// project whose framing the renderer was quietly rewriting.
     #[test]
     fn a_window_past_the_edge_is_reported_with_what_it_becomes() {
-        assert_eq!(out_of_bounds([0.0, 0.0, 1.0, 1.0]), None, "the whole frame is legal");
+        assert_eq!(
+            out_of_bounds([0.0, 0.0, 1.0, 1.0]),
+            None,
+            "the whole frame is legal"
+        );
         assert_eq!(out_of_bounds([0.25, 0.25, 0.5, 0.5]), None);
 
         // Slides back in, size first — the same rule `clamped` applies.
-        assert_eq!(out_of_bounds([0.55, 0.1, 0.6, 0.4]), Some([0.4, 0.1, 0.6, 0.4]));
-        assert_eq!(out_of_bounds([-0.2, 0.0, 0.5, 0.5]), Some([0.0, 0.0, 0.5, 0.5]));
+        assert_eq!(
+            out_of_bounds([0.55, 0.1, 0.6, 0.4]),
+            Some([0.4, 0.1, 0.6, 0.4])
+        );
+        assert_eq!(
+            out_of_bounds([-0.2, 0.0, 0.5, 0.5]),
+            Some([0.0, 0.0, 0.5, 0.5])
+        );
         // Too big shrinks to the frame; too small grows to the floor.
-        assert_eq!(out_of_bounds([0.0, 0.0, 2.0, 1.0]), Some([0.0, 0.0, 1.0, 1.0]));
-        assert_eq!(out_of_bounds([0.0, 0.0, 0.0, 0.5]), Some([0.0, 0.0, MIN_SIZE, 0.5]));
+        assert_eq!(
+            out_of_bounds([0.0, 0.0, 2.0, 1.0]),
+            Some([0.0, 0.0, 1.0, 1.0])
+        );
+        assert_eq!(
+            out_of_bounds([0.0, 0.0, 0.0, 0.5]),
+            Some([0.0, 0.0, MIN_SIZE, 0.5])
+        );
     }
 }

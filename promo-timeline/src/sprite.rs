@@ -94,6 +94,7 @@ pub fn frame_at(
 /// - The new resource must be of the layer's OWN kind. Anything else is
 ///   ignored rather than drawn, because an image layer handed a video has no
 ///   sensible thing to do with it.
+///
 /// The resource `id` names, if this layer could actually swap to it —
 /// it exists and is the kind this layer draws.
 ///
@@ -138,15 +139,19 @@ pub fn layer_resource_id<'a>(
         .iter()
         .filter(|k| k.resource_id.is_some())
         .collect();
-    swaps.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    swaps.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     swaps
         .iter()
         .rev()
         .find(|k| {
             k.time <= local
-                && k.resource_id.as_deref().is_some_and(|id| {
-                    resources.iter().any(|r| r.id == id && r.kind == wanted)
-                })
+                && k.resource_id
+                    .as_deref()
+                    .is_some_and(|id| resources.iter().any(|r| r.id == id && r.kind == wanted))
         })
         .and_then(|k| k.resource_id.as_deref())
         .or(base)
@@ -197,15 +202,33 @@ mod tests {
         let (s, size) = (sheet(), Size::new(256.0, 128.0));
         // One cycle is 0.4s at 10fps, so 0.45s is 0.05s into the NEXT one:
         // back to frame 0, and 0.55s is frame 1.
-        assert_eq!(frame_at(&s, &layer(""), 0.45, size).unwrap().uv_rect, s.uv_rect(0));
-        assert_eq!(frame_at(&s, &layer(""), 0.55, size).unwrap().uv_rect, s.uv_rect(1));
-        assert_eq!(frame_at(&s, &layer("loop"), 0.55, size).unwrap().uv_rect, s.uv_rect(1));
+        assert_eq!(
+            frame_at(&s, &layer(""), 0.45, size).unwrap().uv_rect,
+            s.uv_rect(0)
+        );
+        assert_eq!(
+            frame_at(&s, &layer(""), 0.55, size).unwrap().uv_rect,
+            s.uv_rect(1)
+        );
+        assert_eq!(
+            frame_at(&s, &layer("loop"), 0.55, size).unwrap().uv_rect,
+            s.uv_rect(1)
+        );
         // Hold stops on the last frame rather than starting over.
-        assert_eq!(frame_at(&s, &layer("hold"), 0.45, size).unwrap().uv_rect, s.uv_rect(3));
-        assert_eq!(frame_at(&s, &layer("hold"), 90.0, size).unwrap().uv_rect, s.uv_rect(3));
+        assert_eq!(
+            frame_at(&s, &layer("hold"), 0.45, size).unwrap().uv_rect,
+            s.uv_rect(3)
+        );
+        assert_eq!(
+            frame_at(&s, &layer("hold"), 90.0, size).unwrap().uv_rect,
+            s.uv_rect(3)
+        );
         // Hide draws nothing at all — but only after the animation has run.
         assert!(frame_at(&s, &layer("hide"), 0.45, size).is_none());
-        assert!(frame_at(&s, &layer("hide"), 0.2, size).is_some(), "mid-cycle");
+        assert!(
+            frame_at(&s, &layer("hide"), 0.2, size).is_some(),
+            "mid-cycle"
+        );
     }
 
     #[test]
@@ -315,7 +338,10 @@ mod tests {
                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]}"#,
         );
         assert!(!is_nearest(Some(&plain)));
-        assert!(!is_nearest(None), "a layer with no resource is not pixel art");
+        assert!(
+            !is_nearest(None),
+            "a layer with no resource is not pixel art"
+        );
         let crisp = resource(
             r#"{"id":"R","kind":"image","filename":"a.png","displayName":"A",
                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],

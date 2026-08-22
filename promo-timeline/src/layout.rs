@@ -242,7 +242,10 @@ mod placement_tests {
         }
         // The offset is a plain nudge from wherever the anchor put it.
         let nudged = placement(r#"{"anchor": "topLeft", "offset": [-40, 12]}"#);
-        assert_eq!(placement_position(&nudged, zoom, aspect, canvas), (-40.0, 12.0));
+        assert_eq!(
+            placement_position(&nudged, zoom, aspect, canvas),
+            (-40.0, 12.0)
+        );
     }
 
     #[test]

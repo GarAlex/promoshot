@@ -224,7 +224,12 @@ pub fn tenure(layer: &ProjectLayer, time: f64) -> (f64, Option<f64>) {
         .map(|k| k.time)
         .collect();
     times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let start = times.iter().rev().find(|t| **t <= local).copied().unwrap_or(0.0);
+    let start = times
+        .iter()
+        .rev()
+        .find(|t| **t <= local)
+        .copied()
+        .unwrap_or(0.0);
     let end = times
         .iter()
         .find(|t| **t > local)
@@ -267,7 +272,11 @@ pub fn active_swap_sampled(
         .iter()
         .filter(|k| k.resource_id.is_some() && usable(k))
         .collect();
-    swaps.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    swaps.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let index = swaps.iter().rposition(|k| k.time <= local)?;
     let current = swaps[index];
@@ -404,11 +413,22 @@ mod tests {
         assert_eq!(shape(&push, 1.0).travel, [0.0, 0.0]);
         assert_eq!(departing(&push, 1.0).travel, [-1.0, 0.0]);
 
-        for kind in [TransitionKind::Wipe, TransitionKind::Fade, TransitionKind::Slide,
-                     TransitionKind::Scale] {
-            let other = LayerTransition { kind, from: None, duration: 1.0, easing: None };
-            assert!(departing(&other, 0.5).is_identity(),
-                    "{kind:?} arrives OVER what it replaces, which does not move");
+        for kind in [
+            TransitionKind::Wipe,
+            TransitionKind::Fade,
+            TransitionKind::Slide,
+            TransitionKind::Scale,
+        ] {
+            let other = LayerTransition {
+                kind,
+                from: None,
+                duration: 1.0,
+                easing: None,
+            };
+            assert!(
+                departing(&other, 0.5).is_identity(),
+                "{kind:?} arrives OVER what it replaces, which does not move"
+            );
         }
     }
 
@@ -426,7 +446,10 @@ mod tests {
                   "transition":{"kind":"wipe","duration":2}}]}"#,
         )
         .expect("layer");
-        assert!(active_swap(&with_target, 3.0, &resources()).is_some(), "both exist");
+        assert!(
+            active_swap(&with_target, 3.0, &resources()).is_some(),
+            "both exist"
+        );
 
         // The same project after someone deleted the second image.
         let only_a: Vec<promo_model::ProjectResource> =
@@ -453,7 +476,12 @@ mod tests {
         let half = effect(&l, 2.5);
         assert_eq!(half.reveal, [0.0, 0.0, 0.5, 1.0]);
 
-        let (rect, uv) = apply(&half, [100.0, 50.0, 400.0, 200.0], [0.0, 0.0, 1.0, 1.0], (1920.0, 1080.0));
+        let (rect, uv) = apply(
+            &half,
+            [100.0, 50.0, 400.0, 200.0],
+            [0.0, 0.0, 1.0, 1.0],
+            (1920.0, 1080.0),
+        );
         assert_eq!(rect, [100.0, 50.0, 200.0, 200.0], "left half of the box");
         assert_eq!(uv, [0.0, 0.0, 0.5, 1.0], "and the left half of the texture");
 
@@ -468,7 +496,12 @@ mod tests {
     fn a_wipe_from_the_right_crops_the_far_side_of_the_texture() {
         let l = layer(r#","transitionIn":{"kind":"wipe","from":"right","duration":1}"#);
         let quarter = effect(&l, 2.25);
-        let (rect, uv) = apply(&quarter, [0.0, 0.0, 400.0, 100.0], [0.0, 0.0, 1.0, 1.0], (1920.0, 1080.0));
+        let (rect, uv) = apply(
+            &quarter,
+            [0.0, 0.0, 400.0, 100.0],
+            [0.0, 0.0, 1.0, 1.0],
+            (1920.0, 1080.0),
+        );
         assert_eq!(rect, [300.0, 0.0, 100.0, 100.0]);
         assert_eq!(uv, [0.75, 0.0, 0.25, 1.0]);
     }
@@ -480,20 +513,39 @@ mod tests {
     fn a_wipe_crops_inside_an_existing_viewport() {
         let l = layer(r#","transitionIn":{"kind":"wipe","from":"left","duration":1}"#);
         let half = effect(&l, 2.5);
-        let (_, uv) = apply(&half, [0.0, 0.0, 400.0, 200.0], [0.25, 0.1, 0.5, 0.4], (1920.0, 1080.0));
-        assert_eq!(uv, [0.25, 0.1, 0.25, 0.4], "half of the viewport, not half of the source");
+        let (_, uv) = apply(
+            &half,
+            [0.0, 0.0, 400.0, 200.0],
+            [0.25, 0.1, 0.5, 0.4],
+            (1920.0, 1080.0),
+        );
+        assert_eq!(
+            uv,
+            [0.25, 0.1, 0.25, 0.4],
+            "half of the viewport, not half of the source"
+        );
     }
 
     #[test]
     fn a_slide_starts_beyond_the_frame_edge_and_arrives_on_time() {
         let l = layer(r#","transitionIn":{"kind":"slide","from":"left","duration":2}"#);
         let start = effect(&l, 2.0);
-        let (rect, _) = apply(&start, [300.0, 100.0, 400.0, 200.0], [0.0, 0.0, 1.0, 1.0], (1920.0, 1080.0));
+        let (rect, _) = apply(
+            &start,
+            [300.0, 100.0, 400.0, 200.0],
+            [0.0, 0.0, 1.0, 1.0],
+            (1920.0, 1080.0),
+        );
         assert_eq!(rect[0] + rect[2], 0.0, "entirely off the left edge at t=0");
         assert_eq!(rect[1], 100.0, "and no vertical drift");
 
         let arrived = effect(&l, 4.0);
-        let (rect, _) = apply(&arrived, [300.0, 100.0, 400.0, 200.0], [0.0, 0.0, 1.0, 1.0], (1920.0, 1080.0));
+        let (rect, _) = apply(
+            &arrived,
+            [300.0, 100.0, 400.0, 200.0],
+            [0.0, 0.0, 1.0, 1.0],
+            (1920.0, 1080.0),
+        );
         assert_eq!(rect, [300.0, 100.0, 400.0, 200.0], "back where it belongs");
     }
 
@@ -502,7 +554,12 @@ mod tests {
         let l = layer(r#","transitionIn":{"kind":"slide","duration":1}"#);
         // No `from`: a slide defaults to coming up from the bottom.
         let start = effect(&l, 2.0);
-        let (rect, _) = apply(&start, [0.0, 800.0, 400.0, 200.0], [0.0, 0.0, 1.0, 1.0], (1920.0, 1080.0));
+        let (rect, _) = apply(
+            &start,
+            [0.0, 800.0, 400.0, 200.0],
+            [0.0, 0.0, 1.0, 1.0],
+            (1920.0, 1080.0),
+        );
         assert_eq!(rect[1], 1080.0, "sitting on the bottom edge of the canvas");
     }
 
@@ -571,9 +628,11 @@ mod tests {
         .expect("layer");
         // ease-out at the midpoint runs AHEAD of linear: 1-(1-t)^2 = 0.75.
         let mid = effect(&layer, 0.5);
-        assert!((mid.opacity - 0.75).abs() < 1e-9,
-                "an eased fade is ahead of linear at the midpoint, got {}",
-                mid.opacity);
+        assert!(
+            (mid.opacity - 0.75).abs() < 1e-9,
+            "an eased fade is ahead of linear at the midpoint, got {}",
+            mid.opacity
+        );
 
         // And the eased clock reaches a push's travel through the swap path.
         let eased: ProjectLayer = serde_json::from_str(
@@ -597,8 +656,10 @@ mod tests {
         .expect("resources");
         let swap = active_swap(&eased, 4.5, &resources).expect("mid-swap");
         // Incoming travel is (1 - progress) toward home; eased 0.75 → 0.25.
-        assert!((swap.effect.travel[0].abs() - 0.25).abs() < 1e-9,
-                "the push's travel rides the eased clock, got {}",
-                swap.effect.travel[0]);
+        assert!(
+            (swap.effect.travel[0].abs() - 0.25).abs() < 1e-9,
+            "the push's travel rides the eased clock, got {}",
+            swap.effect.travel[0]
+        );
     }
 }

@@ -50,7 +50,10 @@ impl Polyline {
     /// fewer than two distinct points, a non-finite coordinate (the SVG arc
     /// approximation is where those come from), or no length at all.
     pub fn new(points: Vec<Point>) -> Option<Self> {
-        if points.iter().any(|p| !p.x().is_finite() || !p.y().is_finite()) {
+        if points
+            .iter()
+            .any(|p| !p.x().is_finite() || !p.y().is_finite())
+        {
             return None;
         }
         // Collapse repeats so the table is strictly increasing.
@@ -123,10 +126,11 @@ impl Polyline {
         // The table is sorted, so binary search rather than a walk: an SVG
         // path can carry a couple of thousand points and this runs per layer
         // per frame.
-        let index = match self
-            .lengths
-            .binary_search_by(|value| value.partial_cmp(&target).unwrap_or(std::cmp::Ordering::Equal))
-        {
+        let index = match self.lengths.binary_search_by(|value| {
+            value
+                .partial_cmp(&target)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
             Ok(exact) => return self.points[exact],
             Err(insert) => insert.max(1).min(self.points.len() - 1),
         };
@@ -138,7 +142,10 @@ impl Polyline {
         } else {
             0.0
         };
-        Point(before.x() + (after.x() - before.x()) * t, before.y() + (after.y() - before.y()) * t)
+        Point(
+            before.x() + (after.x() - before.x()) * t,
+            before.y() + (after.y() - before.y()) * t,
+        )
     }
 }
 
@@ -264,7 +271,10 @@ pub fn point_along_range(
     let (cx, cy) = (chord.x() / chord_length, chord.y() / chord_length);
     let (tx, ty) = (target.x() / target_length, target.y() / target_length);
     let (cos, sin) = (cx * tx + cy * ty, cx * ty - cy * tx);
-    Point(from.x() + scale * (local.x() * cos - local.y() * sin), from.y() + scale * (local.x() * sin + local.y() * cos))
+    Point(
+        from.x() + scale * (local.x() * cos - local.y() * sin),
+        from.y() + scale * (local.x() * sin + local.y() * cos),
+    )
 }
 
 #[cfg(test)]
@@ -290,9 +300,15 @@ mod tests {
         // Halfway by DISTANCE is the corner. By raw parameter it would be the
         // midpoint of the first segment — the bug this table exists to avoid.
         let mid = line.point_at(0.5);
-        assert!((mid.x() - 10.0).abs() < 1e-9 && (mid.y() - 0.0).abs() < 1e-9, "{mid:?}");
+        assert!(
+            (mid.x() - 10.0).abs() < 1e-9 && (mid.y() - 0.0).abs() < 1e-9,
+            "{mid:?}"
+        );
         let quarter = line.point_at(0.25);
-        assert!((quarter.x() - 5.0).abs() < 1e-9 && quarter.y().abs() < 1e-9, "{quarter:?}");
+        assert!(
+            (quarter.x() - 5.0).abs() < 1e-9 && quarter.y().abs() < 1e-9,
+            "{quarter:?}"
+        );
     }
 
     #[test]
@@ -302,12 +318,18 @@ mod tests {
         let (a, b) = (pt(100.0, 100.0), pt(100.0, 900.0));
         assert_eq!(point_along(&drawn, a, b, false, 0.0), a, "starts at A");
         let end = point_along(&drawn, a, b, false, 1.0);
-        assert!((end.x() - b.x()).abs() < 1e-9 && (end.y() - b.y()).abs() < 1e-9, "ends at B: {end:?}");
+        assert!(
+            (end.x() - b.x()).abs() < 1e-9 && (end.y() - b.y()).abs() < 1e-9,
+            "ends at B: {end:?}"
+        );
         // The bulge is perpendicular to A→B and scaled with it: the drawn
         // hump rose 1 against a chord of 2, so half the 800pt move = 400.
         let mid = point_along(&drawn, a, b, false, 0.5);
         assert!((mid.y() - 500.0).abs() < 1e-6, "half way along: {mid:?}");
-        assert!((mid.x() - a.x()).abs() > 100.0, "and off the straight line: {mid:?}");
+        assert!(
+            (mid.x() - a.x()).abs() > 100.0,
+            "and off the straight line: {mid:?}"
+        );
     }
 
     #[test]
@@ -316,7 +338,10 @@ mod tests {
         let short = point_along(&drawn, pt(0.0, 0.0), pt(100.0, 0.0), false, 0.5);
         let long = point_along(&drawn, pt(0.0, 0.0), pt(400.0, 0.0), false, 0.5);
         // Four times the move, four times the bulge — a similarity fit.
-        assert!((long.y() / short.y() - 4.0).abs() < 1e-6, "{short:?} {long:?}");
+        assert!(
+            (long.y() / short.y() - 4.0).abs() < 1e-6,
+            "{short:?} {long:?}"
+        );
     }
 
     #[test]
@@ -325,8 +350,14 @@ mod tests {
         let (a, b) = (pt(0.0, 0.0), pt(200.0, 0.0));
         let normal = point_along(&drawn, a, b, false, 0.5);
         let flipped = point_along(&drawn, a, b, true, 0.5);
-        assert!((normal.y() + flipped.y()).abs() < 1e-6, "{normal:?} {flipped:?}");
-        assert!((normal.x() - flipped.x()).abs() < 1e-6, "same distance along");
+        assert!(
+            (normal.y() + flipped.y()).abs() < 1e-6,
+            "{normal:?} {flipped:?}"
+        );
+        assert!(
+            (normal.x() - flipped.x()).abs() < 1e-6,
+            "same distance along"
+        );
         assert_eq!(point_along(&drawn, a, b, true, 1.0).x().round(), b.x());
     }
 
@@ -370,7 +401,10 @@ mod tests {
             controls: vec![],
         })
         .unwrap();
-        assert!(straight.point_at(0.5).y().abs() < 1e-9, "no controls, no bend");
+        assert!(
+            straight.point_at(0.5).y().abs() < 1e-9,
+            "no controls, no bend"
+        );
 
         // Quadratic: the curve reaches half of the control's offset.
         let quad = path_document_polyline(&PathDocument {
@@ -379,7 +413,11 @@ mod tests {
             controls: vec![pt(5.0, -10.0)],
         })
         .unwrap();
-        assert!((quad.point_at(0.5).y() + 5.0).abs() < 0.05, "{:?}", quad.point_at(0.5));
+        assert!(
+            (quad.point_at(0.5).y() + 5.0).abs() < 0.05,
+            "{:?}",
+            quad.point_at(0.5)
+        );
 
         // Cubic takes two, and anything past them is ignored rather than
         // refused — a future multi-segment path must not break today's files.
@@ -402,7 +440,10 @@ mod tests {
         let forward = point_along_range(&line, a, b, false, 0.0, 1.0, 0.25);
         let backward = point_along_range(&line, a, b, false, 1.0, 0.0, 0.25);
         assert!((forward.x() - 25.0).abs() < 1e-6, "{forward:?}");
-        assert!((backward.x() - 25.0).abs() < 1e-6, "ends still fitted: {backward:?}");
+        assert!(
+            (backward.x() - 25.0).abs() < 1e-6,
+            "ends still fitted: {backward:?}"
+        );
 
         // A half of a closed path is an arc rather than a degenerate loop:
         // used 0→0.5, its two ends are far apart and the fit has a direction.
@@ -415,7 +456,10 @@ mod tests {
         let loop_line = Polyline::new(circle).unwrap();
         assert!(loop_line.is_closed());
         let half = point_along_range(&loop_line, a, b, false, 0.0, 0.5, 0.5);
-        assert!(half.y().abs() > 10.0, "the arc bulges off the chord: {half:?}");
+        assert!(
+            half.y().abs() > 10.0,
+            "the arc bulges off the chord: {half:?}"
+        );
     }
 
     /// Everything above tests the geometry in isolation. This is the contract
@@ -449,8 +493,14 @@ mod tests {
         // Both ends are the keyframes' own positions, path or no path.
         for edge in [0.0, 2.0] {
             let (curved, plain) = (at(edge), straight(edge));
-            assert!((curved.horizontal_shift - plain.horizontal_shift).abs() < 1e-6, "{edge}");
-            assert!((curved.vertical_shift - plain.vertical_shift).abs() < 1e-6, "{edge}");
+            assert!(
+                (curved.horizontal_shift - plain.horizontal_shift).abs() < 1e-6,
+                "{edge}"
+            );
+            assert!(
+                (curved.vertical_shift - plain.vertical_shift).abs() < 1e-6,
+                "{edge}"
+            );
         }
 
         // In between it leaves the straight line — the whole point.
@@ -487,7 +537,11 @@ mod tests {
         .expect("layer");
         let defaults = CompositionSettings::default();
         let missing = layer_transform_along_paths(
-            &layer, 1.0, &defaults, &path_resource(serde_json::json!([[1.0, -4.0]])));
+            &layer,
+            1.0,
+            &defaults,
+            &path_resource(serde_json::json!([[1.0, -4.0]])),
+        );
         let plain = layer_transform(&layer, 1.0, &defaults);
         assert!((missing.horizontal_shift - plain.horizontal_shift).abs() < 1e-9);
         assert!(missing.vertical_shift.abs() < 1e-9, "{missing:?}");
@@ -510,12 +564,20 @@ mod tests {
         let (a, b) = (pt(0.0, 0.0), pt(500.0, 0.0));
 
         let end = point_along(&closed, a, b, false, 1.0);
-        assert!((end.x() - a.x()).abs() < 1e-6 && (end.y() - a.y()).abs() < 1e-6,
-                "back where it started, not at B: {end:?}");
+        assert!(
+            (end.x() - a.x()).abs() < 1e-6 && (end.y() - a.y()).abs() < 1e-6,
+            "back where it started, not at B: {end:?}"
+        );
         let quarter = point_along(&closed, a, b, false, 0.25);
-        assert!(quarter.y().abs() > 5.0, "and it has been away in between: {quarter:?}");
+        assert!(
+            quarter.y().abs() > 5.0,
+            "and it has been away in between: {quarter:?}"
+        );
         // Drawn size, not scaled to the 500pt gap it was given.
-        assert!(quarter.x().abs() <= 20.0 && quarter.y().abs() <= 20.0, "{quarter:?}");
+        assert!(
+            quarter.x().abs() <= 20.0 && quarter.y().abs() <= 20.0,
+            "{quarter:?}"
+        );
     }
 
     #[test]
@@ -541,7 +603,8 @@ mod tests {
     #[test]
     fn flip_and_reverse_compose_without_interfering() {
         let (a, b) = (pt(0.0, 0.0), pt(200.0, 0.0));
-        let near = |x: Point, y: Point| (x.x() - y.x()).abs() < 1e-9 && (x.y() - y.y()).abs() < 1e-9;
+        let near =
+            |x: Point, y: Point| (x.x() - y.x()).abs() < 1e-9 && (x.y() - y.y()).abs() < 1e-9;
 
         let symmetric = Polyline::new(vec![pt(0.0, 0.0), pt(1.0, 1.0), pt(2.0, 0.0)]).unwrap();
         for p in [0.0, 0.25, 0.5, 0.75, 1.0] {
@@ -549,13 +612,25 @@ mod tests {
             let reversed = point_along_range(&symmetric, a, b, false, 1.0, 0.0, p);
             let both = point_along_range(&symmetric, a, b, true, 1.0, 0.0, p);
             let plain = point_along_range(&symmetric, a, b, false, 0.0, 1.0, p);
-            assert!(near(flipped, reversed), "one mirror at {p}: {flipped:?} {reversed:?}");
-            assert!(near(both, plain), "two mirrors cancel at {p}: {both:?} {plain:?}");
+            assert!(
+                near(flipped, reversed),
+                "one mirror at {p}: {flipped:?} {reversed:?}"
+            );
+            assert!(
+                near(both, plain),
+                "two mirrors cancel at {p}: {both:?} {plain:?}"
+            );
         }
         // Ends are keyframe positions, whatever the switches say.
         for (flip, range) in [(false, (1.0, 0.0)), (true, (0.0, 1.0)), (true, (1.0, 0.0))] {
-            assert!(near(point_along_range(&symmetric, a, b, flip, range.0, range.1, 0.0), a));
-            assert!(near(point_along_range(&symmetric, a, b, flip, range.0, range.1, 1.0), b));
+            assert!(near(
+                point_along_range(&symmetric, a, b, flip, range.0, range.1, 0.0),
+                a
+            ));
+            assert!(near(
+                point_along_range(&symmetric, a, b, flip, range.0, range.1, 1.0),
+                b
+            ));
         }
 
         // An early bulge tells flip and reverse apart: flip keeps it early,

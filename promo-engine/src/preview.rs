@@ -15,11 +15,11 @@ use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
 use promo_gpu::{GpuSurface, ImportedFrame};
 // Only the Apple-typed render entries name this; the provider no longer does.
+use crate::vector::vector_shapes;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use promo_gpu::iosurface::IOSurfaceRef;
 use promo_gpu::{GpuContext, GpuError};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, Size};
-use crate::vector::vector_shapes;
 use promo_timeline as tl;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
@@ -351,9 +351,7 @@ impl PreviewEngine {
             .id_of
             .iter()
             .filter(|(_, (id, _, _))| {
-                id == layer_id
-                    || id.starts_with(&media_prefix)
-                    || id.starts_with(&caption_prefix)
+                id == layer_id || id.starts_with(&media_prefix) || id.starts_with(&caption_prefix)
             })
             .map(|(entry, _)| *entry)
             .collect();
@@ -562,11 +560,17 @@ impl PreviewEngine {
                 None => local,
             };
             let before = self.misses;
-            let resource_id = tl::layer_resource_id(
-                layer, time, self.meta.resources.as_deref().unwrap_or(&[]))
-                .unwrap_or_default()
-                .to_string();
-            let _ = self.frame(&layer.id, &resource_id, source_time, self.tier_for(layer, time), &[]);
+            let resource_id =
+                tl::layer_resource_id(layer, time, self.meta.resources.as_deref().unwrap_or(&[]))
+                    .unwrap_or_default()
+                    .to_string();
+            let _ = self.frame(
+                &layer.id,
+                &resource_id,
+                source_time,
+                self.tier_for(layer, time),
+                &[],
+            );
             if self.misses > before {
                 fetched += 1;
             }
@@ -609,9 +613,7 @@ impl PreviewEngine {
         let tint = resolved
             .tint_hex
             .as_deref()
-            .map(|hex| {
-                rgba_from_hex(self.meta.composition_settings.resolve_color(hex))
-            })
+            .map(|hex| rgba_from_hex(self.meta.composition_settings.resolve_color(hex)))
             .unwrap_or([1.0, 1.0, 1.0, 1.0]);
         Some((
             [
@@ -797,8 +799,12 @@ impl PreviewEngine {
             self.compositor
                 .accumulate_scene_to_texture_borrowed(self.ctx, scene, &textures, index, count)?;
         }
-        self.compositor
-            .accumulate_resolve_to_iosurface(self.ctx, output, output_width, output_height)
+        self.compositor.accumulate_resolve_to_iosurface(
+            self.ctx,
+            output,
+            output_width,
+            output_height,
+        )
     }
 
     /// Renders into a wgpu texture — the portable path, and the one a Rust
@@ -863,9 +869,7 @@ impl PreviewEngine {
         resources: &[promo_model::ProjectResource],
         used: &[u64],
     ) -> Option<(SceneQuad, u64)> {
-        let Some(frame_id) = self.frame(&layer.id, showing, source_time, tier, &used) else {
-            return None;
-        };
+        let frame_id = self.frame(&layer.id, showing, source_time, tier, used)?;
         let frame = self.cached_frame(frame_id);
         let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
         let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
@@ -879,9 +883,7 @@ impl PreviewEngine {
         let mut uv_rect = [0.0f32, 0.0, 1.0, 1.0];
         if let Some(sheet) = resource.and_then(tl::sheet_for) {
             let local = tl::layer_local_time(layer, time);
-            let Some(cell) =
-                tl::sprite_frame_at(sheet, layer, local, Size::new(fw, fh))
-            else {
+            let Some(cell) = tl::sprite_frame_at(sheet, layer, local, Size::new(fw, fh)) else {
                 // `hide`: the cycle is spent and the layer asked to go.
                 return None;
             };
@@ -918,7 +920,11 @@ impl PreviewEngine {
         }
 
         let tr = tl::layer_transform_along_paths(
-            layer, time, &settings, self.meta.resources.as_deref().unwrap_or(&[]));
+            layer,
+            time,
+            settings,
+            self.meta.resources.as_deref().unwrap_or(&[]),
+        );
         let rect = if is_drawing {
             tl::drawing_rect(
                 Size::new(fw, fh),
@@ -951,7 +957,7 @@ impl PreviewEngine {
             let style = media_border_style(
                 self.effective_frame(layer),
                 layer,
-                &settings,
+                settings,
                 tr.zoom,
                 canvas.width(),
             );
@@ -1009,8 +1015,7 @@ impl PreviewEngine {
         if let Some(cached) = self.reveal_cache.get(&key) {
             return cached.clone();
         }
-        let layout =
-            promo_text::reveal_layout(&text, canvas.width(), canvas.height(), &style, by);
+        let layout = promo_text::reveal_layout(&text, canvas.width(), canvas.height(), &style, by);
         self.reveal_cache.insert(key, layout.clone());
         layout
     }
@@ -1149,8 +1154,12 @@ impl PreviewEngine {
         // together, so the quad below lands at the same canvas-space spot —
         // the texture is just denser.
         let dense = style.scaled_lengths(scale);
-        let raster =
-            promo_text::rasterize(text, canvas.width() * scale, canvas.height() * scale, &dense)?;
+        let raster = promo_text::rasterize(
+            text,
+            canvas.width() * scale,
+            canvas.height() * scale,
+            &dense,
+        )?;
         // promo-text produces straight RGBA; the compositor wants
         // premultiplied BGRA. Without the premultiply, every antialiased
         // glyph edge saturates and the text renders with binary edges.
@@ -1233,7 +1242,7 @@ impl PreviewEngine {
             .find(|r| Some(r.id.as_str()) == showing)?
             .drawing
             .as_ref()?;
-        let shapes = vector_shapes(doc, &settings);
+        let shapes = vector_shapes(doc, settings);
         if shapes.is_empty() {
             return None;
         }
@@ -1241,7 +1250,11 @@ impl PreviewEngine {
         // Path-aware: a keyframe carrying a motionPath bends the route to
         // it, and resolving that needs the drawing resource.
         let tr = tl::layer_transform_along_paths(
-            layer, time, settings, self.meta.resources.as_deref().unwrap_or(&[]));
+            layer,
+            time,
+            settings,
+            self.meta.resources.as_deref().unwrap_or(&[]),
+        );
         let rect = tl::drawing_rect(
             Size::new(bw.max(1.0), bh.max(1.0)),
             canvas,
@@ -1454,8 +1467,12 @@ impl PreviewEngine {
                     stops: gradient
                         .resolved_stops()
                         .iter()
-                        .map(|stop| (rgba_from_hex(settings.resolve_color(&stop.color_hex)),
-                                     stop.at as f32))
+                        .map(|stop| {
+                            (
+                                rgba_from_hex(settings.resolve_color(&stop.color_hex)),
+                                stop.at as f32,
+                            )
+                        })
                         .collect(),
                 }
             });
@@ -1479,9 +1496,7 @@ impl PreviewEngine {
             // shutter stays a cut, and no frame decodes twice.
             let centre = time;
             let time = match self.blur_sample {
-                Some(sample) if tl::layer_shutter(layer, centre).is_some_and(|s| s > 0.0) => {
-                    sample
-                }
+                Some(sample) if tl::layer_shutter(layer, centre).is_some_and(|s| s > 0.0) => sample,
                 _ => centre,
             };
             if layer.kind == ProjectLayerKind::Caption {
@@ -1494,8 +1509,13 @@ impl PreviewEngine {
                 // arrive — the same two-quad rule the media path uses.
                 if let Some(swap) = swap.as_ref() {
                     if let Some((mut quad, id)) = self.caption_quad(
-                        layer, swap.previous.as_deref(), &settings, canvas, time, &used)
-                    {
+                        layer,
+                        swap.previous.as_deref(),
+                        &settings,
+                        canvas,
+                        time,
+                        &used,
+                    ) {
                         quad.opacity = tl::layer_opacity(layer, time) as f32;
                         // A push shoves the outgoing material out the far
                         // side; every other kind leaves it where it is and
@@ -1506,8 +1526,8 @@ impl PreviewEngine {
                         used.push(id);
                     }
                 }
-                if let Some((mut quad, id)) = self.caption_quad(
-                    layer, showing.as_deref(), &settings, canvas, time, &used)
+                if let Some((mut quad, id)) =
+                    self.caption_quad(layer, showing.as_deref(), &settings, canvas, time, &used)
                 {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
                     if let Some(swap) = swap.as_ref() {
@@ -1528,7 +1548,13 @@ impl PreviewEngine {
                     let bands = rule.as_ref().and_then(|rule| {
                         let by = tl::reveal::unit_of(rule);
                         let layout = self.caption_reveal(
-                            layer, showing.as_deref(), &settings, canvas, time, by)?;
+                            layer,
+                            showing.as_deref(),
+                            &settings,
+                            canvas,
+                            time,
+                            by,
+                        )?;
                         let progress = tl::reveal::progress(rule, layer, time, layout.units.len());
                         Some((tl::reveal::bands(&layout, progress, rule), rule.clone()))
                     });
@@ -1536,10 +1562,16 @@ impl PreviewEngine {
                     match bands {
                         Some((bands, rule)) if !bands.is_empty() => {
                             let tinted = rule.highlight_color_hex.as_deref().and_then(|hex| {
-                                let rgba = rgba_bytes(&settings.resolve_color(hex), 1.0);
+                                let rgba = rgba_bytes(settings.resolve_color(hex), 1.0);
                                 self.caption_quad_colored(
-                                    layer, showing.as_deref(), &settings, canvas, time,
-                                    Some(rgba), &used)
+                                    layer,
+                                    showing.as_deref(),
+                                    &settings,
+                                    canvas,
+                                    time,
+                                    Some(rgba),
+                                    &used,
+                                )
                             });
                             for band in bands {
                                 let source = if band.active { tinted } else { None };
@@ -1620,8 +1652,13 @@ impl PreviewEngine {
                 let swap = tl::transition::active_swap_sampled(layer, centre, time, &all);
                 if let Some(swap) = swap.as_ref() {
                     if let Some((mut quad, id)) = self.drawing_quad(
-                        layer, swap.previous.as_deref(), &settings, canvas, time, &used)
-                    {
+                        layer,
+                        swap.previous.as_deref(),
+                        &settings,
+                        canvas,
+                        time,
+                        &used,
+                    ) {
                         quad.rotation_deg = tl::layer_rotation(layer, time);
                         quad.opacity = tl::layer_opacity(layer, time) as f32;
                         apply_effect(&mut quad, swap.departing, canvas);
@@ -1630,8 +1667,8 @@ impl PreviewEngine {
                         used.push(id);
                     }
                 }
-                if let Some((quad, id)) = self.drawing_quad(
-                    layer, showing.as_deref(), &settings, canvas, time, &used)
+                if let Some((quad, id)) =
+                    self.drawing_quad(layer, showing.as_deref(), &settings, canvas, time, &used)
                 {
                     let mut quad = quad;
                     quad.rotation_deg = tl::layer_rotation(layer, time);
@@ -1660,9 +1697,17 @@ impl PreviewEngine {
                 // swap could not do while a layer drew one quad.
                 if let Some(previous) = swap.previous.as_deref() {
                     if let Some((mut quad, id)) = self.media_quad(
-                        layer, previous, &settings, canvas, time, source_time, tier,
-                        is_drawing, &resources, &used)
-                    {
+                        layer,
+                        previous,
+                        &settings,
+                        canvas,
+                        time,
+                        source_time,
+                        tier,
+                        is_drawing,
+                        &resources,
+                        &used,
+                    ) {
                         apply_effect(&mut quad, swap.departing, canvas);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
@@ -1680,9 +1725,17 @@ impl PreviewEngine {
                 }
             }
             let Some((mut quad, frame_id)) = self.media_quad(
-                layer, &showing, &settings, canvas, time, source_time, tier,
-                is_drawing, &resources, &used)
-            else {
+                layer,
+                &showing,
+                &settings,
+                canvas,
+                time,
+                source_time,
+                tier,
+                is_drawing,
+                &resources,
+                &used,
+            ) else {
                 continue;
             };
             used.push(frame_id);
@@ -1715,8 +1768,7 @@ impl PreviewEngine {
         // put too. A mask shared by several quads lands in one slot.
         for (quad_index, resource_id, inverted) in mask_requests {
             let rect = quads[quad_index].rect;
-            let Some(id) = self.mask_texture(&resource_id, rect, &settings, canvas, &used)
-            else {
+            let Some(id) = self.mask_texture(&resource_id, rect, &settings, canvas, &used) else {
                 continue;
             };
             let slot = match used.iter().position(|&u| u == id) {
@@ -1788,7 +1840,8 @@ fn media_border_style(
                 layer
                     .image_border_color_hex
                     .as_deref()
-                    .unwrap_or(&settings.video_border_color_hex)),
+                    .unwrap_or(&settings.video_border_color_hex),
+            ),
         ),
     }
 }
@@ -1818,13 +1871,7 @@ mod border_style_tests {
     #[test]
     fn a_border_frame_supplies_radius_thickness_and_color() {
         let settings = promo_model::CompositionSettings::default();
-        let style = media_border_style(
-            Some(&border_frame()),
-            &layer(),
-            &settings,
-            1.0,
-            1920.0,
-        );
+        let style = media_border_style(Some(&border_frame()), &layer(), &settings, 1.0, 1920.0);
         // Authored at 1080-wide: 24 * 1920/1080, 6 * 1920/1080 — the exact
         // Swift math, floor applied before zoom.
         assert!((style.corner_radius - 24.0 * 1920.0 / 1080.0).abs() < 1e-9);
@@ -1838,8 +1885,7 @@ mod border_style_tests {
         let with_none = media_border_style(None, &layer(), &settings, 1.0, 1920.0);
         let mut device = border_frame();
         device.kind = promo_model::ResourceFrameKind::Device;
-        let with_device =
-            media_border_style(Some(&device), &layer(), &settings, 1.0, 1920.0);
+        let with_device = media_border_style(Some(&device), &layer(), &settings, 1.0, 1920.0);
         // A device frame is pre-baked by the provider; the quad falls back to
         // the settings path, same as no frame at all.
         assert_eq!(with_none, with_device);
@@ -1852,7 +1898,10 @@ mod border_style_tests {
         let mut frame = border_frame();
         frame.border_width = 0.1; // 0.1 * 540/1080 = 0.05 → floors to 1
         let style = media_border_style(Some(&frame), &layer(), &settings, 2.0, 540.0);
-        assert!((style.border_width - 2.0).abs() < 1e-9, "1px floor × zoom 2");
+        assert!(
+            (style.border_width - 2.0).abs() < 1e-9,
+            "1px floor × zoom 2"
+        );
     }
 }
 
@@ -1881,8 +1930,7 @@ fn scene_displacement(a: &Scene, b: &Scene) -> Option<f64> {
         return None;
     }
     let scale = if a.canvas_width > 0.0 && a.canvas_height > 0.0 {
-        (a.output_width as f64 / a.canvas_width)
-            .min(a.output_height as f64 / a.canvas_height)
+        (a.output_width as f64 / a.canvas_width).min(a.output_height as f64 / a.canvas_height)
     } else {
         1.0
     };
@@ -1892,9 +1940,7 @@ fn scene_displacement(a: &Scene, b: &Scene) -> Option<f64> {
             let [x, y, w, h] = q.rect;
             let (cx, cy) = (x + w / 2.0, y + h / 2.0);
             let (sin, cos) = q.rotation_deg.to_radians().sin_cos();
-            let rot = |dx: f64, dy: f64| {
-                [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]
-            };
+            let rot = |dx: f64, dy: f64| [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
             [
                 rot(-w / 2.0, -h / 2.0),
                 rot(w / 2.0, -h / 2.0),
@@ -1923,12 +1969,7 @@ fn scene_displacement(a: &Scene, b: &Scene) -> Option<f64> {
 
 fn crop_to_band(quad: &mut SceneQuad, uv: [f64; 4]) {
     let [x, y, w, h] = quad.rect;
-    quad.rect = [
-        x + w * uv[0],
-        y + h * uv[1],
-        w * uv[2],
-        h * uv[3],
-    ];
+    quad.rect = [x + w * uv[0], y + h * uv[1], w * uv[2], h * uv[3]];
     let base = quad.uv_rect;
     quad.uv_rect = [
         base[0] + base[2] * uv[0] as f32,
@@ -1944,7 +1985,12 @@ fn crop_to_band(quad: &mut SceneQuad, uv: [f64; 4]) {
 /// screenshot does. Opacity is already multiplied in by `layer_opacity` —
 /// what is left is the geometry: where the quad sits, how much of it shows,
 /// and how big it is.
-fn apply_transition(quad: &mut SceneQuad, layer: &promo_model::ProjectLayer, time: f64, canvas: Size) {
+fn apply_transition(
+    quad: &mut SceneQuad,
+    layer: &promo_model::ProjectLayer,
+    time: f64,
+    canvas: Size,
+) {
     apply_effect(quad, tl::transition::effect(layer, time), canvas);
 }
 
@@ -1986,7 +2032,8 @@ pub fn caption_style(
         settings.resolve_color(
             &style
                 .and_then(|s| s.text_color_hex.clone())
-                .unwrap_or_else(|| settings.subtitle_color_hex.clone())),
+                .unwrap_or_else(|| settings.subtitle_color_hex.clone()),
+        ),
         1.0,
     );
     let bg_opacity = style
@@ -1996,7 +2043,8 @@ pub fn caption_style(
         settings.resolve_color(
             &style
                 .and_then(|s| s.background_color_hex.clone())
-                .unwrap_or_else(|| settings.subtitle_background_color_hex.clone())),
+                .unwrap_or_else(|| settings.subtitle_background_color_hex.clone()),
+        ),
         bg_opacity,
     );
     promo_text::TextStyle {
@@ -2027,7 +2075,8 @@ pub fn caption_style(
             settings.resolve_color(
                 &style
                     .and_then(|s| s.stroke_color_hex.clone())
-                    .unwrap_or_else(|| settings.subtitle_stroke_color_hex.clone())),
+                    .unwrap_or_else(|| settings.subtitle_stroke_color_hex.clone()),
+            ),
             1.0,
         ),
         stroke_width: get(|s| s.stroke_width, settings.subtitle_stroke_width),
@@ -2035,7 +2084,8 @@ pub fn caption_style(
             settings.resolve_color(
                 &style
                     .and_then(|s| s.shadow_color_hex.clone())
-                    .unwrap_or_else(|| settings.subtitle_shadow_color_hex.clone())),
+                    .unwrap_or_else(|| settings.subtitle_shadow_color_hex.clone()),
+            ),
             style
                 .and_then(|s| s.shadow_opacity)
                 .unwrap_or(settings.subtitle_shadow_opacity),
@@ -2049,10 +2099,16 @@ pub fn caption_style(
             .and_then(|s| s.shadow_offset)
             .or(settings.subtitle_shadow_offset)
             .unwrap_or_else(|| {
-                [0.0, get(|s| s.shadow_radius, settings.subtitle_shadow_radius) / 2.0]
+                [
+                    0.0,
+                    get(|s| s.shadow_radius, settings.subtitle_shadow_radius) / 2.0,
+                ]
             }),
         padding: get(|s| s.padding, settings.subtitle_background_padding),
-        corner_radius: get(|s| s.corner_radius, settings.subtitle_background_corner_radius),
+        corner_radius: get(
+            |s| s.corner_radius,
+            settings.subtitle_background_corner_radius,
+        ),
         left_margin: get(|s| s.left_margin, settings.subtitle_left_margin),
         right_margin: get(|s| s.right_margin, settings.subtitle_right_margin),
         vertical_margin: get(|s| s.vertical_margin, settings.subtitle_vertical_margin),
@@ -2268,7 +2324,12 @@ mod tests {
         engine.render(3.0, out.raw(), 64, 64).expect("render");
 
         assert!(
-            !state.lock().unwrap().requests.iter().any(|r| r.0 == "DRAWL"),
+            !state
+                .lock()
+                .unwrap()
+                .requests
+                .iter()
+                .any(|r| r.0 == "DRAWL"),
             "the engine must not ask a host for vector content"
         );
         // The stroke runs corner to corner: the centre pixel is on it, and
@@ -2503,9 +2564,18 @@ mod tests {
         let first = ink(0.0);
         let half = ink(2.0);
         let whole = ink(3.9);
-        assert!(first > 0, "the first word is there when the caption is ({first} px)");
-        assert!(half > first, "more words by the middle: {first} then {half}");
-        assert!(whole > half, "and all of them by the end: {half} then {whole}");
+        assert!(
+            first > 0,
+            "the first word is there when the caption is ({first} px)"
+        );
+        assert!(
+            half > first,
+            "more words by the middle: {first} then {half}"
+        );
+        assert!(
+            whole > half,
+            "and all of them by the end: {half} then {whole}"
+        );
 
         // The reveal must not MOVE the caption: laid out whole, the last
         // word lands where it always was.
@@ -2523,8 +2593,11 @@ mod tests {
         // The first word starts at the same x throughout — nothing re-flows.
         engine.render(0.0, out.raw(), 512, 128).expect("render");
         let at_start = out.read_pixels().unwrap();
-        assert_eq!(leftmost(&at_start), x_when_revealed,
-                   "a caption that re-flows as it types has been laid out per frame");
+        assert_eq!(
+            leftmost(&at_start),
+            x_when_revealed,
+            "a caption that re-flows as it types has been laid out per frame"
+        );
     }
 
     /// A staggered reveal changes WHEN each word arrives, never where it
@@ -2569,7 +2642,7 @@ mod tests {
                 (0..512).filter(|x| (0..256).any(|y| lit(*x, y))).collect(),
             )
         };
-        let mut render = |json: String, time: f64| {
+        let render = |json: String, time: f64| {
             let meta = ProjectMetadata::from_json(&json).expect("reveal fixture");
             let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
             engine.render(time, out.raw(), 512, 256).expect("render");
@@ -2717,9 +2790,12 @@ mod tests {
     fn a_blurred_mover_smears_and_a_sharp_one_does_not() {
         let sharp_meta = blur_project(&blur_fixture(0.0, "FF0000", ""));
         let blurred_meta = blur_project(&blur_fixture(
-            0.0, "FF0000", r#", "motionBlur": {"shutter": 1.0}"#));
+            0.0,
+            "FF0000",
+            r#", "motionBlur": {"shutter": 1.0}"#,
+        ));
         let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
-        let mut render = |meta: ProjectMetadata| {
+        let render = |meta: ProjectMetadata| {
             let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
             engine.render(0.5, out.raw(), 512, 128).expect("render");
             out.read_pixels().unwrap()
@@ -2766,7 +2842,10 @@ mod tests {
             "the blurred plate smears ({red_ramp}) while its sharp twin does \
              not ({blue_ramp}) — anything else means the pin failed",
         );
-        assert!(blue_ramp <= 6, "the sharp layer stays antialiasing-sharp: {blue_ramp}");
+        assert!(
+            blue_ramp <= 6,
+            "the sharp layer stays antialiasing-sharp: {blue_ramp}"
+        );
     }
 
     /// A blurred layer that is not actually moving costs nothing and changes
@@ -2786,7 +2865,7 @@ mod tests {
             ))
         };
         let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
-        let mut render = |meta: ProjectMetadata| {
+        let render = |meta: ProjectMetadata| {
             let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
             engine.render(0.5, out.raw(), 512, 128).expect("render");
             out.read_pixels().unwrap()
@@ -2801,8 +2880,11 @@ mod tests {
         // early-out — whose saving is the skipped GPU accumulation, which
         // no assertion here can see. The bit-exact check above is the
         // correctness half; this is the ledger.
-        let (mut engine, _state) =
-            make_engine(still(r#", "motionBlur": {"shutter": 1.0}"#), vec![], 64 << 20);
+        let (mut engine, _state) = make_engine(
+            still(r#", "motionBlur": {"shutter": 1.0}"#),
+            vec![],
+            64 << 20,
+        );
         engine.render(0.5, out.raw(), 512, 128).expect("render");
         assert_eq!(
             engine.builds, 3,
@@ -2815,22 +2897,22 @@ mod tests {
     /// is the whip-pan idiom, blur arriving with the speed.
     #[test]
     fn a_keyframed_shutter_ramps_the_blur_in() {
-        let meta = blur_project(&format!(
-            r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B01", "name":"mover",
+        let meta = blur_project(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B01", "name":"mover",
                 "sortIndex": 1, "kind":"caption",
                 "isEnabled": true, "startTime": 0, "duration": 1,
                 "captionText": "MOTION",
-                "captionStyle": {{"backgroundColorHex": "FF0000",
-                                  "backgroundOpacity": 1.0, "fontSize": 18}},
+                "captionStyle": {"backgroundColorHex": "FF0000",
+                                  "backgroundOpacity": 1.0, "fontSize": 18},
                 "keyframes": [
-                  {{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B02", "time": 0,
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B02", "time": 0,
                     "horizontalShift": -200, "verticalShift": 0,
-                    "shutter": 0, "transitionDuration": 0}},
-                  {{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B03", "time": 1,
+                    "shutter": 0, "transitionDuration": 0},
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B03", "time": 1,
                     "horizontalShift": 200, "verticalShift": 0,
-                    "shutter": 1, "transitionDuration": 1}}
-                ]}}"#
-        ));
+                    "shutter": 1, "transitionDuration": 1}
+                ]}"#,
+        );
         let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
         let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
         let mut ramp_at = |time: f64| {
@@ -2872,7 +2954,7 @@ mod tests {
             ))
         };
         let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
-        let mut render = |meta: ProjectMetadata| {
+        let render = |meta: ProjectMetadata| {
             let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
             engine.render(0.5, out.raw(), 512, 128).expect("render");
             out.read_pixels().unwrap()
@@ -2882,8 +2964,10 @@ mod tests {
             r#", "motionBlur": {"shutter": 1.0}"#,
             r#", "shutter": 0"#,
         ));
-        assert_eq!(sharp, overridden,
-                   "keyframed zero beats the constant, to the bit");
+        assert_eq!(
+            sharp, overridden,
+            "keyframed zero beats the constant, to the bit"
+        );
     }
 
     /// A push swap's travel smears when the layer asks for blur: the swap's
@@ -2931,7 +3015,7 @@ mod tests {
             )
         };
         let out = OwnedIoSurface::new_bgra(256, 128).unwrap();
-        let mut render = |json: String| {
+        let render = |json: String| {
             let meta = ProjectMetadata::from_json(&json).expect("swap fixture");
             let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
             // Mid-push: both plates are travelling at canvas-width per
@@ -2941,9 +3025,7 @@ mod tests {
         };
         let ramp = |px: &[u8], channel: usize| -> usize {
             let row = (0..128)
-                .filter(|y| {
-                    (0..256).any(|x| px[((y * 256 + x) * 4) + channel] > 200)
-                })
+                .filter(|y| (0..256).any(|x| px[((y * 256 + x) * 4) + channel] > 200))
                 .collect::<Vec<_>>();
             let row = row[row.len() / 2];
             (0..256)
@@ -2990,7 +3072,7 @@ mod tests {
             ))
         };
         let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
-        let mut ink = |meta: ProjectMetadata, time: f64| -> usize {
+        let ink = |meta: ProjectMetadata, time: f64| -> usize {
             let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
             engine.render(time, out.raw(), 512, 128).expect("render");
             out.read_pixels()
@@ -2999,9 +3081,7 @@ mod tests {
                 .filter(|p| p[2] > 60)
                 .count()
         };
-        let rise = |t: f64| {
-            ink(fixture(r#", "reveal": {"by": "word", "mode": "rise"}"#), t)
-        };
+        let rise = |t: f64| ink(fixture(r#", "reveal": {"by": "word", "mode": "rise"}"#), t);
         assert_eq!(rise(0.5), 0, "at the first frame nothing has arrived");
         assert!(rise(1.2) > 0, "and the words duly arrive");
         // The no-reveal caption still draws whole from its first frame —
@@ -3031,10 +3111,12 @@ mod tests {
     fn centre_of_band_rows(px: &[u8], y0: usize, y1: usize) -> (u8, u8, u8) {
         // The plate's centre row and column: the widest lit band.
         let rows: Vec<usize> = (y0..y1)
-            .filter(|y| (0..512).any(|x| {
-                let o = (y * 512 + x) * 4;
-                px[o] > 30 || px[o + 1] > 30 || px[o + 2] > 30
-            }))
+            .filter(|y| {
+                (0..512).any(|x| {
+                    let o = (y * 512 + x) * 4;
+                    px[o] > 30 || px[o + 1] > 30 || px[o + 2] > 30
+                })
+            })
             .collect();
         let y = rows[rows.len() / 2];
         let cols: Vec<usize> = (0..512)
@@ -3047,7 +3129,7 @@ mod tests {
         // clear of the white glyphs at its centre.
         let x = cols[cols.len() / 10];
         let o = (y * 512 + x) * 4;
-        (px[o + 2], px[o + 1], px[o])   // r, g, b from BGRA
+        (px[o + 2], px[o + 1], px[o]) // r, g, b from BGRA
     }
 
     /// Saturation zero turns the layer's own pixels grey — and ONLY its
@@ -3085,13 +3167,17 @@ mod tests {
 
         // Top band: the graded plate. Its red must have collapsed to luma.
         let (r, g, b) = centre_of_band_rows(&px, 0, 60);
-        assert!(r.abs_diff(g) <= 2 && g.abs_diff(b) <= 2,
-                "grey means r=g=b, got ({r},{g},{b})");
+        assert!(
+            r.abs_diff(g) <= 2 && g.abs_diff(b) <= 2,
+            "grey means r=g=b, got ({r},{g},{b})"
+        );
         assert!(r < 120, "and far from full red, got {r}");
         // Bottom band: the neighbour keeps its blue.
         let (nr, _ng, nb) = centre_of_band_rows(&px, 60, 128);
-        assert!(nb > 150 && nr < 60,
-                "the ungraded neighbour stays blue, got r={nr} b={nb}");
+        assert!(
+            nb > 150 && nr < 60,
+            "the ungraded neighbour stays blue, got r={nr} b={nb}"
+        );
     }
 
     /// A tint is a gel: at full amount a white plate takes the tint's own
@@ -3138,8 +3224,10 @@ mod tests {
         let start = green_at(0.05);
         let late = green_at(1.9);
         assert!(start < 15, "fully saturated red has no green, got {start}");
-        assert!(late > start + 25,
-                "desaturating pulls green toward luma: {start} then {late}");
+        assert!(
+            late > start + 25,
+            "desaturating pulls green toward luma: {start} then {late}"
+        );
     }
 
     /// The three blend modes against a red ground: screen drops a black
@@ -3159,7 +3247,7 @@ mod tests {
             ))
         };
         let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
-        let mut frame = |plate: &str, blend: &str| {
+        let frame = |plate: &str, blend: &str| {
             let mut meta = fixture(plate, blend);
             // A red ground beneath everything, so "what is beneath" is a
             // known number.
@@ -3187,27 +3275,42 @@ mod tests {
             let o = (px_y * 512 + px_x) * 4;
             (px[o + 2], px[o + 1], px[o])
         };
-        let mut plate_px = |plate: &str, blend: &str| probe(&frame(plate, blend));
+        let plate_px = |plate: &str, blend: &str| probe(&frame(plate, blend));
 
         // Screen with a BLACK plate: black drops out, the ground shows.
         let (r, g, _b) = plate_px("000000", r#", "blendMode": "screen""#);
-        assert!(r > 140 && g < 40, "screen lets the red ground through black, got r={r} g={g}");
+        assert!(
+            r > 140 && g < 40,
+            "screen lets the red ground through black, got r={r} g={g}"
+        );
         // The control: a normal black plate covers the ground.
         let (nr, _, _) = probe(&control);
         assert!(nr < 40, "normal black covers, got r={nr}");
 
         // Multiply with a WHITE plate: white drops out, the ground shows.
         let (mr, mg, _b) = plate_px("FFFFFF", r#", "blendMode": "multiply""#);
-        assert!(mr > 140 && mg < 40, "multiply lets red through white, got r={mr} g={mg}");
+        assert!(
+            mr > 140 && mg < 40,
+            "multiply lets red through white, got r={mr} g={mg}"
+        );
         // Control: normal white covers.
         let (wr, wg, _) = plate_px("FFFFFF", "");
-        assert!(wr > 200 && wg > 200, "normal white covers, got r={wr} g={wg}");
+        assert!(
+            wr > 200 && wg > 200,
+            "normal white covers, got r={wr} g={wg}"
+        );
 
         // Add with a dim grey plate over the red ground: brighter than
         // either alone, in every channel the sources carry.
         let (ar, ag, _b) = plate_px("303030", r#", "blendMode": "add""#);
-        assert!(ar > 190, "add sums the ground's red and the plate, got {ar}");
-        assert!((30..=90).contains(&ag), "and the plate's own grey rides along, got {ag}");
+        assert!(
+            ar > 190,
+            "add sums the ground's red and the plate, got {ar}"
+        );
+        assert!(
+            (30..=90).contains(&ag),
+            "and the plate's own grey rides along, got {ag}"
+        );
     }
 
     /// A mask project: a full-canvas red image layer over a blue ground,
@@ -3272,13 +3375,29 @@ mod tests {
 
         // Masked: the oval's centre keeps the layer, the corner loses it.
         let masked = render(r#", "maskResourceID": "MASK""#);
-        assert_eq!(at(&masked, 64, 64), [0, 0, 255, 255], "ink: the layer shows");
-        assert_eq!(at(&masked, 6, 6), [255, 0, 0, 255], "no ink: the ground shows");
+        assert_eq!(
+            at(&masked, 64, 64),
+            [0, 0, 255, 255],
+            "ink: the layer shows"
+        );
+        assert_eq!(
+            at(&masked, 6, 6),
+            [255, 0, 0, 255],
+            "no ink: the ground shows"
+        );
 
         // Inverted: the ink is the hole now.
         let inverted = render(r#", "maskResourceID": "MASK", "maskInverted": true"#);
-        assert_eq!(at(&inverted, 64, 64), [255, 0, 0, 255], "inverted: the hole");
-        assert_eq!(at(&inverted, 6, 6), [0, 0, 255, 255], "inverted: layer outside the ink");
+        assert_eq!(
+            at(&inverted, 64, 64),
+            [255, 0, 0, 255],
+            "inverted: the hole"
+        );
+        assert_eq!(
+            at(&inverted, 6, 6),
+            [0, 0, 255, 255],
+            "inverted: layer outside the ink"
+        );
     }
 
     /// Mid-swap, BOTH materials are on screen — and both stay inside the
@@ -3299,8 +3418,16 @@ mod tests {
             make_engine(meta, vec![("IMG".into(), [0, 0, 255, 255], 32)], 64 << 20);
         let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
         engine.render(1.5, out.raw(), 128, 128).expect("render");
-        assert_eq!(pixel(&out, 64, 64), [0, 0, 255, 255], "the swap shows inside");
-        assert_eq!(pixel(&out, 6, 6), [255, 0, 0, 255], "and the corner stays ground");
+        assert_eq!(
+            pixel(&out, 64, 64),
+            [0, 0, 255, 255],
+            "the swap shows inside"
+        );
+        assert_eq!(
+            pixel(&out, 6, 6),
+            [255, 0, 0, 255],
+            "and the corner stays ground"
+        );
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as
@@ -3345,23 +3472,41 @@ mod tests {
             engine.render(time, out.raw(), 256, 128).expect("render");
             let px = out.read_pixels().unwrap();
             // BGRA: the first caption is red, the second blue.
-            let red = px.chunks_exact(4).filter(|p| p[2] > 100 && p[0] < 80).count();
-            let blue = px.chunks_exact(4).filter(|p| p[0] > 100 && p[2] < 80).count();
+            let red = px
+                .chunks_exact(4)
+                .filter(|p| p[2] > 100 && p[0] < 80)
+                .count();
+            let blue = px
+                .chunks_exact(4)
+                .filter(|p| p[0] > 100 && p[2] < 80)
+                .count();
             (red, blue)
         };
 
         let (before_red, before_blue) = counts(1.0);
-        assert!(before_red > 20, "the first caption renders ({before_red} px)");
+        assert!(
+            before_red > 20,
+            "the first caption renders ({before_red} px)"
+        );
         assert_eq!(before_blue, 0, "and only it");
 
         // Half way through the wipe: both sets of words on screen.
         let (mid_red, mid_blue) = counts(5.0);
-        assert!(mid_red > 0, "the outgoing words are still there ({mid_red})");
+        assert!(
+            mid_red > 0,
+            "the outgoing words are still there ({mid_red})"
+        );
         assert!(mid_blue > 0, "while the new ones arrive ({mid_blue})");
 
         let (after_red, after_blue) = counts(8.0);
-        assert!(after_blue > 20, "the second caption renders ({after_blue} px)");
-        assert_eq!(after_red, 0, "and the first is gone — the swap was ignored before");
+        assert!(
+            after_blue > 20,
+            "the second caption renders ({after_blue} px)"
+        );
+        assert_eq!(
+            after_red, 0,
+            "and the first is gone — the swap was ignored before"
+        );
     }
 
     #[test]
@@ -3432,7 +3577,10 @@ mod tests {
         };
 
         let whole = lit(5.0);
-        assert!(whole > 200, "the caption must render at all ({whole} lit px)");
+        assert!(
+            whole > 200,
+            "the caption must render at all ({whole} lit px)"
+        );
         assert_eq!(lit(0.0), 0, "nothing is revealed at the very start");
 
         let half = lit(1.0);
@@ -3492,8 +3640,10 @@ mod tests {
         // without scaling them drew a 5px outline at 1135 lit pixels instead
         // of 1857, and halved the shadow — a 4K export of a 1080p canvas
         // quietly lost the very effects that keep a caption readable.
-        for (name, f, floor) in [("outline", red as fn(&[u8]) -> bool, 500usize),
-                                 ("shadow", blue as fn(&[u8]) -> bool, 400usize)] {
+        for (name, f, floor) in [
+            ("outline", red as fn(&[u8]) -> bool, 500usize),
+            ("shadow", blue as fn(&[u8]) -> bool, 400usize),
+        ] {
             let (one, two) = (count(&at_1x, f), count(&at_2x, f));
             assert!(one > floor, "{name} did not render at 1x ({one} px)");
             let ratio = one.max(two) as f64 / one.min(two).max(1) as f64;
@@ -3502,10 +3652,16 @@ mod tests {
         let ink = |px: &[u8]| px.chunks_exact(4).filter(|p| p[1] > 64).count();
         let ink_1x = ink(&at_1x);
         let ink_2x = ink(&at_2x);
-        assert!(ink_1x > 50, "caption must actually render ({ink_1x} lit px)");
+        assert!(
+            ink_1x > 50,
+            "caption must actually render ({ink_1x} lit px)"
+        );
         // Same placement and size: ink counts within 25% of each other …
         let ratio = ink_1x.max(ink_2x) as f64 / ink_1x.min(ink_2x).max(1) as f64;
-        assert!(ratio < 1.25, "ink {ink_1x} vs {ink_2x}: quad moved or resized");
+        assert!(
+            ratio < 1.25,
+            "ink {ink_1x} vs {ink_2x}: quad moved or resized"
+        );
         // … and the frames differ only at glyph-edge level.
         let mean = at_1x
             .iter()
@@ -3844,12 +4000,24 @@ mod portable_tests {
 
         // At t=0 the cell is red and the layer sits at the left edge.
         let start = render_and_read(&mut engine, 0.0, 64);
-        assert_eq!(pixel_at(&start, 64, 8, 8), [0, 0, 255, 255], "frame 0 is red");
-        assert_eq!(pixel_at(&start, 64, 40, 8), [0, 51, 0, 255], "nothing there yet");
+        assert_eq!(
+            pixel_at(&start, 64, 8, 8),
+            [0, 0, 255, 255],
+            "frame 0 is red"
+        );
+        assert_eq!(
+            pixel_at(&start, 64, 40, 8),
+            [0, 51, 0, 255],
+            "nothing there yet"
+        );
 
         // At t=2 it has moved 32px right AND advanced to the third frame.
         let later = render_and_read(&mut engine, 2.0, 64);
-        assert_eq!(pixel_at(&later, 64, 40, 8), [255, 0, 0, 255], "frame 2 is blue");
+        assert_eq!(
+            pixel_at(&later, 64, 40, 8),
+            [255, 0, 0, 255],
+            "frame 2 is blue"
+        );
         assert_eq!(pixel_at(&later, 64, 8, 8), [0, 51, 0, 255], "left behind");
     }
 
@@ -3910,18 +4078,38 @@ mod portable_tests {
         );
 
         let before = render_and_read(&mut engine, 1.0, 64);
-        assert_eq!(pixel_at(&before, 64, 8, 32), [0, 0, 255, 255], "red before the swap");
-        assert_eq!(pixel_at(&before, 64, 56, 32), [0, 0, 255, 255], "on both sides");
+        assert_eq!(
+            pixel_at(&before, 64, 8, 32),
+            [0, 0, 255, 255],
+            "red before the swap"
+        );
+        assert_eq!(
+            pixel_at(&before, 64, 56, 32),
+            [0, 0, 255, 255],
+            "on both sides"
+        );
 
         // Half way through a wipe from the left: the incoming image holds the
         // left of the frame, the outgoing one is still there on the right.
         // This is the assertion a cut could never satisfy.
         let mid = render_and_read(&mut engine, 3.0, 64);
-        assert_eq!(pixel_at(&mid, 64, 8, 32), [255, 0, 0, 255], "blue arriving on the left");
-        assert_eq!(pixel_at(&mid, 64, 56, 32), [0, 0, 255, 255], "red still leaving on the right");
+        assert_eq!(
+            pixel_at(&mid, 64, 8, 32),
+            [255, 0, 0, 255],
+            "blue arriving on the left"
+        );
+        assert_eq!(
+            pixel_at(&mid, 64, 56, 32),
+            [0, 0, 255, 255],
+            "red still leaving on the right"
+        );
 
         let after = render_and_read(&mut engine, 5.0, 64);
-        assert_eq!(pixel_at(&after, 64, 8, 32), [255, 0, 0, 255], "blue once it is done");
+        assert_eq!(
+            pixel_at(&after, 64, 8, 32),
+            [255, 0, 0, 255],
+            "blue once it is done"
+        );
         assert_eq!(pixel_at(&after, 64, 56, 32), [255, 0, 0, 255], "everywhere");
     }
 
@@ -3978,13 +4166,25 @@ mod portable_tests {
         // x=8 behind; the swap and the movement are independent, which is
         // exactly what the next assertions check.
         let after = render_and_read(&mut engine, 3.0, 64);
-        assert_eq!(pixel_at(&after, 64, 30, 8), [255, 0, 0, 255], "swapped to blue");
+        assert_eq!(
+            pixel_at(&after, 64, 30, 8),
+            [255, 0, 0, 255],
+            "swapped to blue"
+        );
 
         // And the layer kept moving through the swap: by t=4 it has slid
         // right, still showing the new resource.
         let moved = render_and_read(&mut engine, 4.0, 64);
-        assert_eq!(pixel_at(&moved, 64, 40, 8), [255, 0, 0, 255], "moved, still blue");
-        assert_eq!(pixel_at(&moved, 64, 8, 8), [0, 51, 0, 255], "left where it was");
+        assert_eq!(
+            pixel_at(&moved, 64, 40, 8),
+            [255, 0, 0, 255],
+            "moved, still blue"
+        );
+        assert_eq!(
+            pixel_at(&moved, 64, 8, 8),
+            [0, 51, 0, 255],
+            "left where it was"
+        );
     }
 
     /// A viewport windows the source and RAMPS — the pan travels through the
@@ -4033,13 +4233,25 @@ mod portable_tests {
         // would lay out as. The pixel past the window proves the rect
         // followed the window, not the source.
         let start = render_and_read(&mut engine, 0.0, 64);
-        assert_eq!(pixel_at(&start, 64, 8, 8), [0, 0, 255, 255], "window on red");
-        assert_eq!(pixel_at(&start, 64, 40, 8), [0, 51, 0, 255], "frame is 16px, not 64");
+        assert_eq!(
+            pixel_at(&start, 64, 8, 8),
+            [0, 0, 255, 255],
+            "window on red"
+        );
+        assert_eq!(
+            pixel_at(&start, 64, 40, 8),
+            [0, 51, 0, 255],
+            "frame is 16px, not 64"
+        );
 
         // Halfway through the ramp the window has slid to x=0.25 — exactly
         // the green cell. This is the pan being a RAMP, not a step.
         let mid = render_and_read(&mut engine, 1.0, 64);
-        assert_eq!(pixel_at(&mid, 64, 8, 8), [0, 255, 0, 255], "mid-ramp on green");
+        assert_eq!(
+            pixel_at(&mid, 64, 8, 8),
+            [0, 255, 0, 255],
+            "mid-ramp on green"
+        );
 
         let end = render_and_read(&mut engine, 2.0, 64);
         assert_eq!(pixel_at(&end, 64, 8, 8), [255, 0, 0, 255], "landed on blue");
@@ -4089,8 +4301,16 @@ mod portable_tests {
 
         // Cell 0 is red; a window inside it is red at both ends.
         let t0 = render_and_read(&mut engine, 0.0, 64);
-        assert_eq!(pixel_at(&t0, 64, 4, 8), [0, 0, 255, 255], "inside cell 0: red");
-        assert_eq!(pixel_at(&t0, 64, 12, 8), [0, 0, 255, 255], "still red at the right");
+        assert_eq!(
+            pixel_at(&t0, 64, 4, 8),
+            [0, 0, 255, 255],
+            "inside cell 0: red"
+        );
+        assert_eq!(
+            pixel_at(&t0, 64, 12, 8),
+            [0, 0, 255, 255],
+            "still red at the right"
+        );
 
         // And the sprite goes on animating with the window applied.
         let t1 = render_and_read(&mut engine, 1.0, 64);
@@ -4136,9 +4356,21 @@ mod portable_tests {
         let by_id = |id: &str| layers.iter().find(|l| l.id == id).unwrap();
 
         engine.set_preferred_tier(1);
-        assert_eq!(engine.tier_for(by_id("ZOOMED"), 0.0), 0, "2x window: full res");
-        assert_eq!(engine.tier_for(by_id("PLAIN"), 0.0), 1, "no window: host tier");
-        assert_eq!(engine.tier_for(by_id("WIDE"), 0.0), 1, "1.25x: proxy still fine");
+        assert_eq!(
+            engine.tier_for(by_id("ZOOMED"), 0.0),
+            0,
+            "2x window: full res"
+        );
+        assert_eq!(
+            engine.tier_for(by_id("PLAIN"), 0.0),
+            1,
+            "no window: host tier"
+        );
+        assert_eq!(
+            engine.tier_for(by_id("WIDE"), 0.0),
+            1,
+            "1.25x: proxy still fine"
+        );
 
         // Tier 0 is already the best there is; a window changes nothing.
         engine.set_preferred_tier(0);
@@ -4179,8 +4411,11 @@ mod portable_tests {
         let meta = ProjectMetadata::from_json(&unknown).expect("fixture");
         let (mut engine, _state) = make_cpu_engine(meta, vec![]);
         let px = render_and_read(&mut engine, 0.0, 64);
-        assert_ne!(pixel_at(&px, 64, 32, 32), [0, 0, 255, 255],
-                   "an unknown name must not silently keep the old colour");
+        assert_ne!(
+            pixel_at(&px, 64, 32, 32),
+            [0, 0, 255, 255],
+            "an unknown name must not silently keep the old colour"
+        );
     }
 
     /// A padded stride is what a real decoder hands over; the import repacks.

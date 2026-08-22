@@ -1298,7 +1298,11 @@ impl Compositor {
         let make = |label: &str, format: wgpu::TextureFormat| {
             let tex = std::sync::Arc::new(ctx.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
-                size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -1316,7 +1320,14 @@ impl Compositor {
         };
         let (scratch, scratch_tex) = make("blur-scratch", wgpu::TextureFormat::Bgra8Unorm);
         let (accum, accum_tex) = make("blur-accum", wgpu::TextureFormat::Rgba16Float);
-        self.accum_targets = Some(AccumTargets { width, height, scratch, scratch_tex, accum, accum_tex });
+        self.accum_targets = Some(AccumTargets {
+            width,
+            height,
+            scratch,
+            scratch_tex,
+            accum,
+            accum_tex,
+        });
     }
 
     /// One fullscreen textured quad into `target` — the plumbing both halves
@@ -1370,13 +1381,20 @@ impl Compositor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target,
                     resolve_target: None,
-                    ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_pipeline(if additive { &self.accum_pipeline } else { &self.pipeline });
+            pass.set_pipeline(if additive {
+                &self.accum_pipeline
+            } else {
+                &self.pipeline
+            });
             pass.set_bind_group(0, &self.globals_bind, &[]);
             let bind = self.binds.get(&bind_id).expect("bind group cached above");
             pass.set_bind_group(1, bind, &[0u32]);
@@ -1673,13 +1691,8 @@ mod tests {
         let ctx = GpuContext::new().expect("gpu");
         let red = Compositor::upload_texture(&ctx, &[0, 0, 255, 255], 1, 1).expect("content");
         // Left texel clear, right texel inked (premultiplied white).
-        let mask = Compositor::upload_texture(
-            &ctx,
-            &[0, 0, 0, 0, 255, 255, 255, 255],
-            2,
-            1,
-        )
-        .expect("mask");
+        let mask = Compositor::upload_texture(&ctx, &[0, 0, 0, 0, 255, 255, 255, 255], 2, 1)
+            .expect("mask");
         let scene = |invert: bool| Scene {
             canvas_width: 100.0,
             canvas_height: 100.0,
@@ -1698,11 +1711,19 @@ mod tests {
         };
         let textures = [red, mask];
         let px = compose(&scene(false), &textures, &ctx);
-        assert_eq!(px_(&px, 5, 50), [0, 255, 0, 255], "no ink: the ground shows");
+        assert_eq!(
+            px_(&px, 5, 50),
+            [0, 255, 0, 255],
+            "no ink: the ground shows"
+        );
         assert_eq!(px_(&px, 95, 50), [0, 0, 255, 255], "ink: the content shows");
 
         let px = compose(&scene(true), &textures, &ctx);
-        assert_eq!(px_(&px, 5, 50), [0, 0, 255, 255], "inverted: content where ink was not");
+        assert_eq!(
+            px_(&px, 5, 50),
+            [0, 0, 255, 255],
+            "inverted: content where ink was not"
+        );
         assert_eq!(px_(&px, 95, 50), [0, 255, 0, 255], "inverted: the hole");
     }
 
@@ -1735,10 +1756,21 @@ mod tests {
         let px = compose(&scene, &[], &ctx);
         // Sampled at pixel CENTRES, so the first pixel is 1.5px along a
         // 100px axis rather than at zero — hence a couple of levels, not none.
-        assert!(px_(&px, 1, 50)[2] <= 6, "black at the left, got {}", px_(&px, 1, 50)[2]);
-        assert!(px_(&px, 98, 50)[2] >= 248, "white at the right, got {}", px_(&px, 98, 50)[2]);
+        assert!(
+            px_(&px, 1, 50)[2] <= 6,
+            "black at the left, got {}",
+            px_(&px, 1, 50)[2]
+        );
+        assert!(
+            px_(&px, 98, 50)[2] >= 248,
+            "white at the right, got {}",
+            px_(&px, 98, 50)[2]
+        );
         let middle = px_(&px, 50, 50)[2];
-        assert!((middle as i32 - 128).abs() <= 3, "grey halfway, got {middle}");
+        assert!(
+            (middle as i32 - 128).abs() <= 3,
+            "grey halfway, got {middle}"
+        );
         // It runs along the AXIS, so the ramp does not vary down the canvas.
         assert_eq!(px_(&px, 50, 10)[2], middle, "constant across the axis");
     }
@@ -1785,9 +1817,14 @@ mod tests {
 
         // Mirror turns that hard return into a fold, so the ends never meet.
         let mirrored = compose(&make(2), &[], &ctx);
-        assert!(mirrored[51 * 4 + 2] > 200 || px_(&mirrored, 51, 50)[2] > 200,
-                "the second tile runs backwards from white");
-        assert!(px_(&mirrored, 99, 50)[2] < 40, "and reaches black at the far end");
+        assert!(
+            mirrored[51 * 4 + 2] > 200 || px_(&mirrored, 51, 50)[2] > 200,
+            "the second tile runs backwards from white"
+        );
+        assert!(
+            px_(&mirrored, 99, 50)[2] < 40,
+            "and reaches black at the far end"
+        );
     }
 
     /// No gradient means the flat colour, unchanged — every project that has
@@ -1846,7 +1883,7 @@ mod tests {
                     ..Default::default()
                 }],
             };
-            compose(&scene, &[tex.clone()], &ctx)
+            compose(&scene, std::slice::from_ref(&tex), &ctx)
         };
 
         // The top-left cell, blown up to the whole canvas.

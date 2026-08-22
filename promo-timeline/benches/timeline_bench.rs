@@ -3,47 +3,39 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use promo_model::{
-    CompositionSettings, ProjectLayer, ProjectLayerKeyframe, ProjectLayerKind, ProjectResource,
-    ProjectResourceKind, Size, VideoTrimKeyframe,
+    CompositionSettings, ProjectLayer, ProjectLayerKind, ProjectResource, ProjectResourceKind,
+    Size, VideoTrimKeyframe,
 };
 
+// Built from JSON like the tests do, so the bench stops rotting every time
+// the model grows an optional field.
 fn layer_with_keyframes(count: usize, span: f64) -> ProjectLayer {
-    let keyframes = (0..count)
-        .map(|i| ProjectLayerKeyframe {
-            id: format!("kf-{i}"),
-            time: span * i as f64 / count.max(1) as f64,
-            zoom: Some(1.0 + (i % 7) as f64 * 0.1),
-            vertical_shift: Some((i % 11) as f64 * 10.0),
-            horizontal_shift: Some((i % 5) as f64 * -8.0),
-            color_hex: None,
-            gain: Some(0.2 + (i % 4) as f32 * 0.2),
-            rotation: Some((i % 13) as f64 * 3.0),
-            tilt_x: None,
-            tilt_y: None,
-            opacity: None,
-            transition_duration: 0.5,
+    let keyframes: Vec<serde_json::Value> = (0..count)
+        .map(|i| {
+            serde_json::json!({
+                "id": format!("kf-{i}"),
+                "time": span * i as f64 / count.max(1) as f64,
+                "zoom": 1.0 + (i % 7) as f64 * 0.1,
+                "verticalShift": (i % 11) as f64 * 10.0,
+                "horizontalShift": (i % 5) as f64 * -8.0,
+                "gain": 0.2 + (i % 4) as f64 * 0.2,
+                "rotation": (i % 13) as f64 * 3.0,
+                "transitionDuration": 0.5,
+            })
         })
         .collect();
-    ProjectLayer {
-        id: "bench-layer".into(),
-        name: "Bench".into(),
-        sort_index: 0,
-        kind: ProjectLayerKind::Video,
-        is_enabled: true,
-        start_time: 0.0,
-        duration: Some(span),
-        resource_id: None,
-        image_filename: None,
-        image_cut_id: None,
-        image_orientation: None,
-        image_border_color_hex: None,
-        image_border_width: None,
-        caption_text: None,
-        caption_style: None,
-        caption_voice_clip: None,
-        audio_focus: None,
-        keyframes,
-    }
+    let raw = serde_json::json!({
+        "id": "bench-layer",
+        "name": "Bench",
+        "sortIndex": 0,
+        "kind": "video",
+        "isEnabled": true,
+        "startTime": 0.0,
+        "duration": span,
+        "keyframes": keyframes,
+    });
+    let _ = ProjectLayerKind::Video;
+    serde_json::from_value(raw).expect("bench layer")
 }
 
 /// A looped 3-hour video resource with 200 alternating include/exclude trim

@@ -156,7 +156,11 @@ pub extern "C" fn promo_layer_motion_paths(
         .iter()
         .filter(|k| k.zoom.is_some() || k.vertical_shift.is_some() || k.horizontal_shift.is_some())
         .collect();
-    keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    keyframes.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut segments: Vec<serde_json::Value> = Vec::new();
     for pair in keyframes.windows(2) {
@@ -174,20 +178,18 @@ pub extern "C" fn promo_layer_motion_paths(
         // both, so a move is visible before anyone decides to bend it.
         // `hasPath` lets the overlay style the two differently without
         // deciding for itself what the shape should be.
-        let resolved = b
-            .motion_path
-            .as_ref()
-            .and_then(|path| promo_timeline::path_polyline(resources, path).map(|line| (path, line)));
+        let resolved = b.motion_path.as_ref().and_then(|path| {
+            promo_timeline::path_polyline(resources, path).map(|line| (path, line))
+        });
         let points: Vec<serde_json::Value> = match resolved.as_ref() {
             Some((path, polyline)) => {
                 let flipped = path.flipped.unwrap_or(false);
-                let (start_at, end_at) =
-                    (path.start_at.unwrap_or(0.0), path.end_at.unwrap_or(1.0));
+                let (start_at, end_at) = (path.start_at.unwrap_or(0.0), path.end_at.unwrap_or(1.0));
                 (0..samples)
                     .map(|step| {
                         let progress = step as f64 / (samples - 1) as f64;
                         let point = promo_timeline::point_along_range(
-                            &polyline, from, to, flipped, start_at, end_at, progress,
+                            polyline, from, to, flipped, start_at, end_at, progress,
                         );
                         serde_json::json!([point.x(), point.y()])
                     })
@@ -265,15 +267,17 @@ pub extern "C" fn promo_path_preview(
         return std::ptr::null_mut();
     };
     let path = promo_model::MotionPath {
-        path_resource_id: params["pathResourceID"].as_str().unwrap_or_default().to_string(),
+        path_resource_id: params["pathResourceID"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         flipped: params["flipped"].as_bool(),
         start_at: params["startAt"].as_f64(),
         end_at: params["endAt"].as_f64(),
     };
-    let Some(polyline) = promo_timeline::path_polyline(
-        handle.meta.resources.as_deref().unwrap_or(&[]),
-        &path,
-    ) else {
+    let Some(polyline) =
+        promo_timeline::path_polyline(handle.meta.resources.as_deref().unwrap_or(&[]), &path)
+    else {
         return std::ptr::null_mut();
     };
     let samples = params["samples"].as_u64().unwrap_or(64).clamp(2, 512) as usize;
@@ -298,6 +302,7 @@ pub extern "C" fn promo_path_preview(
 /// array of sentences — the same list `promo validate` prints, so the CLI and
 /// the app's `promo_validate` cannot disagree about what is wrong.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn promo_project_warnings(json: *const c_char) -> *mut c_char {
     crate::ffi_guard_else(
         || to_c_string("[]"),
@@ -461,7 +466,11 @@ fn eval(meta: &ProjectMetadata, times: &[f64]) -> serde_json::Value {
                 .iter()
                 .map(|&t| {
                     let tr = tl::layer_transform_along_paths(
-                        layer, t, settings, meta.resources.as_deref().unwrap_or(&[]));
+                        layer,
+                        t,
+                        settings,
+                        meta.resources.as_deref().unwrap_or(&[]),
+                    );
                     json!([tr.zoom, tr.vertical_shift, tr.horizontal_shift])
                 })
                 .collect();
@@ -604,8 +613,11 @@ pub extern "C" fn promo_layer_transform(
             return -1;
         };
         let tr = tl::layer_transform_along_paths(
-            layer, time, &handle.meta.composition_settings,
-            handle.meta.resources.as_deref().unwrap_or(&[]));
+            layer,
+            time,
+            &handle.meta.composition_settings,
+            handle.meta.resources.as_deref().unwrap_or(&[]),
+        );
         unsafe {
             *out = tr.zoom;
             *out.add(1) = tr.vertical_shift;
@@ -1032,83 +1044,6 @@ pub extern "C" fn promo_audio_level_points(params_json: *const c_char) -> *mut c
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn fixture_cstring() -> CString {
-        let raw = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../fixtures/projects/project-4.json"
-        ))
-        .expect("fixture");
-        CString::new(raw).unwrap()
-    }
-
-    #[test]
-    fn parse_eval_free_round_trip() {
-        let json = fixture_cstring();
-        let handle = promo_project_parse(json.as_ptr());
-        assert!(!handle.is_null());
-
-        let times = [0.0, 2.5, 8.5, 14.5];
-        let out = promo_timeline_eval(handle, times.as_ptr(), times.len());
-        assert!(!out.is_null());
-        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
-        promo_string_free(out);
-        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(doc["layers"].as_array().unwrap().len(), 4);
-        assert_eq!(doc["resources"].as_array().unwrap().len(), 4);
-        assert_eq!(doc["focusIntervals"][0][0].as_f64(), Some(2.5));
-
-        // Hot path spot checks against the timeline crate's fixture tests.
-        assert_eq!(promo_resource_source_time(handle, 0, 14.0), 5.0);
-        let mut seg = [0.0; 4];
-        assert_eq!(
-            promo_resource_video_segment(handle, 0, 12.0, seg.as_mut_ptr()),
-            0
-        );
-        assert_eq!(seg, [0.0, 10.0, 13.0, 1.0]);
-        let mut tr = [0.0; 3];
-        assert_eq!(
-            promo_layer_transform(handle, 1, 2.5 + 5.25, tr.as_mut_ptr()),
-            0
-        );
-        assert!((tr[0] - 1.6).abs() < 1e-12);
-        assert_eq!(promo_layer_resource_index(handle, 1), 0);
-        assert_eq!(promo_layer_resource_index(handle, 0), -1);
-        let g = promo_layer_gain(handle, 3, 2.5, 0.8);
-        assert!((g - 0.6).abs() < 1e-6);
-
-        promo_project_free(handle);
-    }
-
-    #[test]
-    fn to_json_round_trips() {
-        let json = fixture_cstring();
-        let handle = promo_project_parse(json.as_ptr());
-        let out = promo_project_to_json(handle);
-        assert!(!out.is_null());
-        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
-        promo_string_free(out);
-        let reparsed = promo_project_parse(CString::new(text).unwrap().as_ptr());
-        assert!(!reparsed.is_null());
-        promo_project_free(reparsed);
-        promo_project_free(handle);
-    }
-
-    #[test]
-    fn bad_inputs_are_safe() {
-        assert!(promo_project_parse(std::ptr::null()).is_null());
-        let bogus = CString::new("not json").unwrap();
-        assert!(promo_project_parse(bogus.as_ptr()).is_null());
-        promo_project_free(std::ptr::null_mut());
-        promo_string_free(std::ptr::null_mut());
-        assert!(promo_project_to_json(std::ptr::null()).is_null());
-        assert_eq!(promo_resource_source_time(std::ptr::null(), 0, 1.0), -1.0);
-    }
-}
-
 /// Resolves attached layers, returning the project with concrete
 /// `startTime`/`duration` written in — free it with `promo_string_free`.
 ///
@@ -1268,10 +1203,8 @@ pub extern "C" fn promo_caption_measure(
     };
     let settings = &handle.meta.composition_settings;
     let text = handle.meta.caption_text_for(layer).unwrap_or_default();
-    let style = promo_engine::caption_style(
-        handle.meta.caption_style_for(layer).as_ref(),
-        settings,
-    );
+    let style =
+        promo_engine::caption_style(handle.meta.caption_style_for(layer).as_ref(), settings);
     // The keyframed values — size and margins animate on a caption, so
     // measuring at a TIME rather than statically is the difference between a
     // box that tracks the caption and one that lags it. No keyframes means
@@ -1288,12 +1221,9 @@ pub extern "C" fn promo_caption_measure(
         vertical_margin: values.vertical_margin,
         ..style
     };
-    let Some(box_) = promo_text::measure(
-        &text,
-        settings.canvas_width,
-        settings.canvas_height,
-        &style,
-    ) else {
+    let Some(box_) =
+        promo_text::measure(&text, settings.canvas_width, settings.canvas_height, &style)
+    else {
         return std::ptr::null_mut();
     };
     to_c_string(
@@ -1346,4 +1276,81 @@ pub extern "C" fn promo_layer_viewport(
         return std::ptr::null_mut();
     };
     to_c_string(&serde_json::json!(vp).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_cstring() -> CString {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .expect("fixture");
+        CString::new(raw).unwrap()
+    }
+
+    #[test]
+    fn parse_eval_free_round_trip() {
+        let json = fixture_cstring();
+        let handle = promo_project_parse(json.as_ptr());
+        assert!(!handle.is_null());
+
+        let times = [0.0, 2.5, 8.5, 14.5];
+        let out = promo_timeline_eval(handle, times.as_ptr(), times.len());
+        assert!(!out.is_null());
+        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        promo_string_free(out);
+        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(doc["layers"].as_array().unwrap().len(), 4);
+        assert_eq!(doc["resources"].as_array().unwrap().len(), 4);
+        assert_eq!(doc["focusIntervals"][0][0].as_f64(), Some(2.5));
+
+        // Hot path spot checks against the timeline crate's fixture tests.
+        assert_eq!(promo_resource_source_time(handle, 0, 14.0), 5.0);
+        let mut seg = [0.0; 4];
+        assert_eq!(
+            promo_resource_video_segment(handle, 0, 12.0, seg.as_mut_ptr()),
+            0
+        );
+        assert_eq!(seg, [0.0, 10.0, 13.0, 1.0]);
+        let mut tr = [0.0; 3];
+        assert_eq!(
+            promo_layer_transform(handle, 1, 2.5 + 5.25, tr.as_mut_ptr()),
+            0
+        );
+        assert!((tr[0] - 1.6).abs() < 1e-12);
+        assert_eq!(promo_layer_resource_index(handle, 1), 0);
+        assert_eq!(promo_layer_resource_index(handle, 0), -1);
+        let g = promo_layer_gain(handle, 3, 2.5, 0.8);
+        assert!((g - 0.6).abs() < 1e-6);
+
+        promo_project_free(handle);
+    }
+
+    #[test]
+    fn to_json_round_trips() {
+        let json = fixture_cstring();
+        let handle = promo_project_parse(json.as_ptr());
+        let out = promo_project_to_json(handle);
+        assert!(!out.is_null());
+        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        promo_string_free(out);
+        let reparsed = promo_project_parse(CString::new(text).unwrap().as_ptr());
+        assert!(!reparsed.is_null());
+        promo_project_free(reparsed);
+        promo_project_free(handle);
+    }
+
+    #[test]
+    fn bad_inputs_are_safe() {
+        assert!(promo_project_parse(std::ptr::null()).is_null());
+        let bogus = CString::new("not json").unwrap();
+        assert!(promo_project_parse(bogus.as_ptr()).is_null());
+        promo_project_free(std::ptr::null_mut());
+        promo_string_free(std::ptr::null_mut());
+        assert!(promo_project_to_json(std::ptr::null()).is_null());
+        assert_eq!(promo_resource_source_time(std::ptr::null(), 0, 1.0), -1.0);
+    }
 }

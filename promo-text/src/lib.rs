@@ -185,7 +185,7 @@ impl Default for TextStyle {
 /// would give square corners on round letters.
 fn distance_to_ink(mask: &[f32], width: usize, height: usize) -> Vec<f32> {
     const NEAR: f32 = 1.0;
-    const DIAG: f32 = 1.4142136;
+    const DIAG: f32 = std::f32::consts::SQRT_2;
     let far = (width + height) as f32;
     let mut dist: Vec<f32> = mask
         .iter()
@@ -197,10 +197,16 @@ fn distance_to_ink(mask: &[f32], width: usize, height: usize) -> Vec<f32> {
             let mut d = dist[at(x, y)];
             if y > 0 {
                 d = d.min(dist[at(x, y - 1)] + NEAR);
-                if x > 0 { d = d.min(dist[at(x - 1, y - 1)] + DIAG); }
-                if x + 1 < width { d = d.min(dist[at(x + 1, y - 1)] + DIAG); }
+                if x > 0 {
+                    d = d.min(dist[at(x - 1, y - 1)] + DIAG);
+                }
+                if x + 1 < width {
+                    d = d.min(dist[at(x + 1, y - 1)] + DIAG);
+                }
             }
-            if x > 0 { d = d.min(dist[at(x - 1, y)] + NEAR); }
+            if x > 0 {
+                d = d.min(dist[at(x - 1, y)] + NEAR);
+            }
             dist[at(x, y)] = d;
         }
     }
@@ -209,10 +215,16 @@ fn distance_to_ink(mask: &[f32], width: usize, height: usize) -> Vec<f32> {
             let mut d = dist[at(x, y)];
             if y + 1 < height {
                 d = d.min(dist[at(x, y + 1)] + NEAR);
-                if x + 1 < width { d = d.min(dist[at(x + 1, y + 1)] + DIAG); }
-                if x > 0 { d = d.min(dist[at(x - 1, y + 1)] + DIAG); }
+                if x + 1 < width {
+                    d = d.min(dist[at(x + 1, y + 1)] + DIAG);
+                }
+                if x > 0 {
+                    d = d.min(dist[at(x - 1, y + 1)] + DIAG);
+                }
             }
-            if x + 1 < width { d = d.min(dist[at(x + 1, y)] + NEAR); }
+            if x + 1 < width {
+                d = d.min(dist[at(x + 1, y)] + NEAR);
+            }
             dist[at(x, y)] = d;
         }
     }
@@ -350,8 +362,16 @@ pub fn reveal_layout(
     };
     let attrs = Attrs::new()
         .family(family)
-        .weight(if style.bold { Weight::BOLD } else { Weight::NORMAL })
-        .style(if style.italic { Style::Italic } else { Style::Normal });
+        .weight(if style.bold {
+            Weight::BOLD
+        } else {
+            Weight::NORMAL
+        })
+        .style(if style.italic {
+            Style::Italic
+        } else {
+            Style::Normal
+        });
     buffer.set_text(text, attrs, Shaping::Advanced);
     buffer.shape_until_scroll(true);
 
@@ -394,8 +414,8 @@ pub fn reveal_layout(
                 let mut current: Option<UnitSpan> = None;
                 for glyph in run.glyphs {
                     let text_of = run.text.get(glyph.start..glyph.end).unwrap_or("");
-                    let is_space = !text_of.is_empty()
-                        && text_of.chars().all(|c| c.is_whitespace());
+                    let is_space =
+                        !text_of.is_empty() && text_of.chars().all(|c| c.is_whitespace());
                     if is_space {
                         if let Some(span) = current.take() {
                             units.push(span);
@@ -613,12 +633,7 @@ struct Layout {
 
 /// Everything both entry points need, computed once. `rasterize` then draws
 /// into the box this decided; `measure` just reports it.
-fn layout(
-    text: &str,
-    canvas_width: f64,
-    canvas_height: f64,
-    style: &TextStyle,
-) -> Option<Layout> {
+fn layout(text: &str, canvas_width: f64, canvas_height: f64, style: &TextStyle) -> Option<Layout> {
     let raster = rasterize_inner(text, canvas_width, canvas_height, style, false)?;
     Some(Layout {
         box_: TextBox {
@@ -769,8 +784,8 @@ fn rasterize_inner(
     // glyphs straight into the buffer, as the plain path does, throws the
     // shape away before either can be built.
     let wants_effects = (style.stroke_width > 0.0 && style.stroke_rgba[3] > 0)
-        || (style.shadow_rgba[3] > 0 && (style.shadow_radius > 0.0
-            || style.shadow_offset != [0.0, 0.0]));
+        || (style.shadow_rgba[3] > 0
+            && (style.shadow_radius > 0.0 || style.shadow_offset != [0.0, 0.0]));
     let mut mask: Vec<f32> = if wants_effects {
         vec![0.0; (width * height) as usize]
     } else {
@@ -836,7 +851,9 @@ fn rasterize_inner(
             Vec::new()
         };
         let stroke_coverage = |index: usize| -> f32 {
-            if !stroked { return 0.0; }
+            if !stroked {
+                return 0.0;
+            }
             (style.stroke_width as f32 + 0.5 - dist[index]).clamp(0.0, 1.0)
         };
         if style.shadow_rgba[3] > 0 {
@@ -859,9 +876,21 @@ fn rasterize_inner(
                         continue;
                     }
                     let a = blurred[sy as usize * w + sx as usize] as f64 * alpha;
-                    if a <= 0.001 { continue; }
-                    blend(&mut rgba, width, x as u32, y as u32,
-                          [style.shadow_rgba[0], style.shadow_rgba[1], style.shadow_rgba[2]], a);
+                    if a <= 0.001 {
+                        continue;
+                    }
+                    blend(
+                        &mut rgba,
+                        width,
+                        x as u32,
+                        y as u32,
+                        [
+                            style.shadow_rgba[0],
+                            style.shadow_rgba[1],
+                            style.shadow_rgba[2],
+                        ],
+                        a,
+                    );
                 }
             }
         }
@@ -872,19 +901,38 @@ fn rasterize_inner(
                     // Anti-aliased at the outer edge: the half-pixel is what
                     // keeps a thin outline from looking like a staircase.
                     let coverage = stroke_coverage(y * w + x);
-                    if coverage <= 0.001 { continue; }
-                    blend(&mut rgba, width, x as u32, y as u32,
-                          [style.stroke_rgba[0], style.stroke_rgba[1], style.stroke_rgba[2]],
-                          coverage as f64 * alpha);
+                    if coverage <= 0.001 {
+                        continue;
+                    }
+                    blend(
+                        &mut rgba,
+                        width,
+                        x as u32,
+                        y as u32,
+                        [
+                            style.stroke_rgba[0],
+                            style.stroke_rgba[1],
+                            style.stroke_rgba[2],
+                        ],
+                        coverage as f64 * alpha,
+                    );
                 }
             }
         }
         for y in 0..h {
             for x in 0..w {
                 let a = mask[y * w + x] as f64;
-                if a <= 0.001 { continue; }
-                blend(&mut rgba, width, x as u32, y as u32,
-                      [style.text_rgba[0], style.text_rgba[1], style.text_rgba[2]], a);
+                if a <= 0.001 {
+                    continue;
+                }
+                blend(
+                    &mut rgba,
+                    width,
+                    x as u32,
+                    y as u32,
+                    [style.text_rgba[0], style.text_rgba[1], style.text_rgba[2]],
+                    a,
+                );
             }
         }
     }
@@ -1071,7 +1119,6 @@ mod tests {
         );
     }
 
-    #[test]
     /// The editor asks `measure`, the renderer calls `rasterize`; if those
     /// two ever disagree the canvas draws a caption somewhere the export does
     /// not. They share a layout precisely so this test can be short.
@@ -1097,10 +1144,21 @@ mod tests {
             assert_eq!(measured.lines, drawn.lines, "{text}");
         }
         // And it really is measuring more than one line.
-        assert_eq!(measure("Two\nlines", 1440.0, 900.0, &style).unwrap().lines, 2);
-        assert!(measure(
-            "A considerably longer headline that cannot possibly fit on one line",
-            1440.0, 900.0, &style).unwrap().lines >= 2);
+        assert_eq!(
+            measure("Two\nlines", 1440.0, 900.0, &style).unwrap().lines,
+            2
+        );
+        assert!(
+            measure(
+                "A considerably longer headline that cannot possibly fit on one line",
+                1440.0,
+                900.0,
+                &style
+            )
+            .unwrap()
+            .lines
+                >= 2
+        );
     }
 
     #[test]
@@ -1212,24 +1270,31 @@ mod smoothing_tests {
         assert_eq!((plain.x, plain.y), (stroked.x, stroked.y));
 
         let dark_opaque = |r: &RasterizedText| {
-            r.rgba.chunks_exact(4)
+            r.rgba
+                .chunks_exact(4)
                 .filter(|px| px[3] > 128 && px[0] < 60 && px[1] < 60 && px[2] < 60)
                 .count()
         };
         assert_eq!(dark_opaque(&plain), 0, "no plate, no stroke: nothing dark");
-        assert!(dark_opaque(&stroked) > 200,
-                "the stroke drew {} dark pixels", dark_opaque(&stroked));
+        assert!(
+            dark_opaque(&stroked) > 200,
+            "the stroke drew {} dark pixels",
+            dark_opaque(&stroked)
+        );
 
         // And the letters are still white on top — an outline that swallowed
         // the fill would be worse than none.
         let white = |r: &RasterizedText| {
-            r.rgba.chunks_exact(4)
+            r.rgba
+                .chunks_exact(4)
                 .filter(|px| px[3] > 200 && px[0] > 220 && px[1] > 220 && px[2] > 220)
                 .count()
         };
         let (before, after) = (white(&plain), white(&stroked));
-        assert!(after as f64 > before as f64 * 0.7,
-                "fill survives the outline: {before} -> {after}");
+        assert!(
+            after as f64 > before as f64 * 0.7,
+            "fill survives the outline: {before} -> {after}"
+        );
     }
 
     /// A stroke wider than the padding is CLIPPED, not grown into: the box
@@ -1237,7 +1302,10 @@ mod smoothing_tests {
     /// and resize any plate behind it.
     #[test]
     fn a_stroke_never_moves_the_caption() {
-        let base = TextStyle { padding: 8.0, ..TextStyle::default() };
+        let base = TextStyle {
+            padding: 8.0,
+            ..TextStyle::default()
+        };
         let plain = rasterize("Ship", 1920.0, 1080.0, &base).expect("plain");
         let huge = TextStyle {
             stroke_rgba: [255, 0, 0, 255],
@@ -1272,10 +1340,17 @@ mod smoothing_tests {
         };
         let h = out.height as usize;
         // More shadow below the text than above it, because it is offset down.
-        assert!(rows(h / 2, h) > rows(0, h / 4),
-                "the shadow falls below: {} vs {}", rows(h / 2, h), rows(0, h / 4));
-        let white = out.rgba.chunks_exact(4)
-            .filter(|px| px[3] > 200 && px[0] > 220).count();
+        assert!(
+            rows(h / 2, h) > rows(0, h / 4),
+            "the shadow falls below: {} vs {}",
+            rows(h / 2, h),
+            rows(0, h / 4)
+        );
+        let white = out
+            .rgba
+            .chunks_exact(4)
+            .filter(|px| px[3] > 200 && px[0] > 220)
+            .count();
         assert!(white > 0, "the letters are still white");
     }
 
@@ -1338,15 +1413,20 @@ mod smoothing_tests {
         };
 
         let (at_8, at_9, at_10) = (spread(8.0), spread(9.0), spread(10.0));
-        assert!(at_8 != at_9 && at_9 != at_10,
-                "8/9/10 must not render the same: {at_8}, {at_9}, {at_10}");
+        assert!(
+            at_8 != at_9 && at_9 != at_10,
+            "8/9/10 must not render the same: {at_8}, {at_9}, {at_10}"
+        );
 
         // And more blur is always softer, never less.
         let mut previous = 0;
         for step in 0..=8 {
             let here = spread(f64::from(step) * 3.0);
-            assert!(here >= previous,
-                    "radius {} narrowed the shadow: {here} after {previous}", step * 3);
+            assert!(
+                here >= previous,
+                "radius {} narrowed the shadow: {here} after {previous}",
+                step * 3
+            );
             previous = here;
         }
     }
@@ -1360,9 +1440,17 @@ mod smoothing_tests {
         assert_eq!(style.stroke_rgba[3], 0);
         assert_eq!(style.shadow_rgba[3], 0);
         let a = rasterize("Same", 1920.0, 1080.0, &style).expect("a");
-        let b = rasterize("Same", 1920.0, 1080.0, &TextStyle {
-            stroke_rgba: [255, 0, 0, 255], stroke_width: 0.0, ..TextStyle::default()
-        }).expect("b");
+        let b = rasterize(
+            "Same",
+            1920.0,
+            1080.0,
+            &TextStyle {
+                stroke_rgba: [255, 0, 0, 255],
+                stroke_width: 0.0,
+                ..TextStyle::default()
+            },
+        )
+        .expect("b");
         assert_eq!(a.rgba, b.rgba, "a zero-width stroke changes nothing");
     }
 
@@ -1386,12 +1474,11 @@ mod smoothing_tests {
             shadow_offset: [0.0, 6.0],
             ..st
         };
-        let ink = |r: &RasterizedText| -> f64 {
-            r.rgba.chunks_exact(4).map(|px| px[3] as f64).sum()
-        };
+        let ink =
+            |r: &RasterizedText| -> f64 { r.rgba.chunks_exact(4).map(|px| px[3] as f64).sum() };
         let plain = rasterize("Hold", 1920.0, 1080.0, &base).expect("plain");
-        let plain_shadowed = rasterize("Hold", 1920.0, 1080.0, &shadow(base.clone()))
-            .expect("plain shadowed");
+        let plain_shadowed =
+            rasterize("Hold", 1920.0, 1080.0, &shadow(base.clone())).expect("plain shadowed");
 
         let stroked_style = TextStyle {
             stroke_rgba: [0, 0, 0, 255],
@@ -1399,8 +1486,8 @@ mod smoothing_tests {
             ..base.clone()
         };
         let stroked = rasterize("Hold", 1920.0, 1080.0, &stroked_style).expect("stroked");
-        let stroked_shadowed = rasterize("Hold", 1920.0, 1080.0, &shadow(stroked_style))
-            .expect("stroked shadowed");
+        let stroked_shadowed =
+            rasterize("Hold", 1920.0, 1080.0, &shadow(stroked_style)).expect("stroked shadowed");
 
         let plain_gain = ink(&plain_shadowed) - ink(&plain);
         let stroked_gain = ink(&stroked_shadowed) - ink(&stroked);
@@ -1411,7 +1498,6 @@ mod smoothing_tests {
         );
     }
 }
-
 
 #[cfg(test)]
 mod reveal_layout_tests {
@@ -1437,8 +1523,11 @@ mod reveal_layout_tests {
         assert_eq!(layout.units.len(), 3, "three words");
         assert!(layout.units.iter().all(|u| u.line == 0), "all on one line");
         for pair in layout.units.windows(2) {
-            assert!(pair[0].end_x <= pair[1].start_x,
-                    "words must not overlap: {:?}", pair);
+            assert!(
+                pair[0].end_x <= pair[1].start_x,
+                "words must not overlap: {:?}",
+                pair
+            );
             assert!(pair[0].start_x < pair[1].start_x, "and must be in order");
         }
         let last = layout.units.last().unwrap();
@@ -1449,8 +1538,8 @@ mod reveal_layout_tests {
     /// keystroke, not several.
     #[test]
     fn character_spans_are_clusters_not_bytes() {
-        let plain = reveal_layout("abc", 1920.0, 1080.0, &style(), RevealBy::Character)
-            .expect("layout");
+        let plain =
+            reveal_layout("abc", 1920.0, 1080.0, &style(), RevealBy::Character).expect("layout");
         assert_eq!(plain.units.len(), 3);
 
         let accented = reveal_layout("e\u{0301}", 1920.0, 1080.0, &style(), RevealBy::Character)
@@ -1467,10 +1556,15 @@ mod reveal_layout_tests {
         let lines: Vec<u32> = layout.units.iter().map(|u| u.line).collect();
         assert!(lines.iter().max().copied().unwrap_or(0) > 0, "it wrapped");
         assert!(lines.windows(2).all(|w| w[0] <= w[1]), "in reading order");
-        assert_eq!(layout.line_tops.len(), lines.iter().max().unwrap().to_owned() as usize + 1);
+        assert_eq!(
+            layout.line_tops.len(),
+            lines.iter().max().unwrap().to_owned() as usize + 1
+        );
         for pair in layout.line_tops.windows(2) {
-            assert!((pair[1] - pair[0] - layout.line_height).abs() < 0.001,
-                    "lines tile by exactly one line height");
+            assert!(
+                (pair[1] - pair[0] - layout.line_height).abs() < 0.001,
+                "lines tile by exactly one line height"
+            );
         }
     }
 

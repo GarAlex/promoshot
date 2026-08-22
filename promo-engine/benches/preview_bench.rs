@@ -20,6 +20,7 @@ fn preview(c: &mut Criterion) {
         extern "C" fn provider(
             user: *mut c_void,
             _layer_id: *const c_char,
+            _resource_id: *const c_char,
             _source_time: f64,
             _tier: i32,
             out_surface: *mut HostSurface,

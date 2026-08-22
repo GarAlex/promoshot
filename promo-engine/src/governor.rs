@@ -189,7 +189,10 @@ mod tests {
     fn pinned_entries_survive_even_over_budget() {
         let mut g = MemoryGovernor::new(100);
         assert!(g.admit(1, 60, &[]).is_empty());
-        assert!(g.admit(2, 60, &[1]).is_empty(), "1 is pinned: nothing to evict");
+        assert!(
+            g.admit(2, 60, &[1]).is_empty(),
+            "1 is pinned: nothing to evict"
+        );
         assert!(g.used() > g.budget(), "transiently over budget by design");
         // With the pin gone, the next admit pays the whole debt back, LRU
         // first — both old entries go, because 60 is all the budget holds.

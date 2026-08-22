@@ -136,7 +136,9 @@ pub fn layer_transform_along_paths(
     };
     let zoom_track = sorted_by_time(&layer.keyframes, |k| {
         k.zoom.is_some()
-            || k.placement.as_ref().is_some_and(promo_model::Placement::sizes)
+            || k.placement
+                .as_ref()
+                .is_some_and(promo_model::Placement::sizes)
     });
     let position_track = sorted_by_time(&layer.keyframes, |k| {
         k.vertical_shift.is_some() || k.horizontal_shift.is_some() || k.placement.is_some()
@@ -296,19 +298,17 @@ pub struct ResolvedAdjustments {
 
 pub fn layer_adjustments(layer: &ProjectLayer, time: f64) -> Option<ResolvedAdjustments> {
     let local = layer_local_time(layer, time);
-    let field = |pick: fn(&ProjectLayerKeyframe) -> Option<f64>,
-                 constant: Option<f64>,
-                 identity: f64| {
-        layer_interpolated_scalar(layer, local, pick)
-            .or(constant)
-            .unwrap_or(identity)
-    };
+    let field =
+        |pick: fn(&ProjectLayerKeyframe) -> Option<f64>, constant: Option<f64>, identity: f64| {
+            layer_interpolated_scalar(layer, local, pick)
+                .or(constant)
+                .unwrap_or(identity)
+        };
     let base = layer.adjustments.as_ref();
     let out = ResolvedAdjustments {
         saturation: field(|k| k.saturation, base.and_then(|a| a.saturation), 1.0).max(0.0),
         contrast: field(|k| k.contrast, base.and_then(|a| a.contrast), 1.0).max(0.0),
-        brightness: field(|k| k.brightness, base.and_then(|a| a.brightness), 0.0)
-            .clamp(-1.0, 1.0),
+        brightness: field(|k| k.brightness, base.and_then(|a| a.brightness), 0.0).clamp(-1.0, 1.0),
         tint_amount: field(|k| k.tint_amount, base.and_then(|a| a.tint_amount), 0.0)
             .clamp(0.0, 1.0),
         tint_hex: base.and_then(|a| a.tint_hex.clone()),
@@ -330,7 +330,6 @@ pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {
     // shorthand for a fade transition and resolve through the same path.
     (keyed * crate::transition::effect(layer, time).opacity).clamp(0.0, 1.0)
 }
-
 
 /// Swift `ProjectLayer.hasTiltKeyframes`.
 pub fn layer_has_tilt_keyframes(layer: &ProjectLayer) -> bool {
@@ -661,8 +660,16 @@ mod opacity_tests {
         layer.duration = Some(8.0);
         layer.fade_in = Some(2.0);
 
-        assert_eq!(layer_opacity(&layer, 1.0), 0.5, "half a fade over full opacity");
-        assert_eq!(layer_opacity(&layer, 4.0), 0.5, "past the fade the keys speak alone");
+        assert_eq!(
+            layer_opacity(&layer, 1.0),
+            0.5,
+            "half a fade over full opacity"
+        );
+        assert_eq!(
+            layer_opacity(&layer, 4.0),
+            0.5,
+            "past the fade the keys speak alone"
+        );
     }
 
     /// A layer with no duration runs to the end of the project, which the
@@ -727,7 +734,11 @@ mod tests {
     }
 
     fn transform(l: &ProjectLayer, t: f64) -> Transform {
-        layer_transform(l, t, &settings(r#"{"canvasWidth": 64, "canvasHeight": 64}"#))
+        layer_transform(
+            l,
+            t,
+            &settings(r#"{"canvasWidth": 64, "canvasHeight": 64}"#),
+        )
     }
 
     /// The user-facing promise: zoom keyed sparsely over a long move, each
@@ -792,18 +803,22 @@ mod tests {
     /// track produced — so a zoom-only or move-only layer is unchanged.
     #[test]
     fn an_empty_track_rests_at_its_constant() {
-        let zoom_only = layer(
-            r#"{"id": "z", "time": 0, "transitionDuration": 0, "zoom": 2.0}"#,
-        );
+        let zoom_only = layer(r#"{"id": "z", "time": 0, "transitionDuration": 0, "zoom": 2.0}"#);
         let t = transform(&zoom_only, 3.0);
-        assert_eq!((t.zoom, t.horizontal_shift, t.vertical_shift), (2.0, 0.0, 0.0));
+        assert_eq!(
+            (t.zoom, t.horizontal_shift, t.vertical_shift),
+            (2.0, 0.0, 0.0)
+        );
 
         let move_only = layer(
             r#"{"id": "p", "time": 0, "transitionDuration": 0,
                 "horizontalShift": 40, "verticalShift": 8}"#,
         );
         let t = transform(&move_only, 3.0);
-        assert_eq!((t.zoom, t.horizontal_shift, t.vertical_shift), (1.0, 40.0, 8.0));
+        assert_eq!(
+            (t.zoom, t.horizontal_shift, t.vertical_shift),
+            (1.0, 40.0, 8.0)
+        );
     }
 
     /// A layer whose keyframes carry NEITHER zoom nor shifts still falls
@@ -857,7 +872,10 @@ mod tests {
         assert_eq!(layer_rotation(&l, t), 67.5);
         let o = layer_opacity(&l, t);
         assert!((o - (1.0 - 0.7 * 1.5 / 7.0)).abs() < 1e-9, "got {o}");
-        assert_eq!(crate::viewport::layer_viewport(&l, t), Some([0.0, 0.0, 1.0, 1.0]));
+        assert_eq!(
+            crate::viewport::layer_viewport(&l, t),
+            Some([0.0, 0.0, 1.0, 1.0])
+        );
 
         // t = 15: rotation and opacity have LANDED mid-glide, the viewport
         // is half way through its pan, the move still going, zoom still
@@ -980,21 +998,43 @@ mod tests {
 
         // The layer sits where a LINEAR ramp would put it at exactly that
         // eased progress — same clock, both properties.
-        let polyline = crate::motion::path_polyline(&resources, &promo_model::MotionPath {
-            path_resource_id: "PATH".into(), flipped: None, start_at: None, end_at: None,
-        })
+        let polyline = crate::motion::path_polyline(
+            &resources,
+            &promo_model::MotionPath {
+                path_resource_id: "PATH".into(),
+                flipped: None,
+                start_at: None,
+                end_at: None,
+            },
+        )
         .expect("polyline");
         let expected = crate::motion::point_along_range(
             &polyline,
             promo_model::Point(0.0, 0.0),
             promo_model::Point(100.0, 0.0),
-            false, 0.0, 1.0, 0.15625);
-        assert!((at.horizontal_shift - expected.x()).abs() < 1e-9,
-                "x {} vs {}", at.horizontal_shift, expected.x());
-        assert!((at.vertical_shift - expected.y()).abs() < 1e-9,
-                "y {} vs {}", at.vertical_shift, expected.y());
+            false,
+            0.0,
+            1.0,
+            0.15625,
+        );
+        assert!(
+            (at.horizontal_shift - expected.x()).abs() < 1e-9,
+            "x {} vs {}",
+            at.horizontal_shift,
+            expected.x()
+        );
+        assert!(
+            (at.vertical_shift - expected.y()).abs() < 1e-9,
+            "y {} vs {}",
+            at.vertical_shift,
+            expected.y()
+        );
         // And it is genuinely off the straight line, so the check has teeth.
-        assert!(at.vertical_shift < -1.0, "curved, got {}", at.vertical_shift);
+        assert!(
+            at.vertical_shift < -1.0,
+            "curved, got {}",
+            at.vertical_shift
+        );
     }
 
     /// A hold has no chord for a motion path to fit onto, so the path only
@@ -1026,7 +1066,11 @@ mod tests {
         assert_eq!((held.horizontal_shift, held.vertical_shift), (0.0, 0.0));
         // Mid-ramp the path pulls the layer OFF the straight line.
         let bent = layer_transform_along_paths(&l, 7.5, &defaults, &resources);
-        assert!(bent.vertical_shift < -1.0, "curved above the chord, got {}", bent.vertical_shift);
+        assert!(
+            bent.vertical_shift < -1.0,
+            "curved above the chord, got {}",
+            bent.vertical_shift
+        );
     }
 
     /// The palette fix that matters at 2.5s, not at the keyframes: endpoints
@@ -1058,7 +1102,10 @@ mod tests {
             );
         }
         // And the middle really is a mix, or the equality above proves nothing.
-        assert_eq!(layer_background_color_hex(&literal, 2.0, &defaults), "808080");
+        assert_eq!(
+            layer_background_color_hex(&literal, 2.0, &defaults),
+            "808080"
+        );
         // Plateaus still hand back the reference itself: editors read those.
         assert_eq!(layer_background_color_hex(&named, 0.0, &defaults), "@night");
     }
@@ -1215,10 +1262,17 @@ mod tests {
     fn author_maths(canvas: (f64, f64), source: (f64, f64), desired_h: f64) -> (f64, f64, f64) {
         let zoom = desired_h / canvas.1;
         let drawn_w = source.0 * (canvas.1 / source.1) * zoom;
-        ((canvas.0 - drawn_w) / 2.0, (canvas.1 - desired_h) / 2.0, zoom)
+        (
+            (canvas.0 - drawn_w) / 2.0,
+            (canvas.1 - desired_h) / 2.0,
+            zoom,
+        )
     }
 
-    fn ruled_layer(rule: &str, resource_px: (f64, f64)) -> (ProjectLayer, Vec<promo_model::ProjectResource>) {
+    fn ruled_layer(
+        rule: &str,
+        resource_px: (f64, f64),
+    ) -> (ProjectLayer, Vec<promo_model::ProjectResource>) {
         let mut layer = layer(&format!(
             r#"{{"id": "A", "time": 0, "transitionDuration": 0, "placement": {rule}}}"#
         ));
@@ -1250,22 +1304,37 @@ mod tests {
         for (canvas, source, desired_h, recorded) in cases {
             let (want_h, want_v, want_zoom) = author_maths(canvas, source, desired_h);
             let defaults = settings(&format!(
-                r#"{{"canvasWidth": {}, "canvasHeight": {}}}"#, canvas.0, canvas.1));
+                r#"{{"canvasWidth": {}, "canvasHeight": {}}}"#,
+                canvas.0, canvas.1
+            ));
             let (layer, resources) = ruled_layer(
-                &format!(r#"{{"height": {desired_h}, "anchor": "center"}}"#), source);
+                &format!(r#"{{"height": {desired_h}, "anchor": "center"}}"#),
+                source,
+            );
             let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
-            assert!((tr.zoom - want_zoom).abs() < 1e-12,
-                    "zoom for {canvas:?}/{source:?}: {} vs {want_zoom}", tr.zoom);
-            assert!((tr.horizontal_shift - want_h).abs() < 1e-9,
-                    "hShift for {canvas:?}/{source:?}: {} vs {want_h}", tr.horizontal_shift);
-            assert!((tr.vertical_shift - want_v).abs() < 1e-9,
-                    "vShift for {canvas:?}/{source:?}: {} vs {want_v}", tr.vertical_shift);
+            assert!(
+                (tr.zoom - want_zoom).abs() < 1e-12,
+                "zoom for {canvas:?}/{source:?}: {} vs {want_zoom}",
+                tr.zoom
+            );
+            assert!(
+                (tr.horizontal_shift - want_h).abs() < 1e-9,
+                "hShift for {canvas:?}/{source:?}: {} vs {want_h}",
+                tr.horizontal_shift
+            );
+            assert!(
+                (tr.vertical_shift - want_v).abs() < 1e-9,
+                "vShift for {canvas:?}/{source:?}: {} vs {want_v}",
+                tr.vertical_shift
+            );
             // Where a real project recorded the number by hand, the engine
             // must land on that exact value — not merely on its own formula.
             if let Some(recorded) = recorded {
-                assert!((tr.horizontal_shift - recorded).abs() < 1e-9,
-                        "the hand-written project said {recorded}, engine says {}",
-                        tr.horizontal_shift);
+                assert!(
+                    (tr.horizontal_shift - recorded).abs() < 1e-9,
+                    "the hand-written project said {recorded}, engine says {}",
+                    tr.horizontal_shift
+                );
             }
         }
     }
@@ -1292,7 +1361,9 @@ mod tests {
             ("bottomRight", canvas.0 - drawn_w, canvas.1 - desired_h),
         ] {
             let (layer, resources) = ruled_layer(
-                &format!(r#"{{"height": {desired_h}, "anchor": "{anchor}"}}"#), source);
+                &format!(r#"{{"height": {desired_h}, "anchor": "{anchor}"}}"#),
+                source,
+            );
             let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
             assert!((tr.horizontal_shift - want_h).abs() < 1e-9, "{anchor} h");
             assert!((tr.vertical_shift - want_v).abs() < 1e-9, "{anchor} v");
@@ -1312,20 +1383,24 @@ mod tests {
         let baked_for_wide = author_maths(canvas, wide, 620.0).0;
 
         for source in [wide, tall] {
-            let (layer, resources) = ruled_layer(
-                r#"{"height": 620, "anchor": "center"}"#, source);
+            let (layer, resources) = ruled_layer(r#"{"height": 620, "anchor": "center"}"#, source);
             let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
             let drawn_w = source.0 * (canvas.1 / source.1) * tr.zoom;
             // Centred against THIS source, whatever it is.
             assert!((tr.horizontal_shift - (canvas.0 - drawn_w) / 2.0).abs() < 1e-9);
-            assert!((tr.zoom - 620.0 / canvas.1).abs() < 1e-12, "height is honoured either way");
+            assert!(
+                (tr.zoom - 620.0 / canvas.1).abs() < 1e-12,
+                "height is honoured either way"
+            );
         }
         // The baked number, meanwhile, is wrong by hundreds of pixels on the
         // second source — which is the failure this feature exists to remove.
         let (layer, resources) = ruled_layer(r#"{"height": 620, "anchor": "center"}"#, tall);
         let tr = layer_transform_along_paths(&layer, 0.0, &defaults, &resources);
-        assert!((tr.horizontal_shift - baked_for_wide).abs() > 300.0,
-                "the two sources must genuinely disagree for this test to mean anything");
+        assert!(
+            (tr.horizontal_shift - baked_for_wide).abs() > 300.0,
+            "the two sources must genuinely disagree for this test to mean anything"
+        );
     }
 
     /// New projects no longer seed the pre-layer timeline, so both readers
@@ -1333,7 +1408,10 @@ mod tests {
     #[test]
     fn an_empty_legacy_timeline_reads_as_no_timeline_at_all() {
         let settings = promo_model::CompositionSettings::default();
-        assert!(settings.video_keyframes.is_empty(), "default must not seed one");
+        assert!(
+            settings.video_keyframes.is_empty(),
+            "default must not seed one"
+        );
         let transform = settings_interpolated_values(&settings, 3.0);
         assert_eq!(transform.zoom, 1.0);
         assert_eq!(transform.vertical_shift, 0.0);
@@ -1344,5 +1422,4 @@ mod tests {
             "with no keyframes the flat background colour is the answer"
         );
     }
-
 }

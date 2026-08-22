@@ -30,6 +30,7 @@ fn compositor(c: &mut Criterion) {
             canvas_width: w as f64,
             canvas_height: h as f64,
             background_rgba: [0.1, 0.2, 0.3, 1.0],
+            background_gradient: None,
             output_width: w,
             output_height: h,
             bars_rgba: [0.0, 0.0, 0.0, 1.0],

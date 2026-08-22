@@ -214,26 +214,30 @@ impl Renderer {
                 continue;
             }
             for candidate in &candidates {
-                let Some(resource) = project.resource(candidate) else { continue };
-                let Some(path) = project.resource_path(resource) else { continue };
+                let Some(resource) = project.resource(candidate) else {
+                    continue;
+                };
+                let Some(path) = project.resource_path(resource) else {
+                    continue;
+                };
                 if frames.contains_key(candidate) {
                     continue;
                 }
-            let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            let rgba = decoded.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            // The compositor samples premultiplied BGRA; a PNG decodes to
-            // straight RGBA, so convert both channel order and alpha or every
-            // soft edge in the image saturates.
-            let mut bgra = rgba.into_raw();
-            for px in bgra.chunks_exact_mut(4) {
-                px.swap(0, 2);
-                let a = px[3] as u32;
-                for channel in px.iter_mut().take(3) {
-                    *channel = ((*channel as u32 * a + 127) / 255) as u8;
+                let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let rgba = decoded.to_rgba8();
+                let (w, h) = rgba.dimensions();
+                // The compositor samples premultiplied BGRA; a PNG decodes to
+                // straight RGBA, so convert both channel order and alpha or every
+                // soft edge in the image saturates.
+                let mut bgra = rgba.into_raw();
+                for px in bgra.chunks_exact_mut(4) {
+                    px.swap(0, 2);
+                    let a = px[3] as u32;
+                    for channel in px.iter_mut().take(3) {
+                        *channel = ((*channel as u32 * a + 127) / 255) as u8;
+                    }
                 }
-            }
-            frames.insert(candidate.clone(), (bgra, w, h));
+                frames.insert(candidate.clone(), (bgra, w, h));
             }
         }
 

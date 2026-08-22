@@ -101,13 +101,13 @@ tolerant_enum!(
     Images,
     [(Video, "video"), (Images, "images"), (Gif, "gif")]
 );
-/// The shape of a ramp.
-///
-/// Tolerant, and falling back to `Linear`: a file written by a newer build
-/// that knows more curves should still play here, and playing it with the
-/// wrong FEEL is a far better failure than refusing to open it. That is also
-/// why no reader-version gate goes with this — an older reader dropping
-/// `easing` changes how a move looks, never what the composition contains.
+// The shape of a ramp.
+//
+// Tolerant, and falling back to `Linear`: a file written by a newer build
+// that knows more curves should still play here, and playing it with the
+// wrong FEEL is a far better failure than refusing to open it. That is also
+// why no reader-version gate goes with this — an older reader dropping
+// `easing` changes how a move looks, never what the composition contains.
 tolerant_enum!(
     Easing,
     Linear,
@@ -155,11 +155,7 @@ tolerant_enum!(
 );
 
 // Sizing relative to the whole canvas.
-tolerant_enum!(
-    PlacementMode,
-    Fit,
-    [(Fit, "fit"), (Fill, "fill")]
-);
+tolerant_enum!(PlacementMode, Fit, [(Fit, "fit"), (Fill, "fill")]);
 
 /// Where a layer's drawn box sits and how big it is — as a RULE, not as
 /// numbers. `height`/`width` are the drawn size in canvas pixels (`mode`
@@ -251,11 +247,7 @@ tolerant_enum!(
 tolerant_enum!(
     RevealUnit,
     Word,
-    [
-        (Character, "character"),
-        (Word, "word"),
-        (Line, "line"),
-    ]
+    [(Character, "character"), (Word, "word"), (Line, "line"),]
 );
 tolerant_enum!(
     RevealMode,
@@ -335,8 +327,10 @@ impl TextReveal {
     /// Whether each unit ANIMATES in, or simply appears. A typewriter is a
     /// stagger whose units arrive instantly — the same walk, no motion.
     pub fn animates(&self) -> bool {
-        matches!(self.mode,
-                 RevealMode::Fade | RevealMode::Rise | RevealMode::Scale)
+        matches!(
+            self.mode,
+            RevealMode::Fade | RevealMode::Rise | RevealMode::Scale
+        )
     }
 
     /// How long the whole reveal takes, given how many units there are and
@@ -1191,7 +1185,9 @@ impl CompositionSettings {
     /// site already had — `promo_validate` is what names it, rather than the
     /// renderer guessing a colour nobody chose.
     pub fn resolve_color<'a>(&'a self, value: &'a str) -> &'a str {
-        let Some(name) = value.strip_prefix('@') else { return value };
+        let Some(name) = value.strip_prefix('@') else {
+            return value;
+        };
         self.palette
             .as_deref()
             .unwrap_or_default()
@@ -1289,14 +1285,26 @@ impl BackgroundGradient {
         stops.sort_by(|a, b| a.at.partial_cmp(&b.at).unwrap_or(std::cmp::Ordering::Equal));
         match stops.len() {
             0 => vec![
-                GradientStop { color_hex: "000000".into(), at: 0.0 },
-                GradientStop { color_hex: "000000".into(), at: 1.0 },
+                GradientStop {
+                    color_hex: "000000".into(),
+                    at: 0.0,
+                },
+                GradientStop {
+                    color_hex: "000000".into(),
+                    at: 1.0,
+                },
             ],
             1 => {
                 let only = stops[0].clone();
                 vec![
-                    GradientStop { color_hex: only.color_hex.clone(), at: 0.0 },
-                    GradientStop { color_hex: only.color_hex, at: 1.0 },
+                    GradientStop {
+                        color_hex: only.color_hex.clone(),
+                        at: 0.0,
+                    },
+                    GradientStop {
+                        color_hex: only.color_hex,
+                        at: 1.0,
+                    },
                 ]
             }
             _ => stops,
@@ -2167,7 +2175,10 @@ impl ProjectMetadata {
         // whatever it was framing. `maskInverted` rides the same rung: it
         // shipped in the same format version, so no reader has ever
         // understood 13 without it.
-        if layers.iter().any(|l| l.mask_resource_id.is_some() || l.mask_inverted.is_some()) {
+        if layers
+            .iter()
+            .any(|l| l.mask_resource_id.is_some() || l.mask_inverted.is_some())
+        {
             return 13;
         }
         // 12 is a blend mode — dropped, a screen-blended glow becomes an
@@ -2192,18 +2203,18 @@ impl ProjectMetadata {
         // Keyframed shutters ride the same rung as the constant: both
         // landed in one unreleased batch, so no reader has ever understood
         // 10 without them.
-        if layers.iter().any(|l| {
-            l.motion_blur.is_some() || l.keyframes.iter().any(|k| k.shutter.is_some())
-        }) {
+        if layers
+            .iter()
+            .any(|l| l.motion_blur.is_some() || l.keyframes.iter().any(|k| k.shutter.is_some()))
+        {
             return 10;
         }
         // A text reveal rides the same rung: it landed in the same
         // unreleased batch as transitions, so no reader has ever understood
         // 9 without it — and dropped, a typewriter becomes a caption that
         // was simply there.
-        let has_reveal = |style: &Option<SubtitleStyle>| {
-            style.as_ref().is_some_and(|s| s.reveal.is_some())
-        };
+        let has_reveal =
+            |style: &Option<SubtitleStyle>| style.as_ref().is_some_and(|s| s.reveal.is_some());
         let reveals = self.composition_settings.subtitle_reveal.is_some()
             || layers.iter().any(|l| has_reveal(&l.caption_style))
             || resources.iter().any(|r| has_reveal(&r.caption_style));
@@ -2216,7 +2227,10 @@ impl ProjectMetadata {
         {
             return 9;
         }
-        if layers.iter().any(|l| l.fade_in.is_some() || l.fade_out.is_some()) {
+        if layers
+            .iter()
+            .any(|l| l.fade_in.is_some() || l.fade_out.is_some())
+        {
             return 8;
         }
         if any_keyframe(|k| k.placement.is_some()) {
@@ -2239,7 +2253,9 @@ impl ProjectMetadata {
         {
             return 3;
         }
-        if resources.iter().any(|r| r.kind == ProjectResourceKind::Path)
+        if resources
+            .iter()
+            .any(|r| r.kind == ProjectResourceKind::Path)
             || any_keyframe(|k| k.motion_path.is_some() || k.transition_percent.is_some())
         {
             return 2;
@@ -2253,13 +2269,6 @@ impl ProjectMetadata {
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
-    }
-
-    /// The caption resource behind a layer, if the layer points at one.
-    /// Mirrors `RecordingProject.captionResource(for:)` — the id must match
-    /// AND the resource must actually be a caption.
-    fn caption_resource_for(&self, layer: &ProjectLayer) -> Option<&ProjectResource> {
-        self.caption_resource_named(layer.resource_id.as_deref())
     }
 
     /// The caption resource with this id, if it is one.
@@ -2414,7 +2423,10 @@ mod caption_source_tests {
             }"#,
         );
         let layer = &p.layers.as_ref().unwrap()[0];
-        assert_eq!(p.caption_text_for(layer).as_deref(), Some("from the resource"));
+        assert_eq!(
+            p.caption_text_for(layer).as_deref(),
+            Some("from the resource")
+        );
         assert_eq!(p.caption_style_for(layer).unwrap().font_size, Some(96.0));
     }
 
@@ -2460,7 +2472,10 @@ mod caption_source_tests {
             }"#,
         );
         let layer = &p.layers.as_ref().unwrap()[0];
-        assert_eq!(p.caption_text_for(layer).as_deref(), Some("the layer's own"));
+        assert_eq!(
+            p.caption_text_for(layer).as_deref(),
+            Some("the layer's own")
+        );
     }
 }
 
@@ -2555,7 +2570,9 @@ mod placement_model_tests {
         // none keeps none on the wire.
         let styled: SubtitleStyle = serde_json::from_str(
             r#"{"strokeColorHex": "@ink", "strokeWidth": 6,
-                "shadowOpacity": 0.4, "shadowOffset": [0, 4]}"#).expect("style");
+                "shadowOpacity": 0.4, "shadowOffset": [0, 4]}"#,
+        )
+        .expect("style");
         assert_eq!(styled.stroke_width, Some(6.0));
         assert_eq!(styled.shadow_offset, Some([0.0, 4.0]));
         let plain: SubtitleStyle = serde_json::from_str("{}").unwrap();
@@ -2585,21 +2602,40 @@ mod placement_model_tests {
             )
         };
 
-        assert_eq!(meta(&layer("")).minimum_reader_version(), 1, "plain project");
-        assert_eq!(meta(&layer(r#","motionPath":{"pathResourceID":"P"}"#)).minimum_reader_version(), 2);
         assert_eq!(
-            meta(r#""resources":[{"id":"R","kind":"image","filename":"a.png",
-                  "displayName":"a","addedAt":0,"sprite":{"columns":2,"rows":2}}]"#)
-                .minimum_reader_version(),
+            meta(&layer("")).minimum_reader_version(),
+            1,
+            "plain project"
+        );
+        assert_eq!(
+            meta(&layer(r#","motionPath":{"pathResourceID":"P"}"#)).minimum_reader_version(),
+            2
+        );
+        assert_eq!(
+            meta(
+                r#""resources":[{"id":"R","kind":"image","filename":"a.png",
+                  "displayName":"a","addedAt":0,"sprite":{"columns":2,"rows":2}}]"#
+            )
+            .minimum_reader_version(),
             3
         );
-        assert_eq!(meta(&layer(r#","gradient":{"kind":"linear",
+        assert_eq!(
+            meta(&layer(
+                r#","gradient":{"kind":"linear",
                     "stops":[{"colorHex":"FF0000","at":0},{"colorHex":"0000FF","at":1}],
-                    "start":[0,0],"end":[1,1]}"#))
-                .minimum_reader_version(),
-            4);
-        assert_eq!(meta(&layer(r#","resourceID":"R2""#)).minimum_reader_version(), 5);
-        assert_eq!(meta(&layer(r#","viewport":[0,0,1,1]"#)).minimum_reader_version(), 6);
+                    "start":[0,0],"end":[1,1]}"#
+            ))
+            .minimum_reader_version(),
+            4
+        );
+        assert_eq!(
+            meta(&layer(r#","resourceID":"R2""#)).minimum_reader_version(),
+            5
+        );
+        assert_eq!(
+            meta(&layer(r#","viewport":[0,0,1,1]"#)).minimum_reader_version(),
+            6
+        );
         assert_eq!(
             meta(&layer(r#","placement":{"height":540,"anchor":"center"}"#))
                 .minimum_reader_version(),
@@ -2609,8 +2645,10 @@ mod placement_model_tests {
         // The ladder is highest-wins: a project using both is stamped by the
         // newer feature, or an older reader would open it and destroy that one.
         assert_eq!(
-            meta(&layer(r#","viewport":[0,0,1,1],"placement":{"height":540,"anchor":"center"}"#))
-                .minimum_reader_version(),
+            meta(&layer(
+                r#","viewport":[0,0,1,1],"placement":{"height":540,"anchor":"center"}"#
+            ))
+            .minimum_reader_version(),
             7
         );
 
@@ -2718,15 +2756,17 @@ mod placement_model_tests {
     fn an_unset_shadow_offset_is_not_invented_on_save() {
         let settings = CompositionSettings::default();
         let encoded = serde_json::to_string(&settings).expect("encode");
-        assert!(!encoded.contains("subtitleShadowOffset"),
-                "an absent offset must not be written: {encoded}");
+        assert!(
+            !encoded.contains("subtitleShadowOffset"),
+            "an absent offset must not be written: {encoded}"
+        );
     }
 
     /// The per-caption half of the same gap.
     #[test]
     fn a_caption_can_override_the_plate() {
-        let style: SubtitleStyle = serde_json::from_str(
-            r#"{"padding": 30, "cornerRadius": 4}"#).expect("style");
+        let style: SubtitleStyle =
+            serde_json::from_str(r#"{"padding": 30, "cornerRadius": 4}"#).expect("style");
         assert_eq!(style.padding, Some(30.0));
         assert_eq!(style.corner_radius, Some(4.0));
         let back: SubtitleStyle =
@@ -2772,7 +2812,9 @@ mod palette_tests {
         let settings: CompositionSettings =
             serde_json::from_str(r#"{"canvasWidth": 64, "canvasHeight": 64}"#).unwrap();
         assert!(settings.palette.is_none());
-        assert!(!serde_json::to_string(&settings).unwrap().contains("palette"));
+        assert!(!serde_json::to_string(&settings)
+            .unwrap()
+            .contains("palette"));
     }
 }
 

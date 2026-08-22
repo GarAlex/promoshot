@@ -173,7 +173,10 @@ fn validate(project: &Project) -> Result<(), String> {
         println!("ok — nothing the renderer would quietly correct");
         return Ok(());
     }
-    println!("ok — the project decodes, with {} warning(s):", warnings.len());
+    println!(
+        "ok — the project decodes, with {} warning(s):",
+        warnings.len()
+    );
     for warning in &warnings {
         println!("  - {warning}");
     }

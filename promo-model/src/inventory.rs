@@ -73,9 +73,9 @@ fn needs_file(resource: &ProjectResource) -> bool {
     match resource.kind {
         // A caption is words, a drawing is shapes, a path is two anchors and
         // a curve — all of them live entirely in metadata.json.
-        ProjectResourceKind::Caption
-        | ProjectResourceKind::Drawing
-        | ProjectResourceKind::Path => false,
+        ProjectResourceKind::Caption | ProjectResourceKind::Drawing | ProjectResourceKind::Path => {
+            false
+        }
         _ => !resource.filename.is_empty(),
     }
 }
@@ -354,7 +354,9 @@ mod tests {
         );
         let resolved = effective_resources(&meta, &[]);
         assert!(
-            resolved.iter().all(|r| r.origin == ResourceOrigin::Declared),
+            resolved
+                .iter()
+                .all(|r| r.origin == ResourceOrigin::Declared),
             "nothing that needs no file may be reported missing: {resolved:?}"
         );
     }

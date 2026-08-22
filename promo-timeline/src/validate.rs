@@ -49,7 +49,11 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             ("transitionIn", &layer.transition_in, layer.fade_in),
             ("transitionOut", &layer.transition_out, layer.fade_out),
         ] {
-            let shorthand = if side == "transitionIn" { "fadeIn" } else { "fadeOut" };
+            let shorthand = if side == "transitionIn" {
+                "fadeIn"
+            } else {
+                "fadeOut"
+            };
             if let (Some(rich), Some(seconds)) = (rich.as_ref(), fade) {
                 out.push(format!(
                     "layer \"{}\": {shorthand} {seconds}s and {side} \"{}\" both set — \
@@ -99,14 +103,26 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 ));
             }
             let overridden = [
-                (adjust.saturation.is_some()
-                     && layer.keyframes.iter().any(|k| k.saturation.is_some()), "saturation"),
-                (adjust.contrast.is_some()
-                     && layer.keyframes.iter().any(|k| k.contrast.is_some()), "contrast"),
-                (adjust.brightness.is_some()
-                     && layer.keyframes.iter().any(|k| k.brightness.is_some()), "brightness"),
-                (adjust.tint_amount.is_some()
-                     && layer.keyframes.iter().any(|k| k.tint_amount.is_some()), "tintAmount"),
+                (
+                    adjust.saturation.is_some()
+                        && layer.keyframes.iter().any(|k| k.saturation.is_some()),
+                    "saturation",
+                ),
+                (
+                    adjust.contrast.is_some()
+                        && layer.keyframes.iter().any(|k| k.contrast.is_some()),
+                    "contrast",
+                ),
+                (
+                    adjust.brightness.is_some()
+                        && layer.keyframes.iter().any(|k| k.brightness.is_some()),
+                    "brightness",
+                ),
+                (
+                    adjust.tint_amount.is_some()
+                        && layer.keyframes.iter().any(|k| k.tint_amount.is_some()),
+                    "tintAmount",
+                ),
             ];
             for (both, name) in overridden {
                 if both {
@@ -242,9 +258,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 }
             }
         }
-        if layer.motion_blur.is_some()
-            && layer.keyframes.iter().any(|k| k.shutter.is_some())
-        {
+        if layer.motion_blur.is_some() && layer.keyframes.iter().any(|k| k.shutter.is_some()) {
             out.push(format!(
                 "layer \"{}\": has BOTH motionBlur and keyframed shutters — the \
                  keyframes win and the constant is ignored",
@@ -365,7 +379,11 @@ mod tests {
         );
         let warnings = warnings(&meta);
         assert_eq!(warnings.len(), 1, "{warnings:?}");
-        assert!(warnings[0].contains("layer \"Clip\" at 2s"), "{}", warnings[0]);
+        assert!(
+            warnings[0].contains("layer \"Clip\" at 2s"),
+            "{}",
+            warnings[0]
+        );
         assert!(warnings[0].contains("slides it back"), "{}", warnings[0]);
     }
 
@@ -396,7 +414,9 @@ mod tests {
         let meta = project(&layer("video", r#","viewport":[0,0,0.5,0.5]"#), "");
         let warnings = warnings(&meta);
         assert!(
-            warnings.iter().any(|w| w.contains("minReaderVersion") && w.contains('6')),
+            warnings
+                .iter()
+                .any(|w| w.contains("minReaderVersion") && w.contains('6')),
             "{warnings:?}"
         );
     }
@@ -455,15 +475,17 @@ mod tests {
                      "motionBlur":{blur},"keyframes":[]}}"#
             )
         };
-        let warned = |blur: &str| {
-            warnings(&project(&clip(blur), r#","minReaderVersion":10"#))
-        };
+        let warned = |blur: &str| warnings(&project(&clip(blur), r#","minReaderVersion":10"#));
         assert!(warned(r#"{"shutter":0}"#)
-            .iter().any(|w| w.contains("does nothing")));
+            .iter()
+            .any(|w| w.contains("does nothing")));
         assert!(warned(r#"{"shutter":1.5}"#)
-            .iter().any(|w| w.contains("clamps")));
-        assert!(warned(r#"{"shutter":0.5}"#).is_empty(),
-                "the 180-degree default is exactly right");
+            .iter()
+            .any(|w| w.contains("clamps")));
+        assert!(
+            warned(r#"{"shutter":0.5}"#).is_empty(),
+            "the 180-degree default is exactly right"
+        );
         assert!(
             warnings(&project(&clip(r#"{"shutter":0.5}"#), ""))
                 .iter()
@@ -515,11 +537,17 @@ mod tests {
             warnings(&project(&clip(layer, kf), r#","minReaderVersion":10"#))
         };
         assert!(warned("", r#","shutter":2.0"#)
-            .iter().any(|w| w.contains("outside 0..1")));
-        assert!(warned(r#","motionBlur":{"shutter":0.5}"#, r#","shutter":0.7"#)
-            .iter().any(|w| w.contains("keyframes win")));
-        assert!(warned("", r#","shutter":0.7"#).is_empty(),
-                "a ramp on its own is exactly right");
+            .iter()
+            .any(|w| w.contains("outside 0..1")));
+        assert!(
+            warned(r#","motionBlur":{"shutter":0.5}"#, r#","shutter":0.7"#)
+                .iter()
+                .any(|w| w.contains("keyframes win"))
+        );
+        assert!(
+            warned("", r#","shutter":0.7"#).is_empty(),
+            "a ramp on its own is exactly right"
+        );
     }
 
     /// A tint needs both halves, and a constant the keyframes shadow gets
@@ -539,13 +567,18 @@ mod tests {
             warnings(&project(&clip(adjust, kf), r#","minReaderVersion":11"#))
         };
         assert!(warned(r#"{"tintHex":"FF8000"}"#, "")
-            .iter().any(|w| w.contains("never applied")));
+            .iter()
+            .any(|w| w.contains("never applied")));
         assert!(warned(r#"{"tintAmount":0.5}"#, "")
-            .iter().any(|w| w.contains("no tintHex")));
+            .iter()
+            .any(|w| w.contains("no tintHex")));
         assert!(warned(r#"{"saturation":0.5}"#, r#","saturation":0"#)
-            .iter().any(|w| w.contains("keyframes win")));
-        assert!(warned(r#"{"saturation":0.5}"#, "").is_empty(),
-                "a plain constant grade is exactly right");
+            .iter()
+            .any(|w| w.contains("keyframes win")));
+        assert!(
+            warned(r#"{"saturation":0.5}"#, "").is_empty(),
+            "a plain constant grade is exactly right"
+        );
     }
 
     /// Blend on a background or audio layer is a knob wired to nothing.
@@ -555,12 +588,15 @@ mod tests {
                      "sortIndex":0,"kind":"background","isEnabled":true,
                      "startTime":0,"duration":4,"blendMode":"screen","keyframes":[]}"#;
         assert!(warnings(&project(bg, r#","minReaderVersion":12"#))
-            .iter().any(|w| w.contains("does nothing")));
+            .iter()
+            .any(|w| w.contains("does nothing")));
         let clip = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A10","name":"Glow",
                        "sortIndex":0,"kind":"image","isEnabled":true,
                        "startTime":0,"duration":4,"blendMode":"screen","keyframes":[]}"#;
-        assert!(warnings(&project(clip, r#","minReaderVersion":12"#)).is_empty(),
-                "screen on an image is exactly what the mode is for");
+        assert!(
+            warnings(&project(clip, r#","minReaderVersion":12"#)).is_empty(),
+            "screen on an image is exactly what the mode is for"
+        );
     }
 
     /// Every way a mask can silently not act gets a voice: a missing
@@ -587,9 +623,8 @@ mod tests {
              "drawing":{"shapes":[]}},
             {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A23","kind":"image",
              "filename":"a.png","displayName":"Pic","addedAt":0}]"#;
-        let mask = |rid: &str| {
-            format!(r#","maskResourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A{rid}""#)
-        };
+        let mask =
+            |rid: &str| format!(r#","maskResourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A{rid}""#);
 
         // The happy path stays silent.
         assert!(
@@ -597,14 +632,24 @@ mod tests {
             "a drawing mask on an image layer is the feature"
         );
         assert!(warnings(&project(&masked("image", &mask("99")), resources))
-            .iter().any(|w| w.contains("names no resource")));
+            .iter()
+            .any(|w| w.contains("names no resource")));
         assert!(warnings(&project(&masked("image", &mask("23")), resources))
-            .iter().any(|w| w.contains("not a drawing")));
+            .iter()
+            .any(|w| w.contains("not a drawing")));
         assert!(warnings(&project(&masked("image", &mask("22")), resources))
-            .iter().any(|w| w.contains("no shapes")));
-        assert!(warnings(&project(&masked("caption", &mask("21")), resources))
-            .iter().any(|w| w.contains("masks window video and image layers")));
-        assert!(warnings(&project(&masked("image", r#","maskInverted":true"#), resources))
-            .iter().any(|w| w.contains("without a maskResourceID")));
+            .iter()
+            .any(|w| w.contains("no shapes")));
+        assert!(
+            warnings(&project(&masked("caption", &mask("21")), resources))
+                .iter()
+                .any(|w| w.contains("masks window video and image layers"))
+        );
+        assert!(warnings(&project(
+            &masked("image", r#","maskInverted":true"#),
+            resources
+        ))
+        .iter()
+        .any(|w| w.contains("without a maskResourceID")));
     }
 }

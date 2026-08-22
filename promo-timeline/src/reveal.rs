@@ -31,14 +31,14 @@ pub struct Progress {
 /// arriving with its reveal already spent. Found the honest way: the first
 /// template to put a karaoke line on a swap keyframe never showed the
 /// highlight, because the walk had finished before the words arrived.
-pub fn progress(
-    reveal: &TextReveal,
-    layer: &ProjectLayer,
-    time: f64,
-    units: usize,
-) -> Progress {
+pub fn progress(reveal: &TextReveal, layer: &ProjectLayer, time: f64, units: usize) -> Progress {
     if units == 0 {
-        return Progress { shown: 0, active: None, fraction: 1.0, total: 0.0 };
+        return Progress {
+            shown: 0,
+            active: None,
+            fraction: 1.0,
+            total: 0.0,
+        };
     }
     let (tenure_start, tenure_end) = crate::transition::tenure(layer, time);
     let tenure_len = tenure_end.map(|end| (end - tenure_start).max(0.0));
@@ -58,7 +58,12 @@ pub fn progress(
     } else {
         Some(shown.saturating_sub(1).min(units - 1))
     };
-    Progress { shown, active, fraction, total }
+    Progress {
+        shown,
+        active,
+        fraction,
+        total,
+    }
 }
 
 /// The unit a reveal walks, in the rasterizer's vocabulary.
@@ -170,7 +175,10 @@ fn highlight_bands(layout: &promo_text::RevealLayout, progress: Progress) -> Vec
             continue;
         }
         let (v, dv) = line_v(layout, line);
-        let left = on_line.iter().map(|(_, u)| u.start_x).fold(f64::MAX, f64::min);
+        let left = on_line
+            .iter()
+            .map(|(_, u)| u.start_x)
+            .fold(f64::MAX, f64::min);
         let right = on_line.iter().map(|(_, u)| u.end_x).fold(0.0f64, f64::max);
         out.push(Band {
             uv: [left / layout.width, v, (right - left) / layout.width, dv],
@@ -232,12 +240,7 @@ fn stagger_bands(
         let (v, dv) = line_v(layout, unit.line);
         let (left, right) = unit_slice(layout, index, unit);
         out.push(Band {
-            uv: [
-                left / layout.width,
-                v,
-                (right - left) / layout.width,
-                dv,
-            ],
+            uv: [left / layout.width, v, (right - left) / layout.width, dv],
             active: false,
             effect: arrival_effect(reveal, arrival, layout.line_height / layout.height),
         });
@@ -277,12 +280,18 @@ fn unit_slice(
 /// What one unit does on the way in.
 fn arrival_effect(reveal: &TextReveal, arrival: f64, line_height: f64) -> Effect {
     match reveal.mode {
-        RevealMode::Fade => Effect { opacity: arrival, ..Effect::IDENTITY },
+        RevealMode::Fade => Effect {
+            opacity: arrival,
+            ..Effect::IDENTITY
+        },
         RevealMode::Rise => Effect {
             opacity: arrival,
             // Up into place. Half a line is far enough to read as movement
             // and near enough not to fly across the frame.
-            offset: [0.0, (1.0 - arrival) * reveal.rise.unwrap_or(0.5) * line_height],
+            offset: [
+                0.0,
+                (1.0 - arrival) * reveal.rise.unwrap_or(0.5) * line_height,
+            ],
             ..Effect::IDENTITY
         },
         RevealMode::Scale => Effect {
@@ -319,9 +328,21 @@ mod tests {
     fn an_unpaced_reveal_spreads_across_the_caption() {
         let layer = caption(Some(4.0));
         let r = rule(r#"{"by":"word"}"#);
-        assert_eq!(progress(&r, &layer, 2.0, 4).shown, 1, "the first word is there at once");
-        assert_eq!(progress(&r, &layer, 4.0, 4).shown, 2, "half way, half the words");
-        assert_eq!(progress(&r, &layer, 6.0, 4).shown, 4, "all of them by the end");
+        assert_eq!(
+            progress(&r, &layer, 2.0, 4).shown,
+            1,
+            "the first word is there at once"
+        );
+        assert_eq!(
+            progress(&r, &layer, 4.0, 4).shown,
+            2,
+            "half way, half the words"
+        );
+        assert_eq!(
+            progress(&r, &layer, 6.0, 4).shown,
+            4,
+            "all of them by the end"
+        );
         assert_eq!(progress(&r, &layer, 99.0, 4).shown, 4, "and they stay");
     }
 
@@ -340,7 +361,11 @@ mod tests {
     fn a_stated_total_wins_over_a_rate() {
         let layer = caption(Some(60.0));
         let r = rule(r#"{"by":"word","secondsPer":10,"seconds":2}"#);
-        assert_eq!(progress(&r, &layer, 3.0, 4).shown, 2, "two seconds total, not forty");
+        assert_eq!(
+            progress(&r, &layer, 3.0, 4).shown,
+            2,
+            "two seconds total, not forty"
+        );
     }
 
     /// The highlight has to stop somewhere: leaving the last word lit for the
@@ -349,8 +374,11 @@ mod tests {
     fn the_active_unit_goes_out_when_the_walk_is_over() {
         let layer = caption(Some(4.0));
         let r = rule(r#"{"by":"word","mode":"highlight"}"#);
-        assert_eq!(progress(&r, &layer, 3.0, 4).active, Some(0),
-                   "a quarter through four words, the first is the live one");
+        assert_eq!(
+            progress(&r, &layer, 3.0, 4).active,
+            Some(0),
+            "a quarter through four words, the first is the live one"
+        );
         assert_eq!(progress(&r, &layer, 6.0, 4).active, None);
     }
 
@@ -365,7 +393,11 @@ mod tests {
         promo_text::RevealLayout {
             units: units
                 .iter()
-                .map(|(line, a, b)| promo_text::UnitSpan { line: *line, start_x: *a, end_x: *b })
+                .map(|(line, a, b)| promo_text::UnitSpan {
+                    line: *line,
+                    start_x: *a,
+                    end_x: *b,
+                })
                 .collect(),
             line_tops: (0..lines).map(|i| i as f64 * 50.0).collect(),
             line_height: 50.0,
@@ -380,14 +412,41 @@ mod tests {
     #[test]
     fn a_wipe_crops_the_line_to_what_has_arrived() {
         let l = layout(&[(0, 10.0, 60.0), (0, 70.0, 120.0)], 1);
-        let one = bands(&l, Progress { shown: 1, active: Some(0), fraction: 0.5, total: 1.0 }, &wipe());
+        let one = bands(
+            &l,
+            Progress {
+                shown: 1,
+                active: Some(0),
+                fraction: 0.5,
+                total: 1.0,
+            },
+            &wipe(),
+        );
         assert_eq!(one.len(), 1);
         assert_eq!(one[0].uv, [0.0, 0.0, 60.0 / 200.0, 1.0]);
 
-        let both = bands(&l, Progress { shown: 2, active: None, fraction: 1.0, total: 1.0 }, &wipe());
+        let both = bands(
+            &l,
+            Progress {
+                shown: 2,
+                active: None,
+                fraction: 1.0,
+                total: 1.0,
+            },
+            &wipe(),
+        );
         assert_eq!(both[0].uv, [0.0, 0.0, 120.0 / 200.0, 1.0]);
 
-        let none = bands(&l, Progress { shown: 0, active: None, fraction: 0.0, total: 1.0 }, &wipe());
+        let none = bands(
+            &l,
+            Progress {
+                shown: 0,
+                active: None,
+                fraction: 0.0,
+                total: 1.0,
+            },
+            &wipe(),
+        );
         assert!(none.is_empty(), "nothing has arrived yet");
     }
 
@@ -395,11 +454,29 @@ mod tests {
     #[test]
     fn a_second_line_does_not_start_before_the_first_ends() {
         let l = layout(&[(0, 10.0, 60.0), (0, 70.0, 120.0), (1, 10.0, 90.0)], 2);
-        let mid = bands(&l, Progress { shown: 2, active: Some(1), fraction: 0.6, total: 1.0 }, &wipe());
+        let mid = bands(
+            &l,
+            Progress {
+                shown: 2,
+                active: Some(1),
+                fraction: 0.6,
+                total: 1.0,
+            },
+            &wipe(),
+        );
         assert_eq!(mid.len(), 1, "still on the first line");
         assert_eq!(mid[0].uv[1], 0.0);
 
-        let all = bands(&l, Progress { shown: 3, active: None, fraction: 1.0, total: 1.0 }, &wipe());
+        let all = bands(
+            &l,
+            Progress {
+                shown: 3,
+                active: None,
+                fraction: 1.0,
+                total: 1.0,
+            },
+            &wipe(),
+        );
         assert_eq!(all.len(), 2, "both lines now");
         assert_eq!(all[1].uv[1], 0.5, "the second band is the second line");
     }
@@ -409,7 +486,16 @@ mod tests {
     #[test]
     fn a_highlight_shows_everything_and_marks_the_active_word() {
         let l = layout(&[(0, 10.0, 60.0), (0, 70.0, 120.0)], 1);
-        let out = bands(&l, Progress { shown: 1, active: Some(1), fraction: 0.5, total: 1.0 }, &highlight());
+        let out = bands(
+            &l,
+            Progress {
+                shown: 1,
+                active: Some(1),
+                fraction: 0.5,
+                total: 1.0,
+            },
+            &highlight(),
+        );
         assert_eq!(out.len(), 2, "the line, then the active word over it");
         assert!(!out[0].active);
         assert!(out[1].active);
@@ -426,7 +512,16 @@ mod tests {
         // Two words on line one, one on line two — the real layout.
         let l = layout(&[(0, 10.0, 60.0), (0, 70.0, 120.0), (1, 10.0, 90.0)], 2);
 
-        let early = bands(&l, Progress { shown: 1, active: Some(0), fraction: 0.1, total: 1.0 }, &rule);
+        let early = bands(
+            &l,
+            Progress {
+                shown: 1,
+                active: Some(0),
+                fraction: 0.1,
+                total: 1.0,
+            },
+            &rule,
+        );
         assert_eq!(early.len(), 1, "only the first word has started");
         assert!(early[0].effect.opacity < 1.0, "and it is still arriving");
         assert!(early[0].effect.offset[1] > 0.0, "from below");
@@ -434,26 +529,62 @@ mod tests {
         // slice runs to the midpoint of the gap beside it, so the words tile
         // the line rather than each being shaved to its own glyphs.
         assert_eq!(early[0].uv[0], 0.0, "out to the edge of the line");
-        assert_eq!(early[0].uv[2], 65.0 / 200.0, "and to the midpoint of the gap");
+        assert_eq!(
+            early[0].uv[2],
+            65.0 / 200.0,
+            "and to the midpoint of the gap"
+        );
 
-        let mid = bands(&l, Progress { shown: 2, active: Some(1), fraction: 0.5, total: 1.0 }, &rule);
+        let mid = bands(
+            &l,
+            Progress {
+                shown: 2,
+                active: Some(1),
+                fraction: 0.5,
+                total: 1.0,
+            },
+            &rule,
+        );
         assert_eq!(mid.len(), 2, "two in flight");
-        assert!(mid[0].effect.opacity > mid[1].effect.opacity,
-                "the earlier word is further along than the later one");
+        assert!(
+            mid[0].effect.opacity > mid[1].effect.opacity,
+            "the earlier word is further along than the later one"
+        );
         assert_eq!(mid[0].uv[1], 0.0, "first line");
-        assert_eq!(mid[1].uv[1], 0.0, "same line — a stagger does not stack words");
+        assert_eq!(
+            mid[1].uv[1], 0.0,
+            "same line — a stagger does not stack words"
+        );
 
-        let done = bands(&l, Progress { shown: 3, active: None, fraction: 1.0, total: 1.0 }, &rule);
+        let done = bands(
+            &l,
+            Progress {
+                shown: 3,
+                active: None,
+                fraction: 1.0,
+                total: 1.0,
+            },
+            &rule,
+        );
         assert_eq!(done.len(), 3);
-        assert!(done.iter().all(|b| b.effect.is_identity()),
-                "everything has landed, so nothing is still moving");
+        assert!(
+            done.iter().all(|b| b.effect.is_identity()),
+            "everything has landed, so nothing is still moving"
+        );
         assert_eq!(done[2].uv[1], 0.5, "the third word is on the second line");
 
         // Tiling, not overlapping: two words fading in at once must not
         // double-composite where they meet.
-        assert_eq!(done[0].uv[0] + done[0].uv[2], done[1].uv[0],
-                   "the first word's slice ends exactly where the second's begins");
-        assert_eq!(done[1].uv[0] + done[1].uv[2], 1.0, "and the last reaches the edge");
+        assert_eq!(
+            done[0].uv[0] + done[0].uv[2],
+            done[1].uv[0],
+            "the first word's slice ends exactly where the second's begins"
+        );
+        assert_eq!(
+            done[1].uv[0] + done[1].uv[2],
+            1.0,
+            "and the last reaches the edge"
+        );
     }
 
     /// A wipe is the same mechanism with no arrival at all — the unification
@@ -461,7 +592,16 @@ mod tests {
     #[test]
     fn a_wipe_is_a_stagger_with_nothing_moving() {
         let l = layout(&[(0, 10.0, 60.0), (0, 70.0, 120.0)], 1);
-        let out = bands(&l, Progress { shown: 1, active: Some(0), fraction: 0.4, total: 1.0 }, &wipe());
+        let out = bands(
+            &l,
+            Progress {
+                shown: 1,
+                active: Some(0),
+                fraction: 0.4,
+                total: 1.0,
+            },
+            &wipe(),
+        );
         assert!(out.iter().all(|b| b.effect.is_identity()));
     }
 
@@ -470,18 +610,31 @@ mod tests {
     /// is the layer's own duration, not some constant.
     #[test]
     fn an_arrival_time_is_seconds_of_the_real_walk() {
-        let rule: TextReveal = serde_json::from_str(
-            r#"{"by":"word","mode":"fade","unitSeconds":1.0}"#).expect("rule");
+        let rule: TextReveal =
+            serde_json::from_str(r#"{"by":"word","mode":"fade","unitSeconds":1.0}"#).expect("rule");
         let l = layout(&[(0, 0.0, 50.0), (0, 60.0, 110.0)], 1);
-        let long = Progress { shown: 1, active: Some(0), fraction: 0.4, total: 10.0 };
-        let short = Progress { shown: 1, active: Some(0), fraction: 0.4, total: 2.0 };
+        let long = Progress {
+            shown: 1,
+            active: Some(0),
+            fraction: 0.4,
+            total: 10.0,
+        };
+        let short = Progress {
+            shown: 1,
+            active: Some(0),
+            fraction: 0.4,
+            total: 2.0,
+        };
 
         // One second is a TENTH of the ten-second walk and a HALF of the
         // two-second one, so four-tenths of the way through, the first word
         // has long landed in one and is still arriving in the other.
         let slow = bands(&l, long, &rule);
         let quick = bands(&l, short, &rule);
-        assert!(slow[0].effect.is_identity(), "a second is a tenth here, long over");
+        assert!(
+            slow[0].effect.is_identity(),
+            "a second is a tenth here, long over"
+        );
         assert!(
             quick[0].effect.opacity > 0.0 && quick[0].effect.opacity < 1.0,
             "and half of the walk there, so still on its way: {}",

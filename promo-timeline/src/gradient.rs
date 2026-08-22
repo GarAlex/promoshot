@@ -67,7 +67,11 @@ pub fn layer_background_gradient(
             .iter()
             .filter(|k| k.gradient.is_some())
             .collect();
-        keyed.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+        keyed.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         keyed
     };
     if keyed.is_empty() {
@@ -107,7 +111,10 @@ pub fn layer_background_gradient(
         };
         // Same easing rule as every other track: a background that eases
         // while the layers over it do not would read as two different scenes.
-        let eased = b.easing.unwrap_or(promo_model::Easing::Linear).apply(progress);
+        let eased = b
+            .easing
+            .unwrap_or(promo_model::Easing::Linear)
+            .apply(progress);
         return Some(blend(&from, &to, eased, defaults));
     }
     Some(at(first))
@@ -150,7 +157,12 @@ mod tests {
         assert!(layer_background_gradient(&layer, 1.0, &settings()).is_none());
 
         let mut defaults = settings();
-        defaults.background_gradient = Some(gradient(&two_stop("000000", "FFFFFF", [0.0, 0.0], [1.0, 0.0])));
+        defaults.background_gradient = Some(gradient(&two_stop(
+            "000000",
+            "FFFFFF",
+            [0.0, 0.0],
+            [1.0, 0.0],
+        )));
         let answer = layer_background_gradient(&layer, 1.0, &defaults).expect("gradient");
         assert_eq!(answer.stops.len(), 2);
     }
@@ -178,7 +190,11 @@ mod tests {
         // the colours, which is what makes it read as motion rather than as
         // a cross-fade.
         let middle = layer_background_gradient(&layer, 2.0, &settings()).expect("middle");
-        assert!((middle.start.x() - 0.125).abs() < 1e-9, "{:?}", middle.start);
+        assert!(
+            (middle.start.x() - 0.125).abs() < 1e-9,
+            "{:?}",
+            middle.start
+        );
         assert_eq!(middle.stops[0].color_hex, "112244", "colours unchanged");
     }
 
@@ -196,7 +212,10 @@ mod tests {
                             {"colorHex": "000000", "at": 1}]}}"#,
         );
         let middle = layer_background_gradient(&layer, 1.0, &settings()).expect("middle");
-        assert_eq!(middle.stops[0].color_hex, "808080", "halfway between the ends");
+        assert_eq!(
+            middle.stops[0].color_hex, "808080",
+            "halfway between the ends"
+        );
         assert_eq!(middle.stops[1].color_hex, "808080");
     }
 

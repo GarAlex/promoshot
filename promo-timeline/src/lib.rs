@@ -7,37 +7,31 @@
 //! parity harness diffs them fixture-by-fixture.
 
 pub mod attachment;
-pub mod gradient;
-pub mod motion;
 pub mod audio;
+pub mod gradient;
 pub mod interpolation;
 pub mod layout;
 pub mod mapping;
-pub mod sprite;
+pub mod motion;
 pub mod reveal;
+pub mod sprite;
 pub mod transition;
 pub mod validate;
 pub mod viewport;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
-pub use motion::{
-    path_document_polyline, path_polyline, point_along, point_along_range, Polyline,
-};
 pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
 };
 pub use gradient::layer_background_gradient;
 pub use interpolation::{
-    interpolate_color_hex, layer_background_color_hex, layer_caption_values,
+    interpolate_color_hex, layer_adjustments, layer_background_color_hex, layer_caption_values,
     layer_has_tilt_keyframes, layer_is_visible, layer_local_time, layer_opacity, layer_rotation,
-    layer_adjustments, layer_shutter, ResolvedAdjustments,
-    layer_tilt_offset, layer_transform, layer_transform_along_paths, ramp_seconds,
-    settings_background_color_hex,
-    settings_interpolated_values, CaptionValues, Transform,
+    layer_shutter, layer_tilt_offset, layer_transform, layer_transform_along_paths, ramp_seconds,
+    settings_background_color_hex, settings_interpolated_values, CaptionValues,
+    ResolvedAdjustments, Transform,
 };
-pub use sprite::{frame_at as sprite_frame_at, layer_resource_id, is_nearest, sheet_for, SpriteFrame};
-pub use viewport::{compose_uv, layer_viewport};
 pub use layout::{
     clamped_zoom, drawing_rect, letterbox_transform, media_corner_radius, media_rect,
 };
@@ -49,6 +43,11 @@ pub use mapping::{
     timeline_video_segment, video_segment, video_trim_ranges, ExtendedPause, PlaybackInterval,
     VideoSegment,
 };
+pub use motion::{path_document_polyline, path_polyline, point_along, point_along_range, Polyline};
+pub use sprite::{
+    frame_at as sprite_frame_at, is_nearest, layer_resource_id, sheet_for, SpriteFrame,
+};
+pub use viewport::{compose_uv, layer_viewport};
 
 /// Result of folding a layer-local time into a looped resource's window.
 #[derive(Debug, Clone, Copy, PartialEq)]

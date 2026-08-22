@@ -114,8 +114,10 @@ pub extern "C" fn promo_vector_content_bounds(doc_json: *const c_char, out: *mut
         let Ok(doc) = serde_json::from_str::<DrawingDocument>(text) else {
             return -2;
         };
-        let (x, y, w, h) = promo_gpu::vector::content_bounds(
-            &vector_shapes(&doc, &promo_model::CompositionSettings::default()));
+        let (x, y, w, h) = promo_gpu::vector::content_bounds(&vector_shapes(
+            &doc,
+            &promo_model::CompositionSettings::default(),
+        ));
         unsafe {
             *out = x;
             *out.add(1) = y;
@@ -125,7 +127,6 @@ pub extern "C" fn promo_vector_content_bounds(doc_json: *const c_char, out: *mut
         0
     })
 }
-
 
 #[cfg(test)]
 mod tests {

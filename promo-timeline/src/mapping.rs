@@ -751,7 +751,10 @@ mod speed_mapping_tests {
 
         // At 1x the wrapper must be bit-for-bit the plain segment.
         let plain = clip(None);
-        assert_eq!(timeline_video_segment(&plain, 1.0), video_segment(&plain, 1.0));
+        assert_eq!(
+            timeline_video_segment(&plain, 1.0),
+            video_segment(&plain, 1.0)
+        );
     }
 
     #[test]
