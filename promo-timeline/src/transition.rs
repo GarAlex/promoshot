@@ -195,6 +195,30 @@ pub struct Swap {
 /// come to disagree — and when they do the engine draws the surviving image
 /// twice, one copy ramping up over the other, which reads as a brightness
 /// pulse where a crossfade should be.
+/// The window (layer-LOCAL) during which the resource showing at `time`
+/// is the one showing: from the swap that brought it in (or the layer's
+/// start) to the swap that will replace it (or the layer's end). What a
+/// caption's reveal counts against — a statement swapped in at 0:07 starts
+/// typing at 0:07, and a reveal with no stated pace spreads across the
+/// statement's own tenure rather than the whole layer's life.
+pub fn tenure(layer: &ProjectLayer, time: f64) -> (f64, Option<f64>) {
+    let local = crate::layer_local_time(layer, time);
+    let mut times: Vec<f64> = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.resource_id.is_some())
+        .map(|k| k.time)
+        .collect();
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let start = times.iter().rev().find(|t| **t <= local).copied().unwrap_or(0.0);
+    let end = times
+        .iter()
+        .find(|t| **t > local)
+        .copied()
+        .or(layer.duration);
+    (start, end)
+}
+
 pub fn active_swap(
     layer: &ProjectLayer,
     time: f64,

@@ -650,7 +650,12 @@ impl PreviewEngine {
         let first = self.build_sub(time, start, false, output_width, output_height)?;
         let last = self.build_sub(time, end, true, output_width, output_height)?;
 
-        let cap = if self.export_mode { 24 } else { 8 };
+        // A whip-speed push crosses the canvas in a frame; 24 samples of
+        // that is not "less blur", it is 24 visible ghosts — the first
+        // template to push under a full shutter proved it. Export affords
+        // the honest count; preview stays cheap and the proxy-tier stance
+        // covers the difference.
+        let cap = if self.export_mode { 64 } else { 8 };
         let count = match scene_displacement(&first.0, &last.0) {
             // Nothing moves as far as a pixel: the average IS the sharp
             // frame, so render that and pay nothing. Retain the scratch —

@@ -239,8 +239,12 @@ impl Renderer {
 
         let state = Box::new(Mutex::new(HostState { frames, videos }));
         let user = &*state as *const Mutex<HostState> as *mut c_void;
-        let engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
+        let mut engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
             .map_err(|e| format!("engine: {e:?}"))?;
+        // Offline renderer: the export clock is monotonic and quality is
+        // the point — per-time frames skip the cache, and a motion-blur
+        // walk gets the export-grade sample cap rather than the preview's.
+        engine.set_export_mode(true);
 
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("promo-cli-target"),

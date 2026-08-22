@@ -25,8 +25,12 @@ pub struct Progress {
 
 /// How far the reveal has got at `time`, for a caption of `units` units.
 ///
-/// Counts from the LAYER's start, not the project's: a caption that appears
-/// at 0:12 starts typing when it appears.
+/// Counts from the showing RESOURCE's tenure, not the layer's start: a
+/// caption that appears at 0:12 starts typing when it appears — and a
+/// statement SWAPPED in at 0:07 starts typing at 0:07, rather than
+/// arriving with its reveal already spent. Found the honest way: the first
+/// template to put a karaoke line on a swap keyframe never showed the
+/// highlight, because the walk had finished before the words arrived.
 pub fn progress(
     reveal: &TextReveal,
     layer: &ProjectLayer,
@@ -36,8 +40,10 @@ pub fn progress(
     if units == 0 {
         return Progress { shown: 0, active: None, fraction: 1.0, total: 0.0 };
     }
-    let total = reveal.total_seconds(units, layer.duration);
-    let elapsed = time - layer.start_time;
+    let (tenure_start, tenure_end) = crate::transition::tenure(layer, time);
+    let tenure_len = tenure_end.map(|end| (end - tenure_start).max(0.0));
+    let total = reveal.total_seconds(units, tenure_len);
+    let elapsed = crate::layer_local_time(layer, time) - tenure_start;
     let raw = if total > 0.0 { elapsed / total } else { 1.0 };
     let clamped = raw.clamp(0.0, 1.0);
     let fraction = reveal.easing.unwrap_or(Easing::Linear).apply(clamped);
@@ -481,5 +487,42 @@ mod tests {
             "and half of the walk there, so still on its way: {}",
             quick[0].effect.opacity,
         );
+    }
+
+    /// A statement swapped in mid-layer starts ITS OWN walk: the reveal
+    /// counts from the resource's tenure, so a karaoke line on a swap
+    /// keyframe highlights when it is on screen — not before it arrives.
+    #[test]
+    fn a_swapped_in_caption_starts_its_own_walk() {
+        let layer: ProjectLayer = serde_json::from_str(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0C01","name":"Words",
+                "sortIndex":0,"kind":"caption","isEnabled":true,
+                "startTime":0,"duration":10,
+                "resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0C02",
+                "keyframes":[{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0C03",
+                  "time":4,"transitionDuration":0,
+                  "resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0C04"}]}"#,
+        )
+        .expect("layer");
+        let rule: TextReveal =
+            serde_json::from_str(r#"{"by":"word","mode":"wipe"}"#).expect("rule");
+
+        // Just after the swap: the new statement has barely begun. On the
+        // layer's clock this instant would be 42% through the walk.
+        let just_in = progress(&rule, &layer, 4.2, 6);
+        assert!(
+            just_in.fraction < 0.1,
+            "a swapped-in caption starts typing when it appears, got {}",
+            just_in.fraction,
+        );
+        // And with no stated pace, its walk spreads across ITS tenure
+        // (4s..10s), finishing as the layer ends.
+        let near_end = progress(&rule, &layer, 9.9, 6);
+        assert!(near_end.fraction > 0.95, "got {}", near_end.fraction);
+        // The first statement's walk spread across the tenure it actually
+        // had — done by the swap, not still typing at 40% of a layer-length
+        // walk it never got to finish.
+        let first = progress(&rule, &layer, 3.9, 6);
+        assert!(first.fraction > 0.95, "got {}", first.fraction);
     }
 }

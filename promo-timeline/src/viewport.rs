@@ -61,7 +61,15 @@ pub fn layer_viewport(layer: &ProjectLayer, time: f64) -> Option<[f64; 4]> {
 /// would describe a correction that no longer happens.
 pub fn out_of_bounds(v: [f64; 4]) -> Option<[f64; 4]> {
     let fixed = clamped(v);
-    (fixed != v).then_some(fixed)
+    // Sub-pixel float noise is not "outside the source": a window authored
+    // as 0.66 + 0.34 exceeds 1.0 by 2e-16, and warning about a correction
+    // no render can see teaches people to ignore the warnings that matter.
+    let noise = 1e-9;
+    fixed
+        .iter()
+        .zip(&v)
+        .any(|(a, b)| (a - b).abs() > noise)
+        .then_some(fixed)
 }
 
 fn clamped(v: [f64; 4]) -> [f64; 4] {
