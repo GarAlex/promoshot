@@ -81,6 +81,36 @@
       "kind": "video",
       "id": "1C0957AA-9480-4E19-92ED-82679151B1B7",
       "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "5B8A1F63-2E4D-4C7A-9B0E-7D3F6A82C914",
+      "kind": "drawing",
+      "filename": "mask-oval.json",
+      "displayName": "Oval mask",
+      "addedAt": 804719600,
+      "drawing": {
+        "shapes": [
+          {
+            "id": "9C4E7D21-6A5B-4F38-8E02-1B9D3C5F7A46",
+            "kind": "oval",
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                100,
+                60
+              ]
+            ],
+            "strokeColorHex": "FFFFFF",
+            "strokeWidth": 1,
+            "fillColorHex": "FFFFFF",
+            "arrowStart": false,
+            "arrowEnd": false
+          }
+        ]
+      }
     }
   ],
   "trimEnd": 25.911666666666665,
@@ -143,8 +173,10 @@
         "tintHex": "FF9040",
         "tintAmount": 0.3
       },
-      "blendMode": "screen"
+      "blendMode": "screen",
+      "maskResourceID": "5B8A1F63-2E4D-4C7A-9B0E-7D3F6A82C914",
+      "maskInverted": true
     }
   ],
-  "minReaderVersion": 12
+  "minReaderVersion": 13
 }

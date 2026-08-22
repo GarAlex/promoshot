@@ -1311,6 +1311,87 @@ impl PreviewEngine {
         Some((quad, id))
     }
 
+    /// Rasterizes a mask drawing and returns the cache id of its texture.
+    ///
+    /// Uniform scale at COVERING density: the raster keeps the drawing's own
+    /// aspect and the shader stretches it corner-to-corner over the layer's
+    /// rect, so choosing the larger of the two covering scales keeps both
+    /// axes sampling at or above 1:1. Cached by resource and pixel size —
+    /// per RESOURCE, not per layer, so two layers sharing a mask at the same
+    /// size share the raster.
+    fn mask_texture(
+        &mut self,
+        resource_id: &str,
+        rect: [f64; 4],
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+        pinned: &[u64],
+    ) -> Option<u64> {
+        if rect[2] <= 0.0 || rect[3] <= 0.0 {
+            return None;
+        }
+        let doc = self
+            .meta
+            .resources
+            .as_ref()?
+            .iter()
+            .find(|r| r.id == resource_id)?
+            .drawing
+            .as_ref()?;
+        let shapes = vector_shapes(doc, settings);
+        if shapes.is_empty() {
+            return None;
+        }
+        let (_, _, bw, bh) = promo_gpu::vector::content_bounds(&shapes);
+        let (bw, bh) = (bw.max(1.0), bh.max(1.0));
+        // Same ceiling the drawing rasterizer uses, but applied to the SCALE
+        // so the raster's aspect survives being capped.
+        let cap = canvas.width().max(canvas.height()) * 2.0 * self.raster_scale;
+        let scale = ((rect[2] * self.raster_scale) / bw)
+            .max((rect[3] * self.raster_scale) / bh)
+            .min(cap / bw)
+            .min(cap / bh);
+        let pw = (bw * scale).round().max(1.0) as u32;
+        let ph = (bh * scale).round().max(1.0) as u32;
+
+        let key = (format!("mask:{resource_id}:{pw}x{ph}"), 0i64, 0i32);
+        if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some(id);
+        }
+        let renderer = match self.vector.as_mut() {
+            Some(renderer) => renderer,
+            None => {
+                self.vector = Some(promo_gpu::vector::VectorRenderer::new(self.ctx).ok()?);
+                self.vector.as_mut()?
+            }
+        };
+        let frame = renderer.render_to_frame(self.ctx, &shapes, pw, ph).ok()?;
+        let bytes = frame.byte_size();
+
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        for victim in self.governor.admit(id, bytes, pinned) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(
+            id,
+            CachedFrame {
+                frame,
+                flags: 0,
+                caption_origin: None,
+            },
+        );
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some(id)
+    }
+
     /// Everything both render paths share: resolve the layers live at `time`,
     /// pull their frames through the provider, and describe the result. The
     /// only thing left to the caller is where it lands.
@@ -1381,6 +1462,10 @@ impl PreviewEngine {
 
         let mut quads: Vec<SceneQuad> = Vec::new();
         let mut used: Vec<u64> = Vec::new();
+        // Masked media quads, patched after the walk: (quad index, mask
+        // resource, inverted). Rasterized LAST, so a mask's cache admission
+        // can never evict a frame the walk has already borrowed.
+        let mut mask_requests: Vec<(usize, String, bool)> = Vec::new();
 
         for layer in &layers {
             if !tl::layer_is_visible(layer, time) {
@@ -1582,6 +1667,15 @@ impl PreviewEngine {
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
+                        // The window frames the OUTGOING material too: a
+                        // swap happens inside the porthole, not around it.
+                        if let Some(rid) = layer.mask_resource_id.as_deref() {
+                            mask_requests.push((
+                                quads.len() - 1,
+                                rid.to_string(),
+                                layer.mask_inverted.unwrap_or(false),
+                            ));
+                        }
                     }
                 }
             }
@@ -1600,12 +1694,40 @@ impl PreviewEngine {
             // than leaving a stroke drawn around nothing.
             apply_transition(&mut quad, layer, time, canvas);
             quads.push(quad);
+            if let Some(rid) = layer.mask_resource_id.as_deref() {
+                mask_requests.push((
+                    quads.len() - 1,
+                    rid.to_string(),
+                    layer.mask_inverted.unwrap_or(false),
+                ));
+            }
         }
 
         // Patch texture indices now that the used-frame list is final; the
         // caller borrows the textures in this same order.
         for (i, quad) in quads.iter_mut().enumerate() {
             quad.texture = Some(i);
+        }
+
+        // Masks join the texture list AFTER the content: `used` is complete,
+        // so pinning it keeps every borrowed frame safe from the masks'
+        // admissions, and nothing allocates after this, so the masks stay
+        // put too. A mask shared by several quads lands in one slot.
+        for (quad_index, resource_id, inverted) in mask_requests {
+            let rect = quads[quad_index].rect;
+            let Some(id) = self.mask_texture(&resource_id, rect, &settings, canvas, &used)
+            else {
+                continue;
+            };
+            let slot = match used.iter().position(|&u| u == id) {
+                Some(slot) => slot,
+                None => {
+                    used.push(id);
+                    used.len() - 1
+                }
+            };
+            quads[quad_index].mask = Some(slot);
+            quads[quad_index].mask_invert = inverted;
         }
 
         Ok((
@@ -3086,6 +3208,99 @@ mod tests {
         let (ar, ag, _b) = plate_px("303030", r#", "blendMode": "add""#);
         assert!(ar > 190, "add sums the ground's red and the plate, got {ar}");
         assert!((30..=90).contains(&ag), "and the plate's own grey rides along, got {ag}");
+    }
+
+    /// A mask project: a full-canvas red image layer over a blue ground,
+    /// windowed by an oval drawing. The oval is inscribed in the square
+    /// canvas, so the centre is ink and the corners are not.
+    fn mask_meta(mask: &str) -> ProjectMetadata {
+        ProjectMetadata::from_json(&format!(
+            r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-00000000MA5C",
+            "name": "mask", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [], "minReaderVersion": 13,
+            "compositionSettings": {{
+                "canvasWidth": 128, "canvasHeight": 128,
+                "backgroundColorHex": "0000FF"
+            }},
+            "resources": [
+                {{"id": "IMGR", "kind": "image", "filename": "a.png",
+                  "displayName": "a", "addedAt": 0}},
+                {{"id": "IMGR2", "kind": "image", "filename": "b.png",
+                  "displayName": "b", "addedAt": 0}},
+                {{"id": "MASK", "kind": "drawing", "filename": "m.json",
+                  "displayName": "Oval", "addedAt": 0,
+                  "drawing": {{"shapes": [{{
+                      "id": "S", "kind": "oval",
+                      "points": [[0.0, 0.0], [100.0, 100.0]],
+                      "strokeColorHex": "FFFFFF", "strokeWidth": 1.0,
+                      "fillColorHex": "FFFFFF",
+                      "arrowStart": false, "arrowEnd": false}}]}}}}
+            ],
+            "layers": [
+                {{"id": "IMG", "name": "Shot", "sortIndex": 1, "kind": "image",
+                  "isEnabled": true, "startTime": 0, "duration": 4,
+                  "resourceID": "IMGR"{mask}, "keyframes": []}}
+            ]}}"#
+        ))
+        .expect("fixture")
+    }
+
+    /// The porthole: where the mask drawing has ink the layer shows, where
+    /// it has none the GROUND shows — the layer's rect still covers the
+    /// whole canvas, which is what the unmasked control proves.
+    #[test]
+    fn a_mask_windows_a_media_layer() {
+        let render = |mask: &str| {
+            let meta = mask_meta(mask);
+            let (mut engine, _state) =
+                make_engine(meta, vec![("IMG".into(), [0, 0, 255, 255], 32)], 64 << 20);
+            let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+            engine.render(1.0, out.raw(), 128, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        let at = |px: &[u8], x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 128 + x) * 4;
+            [px[i], px[i + 1], px[i + 2], px[i + 3]]
+        };
+
+        // Control: without a mask the red layer covers the corner too.
+        let control = render("");
+        assert_eq!(at(&control, 64, 64), [0, 0, 255, 255], "control centre red");
+        assert_eq!(at(&control, 6, 6), [0, 0, 255, 255], "control corner red");
+
+        // Masked: the oval's centre keeps the layer, the corner loses it.
+        let masked = render(r#", "maskResourceID": "MASK""#);
+        assert_eq!(at(&masked, 64, 64), [0, 0, 255, 255], "ink: the layer shows");
+        assert_eq!(at(&masked, 6, 6), [255, 0, 0, 255], "no ink: the ground shows");
+
+        // Inverted: the ink is the hole now.
+        let inverted = render(r#", "maskResourceID": "MASK", "maskInverted": true"#);
+        assert_eq!(at(&inverted, 64, 64), [255, 0, 0, 255], "inverted: the hole");
+        assert_eq!(at(&inverted, 6, 6), [0, 0, 255, 255], "inverted: layer outside the ink");
+    }
+
+    /// Mid-swap, BOTH materials are on screen — and both stay inside the
+    /// window. The outgoing quad is a separate attach site in the walk, so
+    /// a corner probe at the swap's midpoint is what catches it going
+    /// unmasked.
+    #[test]
+    fn a_swap_happens_inside_the_mask_window() {
+        let mut meta = mask_meta(r#", "maskResourceID": "MASK""#);
+        let mut layers = meta.layers.clone().unwrap_or_default();
+        layers[0].keyframes = serde_json::from_value(serde_json::json!([
+            {"id": "K", "time": 1.0, "resourceID": "IMGR2", "transitionDuration": 0,
+             "transition": {"kind": "wipe", "from": "left", "duration": 1.0}}
+        ]))
+        .unwrap();
+        meta.layers = Some(layers);
+        let (mut engine, _state) =
+            make_engine(meta, vec![("IMG".into(), [0, 0, 255, 255], 32)], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+        engine.render(1.5, out.raw(), 128, 128).expect("render");
+        assert_eq!(pixel(&out, 64, 64), [0, 0, 255, 255], "the swap shows inside");
+        assert_eq!(pixel(&out, 6, 6), [255, 0, 0, 255], "and the corner stays ground");
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as

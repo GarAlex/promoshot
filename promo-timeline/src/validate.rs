@@ -136,6 +136,54 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    // A mask must point at a drawing with ink, on a layer that draws media.
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        let media = matches!(
+            layer.kind,
+            promo_model::ProjectLayerKind::Video | promo_model::ProjectLayerKind::Image
+        );
+        if let Some(rid) = layer.mask_resource_id.as_deref() {
+            if !media {
+                out.push(format!(
+                    "layer \"{}\": maskResourceID on a {:?} layer does nothing — \
+                     masks window video and image layers",
+                    layer.name, layer.kind
+                ));
+            }
+            match meta
+                .resources
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .find(|r| r.id == rid)
+            {
+                None => out.push(format!(
+                    "layer \"{}\": maskResourceID \"{rid}\" names no resource — \
+                     the layer renders unmasked",
+                    layer.name
+                )),
+                Some(resource) => match resource.drawing.as_ref() {
+                    None => out.push(format!(
+                        "layer \"{}\": mask resource \"{}\" is {:?}, not a drawing — \
+                         a mask is a drawing's ink, and the layer renders unmasked",
+                        layer.name, resource.display_name, resource.kind
+                    )),
+                    Some(doc) if doc.shapes.is_empty() => out.push(format!(
+                        "layer \"{}\": mask drawing \"{}\" has no shapes — no ink, \
+                         no window, the layer renders unmasked",
+                        layer.name, resource.display_name
+                    )),
+                    Some(_) => {}
+                },
+            }
+        } else if layer.mask_inverted.is_some() {
+            out.push(format!(
+                "layer \"{}\": maskInverted without a maskResourceID does nothing",
+                layer.name
+            ));
+        }
+    }
+
     // Ids are UUIDs — all of them. The Rust side reads them as strings and
     // never minds, which is exactly the trap: `validate` said "ok" to a
     // project whose layers were named "CAP" and "B", and the app then
@@ -513,5 +561,50 @@ mod tests {
                        "startTime":0,"duration":4,"blendMode":"screen","keyframes":[]}"#;
         assert!(warnings(&project(clip, r#","minReaderVersion":12"#)).is_empty(),
                 "screen on an image is exactly what the mode is for");
+    }
+
+    /// Every way a mask can silently not act gets a voice: a missing
+    /// resource, a resource of the wrong kind, an inkless drawing, a layer
+    /// kind masks skip, and an invert with nothing to flip.
+    #[test]
+    fn a_mask_that_cannot_act_is_named() {
+        let masked = |kind: &str, mask: &str| {
+            format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A20","name":"Shot",
+                     "sortIndex":0,"kind":"{kind}","isEnabled":true,
+                     "startTime":0,"duration":4{mask},"keyframes":[]}}"#
+            )
+        };
+        let resources = r#","minReaderVersion":13,"resources":[
+            {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A21","kind":"drawing",
+             "filename":"m.json","displayName":"Oval","addedAt":0,
+             "drawing":{"shapes":[{"id":"S","kind":"oval",
+                 "points":[[0.0,0.0],[10.0,10.0]],"strokeColorHex":"FFFFFF",
+                 "strokeWidth":1.0,"fillColorHex":"FFFFFF",
+                 "arrowStart":false,"arrowEnd":false}]}},
+            {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A22","kind":"drawing",
+             "filename":"e.json","displayName":"Empty","addedAt":0,
+             "drawing":{"shapes":[]}},
+            {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A23","kind":"image",
+             "filename":"a.png","displayName":"Pic","addedAt":0}]"#;
+        let mask = |rid: &str| {
+            format!(r#","maskResourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A{rid}""#)
+        };
+
+        // The happy path stays silent.
+        assert!(
+            warnings(&project(&masked("image", &mask("21")), resources)).is_empty(),
+            "a drawing mask on an image layer is the feature"
+        );
+        assert!(warnings(&project(&masked("image", &mask("99")), resources))
+            .iter().any(|w| w.contains("names no resource")));
+        assert!(warnings(&project(&masked("image", &mask("23")), resources))
+            .iter().any(|w| w.contains("not a drawing")));
+        assert!(warnings(&project(&masked("image", &mask("22")), resources))
+            .iter().any(|w| w.contains("no shapes")));
+        assert!(warnings(&project(&masked("caption", &mask("21")), resources))
+            .iter().any(|w| w.contains("masks window video and image layers")));
+        assert!(warnings(&project(&masked("image", r#","maskInverted":true"#), resources))
+            .iter().any(|w| w.contains("without a maskResourceID")));
     }
 }

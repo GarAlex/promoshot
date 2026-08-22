@@ -1524,6 +1524,17 @@ pub struct ProjectLayer {
     /// animate the layer's opacity or its grade instead.
     #[serde(default, skip_serializing_if = "is_none")]
     pub blend_mode: Option<BlendMode>,
+    /// The drawing whose ink is this layer's WINDOW: rasterized and
+    /// stretched over the layer's rect, the layer only shows where the
+    /// drawing has ink. Absent means the whole rect, as always. A static
+    /// attribute (like `blend_mode`), and deliberately split from the
+    /// keyframe `viewport`: the mask holds the window still on the canvas
+    /// while the viewport pans and zooms the content behind it.
+    #[serde(default, skip_serializing_if = "is_none", rename = "maskResourceID")]
+    pub mask_resource_id: Option<String>,
+    /// Flips the mask: the ink becomes the hole instead of the window.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mask_inverted: Option<bool>,
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2151,6 +2162,14 @@ impl ProjectMetadata {
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test
         // every rung on this ladder passed.
+        // 13 is a shape mask — dropped by an older reader's save, the
+        // porthole vanishes and the full rectangle floods back over
+        // whatever it was framing. `maskInverted` rides the same rung: it
+        // shipped in the same format version, so no reader has ever
+        // understood 13 without it.
+        if layers.iter().any(|l| l.mask_resource_id.is_some() || l.mask_inverted.is_some()) {
+            return 13;
+        }
         // 12 is a blend mode — dropped, a screen-blended glow becomes an
         // opaque black card over the footage, which is far worse than the
         // look merely reverting.
@@ -2635,6 +2654,28 @@ mod placement_model_tests {
             )
             .minimum_reader_version(),
             12
+        );
+
+        // A mask claims 13: dropped, the porthole vanishes and the full
+        // rectangle floods back. The invert flag alone claims it too — a
+        // reader that saves it off flips a hole into a window.
+        assert_eq!(
+            meta(
+                r#""layers":[{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "maskResourceID":"M","keyframes":[]}]"#
+            )
+            .minimum_reader_version(),
+            13
+        );
+        assert_eq!(
+            meta(
+                r#""layers":[{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "maskInverted":true,"keyframes":[]}]"#
+            )
+            .minimum_reader_version(),
+            13
         );
     }
 

@@ -446,6 +446,8 @@ mod tests {
             motion_blur: None,
             adjustments: None,
             blend_mode: None,
+            mask_resource_id: None,
+            mask_inverted: None,
             start_time: start,
             duration,
             resource_id: None,

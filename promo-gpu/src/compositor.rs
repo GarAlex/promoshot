@@ -58,6 +58,14 @@ pub struct SceneQuad {
     pub tint_rgba: [f32; 4],
     /// How this quad combines with what is already drawn.
     pub blend: QuadBlend,
+    /// Index of this quad's MASK texture in the textures passed to
+    /// `compose`, or `None` for no mask. Sampled in QUAD-LOCAL coordinates
+    /// (corner to corner over the rect, ignoring `uv_rect`), its alpha
+    /// multiplied into the quad's final colour: the mask is a window fixed
+    /// on the canvas while the uv pans the content behind it.
+    pub mask: Option<usize>,
+    /// Flips the mask: ink becomes the hole instead of the window.
+    pub mask_invert: bool,
 }
 
 impl Default for SceneQuad {
@@ -78,6 +86,8 @@ impl Default for SceneQuad {
             adjust: [1.0, 1.0, 0.0, 0.0],
             tint_rgba: [1.0, 1.0, 1.0, 1.0],
             blend: QuadBlend::Normal,
+            mask: None,
+            mask_invert: false,
         }
     }
 }
@@ -170,12 +180,16 @@ struct Quad {
     adjust: vec4<f32>,
     // The tint's colour, straight alpha.
     tint_color: vec4<f32>,
+    // x = 1 masked / 0 not, y = 1 inverted. A masked quad samples
+    // `quad_mask`'s alpha in quad-local coordinates and multiplies it in.
+    mask: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(1) @binding(0) var<uniform> quad: Quad;
 @group(1) @binding(1) var quad_tex: texture_2d<f32>;
 @group(1) @binding(2) var quad_samp: sampler;
+@group(1) @binding(3) var quad_mask: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -351,7 +365,20 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         color = border_pm + color * (1.0 - border_pm.a);
     }
 
-    return color * coverage * quad.params.x;
+    // The mask is a WINDOW over the whole layer — content, adjustments and
+    // border alike — so it cuts last, beside the rect's own coverage. Local
+    // coordinates, not uv: a viewport pans the content behind the window
+    // without moving the window.
+    var mask_cov = 1.0;
+    if quad.mask.x > 0.5 {
+        var ink = textureSample(quad_mask, quad_samp, in.local / size).a;
+        if quad.mask.y > 0.5 {
+            ink = 1.0 - ink;
+        }
+        mask_cov = ink;
+    }
+
+    return color * coverage * mask_cov * quad.params.x;
 }
 "#;
 
@@ -378,6 +405,7 @@ struct QuadRaw {
     uv_rect: [f32; 4],
     adjust: [f32; 4],
     tint_color: [f32; 4],
+    mask: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -440,9 +468,9 @@ pub struct Compositor {
     /// texture view — and therefore the IOSurface behind it — so an unbounded
     /// map pins every frame's surfaces in memory (measured: +38 GB across a
     /// 600-frame 4K export before this cap existed).
-    binds: std::collections::HashMap<u64, wgpu::BindGroup>,
+    binds: std::collections::HashMap<(u64, u64), wgpu::BindGroup>,
     /// Insertion order for eviction.
-    bind_order: std::collections::VecDeque<u64>,
+    bind_order: std::collections::VecDeque<(u64, u64)>,
     /// IOSurface→texture adoption cache (macOS/iOS), keyed by IOSurfaceID +
     /// render-attachment flag. Adopting is a per-call Metal object creation
     /// (~100 µs each) that used to run for EVERY input surface of EVERY
@@ -556,6 +584,16 @@ impl Compositor {
                     binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
                     count: None,
                 },
             ],
@@ -775,15 +813,19 @@ impl Compositor {
     ///
     /// Keyed by texture AND filter, since the sampler is part of the bind
     /// group: the same sheet drawn smoothed and unsmoothed in one scene needs
-    /// two. The low bit carries the filter, so ids stay dense.
+    /// two. The low bit carries the filter, so ids stay dense. The mask
+    /// texture widens the key: an unmasked quad binds the dummy there and
+    /// the shader's flag keeps it unread.
     fn bind_group_for(
         &mut self,
         ctx: &GpuContext,
         texture: Option<&InputTexture>,
         nearest: bool,
-    ) -> u64 {
+        mask: Option<&InputTexture>,
+    ) -> (u64, u64) {
         let texture = texture.unwrap_or(&self.dummy);
-        let id = (texture.id << 1) | u64::from(nearest);
+        let mask = mask.unwrap_or(&self.dummy);
+        let id = ((texture.id << 1) | u64::from(nearest), mask.id);
         if !self.binds.contains_key(&id) {
             let sampler = if nearest {
                 &self.nearest_sampler
@@ -809,6 +851,10 @@ impl Compositor {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&mask.view),
                     },
                 ],
             });
@@ -1101,7 +1147,7 @@ impl Compositor {
 
         // One staging write for the whole frame's quad uniforms.
         let mut staging = vec![0u8; QUAD_STRIDE as usize * quads.len()];
-        let mut binds: Vec<u64> = Vec::with_capacity(quads.len());
+        let mut binds: Vec<(u64, u64)> = Vec::with_capacity(quads.len());
         for (i, q) in quads.iter().enumerate() {
             let rot = q.rotation_deg.to_radians();
             let raw = QuadRaw {
@@ -1128,6 +1174,12 @@ impl Compositor {
                 uv_rect: q.uv_rect,
                 adjust: q.adjust,
                 tint_color: q.tint_rgba,
+                mask: [
+                    if q.mask.is_some() { 1.0 } else { 0.0 },
+                    if q.mask_invert { 1.0 } else { 0.0 },
+                    0.0,
+                    0.0,
+                ],
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1138,7 +1190,13 @@ impl Compositor {
                 })?),
                 None => None,
             };
-            binds.push(self.bind_group_for(ctx, texture, q.nearest));
+            let mask = match q.mask {
+                Some(index) => Some(*textures.get(index).ok_or_else(|| {
+                    GpuError::Import(format!("mask texture index {index} out of range"))
+                })?),
+                None => None,
+            };
+            binds.push(self.bind_group_for(ctx, texture, q.nearest, mask));
         }
         ctx.queue.write_buffer(&self.quad_buf, 0, &staging);
 
@@ -1295,10 +1353,11 @@ impl Compositor {
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             adjust: [1.0, 1.0, 0.0, 0.0],
             tint_color: [1.0, 1.0, 1.0, 1.0],
+            mask: [0.0; 4],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
-        let bind_id = self.bind_group_for(ctx, Some(&source), true);
+        let bind_id = self.bind_group_for(ctx, Some(&source), true, None);
 
         let mut encoder = ctx
             .device
@@ -1603,6 +1662,48 @@ mod tests {
         assert_eq!(px(&pixels, 200, 190, 50), [0, 0, 255, 255], "right bar red");
         assert_eq!(px(&pixels, 200, 60, 10), [0, 255, 0, 255], "canvas green");
         assert_eq!(px(&pixels, 200, 100, 50), [255, 0, 0, 255], "quad blue");
+    }
+
+    /// A mask is a second texture whose ALPHA windows the quad: where the
+    /// mask has no ink the quad must vanish and the ground behind it show,
+    /// and `mask_invert` flips the window into a hole. Probes sit at 5% and
+    /// 95% of the quad so the two-texel mask's bilinear ramp stays away.
+    #[test]
+    fn a_mask_windows_a_quad_and_inverts() {
+        let ctx = GpuContext::new().expect("gpu");
+        let red = Compositor::upload_texture(&ctx, &[0, 0, 255, 255], 1, 1).expect("content");
+        // Left texel clear, right texel inked (premultiplied white).
+        let mask = Compositor::upload_texture(
+            &ctx,
+            &[0, 0, 0, 0, 255, 255, 255, 255],
+            2,
+            1,
+        )
+        .expect("mask");
+        let scene = |invert: bool| Scene {
+            canvas_width: 100.0,
+            canvas_height: 100.0,
+            background_rgba: [0.0, 1.0, 0.0, 1.0], // green ground
+            background_gradient: None,
+            output_width: 100,
+            output_height: 100,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                texture: Some(0),
+                rect: [0.0, 0.0, 100.0, 100.0],
+                mask: Some(1),
+                mask_invert: invert,
+                ..Default::default()
+            }],
+        };
+        let textures = [red, mask];
+        let px = compose(&scene(false), &textures, &ctx);
+        assert_eq!(px_(&px, 5, 50), [0, 255, 0, 255], "no ink: the ground shows");
+        assert_eq!(px_(&px, 95, 50), [0, 0, 255, 255], "ink: the content shows");
+
+        let px = compose(&scene(true), &textures, &ctx);
+        assert_eq!(px_(&px, 5, 50), [0, 0, 255, 255], "inverted: content where ink was not");
+        assert_eq!(px_(&px, 95, 50), [0, 255, 0, 255], "inverted: the hole");
     }
 
     fn gradient_scene(gradient: SceneGradient) -> Scene {
