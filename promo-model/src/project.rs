@@ -414,6 +414,8 @@ pub struct LayerTransition {
     pub from: Option<TransitionEdge>,
     /// Seconds. A transition longer than the layer is clamped to it.
     pub duration: f64,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub easing: Option<Easing>,
 }
 
 impl LayerTransition {

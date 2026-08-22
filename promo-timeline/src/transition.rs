@@ -63,7 +63,11 @@ pub fn outgoing(layer: &ProjectLayer) -> Option<LayerTransition> {
 }
 
 fn fade(duration: f64) -> LayerTransition {
+    // The shorthand is linear on purpose: `fadeIn: 0.3` says the common
+    // thing; a fade with a CURVE is what `transitionIn` with `easing` is
+    // for.
     LayerTransition {
+        easing: None,
         kind: TransitionKind::Fade,
         from: None,
         duration,
@@ -111,6 +115,12 @@ fn progress(raw: f64) -> f64 {
 }
 
 fn shape(transition: &LayerTransition, progress: f64) -> Effect {
+    // Eased HERE, once per half, so all five kinds share the ramp's clock —
+    // the same central-easing rule the keyframe tracks follow.
+    let progress = transition
+        .easing
+        .unwrap_or(promo_model::Easing::Linear)
+        .apply(progress);
     let edge = transition.edge();
     match transition.kind {
         TransitionKind::Fade => Effect {
@@ -153,6 +163,10 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
 /// material is part of the motion — which is why it only means anything at a
 /// swap, where there IS an outgoing.
 pub fn departing(transition: &LayerTransition, progress: f64) -> Effect {
+    let progress = transition
+        .easing
+        .unwrap_or(promo_model::Easing::Linear)
+        .apply(progress);
     match transition.kind {
         TransitionKind::Push => Effect {
             travel: match transition.edge() {
@@ -374,6 +388,7 @@ mod tests {
     #[test]
     fn a_push_moves_the_material_it_replaces_and_nothing_else_does() {
         let push = LayerTransition {
+            easing: None,
             kind: TransitionKind::Push,
             from: Some(TransitionEdge::Right),
             duration: 1.0,
@@ -391,7 +406,7 @@ mod tests {
 
         for kind in [TransitionKind::Wipe, TransitionKind::Fade, TransitionKind::Slide,
                      TransitionKind::Scale] {
-            let other = LayerTransition { kind, from: None, duration: 1.0 };
+            let other = LayerTransition { kind, from: None, duration: 1.0, easing: None };
             assert!(departing(&other, 0.5).is_identity(),
                     "{kind:?} arrives OVER what it replaces, which does not move");
         }
@@ -540,5 +555,50 @@ mod tests {
         let half = effect(&l, 2.5);
         assert_eq!(half.opacity, 1.0, "a wipe does not fade");
         assert_eq!(half.reveal, [0.0, 0.0, 0.5, 1.0]);
+    }
+
+    /// One easing field shapes all five kinds — pinned on the two halves
+    /// that move differently: a fade's opacity and a push's travel.
+    #[test]
+    fn a_transition_can_carry_a_curve() {
+        let layer: ProjectLayer = serde_json::from_str(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1001","name":"L",
+                "sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":4,
+                "transitionIn":{"kind":"fade","duration":1.0,"easing":"easeOut"},
+                "keyframes":[]}"#,
+        )
+        .expect("layer");
+        // ease-out at the midpoint runs AHEAD of linear: 1-(1-t)^2 = 0.75.
+        let mid = effect(&layer, 0.5);
+        assert!((mid.opacity - 0.75).abs() < 1e-9,
+                "an eased fade is ahead of linear at the midpoint, got {}",
+                mid.opacity);
+
+        // And the eased clock reaches a push's travel through the swap path.
+        let eased: ProjectLayer = serde_json::from_str(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1002","name":"L",
+                "sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":8,
+                "resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1003",
+                "keyframes":[{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1004",
+                  "time":4,"transitionDuration":0,
+                  "resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1005",
+                  "transition":{"kind":"push","from":"left","duration":1.0,
+                                "easing":"easeOut"}}]}"#,
+        )
+        .expect("layer");
+        let resources: Vec<promo_model::ProjectResource> = serde_json::from_str(
+            r#"[{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1003","kind":"image",
+                 "filename":"a.png","displayName":"a","addedAt":0},
+                {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B1005","kind":"image",
+                 "filename":"b.png","displayName":"b","addedAt":0}]"#,
+        )
+        .expect("resources");
+        let swap = active_swap(&eased, 4.5, &resources).expect("mid-swap");
+        // Incoming travel is (1 - progress) toward home; eased 0.75 → 0.25.
+        assert!((swap.effect.travel[0].abs() - 0.25).abs() < 1e-9,
+                "the push's travel rides the eased clock, got {}",
+                swap.effect.travel[0]);
     }
 }
