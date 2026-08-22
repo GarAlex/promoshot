@@ -339,6 +339,29 @@ impl TextReveal {
     }
 }
 
+/// A per-layer colour grade, applied to the layer's own pixels only —
+/// the screenshot goes black-and-white while everything around it keeps
+/// its colour. NOT an adjustment layer: nothing beneath is touched.
+///
+/// `saturation` 1 is untouched and 0 is grey; `contrast` 1 is untouched;
+/// `brightness` is additive around 0; `tint` multiplies `tintHex` in at
+/// `tintAmount` (a gel — 1 is fully gelled). Applied in that order, so
+/// saturation 0 plus a warm tint reads as a duotone.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerAdjustments {
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub saturation: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub contrast: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub brightness: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub tint_hex: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub tint_amount: Option<f64>,
+}
+
 /// A per-layer camera shutter.
 ///
 /// `shutter` is the fraction of one frame interval the shutter stays open —
@@ -1041,6 +1064,17 @@ pub struct ProjectLayerKeyframe {
     /// carries a shutter, the keyframes win.
     #[serde(default, skip_serializing_if = "is_none")]
     pub shutter: Option<f64>,
+    /// The grade's scalar tracks, for adjustments that RAMP — fade to
+    /// grey, warm as the sun sets. Same both-present rule as the shutter:
+    /// a keyframed field beats the layer constant of the same name.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub saturation: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub contrast: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub brightness: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub tint_amount: Option<f64>,
     pub transition_duration: f64,
     /// The share of the gap from the PREVIOUS keyframe spent moving, as a
     /// percentage: 100 starts moving immediately and arrives exactly here,
@@ -1461,6 +1495,12 @@ pub struct ProjectLayer {
     /// not the usual intent.
     #[serde(default, skip_serializing_if = "is_none")]
     pub motion_blur: Option<MotionBlur>,
+    /// This layer's own colour grade — its pixels and nobody else's.
+    /// Absent means untouched. The constants are the shorthand; the
+    /// keyframe fields of the same names are the full form, and win
+    /// per field when present.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub adjustments: Option<LayerAdjustments>,
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2088,6 +2128,19 @@ impl ProjectMetadata {
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test
         // every rung on this ladder passed.
+        // 11 is a per-layer colour grade — dropped by an older reader's
+        // save, the look silently reverts.
+        if layers.iter().any(|l| {
+            l.adjustments.is_some()
+                || l.keyframes.iter().any(|k| {
+                    k.saturation.is_some()
+                        || k.contrast.is_some()
+                        || k.brightness.is_some()
+                        || k.tint_amount.is_some()
+                })
+        }) {
+            return 11;
+        }
         // Keyframed shutters ride the same rung as the constant: both
         // landed in one unreleased batch, so no reader has ever understood
         // 10 without them.
@@ -2523,6 +2576,24 @@ mod placement_model_tests {
             )
             .minimum_reader_version(),
             10
+        );
+
+        // A grade claims 11 — dropped, the look silently reverts — and it
+        // outranks blur on the same project (highest-wins).
+        assert_eq!(
+            meta(
+                r#""layers":[{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "motionBlur":{"shutter":0.5},
+                     "adjustments":{"saturation":0},"keyframes":[]}]"#
+            )
+            .minimum_reader_version(),
+            11
+        );
+        assert_eq!(
+            meta(&layer(r#","saturation":0.5"#)).minimum_reader_version(),
+            11,
+            "and a keyframed grade field claims it too"
         );
     }
 

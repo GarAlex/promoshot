@@ -49,6 +49,13 @@ pub struct SceneQuad {
     /// Fill from the frame's background gradient rather than `solid_rgba`.
     /// Set on the background quad alone.
     pub gradient_fill: bool,
+    /// Per-layer colour adjustments, applied to THIS quad's own pixels and
+    /// nothing else: `[saturation, contrast, brightness, tint_amount]`.
+    /// Identity is `[1, 1, 0, 0]` — the shader skips the work then.
+    pub adjust: [f32; 4],
+    /// The tint's colour (straight, unpremultiplied). Multiplied in at
+    /// `tint_amount`: 1 gels the layer fully, 0 leaves it alone.
+    pub tint_rgba: [f32; 4],
 }
 
 impl Default for SceneQuad {
@@ -66,6 +73,8 @@ impl Default for SceneQuad {
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             nearest: false,
             gradient_fill: false,
+            adjust: [1.0, 1.0, 0.0, 0.0],
+            tint_rgba: [1.0, 1.0, 1.0, 1.0],
         }
     }
 }
@@ -139,6 +148,11 @@ struct Quad {
     params: vec4<f32>,
     // xy = uv origin, zw = uv size. Whole texture is (0,0,1,1).
     uv_rect: vec4<f32>,
+    // x = saturation (1 = as-is, 0 = grey), y = contrast (1 = as-is),
+    // z = brightness (additive, 0 = as-is), w = tint amount (0 = none).
+    adjust: vec4<f32>,
+    // The tint's colour, straight alpha.
+    tint_color: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -286,6 +300,27 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         color = vec4<f32>(color.rgb * color.a, color.a);
     }
 
+    // Per-layer colour adjustments, on THIS quad's pixels alone. The
+    // colour is premultiplied by here, and colour maths on premultiplied
+    // values fringes at soft edges — so un-premultiply, adjust, and fold
+    // the alpha back in. Saturation, then contrast, then brightness, then
+    // tint: saturation-then-tint is what makes a duotone (grey first, gel
+    // after) come out as one.
+    let adj = quad.adjust;
+    if adj.x != 1.0 || adj.y != 1.0 || adj.z != 0.0 || adj.w != 0.0 {
+        var rgb = color.rgb;
+        if color.a > 0.0 {
+            rgb = rgb / color.a;
+        }
+        let luma = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        rgb = mix(vec3<f32>(luma, luma, luma), rgb, adj.x);
+        rgb = (rgb - vec3<f32>(0.5)) * adj.y + vec3<f32>(0.5);
+        rgb = rgb + vec3<f32>(adj.z);
+        rgb = rgb * mix(vec3<f32>(1.0), quad.tint_color.rgb, adj.w);
+        rgb = clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+        color = vec4<f32>(rgb * color.a, color.a);
+    }
+
     // Inside border: ring between the outer edge and the inset rounded rect.
     let bw = quad.rot_radius_border.w;
     if bw > 0.0 {
@@ -324,6 +359,8 @@ struct QuadRaw {
     solid_color: [f32; 4],
     params: [f32; 4],
     uv_rect: [f32; 4],
+    adjust: [f32; 4],
+    tint_color: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -1031,6 +1068,8 @@ impl Compositor {
                     if q.gradient_fill { 1.0 } else { 0.0 },
                 ],
                 uv_rect: q.uv_rect,
+                adjust: q.adjust,
+                tint_color: q.tint_rgba,
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1185,6 +1224,8 @@ impl Compositor {
             solid_color: [0.0; 4],
             params: [weight, 1.0, 0.0, 0.0],
             uv_rect: [0.0, 0.0, 1.0, 1.0],
+            adjust: [1.0, 1.0, 0.0, 0.0],
+            tint_color: [1.0, 1.0, 1.0, 1.0],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));

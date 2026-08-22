@@ -282,6 +282,44 @@ pub fn layer_shutter(layer: &ProjectLayer, time: f64) -> Option<f64> {
         .map(|blur| blur.shutter.clamp(0.0, 1.0))
 }
 
+/// A layer's grade at `time`, every field resolved: keyframes first (the
+/// full form, held-then-ramped), else the layer constant, else identity.
+/// None when the whole grade IS identity, so the renderer can skip the
+/// shader work without inspecting fields.
+pub struct ResolvedAdjustments {
+    pub saturation: f64,
+    pub contrast: f64,
+    pub brightness: f64,
+    pub tint_amount: f64,
+    pub tint_hex: Option<String>,
+}
+
+pub fn layer_adjustments(layer: &ProjectLayer, time: f64) -> Option<ResolvedAdjustments> {
+    let local = layer_local_time(layer, time);
+    let field = |pick: fn(&ProjectLayerKeyframe) -> Option<f64>,
+                 constant: Option<f64>,
+                 identity: f64| {
+        layer_interpolated_scalar(layer, local, pick)
+            .or(constant)
+            .unwrap_or(identity)
+    };
+    let base = layer.adjustments.as_ref();
+    let out = ResolvedAdjustments {
+        saturation: field(|k| k.saturation, base.and_then(|a| a.saturation), 1.0).max(0.0),
+        contrast: field(|k| k.contrast, base.and_then(|a| a.contrast), 1.0).max(0.0),
+        brightness: field(|k| k.brightness, base.and_then(|a| a.brightness), 0.0)
+            .clamp(-1.0, 1.0),
+        tint_amount: field(|k| k.tint_amount, base.and_then(|a| a.tint_amount), 0.0)
+            .clamp(0.0, 1.0),
+        tint_hex: base.and_then(|a| a.tint_hex.clone()),
+    };
+    let identity = out.saturation == 1.0
+        && out.contrast == 1.0
+        && out.brightness == 0.0
+        && out.tint_amount == 0.0;
+    (!identity).then_some(out)
+}
+
 /// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
 /// keyframes, so an un-keyed layer is fully visible as before.
 pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {

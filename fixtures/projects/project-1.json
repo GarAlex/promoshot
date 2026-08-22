@@ -127,12 +127,23 @@
           "time": 1.5,
           "shutter": 0.75,
           "transitionDuration": 1
+        },
+        {
+          "id": "7A1B2C3D-4E5F-6071-8293-A4B5C6D7E8FA",
+          "time": 2.0,
+          "saturation": 1.0,
+          "transitionDuration": 1
         }
       ],
       "motionBlur": {
         "shutter": 0.5
+      },
+      "adjustments": {
+        "saturation": 0.4,
+        "tintHex": "FF9040",
+        "tintAmount": 0.3
       }
     }
   ],
-  "minReaderVersion": 10
+  "minReaderVersion": 11
 }

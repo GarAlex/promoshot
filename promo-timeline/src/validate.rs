@@ -77,6 +77,49 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    // A grade whose fields cannot act is a broken-looking feature: a tint
+    // amount with no colour (or a colour with no amount) does nothing, and
+    // a constant the keyframes override is dead weight.
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        if let Some(adjust) = &layer.adjustments {
+            let has_amount = adjust.tint_amount.is_some_and(|a| a > 0.0)
+                || layer.keyframes.iter().any(|k| k.tint_amount.is_some());
+            if adjust.tint_hex.is_some() && !has_amount {
+                out.push(format!(
+                    "layer \"{}\": adjustments name a tintHex but no tintAmount — \
+                     the gel is never applied",
+                    layer.name
+                ));
+            }
+            if has_amount && adjust.tint_hex.is_none() {
+                out.push(format!(
+                    "layer \"{}\": a tintAmount with no tintHex does nothing — \
+                     name the gel's colour",
+                    layer.name
+                ));
+            }
+            let overridden = [
+                (adjust.saturation.is_some()
+                     && layer.keyframes.iter().any(|k| k.saturation.is_some()), "saturation"),
+                (adjust.contrast.is_some()
+                     && layer.keyframes.iter().any(|k| k.contrast.is_some()), "contrast"),
+                (adjust.brightness.is_some()
+                     && layer.keyframes.iter().any(|k| k.brightness.is_some()), "brightness"),
+                (adjust.tint_amount.is_some()
+                     && layer.keyframes.iter().any(|k| k.tint_amount.is_some()), "tintAmount"),
+            ];
+            for (both, name) in overridden {
+                if both {
+                    out.push(format!(
+                        "layer \"{}\": has BOTH a constant {name} and keyframed \
+                         {name} — the keyframes win and the constant is ignored",
+                        layer.name
+                    ));
+                }
+            }
+        }
+    }
+
     // Ids are UUIDs — all of them. The Rust side reads them as strings and
     // never minds, which is exactly the trap: `validate` said "ok" to a
     // project whose layers were named "CAP" and "B", and the app then
@@ -413,5 +456,31 @@ mod tests {
             .iter().any(|w| w.contains("keyframes win")));
         assert!(warned("", r#","shutter":0.7"#).is_empty(),
                 "a ramp on its own is exactly right");
+    }
+
+    /// A tint needs both halves, and a constant the keyframes shadow gets
+    /// named — the same honesty the shutter's warnings give.
+    #[test]
+    fn a_half_stated_tint_and_a_shadowed_constant_are_named() {
+        let clip = |adjust: &str, kf: &str| {
+            format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A07","name":"Clip",
+                     "sortIndex":0,"kind":"video","isEnabled":true,
+                     "startTime":0,"duration":4,"adjustments":{adjust},
+                     "keyframes":[{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A08",
+                       "time":2,"transitionDuration":1{kf}}}]}}"#
+            )
+        };
+        let warned = |adjust: &str, kf: &str| {
+            warnings(&project(&clip(adjust, kf), r#","minReaderVersion":11"#))
+        };
+        assert!(warned(r#"{"tintHex":"FF8000"}"#, "")
+            .iter().any(|w| w.contains("never applied")));
+        assert!(warned(r#"{"tintAmount":0.5}"#, "")
+            .iter().any(|w| w.contains("no tintHex")));
+        assert!(warned(r#"{"saturation":0.5}"#, r#","saturation":0"#)
+            .iter().any(|w| w.contains("keyframes win")));
+        assert!(warned(r#"{"saturation":0.5}"#, "").is_empty(),
+                "a plain constant grade is exactly right");
     }
 }

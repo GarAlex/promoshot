@@ -587,6 +587,37 @@ impl PreviewEngine {
         self.render_with_overlay(time, output, output_width, output_height, None)
     }
 
+    /// The layer's grade at `time` in the shader's units, or None when the
+    /// grade is identity and the shader can skip it. Fed the GEOMETRY time
+    /// under a blur walk, so a fade-to-grey smears with everything else.
+    fn adjust_for(
+        &self,
+        layer: &promo_model::ProjectLayer,
+        time: f64,
+    ) -> Option<([f32; 4], [f32; 4])> {
+        let resolved = tl::layer_adjustments(layer, time)?;
+        let tint = resolved
+            .tint_hex
+            .as_deref()
+            .map(|hex| {
+                rgba_from_hex(self.meta.composition_settings.resolve_color(hex))
+            })
+            .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+        Some((
+            [
+                resolved.saturation as f32,
+                resolved.contrast as f32,
+                resolved.brightness as f32,
+                if resolved.tint_hex.is_some() {
+                    resolved.tint_amount as f32
+                } else {
+                    0.0
+                },
+            ],
+            tint,
+        ))
+    }
+
     /// The widest shutter any visible blurred layer asks for, in seconds.
     /// None when this instant needs no walk at all — the common case, and
     /// the zero-cost one.
@@ -918,6 +949,10 @@ impl PreviewEngine {
             quad.border_width = style.border_width;
             quad.border_rgba = style.border_rgba;
         }
+        if let Some((adjust, tint)) = self.adjust_for(layer, time) {
+            quad.adjust = adjust;
+            quad.tint_rgba = tint;
+        }
         Some((quad, frame_id))
     }
 
@@ -1090,7 +1125,12 @@ impl PreviewEngine {
                 frame.frame.height as f64 / scale,
             );
             let (x, y) = frame.caption_origin?;
-            return Some((caption_scene_quad(x, y, w, h), id));
+            let mut quad = caption_scene_quad(x, y, w, h);
+            if let Some((adjust, tint)) = self.adjust_for(layer, time) {
+                quad.adjust = adjust;
+                quad.tint_rgba = tint;
+            }
+            return Some((quad, id));
         }
 
         // Rasterize at `scale`× density: everything the layout reads scales
@@ -1140,15 +1180,17 @@ impl PreviewEngine {
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
-        Some((
-            caption_scene_quad(
-                raster.x / scale,
-                raster.y / scale,
-                raster.width as f64 / scale,
-                raster.height as f64 / scale,
-            ),
-            id,
-        ))
+        let mut quad = caption_scene_quad(
+            raster.x / scale,
+            raster.y / scale,
+            raster.width as f64 / scale,
+            raster.height as f64 / scale,
+        );
+        if let Some((adjust, tint)) = self.adjust_for(layer, time) {
+            quad.adjust = adjust;
+            quad.tint_rgba = tint;
+        }
+        Some((quad, id))
     }
 
     /// Rasterizes a drawing layer's vector document and returns its quad plus
@@ -1209,7 +1251,12 @@ impl PreviewEngine {
         if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
             self.hits += 1;
-            return Some((drawing_scene_quad(&rect), id));
+            let mut quad = drawing_scene_quad(&rect);
+            if let Some((adjust, tint)) = self.adjust_for(layer, time) {
+                quad.adjust = adjust;
+                quad.tint_rgba = tint;
+            }
+            return Some((quad, id));
         }
 
         let renderer = match self.vector.as_mut() {
@@ -1241,7 +1288,12 @@ impl PreviewEngine {
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
-        Some((drawing_scene_quad(&rect), id))
+        let mut quad = drawing_scene_quad(&rect);
+        if let Some((adjust, tint)) = self.adjust_for(layer, time) {
+            quad.adjust = adjust;
+            quad.tint_rgba = tint;
+        }
+        Some((quad, id))
     }
 
     /// Everything both render paths share: resolve the layers live at `time`,
@@ -2818,6 +2870,139 @@ mod tests {
         // The no-reveal caption still draws whole from its first frame —
         // the fallback arm is for it, not for an active reveal.
         assert!(ink(fixture(""), 0.5) > 0, "a plain caption is simply there");
+    }
+
+    /// The grade fixture: a solid plate whose colour makes every adjustment
+    /// legible in numbers. Layer-level constants or keyframed ramps via
+    /// `extra`.
+    fn grade_fixture(plate: &str, extra: &str) -> ProjectMetadata {
+        blur_project(&format!(
+            r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E01", "name":"graded",
+                "sortIndex": 1, "kind":"caption",
+                "isEnabled": true, "startTime": 0, "duration": 2,
+                "captionText": "GRADE"{extra},
+                "captionStyle": {{"backgroundColorHex": "{plate}",
+                                  "backgroundOpacity": 1.0, "fontSize": 18}},
+                "keyframes": []}}"#
+        ))
+    }
+
+    fn centre_of_band(px: &[u8]) -> (u8, u8, u8) {
+        centre_of_band_rows(px, 0, 128)
+    }
+
+    fn centre_of_band_rows(px: &[u8], y0: usize, y1: usize) -> (u8, u8, u8) {
+        // The plate's centre row and column: the widest lit band.
+        let rows: Vec<usize> = (y0..y1)
+            .filter(|y| (0..512).any(|x| {
+                let o = (y * 512 + x) * 4;
+                px[o] > 30 || px[o + 1] > 30 || px[o + 2] > 30
+            }))
+            .collect();
+        let y = rows[rows.len() / 2];
+        let cols: Vec<usize> = (0..512)
+            .filter(|x| {
+                let o = (y * 512 + x) * 4;
+                px[o] > 30 || px[o + 1] > 30 || px[o + 2] > 30
+            })
+            .collect();
+        // A tenth in from the band's left edge: inside the plate's padding,
+        // clear of the white glyphs at its centre.
+        let x = cols[cols.len() / 10];
+        let o = (y * 512 + x) * 4;
+        (px[o + 2], px[o + 1], px[o])   // r, g, b from BGRA
+    }
+
+    /// Saturation zero turns the layer's own pixels grey — and ONLY its
+    /// own: an ungraded neighbour in the same frame keeps its colour.
+    #[test]
+    fn a_grade_desaturates_its_own_layer_and_nobody_else() {
+        let meta = blur_project(&format!(
+            "{},{}",
+            // Red plate, graded to grey.
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E02", "name":"grey",
+                "sortIndex": 1, "kind":"caption",
+                "isEnabled": true, "startTime": 0, "duration": 2,
+                "captionText": "GRADED",
+                "adjustments": {"saturation": 0},
+                "captionStyle": {"backgroundColorHex": "FF0000",
+                                 "backgroundOpacity": 1.0, "fontSize": 18},
+                "keyframes": [
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E03","time":0,
+                   "horizontalShift":-120,"verticalShift":0,"transitionDuration":0}]}"#,
+            // Blue plate, untouched.
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E04", "name":"blue",
+                "sortIndex": 2, "kind":"caption",
+                "isEnabled": true, "startTime": 0, "duration": 2,
+                "captionText": "PLAIN",
+                "captionStyle": {"backgroundColorHex": "0000FF",
+                                 "backgroundOpacity": 1.0, "fontSize": 18},
+                "keyframes": [
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E05","time":0,
+                   "horizontalShift":-120,"verticalShift":64,"transitionDuration":0}]}"#,
+        ));
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        engine.render(1.0, out.raw(), 512, 128).expect("render");
+        let px = out.read_pixels().unwrap();
+
+        // Top band: the graded plate. Its red must have collapsed to luma.
+        let (r, g, b) = centre_of_band_rows(&px, 0, 60);
+        assert!(r.abs_diff(g) <= 2 && g.abs_diff(b) <= 2,
+                "grey means r=g=b, got ({r},{g},{b})");
+        assert!(r < 120, "and far from full red, got {r}");
+        // Bottom band: the neighbour keeps its blue.
+        let (nr, _ng, nb) = centre_of_band_rows(&px, 60, 128);
+        assert!(nb > 150 && nr < 60,
+                "the ungraded neighbour stays blue, got r={nr} b={nb}");
+    }
+
+    /// A tint is a gel: at full amount a white plate takes the tint's own
+    /// colour, saturation-first so grade-plus-tint reads as a duotone.
+    #[test]
+    fn a_full_tint_gels_the_layer() {
+        let meta = grade_fixture(
+            "FFFFFF",
+            r#", "adjustments": {"tintHex": "FF8000", "tintAmount": 1.0}"#,
+        );
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        engine.render(1.0, out.raw(), 512, 128).expect("render");
+        let (r, g, b) = centre_of_band(&out.read_pixels().unwrap());
+        assert!(r > 230, "the gel passes its red, got {r}");
+        assert!((100..=160).contains(&g), "half-passes green, got {g}");
+        assert!(b < 30, "and blocks blue, got {b}");
+    }
+
+    /// The grade RAMPS: keyframed saturation walks a red plate to grey
+    /// across the layer, and the keyframed track beats the layer constant.
+    #[test]
+    fn a_keyframed_grade_ramps_and_beats_the_constant() {
+        let meta = blur_project(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E08", "name":"ramped",
+                "sortIndex": 1, "kind":"caption",
+                "isEnabled": true, "startTime": 0, "duration": 2,
+                "captionText": "GRADE",
+                "adjustments": {"saturation": 1.0},
+                "captionStyle": {"backgroundColorHex": "FF0000",
+                                 "backgroundOpacity": 1.0, "fontSize": 18},
+                "keyframes": [
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E06","time":0,
+                   "saturation":1,"transitionDuration":0},
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0E07","time":2,
+                   "saturation":0,"transitionDuration":2}]}"#,
+        );
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let mut green_at = |t: f64| {
+            engine.render(t, out.raw(), 512, 128).expect("render");
+            centre_of_band(&out.read_pixels().unwrap()).1
+        };
+        let start = green_at(0.05);
+        let late = green_at(1.9);
+        assert!(start < 15, "fully saturated red has no green, got {start}");
+        assert!(late > start + 25,
+                "desaturating pulls green toward luma: {start} then {late}");
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as
