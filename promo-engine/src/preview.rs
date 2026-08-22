@@ -333,7 +333,43 @@ impl PreviewEngine {
         for id in stale {
             self.evict_layer(&id);
         }
+        // Mask rasters are keyed `mask:{resource}:…`, per RESOURCE on purpose
+        // so two layers wearing the same mask share one texture — which puts
+        // them beyond `evict_layer`'s reach, and beyond `resource_changed`
+        // above, which only follows `layer.resource_id` and never
+        // `mask_resource_id`. The stamp in the key is what makes an edited
+        // mask VISIBLE; this only reclaims the superseded raster now instead
+        // of leaving it for the governor's LRU to notice under pressure. One
+        // is worth reclaiming: a mask raster is capped at twice the canvas'
+        // long side per axis.
+        for old_res in &old_resources {
+            if new_resources.iter().find(|r| r.id == old_res.id) != Some(old_res) {
+                self.evict_mask(&old_res.id);
+            }
+        }
         self.meta = meta;
+    }
+
+    /// Drops the cached rasters of a mask DRAWING, keyed `mask:{resource}:…`.
+    ///
+    /// Separate from `evict_layer` because a mask belongs to its RESOURCE,
+    /// not to any one layer wearing it — the key is shared on purpose, and a
+    /// layer-scoped sweep cannot express "this drawing changed".
+    fn evict_mask(&mut self, resource_id: &str) {
+        let prefix = format!("mask:{resource_id}:");
+        let victims: Vec<u64> = self
+            .id_of
+            .iter()
+            .filter(|(_, (id, _, _))| id.starts_with(&prefix))
+            .map(|(entry, _)| *entry)
+            .collect();
+        for entry in victims {
+            if let Some(key) = self.id_of.remove(&entry) {
+                self.key_of.remove(&key);
+            }
+            self.governor.remove(entry);
+            self.cache.remove(&entry);
+        }
     }
 
     /// Drops every cached frame belonging to `layer_id` — media frames keyed
@@ -1273,7 +1309,18 @@ impl PreviewEngine {
         let pixel_height = (rect.height() * self.raster_scale).min(cap).max(1.0);
         let (pw, ph) = (pixel_width.round() as u32, pixel_height.round() as u32);
 
-        let key = (format!("drawing:{}:{}x{}", layer.id, pw, ph), 0i64, 0i32);
+        // Stamped for the same reason the mask key is: pw×ph comes from the
+        // document's content bounds, which come from its points, so every
+        // edit that moves no point — colour, stroke width, fill, arrowheads —
+        // hit the pre-edit raster. `evict_layer` cannot cover for it either:
+        // it matches `caption:{layer}:` and `{layer}\u{1f}` but never
+        // `drawing:`, so a stale drawing layer survived its own eviction.
+        let stamp = vector_content_stamp(&shapes);
+        let key = (
+            format!("drawing:{}:{:x}:{}x{}", layer.id, stamp, pw, ph),
+            0i64,
+            0i32,
+        );
         if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
             self.hits += 1;
@@ -1367,7 +1414,18 @@ impl PreviewEngine {
         let pw = (bw * scale).round().max(1.0) as u32;
         let ph = (bh * scale).round().max(1.0) as u32;
 
-        let key = (format!("mask:{resource_id}:{pw}x{ph}"), 0i64, 0i32);
+        // The stamp is what makes an EDIT visible. `mask:{resource}:{w}x{h}`
+        // alone survived every change that left the drawing's points alone —
+        // ink opacity, fill toggle, stroke width, shape kind, colour — since
+        // the size below is derived from those points and nothing else, so
+        // the canvas kept showing the pre-edit window. Nothing evicts it
+        // either: this key is per RESOURCE and `evict_layer` is per layer.
+        let stamp = vector_content_stamp(&shapes);
+        let key = (
+            format!("mask:{resource_id}:{stamp:x}:{pw}x{ph}"),
+            0i64,
+            0i32,
+        );
         if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
             self.hits += 1;
@@ -1924,6 +1982,64 @@ mod border_style_tests {
     }
 }
 
+/// A fingerprint of everything the vector rasterizer reads — the piece a
+/// raster cache key needs so an EDIT is a different key.
+///
+/// Both vector caches key by size, and the size comes from the document's
+/// content bounds, which come from its POINTS alone. So recolouring a mask,
+/// thickening its stroke, dropping its fill, flipping its even-odd rule, or
+/// swapping pen for oval all landed on the identical key and the canvas kept
+/// compositing the raster from before the edit. macOS hid it — the resource
+/// editor tears the engine down — while on iOS the editor is a sheet over a
+/// live engine, which is the feature's whole edit-and-check loop. Same bug
+/// the caption's `content_stamp` exists for, one cache along.
+///
+/// Hashed on the RESOLVED shapes rather than the document, so `@name`
+/// colours are already looked up: a palette edit re-rasterizes too, and the
+/// hash covers exactly the bytes the tessellator will read.
+///
+/// Colours are in the stamp even though a mask samples only ALPHA (the
+/// compositor's `textureSample(quad_mask, …).a`, and the vector pipeline
+/// blends alpha independently of RGB, so hue provably cannot move a mask).
+/// Leaving hue out would save one rasterization per recolour and buy a key
+/// that is silently wrong the day anything reads a mask's colour — the same
+/// trade that produced this bug. The cache is not worth being clever with.
+fn vector_content_stamp(shapes: &[promo_gpu::vector::VectorShape]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    shapes.len().hash(&mut hasher);
+    for shape in shapes {
+        // Order matters as much as content: the tessellator draws
+        // fill-then-stroke per shape in array order.
+        (shape.kind as u8).hash(&mut hasher);
+        shape.points.len().hash(&mut hasher);
+        for &(x, y) in &shape.points {
+            x.to_bits().hash(&mut hasher);
+            y.to_bits().hash(&mut hasher);
+        }
+        shape.stroke_width.to_bits().hash(&mut hasher);
+        for c in &shape.stroke_rgba {
+            c.to_bits().hash(&mut hasher);
+        }
+        // NO fill and a fully transparent fill are different rasters, so the
+        // discriminant is hashed, not just the components — an unparseable
+        // `fillColorHex` collapses to `None` in `vector_shapes`.
+        match shape.fill_rgba {
+            Some(rgba) => {
+                1u8.hash(&mut hasher);
+                for c in &rgba {
+                    c.to_bits().hash(&mut hasher);
+                }
+            }
+            None => 0u8.hash(&mut hasher),
+        }
+        shape.arrow_start.hash(&mut hasher);
+        shape.arrow_end.hash(&mut hasher);
+        shape.even_odd_fill.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
 /// A drawing quad sits where `drawing_rect` put it, in canvas space.
 fn drawing_scene_quad(rect: &promo_model::Rect) -> SceneQuad {
     SceneQuad {
@@ -2357,6 +2473,72 @@ mod tests {
         assert!(
             centre[2] > 100 && centre[1] < 80,
             "expected a red stroke at the centre, got {centre:?}"
+        );
+    }
+
+    /// A PALETTE edit must reach the canvas — the case the eviction sweep
+    /// structurally cannot see, and so the one that pins the content stamp.
+    ///
+    /// `set_project` evicts by comparing RESOURCES, but a palette lives in
+    /// `compositionSettings`: recolouring `@ink` leaves every resource byte
+    /// for byte identical, so nothing is ever marked stale. The raster's
+    /// pixel size is unchanged too (it comes from the points), so before the
+    /// stamp the key `drawing:{layer}:{w}x{h}` was identical across the edit
+    /// and the canvas kept the old colour. The stamp is hashed on RESOLVED
+    /// shapes — `@ink` already looked up — which is what makes it move here.
+    #[test]
+    fn a_palette_edit_re_rasterizes_a_drawing() {
+        let build = |ink: &str| {
+            let mut meta = tests_support::fixture_meta(64.0);
+            meta.composition_settings.palette = Some(vec![promo_model::PaletteColor {
+                name: "ink".into(),
+                color_hex: ink.into(),
+            }]);
+            let mut resources = meta.resources.clone().unwrap_or_default();
+            resources.push(
+                serde_json::from_value(serde_json::json!({
+                    "id": "DRAW", "kind": "drawing", "filename": "d.json",
+                    "displayName": "Marks", "addedAt": 0,
+                    "drawing": {"shapes": [{
+                        "id": "S1", "kind": "line",
+                        "points": [[0.0, 0.0], [100.0, 100.0]],
+                        "strokeColorHex": "@ink", "strokeWidth": 24.0,
+                        "arrowStart": false, "arrowEnd": false
+                    }]}
+                }))
+                .unwrap(),
+            );
+            meta.resources = Some(resources);
+            let mut layers = meta.layers.clone().unwrap_or_default();
+            layers.push(
+                serde_json::from_value(serde_json::json!({
+                    "id": "DRAWL", "name": "Marks", "sortIndex": 9, "kind": "drawing",
+                    "isEnabled": true, "startTime": 0.0, "duration": 100.0,
+                    "resourceID": "DRAW", "keyframes": []
+                }))
+                .unwrap(),
+            );
+            meta.layers = Some(layers);
+            meta
+        };
+
+        let (mut engine, _state) = make_engine(build("FF0000"), vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(3.0, out.raw(), 64, 64).expect("render");
+        let before = pixel(&out, 32, 32);
+        assert!(
+            before[2] > 100 && before[1] < 80,
+            "the stroke starts red, got {before:?}"
+        );
+
+        // The ONLY change is the palette entry. No resource moves, so the
+        // eviction sweep never fires; only a content-derived key can notice.
+        engine.set_project(build("00FF00"));
+        engine.render(3.0, out.raw(), 64, 64).expect("render");
+        let after = pixel(&out, 32, 32);
+        assert!(
+            after[1] > 100 && after[2] < 80,
+            "the recoloured stroke must reach the canvas, got {after:?}"
         );
     }
 
@@ -3417,6 +3599,65 @@ mod tests {
             [0, 0, 255, 255],
             "inverted: layer outside the ink"
         );
+    }
+
+    /// `mask_meta`'s oval with its fill opacity overridden — the smallest
+    /// edit that changes the mask's ALPHA while leaving every point alone.
+    fn mask_meta_with_fill_opacity(opacity: f32) -> ProjectMetadata {
+        let mut meta = mask_meta(r#", "maskResourceID": "MASK""#);
+        let resources = meta.resources.as_mut().expect("resources");
+        let mask = resources.iter_mut().find(|r| r.id == "MASK").expect("MASK");
+        mask.drawing.as_mut().expect("drawing").shapes[0].fill_opacity = Some(opacity);
+        meta
+    }
+
+    /// An edit to the mask DRAWING must reach the canvas even when it leaves
+    /// the drawing's content bounds — and so the raster's pixel size — exactly
+    /// where they were. `mask:{resource}:{w}x{h}` was the whole key, so
+    /// turning the oval's fill transparent hit the FILLED raster from before
+    /// the edit and the porthole never changed. macOS hid it (the resource
+    /// editor tears the engine down); on iOS the editor is a sheet over a
+    /// live engine, which is this feature's whole edit-and-check loop.
+    #[test]
+    fn editing_the_mask_drawing_re_rasterizes_it() {
+        let meta = mask_meta(r#", "maskResourceID": "MASK""#);
+        let (mut engine, _state) = make_engine(
+            meta.clone(),
+            vec![("IMG".into(), [0, 0, 255, 255], 32)],
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+
+        engine.render(1.0, out.raw(), 128, 128).expect("render");
+        assert_eq!(
+            pixel(&out, 64, 64),
+            [0, 0, 255, 255],
+            "filled oval: the layer shows"
+        );
+        let before = engine.stats().misses;
+
+        // The ONLY edit is the fill's opacity: not one point moves, so the
+        // content bounds — and the raster's pw×ph — are bit-identical. That
+        // is exactly the case the unstamped key could not tell apart. Note
+        // nothing evicts here either: no layer changed, and the masked
+        // layer's own resource (IMGR) is untouched.
+        engine.set_project(mask_meta_with_fill_opacity(0.0));
+        engine.render(1.0, out.raw(), 128, 128).expect("render");
+        assert_eq!(
+            pixel(&out, 64, 64),
+            [255, 0, 0, 255],
+            "fill turned transparent: no ink, the ground shows"
+        );
+        assert_eq!(pixel(&out, 6, 6), [255, 0, 0, 255], "corner never had ink");
+        assert!(
+            engine.stats().misses > before,
+            "the edited mask re-rasterized instead of hitting the old key"
+        );
+
+        // And back: the stamp returns to what it was, so does the porthole.
+        engine.set_project(meta.clone());
+        engine.render(1.0, out.raw(), 128, 128).expect("render");
+        assert_eq!(pixel(&out, 64, 64), [0, 0, 255, 255], "fill restored");
     }
 
     /// The window FLIES: maskOffsetX keyframes carry the oval across the
