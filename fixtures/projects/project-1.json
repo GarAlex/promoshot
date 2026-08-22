@@ -122,7 +122,11 @@
           "zoom": 1,
           "verticalShift": 0
         }
-      ]
+      ],
+      "motionBlur": {
+        "shutter": 0.5
+      }
     }
-  ]
+  ],
+  "minReaderVersion": 10
 }

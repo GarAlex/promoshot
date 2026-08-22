@@ -77,6 +77,48 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    // Ids are UUIDs — all of them. The Rust side reads them as strings and
+    // never minds, which is exactly the trap: `validate` said "ok" to a
+    // project whose layers were named "CAP" and "B", and the app then
+    // refused to LIST it — no error, no row, a project that exists on disk
+    // and nowhere else. The one place that can say why is here.
+    let uuid_ok = |id: &str| {
+        let bytes = id.as_bytes();
+        bytes.len() == 36
+            && bytes.iter().enumerate().all(|(i, b)| match i {
+                8 | 13 | 18 | 23 => *b == b'-',
+                _ => b.is_ascii_hexdigit(),
+            })
+    };
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        if !uuid_ok(&layer.id) {
+            out.push(format!(
+                "layer \"{}\": id \"{}\" is not a UUID — the app reads ids as \
+                 UUIDs and will refuse to open the project (silently: it \
+                 just never appears in the list)",
+                layer.name, layer.id
+            ));
+        }
+        for keyframe in &layer.keyframes {
+            if !uuid_ok(&keyframe.id) {
+                out.push(format!(
+                    "layer \"{}\": keyframe id \"{}\" is not a UUID — the app \
+                     will refuse to open the project",
+                    layer.name, keyframe.id
+                ));
+            }
+        }
+    }
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        if !uuid_ok(&resource.id) {
+            out.push(format!(
+                "resource \"{}\": id \"{}\" is not a UUID — the app will \
+                 refuse to open the project",
+                resource.display_name, resource.id
+            ));
+        }
+    }
+
     // A shutter is a fraction of one frame interval, open (0, 1]. Zero or
     // negative does nothing, and more than 1 is a shutter open longer than
     // the frame it exposes — the engine clamps it, so say so here rather
@@ -182,9 +224,9 @@ mod tests {
     }
     fn layer(kind: &str, keyframe: &str) -> String {
         format!(
-            r#"{{"id":"L","name":"Clip","sortIndex":0,"kind":"{kind}","isEnabled":true,
+            r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A03","name":"Clip","sortIndex":0,"kind":"{kind}","isEnabled":true,
                  "startTime":0,"duration":4,
-                 "keyframes":[{{"id":"K","time":2,"transitionDuration":0{keyframe}}}]}}"#
+                 "keyframes":[{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A04","time":2,"transitionDuration":0{keyframe}}}]}}"#
         )
     }
 
@@ -238,7 +280,7 @@ mod tests {
     fn a_reveal_setting_its_mode_does_not_have_is_named() {
         let caption = |reveal: &str| {
             format!(
-                r#"{{"id":"L","name":"Words","sortIndex":0,"kind":"caption",
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A01","name":"Words","sortIndex":0,"kind":"caption",
                      "isEnabled":true,"startTime":0,"duration":4,
                      "captionText":"one two","captionStyle":{{"reveal":{reveal}}},
                      "keyframes":[]}}"#
@@ -281,7 +323,7 @@ mod tests {
     fn a_useless_or_clamped_shutter_is_named() {
         let clip = |blur: &str| {
             format!(
-                r#"{{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A02","name":"Clip","sortIndex":0,"kind":"video",
                      "isEnabled":true,"startTime":0,"duration":4,
                      "motionBlur":{blur},"keyframes":[]}}"#
             )
@@ -300,6 +342,32 @@ mod tests {
                 .iter()
                 .any(|w| w.contains("minReaderVersion")),
             "and an undeclared one is named, because a save would destroy it",
+        );
+    }
+
+    /// The CLI reads ids as strings; the app reads them as UUIDs and
+    /// silently refuses a project whose ids are not. Validate is the only
+    /// place that can say so before someone loses an afternoon to a project
+    /// that "just never shows up".
+    #[test]
+    fn a_non_uuid_id_is_named_before_the_app_silently_refuses_it() {
+        let bad = r#"{"id":"CAP","name":"Words","sortIndex":0,"kind":"caption",
+                      "isEnabled":true,"startTime":0,"duration":4,
+                      "captionText":"hi","keyframes":[]}"#;
+        assert!(
+            warnings(&project(bad, ""))
+                .iter()
+                .any(|w| w.contains("not a UUID")),
+            "a layer id of \"CAP\" must be named",
+        );
+        let good = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A11","name":"Words",
+                       "sortIndex":0,"kind":"caption","isEnabled":true,
+                       "startTime":0,"duration":4,"captionText":"hi","keyframes":[]}"#;
+        assert!(
+            !warnings(&project(good, ""))
+                .iter()
+                .any(|w| w.contains("not a UUID")),
+            "a real UUID passes",
         );
     }
 }
