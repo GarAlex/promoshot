@@ -587,6 +587,16 @@ impl PreviewEngine {
         self.render_with_overlay(time, output, output_width, output_height, None)
     }
 
+    fn blend_for(layer: &promo_model::ProjectLayer) -> promo_gpu::compositor::QuadBlend {
+        use promo_gpu::compositor::QuadBlend;
+        match layer.blend_mode {
+            Some(promo_model::BlendMode::Multiply) => QuadBlend::Multiply,
+            Some(promo_model::BlendMode::Screen) => QuadBlend::Screen,
+            Some(promo_model::BlendMode::Add) => QuadBlend::Add,
+            _ => QuadBlend::Normal,
+        }
+    }
+
     /// The layer's grade at `time` in the shader's units, or None when the
     /// grade is identity and the shader can skip it. Fed the GEOMETRY time
     /// under a blur walk, so a fade-to-grey smears with everything else.
@@ -953,6 +963,7 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        quad.blend = Self::blend_for(layer);
         Some((quad, frame_id))
     }
 
@@ -1130,6 +1141,7 @@ impl PreviewEngine {
                 quad.adjust = adjust;
                 quad.tint_rgba = tint;
             }
+            quad.blend = Self::blend_for(layer);
             return Some((quad, id));
         }
 
@@ -1190,6 +1202,7 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        quad.blend = Self::blend_for(layer);
         Some((quad, id))
     }
 
@@ -1256,6 +1269,7 @@ impl PreviewEngine {
                 quad.adjust = adjust;
                 quad.tint_rgba = tint;
             }
+            quad.blend = Self::blend_for(layer);
             return Some((quad, id));
         }
 
@@ -1293,6 +1307,7 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        quad.blend = Self::blend_for(layer);
         Some((quad, id))
     }
 
@@ -3003,6 +3018,74 @@ mod tests {
         assert!(start < 15, "fully saturated red has no green, got {start}");
         assert!(late > start + 25,
                 "desaturating pulls green toward luma: {start} then {late}");
+    }
+
+    /// The three blend modes against a red ground: screen drops a black
+    /// plate out entirely, multiply lets the ground through a white plate,
+    /// add pushes past both — and normal, the control, just covers.
+    #[test]
+    fn blend_modes_combine_with_what_is_beneath() {
+        let fixture = |plate: &str, blend: &str| {
+            blur_project(&format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0F01", "name":"over",
+                    "sortIndex": 1, "kind":"caption",
+                    "isEnabled": true, "startTime": 0, "duration": 2,
+                    "captionText": "BLEND"{blend},
+                    "captionStyle": {{"backgroundColorHex": "{plate}",
+                                     "backgroundOpacity": 1.0, "fontSize": 18}},
+                    "keyframes": []}}"#
+            ))
+        };
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let mut frame = |plate: &str, blend: &str| {
+            let mut meta = fixture(plate, blend);
+            // A red ground beneath everything, so "what is beneath" is a
+            // known number.
+            meta.composition_settings.background_color_hex = "B00000".into();
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            engine.render(1.0, out.raw(), 512, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        // The plate's geometry is identical in every variant, so find it
+        // ONCE — as the dark region of the normal-black control — and probe
+        // that same spot everywhere. (A screen-blended black plate matches
+        // the ground exactly; that sameness is the assertion, so it cannot
+        // also be the finder.)
+        let control = frame("000000", "");
+        let dark: Vec<(usize, usize)> = (0..128)
+            .flat_map(|y| (0..512).map(move |x| (x, y)))
+            .filter(|(x, y)| {
+                let o = (y * 512 + x) * 4;
+                control[o] < 40 && control[o + 1] < 40 && control[o + 2] < 40
+            })
+            .collect();
+        assert!(dark.len() > 200, "the control's black plate is findable");
+        let (px_x, px_y) = dark[dark.len() / 10];
+        let probe = |px: &[u8]| {
+            let o = (px_y * 512 + px_x) * 4;
+            (px[o + 2], px[o + 1], px[o])
+        };
+        let mut plate_px = |plate: &str, blend: &str| probe(&frame(plate, blend));
+
+        // Screen with a BLACK plate: black drops out, the ground shows.
+        let (r, g, _b) = plate_px("000000", r#", "blendMode": "screen""#);
+        assert!(r > 140 && g < 40, "screen lets the red ground through black, got r={r} g={g}");
+        // The control: a normal black plate covers the ground.
+        let (nr, _, _) = probe(&control);
+        assert!(nr < 40, "normal black covers, got r={nr}");
+
+        // Multiply with a WHITE plate: white drops out, the ground shows.
+        let (mr, mg, _b) = plate_px("FFFFFF", r#", "blendMode": "multiply""#);
+        assert!(mr > 140 && mg < 40, "multiply lets red through white, got r={mr} g={mg}");
+        // Control: normal white covers.
+        let (wr, wg, _) = plate_px("FFFFFF", "");
+        assert!(wr > 200 && wg > 200, "normal white covers, got r={wr} g={wg}");
+
+        // Add with a dim grey plate over the red ground: brighter than
+        // either alone, in every channel the sources carry.
+        let (ar, ag, _b) = plate_px("303030", r#", "blendMode": "add""#);
+        assert!(ar > 190, "add sums the ground's red and the plate, got {ar}");
+        assert!((30..=90).contains(&ag), "and the plate's own grey rides along, got {ag}");
     }
 
     /// A caption layer can have its WORDS replaced by a keyframe, exactly as

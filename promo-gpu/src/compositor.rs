@@ -56,6 +56,8 @@ pub struct SceneQuad {
     /// The tint's colour (straight, unpremultiplied). Multiplied in at
     /// `tint_amount`: 1 gels the layer fully, 0 leaves it alone.
     pub tint_rgba: [f32; 4],
+    /// How this quad combines with what is already drawn.
+    pub blend: QuadBlend,
 }
 
 impl Default for SceneQuad {
@@ -75,8 +77,23 @@ impl Default for SceneQuad {
             gradient_fill: false,
             adjust: [1.0, 1.0, 0.0, 0.0],
             tint_rgba: [1.0, 1.0, 1.0, 1.0],
+            blend: QuadBlend::Normal,
         }
     }
+}
+
+/// The blend functions the compositor can draw with — the ones a
+/// fixed-function blend state can express. Overlay and friends branch on
+/// the destination and need a different architecture; these three cover
+/// the overlay-asset cases (black-backed light on `Screen`/`Add`,
+/// white-backed texture on `Multiply`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum QuadBlend {
+    #[default]
+    Normal,
+    Multiply,
+    Screen,
+    Add,
 }
 
 /// A full frame description. The canvas is aspect-fit into the output
@@ -452,6 +469,9 @@ pub struct Compositor {
     /// pass; adding each sample once into 16-bit float and resolving at the
     /// end quantises exactly once.
     accum_pipeline: wgpu::RenderPipeline,
+    pipeline_multiply: wgpu::RenderPipeline,
+    pipeline_screen: wgpu::RenderPipeline,
+    pipeline_add: wgpu::RenderPipeline,
     /// Lazily sized to the output: `scratch` receives each sub-sample's
     /// ordinary compose, `accum` sums them.
     accum_targets: Option<AccumTargets>,
@@ -547,45 +567,80 @@ impl Compositor {
             push_constant_ranges: &[],
         });
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("compositor"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
+        // One shader, one blend state per mode. The colour factors are the
+        // whole difference; alpha always composites source-over so coverage
+        // stays sane whatever the colours do.
+        let make_pipeline = |label: &str, color: wgpu::BlendComponent| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        blend: Some(wgpu::BlendState {
+                            color,
+                            alpha: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::One,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let over = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+            operation: wgpu::BlendOperation::Add,
+        };
+        let pipeline = make_pipeline("compositor", over);
+        // Multiply: S·D where the source covers, D where it does not —
+        // premultiplied S makes the two ends meet at soft edges.
+        let pipeline_multiply = make_pipeline(
+            "compositor-multiply",
+            wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::Dst,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
             },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                ..Default::default()
+        );
+        // Screen: S + D·(1−S). Black sources vanish, which is the point.
+        let pipeline_screen = make_pipeline(
+            "compositor-screen",
+            wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrc,
+                operation: wgpu::BlendOperation::Add,
             },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
+        );
+        // Add: pure light, clips sooner than screen.
+        let pipeline_add = make_pipeline(
+            "compositor-add",
+            wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+        );
 
         let accum_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("compositor-accum"),
@@ -694,6 +749,9 @@ impl Compositor {
             import_misses: 0,
             defer_completion: false,
             accum_pipeline,
+            pipeline_multiply,
+            pipeline_screen,
+            pipeline_add,
             accum_targets: None,
             last_submission: None,
         })
@@ -1113,7 +1171,18 @@ impl Compositor {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.globals_bind, &[]);
+            let mut current = QuadBlend::Normal;
             for (i, id) in binds.iter().enumerate() {
+                let wanted = quads[i].blend;
+                if wanted != current {
+                    pass.set_pipeline(match wanted {
+                        QuadBlend::Normal => &self.pipeline,
+                        QuadBlend::Multiply => &self.pipeline_multiply,
+                        QuadBlend::Screen => &self.pipeline_screen,
+                        QuadBlend::Add => &self.pipeline_add,
+                    });
+                    current = wanted;
+                }
                 let bind = self.binds.get(id).expect("bind group cached above");
                 pass.set_bind_group(1, bind, &[(QUAD_STRIDE as usize * i) as u32]);
                 pass.draw(0..4, 0..1);

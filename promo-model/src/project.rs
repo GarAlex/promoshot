@@ -234,6 +234,21 @@ tolerant_enum!(
 );
 
 tolerant_enum!(
+    BlendMode,
+    Normal,
+    [
+        // Source-over: what every layer does unless it says otherwise.
+        (Normal, "normal"),
+        // Darkens: white drops out. Vignettes, shadows, paper grain.
+        (Multiply, "multiply"),
+        // Lightens: black drops out. The mode that makes light-effect
+        // packs usable at all — glows, flares and leaks ship on black.
+        (Screen, "screen"),
+        // Sums: pure light. Hotter than screen, clips sooner.
+        (Add, "add"),
+    ]
+);
+tolerant_enum!(
     RevealUnit,
     Word,
     [
@@ -1501,6 +1516,12 @@ pub struct ProjectLayer {
     /// per field when present.
     #[serde(default, skip_serializing_if = "is_none")]
     pub adjustments: Option<LayerAdjustments>,
+    /// How this layer's pixels COMBINE with what is beneath them. Absent
+    /// means source-over. A static attribute, deliberately not keyframed:
+    /// there is nothing to interpolate between two blend functions —
+    /// animate the layer's opacity or its grade instead.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub blend_mode: Option<BlendMode>,
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
     pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2128,6 +2149,12 @@ impl ProjectMetadata {
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test
         // every rung on this ladder passed.
+        // 12 is a blend mode — dropped, a screen-blended glow becomes an
+        // opaque black card over the footage, which is far worse than the
+        // look merely reverting.
+        if layers.iter().any(|l| l.blend_mode.is_some()) {
+            return 12;
+        }
         // 11 is a per-layer colour grade — dropped by an older reader's
         // save, the look silently reverts.
         if layers.iter().any(|l| {
@@ -2594,6 +2621,18 @@ mod placement_model_tests {
             meta(&layer(r#","saturation":0.5"#)).minimum_reader_version(),
             11,
             "and a keyframed grade field claims it too"
+        );
+
+        // A blend mode claims 12: dropped, a screen-blended glow becomes an
+        // opaque black card over the footage.
+        assert_eq!(
+            meta(
+                r#""layers":[{"id":"L","name":"Glow","sortIndex":0,"kind":"image",
+                     "isEnabled":true,"startTime":0,"duration":4,
+                     "blendMode":"screen","keyframes":[]}]"#
+            )
+            .minimum_reader_version(),
+            12
         );
     }
 

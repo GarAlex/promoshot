@@ -120,6 +120,22 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    // A blend mode on a layer that draws no pixels does nothing.
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        if layer.blend_mode.is_some()
+            && matches!(
+                layer.kind,
+                promo_model::ProjectLayerKind::Background | promo_model::ProjectLayerKind::Audio
+            )
+        {
+            out.push(format!(
+                "layer \"{}\": blendMode on a {:?} layer does nothing — only \
+                 layers that draw pixels combine with anything",
+                layer.name, layer.kind
+            ));
+        }
+    }
+
     // Ids are UUIDs — all of them. The Rust side reads them as strings and
     // never minds, which is exactly the trap: `validate` said "ok" to a
     // project whose layers were named "CAP" and "B", and the app then
@@ -482,5 +498,20 @@ mod tests {
             .iter().any(|w| w.contains("keyframes win")));
         assert!(warned(r#"{"saturation":0.5}"#, "").is_empty(),
                 "a plain constant grade is exactly right");
+    }
+
+    /// Blend on a background or audio layer is a knob wired to nothing.
+    #[test]
+    fn a_blend_mode_that_cannot_act_is_named() {
+        let bg = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A09","name":"BG",
+                     "sortIndex":0,"kind":"background","isEnabled":true,
+                     "startTime":0,"duration":4,"blendMode":"screen","keyframes":[]}"#;
+        assert!(warnings(&project(bg, r#","minReaderVersion":12"#))
+            .iter().any(|w| w.contains("does nothing")));
+        let clip = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A10","name":"Glow",
+                       "sortIndex":0,"kind":"image","isEnabled":true,
+                       "startTime":0,"duration":4,"blendMode":"screen","keyframes":[]}"#;
+        assert!(warnings(&project(clip, r#","minReaderVersion":12"#)).is_empty(),
+                "screen on an image is exactly what the mode is for");
     }
 }

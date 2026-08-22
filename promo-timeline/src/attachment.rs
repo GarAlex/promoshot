@@ -445,6 +445,7 @@ mod tests {
             transition_out: None,
             motion_blur: None,
             adjustments: None,
+            blend_mode: None,
             start_time: start,
             duration,
             resource_id: None,

@@ -142,8 +142,9 @@
         "saturation": 0.4,
         "tintHex": "FF9040",
         "tintAmount": 0.3
-      }
+      },
+      "blendMode": "screen"
     }
   ],
-  "minReaderVersion": 11
+  "minReaderVersion": 12
 }
