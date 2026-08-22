@@ -295,6 +295,10 @@ mod schema_doc_tests {
             contrast: Some(1.1),
             brightness: Some(0.05),
             tint_amount: Some(0.4),
+            mask_offset_x: Some(-320.0),
+            mask_offset_y: Some(90.0),
+            mask_zoom: Some(1.6),
+            mask_rotation: Some(45.0),
             transition_duration: 0.5,
             transition_percent: Some(80.0),
             motion_path: Some(MotionPath {

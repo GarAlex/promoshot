@@ -1480,9 +1480,11 @@ impl PreviewEngine {
         let mut quads: Vec<SceneQuad> = Vec::new();
         let mut used: Vec<u64> = Vec::new();
         // Masked media quads, patched after the walk: (quad index, mask
-        // resource, inverted). Rasterized LAST, so a mask's cache admission
-        // can never evict a frame the walk has already borrowed.
-        let mut mask_requests: Vec<(usize, String, bool)> = Vec::new();
+        // resource, inverted, placement). Rasterized LAST, so a mask's cache
+        // admission can never evict a frame the walk has already borrowed.
+        // Placement resolves on the GEOMETRY clock (`time`, the blur
+        // sub-sample) — a flying window smears like any other motion.
+        let mut mask_requests: Vec<(usize, String, bool, Option<tl::MaskPlacement>)> = Vec::new();
 
         for layer in &layers {
             if !tl::layer_is_visible(layer, time) {
@@ -1719,6 +1721,7 @@ impl PreviewEngine {
                                 quads.len() - 1,
                                 rid.to_string(),
                                 layer.mask_inverted.unwrap_or(false),
+                                tl::layer_mask_placement(layer, time),
                             ));
                         }
                     }
@@ -1752,6 +1755,7 @@ impl PreviewEngine {
                     quads.len() - 1,
                     rid.to_string(),
                     layer.mask_inverted.unwrap_or(false),
+                    tl::layer_mask_placement(layer, time),
                 ));
             }
         }
@@ -1766,8 +1770,15 @@ impl PreviewEngine {
         // so pinning it keeps every borrowed frame safe from the masks'
         // admissions, and nothing allocates after this, so the masks stay
         // put too. A mask shared by several quads lands in one slot.
-        for (quad_index, resource_id, inverted) in mask_requests {
-            let rect = quads[quad_index].rect;
+        for (quad_index, resource_id, inverted, placement) in mask_requests {
+            let mut rect = quads[quad_index].rect;
+            // A zoomed-up window samples a larger share of the rect from the
+            // same raster: raise the raster's density with it so the edge
+            // stays crisp. Never below the base density — a shrunken window
+            // costs nothing extra.
+            let density = placement.map_or(1.0, |p| p.zoom).max(1.0);
+            rect[2] *= density;
+            rect[3] *= density;
             let Some(id) = self.mask_texture(&resource_id, rect, &settings, canvas, &used) else {
                 continue;
             };
@@ -1780,6 +1791,14 @@ impl PreviewEngine {
             };
             quads[quad_index].mask = Some(slot);
             quads[quad_index].mask_invert = inverted;
+            if let Some(p) = placement {
+                quads[quad_index].mask_transform = [
+                    p.dx as f32,
+                    p.dy as f32,
+                    p.zoom as f32,
+                    p.rotation_deg as f32,
+                ];
+            }
         }
 
         Ok((
@@ -3398,6 +3417,33 @@ mod tests {
             [0, 0, 255, 255],
             "inverted: layer outside the ink"
         );
+    }
+
+    /// The window FLIES: maskOffsetX keyframes carry the oval across the
+    /// rect while the layer itself never moves. At each end the probes sit
+    /// where the window is — and where it has left, the ground shows,
+    /// including beyond the flown box.
+    #[test]
+    fn a_mask_placement_keyframe_flies_the_window() {
+        let mut meta = mask_meta(r#", "maskResourceID": "MASK""#);
+        let mut layers = meta.layers.clone().unwrap_or_default();
+        layers[0].keyframes = serde_json::from_value(serde_json::json!([
+            {"id": "K1", "time": 0.0, "maskOffsetX": -40.0, "transitionDuration": 0},
+            {"id": "K2", "time": 2.0, "maskOffsetX": 40.0, "transitionDuration": 2.0}
+        ]))
+        .unwrap();
+        meta.layers = Some(layers);
+        let (mut engine, _state) =
+            make_engine(meta, vec![("IMG".into(), [0, 0, 255, 255], 32)], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+
+        engine.render(0.0, out.raw(), 128, 128).expect("render");
+        assert_eq!(pixel(&out, 22, 64), [0, 0, 255, 255], "window flown left");
+        assert_eq!(pixel(&out, 106, 64), [255, 0, 0, 255], "right is beyond it");
+
+        engine.render(2.0, out.raw(), 128, 128).expect("render");
+        assert_eq!(pixel(&out, 106, 64), [0, 0, 255, 255], "window flown right");
+        assert_eq!(pixel(&out, 22, 64), [255, 0, 0, 255], "left is beyond it");
     }
 
     /// Mid-swap, BOTH materials are on screen — and both stay inside the

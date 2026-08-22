@@ -296,6 +296,42 @@ pub struct ResolvedAdjustments {
     pub tint_hex: Option<String>,
 }
 
+/// Where a layer's mask sits at `time`, when any keyframe moves it.
+///
+/// Offsets in canvas px, zoom about the rect centre, rotation clockwise
+/// degrees — a similarity transform, each field resolved on the same eased
+/// clock as every scalar track. `None` when no keyframe carries a mask
+/// placement field at all, so a static mask keeps the identity path free.
+#[derive(Debug, Clone, Copy)]
+pub struct MaskPlacement {
+    pub dx: f64,
+    pub dy: f64,
+    pub zoom: f64,
+    pub rotation_deg: f64,
+}
+
+pub fn layer_mask_placement(layer: &ProjectLayer, time: f64) -> Option<MaskPlacement> {
+    let any = layer.keyframes.iter().any(|k| {
+        k.mask_offset_x.is_some()
+            || k.mask_offset_y.is_some()
+            || k.mask_zoom.is_some()
+            || k.mask_rotation.is_some()
+    });
+    if !any {
+        return None;
+    }
+    let local = layer_local_time(layer, time);
+    let field = |pick: fn(&ProjectLayerKeyframe) -> Option<f64>, identity: f64| {
+        layer_interpolated_scalar(layer, local, pick).unwrap_or(identity)
+    };
+    Some(MaskPlacement {
+        dx: field(|k| k.mask_offset_x, 0.0),
+        dy: field(|k| k.mask_offset_y, 0.0),
+        zoom: field(|k| k.mask_zoom, 1.0).max(1e-6),
+        rotation_deg: field(|k| k.mask_rotation, 0.0),
+    })
+}
+
 pub fn layer_adjustments(layer: &ProjectLayer, time: f64) -> Option<ResolvedAdjustments> {
     let local = layer_local_time(layer, time);
     let field =

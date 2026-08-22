@@ -1030,10 +1030,11 @@ pub struct ProjectLayerKeyframe {
     /// The layer's own `resource_id` is the value before the first of these,
     /// so a project with no swaps is untouched. Deliberately a step: there is
     /// no halfway between two images, and dissolving needs both drawn at
-    /// once, which one layer cannot do. Honoured on image and caption layers
-    /// only — for video and audio a mid-layer swap would silently turn the
-    /// layer into a playlist and force an answer to "where does the second
-    /// clip start", which is a sequence model rather than a keyframe.
+    /// once, which one layer cannot do. Honoured on image, caption and
+    /// drawing layers — for video and audio a mid-layer swap would silently
+    /// turn the layer into a playlist and force an answer to "where does
+    /// the second clip start", which is a sequence model rather than a
+    /// keyframe.
     /// Spelled `resourceID` on the wire, matching the layer's own field —
     /// camelCase would give `resourceId`, which is not what the format says.
     #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
@@ -1086,6 +1087,20 @@ pub struct ProjectLayerKeyframe {
     pub brightness: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub tint_amount: Option<f64>,
+    /// The mask's own placement — the WINDOW flies while the footage holds
+    /// still, the inverse of `viewport`. Offsets in canvas px, zoom a
+    /// uniform factor about the rect's centre (1 = as placed), rotation
+    /// clockwise degrees; each rides the eased scalar clock like `shutter`.
+    /// Absent means the mask sits where the rect put it, which is what
+    /// every masked layer did before these existed.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mask_offset_x: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mask_offset_y: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mask_zoom: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mask_rotation: Option<f64>,
     pub transition_duration: f64,
     /// The share of the gap from the PREVIOUS keyframe spent moving, as a
     /// percentage: 100 starts moving immediately and arrives exactly here,
@@ -2170,6 +2185,17 @@ impl ProjectMetadata {
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test
         // every rung on this ladder passed.
+        // 14 is a mask that MOVES. Dropped by an older reader's save, the
+        // flying window parks in the rect's centre — the composition stops
+        // showing what it showed, the same destruction test as every rung.
+        if any_keyframe(|k| {
+            k.mask_offset_x.is_some()
+                || k.mask_offset_y.is_some()
+                || k.mask_zoom.is_some()
+                || k.mask_rotation.is_some()
+        }) {
+            return 14;
+        }
         // 13 is a shape mask — dropped by an older reader's save, the
         // porthole vanishes and the full rectangle floods back over
         // whatever it was framing. `maskInverted` rides the same rung: it
@@ -2714,6 +2740,16 @@ mod placement_model_tests {
             )
             .minimum_reader_version(),
             13
+        );
+
+        // A mask that MOVES claims 14: dropped, the window parks.
+        assert_eq!(
+            meta(&layer(r#","maskRotation":45"#)).minimum_reader_version(),
+            14
+        );
+        assert_eq!(
+            meta(&layer(r#","maskOffsetX":-320"#)).minimum_reader_version(),
+            14
         );
     }
 

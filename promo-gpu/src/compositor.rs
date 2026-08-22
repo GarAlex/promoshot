@@ -66,6 +66,11 @@ pub struct SceneQuad {
     pub mask: Option<usize>,
     /// Flips the mask: ink becomes the hole instead of the window.
     pub mask_invert: bool,
+    /// The mask's own placement over the rect: `[dx, dy, zoom, rotation_deg]`
+    /// in rect-local px (canvas px on an unrotated layer), zoom and spin
+    /// about the flown centre. Identity `[0, 0, 1, 0]` samples exactly as
+    /// before — the window sits where the rect put it.
+    pub mask_transform: [f32; 4],
 }
 
 impl Default for SceneQuad {
@@ -88,6 +93,7 @@ impl Default for SceneQuad {
             blend: QuadBlend::Normal,
             mask: None,
             mask_invert: false,
+            mask_transform: [0.0, 0.0, 1.0, 0.0],
         }
     }
 }
@@ -180,9 +186,13 @@ struct Quad {
     adjust: vec4<f32>,
     // The tint's colour, straight alpha.
     tint_color: vec4<f32>,
-    // x = 1 masked / 0 not, y = 1 inverted. A masked quad samples
-    // `quad_mask`'s alpha in quad-local coordinates and multiplies it in.
+    // x = 1 masked / 0 not, y = 1 inverted, z = the mask's own zoom.
+    // A masked quad samples `quad_mask`'s alpha in quad-local coordinates
+    // and multiplies it in.
     mask: vec4<f32>,
+    // The mask's own placement: xy = offset in local px, zw = cos/sin of
+    // its rotation. Identity is (0, 0, 1, 0).
+    mask_xform: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -371,7 +381,23 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // without moving the window.
     var mask_cov = 1.0;
     if quad.mask.x > 0.5 {
-        var ink = textureSample(quad_mask, quad_samp, in.local / size).a;
+        // The window's own flight: un-fly the sample point (inverse
+        // similarity — translate, then spin and scale about the flown
+        // centre), so the PATTERN translates, spins and scales. The star
+        // spins about itself wherever it is.
+        let mc = size * 0.5;
+        let mcs = quad.mask_xform.z;
+        let msn = quad.mask_xform.w;
+        var p = in.local - mc - quad.mask_xform.xy;
+        p = vec2<f32>(p.x * mcs + p.y * msn, -p.x * msn + p.y * mcs);
+        p = p / max(quad.mask.z, 1e-6) + mc;
+        var ink = textureSample(quad_mask, quad_samp, p / size).a;
+        // A flown window cuts to NOTHING beyond its own box: the raster's
+        // tips touch its edges, and clamp-sampling would smear them into
+        // streaks across the rect.
+        if p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y {
+            ink = 0.0;
+        }
         if quad.mask.y > 0.5 {
             ink = 1.0 - ink;
         }
@@ -406,6 +432,7 @@ struct QuadRaw {
     adjust: [f32; 4],
     tint_color: [f32; 4],
     mask: [f32; 4],
+    mask_xform: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -1177,9 +1204,18 @@ impl Compositor {
                 mask: [
                     if q.mask.is_some() { 1.0 } else { 0.0 },
                     if q.mask_invert { 1.0 } else { 0.0 },
-                    0.0,
+                    q.mask_transform[2],
                     0.0,
                 ],
+                mask_xform: {
+                    let rot = (q.mask_transform[3] as f64).to_radians();
+                    [
+                        q.mask_transform[0],
+                        q.mask_transform[1],
+                        rot.cos() as f32,
+                        rot.sin() as f32,
+                    ]
+                },
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1365,6 +1401,7 @@ impl Compositor {
             adjust: [1.0, 1.0, 0.0, 0.0],
             tint_color: [1.0, 1.0, 1.0, 1.0],
             mask: [0.0; 4],
+            mask_xform: [0.0, 0.0, 1.0, 0.0],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
@@ -1725,6 +1762,68 @@ mod tests {
             "inverted: content where ink was not"
         );
         assert_eq!(px_(&px, 95, 50), [0, 255, 0, 255], "inverted: the hole");
+    }
+
+    /// The mask's own flight: offset translates the window, zoom scales it
+    /// about its flown centre, rotation spins it the same visual direction
+    /// as layer rotation — and beyond the flown box the window cuts to
+    /// NOTHING (clamp-sampling would smear the raster's edge texels into
+    /// streaks). Red content over a green ground; the mask's ink is its
+    /// right half, so every placement has an unambiguous where.
+    #[test]
+    fn a_mask_flies_spins_and_cuts_at_its_box() {
+        let ctx = GpuContext::new().expect("gpu");
+        let red = Compositor::upload_texture(&ctx, &[0, 0, 255, 255], 1, 1).expect("content");
+        // 8x1: four clear texels, four inked — a sharp-enough edge that
+        // half-resolution sampling keeps probes out of the bilinear ramp.
+        let mut bytes = vec![0u8; 16];
+        bytes.extend([255u8; 16]);
+        let mask = Compositor::upload_texture(&ctx, &bytes, 8, 1).expect("mask");
+        let scene = |xform: [f32; 4], invert: bool| Scene {
+            canvas_width: 100.0,
+            canvas_height: 100.0,
+            background_rgba: [0.0, 1.0, 0.0, 1.0],
+            background_gradient: None,
+            output_width: 100,
+            output_height: 100,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                texture: Some(0),
+                rect: [0.0, 0.0, 100.0, 100.0],
+                mask: Some(1),
+                mask_invert: invert,
+                mask_transform: xform,
+                ..Default::default()
+            }],
+        };
+        let textures = [red, mask];
+        const RED: [u8; 4] = [0, 0, 255, 255];
+        const GREEN: [u8; 4] = [0, 255, 0, 255];
+
+        // Flown left by 50: the ink lands on the left half, and the right
+        // half is BEYOND the flown box — ground, not smeared edge texels.
+        let px = compose(&scene([-50.0, 0.0, 1.0, 0.0], false), &textures, &ctx);
+        assert_eq!(px_(&px, 25, 50), RED, "ink flew left");
+        assert_eq!(px_(&px, 75, 50), GREEN, "beyond the box cuts to nothing");
+
+        // Inverted, same flight: the hole flies with it, and beyond the box
+        // the CONTENT shows — outside the window's world there is no ink.
+        let px = compose(&scene([-50.0, 0.0, 1.0, 0.0], true), &textures, &ctx);
+        assert_eq!(px_(&px, 25, 50), GREEN, "the hole flew left");
+        assert_eq!(px_(&px, 75, 50), RED, "beyond the box the layer shows");
+
+        // Zoom 0.5 about the centre: the box shrinks to [25, 75], ink to
+        // [50, 75], and past 75 is outside the box.
+        let px = compose(&scene([0.0, 0.0, 0.5, 0.0], false), &textures, &ctx);
+        assert_eq!(px_(&px, 60, 50), RED, "ink inside the shrunk window");
+        assert_eq!(px_(&px, 30, 50), GREEN, "clear half of the shrunk window");
+        assert_eq!(px_(&px, 85, 50), GREEN, "past the shrunk box");
+
+        // 90 degrees: the right-half ink swings to the BOTTOM half — the
+        // same clockwise-on-screen direction a layer's own rotation turns.
+        let px = compose(&scene([0.0, 0.0, 1.0, 90.0], false), &textures, &ctx);
+        assert_eq!(px_(&px, 50, 75), RED, "ink swung to the bottom");
+        assert_eq!(px_(&px, 50, 25), GREEN, "clear swung to the top");
     }
 
     fn gradient_scene(gradient: SceneGradient) -> Scene {

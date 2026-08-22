@@ -198,6 +198,31 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 layer.name
             ));
         }
+        // Placement keyframes fly the window; with no window they fly nothing.
+        let flies = layer.keyframes.iter().any(|k| {
+            k.mask_offset_x.is_some()
+                || k.mask_offset_y.is_some()
+                || k.mask_zoom.is_some()
+                || k.mask_rotation.is_some()
+        });
+        if flies && layer.mask_resource_id.is_none() {
+            out.push(format!(
+                "layer \"{}\": mask placement keyframes without a maskResourceID \
+                 do nothing — there is no window to fly",
+                layer.name
+            ));
+        }
+        for keyframe in &layer.keyframes {
+            if keyframe.mask_zoom.is_some_and(|z| z <= 0.0) {
+                out.push(format!(
+                    "layer \"{}\": maskZoom {} at {}s — zero or negative collapses \
+                     the window; the renderer clamps it to nearly nothing",
+                    layer.name,
+                    keyframe.mask_zoom.unwrap_or_default(),
+                    keyframe.time
+                ));
+            }
+        }
     }
 
     // Ids are UUIDs — all of them. The Rust side reads them as strings and
@@ -651,5 +676,42 @@ mod tests {
         ))
         .iter()
         .any(|w| w.contains("without a maskResourceID")));
+    }
+
+    /// Flying a window that does not exist, and collapsing one that does.
+    #[test]
+    fn a_flightless_or_collapsed_mask_is_named() {
+        let flier = |mask: &str, keyframe: &str| {
+            format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A30","name":"Shot",
+                     "sortIndex":0,"kind":"image","isEnabled":true,
+                     "startTime":0,"duration":4{mask},
+                     "keyframes":[{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A31",
+                        "time":1,"transitionDuration":0{keyframe}}}]}}"#
+            )
+        };
+        let resources = r#","minReaderVersion":14,"resources":[
+            {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A21","kind":"drawing",
+             "filename":"m.json","displayName":"Oval","addedAt":0,
+             "drawing":{"shapes":[{"id":"S","kind":"oval",
+                 "points":[[0.0,0.0],[10.0,10.0]],"strokeColorHex":"FFFFFF",
+                 "strokeWidth":1.0,"fillColorHex":"FFFFFF",
+                 "arrowStart":false,"arrowEnd":false}]}}]"#;
+        let mask = r#","maskResourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A21""#;
+
+        assert!(
+            warnings(&project(&flier(mask, r#","maskRotation":45"#), resources)).is_empty(),
+            "a flying window over a real mask is the feature"
+        );
+        assert!(
+            warnings(&project(&flier("", r#","maskOffsetX":40"#), resources))
+                .iter()
+                .any(|w| w.contains("no window to fly"))
+        );
+        assert!(
+            warnings(&project(&flier(mask, r#","maskZoom":0"#), resources))
+                .iter()
+                .any(|w| w.contains("collapses"))
+        );
     }
 }

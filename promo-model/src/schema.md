@@ -15,7 +15,7 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "minReaderVersion": 13, "trimStart": 0, "trimEnd": 0,
+  "minReaderVersion": 14, "trimStart": 0, "trimEnd": 0,
   "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
@@ -69,7 +69,7 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 13 at the top
+The format is ONE version: stamp "minReaderVersion": 14 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
@@ -333,13 +333,24 @@ Semantics worth knowing:
   16:9 layer becomes an ellipse filling it; make the layer square,
   or draw the ellipse you mean, to get a circle), and it does NOT
   move with the content: a keyframe viewport pans and zooms the
-  footage BEHIND the window while the window holds still. Ink is
+  footage BEHIND the window while the window holds still — unless
+  keyframes fly the window itself. `maskOffsetX` / `maskOffsetY`
+  (canvas px), `maskZoom` (uniform, about the rect's centre, 1 = as
+  placed) and `maskRotation` (clockwise degrees) on keyframes move
+  the MASK while the footage stays put — the roaming-spotlight shot
+  the viewport alone cannot make (paired keyframes can counter-pan
+  a translation, never a rotation). Each rides the same eased
+  scalar clock as every keyframe track, holds then ramps, and
+  composes with the layer's own motion: the layer's rotation tilts
+  the window too, the mask fields tilt it alone. Ink is
   ink — fills and strokes both count, and the ink's own opacity
   carries through: 50%-opacity ink shows the layer at 50%; a shape
   with `evenOddFill` makes a ring or a donut hole. `maskInverted:
   true` flips it — the ink becomes the HOLE (a cut-out) instead of
-  the window. Static per layer, like blendMode; swaps, transitions,
-  grades, blends and motion blur all happen INSIDE the window.
+  the window. WHICH drawing is the mask (and the invert flag) is
+  static per layer, like blendMode — the placement is what the
+  keyframes fly; swaps, transitions, grades, blends and motion blur
+  all happen INSIDE the window.
   promo_validate names a mask on any other layer kind, one pointing
   at nothing or at a non-drawing, and an inkless mask drawing. Known
   limit: `imageBorderWidth` / `imageBorderColorHex` still trace the
