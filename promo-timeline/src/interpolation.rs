@@ -262,6 +262,26 @@ pub fn layer_rotation(layer: &ProjectLayer, time: f64) -> f64 {
     layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.rotation).unwrap_or(0.0)
 }
 
+/// The layer's shutter at `time` — the fraction of one frame interval its
+/// blur keeps the shutter open, or None when the layer never asked for
+/// blur at all.
+///
+/// Keyframes first: they are the full form, held-then-ramped on the same
+/// clock as every other scalar, which is what lets a blur ramp INTO a whip
+/// pan and back out. The layer's `motionBlur` constant is the shorthand
+/// for the common case; when any keyframe carries a shutter, the keyframes
+/// win — the same both-present rule fades and transitions settled on.
+pub fn layer_shutter(layer: &ProjectLayer, time: f64) -> Option<f64> {
+    if layer.keyframes.iter().any(|k| k.shutter.is_some()) {
+        return layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.shutter)
+            .map(|s| s.clamp(0.0, 1.0));
+    }
+    layer
+        .motion_blur
+        .as_ref()
+        .map(|blur| blur.shutter.clamp(0.0, 1.0))
+}
+
 /// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
 /// keyframes, so an un-keyed layer is fully visible as before.
 pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {

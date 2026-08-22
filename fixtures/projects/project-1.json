@@ -121,6 +121,12 @@
           "id": "15418E8E-9559-47DD-AFBB-0D3413824D8E",
           "zoom": 1,
           "verticalShift": 0
+        },
+        {
+          "id": "7A1B2C3D-4E5F-6071-8293-A4B5C6D7E8F9",
+          "time": 1.5,
+          "shutter": 0.75,
+          "transitionDuration": 1
         }
       ],
       "motionBlur": {

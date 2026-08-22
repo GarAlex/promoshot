@@ -601,8 +601,7 @@ impl PreviewEngine {
         let fraction = layers
             .iter()
             .filter(|l| tl::layer_is_visible(l, time))
-            .filter_map(|l| l.motion_blur.as_ref())
-            .map(|b| b.shutter.clamp(0.0, 1.0))
+            .filter_map(|l| tl::layer_shutter(l, time))
             .fold(0.0f64, f64::max);
         (fraction > 0.0).then_some(fraction / fps)
     }
@@ -1322,8 +1321,10 @@ impl PreviewEngine {
             // whole feature: the editor's motion smears, a cut inside the
             // shutter stays a cut, and no frame decodes twice.
             let centre = time;
-            let time = match (&layer.motion_blur, self.blur_sample) {
-                (Some(_), Some(sample)) => sample,
+            let time = match self.blur_sample {
+                Some(sample) if tl::layer_shutter(layer, centre).is_some_and(|s| s > 0.0) => {
+                    sample
+                }
                 _ => centre,
             };
             if layer.kind == ProjectLayerKind::Caption {
@@ -1331,7 +1332,7 @@ impl PreviewEngine {
                 // overlay — so a headless render keeps its captions.
                 let all = self.meta.resources.clone().unwrap_or_default();
                 let showing = tl::layer_resource_id(layer, centre, &all).map(str::to_string);
-                let swap = tl::transition::active_swap(layer, centre, &all);
+                let swap = tl::transition::active_swap_sampled(layer, centre, time, &all);
                 // Words being replaced are still on screen while the new ones
                 // arrive — the same two-quad rule the media path uses.
                 if let Some(swap) = swap.as_ref() {
@@ -1450,7 +1451,7 @@ impl PreviewEngine {
             if is_drawing {
                 let all = self.meta.resources.clone().unwrap_or_default();
                 let showing = tl::layer_resource_id(layer, centre, &all).map(str::to_string);
-                let swap = tl::transition::active_swap(layer, centre, &all);
+                let swap = tl::transition::active_swap_sampled(layer, centre, time, &all);
                 if let Some(swap) = swap.as_ref() {
                     if let Some((mut quad, id)) = self.drawing_quad(
                         layer, swap.previous.as_deref(), &settings, canvas, time, &used)
@@ -1486,7 +1487,7 @@ impl PreviewEngine {
             let showing = tl::layer_resource_id(layer, centre, &resources)
                 .unwrap_or_default()
                 .to_string();
-            let swap = tl::transition::active_swap(layer, centre, &resources);
+            let swap = tl::transition::active_swap_sampled(layer, centre, time, &resources);
             if let Some(swap) = swap.as_ref() {
                 // The outgoing material, whole, underneath — a dissolve or a
                 // wipe needs both on screen at once, which is exactly what a
@@ -2603,6 +2604,165 @@ mod tests {
         assert_eq!(
             engine.builds, 3,
             "two endpoint probes plus the sharp frame — the cap fallback would be 8",
+        );
+    }
+
+    /// A keyframed shutter is a RAMP: the same move renders nearly sharp
+    /// where the shutter is closed and smeared where it has opened — which
+    /// is the whip-pan idiom, blur arriving with the speed.
+    #[test]
+    fn a_keyframed_shutter_ramps_the_blur_in() {
+        let meta = blur_project(&format!(
+            r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B01", "name":"mover",
+                "sortIndex": 1, "kind":"caption",
+                "isEnabled": true, "startTime": 0, "duration": 1,
+                "captionText": "MOTION",
+                "captionStyle": {{"backgroundColorHex": "FF0000",
+                                  "backgroundOpacity": 1.0, "fontSize": 18}},
+                "keyframes": [
+                  {{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B02", "time": 0,
+                    "horizontalShift": -200, "verticalShift": 0,
+                    "shutter": 0, "transitionDuration": 0}},
+                  {{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B03", "time": 1,
+                    "horizontalShift": 200, "verticalShift": 0,
+                    "shutter": 1, "transitionDuration": 1}}
+                ]}}"#
+        ));
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let mut ramp_at = |time: f64| {
+            engine.render(time, out.raw(), 512, 128).expect("render");
+            let px = out.read_pixels().unwrap();
+            ramp_columns(&px, band_centre_row(&px, 2), 2)
+        };
+        // Same speed both times — only the shutter differs.
+        let early = ramp_at(0.1);
+        let late = ramp_at(0.9);
+        assert!(
+            late >= early + 6,
+            "the blur should arrive with the ramp: {early} columns early, \
+             {late} late",
+        );
+    }
+
+    /// When a layer carries BOTH the constant and keyframed shutters, the
+    /// keyframes win — and a keyframed zero really is sharp, bit-exact, so
+    /// "ramp to nothing" costs nothing.
+    #[test]
+    fn keyframed_shutter_zero_beats_the_constant_and_is_free() {
+        let mover = |blur: &str, shutter: &str| {
+            blur_project(&format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B04", "name":"mover",
+                    "sortIndex": 1, "kind":"caption",
+                    "isEnabled": true, "startTime": 0, "duration": 1,
+                    "captionText": "MOTION"{blur},
+                    "captionStyle": {{"backgroundColorHex": "FF0000",
+                                      "backgroundOpacity": 1.0, "fontSize": 18}},
+                    "keyframes": [
+                      {{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B05", "time": 0,
+                        "horizontalShift": -200, "verticalShift": 0{shutter},
+                        "transitionDuration": 0}},
+                      {{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B06", "time": 1,
+                        "horizontalShift": 200, "verticalShift": 0{shutter},
+                        "transitionDuration": 1}}
+                    ]}}"#
+            ))
+        };
+        let out = OwnedIoSurface::new_bgra(512, 128).unwrap();
+        let mut render = |meta: ProjectMetadata| {
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            engine.render(0.5, out.raw(), 512, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        let sharp = render(mover("", ""));
+        let overridden = render(mover(
+            r#", "motionBlur": {"shutter": 1.0}"#,
+            r#", "shutter": 0"#,
+        ));
+        assert_eq!(sharp, overridden,
+                   "keyframed zero beats the constant, to the bit");
+    }
+
+    /// A push swap's travel smears when the layer asks for blur: the swap's
+    /// IDENTITY stays on the frame's clock (a cut inside the shutter stays a
+    /// cut, every sub-sample agrees what exists) while its travel reads the
+    /// sub-sample's clock. Sharp twin as the control.
+    #[test]
+    fn a_swap_push_travel_smears_under_blur() {
+        let fixture = |blur: &str| {
+            format!(
+                r#"{{
+            "id": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B07",
+            "name": "words", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [], "minReaderVersion": 10,
+            "compositionSettings": {{
+                "canvasWidth": 256, "canvasHeight": 128,
+                "backgroundColorHex": "000000",
+                "subtitleFontSize": 30, "subtitleVerticalMargin": 30,
+                "subtitleBackgroundOpacity": 1.0,
+                "subtitleLeftMargin": 10, "subtitleRightMargin": 10
+            }},
+            "resources": [
+                {{"id": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B08", "kind": "caption",
+                 "filename": "", "displayName": "one",
+                 "addedAt": 0, "captionText": "AAA",
+                 "captionStyle": {{"backgroundColorHex": "FF0000"}}}},
+                {{"id": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B09", "kind": "caption",
+                 "filename": "", "displayName": "two",
+                 "addedAt": 0, "captionText": "BBB",
+                 "captionStyle": {{"backgroundColorHex": "0000FF"}}}}
+            ],
+            "layers": [
+                {{"id": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B10", "name": "words",
+                 "sortIndex": 0, "kind": "caption",
+                 "isEnabled": true, "startTime": 0, "duration": 10,
+                 "resourceID": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B08"{blur},
+                 "keyframes": [
+                   {{"id": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B11", "time": 4,
+                    "transitionDuration": 0,
+                    "resourceID": "D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0B09",
+                    "transition": {{"kind": "push", "from": "left", "duration": 0.5}}}}
+                 ]}}
+            ]}}"#
+            )
+        };
+        let out = OwnedIoSurface::new_bgra(256, 128).unwrap();
+        let mut render = |json: String| {
+            let meta = ProjectMetadata::from_json(&json).expect("swap fixture");
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            // Mid-push: both plates are travelling at canvas-width per
+            // half-second, the fastest thing this suite draws.
+            engine.render(4.25, out.raw(), 256, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        let ramp = |px: &[u8], channel: usize| -> usize {
+            let row = (0..128)
+                .filter(|y| {
+                    (0..256).any(|x| px[((y * 256 + x) * 4) + channel] > 200)
+                })
+                .collect::<Vec<_>>();
+            let row = row[row.len() / 2];
+            (0..256)
+                .filter(|x| {
+                    let v = px[((row * 256 + x) * 4) + channel];
+                    v > 40 && v < 215
+                })
+                .count()
+        };
+        let sharp = render(fixture(""));
+        let blurred = render(fixture(r#", "motionBlur": {"shutter": 1.0}"#));
+        assert!(
+            ramp(&blurred, 2) >= ramp(&sharp, 2) + 6,
+            "the outgoing plate's travel should smear: sharp {} vs blurred {}",
+            ramp(&sharp, 2),
+            ramp(&blurred, 2),
+        );
+        assert!(
+            ramp(&blurred, 0) >= ramp(&sharp, 0) + 6,
+            "and the incoming plate's too: sharp {} vs blurred {}",
+            ramp(&sharp, 0),
+            ramp(&blurred, 0),
         );
     }
 

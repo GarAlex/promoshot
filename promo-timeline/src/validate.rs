@@ -124,6 +124,26 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     // the frame it exposes — the engine clamps it, so say so here rather
     // than let two projects with different numbers render the same.
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        for keyframe in &layer.keyframes {
+            if let Some(shutter) = keyframe.shutter {
+                if !(0.0..=1.0).contains(&shutter) {
+                    out.push(format!(
+                        "layer \"{}\": keyframe shutter {} is outside 0..1 — the \
+                         renderer clamps it (0 = sharp, 1 = 360 degrees)",
+                        layer.name, shutter
+                    ));
+                }
+            }
+        }
+        if layer.motion_blur.is_some()
+            && layer.keyframes.iter().any(|k| k.shutter.is_some())
+        {
+            out.push(format!(
+                "layer \"{}\": has BOTH motionBlur and keyframed shutters — the \
+                 keyframes win and the constant is ignored",
+                layer.name
+            ));
+        }
         if let Some(blur) = &layer.motion_blur {
             if blur.shutter <= 0.0 {
                 out.push(format!(
@@ -369,5 +389,29 @@ mod tests {
                 .any(|w| w.contains("not a UUID")),
             "a real UUID passes",
         );
+    }
+
+    /// Keyframed shutters: out-of-range values are named, and so is a
+    /// constant the keyframes silently override.
+    #[test]
+    fn keyframed_shutter_conflicts_and_ranges_are_named() {
+        let clip = |extra_layer: &str, extra_kf: &str| {
+            format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A05","name":"Clip",
+                     "sortIndex":0,"kind":"video","isEnabled":true,
+                     "startTime":0,"duration":4{extra_layer},
+                     "keyframes":[{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A06",
+                       "time":2,"transitionDuration":1{extra_kf}}}]}}"#
+            )
+        };
+        let warned = |layer: &str, kf: &str| {
+            warnings(&project(&clip(layer, kf), r#","minReaderVersion":10"#))
+        };
+        assert!(warned("", r#","shutter":2.0"#)
+            .iter().any(|w| w.contains("outside 0..1")));
+        assert!(warned(r#","motionBlur":{"shutter":0.5}"#, r#","shutter":0.7"#)
+            .iter().any(|w| w.contains("keyframes win")));
+        assert!(warned("", r#","shutter":0.7"#).is_empty(),
+                "a ramp on its own is exactly right");
     }
 }

@@ -200,7 +200,23 @@ pub fn active_swap(
     time: f64,
     resources: &[promo_model::ProjectResource],
 ) -> Option<Swap> {
-    let local = crate::layer_local_time(layer, time);
+    active_swap_sampled(layer, time, time, resources)
+}
+
+/// The swap with its two clocks separated, for motion blur: WHICH swap is
+/// active — and whether one is active at all — is decided at
+/// `identity_time`, the frame's own clock, so a cut inside a shutter stays
+/// a cut and every sub-sample agrees on how many quads exist. How far the
+/// travel has got is read at `effect_time`, the sub-sample's clock, clamped
+/// to the transition's own window — which is what lets a push's moving
+/// edge smear. The plain [`active_swap`] is this with both clocks equal.
+pub fn active_swap_sampled(
+    layer: &ProjectLayer,
+    identity_time: f64,
+    effect_time: f64,
+    resources: &[promo_model::ProjectResource],
+) -> Option<Swap> {
+    let local = crate::layer_local_time(layer, identity_time);
     let usable = |keyframe: &promo_model::ProjectLayerKeyframe| {
         keyframe
             .resource_id
@@ -223,6 +239,12 @@ pub fn active_swap(
     if progress >= 1.0 {
         return None;
     }
+    // From here the sub-sample's clock takes over: the swap EXISTS because
+    // the frame's own instant is mid-transition, but the travel is read at
+    // the sample, saturating at the window's ends rather than extrapolating
+    // past them.
+    let effect_local = crate::layer_local_time(layer, effect_time);
+    let progress = ((effect_local - current.time) / transition.duration).clamp(0.0, 1.0);
     // What it is replacing: the swap before it, else the layer's own. Also
     // filtered, so a deleted predecessor falls back the way the resolver
     // does rather than naming a resource nothing can draw.

@@ -1035,6 +1035,12 @@ pub struct ProjectLayerKeyframe {
     /// keyframe was missing.
     #[serde(default, skip_serializing_if = "is_none")]
     pub opacity: Option<f64>,
+    /// The layer's shutter at this keyframe, for a blur that RAMPS — held
+    /// then eased into like every other scalar track. The full form of
+    /// `layer.motionBlur`, which is the shorthand; when any keyframe
+    /// carries a shutter, the keyframes win.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shutter: Option<f64>,
     pub transition_duration: f64,
     /// The share of the gap from the PREVIOUS keyframe spent moving, as a
     /// percentage: 100 starts moving immediately and arrives exactly here,
@@ -2082,7 +2088,12 @@ impl ProjectMetadata {
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test
         // every rung on this ladder passed.
-        if layers.iter().any(|l| l.motion_blur.is_some()) {
+        // Keyframed shutters ride the same rung as the constant: both
+        // landed in one unreleased batch, so no reader has ever understood
+        // 10 without them.
+        if layers.iter().any(|l| {
+            l.motion_blur.is_some() || l.keyframes.iter().any(|k| k.shutter.is_some())
+        }) {
             return 10;
         }
         // A text reveal rides the same rung: it landed in the same
