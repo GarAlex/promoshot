@@ -66,6 +66,14 @@ pub struct SceneQuad {
     pub mask: Option<usize>,
     /// Flips the mask: ink becomes the hole instead of the window.
     pub mask_invert: bool,
+    /// The window's VERTICAL scale. Separate from `mask_transform[2]` so a
+    /// mask can be stretched deliberately; equal to it means "unstretched".
+    pub mask_zoom_y: f32,
+    /// Half-size, in quad-local px, of the box the mask's own proportions
+    /// occupy inside the rect — the drawing aspect-fitted and centred. This
+    /// is what keeps a circle a circle on a layer of any shape. `[0, 0]`
+    /// means the old behaviour: stretch corner to corner over the rect.
+    pub mask_half: [f32; 2],
     /// The mask's own placement over the rect: `[dx, dy, zoom, rotation_deg]`
     /// in rect-local px (canvas px on an unrotated layer), zoom and spin
     /// about the flown centre. Identity `[0, 0, 1, 0]` samples exactly as
@@ -93,6 +101,8 @@ impl Default for SceneQuad {
             blend: QuadBlend::Normal,
             mask: None,
             mask_invert: false,
+            mask_zoom_y: 1.0,
+            mask_half: [0.0, 0.0],
             mask_transform: [0.0, 0.0, 1.0, 0.0],
         }
     }
@@ -193,6 +203,9 @@ struct Quad {
     // The mask's own placement: xy = offset in local px, zw = cos/sin of
     // its rotation. Identity is (0, 0, 1, 0).
     mask_xform: vec4<f32>,
+    // xy = half-size of the mask's own box inside the rect (its proportions,
+    // aspect-fitted and centred). (0, 0) stretches it over the whole rect.
+    mask_box: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -388,14 +401,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let mc = size * 0.5;
         let mcs = quad.mask_xform.z;
         let msn = quad.mask_xform.w;
+        // The mask's OWN box: its proportions, fitted inside the rect. A
+        // circle drawn round stays round on a 2:3 layer, because the rect's
+        // shape no longer decides the mask's. (0,0) keeps the old
+        // stretch-to-fill for a caller that wants it.
+        var half = quad.mask_box.xy;
+        if half.x <= 0.0 || half.y <= 0.0 {
+            half = mc;
+        }
         var p = in.local - mc - quad.mask_xform.xy;
         p = vec2<f32>(p.x * mcs + p.y * msn, -p.x * msn + p.y * mcs);
-        p = p / max(quad.mask.z, 1e-6) + mc;
-        var ink = textureSample(quad_mask, quad_samp, p / size).a;
-        // A flown window cuts to NOTHING beyond its own box: the raster's
-        // tips touch its edges, and clamp-sampling would smear them into
-        // streaks across the rect.
-        if p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y {
+        p = vec2<f32>(p.x / max(quad.mask.z, 1e-6), p.y / max(quad.mask.w, 1e-6));
+        var ink = textureSample(quad_mask, quad_samp, p / (half * 2.0) + vec2<f32>(0.5)).a;
+        // Outside the window's own box there is nothing to sample: the
+        // raster's tips touch its edges, and clamp-sampling would smear
+        // them into streaks across the rect.
+        if abs(p.x) > half.x || abs(p.y) > half.y {
             ink = 0.0;
         }
         if quad.mask.y > 0.5 {
@@ -433,6 +454,7 @@ struct QuadRaw {
     tint_color: [f32; 4],
     mask: [f32; 4],
     mask_xform: [f32; 4],
+    mask_box: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -1205,7 +1227,7 @@ impl Compositor {
                     if q.mask.is_some() { 1.0 } else { 0.0 },
                     if q.mask_invert { 1.0 } else { 0.0 },
                     q.mask_transform[2],
-                    0.0,
+                    q.mask_zoom_y,
                 ],
                 mask_xform: {
                     let rot = (q.mask_transform[3] as f64).to_radians();
@@ -1216,6 +1238,7 @@ impl Compositor {
                         rot.sin() as f32,
                     ]
                 },
+                mask_box: [q.mask_half[0], q.mask_half[1], 0.0, 0.0],
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1402,6 +1425,7 @@ impl Compositor {
             tint_color: [1.0, 1.0, 1.0, 1.0],
             mask: [0.0; 4],
             mask_xform: [0.0, 0.0, 1.0, 0.0],
+            mask_box: [0.0; 4],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));

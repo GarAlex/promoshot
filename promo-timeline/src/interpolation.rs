@@ -306,7 +306,12 @@ pub struct ResolvedAdjustments {
 pub struct MaskPlacement {
     pub dx: f64,
     pub dy: f64,
+    /// Horizontal scale of the window.
     pub zoom: f64,
+    /// Vertical scale. Follows `zoom` unless a keyframe says otherwise —
+    /// the mask keeps its own proportions by default, and only a deliberate
+    /// stretch makes a circle an oval.
+    pub zoom_y: f64,
     pub rotation_deg: f64,
 }
 
@@ -315,6 +320,7 @@ pub fn layer_mask_placement(layer: &ProjectLayer, time: f64) -> Option<MaskPlace
         k.mask_offset_x.is_some()
             || k.mask_offset_y.is_some()
             || k.mask_zoom.is_some()
+            || k.mask_zoom_y.is_some()
             || k.mask_rotation.is_some()
     });
     if !any {
@@ -324,10 +330,16 @@ pub fn layer_mask_placement(layer: &ProjectLayer, time: f64) -> Option<MaskPlace
     let field = |pick: fn(&ProjectLayerKeyframe) -> Option<f64>, identity: f64| {
         layer_interpolated_scalar(layer, local, pick).unwrap_or(identity)
     };
+    let zoom = field(|k| k.mask_zoom, 1.0).max(1e-6);
     Some(MaskPlacement {
         dx: field(|k| k.mask_offset_x, 0.0),
         dy: field(|k| k.mask_offset_y, 0.0),
-        zoom: field(|k| k.mask_zoom, 1.0).max(1e-6),
+        zoom,
+        // Defaulting to the horizontal is what keeps the shape honest: a
+        // mask only stretches when someone asks it to.
+        zoom_y: layer_interpolated_scalar(layer, local, |k| k.mask_zoom_y)
+            .unwrap_or(zoom)
+            .max(1e-6),
         rotation_deg: field(|k| k.mask_rotation, 0.0),
     })
 }

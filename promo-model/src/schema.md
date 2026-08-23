@@ -328,15 +328,17 @@ Semantics worth knowing:
 - `maskResourceID` on a video or image layer windows it by a
   DRAWING: the drawing's ink is the mask, and the layer only shows
   where that drawing has ink — a filled oval for a porthole, a
-  pen-tool star, an imported SVG shape. The mask is rasterized and
-  stretched corner-to-corner over the layer's rect (a circle on a
-  16:9 layer becomes an ellipse filling it; make the layer square,
-  or draw the ellipse you mean, to get a circle), and it does NOT
-  move with the content: a keyframe viewport pans and zooms the
-  footage BEHIND the window while the window holds still — unless
-  keyframes fly the window itself. `maskOffsetX` / `maskOffsetY`
-  (canvas px), `maskZoom` (uniform, about the rect's centre, 1 = as
-  placed) and `maskRotation` (clockwise degrees) on keyframes move
+  pen-tool star, an imported SVG shape. The mask keeps its OWN
+  proportions: it is aspect-fitted into the layer's rect and
+  centred, so a circle drawn round renders round whatever shape the
+  layer is. It does NOT move with the content: a keyframe viewport
+  pans and zooms the footage BEHIND the window while the window
+  holds still — unless keyframes fly the window itself.
+  `maskOffsetX` / `maskOffsetY` (canvas px), `maskZoom` (scale
+  about the window's centre, 1 = as fitted), `maskZoomY` (the
+  vertical scale when it should differ — absent it follows
+  `maskZoom`, which is what keeps the shape honest) and
+  `maskRotation` (clockwise degrees) on keyframes move
   the MASK while the footage stays put — the roaming-spotlight shot
   the viewport alone cannot make (paired keyframes can counter-pan
   a translation, never a rotation). Each rides the same eased

@@ -1099,6 +1099,12 @@ pub struct ProjectLayerKeyframe {
     pub mask_offset_y: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub mask_zoom: Option<f64>,
+    /// The window's VERTICAL scale, when it should differ from `mask_zoom`.
+    /// Absent means "same as the horizontal" — a mask keeps its own shape
+    /// unless something deliberately stretches it, which is why a circle
+    /// stays a circle on a layer of any proportion.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mask_zoom_y: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub mask_rotation: Option<f64>,
     pub transition_duration: f64,
@@ -2192,6 +2198,7 @@ impl ProjectMetadata {
             k.mask_offset_x.is_some()
                 || k.mask_offset_y.is_some()
                 || k.mask_zoom.is_some()
+                || k.mask_zoom_y.is_some()
                 || k.mask_rotation.is_some()
         }) {
             return 14;

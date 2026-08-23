@@ -160,6 +160,7 @@
           "maskOffsetX": -120,
           "maskOffsetY": 40,
           "maskZoom": 1.4,
+          "maskZoomY": 0.9,
           "maskRotation": 30
         },
         {

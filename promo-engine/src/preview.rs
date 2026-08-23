@@ -1386,7 +1386,7 @@ impl PreviewEngine {
         settings: &promo_model::CompositionSettings,
         canvas: Size,
         pinned: &[u64],
-    ) -> Option<u64> {
+    ) -> Option<(u64, f64, f64)> {
         if rect[2] <= 0.0 || rect[3] <= 0.0 {
             return None;
         }
@@ -1429,7 +1429,7 @@ impl PreviewEngine {
         if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
             self.hits += 1;
-            return Some(id);
+            return Some((id, bw, bh));
         }
         let renderer = match self.vector.as_mut() {
             Some(renderer) => renderer,
@@ -1460,7 +1460,7 @@ impl PreviewEngine {
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
-        Some(id)
+        Some((id, bw, bh))
     }
 
     /// Everything both render paths share: resolve the layers live at `time`,
@@ -1837,9 +1837,18 @@ impl PreviewEngine {
             let density = placement.map_or(1.0, |p| p.zoom).max(1.0);
             rect[2] *= density;
             rect[3] *= density;
-            let Some(id) = self.mask_texture(&resource_id, rect, &settings, canvas, &used) else {
+            let Some((id, bw, bh)) =
+                self.mask_texture(&resource_id, rect, &settings, canvas, &used)
+            else {
                 continue;
             };
+            // The mask's OWN proportions, aspect-fitted into the layer's rect
+            // and centred — so a circle drawn round renders round on a 2:3
+            // layer instead of being stretched into an oval by it. Only a
+            // deliberate zoom_y makes it an oval now.
+            let quad_rect = quads[quad_index].rect;
+            let fit = (quad_rect[2] / bw.max(1e-6)).min(quad_rect[3] / bh.max(1e-6));
+            let half = [(bw * fit / 2.0) as f32, (bh * fit / 2.0) as f32];
             let slot = match used.iter().position(|&u| u == id) {
                 Some(slot) => slot,
                 None => {
@@ -1849,7 +1858,9 @@ impl PreviewEngine {
             };
             quads[quad_index].mask = Some(slot);
             quads[quad_index].mask_invert = inverted;
+            quads[quad_index].mask_half = half;
             if let Some(p) = placement {
+                quads[quad_index].mask_zoom_y = p.zoom_y as f32;
                 quads[quad_index].mask_transform = [
                     p.dx as f32,
                     p.dy as f32,
@@ -3685,6 +3696,67 @@ mod tests {
         engine.render(2.0, out.raw(), 128, 128).expect("render");
         assert_eq!(pixel(&out, 106, 64), [0, 0, 255, 255], "window flown right");
         assert_eq!(pixel(&out, 22, 64), [255, 0, 0, 255], "left is beyond it");
+    }
+
+    /// A round mask stays round on a layer of any proportion.
+    ///
+    /// The mask used to be stretched corner-to-corner over the layer's rect,
+    /// so a circle came out an oval on anything but a square layer and the
+    /// only cure was to draw the distortion in reverse. The mask carries its
+    /// own proportions now, fitted and centred, and `maskZoomY` is the ONLY
+    /// way to stretch it.
+    #[test]
+    fn a_round_mask_stays_round_on_an_oblong_layer() {
+        // The canvas is 2:1, and the layer fills it — so a stretched mask
+        // would be twice as wide as it is tall.
+        let mut meta = mask_meta(r#", "maskResourceID": "MASK""#);
+        meta.composition_settings.canvas_width = 256.0;
+        meta.composition_settings.canvas_height = 128.0;
+        // The layer must lay out OBLONG or a stretch is uniform and proves
+        // nothing: a viewport over half the source's height makes the rect
+        // 2:1, and a stretched circle would come out 2:1 with it.
+        let mut layers = meta.layers.clone().unwrap_or_default();
+        layers[0].keyframes = serde_json::from_value(serde_json::json!([
+            {"id": "VP", "time": 0, "viewport": [0.0, 0.0, 1.0, 0.5],
+             "transitionDuration": 0}
+        ]))
+        .unwrap();
+        meta.layers = Some(layers);
+        let (mut engine, _state) =
+            make_engine(meta, vec![("IMG".into(), [0, 0, 255, 255], 32)], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(256, 128).unwrap();
+        engine.render(1.0, out.raw(), 256, 128).expect("render");
+        let px = out.read_pixels().unwrap();
+
+        // The ink's extent, measured directly off the frame.
+        let lit = |x: usize, y: usize| -> bool {
+            let o = (y * 256 + x) * 4;
+            // BGRA: the layer's frame is [0,0,255,255], the ground is blue.
+            px[o] < 80 && px[o + 2] > 100
+        };
+        let mut min_x = 256usize;
+        let mut max_x = 0usize;
+        let mut min_y = 128usize;
+        let mut max_y = 0usize;
+        for y in 0..128 {
+            for x in 0..256 {
+                if lit(x, y) {
+                    min_x = min_x.min(x);
+                    max_x = max_x.max(x);
+                    min_y = min_y.min(y);
+                    max_y = max_y.max(y);
+                }
+            }
+        }
+        assert!(max_x > min_x, "the mask drew something");
+        let width = (max_x - min_x + 1) as f64;
+        let height = (max_y - min_y + 1) as f64;
+        assert!(
+            (width / height - 1.0).abs() < 0.06,
+            "a round mask must stay round: got {width}x{height} on a 2:1 layer"
+        );
+        // And it is fitted, not shrunk to nothing: it fills the short axis.
+        assert!(height > 100.0, "fitted to the rect's height, got {height}");
     }
 
     /// Mid-swap, BOTH materials are on screen — and both stay inside the
