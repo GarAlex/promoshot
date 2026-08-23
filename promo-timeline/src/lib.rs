@@ -28,9 +28,10 @@ pub use gradient::layer_background_gradient;
 pub use interpolation::{
     interpolate_color_hex, layer_adjustments, layer_background_color_hex, layer_caption_values,
     layer_has_tilt_keyframes, layer_is_visible, layer_local_time, layer_mask_placement,
-    layer_opacity, layer_rotation, layer_shutter, layer_tilt_offset, layer_transform,
-    layer_transform_along_paths, ramp_seconds, settings_background_color_hex,
-    settings_interpolated_values, CaptionValues, MaskPlacement, ResolvedAdjustments, Transform,
+    layer_opacity, layer_position_waypoints, layer_rotation, layer_shutter, layer_tilt_offset,
+    layer_transform, layer_transform_along_paths, ramp_seconds, settings_background_color_hex,
+    settings_interpolated_values, CaptionValues, MaskPlacement, PositionWaypoint,
+    ResolvedAdjustments, Transform,
 };
 pub use layout::{
     clamped_zoom, drawing_rect, letterbox_transform, media_corner_radius, media_rect,

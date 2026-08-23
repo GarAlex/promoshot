@@ -104,7 +104,9 @@ pub extern "C" fn promo_project_inventory(
 /// committing to it.
 ///
 /// Input `{"layerID": "…", "samples": 64}`; returns
-/// `{"segments": [{"fromTime", "toTime", "hasPath", "points": [[x, y], …]}]}`
+/// `{"anchor": [x, y], "segments": [{"fromTime", "toTime", "hasPath",
+/// "points": [[x, y], …]}]}` — every point is a layer SHIFT; add `anchor` to
+/// put it in canvas space.
 /// — one entry per keyframe pair the layer actually MOVES across, whether or
 /// not it follows a path. A pathed segment is the fitted curve; a plain one
 /// is the straight line it really travels, given as its two endpoints.
@@ -151,28 +153,45 @@ pub extern "C" fn promo_layer_motion_paths(
     };
     let resources = handle.meta.resources.as_deref().unwrap_or(&[]);
 
-    let mut keyframes: Vec<&promo_model::ProjectLayerKeyframe> = layer
-        .keyframes
-        .iter()
-        .filter(|k| k.zoom.is_some() || k.vertical_shift.is_some() || k.horizontal_shift.is_some())
-        .collect();
-    keyframes.sort_by(|a, b| {
-        a.time
-            .partial_cmp(&b.time)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    // The core owns what a waypoint IS and where it lands. Asking it was not
+    // a tidiness move: deciding here meant zoom-only keyframes counted as
+    // waypoints and placement keyframes read as the origin, so the overlay
+    // drew legs the layer never flies.
+    // `time` resolves what the layer SHOWS — a swapped sprite, a viewport —
+    // which is what a placement rule sizes itself against. The overlay is
+    // drawn at the playhead, so it passes the playhead.
+    // A shift means two different things depending on the layer. For video
+    // and images it IS the rect's origin; for a drawing the rect is aspect
+    // -fit and CENTRED first, and the shift moves it from there. Same number,
+    // two spaces. The overlay drew every route in the first space, so a
+    // drawing's route hung half a canvas up and to the left of the drawing —
+    // a line through empty space. The core says where to hang it.
+    let settings = &handle.meta.composition_settings;
+    let anchor = match layer.kind {
+        promo_model::ProjectLayerKind::Video | promo_model::ProjectLayerKind::Image => (0.0, 0.0),
+        promo_model::ProjectLayerKind::Drawing => {
+            (settings.canvas_width / 2.0, settings.canvas_height / 2.0)
+        }
+        // Not every layer's shifts are a place. A CAPTION reads the very same
+        // fields as its left margin, its vertical margin and its font size —
+        // so a caption that merely grows and re-indents has keyframes that
+        // plot, as canvas points, a route through somewhere it has never
+        // been. Background and audio layers have no rect at all. There is no
+        // line to draw for any of them.
+        _ => return to_c_string("{\"segments\":[],\"anchor\":[0.0,0.0]}"),
+    };
+
+    let waypoints = promo_timeline::layer_position_waypoints(
+        layer,
+        params["time"].as_f64().unwrap_or(0.0),
+        settings,
+        resources,
+    );
 
     let mut segments: Vec<serde_json::Value> = Vec::new();
-    for pair in keyframes.windows(2) {
-        let (a, b) = (pair[0], pair[1]);
-        let from = promo_model::Point(
-            a.horizontal_shift.unwrap_or(0.0),
-            a.vertical_shift.unwrap_or(0.0),
-        );
-        let to = promo_model::Point(
-            b.horizontal_shift.unwrap_or(0.0),
-            b.vertical_shift.unwrap_or(0.0),
-        );
+    for pair in waypoints.windows(2) {
+        let (a, b) = (pair[0].keyframe, pair[1].keyframe);
+        let (from, to) = (pair[0].point, pair[1].point);
         // A segment with a path follows it; one without is still a route —
         // a straight line the layer really travels — and the editor draws
         // both, so a move is visible before anyone decides to bend it.
@@ -218,7 +237,9 @@ pub extern "C" fn promo_layer_motion_paths(
             "points": points,
         }));
     }
-    match serde_json::to_string(&serde_json::json!({ "segments": segments })) {
+    match serde_json::to_string(
+        &serde_json::json!({ "segments": segments, "anchor": [anchor.0, anchor.1] }),
+    ) {
         Ok(text) => to_c_string(&text),
         Err(_) => std::ptr::null_mut(),
     }
@@ -300,7 +321,10 @@ pub extern "C" fn promo_path_preview(
 
 /// Everything the renderer would quietly correct in this project, as a JSON
 /// array of sentences — the same list `promo validate` prints, so the CLI and
-/// the app's `promo_validate` cannot disagree about what is wrong.
+/// the app's `promo_validate` cannot disagree about what is wrong. Timing is
+/// resolved first, exactly as `Project::open` does over there: attachment
+/// problems lead the list, and the warning walk sees the numbers a render
+/// would actually use.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn promo_project_warnings(json: *const c_char) -> *mut c_char {
@@ -313,10 +337,14 @@ pub extern "C" fn promo_project_warnings(json: *const c_char) -> *mut c_char {
             let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
                 return to_c_string("[]");
             };
-            let Ok(meta) = ProjectMetadata::from_json(text) else {
+            let Ok(mut meta) = ProjectMetadata::from_json(text) else {
                 return to_c_string("[]");
             };
-            let warnings = promo_timeline::validate::warnings(&meta);
+            let mut warnings: Vec<String> = promo_timeline::resolve_attachments(&mut meta)
+                .into_iter()
+                .map(|problem| problem.to_string())
+                .collect();
+            warnings.extend(promo_timeline::validate::warnings(&meta));
             to_c_string(&serde_json::to_string(&warnings).unwrap_or_else(|_| "[]".into()))
         },
     )
@@ -1341,6 +1369,170 @@ mod tests {
         assert!(!reparsed.is_null());
         promo_project_free(reparsed);
         promo_project_free(handle);
+    }
+
+    /// The warning list leads with attachment problems, exactly as `promo
+    /// validate` orders them. The app's `promo_validate` serves this list, and
+    /// this is the one place an author hears about a broken anchor — the app
+    /// itself resolves quietly and renders the stored numbers.
+    #[test]
+    fn warnings_lead_with_attachment_problems() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .expect("fixture");
+        let mut doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        // The bottom of the stack anchoring backwards: nothing is there.
+        doc["layers"][0]["timing"] =
+            serde_json::json!({ "start": { "from": "previousStart", "offset": 1.0 } });
+
+        let json = CString::new(doc.to_string()).unwrap();
+        let out = promo_project_warnings(json.as_ptr());
+        assert!(!out.is_null());
+        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        promo_string_free(out);
+        let warnings: Vec<String> = serde_json::from_str(&text).unwrap();
+        assert!(
+            warnings
+                .first()
+                .is_some_and(|w| w.contains("attached to the previous layer")),
+            "attachment problem missing or not first: {warnings:?}"
+        );
+    }
+
+    /// The route overlay draws exactly the legs the layer flies.
+    ///
+    /// It used to draw one more: a zoom-only keyframe counted as a waypoint,
+    /// and its unset shifts read as `(0, 0)`, so a layer parked off-centre
+    /// that merely zoomed later sprouted a leg home to the origin. The user
+    /// saw "pathes which I think actually not there" — and was right.
+    #[test]
+    fn the_route_has_no_leg_the_layer_never_flies() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .expect("fixture");
+        let mut doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        doc["layers"][1]["keyframes"] = serde_json::json!([
+            {"id": "A", "time": 0.0, "transitionDuration": 0.0,
+             "horizontalShift": 0.0, "verticalShift": 0.0},
+            {"id": "B", "time": 2.0, "transitionDuration": 0.0,
+             "horizontalShift": 400.0, "verticalShift": 120.0},
+            {"id": "C", "time": 6.0, "transitionDuration": 0.0, "zoom": 2.5},
+        ]);
+        let layer_id = doc["layers"][1]["id"].as_str().unwrap().to_string();
+
+        let json = CString::new(doc.to_string()).unwrap();
+        let handle = promo_project_parse(json.as_ptr());
+        assert!(!handle.is_null());
+
+        let params =
+            CString::new(serde_json::json!({ "layerID": layer_id, "samples": 8 }).to_string())
+                .unwrap();
+        let out = promo_layer_motion_paths(handle, params.as_ptr());
+        assert!(!out.is_null());
+        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        promo_string_free(out);
+        promo_project_free(handle);
+
+        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let segments = doc["segments"].as_array().expect("segments");
+        assert_eq!(
+            segments.len(),
+            1,
+            "the zoom is not a move; only one leg is flown: {text}"
+        );
+        let points = segments[0]["points"].as_array().unwrap();
+        assert_eq!(points.first().unwrap(), &serde_json::json!([0.0, 0.0]));
+        assert_eq!(points.last().unwrap(), &serde_json::json!([400.0, 120.0]));
+    }
+
+    /// A drawing's shift is measured from the CENTRED position, a video's
+    /// from the canvas origin. The overlay cannot know which without being
+    /// told, and when it assumed the second for both, a drawing's route hung
+    /// half a canvas away from the drawing.
+    #[test]
+    fn the_route_is_anchored_where_the_layer_measures_from() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .expect("fixture");
+        let base: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let (w, h) = (
+            base["compositionSettings"]["canvasWidth"].as_f64().unwrap(),
+            base["compositionSettings"]["canvasHeight"]
+                .as_f64()
+                .unwrap(),
+        );
+
+        let anchor_for = |kind: &str| -> serde_json::Value {
+            let mut doc = base.clone();
+            doc["layers"][1]["kind"] = serde_json::json!(kind);
+            doc["layers"][1]["keyframes"] = serde_json::json!([
+                {"id": "A", "time": 0.0, "transitionDuration": 0.0,
+                 "horizontalShift": 0.0, "verticalShift": 0.0},
+                {"id": "B", "time": 2.0, "transitionDuration": 0.0,
+                 "horizontalShift": 400.0, "verticalShift": 120.0},
+            ]);
+            let layer_id = doc["layers"][1]["id"].as_str().unwrap().to_string();
+            let json = CString::new(doc.to_string()).unwrap();
+            let handle = promo_project_parse(json.as_ptr());
+            assert!(!handle.is_null(), "{kind}");
+            let params =
+                CString::new(serde_json::json!({ "layerID": layer_id }).to_string()).unwrap();
+            let out = promo_layer_motion_paths(handle, params.as_ptr());
+            let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+            promo_string_free(out);
+            promo_project_free(handle);
+            serde_json::from_str::<serde_json::Value>(&text).unwrap()["anchor"].clone()
+        };
+
+        assert_eq!(anchor_for("video"), serde_json::json!([0.0, 0.0]));
+        assert_eq!(anchor_for("image"), serde_json::json!([0.0, 0.0]));
+        assert_eq!(
+            anchor_for("drawing"),
+            serde_json::json!([w / 2.0, h / 2.0]),
+            "a drawing is centred before it is shifted"
+        );
+    }
+
+    /// A caption reads `horizontalShift` as its LEFT MARGIN, `verticalShift`
+    /// as its vertical margin and `zoom` as its font size. Plotted as canvas
+    /// points those numbers trace a route through somewhere the caption has
+    /// never been — so the overlay is given nothing to draw.
+    #[test]
+    fn a_caption_has_no_route_because_its_shifts_are_margins() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .expect("fixture");
+        let mut doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        doc["layers"][1]["kind"] = serde_json::json!("caption");
+        doc["layers"][1]["keyframes"] = serde_json::json!([
+            {"id": "A", "time": 0.0, "transitionDuration": 0.0,
+             "horizontalShift": 64.0, "verticalShift": 120.0, "zoom": 48.0},
+            {"id": "B", "time": 2.0, "transitionDuration": 0.0,
+             "horizontalShift": 96.0, "verticalShift": 180.0, "zoom": 72.0},
+        ]);
+        let layer_id = doc["layers"][1]["id"].as_str().unwrap().to_string();
+        let json = CString::new(doc.to_string()).unwrap();
+        let handle = promo_project_parse(json.as_ptr());
+        assert!(!handle.is_null());
+        let params = CString::new(serde_json::json!({ "layerID": layer_id }).to_string()).unwrap();
+        let out = promo_layer_motion_paths(handle, params.as_ptr());
+        let text = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        promo_string_free(out);
+        promo_project_free(handle);
+
+        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(
+            doc["segments"].as_array().unwrap().is_empty(),
+            "margins are not a place: {text}"
+        );
     }
 
     #[test]

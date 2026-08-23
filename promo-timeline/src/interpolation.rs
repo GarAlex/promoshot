@@ -58,6 +58,108 @@ pub fn layer_is_visible(layer: &ProjectLayer, time: f64) -> bool {
 }
 
 /// Swift `ProjectLayer.transform(at:defaults:)`.
+/// Whether a keyframe speaks for the layer's POSITION.
+///
+/// A zoom-only keyframe does NOT: it says nothing about where the layer is,
+/// so it is not a waypoint on the route and must not be read as one. Reading
+/// it as `(0, 0)` — an absent field is INHERITED, never zero — drew a leg
+/// home to the origin that the layer never travels.
+pub fn is_position_keyframe(k: &ProjectLayerKeyframe) -> bool {
+    k.vertical_shift.is_some() || k.horizontal_shift.is_some() || k.placement.is_some()
+}
+
+/// A placement rule resolves against what the layer SHOWS at this instant:
+/// the active resource's pixels (swap-aware), windowed by the viewport — the
+/// same box the renderer lays out. A source the model has no size for reads
+/// as square; `promo_validate` names that. Resolution happens HERE, before
+/// the lerp, so ramps, easing and motion paths blend plain numbers — the rule
+/// itself is never baked anywhere.
+fn placement_aspect(
+    layer: &ProjectLayer,
+    time: f64,
+    resources: &[promo_model::ProjectResource],
+) -> f64 {
+    if !layer.keyframes.iter().any(|k| k.placement.is_some()) {
+        return 1.0;
+    }
+    let source = crate::sprite::layer_resource_id(layer, time, resources)
+        .and_then(|id| resources.iter().find(|r| r.id == id))
+        .or_else(|| {
+            layer
+                .resource_id
+                .as_ref()
+                .and_then(|id| resources.iter().find(|r| &r.id == id))
+        })
+        .and_then(crate::layout::resource_source_size);
+    let mut aspect = source.map_or(1.0, |s| s.width() / s.height().max(f64::EPSILON));
+    if let Some(vp) = crate::viewport::layer_viewport(layer, time) {
+        aspect *= vp[2] / vp[3].max(f64::EPSILON);
+    }
+    aspect
+}
+
+/// What a keyframe SAYS its zoom is, resolved: a placement wins over the raw
+/// number on the same keyframe. A position-only rule (no height/width/mode)
+/// keeps the keyframe's own zoom for its box.
+fn keyframe_zoom(k: &ProjectLayerKeyframe, aspect: f64, canvas: promo_model::Size) -> f64 {
+    k.placement
+        .as_ref()
+        .and_then(|p| crate::layout::placement_zoom(p, aspect, canvas))
+        .or(k.zoom)
+        .unwrap_or(1.0)
+}
+
+/// Where a keyframe SAYS the layer is, resolved the same way.
+fn keyframe_position(
+    k: &ProjectLayerKeyframe,
+    aspect: f64,
+    canvas: promo_model::Size,
+) -> (f64, f64) {
+    match &k.placement {
+        Some(p) => {
+            crate::layout::placement_position(p, keyframe_zoom(k, aspect, canvas), aspect, canvas)
+        }
+        None => (
+            k.horizontal_shift.unwrap_or(0.0),
+            k.vertical_shift.unwrap_or(0.0),
+        ),
+    }
+}
+
+/// One waypoint of the route a layer's position travels: a position-track
+/// keyframe with its point resolved exactly as `layer_transform` resolves it.
+///
+/// This exists so the editor's route overlay cannot invent its own answer.
+/// It drew phantom legs for years' worth of two reasons at once — counting
+/// zoom-only keyframes as waypoints, and reading a placement keyframe as the
+/// origin — and both were re-derivations of a rule that lives here.
+pub struct PositionWaypoint<'a> {
+    pub keyframe: &'a ProjectLayerKeyframe,
+    pub point: promo_model::Point,
+}
+
+/// The route a layer's position travels, in canvas points, at `time`'s
+/// resolution of what the layer shows.
+pub fn layer_position_waypoints<'a>(
+    layer: &'a ProjectLayer,
+    time: f64,
+    defaults: &CompositionSettings,
+    resources: &[promo_model::ProjectResource],
+) -> Vec<PositionWaypoint<'a>> {
+    let canvas = promo_model::Size::new(defaults.canvas_width, defaults.canvas_height);
+    let aspect = placement_aspect(layer, time, resources);
+    sorted_by_time(&layer.keyframes, is_position_keyframe)
+        .into_iter()
+        .map(|k| {
+            let (x, y) = keyframe_position(k, aspect, canvas);
+            PositionWaypoint {
+                keyframe: k,
+                point: promo_model::Point(x, y),
+            }
+        })
+        .collect()
+}
+
 pub fn layer_transform(
     layer: &ProjectLayer,
     time: f64,
@@ -96,53 +198,16 @@ pub fn layer_transform_along_paths(
     // happens HERE, before the lerp, so ramps, easing and motion paths blend
     // plain numbers — the rule itself is never baked anywhere.
     let canvas = promo_model::Size::new(defaults.canvas_width, defaults.canvas_height);
-    let uses_placement = layer.keyframes.iter().any(|k| k.placement.is_some());
-    let aspect = if uses_placement {
-        let source = crate::sprite::layer_resource_id(layer, time, resources)
-            .and_then(|id| resources.iter().find(|r| r.id == id))
-            .or_else(|| {
-                layer
-                    .resource_id
-                    .as_ref()
-                    .and_then(|id| resources.iter().find(|r| &r.id == id))
-            })
-            .and_then(crate::layout::resource_source_size);
-        let mut aspect = source.map_or(1.0, |s| s.width() / s.height().max(f64::EPSILON));
-        if let Some(vp) = crate::viewport::layer_viewport(layer, time) {
-            aspect *= vp[2] / vp[3].max(f64::EPSILON);
-        }
-        aspect
-    } else {
-        1.0
-    };
-    // What each keyframe SAYS, resolved: a placement wins over raw numbers
-    // on the same keyframe. A position-only rule (no height/width/mode)
-    // keeps the keyframe's own zoom for its box.
-    let zoom_of = |k: &ProjectLayerKeyframe| -> f64 {
-        k.placement
-            .as_ref()
-            .and_then(|p| crate::layout::placement_zoom(p, aspect, canvas))
-            .or(k.zoom)
-            .unwrap_or(1.0)
-    };
-    let position_of = |k: &ProjectLayerKeyframe| -> (f64, f64) {
-        match &k.placement {
-            Some(p) => crate::layout::placement_position(p, zoom_of(k), aspect, canvas),
-            None => (
-                k.horizontal_shift.unwrap_or(0.0),
-                k.vertical_shift.unwrap_or(0.0),
-            ),
-        }
-    };
+    let aspect = placement_aspect(layer, time, resources);
+    let zoom_of = |k: &ProjectLayerKeyframe| keyframe_zoom(k, aspect, canvas);
+    let position_of = |k: &ProjectLayerKeyframe| keyframe_position(k, aspect, canvas);
     let zoom_track = sorted_by_time(&layer.keyframes, |k| {
         k.zoom.is_some()
             || k.placement
                 .as_ref()
                 .is_some_and(promo_model::Placement::sizes)
     });
-    let position_track = sorted_by_time(&layer.keyframes, |k| {
-        k.vertical_shift.is_some() || k.horizontal_shift.is_some() || k.placement.is_some()
-    });
+    let position_track = sorted_by_time(&layer.keyframes, is_position_keyframe);
     // No keyframe carries any of the three: the legacy settings timeline
     // stands, exactly as before the split. One EMPTY track falls back to its
     // constant (zoom 1, position 0,0) — the same numbers the fused track
@@ -779,6 +844,79 @@ mod tests {
 
     fn settings(json: &str) -> CompositionSettings {
         serde_json::from_str(json).expect("settings")
+    }
+
+    /// Every waypoint the route overlay draws must be a place the layer
+    /// actually IS at that moment. Not "close to" — a keyframe's own time
+    /// sits at the END of its ramp, so the resolved position there is
+    /// exactly the keyframe's point.
+    ///
+    /// The overlay used to answer this itself and got both halves wrong: it
+    /// counted zoom-only keyframes as waypoints, and read every keyframe's
+    /// position as `horizontal_shift.unwrap_or(0)`. An absent field is
+    /// INHERITED, so a layer parked at x=400 that merely zooms later grew a
+    /// leg home to the origin it never flies.
+    #[test]
+    fn waypoints_are_where_the_layer_really_is() {
+        let cfg = settings(r#"{"canvasWidth": 64, "canvasHeight": 64}"#);
+        let l = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 0, "verticalShift": 0},
+               {"id": "B", "time": 2, "transitionDuration": 0,
+                "horizontalShift": 400, "verticalShift": 120},
+               {"id": "C", "time": 6, "transitionDuration": 0, "zoom": 2.5}"#,
+        );
+
+        let route = layer_position_waypoints(&l, 0.0, &cfg, &[]);
+        assert_eq!(
+            route.len(),
+            2,
+            "the zoom-only keyframe is not a place the layer goes"
+        );
+        for w in &route {
+            let at = layer_transform(&l, w.keyframe.time, &cfg);
+            assert_eq!(
+                (at.horizontal_shift, at.vertical_shift),
+                (w.point.x(), w.point.y()),
+                "waypoint at t={} is not where the layer is",
+                w.keyframe.time
+            );
+        }
+
+        // And the layer has NOT come home by the time it zooms.
+        let zooming = layer_transform(&l, 6.0, &cfg);
+        assert_eq!(
+            (zooming.horizontal_shift, zooming.vertical_shift),
+            (400.0, 120.0),
+            "an absent shift inherits, it does not reset"
+        );
+    }
+
+    /// A placement keyframe says where the layer is with a RULE, not two
+    /// numbers. The overlay read its raw (absent) shifts and pinned the
+    /// route to the origin.
+    #[test]
+    fn placement_waypoints_resolve_the_rule() {
+        let cfg = settings(r#"{"canvasWidth": 1920, "canvasHeight": 1080}"#);
+        let l = layer(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "horizontalShift": 0, "verticalShift": 0},
+               {"id": "B", "time": 3, "transitionDuration": 0,
+                "placement": {"anchor": "topTrailing", "width": 0.25}}"#,
+        );
+
+        let route = layer_position_waypoints(&l, 0.0, &cfg, &[]);
+        assert_eq!(route.len(), 2, "a placement keyframe IS a waypoint");
+        let placed = route[1].point;
+        assert!(
+            placed.x() != 0.0 || placed.y() != 0.0,
+            "a corner placement is not the origin, got {placed:?}"
+        );
+        let at = layer_transform(&l, 3.0, &cfg);
+        assert_eq!(
+            (at.horizontal_shift, at.vertical_shift),
+            (placed.x(), placed.y())
+        );
     }
 
     fn transform(l: &ProjectLayer, t: f64) -> Transform {
