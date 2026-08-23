@@ -405,6 +405,36 @@ Semantics worth knowing:
   it; a transitionOut, like a fadeOut, needs the layer to have a
   `duration`. Background layers are the frame itself and do not
   transition.
+- `timing` puts a layer on the timeline as a RULE instead of numbers:
+  its start and end anchor to a NEIGHBOUR in the stack, plus an
+  offset in seconds. { "timing": { "start": { "from":
+  "previousStart", "offset": 0.45 }, "end": { "from": "previousEnd",
+  "offset": 0 } } } on a caption is "enter half a beat after my
+  clip, leave with it", and it stays true when the clip is
+  retrimmed. `from` is previousStart / previousEnd (the neighbour
+  one sortIndex step DOWN — the caption's clip) or nextStart /
+  nextEnd (one step up); `offset` defaults to 0 and may be negative.
+  Half a spec is fine: no `start` keeps the layer's own startTime,
+  no `end` keeps its own duration, so a start anchor alone slides
+  the layer whole. Anchors reach exactly ONE layer either way, so
+  chained layers are always a contiguous run — a slideshow is each
+  clip's start anchored to previousEnd, and inserting a clip
+  re-times everything after it. startTime stays REQUIRED on the
+  wire: every open (app, CLI, render) resolves the spec and
+  OVERWRITES startTime/duration with the answer, so on an anchored
+  layer the stored numbers are only a cache — write 0 and let
+  resolution fill them in. An `end` anchored to a layer that never
+  ends (a background with no duration) means "run to the end of the
+  composition". Resolution never refuses: what cannot be honoured
+  is named by promo_validate and the layer keeps its stored
+  numbers — an anchor with no neighbour on that side, a START
+  anchored to the end of an open-ended layer (it would begin as the
+  composition finishes), two neighbours each waiting on the other,
+  and offsets that put the end at or before the start, which clamp
+  to zero length and render NO frames, not one. In the app the
+  attachment holds until the person drags the layer to numbers of
+  their own; then their edit stands and the attachment is dropped,
+  rather than snapping back on the next open.
 - Layer placement: a media layer's rect has its TOP-LEFT at
   (horizontalShift, verticalShift) in canvas coordinates, and is scaled
   by (canvasHeight / sourceHeight) * zoom. So zoom = scale *

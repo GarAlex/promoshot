@@ -1592,7 +1592,8 @@ pub struct ProjectLayer {
     pub caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub audio_focus: Option<bool>,
-    /// Timing derived from the layer above instead of stated outright.
+    /// Timing derived from a neighbouring layer instead of stated outright.
+    /// Authorable — documented in `schema.md`, guarded by `schema_doc_tests`.
     ///
     /// `start_time` and `duration` remain the resolved answer — every renderer
     /// keeps reading plain numbers, and this is only the rule that produced

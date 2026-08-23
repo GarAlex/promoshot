@@ -365,9 +365,16 @@ mod schema_doc_tests {
             caption_voice_clip: None,
             // App-side audio ducking toggle, undocumented on purpose.
             audio_focus: None,
-            // Timing anchors are documented nowhere yet (skill doc included);
-            // when they are, this becomes Some and schema.md gains the field.
-            timing: None,
+            timing: Some(LayerTiming {
+                start: Some(TimingAnchor {
+                    from: TimingReference::PreviousStart,
+                    offset: 0.45,
+                }),
+                end: Some(TimingAnchor {
+                    from: TimingReference::PreviousEnd,
+                    offset: 0.0,
+                }),
+            }),
             keyframes: vec![full_keyframe()],
             extra: serde_json::Map::new(),
         }
@@ -568,6 +575,11 @@ mod schema_doc_tests {
         "hold",
         "loop",
         "hide",
+        // Timing anchor references.
+        "previousStart",
+        "previousEnd",
+        "nextStart",
+        "nextEnd",
         // Sampling.
         "smooth",
         "nearest",
