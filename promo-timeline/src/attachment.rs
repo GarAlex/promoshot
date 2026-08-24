@@ -15,7 +15,10 @@
 //! always a **contiguous run** of layers — which is what lets a UI treat one
 //! as a group without storing a group anywhere.
 
-use promo_model::{ProjectLayer, ProjectMetadata, TimingReference};
+use promo_model::{
+    DurationRuleKind, ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource,
+    TimingReference,
+};
 
 /// Why a layer's timing could not be worked out. Each names both layers,
 /// because "which one" is the first thing anyone asks.
@@ -72,6 +75,28 @@ impl std::fmt::Display for AttachmentProblem {
     }
 }
 
+/// A layer's own stored duration, with `fitContent` resolved through it:
+/// the layer plays its RESOURCE out, however long the file turned out to be.
+/// Unknown content (a speech draft not yet synthesized) falls back to the
+/// stored number, so a draft show still lays out.
+fn effective_duration(layer: &ProjectLayer, resources: &[ProjectResource]) -> Option<f64> {
+    if layer
+        .duration_rule
+        .is_some_and(|r| r.kind == DurationRuleKind::FitContent)
+    {
+        if let Some(length) = layer
+            .resource_id
+            .as_ref()
+            .and_then(|id| resources.iter().find(|r| &r.id == id))
+            .and_then(|r| r.duration)
+            .filter(|d| *d > 0.0)
+        {
+            return Some(length);
+        }
+    }
+    layer.duration
+}
+
 /// Measured once, before anything is resolved. A layer that then resolves
 /// past it does not stretch the answer for its neighbours: one pass, one set
 /// of numbers, no chasing its own tail.
@@ -97,12 +122,16 @@ struct Slot {
 /// anchor at the bottom must not claim something is missing ABOVE.
 fn missing_neighbour(from: TimingReference, layer: &ProjectLayer) -> AttachmentProblem {
     match from {
-        TimingReference::PreviousStart | TimingReference::PreviousEnd => {
-            AttachmentProblem::NoPreviousLayer {
-                layer: layer.name.clone(),
-            }
-        }
-        TimingReference::NextStart | TimingReference::NextEnd => AttachmentProblem::NoNextLayer {
+        TimingReference::PreviousStart
+        | TimingReference::PreviousEnd
+        | TimingReference::PreviousPeerStart
+        | TimingReference::PreviousPeerEnd => AttachmentProblem::NoPreviousLayer {
+            layer: layer.name.clone(),
+        },
+        TimingReference::NextStart
+        | TimingReference::NextEnd
+        | TimingReference::NextPeerStart
+        | TimingReference::NextPeerEnd => AttachmentProblem::NoNextLayer {
             layer: layer.name.clone(),
         },
     }
@@ -117,6 +146,7 @@ fn missing_neighbour(from: TimingReference, layer: &ProjectLayer) -> AttachmentP
 /// is a cycle — two neighbours each waiting on the other. Those are named and
 /// left with their stored values, so the project still plays.
 pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProblem> {
+    let resources = project.resources.clone().unwrap_or_default();
     let Some(layers) = project.layers.as_mut() else {
         return Vec::new();
     };
@@ -136,12 +166,19 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
 
     // Everything not attached is known from the outset, and is what the
     // attached layers hang off.
+    let kinds: Vec<ProjectLayerKind> = order.iter().map(|&i| layers[i].kind).collect();
     let mut slots: Vec<Slot> = order
         .iter()
         .map(|&index| {
             let layer = &layers[index];
             if is_attached(layer) {
                 Slot::default()
+            } else if layer.duration_rule.is_some() {
+                // Start is its own; the END is the rule's to decide.
+                Slot {
+                    start: Some(layer.start_time),
+                    end: None,
+                }
             } else {
                 Slot {
                     start: Some(layer.start_time),
@@ -151,6 +188,31 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
         })
         .collect();
 
+    // Who hangs off whom: position -> the positions whose start is anchored
+    // to this layer's START. That is CONTAINMENT — "things that begin inside
+    // me" — and it is the relation `fitDependents` fits. Sequencing anchors
+    // (…End) and peer chains are deliberately NOT dependents: the next slide
+    // follows this one, it does not live inside it — and counting it would
+    // make the rule wait on a layer that waits on the rule.
+    let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); order.len()];
+    for position in 0..order.len() {
+        if let Some(anchor) = layers[order[position]]
+            .timing
+            .as_ref()
+            .and_then(|t| t.start.as_ref())
+        {
+            let containment = matches!(
+                anchor.from,
+                TimingReference::PreviousStart | TimingReference::NextStart
+            );
+            if containment {
+                if let Some(target) = anchor_target(&kinds, position, anchor.from) {
+                    dependents[target].push(position);
+                }
+            }
+        }
+    }
+
     let mut stalled = vec![false; order.len()];
     loop {
         let mut progressed = false;
@@ -159,9 +221,12 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
                 continue;
             }
             let layer = &layers[order[position]];
-            let Some(timing) = layer.timing.as_ref() else {
+            if !participates(layer) {
                 continue;
-            };
+            }
+            // A rule layer may carry no anchors at all; it still runs the
+            // loop so its END gets decided.
+            let timing = layer.timing.clone().unwrap_or_default();
             if slots[position].start.is_some() && slots[position].end.is_some() {
                 continue;
             }
@@ -173,7 +238,7 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
                         slots[position].start = Some(layer.start_time);
                         progressed = true;
                     }
-                    Some(anchor) => match neighbour_time(&slots, position, anchor.from) {
+                    Some(anchor) => match neighbour_time(&slots, &kinds, position, anchor.from) {
                         Known::Time(time) => {
                             slots[position].start = Some(time + anchor.offset);
                             progressed = true;
@@ -200,14 +265,48 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
 
             // End, which may need the start first.
             if slots[position].end.is_none() {
-                match timing.end.as_ref() {
-                    None => {
-                        if let Some(start) = slots[position].start {
-                            slots[position].end = Some(layer.duration.map(|d| start + d));
+                // A duration RULE owns the end; an end anchor on the same
+                // layer would be two producers for one number, which
+                // validate names. The rule waits for every dependent.
+                if layer
+                    .duration_rule
+                    .is_some_and(|r| r.kind == DurationRuleKind::FitDependents)
+                {
+                    if let Some(start) = slots[position].start {
+                        let tail = layer.duration_rule.and_then(|r| r.tail).unwrap_or(0.0);
+                        let mut floor = effective_duration(layer, &resources).map(|d| start + d);
+                        let mut ready = true;
+                        for &child in &dependents[position] {
+                            match slots[child].end {
+                                Some(Some(end)) => {
+                                    let fitted = end + tail;
+                                    floor = Some(match floor {
+                                        Some(f) => f.max(fitted),
+                                        None => fitted,
+                                    });
+                                }
+                                // An open-ended dependent runs to the
+                                // composition's end; the floor stands.
+                                Some(None) => {}
+                                None => ready = false,
+                            }
+                        }
+                        if ready {
+                            slots[position].end = Some(floor);
                             progressed = true;
                         }
                     }
-                    Some(anchor) => match neighbour_time(&slots, position, anchor.from) {
+                    continue;
+                }
+                match timing.end.as_ref() {
+                    None => {
+                        if let Some(start) = slots[position].start {
+                            slots[position].end =
+                                Some(effective_duration(layer, &resources).map(|d| start + d));
+                            progressed = true;
+                        }
+                    }
+                    Some(anchor) => match neighbour_time(&slots, &kinds, position, anchor.from) {
                         // An end anchored to an open-ended layer means "run to
                         // the finish", which is what attaching to a background
                         // should do.
@@ -243,7 +342,7 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
     // Whatever never settled is waiting on something that is waiting on it.
     for position in 0..order.len() {
         let layer = &layers[order[position]];
-        if is_attached(layer) && (slots[position].start.is_none() || slots[position].end.is_none())
+        if participates(layer) && (slots[position].start.is_none() || slots[position].end.is_none())
         {
             problems.push(AttachmentProblem::Circular {
                 layer: layer.name.clone(),
@@ -256,7 +355,7 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
     // Clamp and write back.
     for position in 0..order.len() {
         let index = order[position];
-        if !is_attached(&layers[index]) {
+        if !participates(&layers[index]) {
             continue;
         }
         let start = slots[position].start.unwrap_or(layers[index].start_time);
@@ -286,6 +385,12 @@ fn is_attached(layer: &ProjectLayer) -> bool {
         .is_some_and(|t| t.start.is_some() || t.end.is_some())
 }
 
+/// Whether resolution has anything to decide for this layer. A duration rule
+/// participates exactly like an anchor: the stored numbers become a cache.
+fn participates(layer: &ProjectLayer) -> bool {
+    is_attached(layer) || layer.duration_rule.is_some()
+}
+
 /// The answer to "what time is that anchor", which has four shapes.
 enum Known {
     Time(f64),
@@ -297,25 +402,51 @@ enum Known {
     NotYet,
 }
 
-fn neighbour_time(slots: &[Slot], position: usize, reference: TimingReference) -> Known {
-    let neighbour = match reference {
+/// The position an anchor points at, peers included: a peer reference walks
+/// past layers of OTHER kinds to the nearest layer of the SAME kind — what
+/// lets a slide chain to the previous slide across the narration between
+/// them.
+fn anchor_target(
+    kinds: &[ProjectLayerKind],
+    position: usize,
+    reference: TimingReference,
+) -> Option<usize> {
+    match reference {
         TimingReference::PreviousStart | TimingReference::PreviousEnd => position.checked_sub(1),
         TimingReference::NextStart | TimingReference::NextEnd => {
             let next = position + 1;
-            (next < slots.len()).then_some(next)
+            (next < kinds.len()).then_some(next)
         }
-    };
-    let Some(neighbour) = neighbour else {
+        TimingReference::PreviousPeerStart | TimingReference::PreviousPeerEnd => {
+            (0..position).rev().find(|&i| kinds[i] == kinds[position])
+        }
+        TimingReference::NextPeerStart | TimingReference::NextPeerEnd => {
+            ((position + 1)..kinds.len()).find(|&i| kinds[i] == kinds[position])
+        }
+    }
+}
+
+fn neighbour_time(
+    slots: &[Slot],
+    kinds: &[ProjectLayerKind],
+    position: usize,
+    reference: TimingReference,
+) -> Known {
+    let Some(neighbour) = anchor_target(kinds, position, reference) else {
         return Known::Missing;
     };
     match reference {
-        TimingReference::PreviousStart | TimingReference::NextStart => {
-            match slots[neighbour].start {
-                Some(time) => Known::Time(time),
-                None => Known::NotYet,
-            }
-        }
-        TimingReference::PreviousEnd | TimingReference::NextEnd => match slots[neighbour].end {
+        TimingReference::PreviousStart
+        | TimingReference::NextStart
+        | TimingReference::PreviousPeerStart
+        | TimingReference::NextPeerStart => match slots[neighbour].start {
+            Some(time) => Known::Time(time),
+            None => Known::NotYet,
+        },
+        TimingReference::PreviousEnd
+        | TimingReference::NextEnd
+        | TimingReference::PreviousPeerEnd
+        | TimingReference::NextPeerEnd => match slots[neighbour].end {
             Some(Some(time)) => Known::Time(time),
             Some(None) => Known::OpenEnded,
             None => Known::NotYet,
@@ -463,6 +594,7 @@ mod tests {
             caption_voice_clip: None,
             audio_focus: None,
             timing: None,
+            duration_rule: None,
             keyframes: Vec::new(),
             extra: Default::default(),
         }
@@ -695,5 +827,178 @@ mod tests {
         let a = layer("A", 0, 0.0, Some(1.0));
         // B stored before A: the run must still come out A-then-B.
         assert_eq!(runs(&[b, a]), vec![vec!["A", "B"]]);
+    }
+
+    /// The narrated-slideshow scheme, whole: slides chain PEER to peer so no
+    /// slide's start depends on a sound's length; each narration hangs off
+    /// its slide and plays its file out (`fitContent`); each slide holds its
+    /// stored N or stretches to fit its narration plus a breath
+    /// (`fitDependents`). One long take moves everything after it — by
+    /// resolution, with no imperative walk anywhere.
+    #[test]
+    fn a_slide_waits_for_its_narration_by_rule() {
+        use promo_model::{DurationRule, DurationRuleKind};
+
+        let fit_deps = DurationRule {
+            kind: DurationRuleKind::FitDependents,
+            tail: Some(2.5),
+        };
+        let fit_content = DurationRule {
+            kind: DurationRuleKind::FitContent,
+            tail: None,
+        };
+
+        let mut slide1 = layer("Slide1", 1, 0.0, Some(20.0));
+        slide1.kind = ProjectLayerKind::Image;
+        slide1.duration_rule = Some(fit_deps);
+
+        let mut audio1 = layer("Audio1", 2, 0.0, Some(1.0));
+        audio1.kind = ProjectLayerKind::Audio;
+        audio1.resource_id = Some("SOUND1".into());
+        audio1.duration_rule = Some(fit_content);
+        audio1.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousStart, 0.4)),
+            end: None,
+        });
+
+        let mut slide2 = layer("Slide2", 3, 0.0, Some(20.0));
+        slide2.kind = ProjectLayerKind::Image;
+        slide2.duration_rule = Some(fit_deps);
+        slide2.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousPeerEnd, -1.0)),
+            end: None,
+        });
+
+        let mut audio2 = layer("Audio2", 4, 0.0, Some(1.0));
+        audio2.kind = ProjectLayerKind::Audio;
+        audio2.duration_rule = Some(fit_content); // no file yet: placeholder
+        audio2.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousStart, 0.4)),
+            end: None,
+        });
+
+        let mut p = project(vec![slide1, audio1, slide2, audio2]);
+        p.resources = Some(vec![serde_json::from_str(
+            r#"{"id": "SOUND1", "kind": "audio", "filename": "n.mp3",
+                "displayName": "n", "addedAt": 0, "duration": 25.0}"#,
+        )
+        .expect("resource decodes")]);
+
+        let problems = resolve_attachments(&mut p);
+        assert!(problems.is_empty(), "{problems:?}");
+
+        let layers = p.layers.unwrap();
+        let by_id = |id: &str| layers.iter().find(|l| l.id == id).unwrap().clone();
+        // The narration plays its 25s file out...
+        assert!((by_id("Audio1").duration.unwrap() - 25.0).abs() < 1e-9);
+        // ...so its slide waits: 0.4 lead + 25 + 2.5 breath.
+        assert!((by_id("Slide1").duration.unwrap() - 27.9).abs() < 1e-9);
+        // The next slide chained through the PEER, not the sound.
+        assert!((by_id("Slide2").start_time - 26.9).abs() < 1e-9);
+        // Whose own draft narration is far below its floor: N stands.
+        assert!((by_id("Slide2").duration.unwrap() - 20.0).abs() < 1e-9);
+        assert!((by_id("Audio2").start_time - 27.3).abs() < 1e-9);
+    }
+
+    /// The floor half: a short take changes nothing. Resolution reproduces
+    /// the stored numbers exactly, because max(N, sound + gap) = N.
+    #[test]
+    fn a_short_narration_never_shrinks_its_slide() {
+        use promo_model::{DurationRule, DurationRuleKind};
+
+        let mut slide = layer("Slide", 1, 0.0, Some(20.0));
+        slide.kind = ProjectLayerKind::Image;
+        slide.duration_rule = Some(DurationRule {
+            kind: DurationRuleKind::FitDependents,
+            tail: Some(2.5),
+        });
+        let mut audio = layer("Audio", 2, 0.0, Some(1.0));
+        audio.kind = ProjectLayerKind::Audio;
+        audio.resource_id = Some("S".into());
+        audio.duration_rule = Some(DurationRule {
+            kind: DurationRuleKind::FitContent,
+            tail: None,
+        });
+        audio.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousStart, 0.4)),
+            end: None,
+        });
+        let mut p = project(vec![slide, audio]);
+        p.resources = Some(vec![serde_json::from_str(
+            r#"{"id": "S", "kind": "audio", "filename": "n.mp3",
+                "displayName": "n", "addedAt": 0, "duration": 8.0}"#,
+        )
+        .unwrap()]);
+
+        assert!(resolve_attachments(&mut p).is_empty());
+        let layers = p.layers.unwrap();
+        assert!(
+            (layers[0].duration.unwrap() - 20.0).abs() < 1e-9,
+            "N stands"
+        );
+        assert!((layers[1].duration.unwrap() - 8.0).abs() < 1e-9);
+    }
+
+    /// A peer anchor walks past other kinds to the nearest layer of its own,
+    /// and reports a missing PREVIOUS when there is none.
+    #[test]
+    fn peer_anchors_skip_other_kinds() {
+        let mut first = layer("First", 0, 1.0, Some(5.0)); // image, 1 → 6
+        first.kind = ProjectLayerKind::Image;
+        let voice = layer("Voice", 1, 0.0, Some(2.0)); // video kind, in between
+        let mut second = layer("Second", 2, 0.0, Some(3.0));
+        second.kind = ProjectLayerKind::Image;
+        second.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousPeerEnd, 0.5)),
+            end: None,
+        });
+        let mut p = project(vec![first, voice, second]);
+        assert!(resolve_attachments(&mut p).is_empty());
+        assert!(
+            (p.layers.as_ref().unwrap()[2].start_time - 6.5).abs() < 1e-9,
+            "chained to the previous IMAGE, not the layer in between"
+        );
+
+        let mut orphan = layer("Orphan", 0, 0.0, Some(1.0));
+        orphan.kind = ProjectLayerKind::Caption;
+        orphan.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousPeerEnd, 0.0)),
+            end: None,
+        });
+        let mut p2 = project(vec![orphan]);
+        let problems = resolve_attachments(&mut p2);
+        assert!(matches!(
+            problems.first(),
+            Some(AttachmentProblem::NoPreviousLayer { .. })
+        ));
+    }
+
+    /// A dependent that anchors its END back onto the ruled layer is a real
+    /// cycle — value-circular, not just shape-circular — and is NAMED, with
+    /// both layers keeping their stored numbers.
+    #[test]
+    fn a_dependent_riding_the_ruled_end_is_named_circular() {
+        use promo_model::{DurationRule, DurationRuleKind};
+
+        let mut slide = layer("Slide", 1, 0.0, Some(20.0));
+        slide.kind = ProjectLayerKind::Image;
+        slide.duration_rule = Some(DurationRule {
+            kind: DurationRuleKind::FitDependents,
+            tail: Some(2.5),
+        });
+        let mut audio = layer("Audio", 2, 0.0, Some(1.0));
+        audio.kind = ProjectLayerKind::Audio;
+        audio.timing = Some(LayerTiming {
+            start: Some(anchor(TimingReference::PreviousStart, 0.4)),
+            end: Some(anchor(TimingReference::PreviousEnd, -0.2)),
+        });
+        let mut p = project(vec![slide, audio]);
+        let problems = resolve_attachments(&mut p);
+        assert!(
+            problems
+                .iter()
+                .any(|pr| matches!(pr, AttachmentProblem::Circular { .. })),
+            "the ride-the-end pattern cycles with fitDependents: {problems:?}"
+        );
     }
 }

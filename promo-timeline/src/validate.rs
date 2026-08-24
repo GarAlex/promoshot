@@ -15,6 +15,7 @@ use promo_model::{ProjectLayerKind, ProjectMetadata};
 /// warnings the app already emits, so the two lists read as one.
 pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     let mut out = Vec::new();
+    duration_rule_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -372,6 +373,89 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         None => {}
     }
     out
+}
+
+/// A duration rule wired to nothing does nothing, and says so here rather
+/// than letting the author wonder why the slide never waits.
+fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    use promo_model::{DurationRuleKind, TimingReference};
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+
+    let mut order: Vec<usize> = (0..layers.len()).collect();
+    order.sort_by(|&a, &b| {
+        layers[a]
+            .sort_index
+            .cmp(&layers[b].sort_index)
+            .then_with(|| a.cmp(&b))
+    });
+
+    for (position, &index) in order.iter().enumerate() {
+        let layer = &layers[index];
+        let Some(rule) = layer.duration_rule else {
+            continue;
+        };
+        match rule.kind {
+            DurationRuleKind::FitContent => {
+                let has_content = layer
+                    .resource_id
+                    .as_ref()
+                    .and_then(|id| resources.iter().find(|r| &r.id == id))
+                    .and_then(|r| r.duration)
+                    .is_some_and(|d| d > 0.0);
+                if layer.resource_id.is_none() {
+                    out.push(format!(
+                        "layer \"{}\": durationRule fitContent has no resource to fit — \
+                         the stored duration stands",
+                        layer.name
+                    ));
+                } else if !has_content {
+                    out.push(format!(
+                        "layer \"{}\": durationRule fitContent — the resource's length is \
+                         not known yet (no file, or no measured duration); the stored \
+                         duration stands until it is",
+                        layer.name
+                    ));
+                }
+                if layer.timing.as_ref().is_some_and(|t| t.end.is_some()) {
+                    out.push(format!(
+                        "layer \"{}\": durationRule and an END anchor are two producers \
+                         for one number — the anchor wins and the rule does nothing",
+                        layer.name
+                    ));
+                }
+            }
+            DurationRuleKind::FitDependents => {
+                // A dependent is a layer whose START is anchored to this
+                // layer's start — containment, mirroring the resolver.
+                let has_dependent = order.iter().enumerate().any(|(other, &oi)| {
+                    layers[oi]
+                        .timing
+                        .as_ref()
+                        .and_then(|t| t.start.as_ref())
+                        .is_some_and(|a| match a.from {
+                            TimingReference::PreviousStart => other == position + 1,
+                            TimingReference::NextStart => other + 1 == position,
+                            _ => false,
+                        })
+                });
+                if !has_dependent {
+                    out.push(format!(
+                        "layer \"{}\": durationRule fitDependents, but no layer's start \
+                         is anchored to it — nothing to fit, the stored duration stands",
+                        layer.name
+                    ));
+                }
+                if layer.timing.as_ref().is_some_and(|t| t.end.is_some()) {
+                    out.push(format!(
+                        "layer \"{}\": durationRule and an END anchor are two producers \
+                         for one number — the anchor wins and the rule does nothing",
+                        layer.name
+                    ));
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

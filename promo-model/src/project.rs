@@ -1592,6 +1592,11 @@ pub struct ProjectLayer {
     pub caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub audio_focus: Option<bool>,
+    /// Duration derived by rule instead of stated outright. Like `timing`,
+    /// the stored `duration` stays the resolved answer (and the floor, for
+    /// `fitDependents`).
+    #[serde(default, skip_serializing_if = "is_none", rename = "durationRule")]
+    pub duration_rule: Option<DurationRule>,
     /// Timing derived from a neighbouring layer instead of stated outright.
     /// Authorable — documented in `schema.md`, guarded by `schema_doc_tests`.
     ///
@@ -1649,6 +1654,42 @@ pub enum TimingReference {
     PreviousEnd,
     NextStart,
     NextEnd,
+    /// The nearest layer of the SAME KIND in that direction — what lets a
+    /// slide chain to the previous slide across the narration between them,
+    /// so no slide's start ever depends on how long a sound turned out.
+    PreviousPeerStart,
+    PreviousPeerEnd,
+    NextPeerStart,
+    NextPeerEnd,
+}
+
+/// How a layer's DURATION is derived, when it is a rule rather than a number.
+///
+/// The time-twin of `placement`: stored, never baked, resolved on every open.
+/// `start_time`/`duration` remain the resolved answer — every renderer keeps
+/// reading plain numbers, exactly as with anchors.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DurationRule {
+    pub kind: DurationRuleKind,
+    /// Seconds of air after whatever the rule fits. Absent means none.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub tail: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DurationRuleKind {
+    /// Duration is the RESOURCE's content length — an audio layer that plays
+    /// its file out, however long the file turns out to be. Falls back to
+    /// the stored duration while the content's length is unknown (a speech
+    /// draft not yet synthesized).
+    FitContent,
+    /// Duration is AT LEAST the stored number, extended so every layer whose
+    /// START is anchored to this one finishes inside it, plus `tail`. The
+    /// stored duration is the floor — "the slide stays N seconds or waits
+    /// for its narration", as a rule instead of a policy.
+    FitDependents,
 }
 
 impl ProjectLayer {
@@ -2192,6 +2233,29 @@ impl ProjectMetadata {
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test
         // every rung on this ladder passed.
+        // 15 is a duration RULE, or a peer-reaching anchor. Dropped by an
+        // older reader's save, a slide that waits for its narration stops
+        // waiting and the chain built through peers collapses onto stale
+        // numbers — the same destruction test as every rung.
+        let peer = |anchor: &Option<TimingAnchor>| {
+            anchor.as_ref().is_some_and(|a| {
+                matches!(
+                    a.from,
+                    TimingReference::PreviousPeerStart
+                        | TimingReference::PreviousPeerEnd
+                        | TimingReference::NextPeerStart
+                        | TimingReference::NextPeerEnd
+                )
+            })
+        };
+        if layers.iter().any(|l| {
+            l.duration_rule.is_some()
+                || l.timing
+                    .as_ref()
+                    .is_some_and(|t| peer(&t.start) || peer(&t.end))
+        }) {
+            return 15;
+        }
         // 14 is a mask that MOVES. Dropped by an older reader's save, the
         // flying window parks in the rect's centre — the composition stops
         // showing what it showed, the same destruction test as every rung.

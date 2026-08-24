@@ -15,7 +15,7 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "minReaderVersion": 14, "trimStart": 0, "trimEnd": 0,
+  "minReaderVersion": 15, "trimStart": 0, "trimEnd": 0,
   "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
@@ -69,7 +69,7 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 14 at the top
+The format is ONE version: stamp "minReaderVersion": 15 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
@@ -414,6 +414,11 @@ Semantics worth knowing:
   retrimmed. `from` is previousStart / previousEnd (the neighbour
   one sortIndex step DOWN — the caption's clip) or nextStart /
   nextEnd (one step up); `offset` defaults to 0 and may be negative.
+  The PEER forms — previousPeerStart / previousPeerEnd /
+  nextPeerStart / nextPeerEnd — walk past layers of OTHER kinds to
+  the nearest layer of the SAME kind, which is what lets a slide
+  chain to the previous slide across the narration between them: no
+  slide's start ever depends on how long a sound turned out to be.
   Half a spec is fine: no `start` keeps the layer's own startTime,
   no `end` keeps its own duration, so a start anchor alone slides
   the layer whole. Anchors reach exactly ONE layer either way, so
@@ -435,6 +440,24 @@ Semantics worth knowing:
   attachment holds until the person drags the layer to numbers of
   their own; then their edit stands and the attachment is dropped,
   rather than snapping back on the next open.
+- `durationRule` derives a layer's DURATION by rule — the time-twin
+  of `placement`: stored, never baked, re-resolved on every open,
+  with startTime/duration remaining the resolved answer every
+  renderer reads. { "durationRule": { "kind": "fitContent" } } on an
+  audio or video layer plays its RESOURCE out, however long the file
+  turns out to be (a speech draft with no file yet keeps its stored
+  duration). { "durationRule": { "kind": "fitDependents",
+  "tail": 2.5 } } holds the layer AT LEAST its stored duration,
+  extended so every layer whose start is anchored to it (its
+  DEPENDENTS — containment via previousStart / nextStart, never the
+  sequencing or peer forms) finishes inside it, plus `tail` seconds
+  of air. That is "the slide stays N seconds or waits for its
+  narration" as a rule instead of an app policy: synthesize a longer
+  take, and the next resolve re-times the whole show — headless
+  included. A rule and an `end` anchor on the same layer are two
+  producers for one number; the anchor wins and promo_validate says
+  so, as it also names a fitContent with no resource and a
+  fitDependents nothing is anchored to.
 - Layer placement: a media layer's rect has its TOP-LEFT at
   (horizontalShift, verticalShift) in canvas coordinates, and is scaled
   by (canvasHeight / sourceHeight) * zoom. So zoom = scale *

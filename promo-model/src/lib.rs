@@ -365,6 +365,10 @@ mod schema_doc_tests {
             caption_voice_clip: None,
             // App-side audio ducking toggle, undocumented on purpose.
             audio_focus: None,
+            duration_rule: Some(DurationRule {
+                kind: DurationRuleKind::FitDependents,
+                tail: Some(2.5),
+            }),
             timing: Some(LayerTiming {
                 start: Some(TimingAnchor {
                     from: TimingReference::PreviousStart,
@@ -580,6 +584,13 @@ mod schema_doc_tests {
         "previousEnd",
         "nextStart",
         "nextEnd",
+        "previousPeerStart",
+        "previousPeerEnd",
+        "nextPeerStart",
+        "nextPeerEnd",
+        // Duration rules.
+        "fitContent",
+        "fitDependents",
         // Sampling.
         "smooth",
         "nearest",
