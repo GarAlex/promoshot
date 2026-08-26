@@ -143,7 +143,10 @@ Semantics worth knowing:
   `fill` — stretched edge to edge, aspect-FIT with the ground showing
   around it, or TILED from `anchor` (unit canvas coordinates, the
   gradient precedent) at the image's own pixel size times `scale`
-  (2 draws each tile twice as large; absent is 1). Background
+  (2 draws each tile twice as large; absent is 1). The image's NATIVE
+  size sets the tile — declare `pixelWidth`/`pixelHeight` on the
+  resource so previews rendering from downsampled bitmaps agree with
+  exports. Background
   plates are scenery, not media: never bordered, cornered or
   shadowed. The background layer's KEYFRAMES compose as everywhere
   else: `colorHex`/`gradient` keyframes override the plate's ground

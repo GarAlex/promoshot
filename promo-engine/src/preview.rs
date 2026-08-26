@@ -1827,10 +1827,25 @@ impl PreviewEngine {
                                         // so it DIVIDES how many repeats
                                         // span the canvas.
                                         let tile_scale =
-                                            style.scale.unwrap_or(1.0).max(0.05);
+                                            style.scale.unwrap_or(1.0).max(0.005);
+                                        // The image's NATIVE size decides
+                                        // the tile, not the provided
+                                        // frame's: previews hand in TIERED
+                                        // (downsampled) bitmaps, and
+                                        // repeats computed from those made
+                                        // a 3000px photo tile as if it
+                                        // were canvas-sized.
+                                        let iw = resource
+                                            .pixel_width
+                                            .filter(|w| *w > 1.0)
+                                            .unwrap_or(fw);
+                                        let ih = resource
+                                            .pixel_height
+                                            .filter(|h| *h > 1.0)
+                                            .unwrap_or(fh);
                                         quad.tile_repeats = [
-                                            (cw / (fw * tile_scale).max(1.0)) as f32,
-                                            (ch / (fh * tile_scale).max(1.0)) as f32,
+                                            (cw / (iw * tile_scale).max(1.0)) as f32,
+                                            (ch / (ih * tile_scale).max(1.0)) as f32,
                                         ];
                                         quad.tile_anchor = [
                                             (anchor[0] + tr.horizontal_shift / cw) as f32,
