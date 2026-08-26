@@ -79,6 +79,12 @@ pub struct SceneQuad {
     /// about the flown centre. Identity `[0, 0, 1, 0]` samples exactly as
     /// before — the window sits where the rect put it.
     pub mask_transform: [f32; 4],
+    /// Tiling: repeats across the quad per axis; [0, 0] (the default)
+    /// samples untiled. A background plate tiles at the image's own pixel
+    /// size, its grid starting at `tile_anchor`.
+    pub tile_repeats: [f32; 2],
+    /// The tile grid's starting point in UNIT quad coordinates.
+    pub tile_anchor: [f32; 2],
     /// Soft-edge length in canvas px: 0 keeps the crisp ~1px analytic AA,
     /// anything more turns the edge into a smoothstep penumbra fading to
     /// nothing at the rect's edge. This is how a drop-shadow quad is drawn:
@@ -111,6 +117,8 @@ impl Default for SceneQuad {
             mask_zoom_y: 1.0,
             mask_half: [0.0, 0.0],
             mask_transform: [0.0, 0.0, 1.0, 0.0],
+            tile_repeats: [0.0, 0.0],
+            tile_anchor: [0.0, 0.0],
             edge_soften: 0.0,
         }
     }
@@ -217,6 +225,8 @@ struct Quad {
     // x = edge soften length in canvas px (0 = crisp ~1px AA edge). A
     // drop-shadow quad sets it: the edge becomes a smoothstep penumbra
     // fading to zero at the (pre-inflated) rect's edge.
+    // yz = tile repeats per axis (0 = untiled); the grid starts at
+    // mask_box.zw (unit quad coordinates) — a tiled background plate.
     extra: vec4<f32>,
 };
 
@@ -359,7 +369,14 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     var color: vec4<f32>;
     if quad.params.y > 0.5 {
-        let uv = quad.uv_rect.xy + (in.local / size) * quad.uv_rect.zw;
+        var uv = quad.uv_rect.xy + (in.local / size) * quad.uv_rect.zw;
+        if quad.extra.y > 0.0 {
+            // Tiled: wrap the unit position through the repeat grid,
+            // phase-shifted so the pattern STARTS at the anchor.
+            let unit = in.local / size;
+            let tiled = fract((unit - quad.mask_box.zw) * quad.extra.yz);
+            uv = quad.uv_rect.xy + tiled * quad.uv_rect.zw;
+        }
         color = textureSample(quad_tex, quad_samp, uv);
         if quad.params.z > 0.5 {
             // Video frames are opaque (alpha 1), so premultiplied rgb == rgb.
@@ -1260,8 +1277,18 @@ impl Compositor {
                         rot.sin() as f32,
                     ]
                 },
-                mask_box: [q.mask_half[0], q.mask_half[1], 0.0, 0.0],
-                extra: [q.edge_soften as f32, 0.0, 0.0, 0.0],
+                mask_box: [
+                    q.mask_half[0],
+                    q.mask_half[1],
+                    q.tile_anchor[0],
+                    q.tile_anchor[1],
+                ],
+                extra: [
+                    q.edge_soften as f32,
+                    q.tile_repeats[0],
+                    q.tile_repeats[1],
+                    0.0,
+                ],
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1803,6 +1830,43 @@ mod tests {
         let a = px(&pixels, 100, 35, 50)[0];
         let b = px(&pixels, 100, 45, 50)[0];
         assert!(a < 128 && b > 128, "fade runs outward: {a} < 128 < {b}");
+    }
+
+    /// Tiling wraps the texture across the quad — `tile_repeats` per axis,
+    /// the grid phase-shifted so the pattern STARTS at `tile_anchor`.
+    #[test]
+    fn tile_repeats_wrap_the_texture_across_the_quad() {
+        let ctx = GpuContext::new().expect("gpu");
+        // Two texels: left red, right blue (premultiplied BGRA).
+        let stripes = Compositor::upload_texture(
+            &ctx, &[0, 0, 255, 255, 255, 0, 0, 255], 2, 1).expect("texture");
+        let scene = |anchor: [f32; 2]| Scene {
+            canvas_width: 100.0,
+            canvas_height: 100.0,
+            background_rgba: [0.0, 0.0, 0.0, 1.0],
+            background_gradient: None,
+            output_width: 100,
+            output_height: 100,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                texture: Some(0),
+                rect: [0.0, 0.0, 100.0, 100.0],
+                tile_repeats: [2.0, 1.0],
+                tile_anchor: anchor,
+                ..Default::default()
+            }],
+        };
+        // Probes sit on texel CENTRES (fract 0.25 / 0.75) so bilinear
+        // blending between the two texels stays away.
+        let px_at = |pixels: &[u8], x: usize| px(pixels, 100, x, 50);
+        let plain = compose(&scene([0.0, 0.0]), &[stripes.clone()], &ctx);
+        assert_eq!(px_at(&plain, 12)[2], 255, "first tile, red half");
+        assert_eq!(px_at(&plain, 37)[0], 255, "first tile, blue half");
+        assert_eq!(px_at(&plain, 62)[2], 255, "second tile, red half");
+        assert_eq!(px_at(&plain, 87)[0], 255, "second tile, blue half");
+        // The anchor phase-shifts the grid: what was red is now blue.
+        let shifted = compose(&scene([0.25, 0.0]), &[stripes], &ctx);
+        assert_eq!(px_at(&shifted, 12)[0], 255, "anchored: blue where red was");
     }
 
     /// A mask is a second texture whose ALPHA windows the quad: where the

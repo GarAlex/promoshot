@@ -1571,11 +1571,32 @@ impl PreviewEngine {
 
         // Background color: the first visible background layer's keyframed
         // color, else the settings color (same rule as the stills path).
-        let bg_hex = layers
+        let bg_layer = layers
             .iter()
-            .find(|l| l.kind == ProjectLayerKind::Background && tl::layer_is_visible(l, time))
-            .map(|l| tl::layer_background_color_hex(l, time, &settings))
-            .unwrap_or_else(|| settings.background_color_hex.clone());
+            .find(|l| l.kind == ProjectLayerKind::Background && tl::layer_is_visible(l, time));
+        // The look resolves keyframes-first, then the layer's BACKGROUND
+        // RESOURCE (rung 16 — swap-aware, so a keyframe can replace the
+        // whole plate), then the composition settings. The resource slots
+        // in by overriding a local copy of the settings: the existing
+        // keyframe resolution then falls back to it naturally.
+        let bg_all = self.meta.resources.clone().unwrap_or_default();
+        let bg_resource = bg_layer
+            .and_then(|l| tl::layer_resource_id(l, time, &bg_all))
+            .and_then(|rid| bg_all.iter().find(|r| r.id == rid))
+            .filter(|r| r.kind == promo_model::ProjectResourceKind::Background)
+            .cloned();
+        let mut bg_settings = settings.clone();
+        if let Some(style) = bg_resource.as_ref().and_then(|r| r.background.as_ref()) {
+            if let Some(hex) = &style.color_hex {
+                bg_settings.background_color_hex = hex.clone();
+            }
+            if style.gradient.is_some() {
+                bg_settings.background_gradient = style.gradient.clone();
+            }
+        }
+        let bg_hex = bg_layer
+            .map(|l| tl::layer_background_color_hex(l, time, &bg_settings))
+            .unwrap_or_else(|| bg_settings.background_color_hex.clone());
         // `@name` becomes a colour here and nowhere else, so every field
         // in the document gains the palette at once.
         let background = rgba_from_hex(settings.resolve_color(&bg_hex));
@@ -1584,11 +1605,9 @@ impl PreviewEngine {
         // hold-then-ramp timing as its colour — resolved here and converted
         // from unit canvas coordinates to the canvas pixels the shader works
         // in, so the model never has to know the output size.
-        let background_gradient = layers
-            .iter()
-            .find(|l| l.kind == ProjectLayerKind::Background && tl::layer_is_visible(l, time))
-            .and_then(|layer| tl::layer_background_gradient(layer, time, &settings))
-            .or_else(|| settings.background_gradient.clone())
+        let background_gradient = bg_layer
+            .and_then(|layer| tl::layer_background_gradient(layer, time, &bg_settings))
+            .or_else(|| bg_settings.background_gradient.clone())
             .map(|gradient| {
                 let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
                 let point = |p: promo_model::Point| [p.x() as f32 * cw, p.y() as f32 * ch];
@@ -1746,6 +1765,71 @@ impl PreviewEngine {
                         None => {
                             quads.push(quad);
                             used.push(id);
+                        }
+                    }
+                }
+                continue;
+            }
+            if layer.kind == ProjectLayerKind::Background {
+                // An image-backed background plate, drawn BARE: no border,
+                // corner, shadow or adjustments — scenery, not media. Its
+                // colour/gradient already came in through the scene
+                // background above; swap keyframes replace the plate via
+                // `layer_resource_id`, and for a TILED plate the layer's
+                // shift keyframes scroll the pattern from its anchor.
+                let all = self.meta.resources.clone().unwrap_or_default();
+                if let Some(rid) = tl::layer_resource_id(layer, centre, &all)
+                    .map(str::to_string)
+                {
+                    if let Some(resource) = all.iter().find(|r| r.id == rid) {
+                        if resource.kind == promo_model::ProjectResourceKind::Background
+                            && !resource.filename.is_empty()
+                        {
+                            let style = resource.background.clone().unwrap_or_default();
+                            let tier = self.tier_for(layer, centre);
+                            if let Some(frame_id) =
+                                self.frame(&layer.id, &rid, -1.0, tier, &used)
+                            {
+                                let frame = self.cached_frame(frame_id);
+                                let (fw, fh) =
+                                    (frame.frame.width as f64, frame.frame.height as f64);
+                                let color_709 = frame.flags & FLAG_COLOR_709 != 0;
+                                let (cw, ch) = (canvas.width(), canvas.height());
+                                let mut quad = SceneQuad {
+                                    texture: Some(0), // patched below
+                                    rect: [0.0, 0.0, cw, ch],
+                                    opacity: tl::layer_opacity(layer, time) as f32,
+                                    color_709,
+                                    ..Default::default()
+                                };
+                                match style.fill {
+                                    promo_model::BackgroundFill::Stretch => {}
+                                    promo_model::BackgroundFill::Fit => {
+                                        let scale =
+                                            (cw / fw.max(1.0)).min(ch / fh.max(1.0));
+                                        let (w, h) = (fw * scale, fh * scale);
+                                        quad.rect =
+                                            [(cw - w) / 2.0, (ch - h) / 2.0, w, h];
+                                    }
+                                    promo_model::BackgroundFill::Tile => {
+                                        let tr = tl::layer_transform_along_paths(
+                                            layer, time, &settings, &all,
+                                        );
+                                        let anchor =
+                                            style.anchor.unwrap_or([0.0, 0.0]);
+                                        quad.tile_repeats = [
+                                            (cw / fw.max(1.0)) as f32,
+                                            (ch / fh.max(1.0)) as f32,
+                                        ];
+                                        quad.tile_anchor = [
+                                            (anchor[0] + tr.horizontal_shift / cw) as f32,
+                                            (anchor[1] + tr.vertical_shift / ch) as f32,
+                                        ];
+                                    }
+                                }
+                                quads.push(quad);
+                                used.push(frame_id);
+                            }
                         }
                     }
                 }
@@ -2629,6 +2713,48 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].0, "VID");
         assert!((requests[0].1 - 2.0).abs() < 1e-9, "got {}", requests[0].1);
+    }
+
+    /// A BACKGROUND resource paints the scene: its colour floods the
+    /// canvas, and its image plate draws bare per its fill — here FIT, so
+    /// the plate letterboxes over the resource's own colour.
+    #[test]
+    fn a_background_resource_paints_colour_and_fitted_plate() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000041",
+            "name": "bg", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [],
+            "compositionSettings": {
+                "canvasWidth": 96, "canvasHeight": 48,
+                "backgroundColorHex": "00FF00"
+            },
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000BB41",
+                 "keyframes": []}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000BB41",
+                 "kind": "background", "filename": "plate.png",
+                 "displayName": "Plate", "addedAt": 0,
+                 "imageCuts": [], "disabledAudioTrackIndices": [],
+                 "background": {"fill": "fit", "colorHex": "FF0000"}}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("background fixture");
+        assert_eq!(meta.minimum_reader_version(), 16, "background is rung 16");
+        let (mut engine, _state) = make_engine(
+            meta,
+            vec![("BG".into(), [255, 0, 0, 255], 32)], // blue 32x32 plate
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(96, 48).unwrap();
+        engine.render(1.0, out.raw(), 96, 48).expect("render");
+        // FIT: 32x32 into 96x48 -> 48x48 centred at x=24..72.
+        assert_eq!(pixel(&out, 48, 24), [255, 0, 0, 255], "plate centre");
+        // The letterbox shows the RESOURCE's colour, not the settings'.
+        assert_eq!(pixel(&out, 6, 24), [0, 0, 255, 255], "resource colour bars");
     }
 
     /// The whole shadow path at once: settings resolve, the soft quad slides

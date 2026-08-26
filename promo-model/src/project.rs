@@ -93,7 +93,10 @@ strict_enum!(
         // containing one carries a minReaderVersion: this enum decodes
         // strictly, so an older binary must refuse the file rather than
         // throw halfway through.
+        // (Background — a colour/gradient/image plate — rides the same
+        // rule at rung 16; see the entry after Path below.)
         (Path, "path"),
+        (Background, "background"),
     ]
 );
 tolerant_enum!(
@@ -1937,6 +1940,48 @@ impl<'de> Deserialize<'de> for DrawingDocument {
 }
 
 /// Mirrors `ProjectResource` including its decode-time migrations: legacy
+/// What a BACKGROUND resource paints: a plain colour, a gradient (wins
+/// over the colour), and optionally an image drawn per `fill`. A
+/// background is scenery, not media — it never takes borders, corner
+/// radius or shadows. Rung 16 rides on the KIND, not these fields.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct BackgroundStyle {
+    pub fill: BackgroundFill,
+    #[serde(skip_serializing_if = "is_none")]
+    pub color_hex: Option<String>,
+    #[serde(skip_serializing_if = "is_none")]
+    pub gradient: Option<BackgroundGradient>,
+    /// The tiling's starting point in UNIT canvas coordinates (the
+    /// gradient precedent). The background layer's shift keyframes MOVE it
+    /// — the eased position track scrolls the pattern.
+    #[serde(skip_serializing_if = "is_none")]
+    pub anchor: Option<[f64; 2]>,
+}
+
+impl Default for BackgroundStyle {
+    fn default() -> Self {
+        BackgroundStyle {
+            fill: BackgroundFill::Stretch,
+            color_hex: None,
+            gradient: None,
+            anchor: None,
+        }
+    }
+}
+
+tolerant_enum!(
+    BackgroundFill,
+    Stretch,
+    [(Stretch, "stretch"), (Fit, "fit"), (Tile, "tile"),]
+);
+
+impl Default for BackgroundFill {
+    fn default() -> Self {
+        BackgroundFill::Stretch
+    }
+}
+
 /// `audioGain` (0…4) collapses into `volume` (0…1) when `volume` is absent,
 /// and `disabledAudioTrackIndices` is deduped / filtered / sorted.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1970,6 +2015,9 @@ pub struct ProjectResource {
     /// of frames that cycle over the layer's local time.
     #[serde(default, skip_serializing_if = "is_none")]
     pub sprite: Option<SpriteSheet>,
+    /// What a BACKGROUND-kind resource paints.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub background: Option<BackgroundStyle>,
     /// How the renderer samples this resource. `None` is smooth, which is
     /// right for photographs and screen captures and wrong for pixel art.
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2035,6 +2083,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     caption_style: Option<SubtitleStyle>,
     #[serde(default)]
+    background: Option<BackgroundStyle>,
+    #[serde(default)]
     caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(default)]
     drawing: Option<DrawingDocument>,
@@ -2089,6 +2139,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
         Ok(ProjectResource {
             id: w.id,
             kind: w.kind,
+            background: w.background,
             media_cuts: w.media_cuts.unwrap_or_default(),
             speed: w.speed,
             filename: w.filename,
@@ -2218,6 +2269,7 @@ impl ProjectResource {
     /// means "not measured yet", which the render paths already handle.
     pub fn placeholder(kind: ProjectResourceKind) -> Self {
         ProjectResource {
+            background: None,
             id: String::new(),
             kind,
             media_cuts: Vec::new(),
@@ -2283,6 +2335,15 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 16 is a BACKGROUND resource: kinds decode strictly, so an older
+        // binary must refuse the file rather than throw mid-decode.
+        if resources
+            .iter()
+            .any(|r| r.kind == ProjectResourceKind::Background)
+        {
+            return 16;
+        }
 
         // 10 is a per-layer motion blur. Dropped by an older reader's
         // save, the shot silently goes sharp — the same destruction test

@@ -15,7 +15,7 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "minReaderVersion": 15, "trimStart": 0, "trimEnd": 0,
+  "minReaderVersion": 16, "trimStart": 0, "trimEnd": 0,
   "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
@@ -71,7 +71,7 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 15 at the top
+The format is ONE version: stamp "minReaderVersion": 16 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
@@ -134,6 +134,23 @@ Semantics worth knowing:
   `subtitleShadowColorHex` / `subtitleShadowOpacity` /
   `subtitleShadowRadius` / `subtitleShadowOffset`; both are OFF
   unless asked for.
+- A `background` RESOURCE is what a background LAYER shows when its
+  `resourceID` names one: `{ "kind": "background", "filename":
+  "plate.png", "background": { "fill": "stretch|fit|tile", "colorHex":
+  "0E1726", "gradient": { …same shape as backgroundGradient… },
+  "anchor": [0, 0] } }`. The colour/gradient are the plate's own
+  ground (gradient wins); an image `filename` draws over it per
+  `fill` — stretched edge to edge, aspect-FIT with the ground showing
+  around it, or TILED at the image's own pixel size from `anchor`
+  (unit canvas coordinates, the gradient precedent). Background
+  plates are scenery, not media: never bordered, cornered or
+  shadowed. The background layer's KEYFRAMES compose as everywhere
+  else: `colorHex`/`gradient` keyframes override the plate's ground
+  on the usual ramps, a keyframe `resourceID` REPLACES the plate (the
+  swap rule now covers background layers), and the layer's
+  shift keyframes scroll a tiled plate's anchor on the eased position
+  track. The kind decodes strictly, so a project holding one refuses
+  to open in older readers.
 - `libraryID` on a resource is APP bookkeeping: the record is a link
   into that device's shared resource library, whose folder its
   `filename` resolves in. Renderers ignore it; the reading app treats

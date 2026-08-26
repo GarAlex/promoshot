@@ -116,6 +116,11 @@ pub fn swappable_kind(layer: &ProjectLayer) -> Option<promo_model::ProjectResour
         promo_model::ProjectLayerKind::Image => Some(promo_model::ProjectResourceKind::Image),
         promo_model::ProjectLayerKind::Caption => Some(promo_model::ProjectResourceKind::Caption),
         promo_model::ProjectLayerKind::Drawing => Some(promo_model::ProjectResourceKind::Drawing),
+        // A background swaps like an image: one plate replaces another.
+        // "Replace the background" on a keyframe is exactly this rule.
+        promo_model::ProjectLayerKind::Background => {
+            Some(promo_model::ProjectResourceKind::Background)
+        }
         _ => None,
     }
 }

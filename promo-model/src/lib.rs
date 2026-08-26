@@ -454,6 +454,7 @@ mod schema_doc_tests {
             pixel_height: Some(2532.0),
             // Device-frame record the app builds from its own catalog.
             frame: None,
+            background: None,
             looped: Some(true),
             extra: serde_json::Map::new(),
         }

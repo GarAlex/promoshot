@@ -186,14 +186,16 @@ impl Renderer {
             let mut candidates: Vec<String> = layer.resource_id.iter().cloned().collect();
             candidates.extend(layer.keyframes.iter().filter_map(|k| k.resource_id.clone()));
             candidates.dedup();
-            let Some(resource) = candidates.first().and_then(|id| project.resource(id)) else {
-                continue;
-            };
-            let Some(path) = project.resource_path(resource) else {
-                continue;
-            };
             // Only stills are preloaded; video opens while it is on screen.
+            // Video keys on the BASE resource (swaps never target video).
             if layer.kind == promo_model::ProjectLayerKind::Video {
+                let Some(resource) = candidates.first().and_then(|id| project.resource(id))
+                else {
+                    continue;
+                };
+                let Some(path) = project.resource_path(resource) else {
+                    continue;
+                };
                 // Open once now so a broken file fails here rather than
                 // mid-render, then drop it: the render reopens what it needs.
                 registry
