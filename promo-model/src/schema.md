@@ -134,6 +134,13 @@ Semantics worth knowing:
   `subtitleShadowColorHex` / `subtitleShadowOpacity` /
   `subtitleShadowRadius` / `subtitleShadowOffset`; both are OFF
   unless asked for.
+- `libraryID` on a resource is APP bookkeeping: the record is a link
+  into that device's shared resource library, whose folder its
+  `filename` resolves in. Renderers ignore it; the reading app treats
+  a link it cannot resolve as ordinary missing media; the app's
+  ARCHIVE step (the self-contained `.promo` interchange form) embeds
+  the referenced files and strips the field. Authoring tools should
+  not write it.
 - Media layers (video/image) cast the same kind of shadow:
   `videoShadowColorHex` / `videoShadowOpacity` / `videoShadowRadius` /
   `videoShadowOffset` in compositionSettings put a soft drop shadow
