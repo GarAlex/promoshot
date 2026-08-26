@@ -27,6 +27,8 @@ metadata.json (only the fields that matter for authoring):
                  { "colorHex": "1B4A8B", "at": 1 } ] },
     "videoCornerRadius": 14, "videoBorderWidth": 1,
     "videoBorderColorHex": "26364F",
+    "videoShadowColorHex": "000000", "videoShadowOpacity": 0.35,
+    "videoShadowRadius": 24, "videoShadowOffset": [0, 12],
     "subtitleFontFamily": "system", "subtitleFontSize": 54,
     "subtitleBold": true,
     "subtitleColorHex": "FFFFFF", "subtitleBackgroundOpacity": 0.0,
@@ -132,6 +134,21 @@ Semantics worth knowing:
   `subtitleShadowColorHex` / `subtitleShadowOpacity` /
   `subtitleShadowRadius` / `subtitleShadowOffset`; both are OFF
   unless asked for.
+- Media layers (video/image) cast the same kind of shadow:
+  `videoShadowColorHex` / `videoShadowOpacity` / `videoShadowRadius` /
+  `videoShadowOffset` in compositionSettings put a soft drop shadow
+  under EVERY media layer's drawn rect — corner radius, zoom, rotation
+  and transitions included. OFF by default (opacity 0). Radius is the
+  penumbra length in canvas px, offset canvas px too; both scale with
+  the layer's zoom so a bigger card casts a bigger shadow, and an
+  absent offset derives the caption drop: straight down by half the
+  blur. A resource's `frame` may override PER FIELD with
+  `shadowColorHex` / `shadowOpacity` / `shadowRadius` / `shadowOffset`
+  (authored against the same 1080-wide reference as its
+  `borderWidth`); each absent field inherits the composition default.
+  Slab-framed (3D box) and masked layers cast nothing — their
+  silhouettes are not the rect. Cosmetic like `easing`, so no rung: an
+  older reader draws the same layout, minus the shadow.
 - `placement` is the drawn box as a RULE instead of numbers, and it
   is the tool to reach for FIRST when sizing or positioning an image
   or video layer: one of `height`/`width` (drawn size in canvas px)

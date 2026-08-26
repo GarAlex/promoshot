@@ -718,6 +718,19 @@ pub struct CompositionSettings {
     pub video_border_color_hex: String,
     pub video_border_width: f64,
     pub video_corner_radius: f64,
+    /// Composition-wide drop shadow under media layers (video/image) — the
+    /// default a resource frame's own shadow fields fall back to, exactly
+    /// as captions fall back to `subtitle_shadow_*`. OFF by default: a
+    /// shadow appearing under every existing layer would change what every
+    /// project already renders.
+    pub video_shadow_color_hex: String,
+    pub video_shadow_opacity: f64,
+    /// Penumbra length in canvas px: the shadow fades out over this
+    /// distance beyond the layer's edge.
+    pub video_shadow_radius: f64,
+    /// Where the shadow falls, in canvas pixels. `None` keeps the derived
+    /// drop — straight down by half the blur — the caption rule.
+    pub video_shadow_offset: Option<[f64; 2]>,
     pub video_keyframes: Vec<VideoKeyframe>,
     pub background_keyframes: Vec<BackgroundKeyframe>,
     pub image_export_scale_percent: f64,
@@ -771,6 +784,10 @@ impl Default for CompositionSettings {
             video_border_color_hex: "FFFFFF".into(),
             video_border_width: 0.0,
             video_corner_radius: 0.0,
+            video_shadow_color_hex: "000000".into(),
+            video_shadow_opacity: 0.0,
+            video_shadow_radius: 0.0,
+            video_shadow_offset: None,
             // The layer timeline owns keyframes now, and SkillDriftTests
             // lists these two as fields an assistant must not write — yet
             // every new project was born carrying one of each. Empty is what
@@ -820,6 +837,10 @@ struct CompositionSettingsWire {
     video_border_color_hex: Option<String>,
     video_border_width: Option<f64>,
     video_corner_radius: Option<f64>,
+    video_shadow_color_hex: Option<String>,
+    video_shadow_opacity: Option<f64>,
+    video_shadow_radius: Option<f64>,
+    video_shadow_offset: Option<[f64; 2]>,
     video_keyframes: Option<Vec<VideoKeyframe>>,
     background_keyframes: Option<Vec<BackgroundKeyframe>>,
     image_export_scale_percent: Option<f64>,
@@ -892,6 +913,14 @@ impl<'de> Deserialize<'de> for CompositionSettings {
                 .unwrap_or(dflt.video_border_color_hex),
             video_border_width: w.video_border_width.unwrap_or(dflt.video_border_width),
             video_corner_radius: w.video_corner_radius.unwrap_or(dflt.video_corner_radius),
+            video_shadow_color_hex: w
+                .video_shadow_color_hex
+                .unwrap_or(dflt.video_shadow_color_hex.clone()),
+            video_shadow_opacity: w
+                .video_shadow_opacity
+                .unwrap_or(dflt.video_shadow_opacity),
+            video_shadow_radius: w.video_shadow_radius.unwrap_or(dflt.video_shadow_radius),
+            video_shadow_offset: w.video_shadow_offset,
             video_keyframes: w.video_keyframes.unwrap_or(dflt.video_keyframes),
             // Swift's fallback anchors the default background keyframe on the
             // *decoded* backgroundColorHex, not the constant.
@@ -956,6 +985,11 @@ impl Serialize for CompositionSettings {
             video_border_color_hex: &'a str,
             video_border_width: f64,
             video_corner_radius: f64,
+            video_shadow_color_hex: &'a str,
+            video_shadow_opacity: f64,
+            video_shadow_radius: f64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            video_shadow_offset: &'a Option<[f64; 2]>,
             video_keyframes: &'a [VideoKeyframe],
             background_keyframes: &'a [BackgroundKeyframe],
             image_export_scale_percent: f64,
@@ -997,6 +1031,10 @@ impl Serialize for CompositionSettings {
             video_border_color_hex: &self.video_border_color_hex,
             video_border_width: self.video_border_width,
             video_corner_radius: self.video_corner_radius,
+            video_shadow_color_hex: &self.video_shadow_color_hex,
+            video_shadow_opacity: self.video_shadow_opacity,
+            video_shadow_radius: self.video_shadow_radius,
+            video_shadow_offset: &self.video_shadow_offset,
             video_keyframes: &self.video_keyframes,
             background_keyframes: &self.background_keyframes,
             image_export_scale_percent: self.image_export_scale_percent,
@@ -1810,6 +1848,18 @@ pub struct ResourceFrame {
     pub tilt_x: f64,
     pub bezel_fraction: f64,
     pub depth_fraction: f64,
+    /// Per-resource drop shadow, each field falling back to the
+    /// composition's `video_shadow_*` default when `None` — the caption
+    /// per-field-fallback rule. Radius and offset here are authored against
+    /// the same 1080-wide reference as `border_width`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow_color_hex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow_opacity: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow_radius: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow_offset: Option<[f64; 2]>,
 }
 
 impl Default for ResourceFrame {
@@ -1824,6 +1874,10 @@ impl Default for ResourceFrame {
             tilt_x: 0.0,
             bezel_fraction: 0.03,
             depth_fraction: 0.06,
+            shadow_color_hex: None,
+            shadow_opacity: None,
+            shadow_radius: None,
+            shadow_offset: None,
         }
     }
 }

@@ -904,7 +904,7 @@ impl PreviewEngine {
         is_drawing: bool,
         resources: &[promo_model::ProjectResource],
         used: &[u64],
-    ) -> Option<(SceneQuad, u64)> {
+    ) -> Option<(SceneQuad, Option<SceneQuad>, u64)> {
         let frame_id = self.frame(&layer.id, showing, source_time, tier, used)?;
         let frame = self.cached_frame(frame_id);
         let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
@@ -1006,7 +1006,51 @@ impl PreviewEngine {
             quad.tint_rgba = tint;
         }
         quad.blend = Self::blend_for(layer);
-        Some((quad, frame_id))
+
+        // The drop shadow, as its own soft-edged solid quad under this one.
+        // Media only, and never under a slab (its silhouette is not the
+        // rect) or a masked layer (the porthole's silhouette is the mask's).
+        // Pre-framed border bakes still cast: the baked bitmap's radius
+        // derives from the same numbers `media_border_style` reads.
+        let shadow = if !is_drawing && layer.mask_resource_id.is_none() {
+            let frame_ref = self.effective_frame(layer);
+            let slab = frame_ref
+                .map(|f| f.kind == promo_model::ResourceFrameKind::Device)
+                .unwrap_or(false);
+            if slab {
+                None
+            } else {
+                media_shadow_style(frame_ref, settings, tr.zoom, canvas.width()).map(|style| {
+                    let radius =
+                        media_border_style(frame_ref, layer, settings, tr.zoom, canvas.width())
+                            .corner_radius
+                            .min(quad.rect[2].min(quad.rect[3]) * 0.5)
+                            .max(0.0);
+                    // Rect and radius inflated by half the penumbra so the
+                    // shader's falloff band straddles the TRUE edge — see
+                    // `SceneQuad::edge_soften`.
+                    let inflate = style.soften * 0.5;
+                    SceneQuad {
+                        texture: None,
+                        rect: [
+                            quad.rect[0] - inflate + style.offset[0],
+                            quad.rect[1] - inflate + style.offset[1],
+                            quad.rect[2] + inflate * 2.0,
+                            quad.rect[3] + inflate * 2.0,
+                        ],
+                        rotation_deg: quad.rotation_deg,
+                        corner_radius: radius + inflate,
+                        solid_rgba: style.rgba,
+                        opacity: quad.opacity,
+                        edge_soften: style.soften,
+                        ..Default::default()
+                    }
+                })
+            }
+        } else {
+            None
+        };
+        Some((quad, shadow, frame_id))
     }
 
     /// Where each reveal unit sits for the caption this layer shows, laid
@@ -1537,6 +1581,11 @@ impl PreviewEngine {
 
         let mut quads: Vec<SceneQuad> = Vec::new();
         let mut used: Vec<u64> = Vec::new();
+        // Drop shadows, recorded as (owner index, quad) and spliced in only
+        // after the texture patch and the mask loop below — both address
+        // `quads` by position, and a shadow inserted early would shift
+        // every index after it.
+        let mut shadow_inserts: Vec<(usize, SceneQuad)> = Vec::new();
         // Masked media quads, patched after the walk: (quad index, mask
         // resource, inverted, placement). Rasterized LAST, so a mask's cache
         // admission can never evict a frame the walk has already borrowed.
@@ -1756,7 +1805,9 @@ impl PreviewEngine {
                 // wipe needs both on screen at once, which is exactly what a
                 // swap could not do while a layer drew one quad.
                 if let Some(previous) = swap.previous.as_deref() {
-                    if let Some((mut quad, id)) = self.media_quad(
+                    // The outgoing material's shadow is discarded: one
+                    // shadow per layer, and the incoming quad carries it.
+                    if let Some((mut quad, _shadow, id)) = self.media_quad(
                         layer,
                         previous,
                         &settings,
@@ -1785,7 +1836,7 @@ impl PreviewEngine {
                     }
                 }
             }
-            let Some((mut quad, frame_id)) = self.media_quad(
+            let Some((mut quad, shadow, frame_id)) = self.media_quad(
                 layer,
                 &showing,
                 &settings,
@@ -1806,8 +1857,19 @@ impl PreviewEngine {
             }
             // After the border, so a wiped edge cuts the frame too rather
             // than leaving a stroke drawn around nothing.
+            let pre_transition = quad.rect;
             apply_transition(&mut quad, layer, time, canvas);
             quads.push(quad);
+            if let Some(mut sq) = shadow {
+                // The transition moved or faded the layer — the shadow
+                // travels glued to it. Delta'd rather than recomputed: a
+                // wipe clips uv, not rect, and needs nothing here.
+                let q = &quads[quads.len() - 1];
+                sq.rect[0] += q.rect[0] - pre_transition[0];
+                sq.rect[1] += q.rect[1] - pre_transition[1];
+                sq.opacity = q.opacity;
+                shadow_inserts.push((quads.len() - 1, sq));
+            }
             if let Some(rid) = layer.mask_resource_id.as_deref() {
                 mask_requests.push((
                     quads.len() - 1,
@@ -1868,6 +1930,14 @@ impl PreviewEngine {
                     p.rotation_deg as f32,
                 ];
             }
+        }
+
+        // Shadows slide in UNDER their layers only now: texture references
+        // are VALUES into `used` by this point (not positions), and the two
+        // loops above addressed quads by index. Reverse order keeps each
+        // recorded index valid while earlier ones are still to be inserted.
+        for (index, sq) in shadow_inserts.into_iter().rev() {
+            quads.insert(index, sq);
         }
 
         Ok((
@@ -1934,6 +2004,62 @@ fn media_border_style(
     }
 }
 
+/// The drop shadow under a media quad: colour (straight alpha), penumbra
+/// length, and offset, all in canvas px.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MediaShadowStyle {
+    rgba: [f32; 4],
+    soften: f64,
+    offset: [f64; 2],
+}
+
+/// Resolves the shadow the way captions resolve theirs: each frame field
+/// falls back PER-FIELD to the composition's `video_shadow_*` default.
+/// Frame-authored lengths are against the 1080-wide reference like
+/// `border_width`; settings-authored lengths are canvas px. Both scale with
+/// zoom — a card zoomed larger casts a larger shadow, exactly as its
+/// corners round wider. An absent offset derives the caption drop: straight
+/// down by half the blur. `None` when the resolved shadow would not draw.
+fn media_shadow_style(
+    frame: Option<&promo_model::ResourceFrame>,
+    settings: &promo_model::CompositionSettings,
+    zoom: f64,
+    canvas_width: f64,
+) -> Option<MediaShadowStyle> {
+    let zoom = tl::clamped_zoom(zoom);
+    let frame_scale = canvas_width / 1080.0;
+    let opacity = frame
+        .and_then(|f| f.shadow_opacity)
+        .unwrap_or(settings.video_shadow_opacity);
+    if opacity <= 0.0 {
+        return None;
+    }
+    let soften = match frame.and_then(|f| f.shadow_radius) {
+        Some(r) => (r * frame_scale).max(0.0) * zoom,
+        None => settings.video_shadow_radius.max(0.0) * zoom,
+    };
+    let offset = match frame.and_then(|f| f.shadow_offset) {
+        Some([x, y]) => [x * frame_scale * zoom, y * frame_scale * zoom],
+        None => match settings.video_shadow_offset {
+            Some([x, y]) => [x * zoom, y * zoom],
+            None => [0.0, soften / 2.0],
+        },
+    };
+    if soften <= 0.0 && offset[0].abs() < 1e-9 && offset[1].abs() < 1e-9 {
+        return None;
+    }
+    let hex = frame
+        .and_then(|f| f.shadow_color_hex.as_deref())
+        .unwrap_or(&settings.video_shadow_color_hex);
+    let mut rgba = rgba_from_hex(settings.resolve_color(hex));
+    rgba[3] = (opacity as f32).clamp(0.0, 1.0);
+    Some(MediaShadowStyle {
+        rgba,
+        soften,
+        offset,
+    })
+}
+
 #[cfg(test)]
 mod border_style_tests {
     use super::*;
@@ -1990,6 +2116,45 @@ mod border_style_tests {
             (style.border_width - 2.0).abs() < 1e-9,
             "1px floor × zoom 2"
         );
+    }
+
+    #[test]
+    fn shadow_is_off_by_default_and_settings_switch_it_on() {
+        let mut settings = promo_model::CompositionSettings::default();
+        assert!(media_shadow_style(None, &settings, 1.0, 1920.0).is_none());
+        settings.video_shadow_opacity = 0.5;
+        settings.video_shadow_radius = 20.0;
+        let style = media_shadow_style(None, &settings, 2.0, 1920.0).unwrap();
+        // Canvas px × zoom, and the derived drop: down by half the blur.
+        assert!((style.soften - 40.0).abs() < 1e-9);
+        assert!((style.offset[0]).abs() < 1e-9);
+        assert!((style.offset[1] - 20.0).abs() < 1e-9);
+        assert!((style.rgba[3] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn frame_shadow_fields_override_per_field_with_1080_reference() {
+        let mut settings = promo_model::CompositionSettings::default();
+        settings.video_shadow_opacity = 0.5; // inherited: frame sets none
+        let mut frame = border_frame();
+        frame.shadow_radius = Some(10.0); // authored at 1080-wide
+        let style = media_shadow_style(Some(&frame), &settings, 1.0, 1920.0).unwrap();
+        assert!((style.soften - 10.0 * 1920.0 / 1080.0).abs() < 1e-9);
+        // Opacity came from the composition — the caption fallback rule.
+        assert!((style.rgba[3] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn zero_opacity_or_zero_geometry_draws_nothing() {
+        let mut settings = promo_model::CompositionSettings::default();
+        settings.video_shadow_radius = 20.0; // opacity still 0
+        assert!(media_shadow_style(None, &settings, 1.0, 1920.0).is_none());
+        settings.video_shadow_radius = 0.0;
+        settings.video_shadow_opacity = 1.0; // no blur, no offset
+        assert!(media_shadow_style(None, &settings, 1.0, 1920.0).is_none());
+        // A hard offset shadow with no blur still draws.
+        settings.video_shadow_offset = Some([6.0, 6.0]);
+        assert!(media_shadow_style(None, &settings, 1.0, 1920.0).is_some());
     }
 }
 
@@ -2429,6 +2594,40 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].0, "VID");
         assert!((requests[0].1 - 2.0).abs() < 1e-9, "got {}", requests[0].1);
+    }
+
+    /// The whole shadow path at once: settings resolve, the soft quad slides
+    /// in UNDER its layer, and — the part only a render can say — the
+    /// post-hoc splice leaves every texture index pointing at the right
+    /// frame (a broken splice here paints the video with the wrong texture,
+    /// not just a missing shadow).
+    #[test]
+    fn a_media_shadow_draws_under_the_layer_and_shifts_no_textures() {
+        let mut meta = tests_support::fixture_meta(64.0);
+        // Loud red, fully opaque, 16 canvas px of penumbra (× the layer's
+        // 0.5 zoom → 8), offset derived: straight down by half the blur.
+        meta.composition_settings.video_shadow_color_hex = "FF0000".into();
+        meta.composition_settings.video_shadow_opacity = 1.0;
+        meta.composition_settings.video_shadow_radius = 16.0;
+        let (mut engine, _state) = make_engine(
+            meta,
+            vec![("VID".into(), [255, 0, 0, 255], 32)], // blue frame
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(3.0, out.raw(), 64, 64).expect("render");
+
+        // The media quad still shows ITS texture at its place (16..48).
+        assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "video frame");
+        // Just below the media's bottom edge (48): the red penumbra over
+        // the green background — red present, background green suppressed.
+        let below = pixel(&out, 32, 50);
+        assert!(
+            below[2] > 100 && below[1] < 60,
+            "shadow below the layer: {below:?}"
+        );
+        // Far corners stay pure background: the shadow ends.
+        assert_eq!(pixel(&out, 2, 2), [0, 51, 0, 255], "background untouched");
     }
 
     #[test]

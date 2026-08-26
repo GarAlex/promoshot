@@ -79,6 +79,13 @@ pub struct SceneQuad {
     /// about the flown centre. Identity `[0, 0, 1, 0]` samples exactly as
     /// before — the window sits where the rect put it.
     pub mask_transform: [f32; 4],
+    /// Soft-edge length in canvas px: 0 keeps the crisp ~1px analytic AA,
+    /// anything more turns the edge into a smoothstep penumbra fading to
+    /// nothing at the rect's edge. This is how a drop-shadow quad is drawn:
+    /// a solid rounded rect whose rect and radius arrive pre-inflated by
+    /// half the penumbra (rounded rects are closed under offsetting, so the
+    /// falloff bands match the true rect's outside distance exactly).
+    pub edge_soften: f64,
 }
 
 impl Default for SceneQuad {
@@ -104,6 +111,7 @@ impl Default for SceneQuad {
             mask_zoom_y: 1.0,
             mask_half: [0.0, 0.0],
             mask_transform: [0.0, 0.0, 1.0, 0.0],
+            edge_soften: 0.0,
         }
     }
 }
@@ -206,6 +214,10 @@ struct Quad {
     // xy = half-size of the mask's own box inside the rect (its proportions,
     // aspect-fitted and centred). (0, 0) stretches it over the whole rect.
     mask_box: vec4<f32>,
+    // x = edge soften length in canvas px (0 = crisp ~1px AA edge). A
+    // drop-shadow quad sets it: the edge becomes a smoothstep penumbra
+    // fading to zero at the (pre-inflated) rect's edge.
+    extra: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -331,7 +343,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let aa = 1.0;
 
     let d_outer = sd_round_rect(in.local, half, radius);
-    let coverage = clamp(0.5 - d_outer / aa, 0.0, 1.0);
+    var coverage: f32;
+    let soften = quad.extra.x;
+    if soften > 0.0 {
+        // Soft edge (drop shadows): full inside, smoothstep to nothing at
+        // the rect's edge. The caller pre-inflated rect and radius by half
+        // the penumbra, so the band straddles the TRUE edge like a blur.
+        coverage = 1.0 - smoothstep(-soften, 0.0, d_outer);
+    } else {
+        coverage = clamp(0.5 - d_outer / aa, 0.0, 1.0);
+    }
     if coverage <= 0.0 {
         discard;
     }
@@ -455,6 +476,7 @@ struct QuadRaw {
     mask: [f32; 4],
     mask_xform: [f32; 4],
     mask_box: [f32; 4],
+    extra: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -1239,6 +1261,7 @@ impl Compositor {
                     ]
                 },
                 mask_box: [q.mask_half[0], q.mask_half[1], 0.0, 0.0],
+                extra: [q.edge_soften as f32, 0.0, 0.0, 0.0],
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1426,6 +1449,7 @@ impl Compositor {
             mask: [0.0; 4],
             mask_xform: [0.0, 0.0, 1.0, 0.0],
             mask_box: [0.0; 4],
+            extra: [0.0; 4],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
@@ -1741,6 +1765,44 @@ mod tests {
         assert_eq!(px(&pixels, 200, 190, 50), [0, 0, 255, 255], "right bar red");
         assert_eq!(px(&pixels, 200, 60, 10), [0, 255, 0, 255], "canvas green");
         assert_eq!(px(&pixels, 200, 100, 50), [255, 0, 0, 255], "quad blue");
+    }
+
+    /// A soft-edged solid quad is the drop-shadow primitive: full inside
+    /// the TRUE rect, fading to nothing at the (pre-inflated) rect's edge,
+    /// half-covered exactly at the true edge — the blur-like penumbra.
+    #[test]
+    fn a_soft_edge_fades_a_solid_quad_out() {
+        let ctx = GpuContext::new().expect("gpu");
+        // True rect 40..60 with a 20px penumbra: the engine convention
+        // inflates rect and radius by half of it → 30..70, radius 10.
+        let scene = Scene {
+            canvas_width: 100.0,
+            canvas_height: 100.0,
+            background_rgba: [0.0, 0.0, 0.0, 1.0],
+            background_gradient: None,
+            output_width: 100,
+            output_height: 100,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![SceneQuad {
+                rect: [30.0, 30.0, 40.0, 40.0],
+                solid_rgba: [1.0, 1.0, 1.0, 1.0],
+                corner_radius: 10.0,
+                edge_soften: 20.0,
+                ..Default::default()
+            }],
+        };
+        let pixels = compose(&scene, &[], &ctx);
+        assert_eq!(px(&pixels, 100, 50, 50), [255, 255, 255, 255], "core solid");
+        let edge = px(&pixels, 100, 40, 50); // the true edge: half covered
+        assert!(
+            (edge[0] as i32 - 128).abs() <= 12,
+            "true edge ~half: {edge:?}"
+        );
+        assert_eq!(px(&pixels, 100, 25, 50), [0, 0, 0, 255], "beyond: nothing");
+        // Monotonic fade across the penumbra.
+        let a = px(&pixels, 100, 35, 50)[0];
+        let b = px(&pixels, 100, 45, 50)[0];
+        assert!(a < 128 && b > 128, "fade runs outward: {a} < 128 < {b}");
     }
 
     /// A mask is a second texture whose ALPHA windows the quad: where the
