@@ -455,6 +455,7 @@ mod schema_doc_tests {
             // Device-frame record the app builds from its own catalog.
             frame: None,
             background: None,
+            palette: None,
             looped: Some(true),
             extra: serde_json::Map::new(),
         }
@@ -479,6 +480,7 @@ mod schema_doc_tests {
                 name: "accent".into(),
                 color_hex: "5B8CFF".into(),
             }]),
+            palette_resource_id: None,
             subtitle_background_color_hex: "000000".into(),
             subtitle_background_opacity: 0.7,
             subtitle_background_padding: 16.0,

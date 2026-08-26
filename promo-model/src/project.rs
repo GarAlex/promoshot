@@ -97,6 +97,10 @@ strict_enum!(
         // rule at rung 16; see the entry after Path below.)
         (Path, "path"),
         (Background, "background"),
+        // A named-colour set (rung 17). The DEFINITION only: the project's
+        // settings.palette stays what every resolver reads — the app
+        // materializes the selected palette resource into it on open/save.
+        (Palette, "palette"),
     ]
 );
 tolerant_enum!(
@@ -697,6 +701,11 @@ pub struct CompositionSettings {
     pub background_gradient: Option<BackgroundGradient>,
     /// Named colours any colour field may reference as `@name`.
     pub palette: Option<Vec<PaletteColor>>,
+    /// The PALETTE resource this project follows, when one is selected.
+    /// `palette` above is its materialized copy (the app rewrites it on
+    /// open and save), so every resolver keeps reading one field. Wire
+    /// name `paletteResourceID` (the wire and borrow structs carry it).
+    pub palette_resource_id: Option<String>,
     pub subtitle_background_color_hex: String,
     pub subtitle_background_opacity: f64,
     pub subtitle_background_padding: f64,
@@ -749,6 +758,7 @@ impl Default for CompositionSettings {
             canvas_width: 1920.0,
             canvas_height: 1080.0,
             fps: None,
+            palette_resource_id: None,
             // Symmetric, and low in the frame. The old defaults — 720 left
             // against 60 right — came from captions set beside a phone
             // screenshot: on a 1920 canvas they put the text panel at
@@ -813,6 +823,8 @@ impl Default for CompositionSettings {
 struct CompositionSettingsWire {
     background_gradient: Option<BackgroundGradient>,
     palette: Option<Vec<PaletteColor>>,
+    #[serde(rename = "paletteResourceID")]
+    palette_resource_id: Option<String>,
     canvas_width: Option<f64>,
     fps: Option<f64>,
     canvas_height: Option<f64>,
@@ -864,6 +876,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
         Ok(CompositionSettings {
             background_gradient: w.background_gradient,
             palette: w.palette,
+            palette_resource_id: w.palette_resource_id,
             canvas_width: w.canvas_width.unwrap_or(dflt.canvas_width),
             // Absent means "renders at 30", which is not the same as 30 being
             // written down — so it stays None rather than defaulting here.
@@ -971,6 +984,9 @@ impl Serialize for CompositionSettings {
             background_gradient: &'a Option<BackgroundGradient>,
             #[serde(skip_serializing_if = "Option::is_none")]
             palette: &'a Option<Vec<PaletteColor>>,
+            #[serde(rename = "paletteResourceID",
+                    skip_serializing_if = "Option::is_none")]
+            palette_resource_id: &'a Option<String>,
             subtitle_background_color_hex: &'a str,
             subtitle_background_opacity: f64,
             subtitle_background_padding: f64,
@@ -1019,6 +1035,7 @@ impl Serialize for CompositionSettings {
             background_color_hex: &self.background_color_hex,
             background_gradient: &self.background_gradient,
             palette: &self.palette,
+            palette_resource_id: &self.palette_resource_id,
             subtitle_background_color_hex: &self.subtitle_background_color_hex,
             subtitle_background_opacity: self.subtitle_background_opacity,
             subtitle_background_padding: self.subtitle_background_padding,
@@ -2018,6 +2035,10 @@ pub struct ProjectResource {
     /// What a BACKGROUND-kind resource paints.
     #[serde(default, skip_serializing_if = "is_none")]
     pub background: Option<BackgroundStyle>,
+    /// A PALETTE-kind resource's entries — the shape of
+    /// `settings.palette`, which a selected palette materializes into.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub palette: Option<Vec<PaletteColor>>,
     /// How the renderer samples this resource. `None` is smooth, which is
     /// right for photographs and screen captures and wrong for pixel art.
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2085,6 +2106,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     background: Option<BackgroundStyle>,
     #[serde(default)]
+    palette: Option<Vec<PaletteColor>>,
+    #[serde(default)]
     caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(default)]
     drawing: Option<DrawingDocument>,
@@ -2140,6 +2163,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             id: w.id,
             kind: w.kind,
             background: w.background,
+            palette: w.palette,
             media_cuts: w.media_cuts.unwrap_or_default(),
             speed: w.speed,
             filename: w.filename,
@@ -2270,6 +2294,7 @@ impl ProjectResource {
     pub fn placeholder(kind: ProjectResourceKind) -> Self {
         ProjectResource {
             background: None,
+            palette: None,
             id: String::new(),
             kind,
             media_cuts: Vec::new(),
@@ -2335,6 +2360,14 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 17 is a PALETTE resource — the same strict-kind rule as 16.
+        if resources
+            .iter()
+            .any(|r| r.kind == ProjectResourceKind::Palette)
+        {
+            return 17;
+        }
 
         // 16 is a BACKGROUND resource: kinds decode strictly, so an older
         // binary must refuse the file rather than throw mid-decode.
@@ -3002,6 +3035,50 @@ mod placement_model_tests {
 
 #[cfg(test)]
 mod palette_tests {
+    use super::*;
+
+    /// The palette RESOURCE: rung 17, and the definition + selection field
+    /// round-trip. `settings.palette` stays the materialized copy every
+    /// resolver reads — that is the whole design.
+    #[test]
+    fn a_palette_resource_is_rung_17_and_round_trips() {
+        let json = serde_json::json!({
+            "id": "P", "name": "p", "createdAt": 0.0, "state": "recorded",
+            "subtitles": [], "trimStart": 0.0, "trimEnd": 0.0,
+            "videoDuration": 0.0,
+            "compositionSettings": {"paletteResourceID": "CCCCCCCC-0000-4000-8000-000000000041"},
+            "resources": [{
+                "id": "CCCCCCCC-0000-4000-8000-000000000041",
+                "kind": "palette", "filename": "", "displayName": "Studio",
+                "addedAt": 0.0, "imageCuts": [],
+                "disabledAudioTrackIndices": [],
+                "palette": [
+                    {"name": "canvas", "colorHex": "101014"},
+                    {"name": "accent", "colorHex": "5B8CFF"}
+                ]
+            }],
+            "layers": []
+        });
+        let project: ProjectMetadata =
+            serde_json::from_value(json).expect("a palette resource decodes");
+        assert_eq!(project.minimum_reader_version(), 17);
+        let resource = &project.resources.as_deref().unwrap()[0];
+        assert_eq!(resource.kind, ProjectResourceKind::Palette);
+        assert_eq!(resource.palette.as_deref().unwrap().len(), 2);
+        assert_eq!(
+            project.composition_settings.palette_resource_id.as_deref(),
+            Some("CCCCCCCC-0000-4000-8000-000000000041")
+        );
+
+        // And the fields survive a rewrite.
+        let out = serde_json::to_value(&project).expect("serializes");
+        assert_eq!(
+            out["compositionSettings"]["paletteResourceID"],
+            "CCCCCCCC-0000-4000-8000-000000000041"
+        );
+        assert_eq!(out["resources"][0]["palette"][1]["colorHex"], "5B8CFF");
+    }
+
     use super::*;
 
     #[test]

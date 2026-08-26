@@ -15,7 +15,7 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "minReaderVersion": 16, "trimStart": 0, "trimEnd": 0,
+  "minReaderVersion": 17, "trimStart": 0, "trimEnd": 0,
   "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
@@ -71,7 +71,7 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 16 at the top
+The format is ONE version: stamp "minReaderVersion": 17 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
@@ -204,6 +204,16 @@ Semantics worth knowing:
   more than once — re-skinning a project then means editing one
   entry rather than hunting every occurrence. Colours are stored as
   bare `RRGGBB`; a leading `#` is accepted on read.
+- A `palette` RESOURCE carries the same entries as a reusable
+  definition: `{ "kind": "palette", "filename": "", "displayName":
+  "Studio Dark", "palette": [{ "name": "canvas", "colorHex":
+  "101014" }, …] }`. `compositionSettings.paletteResourceID` records
+  which one the project follows; `compositionSettings.palette` is its
+  MATERIALIZED copy — the app rewrites it from the resource on open
+  and save, and every resolver keeps reading `settings.palette`, so a
+  hand-authored document may simply write `palette` and skip the
+  resource entirely. When authoring both, keep them consistent: the
+  resource wins on the next open.
 - backgroundGradient replaces the flat backgroundColorHex, which
   stays as the fallback. `kind` is linear (colours run from `start`
   to `end`) or radial (outward from `start`, reaching the last stop
