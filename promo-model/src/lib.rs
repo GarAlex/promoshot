@@ -267,8 +267,8 @@ mod schema_doc_tests {
                     at: 1.0,
                 },
             ],
-            start: Point(0.0, 0.0),
-            end: Point(1.0, 1.0),
+            start: Some(Point(0.0, 0.0)),
+            end: Some(Point(1.0, 1.0)),
             repeat: Some(GradientRepeat::Mirror),
         }
     }

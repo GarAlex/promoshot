@@ -1330,11 +1330,18 @@ pub struct BackgroundGradient {
     /// Ordered by position. Two or more; a gradient of one colour is a fill,
     /// and should be written as `backgroundColorHex` instead.
     pub stops: Vec<GradientStop>,
-    /// Linear: where the ramp begins. Radial: the centre.
-    pub start: Point,
+    /// Linear: where the ramp begins. Radial: the centre. ABSENT means
+    /// "follow the surface underneath": a background layer keyframe's
+    /// gradient without geometry pulls the PLATE's start/end at every
+    /// read, so a recolour-only keyframe tracks later plate edits live;
+    /// a plate without one uses the canonical default for its kind.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub start: Option<Point>,
     /// Linear: where it ends. Radial: a point at the outer edge, so the
-    /// distance between the two is the radius.
-    pub end: Point,
+    /// distance between the two is the radius. Absent inherits (see
+    /// `start`).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub end: Option<Point>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub repeat: Option<GradientRepeat>,
 }
@@ -1343,6 +1350,32 @@ impl BackgroundGradient {
     /// The most stops the renderer carries. Eight is far past what a
     /// background wants and keeps the per-frame uniform a fixed size.
     pub const MAX_STOPS: usize = 8;
+
+    /// The canonical geometry for a gradient of `kind` that states none:
+    /// linear runs top to bottom; radial blooms from the centre to a
+    /// corner.
+    pub fn default_geometry(kind: GradientKind) -> (Point, Point) {
+        match kind {
+            GradientKind::Radial => (Point(0.5, 0.5), Point(1.0, 1.0)),
+            _ => (Point(0.5, 0.0), Point(0.5, 1.0)),
+        }
+    }
+
+    /// This gradient with absent geometry and repeat RESOLVED — against
+    /// `base` (the plate's gradient, when a keyframe rides one), else the
+    /// canonical default. Everything that consumes geometry reads through
+    /// this, which is what makes "no angle/width in the keyframe" mean
+    /// "the plate's, live" rather than "whatever was frozen at write".
+    pub fn resolved_geometry(&self, base: Option<&BackgroundGradient>) -> BackgroundGradient {
+        let fallback = Self::default_geometry(self.kind);
+        let base_start = base.and_then(|b| b.start);
+        let base_end = base.and_then(|b| b.end);
+        let mut resolved = self.clone();
+        resolved.start = Some(self.start.or(base_start).unwrap_or(fallback.0));
+        resolved.end = Some(self.end.or(base_end).unwrap_or(fallback.1));
+        resolved.repeat = self.repeat.or(base.and_then(|b| b.repeat));
+        resolved
+    }
 
     pub fn effective_repeat(&self) -> GradientRepeat {
         self.repeat.unwrap_or(GradientRepeat::Clamp)

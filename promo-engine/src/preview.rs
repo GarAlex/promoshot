@@ -1608,9 +1608,15 @@ impl PreviewEngine {
         let background_gradient = bg_layer
             .and_then(|layer| tl::layer_background_gradient(layer, time, &bg_settings))
             .or_else(|| bg_settings.background_gradient.clone())
+            // Absent geometry resolved at READ — the timeline already
+            // resolved keyframed gradients against the plate; this covers
+            // the plate/settings fallbacks themselves.
+            .map(|gradient| gradient.resolved_geometry(None))
             .map(|gradient| {
                 let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
                 let point = |p: promo_model::Point| [p.x() as f32 * cw, p.y() as f32 * ch];
+                let fallback =
+                    promo_model::BackgroundGradient::default_geometry(gradient.kind);
                 promo_gpu::compositor::SceneGradient {
                     radial: gradient.kind == promo_model::GradientKind::Radial,
                     repeat: match gradient.effective_repeat() {
@@ -1618,8 +1624,8 @@ impl PreviewEngine {
                         promo_model::GradientRepeat::Repeat => 1,
                         promo_model::GradientRepeat::Mirror => 2,
                     },
-                    start: point(gradient.start),
-                    end: point(gradient.end),
+                    start: point(gradient.start.unwrap_or(fallback.0)),
+                    end: point(gradient.end.unwrap_or(fallback.1)),
                     stops: gradient
                         .resolved_stops()
                         .iter()

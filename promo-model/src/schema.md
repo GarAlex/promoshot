@@ -215,6 +215,13 @@ Semantics worth knowing:
   hand-authored document may simply write `palette` and skip the
   resource entirely. When authoring both, keep them consistent: the
   resource wins on the next open.
+- A gradient's `start`/`end` (and `repeat`) may be OMITTED on a
+  background LAYER keyframe's gradient: absent geometry is pulled
+  from the PLATE's gradient at every read — so a keyframe that only
+  recolours follows the plate's later angle/width edits live, and
+  only a keyframe that states geometry freezes it. A plate (or
+  settings gradient) with absent geometry uses the canonical default
+  for its kind: linear top→bottom, radial centre→corner.
 - backgroundGradient replaces the flat backgroundColorHex, which
   stays as the fallback. `kind` is linear (colours run from `start`
   to `end`) or radial (outward from `start`, reaching the last stop

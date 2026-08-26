@@ -27,14 +27,22 @@ fn blend(
 ) -> BackgroundGradient {
     let lerp = |x: f64, y: f64| x + (y - x) * progress;
     let (from, to) = (a.resolved_stops(), b.resolved_stops());
+    // Callers hand in RESOLVED gradients (geometry made concrete against
+    // the plate), so the unwraps below cannot fire on real input.
+    let fallback = BackgroundGradient::default_geometry(b.kind);
+    let (a_start, a_end) = (a.start.unwrap_or(fallback.0), a.end.unwrap_or(fallback.1));
+    let (b_start, b_end) = (b.start.unwrap_or(fallback.0), b.end.unwrap_or(fallback.1));
     BackgroundGradient {
         kind: b.kind,
         repeat: b.repeat,
-        start: promo_model::Point(
-            lerp(a.start.x(), b.start.x()),
-            lerp(a.start.y(), b.start.y()),
-        ),
-        end: promo_model::Point(lerp(a.end.x(), b.end.x()), lerp(a.end.y(), b.end.y())),
+        start: Some(promo_model::Point(
+            lerp(a_start.x(), b_start.x()),
+            lerp(a_start.y(), b_start.y()),
+        )),
+        end: Some(promo_model::Point(
+            lerp(a_end.x(), b_end.x()),
+            lerp(a_end.y(), b_end.y()),
+        )),
         stops: from
             .iter()
             .zip(to.iter())
@@ -74,10 +82,20 @@ pub fn layer_background_gradient(
         });
         keyed
     };
+    // `defaults.background_gradient` carries the PLATE's gradient when a
+    // background resource is bound (the engine merges it in), so resolving
+    // every keyframed gradient against it is what makes absent
+    // angle/width/repeat mean "the plate's, at every read".
+    let base = defaults.background_gradient.as_ref();
     if keyed.is_empty() {
-        return defaults.background_gradient.clone();
+        return base.map(|gradient| gradient.resolved_geometry(None));
     }
-    let at = |k: &ProjectLayerKeyframe| k.gradient.clone().expect("filtered");
+    let at = |k: &ProjectLayerKeyframe| {
+        k.gradient
+            .clone()
+            .expect("filtered")
+            .resolved_geometry(base)
+    };
 
     let first = keyed[0];
     let last = keyed[keyed.len() - 1];
@@ -183,7 +201,7 @@ mod tests {
         let start = layer_background_gradient(&layer, 0.0, &settings()).expect("start");
         let end = layer_background_gradient(&layer, 4.0, &settings()).expect("end");
         // One period along: the axis has moved by its own length.
-        assert!((end.start.x() - start.end.x()).abs() < 1e-9);
+        assert!((end.start.unwrap().x() - start.end.unwrap().x()).abs() < 1e-9);
         assert_eq!(start.effective_repeat(), GradientRepeat::Repeat);
 
         // Halfway, the axis is halfway — the geometry is what animates, not
@@ -191,11 +209,49 @@ mod tests {
         // a cross-fade.
         let middle = layer_background_gradient(&layer, 2.0, &settings()).expect("middle");
         assert!(
-            (middle.start.x() - 0.125).abs() < 1e-9,
+            (middle.start.unwrap().x() - 0.125).abs() < 1e-9,
             "{:?}",
             middle.start
         );
         assert_eq!(middle.stops[0].color_hex, "112244", "colours unchanged");
+    }
+
+    /// A keyframe that only recolours — no start/end — INHERITS the
+    /// plate's geometry at every read: re-angle the plate later and the
+    /// keyframed look follows, because nothing was frozen at write.
+    #[test]
+    fn a_geometryless_keyframe_pulls_the_plates_angle_at_read() {
+        let layer = layer_with(
+            r#"{"id": "A", "time": 0, "transitionDuration": 0,
+                "gradient": {"kind": "linear",
+                             "stops": [{"colorHex": "FF0000", "at": 0},
+                                       {"colorHex": "00FF00", "at": 1}]}}"#,
+        );
+        let mut defaults = settings();
+        defaults.background_gradient = Some(BackgroundGradient {
+            kind: GradientKind::Linear,
+            stops: vec![
+                GradientStop { color_hex: "000000".into(), at: 0.0 },
+                GradientStop { color_hex: "FFFFFF".into(), at: 1.0 },
+            ],
+            start: Some(Point(0.0, 0.5)),
+            end: Some(Point(1.0, 0.5)),
+            repeat: Some(GradientRepeat::Repeat),
+        });
+        let resolved = layer_background_gradient(&layer, 0.0, &defaults).expect("gradient");
+        // The keyframe's colours…
+        assert_eq!(resolved.stops[0].color_hex, "FF0000");
+        // …on the PLATE's axis and repeat.
+        assert_eq!(resolved.start, Some(Point(0.0, 0.5)));
+        assert_eq!(resolved.end, Some(Point(1.0, 0.5)));
+        assert_eq!(resolved.effective_repeat(), GradientRepeat::Repeat);
+
+        // The plate re-angles; the same keyframe follows at the next read.
+        defaults.background_gradient.as_mut().unwrap().start = Some(Point(0.5, 0.0));
+        defaults.background_gradient.as_mut().unwrap().end = Some(Point(0.5, 1.0));
+        let followed = layer_background_gradient(&layer, 0.0, &defaults).expect("gradient");
+        assert_eq!(followed.start, Some(Point(0.5, 0.0)));
+        assert_eq!(followed.stops[0].color_hex, "FF0000");
     }
 
     #[test]
@@ -276,8 +332,8 @@ mod tests {
                 "stops": [{"colorHex": "000000", "at": 0},
                           {"colorHex": "FFFFFF", "at": 1}]}"#,
         );
-        assert_eq!(g.start, Point(0.25, 0.75));
-        assert_eq!(g.end, Point(1.0, 0.5));
+        assert_eq!(g.start, Some(Point(0.25, 0.75)));
+        assert_eq!(g.end, Some(Point(1.0, 0.5)));
     }
 
     /// Stops that name palette colours blend exactly like written-out ones.
