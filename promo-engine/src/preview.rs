@@ -209,6 +209,15 @@ pub struct PreviewEngine {
     /// re-ask, N times, and without this memo each sub-build would decode
     /// the same frame again.
     scratch_key: HashMap<(String, i64, i32), u64>,
+    /// The frame each layer+resource most recently SHOWED, for the live
+    /// canvas's miss path: a host decode that fails or arrives late must
+    /// hold the last picture, not blank the layer for one render — a long
+    /// video's mid-GOP seeks miss often enough that the drop-out reads as
+    /// BLINKING during playback. Best-effort: the id may have been evicted
+    /// since (checked before use). Export/transient renders never consult
+    /// it — a stale frame silently written into a delivered file would
+    /// hide the decode failure instead of surfacing it.
+    recent_by_subject: HashMap<String, u64>,
 }
 
 // The raw `user` pointer is owned by the host and promised valid for the
@@ -256,6 +265,7 @@ impl PreviewEngine {
             retain_scratch: false,
             builds: 0,
             scratch_key: HashMap::new(),
+            recent_by_subject: HashMap::new(),
         })
     }
 
@@ -523,6 +533,7 @@ impl PreviewEngine {
         } else if let Some(&id) = self.key_of.get(&key) {
             self.governor.touch(id);
             self.hits += 1;
+            self.recent_by_subject.insert(key.0.clone(), id);
             return Some(id);
         }
 
@@ -540,15 +551,22 @@ impl PreviewEngine {
             &mut flags,
         );
         if rc != 0 {
-            return None;
+            // Hold the last picture rather than blanking the layer for one
+            // render — see `recent_by_subject`. Never for transient
+            // (export) frames: a delivered file must not paper over misses.
+            return self.recent_frame(&key.0, transient);
         }
         // SAFETY: the provider contract requires a CPU_PIXELS descriptor to
         // address bytes_per_row * height readable bytes for this call; the
         // conversion copies them before returning.
-        let gpu_surface = unsafe { surface.to_gpu_surface() }?;
+        let Some(gpu_surface) = (unsafe { surface.to_gpu_surface() }) else {
+            return self.recent_frame(&key.0, transient);
+        };
         // One import entry point: retains and adopts on Apple, uploads
         // elsewhere, and hands back something that owns what it needs.
-        let frame = Compositor::import(self.ctx, &gpu_surface).ok()?;
+        let Ok(frame) = Compositor::import(self.ctx, &gpu_surface) else {
+            return self.recent_frame(&key.0, transient);
+        };
         let (width, height) = (frame.width as usize, frame.height as usize);
 
         self.misses += 1;
@@ -572,7 +590,24 @@ impl PreviewEngine {
         }
         self.cache.insert(id, entry);
         self.key_of.insert(key.clone(), id);
+        self.recent_by_subject.insert(key.0.clone(), id);
         self.id_of.insert(id, key);
+        Some(id)
+    }
+
+    /// The last frame this layer+resource actually showed, if it is still
+    /// cached — the live canvas's answer to a provider miss. `None` in
+    /// transient (export) mode, for a subject never yet shown, or once the
+    /// governor has evicted the frame.
+    fn recent_frame(&mut self, subject: &str, transient: bool) -> Option<u64> {
+        if transient {
+            return None;
+        }
+        let id = *self.recent_by_subject.get(subject)?;
+        if !self.cache.contains_key(&id) {
+            return None;
+        }
+        self.governor.touch(id);
         Some(id)
     }
 
@@ -2628,6 +2663,33 @@ mod tests {
         );
         // Far corners stay pure background: the shadow ends.
         assert_eq!(pixel(&out, 2, 2), [0, 51, 0, 255], "background untouched");
+    }
+
+    /// The live canvas's miss rule: a provider that cannot serve a frame
+    /// (a long video's mid-GOP seek failing under playback pressure) must
+    /// leave the layer showing its LAST picture, not blank it for one
+    /// render — the blank-every-few-ticks failure reads as blinking. A
+    /// layer never shown stays absent: there is nothing to hold.
+    #[test]
+    fn a_provider_miss_holds_the_last_frame_instead_of_blinking() {
+        let meta = tests_support::fixture_meta(64.0);
+        let (mut engine, state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+
+        // Failing provider, never-shown layer: background, no phantom.
+        engine.render(3.0, out.raw(), 64, 64).expect("render");
+        assert_eq!(pixel(&out, 30, 30), [0, 51, 0, 255], "no phantom frame");
+
+        // A frame arrives...
+        state.lock().unwrap().colors = vec![("VID".into(), [255, 0, 0, 255], 32)];
+        engine.render(3.5, out.raw(), 64, 64).expect("render");
+        assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "live frame");
+
+        // ...then the decoder misses at a NEW time: the layer holds the
+        // last picture instead of blinking out.
+        state.lock().unwrap().colors = vec![];
+        engine.render(4.5, out.raw(), 64, 64).expect("render");
+        assert_eq!(pixel(&out, 30, 30), [255, 0, 0, 255], "held frame");
     }
 
     #[test]
