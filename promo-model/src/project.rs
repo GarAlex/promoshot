@@ -1974,6 +1974,10 @@ pub struct BackgroundStyle {
     /// — the eased position track scrolls the pattern.
     #[serde(skip_serializing_if = "is_none")]
     pub anchor: Option<[f64; 2]>,
+    /// Tile size multiplier: 2 draws each tile twice as large. `None` is 1
+    /// — the image's own pixel size. Tiled fill only.
+    #[serde(skip_serializing_if = "is_none")]
+    pub scale: Option<f64>,
 }
 
 impl Default for BackgroundStyle {
@@ -1983,6 +1987,7 @@ impl Default for BackgroundStyle {
             color_hex: None,
             gradient: None,
             anchor: None,
+            scale: None,
         }
     }
 }

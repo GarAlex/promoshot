@@ -141,8 +141,9 @@ Semantics worth knowing:
   "anchor": [0, 0] } }`. The colour/gradient are the plate's own
   ground (gradient wins); an image `filename` draws over it per
   `fill` — stretched edge to edge, aspect-FIT with the ground showing
-  around it, or TILED at the image's own pixel size from `anchor`
-  (unit canvas coordinates, the gradient precedent). Background
+  around it, or TILED from `anchor` (unit canvas coordinates, the
+  gradient precedent) at the image's own pixel size times `scale`
+  (2 draws each tile twice as large; absent is 1). Background
   plates are scenery, not media: never bordered, cornered or
   shadowed. The background layer's KEYFRAMES compose as everywhere
   else: `colorHex`/`gradient` keyframes override the plate's ground

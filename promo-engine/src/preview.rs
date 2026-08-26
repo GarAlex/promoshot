@@ -1817,9 +1817,14 @@ impl PreviewEngine {
                                         );
                                         let anchor =
                                             style.anchor.unwrap_or([0.0, 0.0]);
+                                        // Scale multiplies the tile's size,
+                                        // so it DIVIDES how many repeats
+                                        // span the canvas.
+                                        let tile_scale =
+                                            style.scale.unwrap_or(1.0).max(0.05);
                                         quad.tile_repeats = [
-                                            (cw / fw.max(1.0)) as f32,
-                                            (ch / fh.max(1.0)) as f32,
+                                            (cw / (fw * tile_scale).max(1.0)) as f32,
+                                            (ch / (fh * tile_scale).max(1.0)) as f32,
                                         ];
                                         quad.tile_anchor = [
                                             (anchor[0] + tr.horizontal_shift / cw) as f32,
