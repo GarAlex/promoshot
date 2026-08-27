@@ -1825,9 +1825,14 @@ impl PreviewEngine {
                                             style.anchor.unwrap_or([0.0, 0.0]);
                                         // Scale multiplies the tile's size,
                                         // so it DIVIDES how many repeats
-                                        // span the canvas.
-                                        let tile_scale =
-                                            style.scale.unwrap_or(1.0).max(0.005);
+                                        // span the canvas. The layer's ZOOM
+                                        // keyframes — which mean nothing
+                                        // else on a background — multiply
+                                        // it, making tile scale animatable
+                                        // on the ordinary eased track.
+                                        let tile_scale = (style.scale.unwrap_or(1.0)
+                                            * tr.zoom.max(0.01))
+                                            .max(0.005);
                                         // The image's NATIVE size decides
                                         // the tile, not the provided
                                         // frame's: previews hand in TIERED
