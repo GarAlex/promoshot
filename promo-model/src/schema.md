@@ -195,9 +195,14 @@ Semantics worth knowing:
   aspect, which comes from the resource's stored `pixelWidth`/
   `pixelHeight` (images; app imports stamp them — include them when
   authoring by hand) or `videoNaturalWidth`/`videoNaturalHeight`
-  (videos); a sprite resolves against one cell. Without a stored
-  size the rule assumes a square source and promo_validate says so.
-  Image and video layers.
+  (videos); a sprite resolves against one cell. A `frame` of kind
+  "device" resolves against the SLAB, not the picture inside it: the
+  device is baked around the image before anything lays the layer
+  out, so it is wider than its screenshot and a different shape, and
+  the rule sizes and centres the thing that actually lands on the
+  canvas. A "border" frame does not change the size a rule resolves
+  against. Without a stored size the rule assumes a square source
+  and promo_validate says so. Image and video layers.
 - `palette` in compositionSettings names colours the project can
   reuse: [{ "name": "accent", "colorHex": "5B8CFF" }, …]. ANY colour
   field may then hold "@accent" instead of a hex value — background,

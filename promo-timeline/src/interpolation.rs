@@ -82,20 +82,63 @@ fn placement_aspect(
     if !layer.keyframes.iter().any(|k| k.placement.is_some()) {
         return 1.0;
     }
-    let source = crate::sprite::layer_resource_id(layer, time, resources)
+    let resource = crate::sprite::layer_resource_id(layer, time, resources)
         .and_then(|id| resources.iter().find(|r| r.id == id))
         .or_else(|| {
             layer
                 .resource_id
                 .as_ref()
                 .and_then(|id| resources.iter().find(|r| &r.id == id))
-        })
-        .and_then(crate::layout::resource_source_size);
+        });
+    let source = resource
+        .and_then(crate::layout::resource_source_size)
+        // A device frame is baked into the picture BEFORE anything lays the
+        // layer out, so what the layer shows is the slab, not the screenshot
+        // inside it. Resolving the rule against the bare pixels sized the
+        // box for an image the renderer never draws — `media_quad` took its
+        // width from the framed texture and its origin from here, and the
+        // device landed off-centre by the difference.
+        .map(|size| {
+            crate::frame::framed_pixel_size(size, effective_frame(layer, time, resource).as_ref())
+        });
     let mut aspect = source.map_or(1.0, |s| s.width() / s.height().max(f64::EPSILON));
     if let Some(vp) = crate::viewport::layer_viewport(layer, time) {
         aspect *= vp[2] / vp[3].max(f64::EPSILON);
     }
     aspect
+}
+
+/// The frame the layer WEARS at `time`: the named cut's, else the resource's
+/// own, with tilt keyframes standing in for the stored tilt — the same frame
+/// the app bakes. Swift twin: `ProjectLayer.effectiveFrame(at:resources:)`.
+///
+/// A SPRITE sheet is left unframed deliberately. `media_quad` divides the
+/// FRAMED texture into cells, so a framed sheet is already wrong further
+/// down; compensating here would stack a second correction on the first and
+/// bury the real defect.
+fn effective_frame(
+    layer: &ProjectLayer,
+    time: f64,
+    resource: Option<&promo_model::ProjectResource>,
+) -> Option<promo_model::ResourceFrame> {
+    let resource = resource?;
+    if resource.sprite.is_some() {
+        return None;
+    }
+    let mut frame = layer
+        .image_cut_id
+        .as_ref()
+        .and_then(|cid| resource.image_cuts.iter().find(|c| &c.id == cid))
+        .and_then(|cut| cut.frame.as_ref())
+        .or(resource.frame.as_ref())?
+        .clone();
+    if frame.kind == promo_model::ResourceFrameKind::Device {
+        if let Some((tilt_x, tilt_y)) = layer_tilt_offset(layer, time) {
+            frame.tilt_x = tilt_x;
+            frame.tilt_y = tilt_y;
+        }
+    }
+    Some(frame)
 }
 
 /// What a keyframe SAYS its zoom is, resolved: a placement wins over the raw
@@ -729,6 +772,117 @@ fn rgb(hex: &str) -> Option<(f64, f64, f64)> {
         ((parsed & 0x00FF00) >> 8) as f64,
         (parsed & 0x0000FF) as f64,
     ))
+}
+
+#[cfg(test)]
+mod placement_frame_tests {
+    use super::*;
+    use promo_model::Size;
+
+    fn framed_shot(bezel: f64, tilt_y: f64) -> promo_model::ProjectResource {
+        let json = format!(
+            r#"{{"id": "R", "kind": "image", "filename": "shot.png",
+                 "displayName": "Shot", "addedAt": 0,
+                 "pixelWidth": 1290, "pixelHeight": 2796,
+                 "frame": {{"kind": "device", "bezelFraction": {bezel},
+                            "tiltY": {tilt_y}}}}}"#
+        );
+        serde_json::from_str(&json).expect("resource")
+    }
+
+    fn placed_layer(keys: &str) -> ProjectLayer {
+        let json = format!(
+            r#"{{"id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 5,
+                 "resourceID": "R", "keyframes": [{keys}]}}"#
+        );
+        serde_json::from_str(&json).expect("layer")
+    }
+
+    fn settings(w: f64, h: f64) -> promo_model::CompositionSettings {
+        let mut s = promo_model::CompositionSettings::default();
+        s.canvas_width = w;
+        s.canvas_height = h;
+        s
+    }
+
+    /// A device-framed shot must land CENTRED.
+    ///
+    /// The app bakes the slab into the picture before the engine sees it, so
+    /// `media_quad` takes the drawn WIDTH from the framed texture. The origin
+    /// comes from here — and resolving against the resource's bare pixels
+    /// made the two disagree by the bezel, leaving 215px of margin on the
+    /// left against 80 on the right on the App Store wizard's iPhone preset.
+    /// Swift twin: `testAFramedShotLandsCentredNotOffToOneSide`.
+    #[test]
+    fn a_framed_shot_lands_centred() {
+        let canvas = settings(1290.0, 2796.0);
+        let resources = vec![framed_shot(0.035, 0.0)];
+        let layer = placed_layer(
+            r#"{"id": "K", "time": 0, "transitionDuration": 0,
+                "placement": {"height": 1800, "anchor": "center"}}"#,
+        );
+        let tr = layer_transform_along_paths(&layer, 1.0, &canvas, &resources);
+
+        let shown = crate::frame::framed_pixel_size(
+            Size::new(1290.0, 2796.0),
+            resources[0].frame.as_ref(),
+        );
+        let drawn_width = 2796.0 * tr.zoom * (shown.width() / shown.height());
+        let left = tr.horizontal_shift;
+        let right = 1290.0 - (tr.horizontal_shift + drawn_width);
+        assert!(
+            (left - right).abs() < 1.0,
+            "off centre: {left} left vs {right} right"
+        );
+    }
+
+    /// The box is asked for PER TIME: a slab that turns is narrower than one
+    /// face-on, so a tilt ramp that used one fixed aspect slid the device
+    /// sideways for the whole length of the turn.
+    #[test]
+    fn a_turning_slab_stays_centred_the_whole_way_through() {
+        let canvas = settings(1290.0, 2796.0);
+        let resources = vec![framed_shot(0.035, 0.0)];
+        let layer = placed_layer(
+            r#"{"id": "A", "time": 0, "tiltY": 0, "transitionDuration": 0,
+                "placement": {"height": 1800, "anchor": "center"}},
+               {"id": "B", "time": 4, "tiltY": -30, "transitionDuration": 4}"#,
+        );
+        for step in 0..=8 {
+            let t = step as f64 * 0.5;
+            let tr = layer_transform_along_paths(&layer, t, &canvas, &resources);
+            let mut frame = resources[0].frame.clone().expect("frame");
+            frame.tilt_y = layer_tilt_offset(&layer, t).expect("tilt").1;
+            let shown =
+                crate::frame::framed_pixel_size(Size::new(1290.0, 2796.0), Some(&frame));
+            let drawn_width = 2796.0 * tr.zoom * (shown.width() / shown.height());
+            let centre = tr.horizontal_shift + drawn_width / 2.0;
+            assert!(
+                (centre - 645.0).abs() < 1.0,
+                "at t={t} the device drifted to {centre}"
+            );
+        }
+    }
+
+    /// A rule on an unframed resource resolves exactly as it always did —
+    /// the guarantee that no existing project moves.
+    #[test]
+    fn an_unframed_shot_is_untouched() {
+        let canvas = settings(1290.0, 2796.0);
+        let json = r#"{"id": "R", "kind": "image", "filename": "s.png",
+                       "displayName": "S", "addedAt": 0,
+                       "pixelWidth": 1290, "pixelHeight": 2796}"#;
+        let resources: Vec<promo_model::ProjectResource> =
+            vec![serde_json::from_str(json).expect("resource")];
+        let layer = placed_layer(
+            r#"{"id": "K", "time": 0, "transitionDuration": 0,
+                "placement": {"height": 1800, "anchor": "center"}}"#,
+        );
+        let tr = layer_transform_along_paths(&layer, 1.0, &canvas, &resources);
+        let drawn_width = 1800.0 * (1290.0 / 2796.0);
+        assert!((tr.horizontal_shift - (1290.0 - drawn_width) / 2.0).abs() < 1e-9);
+    }
 }
 
 #[cfg(test)]
