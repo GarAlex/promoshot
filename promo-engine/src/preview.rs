@@ -1047,11 +1047,17 @@ impl PreviewEngine {
         // rect) or a masked layer (the porthole's silhouette is the mask's).
         // Pre-framed border bakes still cast: the baked bitmap's radius
         // derives from the same numbers `media_border_style` reads.
+        //
+        // Only a BAKED slab escapes the shadow. An unbaked Device frame (video,
+        // which no bake site covers) draws as a plain bordered rect — see
+        // `media_border_style` — so its silhouette IS the rect and it casts
+        // like any other bordered layer.
         let shadow = if !is_drawing && layer.mask_resource_id.is_none() {
             let frame_ref = self.effective_frame(layer);
-            let slab = frame_ref
-                .map(|f| f.kind == promo_model::ResourceFrameKind::Device)
-                .unwrap_or(false);
+            let slab = pre_framed
+                && frame_ref
+                    .map(|f| f.kind == promo_model::ResourceFrameKind::Device)
+                    .unwrap_or(false);
             if slab {
                 None
             } else {
@@ -2121,6 +2127,12 @@ struct MediaBorderStyle {
 /// border frame, the settings/layer fallbacks apply as before. This used to
 /// exist only in `VideoComposer`, so a border-framed video rendered
 /// differently in preview and export.
+///
+/// A DEVICE frame reaches here only on a layer nothing pre-baked a slab for —
+/// video, which no bake site covers. The slab can't be drawn, so the frame
+/// degrades to its border rather than to the canvas-wide default: the layer
+/// keeps the radius and edge the project authored instead of losing its frame
+/// outright. Callers styling a pre-framed quad don't call this at all.
 fn media_border_style(
     frame: Option<&promo_model::ResourceFrame>,
     layer: &ProjectLayer,
@@ -2130,7 +2142,7 @@ fn media_border_style(
 ) -> MediaBorderStyle {
     let zoom = tl::clamped_zoom(zoom);
     if let Some(frame) = frame {
-        if frame.kind == promo_model::ResourceFrameKind::Border {
+        if frame.kind != promo_model::ResourceFrameKind::None {
             return MediaBorderStyle {
                 corner_radius: (frame.corner_radius * canvas_width / 1080.0).max(0.0) * zoom,
                 border_width: (frame.border_width * canvas_width / 1080.0).max(1.0) * zoom,
@@ -2247,13 +2259,37 @@ mod border_style_tests {
     fn no_frame_keeps_the_settings_fallback() {
         let settings = promo_model::CompositionSettings::default();
         let with_none = media_border_style(None, &layer(), &settings, 1.0, 1920.0);
+        assert!((with_none.corner_radius - settings.video_corner_radius).abs() < 1e-9);
+        assert!((with_none.border_width - settings.video_border_width).abs() < 1e-9);
+
+        // An explicit None-kind frame is the same as no frame: it must not
+        // borrow the frame's authored radius/thickness.
+        let mut off = border_frame();
+        off.kind = promo_model::ResourceFrameKind::None;
+        assert_eq!(media_border_style(Some(&off), &layer(), &settings, 1.0, 1920.0), with_none);
+    }
+
+    #[test]
+    fn an_unbaked_device_frame_degrades_to_its_border() {
+        // A Device frame only reaches `media_border_style` when nothing baked
+        // a slab for the layer — video, which no bake site covers. It used to
+        // fall through to the canvas-wide default, so a 3D Box on a video
+        // rendered as a plain rect with none of the frame the project
+        // authored. It now keeps the frame's radius, thickness, and color.
+        let settings = promo_model::CompositionSettings::default();
         let mut device = border_frame();
         device.kind = promo_model::ResourceFrameKind::Device;
         let with_device = media_border_style(Some(&device), &layer(), &settings, 1.0, 1920.0);
-        // A device frame is pre-baked by the provider; the quad falls back to
-        // the settings path, same as no frame at all.
-        assert_eq!(with_none, with_device);
-        assert!((with_none.corner_radius - settings.video_corner_radius).abs() < 1e-9);
+        assert_eq!(
+            with_device,
+            media_border_style(Some(&border_frame()), &layer(), &settings, 1.0, 1920.0),
+            "an unbaked device frame styles exactly as the border it degrades to"
+        );
+        assert!((with_device.corner_radius - 24.0 * 1920.0 / 1080.0).abs() < 1e-9);
+        assert!(
+            (with_device.corner_radius - settings.video_corner_radius).abs() > 1e-6,
+            "and NOT the canvas-wide default it used to fall back to"
+        );
     }
 
     #[test]

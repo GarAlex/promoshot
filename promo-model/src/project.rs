@@ -22,6 +22,12 @@ fn is_none<T>(v: &Option<T>) -> bool {
 /// app versions able to open newer projects).
 macro_rules! tolerant_enum {
     ($name:ident, $fallback:ident, [$(($variant:ident, $raw:literal)),+ $(,)?]) => {
+        tolerant_enum!($name, $fallback, [$(($variant, $raw)),+], legacy: []);
+    };
+    // `legacy:` lists retired wire strings that still decode to a live
+    // variant. They never serialize, so they stay out of the enum itself.
+    ($name:ident, $fallback:ident, [$(($variant:ident, $raw:literal)),+ $(,)?],
+     legacy: [$(($legacy_variant:ident, $legacy_raw:literal)),* $(,)?]) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
         pub enum $name {
             $(#[serde(rename = $raw)] $variant,)+
@@ -41,6 +47,7 @@ macro_rules! tolerant_enum {
                 let raw = String::deserialize(d)?;
                 Ok(match raw.as_str() {
                     $($raw => $name::$variant,)+
+                    $($legacy_raw => $name::$legacy_variant,)*
                     _ => $name::$fallback,
                 })
             }
@@ -470,11 +477,15 @@ strict_enum!(
     [(Pen, "pen"), (Line, "line"), (Oval, "oval")]
 );
 
-// `ResourceFrame.Kind` — legacy "phone" (and any unknown) folds into Device.
+// `ResourceFrame.Kind` — legacy "phone" folds into Device. Every string this
+// app has ever written is enumerated, so an unknown one is a typo, not an older
+// frame: it decodes to None rather than silently becoming a device slab. Mirrors
+// `ResourceFrame.Kind.init(from:)`.
 tolerant_enum!(
     ResourceFrameKind,
-    Device,
-    [(None, "none"), (Border, "border"), (Device, "device")]
+    None,
+    [(None, "none"), (Border, "border"), (Device, "device")],
+    legacy: [(Device, "phone")]
 );
 
 // `ResourceFrame.Material` — unknown values fall back to Space Black.
@@ -2783,6 +2794,44 @@ mod fps_tests {
         assert_eq!(ntsc.fps, Some(59.94005994005994));
         let text = serde_json::to_string(&ntsc).unwrap();
         assert!(text.contains("59.94"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod frame_kind_tests {
+    use super::*;
+
+    fn kind(raw: &str) -> ResourceFrameKind {
+        let f: ResourceFrame = serde_json::from_value(serde_json::json!({ "kind": raw })).unwrap();
+        f.kind
+    }
+
+    /// Mirrors `ResourceFrame.Kind.init(from:)` on the Swift side. The set of
+    /// strings this app has ever written is closed — none/border/device plus
+    /// the retired "phone" — so an unknown one is a typo (a hand-written or
+    /// MCP-written metadata.json with "Border"), not an older frame. It used to
+    /// become a full device slab on both sides.
+    #[test]
+    fn known_and_legacy_kinds_decode_unknown_ones_do_not_become_slabs() {
+        assert_eq!(kind("none"), ResourceFrameKind::None);
+        assert_eq!(kind("border"), ResourceFrameKind::Border);
+        assert_eq!(kind("device"), ResourceFrameKind::Device);
+        assert_eq!(kind("phone"), ResourceFrameKind::Device, "legacy phone frames keep their slab");
+
+        for raw in ["Border", "None", "Device", "3dbox", "phone2", "", "border "] {
+            assert_eq!(kind(raw), ResourceFrameKind::None, "unknown kind {raw:?}");
+        }
+    }
+
+    /// The legacy alias decodes but never serializes — writing "phone" back
+    /// out would resurrect a wire string the app retired.
+    #[test]
+    fn legacy_phone_re_encodes_as_device() {
+        let f: ResourceFrame =
+            serde_json::from_value(serde_json::json!({ "kind": "phone" })).unwrap();
+        let text = serde_json::to_string(&f).unwrap();
+        assert!(text.contains("\"device\""), "{text}");
+        assert!(!text.contains("phone"), "{text}");
     }
 }
 
