@@ -1270,10 +1270,15 @@ impl CompositionSettings {
     ///
     /// The ONE place a reference becomes a value, so every colour in the
     /// document gains palette support at once and none of them can disagree
-    /// about what `@accent` means. An unknown name passes through unchanged
-    /// and therefore fails to parse as hex, landing on whatever fallback the
-    /// site already had — `promo_validate` is what names it, rather than the
-    /// renderer guessing a colour nobody chose.
+    /// about what `@accent` means.
+    ///
+    /// An unknown name passes through UNCHANGED. It is not a fallback to the
+    /// field's own default: the `@name` reaches the hex parser, fails, and
+    /// lands on whatever that particular parser does — which in this engine
+    /// is black everywhere (`rgba_from_hex`), and in the app's editing canvas
+    /// is white for caption text. So an undefined name looks right while it
+    /// is being edited and ships invisible. `promo_validate` names it, which
+    /// is the only reason this is survivable rather than a hard error.
     pub fn resolve_color<'a>(&'a self, value: &'a str) -> &'a str {
         let Some(name) = value.strip_prefix('@') else {
             return value;
@@ -2265,10 +2270,12 @@ impl ProjectResource {
 /// background keyframes. Re-skinning one meant finding every occurrence.
 /// A palette entry is the indirection that turns that into a single edit.
 ///
-/// Deliberately NOT a resource: resources are things a LAYER points at by id
-/// and that mostly have files. A colour is referenced by fields all over the
-/// document, and giving six characters of hex a UUID and a row next to the
-/// videos would be noise.
+/// An ENTRY is deliberately not a resource: resources are things a LAYER
+/// points at by id and that mostly have files, while a colour is referenced
+/// by fields all over the document, and giving six characters of hex a UUID
+/// and a row next to the videos would be noise. The SET is a resource —
+/// `ProjectResourceKind::Palette`, which is how a whole theme is shared and
+/// swapped — but that is a different object at a different grain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteColor {

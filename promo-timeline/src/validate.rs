@@ -16,6 +16,7 @@ use promo_model::{ProjectLayerKind, ProjectMetadata};
 pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     let mut out = Vec::new();
     duration_rule_warnings(meta, &mut out);
+    palette_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -377,6 +378,108 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 
 /// A duration rule wired to nothing does nothing, and says so here rather
 /// than letting the author wonder why the slide never waits.
+/// Colour references the palette does not define, and a palette resource
+/// the settings copy has drifted from.
+///
+/// Walked over the SERIALIZED document rather than field by field, so it
+/// cannot fall behind the model: every `*Hex` string the file writes is
+/// checked, fields added since this was written included. The palette's own
+/// entries are skipped — they are the definitions references point at, not
+/// uses of a colour.
+fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let settings = &meta.composition_settings;
+    let defined: std::collections::BTreeSet<String> = settings
+        .palette
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|entry| entry.name.to_lowercase())
+        .collect();
+
+    let Ok(document) = serde_json::to_value(meta) else {
+        return;
+    };
+    let mut used = std::collections::BTreeSet::new();
+    collect_colour_references(&document, &mut used);
+    for name in used.difference(&defined) {
+        out.push(format!(
+            "colour \"@{name}\" is used but no palette entry defines it — an \
+             unresolved name is NOT a fallback to the field's own default: it \
+             is handed on unchanged, fails to parse as hex, and renders black"
+        ));
+    }
+
+    // The app materializes the selected resource into `settings.palette` on
+    // open and save, so the two agreeing is the normal state. When they do
+    // not, a render from the file AS IT STANDS — the CLI, or anything that
+    // never opened it in the app — uses the settings copy.
+    if let Some(id) = settings.palette_resource_id.as_deref() {
+        match meta
+            .resources
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .find(|r| r.id == id)
+        {
+            None => out.push(format!(
+                "compositionSettings.paletteResourceID names \"{id}\", which is \
+                 not a resource in this project — nothing materializes, and \
+                 settings.palette stands as written"
+            )),
+            Some(resource) => {
+                let entries = resource.palette.as_deref().unwrap_or_default();
+                let same = entries.len() == settings.palette.as_deref().unwrap_or_default().len()
+                    && entries.iter().zip(
+                        settings.palette.as_deref().unwrap_or_default().iter(),
+                    ).all(|(a, b)| {
+                        a.name.eq_ignore_ascii_case(&b.name)
+                            && a.color_hex.eq_ignore_ascii_case(&b.color_hex)
+                    });
+                if !same {
+                    out.push(format!(
+                        "compositionSettings.palette differs from the palette \
+                         resource \"{}\" it follows — the app rewrites it from \
+                         the resource on open, so a render from this file as it \
+                         stands uses the copy in settings",
+                        resource.display_name
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// Every `@name` a `*Hex` field in the document holds, lowercased.
+fn collect_colour_references(
+    node: &serde_json::Value,
+    out: &mut std::collections::BTreeSet<String>,
+) {
+    match node {
+        serde_json::Value::Object(map) => {
+            for (key, value) in map {
+                // Definitions, not uses — on the settings and on a palette
+                // resource alike.
+                if key == "palette" {
+                    continue;
+                }
+                if key.ends_with("Hex") {
+                    if let Some(name) = value.as_str().and_then(|s| s.strip_prefix('@')) {
+                        out.insert(name.to_lowercase());
+                    }
+                } else {
+                    collect_colour_references(value, out);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_colour_references(item, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     use promo_model::{DurationRuleKind, TimingReference};
     let layers = meta.layers.as_deref().unwrap_or(&[]);
@@ -797,5 +900,104 @@ mod tests {
                 .iter()
                 .any(|w| w.contains("collapses"))
         );
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    use super::*;
+
+    /// `settings` and `resources`/`layers` fragments, spliced into a file.
+    fn project(settings: &str, resources: &str, layers: &str) -> ProjectMetadata {
+        ProjectMetadata::from_json(&format!(
+            // Declares 17 throughout: a palette RESOURCE needs that rung,
+            // and an under-declared file warns about it, which would drown
+            // out what these tests are actually looking at.
+            r#"{{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v","createdAt":0,
+                 "state":"recorded","trimStart":0,"trimEnd":0,"videoDuration":0,
+                 "subtitles":[],"minReaderVersion":17,
+                 "compositionSettings":{{"canvasWidth":1920,"canvasHeight":1080{settings}}},
+                 "resources":[{resources}],"layers":[{layers}]}}"#
+        ))
+        .expect("fixture")
+    }
+
+    const PALETTE: &str = r#","palette":[{"name":"text","colorHex":"FFFFFF"}]"#;
+
+    fn caption(colour: &str) -> String {
+        format!(
+            r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A03","name":"C","sortIndex":0,
+                 "kind":"caption","isEnabled":true,"startTime":0,"keyframes":[],
+                 "captionStyle":{{"textColorHex":"{colour}"}}}}"#
+        )
+    }
+
+    #[test]
+    fn an_undefined_name_is_named() {
+        let warnings = warnings(&project(PALETTE, "", &caption("@brand")));
+        assert!(
+            warnings.iter().any(|w| w.contains("\"@brand\"") && w.contains("renders black")),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn a_defined_name_says_nothing() {
+        assert!(warnings(&project(PALETTE, "", &caption("@text"))).is_empty());
+    }
+
+    /// A palette entry is a DEFINITION. If its own name counted as a use,
+    /// every palette would report itself.
+    #[test]
+    fn the_palettes_own_entries_are_not_uses() {
+        let defs = r#","palette":[{"name":"text","colorHex":"@text"}]"#;
+        assert!(warnings(&project(defs, "", "")).is_empty());
+    }
+
+    /// The reason the walk runs over the SERIALIZED document: these two
+    /// fields are resolved by the engine but were invisible to the app's
+    /// hand-written colour walk for as long as it existed. A field-by-field
+    /// validator would have the same blind spot.
+    #[test]
+    fn deep_fields_are_walked_too() {
+        let tinted = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A04","name":"L","sortIndex":0,
+             "kind":"image","isEnabled":true,"startTime":0,"keyframes":[],
+             "adjustments":{"tintHex":"@warm","tintAmount":0.5}}"#;
+        let reveal = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A05","name":"K","sortIndex":1,
+             "kind":"caption","isEnabled":true,"startTime":0,"keyframes":[],
+             "captionStyle":{"reveal":{"mode":"highlight","highlightColorHex":"@pop"}}}"#;
+        let found = warnings(&project(PALETTE, "", &format!("{tinted},{reveal}")));
+        assert!(found.iter().any(|w| w.contains("@warm")), "{found:?}");
+        assert!(found.iter().any(|w| w.contains("@pop")), "{found:?}");
+    }
+
+    /// The CLI renders the file as it stands. When the settings copy has
+    /// drifted from the resource it follows, that is what it draws.
+    #[test]
+    fn a_stale_settings_copy_is_named() {
+        let settings = concat!(
+            r#","palette":[{"name":"text","colorHex":"000000"}]"#,
+            r#","paletteResourceID":"CCCCCCCC-0000-4000-8000-000000000041""#
+        );
+        let resource = r#"{"id":"CCCCCCCC-0000-4000-8000-000000000041","kind":"palette",
+             "filename":"","displayName":"Studio Dark","addedAt":0,
+             "palette":[{"name":"text","colorHex":"FFFFFF"}]}"#;
+        let found = warnings(&project(settings, resource, ""));
+        assert!(found.iter().any(|w| w.contains("differs from the palette")), "{found:?}");
+
+        // Agreeing says nothing.
+        let agreeing = concat!(
+            r#","palette":[{"name":"text","colorHex":"FFFFFF"}]"#,
+            r#","paletteResourceID":"CCCCCCCC-0000-4000-8000-000000000041""#
+        );
+        let quiet = warnings(&project(agreeing, resource, ""));
+        assert!(quiet.is_empty(), "{quiet:?}");
+    }
+
+    #[test]
+    fn a_selection_naming_nothing_is_named() {
+        let settings = r#","paletteResourceID":"CCCCCCCC-0000-4000-8000-0000000000FF""#;
+        let found = warnings(&project(settings, "", ""));
+        assert!(found.iter().any(|w| w.contains("not a resource")), "{found:?}");
     }
 }
