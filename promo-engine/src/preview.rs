@@ -1043,22 +1043,12 @@ impl PreviewEngine {
         quad.blend = Self::blend_for(layer);
 
         // The drop shadow, as its own soft-edged solid quad under this one.
-        // Media only, and never under a slab (its silhouette is not the
-        // rect) or a masked layer (the porthole's silhouette is the mask's).
-        // Pre-framed border bakes still cast: the baked bitmap's radius
-        // derives from the same numbers `media_border_style` reads.
-        //
-        // Only a BAKED slab escapes the shadow. An unbaked Device frame (video,
-        // which no bake site covers) draws as a plain bordered rect — see
-        // `media_border_style` — so its silhouette IS the rect and it casts
-        // like any other bordered layer.
-        let shadow = if !is_drawing && layer.mask_resource_id.is_none() {
+        // Media only; `media_shadow_suppressed` holds the rest of the rule.
+        let shadow = if is_drawing {
+            None
+        } else {
             let frame_ref = self.effective_frame(layer);
-            let slab = pre_framed
-                && frame_ref
-                    .map(|f| f.kind == promo_model::ResourceFrameKind::Device)
-                    .unwrap_or(false);
-            if slab {
+            if media_shadow_suppressed(frame_ref, pre_framed, layer.mask_resource_id.is_some()) {
                 None
             } else {
                 media_shadow_style(frame_ref, settings, tr.zoom, canvas.width()).map(|style| {
@@ -1088,8 +1078,6 @@ impl PreviewEngine {
                     }
                 })
             }
-        } else {
-            None
         };
         Some((quad, shadow, frame_id))
     }
@@ -2166,6 +2154,34 @@ fn media_border_style(
     }
 }
 
+/// Whether a media layer casts NO shadow at all, whatever
+/// [`media_shadow_style`] would resolve. Mirrored by Swift's
+/// `LayerLayout.mediaShadowSuppressed`, which feeds the SwiftUI fallback
+/// canvas — the two disagreed for a release, and an unbaked device frame
+/// cast in the export while the preview showed none.
+///
+/// A MASKED layer's silhouette is the mask's, not the rect, so a rect
+/// shadow would trace the wrong outline. So would a device SLAB's — but
+/// only where a slab was actually built, which is what `pre_framed` says:
+/// the frame is already baked into the bitmap this quad samples. Nothing
+/// bakes a slab for video, and an unbaked device frame degrades to its
+/// border (see [`media_border_style`]), so its silhouette IS the rect and
+/// it casts like any other bordered layer. Pre-framed BORDER bakes cast
+/// too: the baked bitmap's radius comes from the same numbers.
+fn media_shadow_suppressed(
+    frame: Option<&promo_model::ResourceFrame>,
+    pre_framed: bool,
+    masked: bool,
+) -> bool {
+    if masked {
+        return true;
+    }
+    pre_framed
+        && frame
+            .map(|f| f.kind == promo_model::ResourceFrameKind::Device)
+            .unwrap_or(false)
+}
+
 /// The drop shadow under a media quad: colour (straight alpha), penumbra
 /// length, and offset, all in canvas px.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2302,6 +2318,41 @@ mod border_style_tests {
             (style.border_width - 2.0).abs() < 1e-9,
             "1px floor × zoom 2"
         );
+    }
+
+    fn device_frame() -> promo_model::ResourceFrame {
+        let mut frame = border_frame();
+        frame.kind = promo_model::ResourceFrameKind::Device;
+        frame
+    }
+
+    /// The divergence this pins: a device frame on a layer nothing baked a
+    /// slab for draws as a plain bordered rect, so it CASTS. The SwiftUI
+    /// fallback skipped every device frame and the preview lost a shadow
+    /// the export drew.
+    #[test]
+    fn only_a_baked_slab_escapes_the_shadow() {
+        let device = device_frame();
+        assert!(
+            !media_shadow_suppressed(Some(&device), false, false),
+            "an unbaked device frame degrades to its border and casts"
+        );
+        assert!(
+            media_shadow_suppressed(Some(&device), true, false),
+            "a baked slab's silhouette is not the rect"
+        );
+        assert!(
+            !media_shadow_suppressed(Some(&border_frame()), true, false),
+            "a baked BORDER is still a rounded rect"
+        );
+        assert!(!media_shadow_suppressed(None, true, false));
+    }
+
+    #[test]
+    fn a_masked_layer_never_casts() {
+        assert!(media_shadow_suppressed(None, false, true));
+        assert!(media_shadow_suppressed(Some(&device_frame()), false, true));
+        assert!(media_shadow_suppressed(Some(&border_frame()), false, true));
     }
 
     #[test]

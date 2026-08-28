@@ -1323,11 +1323,21 @@ pub enum GradientRepeat {
 }
 
 /// One colour along a gradient.
+///
+/// Both fields decode TOLERANTLY, mirroring the Swift twin
+/// (`GradientStop.init(from:)`): an omitted `colorHex` is black and an
+/// omitted `at` is 0. A stop is hand-authorable — it is one of the shapes
+/// schema.md teaches — and a required field here meant a file the app
+/// opened happily made the engine refuse the whole project. Refusing to
+/// decode is this format's version gate (see `ProjectResourceKind`), not
+/// its authoring-mistake channel; `promo_validate` is that.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientStop {
+    #[serde(default = "default_black")]
     pub color_hex: String,
     /// Where it sits, 0…1 along the gradient.
+    #[serde(default)]
     pub at: f64,
 }
 
@@ -1935,7 +1945,11 @@ impl Default for ResourceFrame {
     fn default() -> Self {
         ResourceFrame {
             kind: ResourceFrameKind::None,
-            border_color_hex: "FFFFFF".into(),
+            // The theme's `edge` role, matching the Swift default
+            // (`ResourceFrame.borderColorHex`). A frame that states no
+            // border colour takes the one the palette calls `edge`;
+            // `resolve_color` turns it into digits at render.
+            border_color_hex: "@edge".into(),
             border_width: 12.0,
             corner_radius: 0.0,
             material: FrameMaterial::SpaceBlack,
@@ -2691,6 +2705,59 @@ mod forward_compat_tests {
         let out = meta.to_json().unwrap();
         assert!(out.contains("\"formatVersion\":3"));
         assert!(out.contains("\"minReaderVersion\":2"));
+    }
+}
+
+#[cfg(test)]
+mod gradient_stop_tests {
+    use super::*;
+
+    fn settings_with(stops: &str) -> CompositionSettings {
+        let json = format!(
+            r#"{{
+                "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+                "subtitles": [], "trimStart": 0, "trimEnd": 0,
+                "videoDuration": 0,
+                "compositionSettings": {{
+                    "canvasWidth": 1920, "canvasHeight": 1080,
+                    "backgroundGradient": {{ "kind": "linear", "stops": {stops} }}
+                }}
+            }}"#
+        );
+        ProjectMetadata::from_json(&json)
+            .expect("a hand-authored gradient must not sink the project")
+            .composition_settings
+    }
+
+    /// A stop that omits `colorHex` loads in the app (Swift defaults it to
+    /// black) — so it has to load here too, or a file the editor opens
+    /// happily makes the RENDERER refuse the whole project.
+    #[test]
+    fn a_stop_without_a_colour_is_black_like_the_swift_twin() {
+        let settings = settings_with(r#"[{"at":0},{"colorHex":"0000FF","at":1}]"#);
+        let gradient = settings.background_gradient.expect("gradient decodes");
+        assert_eq!(gradient.stops[0].color_hex, "000000");
+        assert_eq!(gradient.stops[1].color_hex, "0000FF");
+    }
+
+    /// `at` is the same shape of hazard, one field along.
+    #[test]
+    fn a_stop_without_a_position_sits_at_zero() {
+        let settings = settings_with(r#"[{"colorHex":"FF0000"},{"colorHex":"0000FF","at":1}]"#);
+        let gradient = settings.background_gradient.expect("gradient decodes");
+        assert_eq!(gradient.stops[0].at, 0.0);
+        assert_eq!(gradient.stops[0].color_hex, "FF0000");
+    }
+
+    /// Tolerant on the way IN, complete on the way out: a defaulted stop
+    /// re-encodes with both keys, so the next reader sees what was rendered
+    /// rather than the same hole.
+    #[test]
+    fn a_defaulted_stop_writes_itself_out_in_full() {
+        let stop: GradientStop = serde_json::from_str("{}").expect("bare stop decodes");
+        let json = serde_json::to_string(&stop).expect("encodes");
+        assert!(json.contains("\"colorHex\":\"000000\""), "{json}");
+        assert!(json.contains("\"at\":0"), "{json}");
     }
 }
 

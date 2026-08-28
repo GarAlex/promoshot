@@ -162,6 +162,32 @@ Semantics worth knowing:
   ARCHIVE step (the self-contained `.promo` interchange form) embeds
   the referenced files and strips the field. Authoring tools should
   not write it.
+- `frame` on an image or video RESOURCE (or on one `imageCuts`
+  entry) dresses every layer that places it: `{ "kind":
+  "none|border|device", "borderColorHex": "@edge", "borderWidth": 12,
+  "cornerRadius": 0, "material": "spaceBlack", "tiltY": 0, "tiltX": 0,
+  "bezelFraction": 0.03, "depthFraction": 0.06 }`. "border" draws a
+  rounded outline of `borderWidth` and `cornerRadius`, both authored
+  against a 1080-wide reference and scaled to the canvas, replacing
+  the composition-wide `videoBorderWidth`/`videoCornerRadius`.
+  "device" instead builds a 3D BOX around the picture: a body of
+  `material` (spaceBlack, naturalTitanium, silver, gold, deepBlue, or
+  the matte plasticWhite / plasticBlack / plasticBlue / plasticRed /
+  plasticGreen / plasticYellow / plasticPink), a bezel of
+  `bezelFraction` and a side depth of `depthFraction` — both as a
+  share of the screen's short edge — turned in 2.5D by `tiltY`
+  (around the vertical axis) and `tiltX` (around the horizontal),
+  in degrees, so the box's side faces come into view. A layer's
+  `tiltX`/`tiltY` KEYFRAMES animate the slab's turn from there.
+  Legacy "phone" reads as "device"; any other kind reads as "none",
+  because an unknown string is a typo rather than an older frame.
+  The slab is built around the picture before the layer is laid out,
+  which is why `placement` resolves against the BOX (below) and why a
+  slab-framed IMAGE casts no drop shadow — its silhouette is not the
+  rect. A "border" frame changes neither. Nothing builds a slab for a
+  VIDEO layer, so "device" there degrades to its border: the layer
+  keeps the radius and edge the frame states, and casts like any
+  other bordered rect.
 - Media layers (video/image) cast the same kind of shadow:
   `videoShadowColorHex` / `videoShadowOpacity` / `videoShadowRadius` /
   `videoShadowOffset` in compositionSettings put a soft drop shadow
@@ -174,8 +200,10 @@ Semantics worth knowing:
   `shadowColorHex` / `shadowOpacity` / `shadowRadius` / `shadowOffset`
   (authored against the same 1080-wide reference as its
   `borderWidth`); each absent field inherits the composition default.
-  Slab-framed (3D box) and masked layers cast nothing — their
-  silhouettes are not the rect. Cosmetic like `easing`, so no rung: an
+  Masked layers cast nothing, and neither does a slab-framed image —
+  their silhouettes are not the rect. A "device" frame on a VIDEO
+  layer has no slab to hide behind (see `frame` above) and casts like
+  the bordered rect it draws as. Cosmetic like `easing`, so no rung: an
   older reader draws the same layout, minus the shadow.
 - `placement` is the drawn box as a RULE instead of numbers, and it
   is the tool to reach for FIRST when sizing or positioning an image
@@ -228,17 +256,23 @@ Semantics worth knowing:
   hand-authored document may simply write `palette` and skip the
   resource entirely. When authoring both, keep them consistent: the
   resource wins on the next open.
-- Four entry names are ROLES — reserved names with a stated job, so
+- Eight entry names are ROLES — reserved names with a stated job, so
   a palette describes a look rather than a bag of colours: `canvas`
   (the ground behind everything), `text` (caption type), `text-bg`
-  (the plate behind caption type), and `edge` (borders and rules
-  around media). A role is only a NAME; there is no role field, and
-  nothing resolves differently. Write a palette that states all four
-  and point the matching settings fields at them —
+  (the plate behind caption type), `edge` (borders and rules around
+  media), `caption-outline` (type's outline, for sitting on footage),
+  `caption-shadow` (the caption's drop shadow), `media-shadow` (the
+  shadow under a picture or video), and `highlight` (a revealed word
+  or line as it arrives). A role is only a NAME; there is no role
+  field, and nothing resolves differently. Write a palette that states
+  all eight and point the matching settings fields at them —
   `backgroundColorHex: "@canvas"`, `subtitleColorHex: "@text"`,
   `subtitleBackgroundColorHex: "@text-bg"`, `videoBorderColorHex:
-  "@edge"` — and re-skinning the whole project is one palette swap.
-  State ALL FOUR in any palette meant to be swapped in: a palette
+  "@edge"`, `subtitleStrokeColorHex: "@caption-outline"`,
+  `subtitleShadowColorHex: "@caption-shadow"`, `videoShadowColorHex:
+  "@media-shadow"`, `subtitleReveal.highlightColorHex: "@highlight"` —
+  and re-skinning the whole project is one palette swap.
+  State ALL EIGHT in any palette meant to be swapped in: a palette
   missing a role leaves documents that followed a previous one
   pointing at a name nobody defines, which renders black. Any other
   name is freeform and nothing is wired to it; `accent`, and ramps

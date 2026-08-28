@@ -254,6 +254,24 @@ mod schema_doc_tests {
         }
     }
 
+    fn full_frame() -> ResourceFrame {
+        ResourceFrame {
+            kind: ResourceFrameKind::Device,
+            border_color_hex: "@edge".into(),
+            border_width: 12.0,
+            corner_radius: 24.0,
+            material: FrameMaterial::NaturalTitanium,
+            tilt_y: 12.0,
+            tilt_x: -4.0,
+            bezel_fraction: 0.03,
+            depth_fraction: 0.06,
+            shadow_color_hex: Some("@media-shadow".into()),
+            shadow_opacity: Some(0.4),
+            shadow_radius: Some(18.0),
+            shadow_offset: Some([0.0, 8.0]),
+        }
+    }
+
     fn full_gradient() -> BackgroundGradient {
         BackgroundGradient {
             kind: GradientKind::Linear,
@@ -452,8 +470,7 @@ mod schema_doc_tests {
             video_natural_height: Some(1080.0),
             pixel_width: Some(1170.0),
             pixel_height: Some(2532.0),
-            // Device-frame record the app builds from its own catalog.
-            frame: None,
+            frame: Some(full_frame()),
             background: None,
             palette: None,
             looped: Some(true),
@@ -609,6 +626,22 @@ mod schema_doc_tests {
         "bottomRight",
         "fit",
         "fill",
+        // Resource frames: the kind, plus every body material.
+        "border",
+        "device",
+        "phone",
+        "spaceBlack",
+        "naturalTitanium",
+        "silver",
+        "gold",
+        "deepBlue",
+        "plasticWhite",
+        "plasticBlack",
+        "plasticBlue",
+        "plasticRed",
+        "plasticGreen",
+        "plasticYellow",
+        "plasticPink",
         // Gradients.
         "radial",
         "clamp",
