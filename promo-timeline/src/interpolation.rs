@@ -112,6 +112,12 @@ fn placement_aspect(
 /// own, with tilt keyframes standing in for the stored tilt — the same frame
 /// the app bakes. Swift twin: `ProjectLayer.effectiveFrame(at:resources:)`.
 ///
+/// Only an IMAGE wears one here. A slab is a BAKE, and every bake site takes
+/// an image — a device frame on a video is never pre-framed, so `media_quad`
+/// lays that layer out at its own size and `media_border_style` degrades the
+/// frame to a border. Inflating there would size the box for a slab nothing
+/// draws: the same defect, pointing the other way.
+///
 /// A SPRITE sheet is left unframed deliberately. `media_quad` divides the
 /// FRAMED texture into cells, so a framed sheet is already wrong further
 /// down; compensating here would stack a second correction on the first and
@@ -122,7 +128,7 @@ fn effective_frame(
     resource: Option<&promo_model::ProjectResource>,
 ) -> Option<promo_model::ResourceFrame> {
     let resource = resource?;
-    if resource.sprite.is_some() {
+    if resource.kind != promo_model::ProjectResourceKind::Image || resource.sprite.is_some() {
         return None;
     }
     let mut frame = layer
@@ -863,6 +869,35 @@ mod placement_frame_tests {
                 "at t={t} the device drifted to {centre}"
             );
         }
+    }
+
+    /// A device frame on a VIDEO does not inflate the box.
+    ///
+    /// Nothing bakes a slab for a video — every bake site takes an image —
+    /// so `media_quad` gets the raw texture and `media_border_style`
+    /// degrades the frame to a border. Sizing the rule for a slab that is
+    /// never drawn is the same defect as sizing it for a screenshot when a
+    /// slab IS drawn, just pointing the other way.
+    #[test]
+    fn a_device_frame_on_a_video_does_not_inflate() {
+        let canvas = settings(1290.0, 2796.0);
+        let json = r#"{"id": "R", "kind": "video", "filename": "clip.mp4",
+                       "displayName": "Clip", "addedAt": 0,
+                       "videoNaturalWidth": 1290, "videoNaturalHeight": 2796,
+                       "frame": {"kind": "device", "bezelFraction": 0.035}}"#;
+        let resources: Vec<promo_model::ProjectResource> =
+            vec![serde_json::from_str(json).expect("resource")];
+        let mut layer = placed_layer(
+            r#"{"id": "K", "time": 0, "transitionDuration": 0,
+                "placement": {"height": 1800, "anchor": "center"}}"#,
+        );
+        layer.kind = promo_model::ProjectLayerKind::Video;
+        let tr = layer_transform_along_paths(&layer, 1.0, &canvas, &resources);
+        let drawn_width = 1800.0 * (1290.0 / 2796.0);
+        assert!(
+            (tr.horizontal_shift - (1290.0 - drawn_width) / 2.0).abs() < 1e-9,
+            "a video was laid out as if a slab had been baked around it"
+        );
     }
 
     /// A rule on an unframed resource resolves exactly as it always did —

@@ -208,10 +208,15 @@ Semantics worth knowing:
   field may then hold "@accent" instead of a hex value — background,
   border, caption colours, gradient stops, a background keyframe's
   colorHex. Matching ignores case. A name the palette does not
-  define is not an error: it falls through to that field's own
-  default and `promo_inspect` lists it. Use it when a colour appears
-  more than once — re-skinning a project then means editing one
-  entry rather than hunting every occurrence. Colours are stored as
+  define does NOT fall through to that field's own default: the
+  reference is handed on unchanged, fails to parse as hex, and
+  renders BLACK. `promo_inspect` lists undefined names, and it is
+  worth reading its output, because the app's editing canvas draws
+  unresolved caption text WHITE — so an undefined name can look
+  right while you are working and ship invisible. Use it when a
+  colour appears more than once — re-skinning a project then means
+  editing one entry rather than hunting every occurrence. Colours
+  are stored as
   bare `RRGGBB`; a leading `#` is accepted on read.
 - A `palette` RESOURCE carries the same entries as a reusable
   definition: `{ "kind": "palette", "filename": "", "displayName":
@@ -223,6 +228,22 @@ Semantics worth knowing:
   hand-authored document may simply write `palette` and skip the
   resource entirely. When authoring both, keep them consistent: the
   resource wins on the next open.
+- Four entry names are ROLES — reserved names with a stated job, so
+  a palette describes a look rather than a bag of colours: `canvas`
+  (the ground behind everything), `text` (caption type), `text-bg`
+  (the plate behind caption type), and `edge` (borders and rules
+  around media). A role is only a NAME; there is no role field, and
+  nothing resolves differently. Write a palette that states all four
+  and point the matching settings fields at them —
+  `backgroundColorHex: "@canvas"`, `subtitleColorHex: "@text"`,
+  `subtitleBackgroundColorHex: "@text-bg"`, `videoBorderColorHex:
+  "@edge"` — and re-skinning the whole project is one palette swap.
+  State ALL FOUR in any palette meant to be swapped in: a palette
+  missing a role leaves documents that followed a previous one
+  pointing at a name nobody defines, which renders black. Any other
+  name is freeform and nothing is wired to it; `accent`, and ramps
+  like `accent1`…`accent4` for gradient stops, are the conventional
+  ones.
 - A gradient's `start`/`end` (and `repeat`) may be OMITTED on a
   background LAYER keyframe's gradient: absent geometry is pulled
   from the PLATE's gradient at every read — so a keyframe that only
