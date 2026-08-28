@@ -244,6 +244,20 @@ Semantics worth knowing:
   name is freeform and nothing is wired to it; `accent`, and ramps
   like `accent1`…`accent4` for gradient stops, are the conventional
   ones.
+- A palette resource may also carry a `captionStyle` — the
+  typography that goes WITH its colours, and the reason the app calls
+  one a THEME. Only the non-colour fields are read from it (weight,
+  alignment, size, margins, plate opacity, stroke and shadow
+  strength): colour comes from the roles, so that nothing has two
+  sources. The app folds it into the `subtitle*` defaults when a
+  project SELECTS the theme, and only over fields still holding their
+  default — a size someone chose stays theirs. Colours differ: the
+  app points the settings field at the role (`"@text"`) rather than
+  filling in its value, which is what lets a later theme re-skin the
+  project without rewriting anything. Both are app conveniences; a
+  hand-authored document can simply write the `subtitle*` values and
+  the `@role` references it wants, and the renderer neither knows nor
+  cares which put them there.
 - A gradient's `start`/`end` (and `repeat`) may be OMITTED on a
   background LAYER keyframe's gradient: absent geometry is pulled
   from the PLATE's gradient at every read — so a keyframe that only
