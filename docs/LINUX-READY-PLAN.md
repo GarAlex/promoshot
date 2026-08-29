@@ -247,7 +247,11 @@ lavapipe (mesa software Vulkan), distro ffmpeg, DejaVu fonts. Results:
   the geometry and colour agree.
 
 So the portable claim is now measured, not inferred: rendering works on
-Linux today with no GPU at all. The untested gap remains DMA-BUF import
+Linux today with no GPU at all. And measured one platform further
+(2026-08-29): the whole workspace ALSO checks clean for
+`x86_64-pc-windows-msvc` — cross-checked only, never run; wgpu goes to
+D3D12/Vulkan there, ffmpeg-as-subprocess needs only an ffmpeg.exe, and
+Media Foundation stays the planned native backend. The untested gap remains DMA-BUF import
 (lavapipe exercised the CPU-pixels path).
 
 **The fonts gap, closed the same day.** The curated picker faces now carry
