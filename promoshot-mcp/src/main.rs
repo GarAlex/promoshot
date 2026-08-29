@@ -480,8 +480,21 @@ mod tests {
         let argv = seen.borrow()[0].clone();
         assert_eq!(argv[0], "still");
         let out = argv[argv.iter().position(|a| a == "--out").unwrap() + 1].clone();
-        assert!(
-            out.ends_with("Exports/still-2.5s.png"),
+        // Compared by component: the separator is the platform's, and on
+        // Windows the path also carries canonicalize's \\?\ prefix — a
+        // substring match with '/' tests a Unix spelling, not the rule.
+        let out_path = Path::new(&out);
+        assert_eq!(
+            out_path.file_name().and_then(|n| n.to_str()),
+            Some("still-2.5s.png"),
+            "defaulted still name: {out}"
+        );
+        assert_eq!(
+            out_path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str()),
+            Some("Exports"),
             "defaulted into the project's Exports: {out}"
         );
         assert!(
