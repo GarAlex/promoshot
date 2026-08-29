@@ -2,6 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "io.github.garalex/promoshot",
   "description": "Render PromoShot (.promo) video projects headless: validate, inspect, and render stills, frame sequences and mp4 with mixed audio. Videos authored as JSON; Rust + wgpu + ffmpeg.",
+  "websiteUrl": "https://promoshot.app",
   "status": "active",
   "repository": {
     "url": "https://github.com/GarAlex/promoshot",
