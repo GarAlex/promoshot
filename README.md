@@ -1,5 +1,10 @@
 # promo-core
 
+<p align="center">
+  <img src="docs/rendered-on-linux.png" width="720"
+       alt="A frame rendered by the engine on Linux: a bordered video card over a themed background, with a stroked, shadowed caption reading 'Rendered on Linux'.">
+</p>
+
 The rendering engine behind [PromoShot](https://apps.apple.com/app/promoshot),
 and an open implementation of its project format. A `.promo` project is a
 folder — `metadata.json` plus its media — and this workspace is everything
@@ -88,6 +93,43 @@ projects outside this tree), `--promo <path>`.
 The Mac app carries its own MCP server (Settings → Automation) with the same
 tool names plus app-only abilities — opening the editor, speech synthesis.
 One skill drives both.
+
+What a session looks like — three requests in, a validated project and a
+rendered frame out (the frame at the top of this page was made exactly this
+way):
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"promo_validate","arguments":{"project":"examples/LinuxSmoke.promo"}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"promo_render_still","arguments":{"project":"examples/LinuxSmoke.promo","time":5.5}}}
+```
+
+```json
+{"id":2,"result":{"content":[{"type":"text","text":"ok — nothing the renderer would quietly correct"}]}}
+{"id":3,"result":{"content":[{"type":"text","text":"wrote examples/LinuxSmoke.promo/Exports/still-5.5s.png (1280x720 at 5.50s)"}]}}
+```
+
+## One engine, every platform
+
+The same project rendered on macOS (Metal, VideoToolbox) and on a bare
+Linux container (lavapipe software Vulkan, no GPU; ffmpeg) — SSIM 0.983
+over the full 240-frame video. The visible difference is the font: the
+caption asks the question, the two frames answer it.
+
+<p align="center">
+  <img src="docs/mac-vs-linux.png"
+       alt="The same frame rendered on macOS (left) and Linux (right), near-identical: a bordered gradient card over a dark background, captioned 'Same pixels as the Mac?'.">
+</p>
+
+Try it yourself — [examples/LinuxSmoke.promo](examples/LinuxSmoke.promo)
+is a complete project (synthetic media, ~450 KB): a clip with audio, an
+image, palette-named colours, placement rules, easing, and a keyframe
+that waits for another layer:
+
+```
+promo video examples/LinuxSmoke.promo --out smoke.mp4
+```
 
 ## Authoring a project
 
