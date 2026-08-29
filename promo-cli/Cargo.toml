@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+# A lib as well as a bin: promo-ffi re-exposes render::Renderer over the C
+# ABI, so front ends that are not Rust drive the same host the CLI is.
+[lib]
+name = "promo_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "promo"
 path = "src/main.rs"

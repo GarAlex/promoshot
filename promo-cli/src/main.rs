@@ -11,10 +11,8 @@
 //! `promo-media`, so what this tool can read and write, any front end can.
 //! `promo inspect` reports anything a given project would lose.
 
-mod project;
-mod render;
-
 use project::{Project, Unsupported};
+use promo_cli::{project, render};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 

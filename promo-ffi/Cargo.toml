@@ -9,6 +9,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 promo-model = { path = "../promo-model" }
+# The CLI's host (render::Renderer), re-exposed over the C ABI so non-Rust
+# front ends drive the same implementation the render oracle runs.
+promo-cli = { path = "../promo-cli" }
 promo-timeline = { path = "../promo-timeline" }
 promo-editor = { path = "../promo-editor" }
 promo-engine = { path = "../promo-engine" }

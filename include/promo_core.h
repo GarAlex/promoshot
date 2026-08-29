@@ -96,6 +96,34 @@ int32_t promo_layer_background_rgba(const PromoProject *project,
 int32_t promo_layer_resource_index(const PromoProject *project,
                                    int32_t layer_index);
 
+/* ---- Project renderer (every platform) ----------------------------------
+ * The CLI's host re-exposed: media decode and composition stay in Rust, and
+ * frames come out as CPU pixels. This is the Windows/Linux preview path —
+ * the IOSurface preview engine below stays the Apple one. Handles are
+ * single-threaded: one call at a time per handle. */
+
+/* Opaque renderer over a .promo project folder. */
+typedef struct PromoRenderer PromoRenderer;
+
+/* Opens a project folder and builds a renderer producing width x height
+ * frames (canvas aspect-fit inside). NULL on a missing/invalid project or
+ * no GPU adapter; the reason is on stderr, and promo_project_validate can
+ * say why a payload is malformed. Free with promo_renderer_free. */
+PromoRenderer *promo_renderer_new(const char *project_dir, int32_t width,
+                                  int32_t height);
+void promo_renderer_free(PromoRenderer *renderer);
+
+/* The composition's duration in seconds; -1.0 on a bad handle. */
+double promo_renderer_duration(const PromoRenderer *renderer);
+
+/* Renders the frame at `time` into out_pixels as premultiplied BGRA rows,
+ * width * height * 4 bytes, no row padding. out_len must equal exactly
+ * that (-2 otherwise — refused rather than written past). 0 ok, -1 bad
+ * handle/pointer, -4 render failed (stderr has why), -5 engine panicked
+ * (fenced; a failed frame never aborts the host). */
+int32_t promo_renderer_frame_bgra(PromoRenderer *renderer, double time,
+                                  uint8_t *out_pixels, size_t out_len);
+
 /* ---- Phase 2: GPU compositor (macOS) ------------------------------------ */
 
 /* Opaque compositor (GPU context + pipeline, reused across frames). */

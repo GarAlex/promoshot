@@ -1051,6 +1051,7 @@ name = "promo-ffi"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "promo-cli",
  "promo-editor",
  "promo-engine",
  "promo-gpu",
