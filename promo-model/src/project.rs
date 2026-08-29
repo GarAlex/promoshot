@@ -17,6 +17,12 @@ fn is_none<T>(v: &Option<T>) -> bool {
     v.is_none()
 }
 
+/// A `false` bool is the absent one: it never serializes, so a project that
+/// says nothing about waiting looks exactly as it did before waiting existed.
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
 /// Tolerant string-enum decode helper: any unknown raw value maps to the
 /// given fallback (mirrors the Swift `init(from:)` overrides that keep old
 /// app versions able to open newer projects).
@@ -1085,7 +1091,27 @@ impl Serialize for CompositionSettings {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLayerKeyframe {
     pub id: String,
+    /// When this keyframe happens, in the layer's own seconds.
+    ///
+    /// When `wait` is set this is also where the last resolve LEFT it, which
+    /// is what lets a wait cost no reader version: a reader that knows
+    /// nothing of waiting sees a plain number and draws the last good answer.
     pub time: f64,
+    /// Hold here until one of the layer's `releases` fires.
+    ///
+    /// Names nothing on purpose. A keyframe pointing at a particular layer
+    /// would scatter the coupling across every keyframe that has one; the
+    /// LAYER states its releases once, as a pool, and any of them frees the
+    /// next waiting keyframe. Nothing here has to know which one it waited
+    /// for.
+    ///
+    /// Resolved like `durationRule` and `placement` — stored, re-resolved on
+    /// every read, with the answer written back into `time`. A wait only ever
+    /// pushes a keyframe LATER: if every release has already fired it is
+    /// skipped, not held, which is what makes resolution a single forward
+    /// pass with no deadlock.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub wait: bool,
     #[serde(default, skip_serializing_if = "is_none")]
     pub zoom: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -1723,6 +1749,15 @@ pub struct ProjectLayer {
     /// differently is exactly how caption placement diverged.
     #[serde(default, skip_serializing_if = "is_none")]
     pub timing: Option<LayerTiming>,
+    /// The layers whose start or end frees this layer's WAITING keyframes.
+    ///
+    /// A POOL, not a pairing: no keyframe is bound to a particular entry, and
+    /// any release in the list frees the next keyframe still waiting. That is
+    /// what lets the coupling live here instead of on every keyframe — and it
+    /// is what makes deletion safe, since one fewer release is simply one
+    /// fewer hold rather than a shift that mis-pairs everything after it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub releases: Vec<LayerRelease>,
     #[serde(default)]
     pub keyframes: Vec<ProjectLayerKeyframe>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
@@ -2071,6 +2106,26 @@ impl Default for BackgroundFill {
         BackgroundFill::Stretch
     }
 }
+
+/// One layer's start or end, as something that frees a waiting keyframe.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerRelease {
+    /// The layer whose moment this is.
+    pub layer_id: String,
+    /// Which moment. Absent means its END, which is what "wait for the
+    /// narration" means nearly every time.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub on: Option<ReleaseMoment>,
+}
+
+impl LayerRelease {
+    pub fn moment(&self) -> ReleaseMoment {
+        self.on.unwrap_or(ReleaseMoment::End)
+    }
+}
+
+tolerant_enum!(ReleaseMoment, End, [(Start, "start"), (End, "end"),]);
 
 /// `audioGain` (0…4) collapses into `volume` (0…1) when `volume` is absent,
 /// and `disabledAudioTrackIndices` is deduped / filtered / sorted.

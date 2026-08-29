@@ -17,8 +17,7 @@
 
 use promo_model::{
     DurationRuleKind, ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource,
-    TimingReference,
-};
+    TimingReference, ReleaseMoment};
 
 /// Why a layer's timing could not be worked out. Each names both layers,
 /// because "which one" is the first thing anyone asks.
@@ -36,6 +35,12 @@ pub enum AttachmentProblem {
     /// anchors reach both ways; found while resolving rather than prevented
     /// by the shape.
     Circular { layer: String },
+    /// A keyframe waits and its layer names no release that can ever fire —
+    /// an empty pool, or one whose entries name layers that are gone or have
+    /// no end. Usually a deleted narration rather than an intent, so it is
+    /// reported. A release that has already FIRED is a different thing and
+    /// stays silent: that is the ordinary case.
+    WaitsForNothing { layer: String },
     /// The offsets put the end at or before the start, so the layer resolves
     /// to nothing. Clamped to zero rather than refused — resolution always
     /// produces an answer — but said out loud, because layer visibility is
@@ -50,6 +55,12 @@ impl std::fmt::Display for AttachmentProblem {
             Self::NoPreviousLayer { layer } => write!(
                 f,
                 "layer \"{layer}\" is attached to the previous layer, but nothing is above it"
+            ),
+            Self::WaitsForNothing { layer } => write!(
+                f,
+                "layer \"{layer}\" has a keyframe that waits, but names no release that \
+                 can fire — an empty list, or one pointing at a layer that is gone or \
+                 never ends. The keyframe stays where it is."
             ),
             Self::NoNextLayer { layer } => write!(
                 f,
@@ -375,6 +386,90 @@ pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProbl
         }
     }
 
+    // Waits resolve AFTER every layer knows where it sits, because a release
+    // is a layer's start or end and those are what this pass just settled.
+    problems.extend(resolve_waits(layers));
+
+    problems
+}
+
+/// Moves every WAITING keyframe to the next release its layer is owed.
+///
+/// A wait names nothing: the LAYER lists the releases, as a pool, and any of
+/// them frees the next keyframe still waiting. Nothing downstream has to know
+/// which one it waited for, which is what lets a narration be reordered or
+/// deleted without touching a single keyframe.
+///
+/// The rule that makes this total rather than a scheduler: a wait only ever
+/// pushes a keyframe LATER. A release already behind the keyframe is spent,
+/// not owed — and when nothing is left the wait is SKIPPED and the keyframe
+/// stays where it was. One forward pass, no deadlock, and a file that always
+/// renders.
+fn resolve_waits(layers: &mut [ProjectLayer]) -> Vec<AttachmentProblem> {
+    let mut problems = Vec::new();
+    // Where each layer starts and ends, read before anything is written: a
+    // release points at another layer, and mutating as we go would let the
+    // answer depend on array order.
+    let moments: std::collections::HashMap<String, (f64, Option<f64>)> = layers
+        .iter()
+        .map(|layer| {
+            (
+                layer.id.clone(),
+                (layer.start_time, layer.duration.map(|d| layer.start_time + d)),
+            )
+        })
+        .collect();
+
+    for layer in layers.iter_mut() {
+        if layer.releases.is_empty() {
+            // A keyframe that waits on a layer stating no releases can never
+            // be freed. Silence would leave it looking like it had held.
+            if layer.keyframes.iter().any(|k| k.wait) {
+                problems.push(AttachmentProblem::WaitsForNothing {
+                    layer: layer.name.clone(),
+                });
+            }
+            continue;
+        }
+
+        let mut times: Vec<f64> = layer
+            .releases
+            .iter()
+            .filter_map(|release| {
+                let (start, end) = moments.get(&release.layer_id)?;
+                match release.moment() {
+                    ReleaseMoment::Start => Some(*start),
+                    // A layer with no end of its own frees nothing: there is
+                    // no moment to name.
+                    ReleaseMoment::End => *end,
+                }
+            })
+            // The layer's own seconds, which is what a keyframe time is.
+            .map(|absolute| absolute - layer.start_time)
+            .collect();
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mut next = 0;
+        let mut waited = false;
+        for keyframe in layer.keyframes.iter_mut().filter(|k| k.wait) {
+            waited = true;
+            // Spend everything already behind this keyframe — those releases
+            // have fired, and a wait cannot pull a keyframe backwards.
+            while next < times.len() && times[next] <= keyframe.time {
+                next += 1;
+            }
+            if next < times.len() {
+                keyframe.time = times[next];
+                next += 1;
+            }
+            // Nothing left: skipped, and the keyframe keeps the time it had.
+        }
+        if waited && times.is_empty() {
+            problems.push(AttachmentProblem::WaitsForNothing {
+                layer: layer.name.clone(),
+            });
+        }
+    }
     problems
 }
 
@@ -559,6 +654,171 @@ pub fn runs(layers: &[ProjectLayer]) -> Vec<Vec<String>> {
 }
 
 #[cfg(test)]
+mod wait_tests {
+    use super::*;
+    use promo_model::ProjectMetadata;
+
+    /// Built from JSON rather than from struct literals, so these exercise
+    /// the WIRE too: a `wait` or a `releases` that failed to decode would
+    /// show up here as a keyframe that never moved.
+    fn project(layers: &str) -> ProjectMetadata {
+        let json = format!(
+            r#"{{"id":"P","name":"P","createdAt":0,"state":"recorded",
+                 "subtitles":[],"trimStart":0,"trimEnd":30,"videoDuration":30,
+                 "compositionSettings":{{"canvasWidth":1290,"canvasHeight":2796}},
+                 "layers":[{layers}]}}"#
+        );
+        ProjectMetadata::from_json(&json).expect("decodes")
+    }
+
+    fn plain(id: &str, sort: i64, start: f64, duration: f64) -> String {
+        format!(
+            r#"{{"id":"{id}","name":"{id}","sortIndex":{sort},"kind":"audio",
+                 "isEnabled":true,"startTime":{start},"duration":{duration},
+                 "keyframes":[]}}"#
+        )
+    }
+
+    fn times(doc: &ProjectMetadata) -> Vec<f64> {
+        doc.layers.as_ref().unwrap()[0]
+            .keyframes
+            .iter()
+            .map(|k| k.time)
+            .collect()
+    }
+
+    /// The pool frees waits in order, and no keyframe names anything.
+    ///
+    /// Two narrations, two waiting keyframes: the first wait takes the first
+    /// release, the second the second. That is what lets a narration be
+    /// reordered or deleted without touching a keyframe.
+    #[test]
+    fn any_release_frees_the_next_wait() {
+        let mut doc = project(&format!(
+            r#"{{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                 "isEnabled":true,"startTime":0,"duration":30,
+                 "releases":[{{"layerId":"VO1"}},{{"layerId":"VO2"}}],
+                 "keyframes":[{{"id":"K1","time":1,"wait":true,"transitionDuration":0}},
+                              {{"id":"K2","time":2,"wait":true,"transitionDuration":0}}]}},{},{}"#,
+            plain("VO1", 2, 0.0, 4.0),
+            plain("VO2", 3, 4.0, 6.0)
+        ));
+        let problems = resolve_attachments(&mut doc);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(times(&doc), vec![4.0, 10.0]);
+    }
+
+    /// A wait only pushes LATER: a release already behind a keyframe is
+    /// spent, not owed. That is what makes this one forward pass rather than
+    /// a scheduler, and what stops a keyframe being dragged backwards into
+    /// something already drawn.
+    #[test]
+    fn a_release_already_behind_is_spent_not_owed() {
+        let mut doc = project(&format!(
+            r#"{{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                 "isEnabled":true,"startTime":0,"duration":30,
+                 "releases":[{{"layerId":"EARLY"}},{{"layerId":"LATE"}}],
+                 "keyframes":[{{"id":"K1","time":8,"wait":true,"transitionDuration":0}}]}},{},{}"#,
+            plain("EARLY", 2, 0.0, 2.0),
+            plain("LATE", 3, 10.0, 5.0)
+        ));
+        assert!(resolve_attachments(&mut doc).is_empty());
+        assert_eq!(times(&doc), vec![15.0],
+                   "the release at 2s was behind it and did not pull it back");
+    }
+
+    /// Nothing left to free it: SKIPPED, keeping its time, and silent.
+    ///
+    /// This is what makes a deleted narration safe — one fewer release is one
+    /// fewer hold, not a shift that mis-pairs everything after it, which is
+    /// what binding a wait to a particular layer would have caused.
+    #[test]
+    fn a_wait_with_nothing_left_is_skipped_and_keeps_its_time() {
+        let mut doc = project(&format!(
+            r#"{{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                 "isEnabled":true,"startTime":0,"duration":30,
+                 "releases":[{{"layerId":"VO1"}}],
+                 "keyframes":[{{"id":"K1","time":1,"wait":true,"transitionDuration":0}},
+                              {{"id":"K2","time":20,"wait":true,"transitionDuration":0}}]}},{}"#,
+            plain("VO1", 2, 0.0, 4.0)
+        ));
+        assert!(resolve_attachments(&mut doc).is_empty(),
+                "a spent pool is the ordinary case and says nothing");
+        assert_eq!(times(&doc), vec![4.0, 20.0], "the second is unmoved, not held");
+    }
+
+    /// A pool that can never fire is REPORTED — a deleted narration rather
+    /// than an intent. The difference from an already-spent pool is the whole
+    /// point of keeping the two apart.
+    #[test]
+    fn a_wait_nothing_can_ever_free_is_named() {
+        let mut doc = project(
+            r#"{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                "isEnabled":true,"startTime":0,"duration":30,
+                "keyframes":[{"id":"K1","time":1,"wait":true,"transitionDuration":0}]}"#,
+        );
+        let problems = resolve_attachments(&mut doc);
+        assert!(matches!(problems.as_slice(),
+                         [AttachmentProblem::WaitsForNothing { layer }] if layer == "Device"),
+                "{problems:?}");
+        assert_eq!(times(&doc), vec![1.0]);
+    }
+
+    /// A release naming a layer that is gone frees nothing, and says so.
+    #[test]
+    fn a_release_pointing_at_a_missing_layer_is_named() {
+        let mut doc = project(
+            r#"{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                "isEnabled":true,"startTime":0,"duration":30,
+                "releases":[{"layerId":"GONE"}],
+                "keyframes":[{"id":"K1","time":1,"wait":true,"transitionDuration":0}]}"#,
+        );
+        assert!(matches!(resolve_attachments(&mut doc).as_slice(),
+                         [AttachmentProblem::WaitsForNothing { .. }]));
+    }
+
+    /// `start` frees on a layer's beginning rather than its end.
+    #[test]
+    fn a_release_may_name_the_start_instead() {
+        let mut doc = project(&format!(
+            r#"{{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                 "isEnabled":true,"startTime":0,"duration":30,
+                 "releases":[{{"layerId":"VO","on":"start"}}],
+                 "keyframes":[{{"id":"K1","time":0,"wait":true,"transitionDuration":0}}]}},{}"#,
+            plain("VO", 2, 6.0, 4.0)
+        ));
+        assert!(resolve_attachments(&mut doc).is_empty());
+        assert_eq!(times(&doc), vec![6.0]);
+    }
+
+    /// A keyframe time is the LAYER's own clock, so a release is measured
+    /// from where that layer starts — not from the composition's zero.
+    #[test]
+    fn a_wait_lands_in_the_layers_own_seconds() {
+        let mut doc = project(&format!(
+            r#"{{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                 "isEnabled":true,"startTime":5,"duration":30,
+                 "releases":[{{"layerId":"VO"}}],
+                 "keyframes":[{{"id":"K1","time":0,"wait":true,"transitionDuration":0}}]}},{}"#,
+            plain("VO", 2, 5.0, 4.0)
+        ));
+        assert!(resolve_attachments(&mut doc).is_empty());
+        assert_eq!(times(&doc), vec![4.0],
+                   "9s absolute is 4s into a layer that starts at 5");
+    }
+
+    /// A project that says nothing about waiting serializes exactly as it did
+    /// before waiting existed — which is what lets this cost no reader rung.
+    #[test]
+    fn silence_costs_nothing_on_the_wire() {
+        let doc = project(&plain("A", 1, 0.0, 3.0));
+        let out = doc.to_json().expect("encodes");
+        assert!(!out.contains("wait"), "{out}");
+        assert!(!out.contains("releases"), "{out}");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use promo_model::{LayerTiming, ProjectLayerKind, TimingAnchor};
@@ -594,6 +854,7 @@ mod tests {
             caption_voice_clip: None,
             audio_focus: None,
             timing: None,
+            releases: Vec::new(),
             duration_rule: None,
             keyframes: Vec::new(),
             extra: Default::default(),

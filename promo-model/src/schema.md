@@ -576,6 +576,25 @@ Semantics worth knowing:
   attachment holds until the person drags the layer to numbers of
   their own; then their edit stands and the attachment is dropped,
   rather than snapping back on the next open.
+- A keyframe may `wait`, and a layer states what frees one. `"wait":
+  true` holds a keyframe until one of its LAYER's `releases` fires:
+  `"releases": [{ "layerId": "<a layer>", "on": "start" | "end" }]`,
+  where `on` defaults to "end". The keyframe names nothing — the list
+  is a POOL, and any release in it frees the next keyframe still
+  waiting, so a narration can be reordered or deleted without touching
+  a keyframe. Resolved like `durationRule`: stored, re-resolved on
+  every open, with the answer written back into `time` — which is why
+  it needs no reader version, since a reader that knows nothing of
+  waiting sees a plain number and draws the last good answer. A wait
+  only ever pushes a keyframe LATER: a release already behind it is
+  spent, not owed, and when nothing is left the wait is SKIPPED and
+  the keyframe keeps its time. That is what makes resolution one
+  forward pass with no deadlock. A wait whose layer names no release
+  that can fire — an empty list, or one pointing at a layer that is
+  gone or never ends — is reported by `promo_validate`; a release that
+  has merely already fired is the ordinary case and says nothing.
+  Times are the LAYER's own seconds, so a release is measured from
+  where that layer starts.
 - `durationRule` derives a layer's DURATION by rule — the time-twin
   of `placement`: stored, never baked, re-resolved on every open,
   with startTime/duration remaining the resolved answer every

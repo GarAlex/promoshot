@@ -296,6 +296,7 @@ mod schema_doc_tests {
         ProjectLayerKeyframe {
             id: "K".into(),
             time: 1.0,
+            wait: true,
             zoom: Some(0.8),
             vertical_shift: Some(150.0),
             horizontal_shift: Some(240.0),
@@ -342,6 +343,10 @@ mod schema_doc_tests {
         ProjectLayer {
             id: "L".into(),
             name: "Clip".into(),
+            releases: vec![LayerRelease {
+                layer_id: "VO".into(),
+                on: None,
+            }],
             sort_index: 1,
             kind: ProjectLayerKind::Video,
             is_enabled: true,
