@@ -409,6 +409,34 @@ fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         ));
     }
 
+    // An entry is a DEFINITION, and a definition holding a reference is a
+    // chain the engine does not follow: every use of that entry is handed
+    // the literal "@other", fails to parse as hex, and renders black. The
+    // walk above cannot see it — palette entries are rightly excluded as
+    // uses — so it is named here or nowhere.
+    let entries = settings
+        .palette
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .chain(
+            meta.resources
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .flat_map(|r| r.palette.as_deref().unwrap_or_default().iter()),
+        );
+    for entry in entries {
+        if let Some(target) = entry.color_hex.strip_prefix('@') {
+            out.push(format!(
+                "palette entry \"{}\" holds \"@{target}\" — an entry is a \
+                 definition, not a reference, and chains are not followed: \
+                 every use of \"@{}\" renders black",
+                entry.name, entry.name
+            ));
+        }
+    }
+
     // The app materializes the selected resource into `settings.palette` on
     // open and save, so the two agreeing is the normal state. When they do
     // not, a render from the file AS IT STANDS — the CLI, or anything that
@@ -949,12 +977,24 @@ mod palette_tests {
         assert!(warnings(&project(PALETTE, "", &caption("@text"))).is_empty());
     }
 
-    /// A palette entry is a DEFINITION. If its own name counted as a use,
-    /// every palette would report itself.
+    /// A palette entry is a DEFINITION. Its own name is not a USE — but a
+    /// definition holding a reference is a chain the engine does not
+    /// follow, and that is said out loud instead of rendering black in
+    /// silence.
     #[test]
-    fn the_palettes_own_entries_are_not_uses() {
+    fn the_palettes_own_entries_are_definitions_not_uses() {
         let defs = r#","palette":[{"name":"text","colorHex":"@text"}]"#;
-        assert!(warnings(&project(defs, "", "")).is_empty());
+        let found = warnings(&project(defs, "", ""));
+        assert!(
+            !found.iter().any(|w| w.contains("no palette entry defines")),
+            "its own name is not a use: {found:?}"
+        );
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("definition, not a reference")),
+            "but the chain is named: {found:?}"
+        );
     }
 
     /// The reason the walk runs over the SERIALIZED document: these two

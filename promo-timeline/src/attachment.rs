@@ -457,9 +457,13 @@ fn resolve_waits(layers: &mut [ProjectLayer]) -> Vec<AttachmentProblem> {
         let mut waited = false;
         for keyframe in layer.keyframes.iter_mut().filter(|k| k.wait) {
             waited = true;
-            // Spend everything already behind this keyframe — those releases
-            // have fired, and a wait cannot pull a keyframe backwards.
-            while next < times.len() && times[next] <= keyframe.time {
+            // Spend everything STRICTLY behind this keyframe — those
+            // releases have fired, and a wait cannot pull a keyframe
+            // backwards. Strictly, because the resolved answer is written
+            // back into the file: a release exactly AT the keyframe's time
+            // is the one it resolved to last pass, and spending it would
+            // walk the keyframe one release later on every re-open.
+            while next < times.len() && times[next] < keyframe.time {
                 next += 1;
             }
             if next < times.len() {
@@ -710,6 +714,38 @@ mod wait_tests {
         let problems = resolve_attachments(&mut doc);
         assert!(problems.is_empty(), "{problems:?}");
         assert_eq!(times(&doc), vec![4.0, 10.0]);
+    }
+
+    /// Resolution is a FIXED POINT: the answer it writes back is the answer
+    /// it reads next time. The resolved time is stored in the file beside
+    /// `wait` — the `durationRule` bargain — so the app's open-save-open
+    /// cycle runs this pass over its own output. Spending a release that
+    /// sits exactly AT the keyframe's time would walk every waiting
+    /// keyframe one release later per open, until all of them piled onto
+    /// the pool's last release.
+    #[test]
+    fn resolving_a_resolved_file_moves_nothing() {
+        let mut doc = project(&format!(
+            r#"{{"id":"DEV","name":"Device","sortIndex":1,"kind":"image",
+                 "isEnabled":true,"startTime":0,"duration":30,
+                 "releases":[{{"layerId":"VO1"}},{{"layerId":"VO2"}}],
+                 "keyframes":[{{"id":"K1","time":1,"wait":true,"transitionDuration":0}},
+                              {{"id":"K2","time":2,"wait":true,"transitionDuration":0}}]}},{},{}"#,
+            plain("VO1", 2, 0.0, 4.0),
+            plain("VO2", 3, 4.0, 6.0)
+        ));
+        assert!(resolve_attachments(&mut doc).is_empty());
+        assert_eq!(times(&doc), vec![4.0, 10.0]);
+
+        // Through the wire, the way a save-then-open runs it.
+        let mut reopened =
+            ProjectMetadata::from_json(&doc.to_json().expect("encodes")).expect("decodes");
+        assert!(resolve_attachments(&mut reopened).is_empty());
+        assert_eq!(
+            times(&reopened),
+            vec![4.0, 10.0],
+            "the second open must answer what the first one wrote"
+        );
     }
 
     /// A wait only pushes LATER: a release already behind a keyframe is
