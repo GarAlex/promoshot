@@ -2371,8 +2371,11 @@ mod border_style_tests {
 
     #[test]
     fn frame_shadow_fields_override_per_field_with_1080_reference() {
-        let mut settings = promo_model::CompositionSettings::default();
-        settings.video_shadow_opacity = 0.5; // inherited: frame sets none
+        // Inherited: the frame sets no opacity of its own.
+        let settings = promo_model::CompositionSettings {
+            video_shadow_opacity: 0.5,
+            ..Default::default()
+        };
         let mut frame = border_frame();
         frame.shadow_radius = Some(10.0); // authored at 1080-wide
         let style = media_shadow_style(Some(&frame), &settings, 1.0, 1920.0).unwrap();
@@ -2383,8 +2386,10 @@ mod border_style_tests {
 
     #[test]
     fn zero_opacity_or_zero_geometry_draws_nothing() {
-        let mut settings = promo_model::CompositionSettings::default();
-        settings.video_shadow_radius = 20.0; // opacity still 0
+        let mut settings = promo_model::CompositionSettings {
+            video_shadow_radius: 20.0, // opacity still 0
+            ..Default::default()
+        };
         assert!(media_shadow_style(None, &settings, 1.0, 1920.0).is_none());
         settings.video_shadow_radius = 0.0;
         settings.video_shadow_opacity = 1.0; // no blur, no offset

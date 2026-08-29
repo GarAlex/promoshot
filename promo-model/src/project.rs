@@ -2061,6 +2061,11 @@ tolerant_enum!(
     [(Stretch, "stretch"), (Fit, "fit"), (Tile, "tile"),]
 );
 
+// Not derivable: `BackgroundFill` is produced by `tolerant_enum!`, whose
+// variants are emitted in a repetition, so `#[default]` cannot be attached to
+// the fallback one. The impl says the same thing the macro's `$fallback`
+// argument already says.
+#[allow(clippy::derivable_impls)]
 impl Default for BackgroundFill {
     fn default() -> Self {
         BackgroundFill::Stretch
@@ -3239,8 +3244,6 @@ mod palette_tests {
         );
         assert_eq!(out["resources"][0]["palette"][1]["colorHex"], "5B8CFF");
     }
-
-    use super::*;
 
     #[test]
     fn a_palette_round_trips_and_resolves() {

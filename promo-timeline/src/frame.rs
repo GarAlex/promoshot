@@ -226,9 +226,11 @@ mod tests {
     fn only_a_slab_changes_the_size() {
         let raw = Size::new(800.0, 600.0);
         assert_eq!(framed_pixel_size(raw, None).width(), 800.0);
-        let mut border = ResourceFrame::default();
-        border.kind = ResourceFrameKind::Border;
-        border.border_width = 40.0;
+        let border = ResourceFrame {
+            kind: ResourceFrameKind::Border,
+            border_width: 40.0,
+            ..Default::default()
+        };
         assert_eq!(framed_pixel_size(raw, Some(&border)).width(), 800.0);
         let none = ResourceFrame::default();
         assert_eq!(framed_pixel_size(raw, Some(&none)).height(), 600.0);

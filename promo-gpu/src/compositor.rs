@@ -1859,7 +1859,7 @@ mod tests {
         // Probes sit on texel CENTRES (fract 0.25 / 0.75) so bilinear
         // blending between the two texels stays away.
         let px_at = |pixels: &[u8], x: usize| px(pixels, 100, x, 50);
-        let plain = compose(&scene([0.0, 0.0]), &[stripes.clone()], &ctx);
+        let plain = compose(&scene([0.0, 0.0]), std::slice::from_ref(&stripes), &ctx);
         assert_eq!(px_at(&plain, 12)[2], 255, "first tile, red half");
         assert_eq!(px_at(&plain, 37)[0], 255, "first tile, blue half");
         assert_eq!(px_at(&plain, 62)[2], 255, "second tile, red half");

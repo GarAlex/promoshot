@@ -806,10 +806,11 @@ mod placement_frame_tests {
     }
 
     fn settings(w: f64, h: f64) -> promo_model::CompositionSettings {
-        let mut s = promo_model::CompositionSettings::default();
-        s.canvas_width = w;
-        s.canvas_height = h;
-        s
+        promo_model::CompositionSettings {
+            canvas_width: w,
+            canvas_height: h,
+            ..Default::default()
+        }
     }
 
     /// A device-framed shot must land CENTRED.
