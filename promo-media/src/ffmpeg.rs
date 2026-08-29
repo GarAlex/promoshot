@@ -593,6 +593,18 @@ mod tests {
         if path.is_file() {
             return Some(path);
         }
+        // Written under a private name and renamed into place. Parallel test
+        // threads all fill this cache on a machine's first run, and ffmpeg
+        // writing the shared name directly means a second caller sees the
+        // file mid-write, takes it as cached, and reads an mp4 whose moov
+        // atom does not exist yet. The tmp keeps the .mp4 suffix because
+        // ffmpeg infers the container from it.
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let tmp = dir.join(format!(
+            "clip-{seconds}s-{}-{}.tmp.mp4",
+            std::process::id(),
+            SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
         let status = Command::new("ffmpeg")
             .args([
                 "-v",
@@ -605,10 +617,23 @@ mod tests {
                 "-pix_fmt",
                 "yuv420p",
             ])
-            .arg(&path)
+            .arg(&tmp)
             .status()
             .ok()?;
-        status.success().then_some(path)
+        if !status.success() {
+            let _ = std::fs::remove_file(&tmp);
+            return None;
+        }
+        if std::fs::rename(&tmp, &path).is_err() {
+            // Windows refuses to rename over an existing file, so losing the
+            // publish race lands here — and the winner's clip is complete,
+            // because only complete clips are ever renamed in.
+            let _ = std::fs::remove_file(&tmp);
+            if !path.is_file() {
+                return None;
+            }
+        }
+        Some(path)
     }
 
     fn pixels(surface: &GpuSurface) -> (Vec<u8>, u32, u32) {
@@ -621,6 +646,35 @@ mod tests {
             } => (data.clone(), *width, *height),
             other => panic!("expected CPU pixels, got {other:?}"),
         }
+    }
+
+    /// fixture() callers run on parallel test threads, and a machine that
+    /// has never run the suite fills the cache for all of them at once. A
+    /// caller that sees the file mid-write takes it as cached and reads a
+    /// clip whose moov atom does not exist yet — how the suite's first-ever
+    /// Windows run failed. So: the moment the cache shows the file, it must
+    /// be readable. 1s is this test's own cache key; clearing it cannot
+    /// disturb the shared 2s clip.
+    #[test]
+    fn a_clip_visible_in_the_cache_is_always_complete() {
+        let path = std::env::temp_dir().join("promo-media-tests/clip-1s.mp4");
+        let _ = std::fs::remove_file(&path);
+        let writer = std::thread::spawn(|| fixture(1));
+        while !path.is_file() && !writer.is_finished() {
+            std::thread::yield_now();
+        }
+        // Size at first sight. A cache that publishes in place shows a file
+        // that is still growing — asserting on the size catches that even
+        // when the write finishes faster than a decoder could be pointed at
+        // it, which on this hardware it does.
+        let seen = path.metadata().map(|m| m.len()).unwrap_or(0);
+        let Some(clip) = writer.join().expect("fixture thread panicked") else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        let full = clip.metadata().expect("clip metadata").len();
+        assert_eq!(seen, full, "the clip was visible before it was complete");
+        FfmpegDecoder::open(&clip).expect("open");
     }
 
     #[test]
