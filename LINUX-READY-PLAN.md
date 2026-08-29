@@ -223,6 +223,33 @@ listing them here is how they stay out.
 
 ## Status
 
+**First real-Linux run (2026-08-29).** Everything before this date was
+cross-checked from a Mac; this was Debian bookworm arm64 in Docker, rust:1,
+lavapipe (mesa software Vulkan), distro ffmpeg, DejaVu fonts. Results:
+
+- `cargo check --workspace --all-targets`: clean.
+- `cargo test --workspace --no-fail-fast`: **338 passed, 1 failed** (Mac
+  runs 401 — the difference is the Apple-gated binaries, which compile to
+  empty suites here). The one failure is
+  `promo-text::a_caption_gets_the_font_the_picker_named`: the curated
+  picker fonts (georgia, futura, markerFelt, timesNewRoman) are Apple
+  preinstalls, absent on a bare distro, so every one of them measured
+  exactly like the fallback sans. An environment fact, not a code bug —
+  the Linux answer is bundling fonts or mapping the curated names to
+  metric-compatible libre faces (Liberation covers three of the four),
+  and the test then passes on its own.
+- The CLI rendered a real project — video layer with audio, image layer,
+  palette roles, placement rules, easing, a `wait`/`releases` pair —
+  end to end: validate clean, four stills, 240-frame 1280×720 mp4 with
+  the soundtrack mixed. Against the same project rendered on the Mac
+  (Metal + VideoToolbox path), stills score SSIM 0.97 per frame and the
+  whole video 0.983 — the visible difference is the font substitution,
+  the geometry and colour agree.
+
+So the portable claim is now measured, not inferred: rendering works on
+Linux today with no GPU at all. The known gap is fonts; the untested gap
+remains DMA-BUF import (lavapipe exercised the CPU-pixels path).
+
 **R1 done** (2026-08-14). Next: R2 or R3 — independent of each other. R3 is
 expanded in [EDITOR-PLAN.md](EDITOR-PLAN.md); its first slice is the lane
 packer.
