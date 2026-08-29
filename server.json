@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.garalex/promoshot",
+  "description": "Render PromoShot (.promo) video projects headless: validate, inspect, and render stills, frame sequences and mp4 with mixed audio. Videos authored as JSON; Rust + wgpu + ffmpeg.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/GarAlex/promoshot",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/garalex/promoshot-mcp:0.1.0",
+      "runtimeHint": "docker",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

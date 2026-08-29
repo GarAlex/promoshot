@@ -90,6 +90,33 @@ Flags, all optional: `--workspace <dir>` (where `promo_workspace` points;
 else `$PROMOSHOT_WORKSPACE`, else the XDG data dir), `--root <dir>` (refuse
 projects outside this tree), `--promo <path>`.
 
+### Docker
+
+The image is the whole render environment — server, CLI, ffmpeg, a
+software Vulkan and the fonts — so a client needs nothing on the host:
+
+```
+docker build -t promoshot-mcp .
+```
+
+```json
+{
+  "mcpServers": {
+    "promoshot": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm",
+               "-v", "/path/to/your/projects:/projects",
+               "promoshot-mcp"]
+    }
+  }
+}
+```
+
+Projects live under the mount; `promo_workspace` answers `/projects`. The
+image bakes in `examples/LinuxSmoke.promo`, so it can prove itself with no
+mount at all. `server.json` is the MCP registry manifest for the published
+image (`ghcr.io/garalex/promoshot-mcp`).
+
 The Mac app carries its own MCP server (Settings → Automation) with the same
 tool names plus app-only abilities — opening the editor, speech synthesis.
 One skill drives both.
