@@ -1609,8 +1609,7 @@ impl PreviewEngine {
             .map(|gradient| {
                 let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
                 let point = |p: promo_model::Point| [p.x() as f32 * cw, p.y() as f32 * ch];
-                let fallback =
-                    promo_model::BackgroundGradient::default_geometry(gradient.kind);
+                let fallback = promo_model::BackgroundGradient::default_geometry(gradient.kind);
                 promo_gpu::compositor::SceneGradient {
                     radial: gradient.kind == promo_model::GradientKind::Radial,
                     repeat: match gradient.effective_repeat() {
@@ -1778,18 +1777,14 @@ impl PreviewEngine {
                 // `layer_resource_id`, and for a TILED plate the layer's
                 // shift keyframes scroll the pattern from its anchor.
                 let all = self.meta.resources.clone().unwrap_or_default();
-                if let Some(rid) = tl::layer_resource_id(layer, centre, &all)
-                    .map(str::to_string)
-                {
+                if let Some(rid) = tl::layer_resource_id(layer, centre, &all).map(str::to_string) {
                     if let Some(resource) = all.iter().find(|r| r.id == rid) {
                         if resource.kind == promo_model::ProjectResourceKind::Background
                             && !resource.filename.is_empty()
                         {
                             let style = resource.background.clone().unwrap_or_default();
                             let tier = self.tier_for(layer, centre);
-                            if let Some(frame_id) =
-                                self.frame(&layer.id, &rid, -1.0, tier, &used)
-                            {
+                            if let Some(frame_id) = self.frame(&layer.id, &rid, -1.0, tier, &used) {
                                 let frame = self.cached_frame(frame_id);
                                 let (fw, fh) =
                                     (frame.frame.width as f64, frame.frame.height as f64);
@@ -1805,18 +1800,15 @@ impl PreviewEngine {
                                 match style.fill {
                                     promo_model::BackgroundFill::Stretch => {}
                                     promo_model::BackgroundFill::Fit => {
-                                        let scale =
-                                            (cw / fw.max(1.0)).min(ch / fh.max(1.0));
+                                        let scale = (cw / fw.max(1.0)).min(ch / fh.max(1.0));
                                         let (w, h) = (fw * scale, fh * scale);
-                                        quad.rect =
-                                            [(cw - w) / 2.0, (ch - h) / 2.0, w, h];
+                                        quad.rect = [(cw - w) / 2.0, (ch - h) / 2.0, w, h];
                                     }
                                     promo_model::BackgroundFill::Tile => {
                                         let tr = tl::layer_transform_along_paths(
                                             layer, time, &settings, &all,
                                         );
-                                        let anchor =
-                                            style.anchor.unwrap_or([0.0, 0.0]);
+                                        let anchor = style.anchor.unwrap_or([0.0, 0.0]);
                                         // Scale multiplies the tile's size,
                                         // so it DIVIDES how many repeats
                                         // span the canvas. The layer's ZOOM
@@ -1826,7 +1818,7 @@ impl PreviewEngine {
                                         // on the ordinary eased track.
                                         let tile_scale = (style.scale.unwrap_or(1.0)
                                             * tr.zoom.max(0.01))
-                                            .max(0.005);
+                                        .max(0.005);
                                         // The image's NATIVE size decides
                                         // the tile, not the provided
                                         // frame's: previews hand in TIERED
@@ -1834,10 +1826,8 @@ impl PreviewEngine {
                                         // repeats computed from those made
                                         // a 3000px photo tile as if it
                                         // were canvas-sized.
-                                        let iw = resource
-                                            .pixel_width
-                                            .filter(|w| *w > 1.0)
-                                            .unwrap_or(fw);
+                                        let iw =
+                                            resource.pixel_width.filter(|w| *w > 1.0).unwrap_or(fw);
                                         let ih = resource
                                             .pixel_height
                                             .filter(|h| *h > 1.0)
@@ -2282,7 +2272,10 @@ mod border_style_tests {
         // borrow the frame's authored radius/thickness.
         let mut off = border_frame();
         off.kind = promo_model::ResourceFrameKind::None;
-        assert_eq!(media_border_style(Some(&off), &layer(), &settings, 1.0, 1920.0), with_none);
+        assert_eq!(
+            media_border_style(Some(&off), &layer(), &settings, 1.0, 1920.0),
+            with_none
+        );
     }
 
     #[test]

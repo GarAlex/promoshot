@@ -429,12 +429,13 @@ fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             Some(resource) => {
                 let entries = resource.palette.as_deref().unwrap_or_default();
                 let same = entries.len() == settings.palette.as_deref().unwrap_or_default().len()
-                    && entries.iter().zip(
-                        settings.palette.as_deref().unwrap_or_default().iter(),
-                    ).all(|(a, b)| {
-                        a.name.eq_ignore_ascii_case(&b.name)
-                            && a.color_hex.eq_ignore_ascii_case(&b.color_hex)
-                    });
+                    && entries
+                        .iter()
+                        .zip(settings.palette.as_deref().unwrap_or_default().iter())
+                        .all(|(a, b)| {
+                            a.name.eq_ignore_ascii_case(&b.name)
+                                && a.color_hex.eq_ignore_ascii_case(&b.color_hex)
+                        });
                 if !same {
                     out.push(format!(
                         "compositionSettings.palette differs from the palette \
@@ -936,7 +937,9 @@ mod palette_tests {
     fn an_undefined_name_is_named() {
         let warnings = warnings(&project(PALETTE, "", &caption("@brand")));
         assert!(
-            warnings.iter().any(|w| w.contains("\"@brand\"") && w.contains("renders black")),
+            warnings
+                .iter()
+                .any(|w| w.contains("\"@brand\"") && w.contains("renders black")),
             "{warnings:?}"
         );
     }
@@ -983,7 +986,10 @@ mod palette_tests {
              "filename":"","displayName":"Studio Dark","addedAt":0,
              "palette":[{"name":"text","colorHex":"FFFFFF"}]}"#;
         let found = warnings(&project(settings, resource, ""));
-        assert!(found.iter().any(|w| w.contains("differs from the palette")), "{found:?}");
+        assert!(
+            found.iter().any(|w| w.contains("differs from the palette")),
+            "{found:?}"
+        );
 
         // Agreeing says nothing.
         let agreeing = concat!(
@@ -998,6 +1004,9 @@ mod palette_tests {
     fn a_selection_naming_nothing_is_named() {
         let settings = r#","paletteResourceID":"CCCCCCCC-0000-4000-8000-0000000000FF""#;
         let found = warnings(&project(settings, "", ""));
-        assert!(found.iter().any(|w| w.contains("not a resource")), "{found:?}");
+        assert!(
+            found.iter().any(|w| w.contains("not a resource")),
+            "{found:?}"
+        );
     }
 }

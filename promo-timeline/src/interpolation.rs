@@ -831,10 +831,8 @@ mod placement_frame_tests {
         );
         let tr = layer_transform_along_paths(&layer, 1.0, &canvas, &resources);
 
-        let shown = crate::frame::framed_pixel_size(
-            Size::new(1290.0, 2796.0),
-            resources[0].frame.as_ref(),
-        );
+        let shown =
+            crate::frame::framed_pixel_size(Size::new(1290.0, 2796.0), resources[0].frame.as_ref());
         let drawn_width = 2796.0 * tr.zoom * (shown.width() / shown.height());
         let left = tr.horizontal_shift;
         let right = 1290.0 - (tr.horizontal_shift + drawn_width);
@@ -861,8 +859,7 @@ mod placement_frame_tests {
             let tr = layer_transform_along_paths(&layer, t, &canvas, &resources);
             let mut frame = resources[0].frame.clone().expect("frame");
             frame.tilt_y = layer_tilt_offset(&layer, t).expect("tilt").1;
-            let shown =
-                crate::frame::framed_pixel_size(Size::new(1290.0, 2796.0), Some(&frame));
+            let shown = crate::frame::framed_pixel_size(Size::new(1290.0, 2796.0), Some(&frame));
             let drawn_width = 2796.0 * tr.zoom * (shown.width() / shown.height());
             let centre = tr.horizontal_shift + drawn_width / 2.0;
             assert!(

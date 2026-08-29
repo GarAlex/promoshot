@@ -227,6 +227,7 @@ listing them here is how they stay out.
 expanded in [EDITOR-PLAN.md](EDITOR-PLAN.md); its first slice is the lane
 packer.
 
-Known debt, pre-existing and unrelated: `cargo fmt --check` in `check-all.sh`
-was already failing before this work — 23 diffs across 8 files. Left alone so
-this change is not buried in a repo-wide reformat; worth its own commit.
+Known debt, since cleared (2026-08-28): `cargo fmt --check` in `check-all.sh`
+had been failing since before R1 — 23 diffs across 8 files — and was left
+alone so no change would be buried in a repo-wide reformat. It got the
+separate commit it was owed, and `./check-all.sh` now prints ALL GREEN.

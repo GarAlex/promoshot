@@ -207,7 +207,10 @@ mod tests {
         let framed = framed_pixel_size(raw, Some(&device(0.035, 0.0, 0.0)));
         let raw_aspect = raw.width() / raw.height();
         let framed_aspect = framed.width() / framed.height();
-        assert!(framed_aspect > raw_aspect * 1.1, "{framed_aspect} vs {raw_aspect}");
+        assert!(
+            framed_aspect > raw_aspect * 1.1,
+            "{framed_aspect} vs {raw_aspect}"
+        );
     }
 
     /// Turning the slab narrows it — the reason the aspect is asked for

@@ -17,7 +17,8 @@
 
 use promo_model::{
     DurationRuleKind, ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource,
-    TimingReference, ReleaseMoment};
+    ReleaseMoment, TimingReference,
+};
 
 /// Why a layer's timing could not be worked out. Each names both layers,
 /// because "which one" is the first thing anyone asks.
@@ -415,7 +416,10 @@ fn resolve_waits(layers: &mut [ProjectLayer]) -> Vec<AttachmentProblem> {
         .map(|layer| {
             (
                 layer.id.clone(),
-                (layer.start_time, layer.duration.map(|d| layer.start_time + d)),
+                (
+                    layer.start_time,
+                    layer.duration.map(|d| layer.start_time + d),
+                ),
             )
         })
         .collect();
@@ -723,8 +727,11 @@ mod wait_tests {
             plain("LATE", 3, 10.0, 5.0)
         ));
         assert!(resolve_attachments(&mut doc).is_empty());
-        assert_eq!(times(&doc), vec![15.0],
-                   "the release at 2s was behind it and did not pull it back");
+        assert_eq!(
+            times(&doc),
+            vec![15.0],
+            "the release at 2s was behind it and did not pull it back"
+        );
     }
 
     /// Nothing left to free it: SKIPPED, keeping its time, and silent.
@@ -742,9 +749,15 @@ mod wait_tests {
                               {{"id":"K2","time":20,"wait":true,"transitionDuration":0}}]}},{}"#,
             plain("VO1", 2, 0.0, 4.0)
         ));
-        assert!(resolve_attachments(&mut doc).is_empty(),
-                "a spent pool is the ordinary case and says nothing");
-        assert_eq!(times(&doc), vec![4.0, 20.0], "the second is unmoved, not held");
+        assert!(
+            resolve_attachments(&mut doc).is_empty(),
+            "a spent pool is the ordinary case and says nothing"
+        );
+        assert_eq!(
+            times(&doc),
+            vec![4.0, 20.0],
+            "the second is unmoved, not held"
+        );
     }
 
     /// A pool that can never fire is REPORTED — a deleted narration rather
@@ -758,9 +771,11 @@ mod wait_tests {
                 "keyframes":[{"id":"K1","time":1,"wait":true,"transitionDuration":0}]}"#,
         );
         let problems = resolve_attachments(&mut doc);
-        assert!(matches!(problems.as_slice(),
+        assert!(
+            matches!(problems.as_slice(),
                          [AttachmentProblem::WaitsForNothing { layer }] if layer == "Device"),
-                "{problems:?}");
+            "{problems:?}"
+        );
         assert_eq!(times(&doc), vec![1.0]);
     }
 
@@ -773,8 +788,10 @@ mod wait_tests {
                 "releases":[{"layerId":"GONE"}],
                 "keyframes":[{"id":"K1","time":1,"wait":true,"transitionDuration":0}]}"#,
         );
-        assert!(matches!(resolve_attachments(&mut doc).as_slice(),
-                         [AttachmentProblem::WaitsForNothing { .. }]));
+        assert!(matches!(
+            resolve_attachments(&mut doc).as_slice(),
+            [AttachmentProblem::WaitsForNothing { .. }]
+        ));
     }
 
     /// `start` frees on a layer's beginning rather than its end.
@@ -803,8 +820,11 @@ mod wait_tests {
             plain("VO", 2, 5.0, 4.0)
         ));
         assert!(resolve_attachments(&mut doc).is_empty());
-        assert_eq!(times(&doc), vec![4.0],
-                   "9s absolute is 4s into a layer that starts at 5");
+        assert_eq!(
+            times(&doc),
+            vec![4.0],
+            "9s absolute is 4s into a layer that starts at 5"
+        );
     }
 
     /// A project that says nothing about waiting serializes exactly as it did

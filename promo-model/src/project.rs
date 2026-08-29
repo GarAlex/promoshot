@@ -949,9 +949,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             video_shadow_color_hex: w
                 .video_shadow_color_hex
                 .unwrap_or(dflt.video_shadow_color_hex.clone()),
-            video_shadow_opacity: w
-                .video_shadow_opacity
-                .unwrap_or(dflt.video_shadow_opacity),
+            video_shadow_opacity: w.video_shadow_opacity.unwrap_or(dflt.video_shadow_opacity),
             video_shadow_radius: w.video_shadow_radius.unwrap_or(dflt.video_shadow_radius),
             video_shadow_offset: w.video_shadow_offset,
             video_keyframes: w.video_keyframes.unwrap_or(dflt.video_keyframes),
@@ -1001,8 +999,7 @@ impl Serialize for CompositionSettings {
             background_gradient: &'a Option<BackgroundGradient>,
             #[serde(skip_serializing_if = "Option::is_none")]
             palette: &'a Option<Vec<PaletteColor>>,
-            #[serde(rename = "paletteResourceID",
-                    skip_serializing_if = "Option::is_none")]
+            #[serde(rename = "paletteResourceID", skip_serializing_if = "Option::is_none")]
             palette_resource_id: &'a Option<String>,
             subtitle_background_color_hex: &'a str,
             subtitle_background_opacity: f64,
@@ -2950,7 +2947,11 @@ mod frame_kind_tests {
         assert_eq!(kind("none"), ResourceFrameKind::None);
         assert_eq!(kind("border"), ResourceFrameKind::Border);
         assert_eq!(kind("device"), ResourceFrameKind::Device);
-        assert_eq!(kind("phone"), ResourceFrameKind::Device, "legacy phone frames keep their slab");
+        assert_eq!(
+            kind("phone"),
+            ResourceFrameKind::Device,
+            "legacy phone frames keep their slab"
+        );
 
         for raw in ["Border", "None", "Device", "3dbox", "phone2", "", "border "] {
             assert_eq!(kind(raw), ResourceFrameKind::None, "unknown kind {raw:?}");

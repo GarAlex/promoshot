@@ -231,8 +231,14 @@ mod tests {
         defaults.background_gradient = Some(BackgroundGradient {
             kind: GradientKind::Linear,
             stops: vec![
-                GradientStop { color_hex: "000000".into(), at: 0.0 },
-                GradientStop { color_hex: "FFFFFF".into(), at: 1.0 },
+                GradientStop {
+                    color_hex: "000000".into(),
+                    at: 0.0,
+                },
+                GradientStop {
+                    color_hex: "FFFFFF".into(),
+                    at: 1.0,
+                },
             ],
             start: Some(Point(0.0, 0.5)),
             end: Some(Point(1.0, 0.5)),

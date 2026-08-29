@@ -1838,8 +1838,8 @@ mod tests {
     fn tile_repeats_wrap_the_texture_across_the_quad() {
         let ctx = GpuContext::new().expect("gpu");
         // Two texels: left red, right blue (premultiplied BGRA).
-        let stripes = Compositor::upload_texture(
-            &ctx, &[0, 0, 255, 255, 255, 0, 0, 255], 2, 1).expect("texture");
+        let stripes = Compositor::upload_texture(&ctx, &[0, 0, 255, 255, 255, 0, 0, 255], 2, 1)
+            .expect("texture");
         let scene = |anchor: [f32; 2]| Scene {
             canvas_width: 100.0,
             canvas_height: 100.0,
