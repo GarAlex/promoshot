@@ -3,8 +3,13 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
+// Off macOS the body compiles away and `c` would be an unused-variable
+// error under `-D warnings`, so the stub owns the unused name.
+#[cfg(not(target_os = "macos"))]
+fn spike(_c: &mut Criterion) {}
+
+#[cfg(target_os = "macos")]
 fn spike(c: &mut Criterion) {
-    #[cfg(target_os = "macos")]
     {
         let ctx = promo_gpu::GpuContext::new().expect("gpu");
         let mut group = c.benchmark_group("iosurface_spike");

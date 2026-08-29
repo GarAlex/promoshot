@@ -3,8 +3,13 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
+// Off macOS the body compiles away and `c` would be an unused-variable
+// error under `-D warnings`, so the stub owns the unused name.
+#[cfg(not(target_os = "macos"))]
+fn compositor(_c: &mut Criterion) {}
+
+#[cfg(target_os = "macos")]
 fn compositor(c: &mut Criterion) {
-    #[cfg(target_os = "macos")]
     {
         use promo_gpu::compositor::{Compositor, Scene, SceneQuad};
         use promo_gpu::iosurface::OwnedIoSurface;

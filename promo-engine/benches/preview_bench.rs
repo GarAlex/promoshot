@@ -4,8 +4,13 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
+// Off macOS the body compiles away and `c` would be an unused-variable
+// error under `-D warnings`, so the stub owns the unused name.
+#[cfg(not(target_os = "macos"))]
+fn preview(_c: &mut Criterion) {}
+
+#[cfg(target_os = "macos")]
 fn preview(c: &mut Criterion) {
-    #[cfg(target_os = "macos")]
     {
         use promo_engine::{HostSurface, PreviewEngine, SURFACE_IOSURFACE};
         use promo_gpu::iosurface::OwnedIoSurface;
