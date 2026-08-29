@@ -10,12 +10,13 @@ members = [
     "promo-media",
     "promo-engine",
     "promo-ffi",
+    "promoshot-mcp",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "Proprietary"
+license = "Apache-2.0"
 authors = ["Alex"]
 
 [workspace.dependencies]
