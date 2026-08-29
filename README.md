@@ -5,7 +5,7 @@
        alt="A frame rendered by the engine on Linux: a bordered video card over a themed background, with a stroked, shadowed caption reading 'Rendered on Linux'.">
 </p>
 
-The rendering engine behind [PromoShot](https://apps.apple.com/app/promoshot),
+The rendering engine behind [PromoShot](https://apps.apple.com/us/app/promoshot-app/id6770157576),
 and an open implementation of its project format. A `.promo` project is a
 folder — `metadata.json` plus its media — and this workspace is everything
 needed to validate, inspect, and render one to stills, image sequences, or
