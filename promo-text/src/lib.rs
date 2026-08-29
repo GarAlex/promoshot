@@ -479,6 +479,7 @@ pub struct RasterizedText {
 }
 
 /// What `resolve_family` settled on.
+#[derive(Debug)]
 enum ResolvedFamily {
     Named(String),
     SansSerif,
@@ -543,6 +544,49 @@ fn has_family(fonts: &FontSystem, name: &str) -> bool {
     matching_family(fonts, name).is_some()
 }
 
+/// Libre stand-ins for the curated Apple faces, consulted only after the
+/// named family itself came up absent. Ordered best-first: metric-compatible
+/// where one exists — Liberation and the URW base35 clones cover the
+/// classics, Gelasio is Georgia's — same-spirit otherwise. A miss on every
+/// candidate still falls through to the UI sans, so this table only ever
+/// upgrades the degradation: a Linux render of a Mac-authored project gets
+/// "a serif shaped like Times" instead of "the system sans".
+const STAND_INS: &[(&str, &[&str])] = &[
+    (
+        "helveticaneue",
+        &["Liberation Sans", "Arimo", "Nimbus Sans"],
+    ),
+    ("avenirnext", &["Nunito", "URW Gothic"]),
+    ("gillsans", &["Gillius ADF", "Lato"]),
+    ("futura", &["URW Gothic", "Jost", "Century Gothic"]),
+    ("trebuchetms", &["Fira Sans", "DejaVu Sans"]),
+    ("georgia", &["Gelasio", "P052"]),
+    ("palatino", &["P052", "TeX Gyre Pagella", "URW Palladio L"]),
+    (
+        "timesnewroman",
+        &["Liberation Serif", "Tinos", "Nimbus Roman", "FreeSerif"],
+    ),
+    ("americantypewriter", &["Nimbus Mono PS", "Liberation Mono"]),
+    (
+        "couriernew",
+        &["Liberation Mono", "Cousine", "Nimbus Mono PS", "FreeMono"],
+    ),
+    ("chalkboard", &["Comic Neue", "Comic Relief"]),
+    ("markerfelt", &["Comic Neue", "Comic Relief"]),
+    ("snellroundhand", &["Z003", "URW Chancery L"]),
+];
+
+/// The first installed stand-in for a curated name, from the given table —
+/// injectable so a test can prove the mechanism with a font database it
+/// built itself, on a machine whose installed fonts it knows nothing about.
+fn stand_in_from(fonts: &FontSystem, name: &str, table: &[(&str, &[&str])]) -> Option<String> {
+    let wanted = normalized_family(name);
+    let (_, candidates) = table.iter().find(|(key, _)| *key == wanted)?;
+    candidates
+        .iter()
+        .find_map(|candidate| matching_family(fonts, candidate))
+}
+
 fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFamily {
     match requested {
         Some("serif") => return ResolvedFamily::Serif,
@@ -552,6 +596,9 @@ fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFa
         // fontdb happens to default to.
         Some(name) if name != "system" && !name.is_empty() => {
             if let Some(family) = matching_family(fonts, name) {
+                return ResolvedFamily::Named(family);
+            }
+            if let Some(family) = stand_in_from(fonts, name, STAND_INS) {
                 return ResolvedFamily::Named(family);
             }
         }
@@ -1376,15 +1423,120 @@ mod smoothing_tests {
                 .unwrap_or(0.0)
         };
         let sans = width_of("system");
-        let measured: Vec<(&str, f64)> = ["georgia", "markerFelt", "futura", "timesNewRoman"]
-            .iter()
-            .map(|name| (*name, width_of(name)))
-            .collect();
+        let probes = ["georgia", "markerFelt", "futura", "timesNewRoman"];
+        // A machine with neither the curated faces nor any stand-in — a bare
+        // container — cannot answer the wiring question this test asks; the
+        // hermetic stand_in_tests below carry the resolver's guarantee
+        // there. Any installed face keeps this test armed, and CI installs
+        // one (Linux: fonts-liberation) precisely so it stays armed.
+        let answerable = {
+            let fonts = font_system().lock().unwrap();
+            probes.iter().any(|name| {
+                matching_family(&fonts, name).is_some()
+                    || stand_in_from(&fonts, name, STAND_INS).is_some()
+            })
+        };
+        if !answerable {
+            eprintln!(
+                "a_caption_gets_the_font_the_picker_named: no curated face or \
+                 stand-in installed — this machine cannot arm the probe"
+            );
+            return;
+        }
+        let measured: Vec<(&str, f64)> =
+            probes.iter().map(|name| (*name, width_of(name))).collect();
         assert!(
             measured.iter().any(|(_, width)| (width - sans).abs() > 0.5),
             "every curated font measured exactly like the fallback sans ({sans}): \
              {measured:?} — the picker's font is not reaching the renderer"
         );
+    }
+
+    /// The resolver, proved against a font database the test built itself —
+    /// so it answers the same on a Mac, a fontless container, or CI. The
+    /// fixture face is Tuffy (public domain), a family no OS ships, which is
+    /// the point: the only way these tests pass is through the table.
+    mod stand_in_tests {
+        use super::super::*;
+
+        fn fonts_with_tuffy() -> FontSystem {
+            let mut db = cosmic_text::fontdb::Database::new();
+            db.load_font_data(include_bytes!("../fonts/Tuffy.ttf").to_vec());
+            FontSystem::new_with_locale_and_db("en-US".into(), db)
+        }
+
+        /// A curated face that is absent takes the first INSTALLED stand-in,
+        /// in table order — not the first listed.
+        #[test]
+        fn a_missing_face_takes_its_first_installed_stand_in() {
+            let fonts = fonts_with_tuffy();
+            let table: &[(&str, &[&str])] = &[("georgia", &["Gelasio", "Tuffy", "DejaVu Serif"])];
+            assert_eq!(
+                stand_in_from(&fonts, "Georgia", table).as_deref(),
+                Some("Tuffy"),
+                "Gelasio is not in the db, Tuffy is — order walked, spelling \
+                 normalized on the way in"
+            );
+        }
+
+        /// A name with no table entry answers None and the caller falls
+        /// through to the UI sans — the stated degradation, unchanged.
+        #[test]
+        fn an_unlisted_face_has_no_stand_in() {
+            let fonts = fonts_with_tuffy();
+            assert_eq!(stand_in_from(&fonts, "Zapfino", STAND_INS), None);
+        }
+
+        /// The resolver end to end on the hermetic db: a curated name whose
+        /// stand-in is installed resolves NAMED, not to the sans fallback.
+        #[test]
+        fn resolution_reaches_the_stand_in_not_the_fallback() {
+            let mut fonts = fonts_with_tuffy();
+            let table: &[(&str, &[&str])] = &[("markerfelt", &["Tuffy"])];
+            let got = match matching_family(&fonts, "markerFelt") {
+                Some(f) => Some(f),
+                None => stand_in_from(&fonts, "markerFelt", table),
+            };
+            assert_eq!(got.as_deref(), Some("Tuffy"));
+            // And the real resolve_family path stays a fallback when the
+            // real table has no installed candidate in this db.
+            match resolve_family(&mut fonts, Some("markerFelt")) {
+                ResolvedFamily::Named(name) => {
+                    panic!("nothing in this db should match, got {name}")
+                }
+                ResolvedFamily::SansSerif => {}
+                other => panic!("expected the sans fallback, got {other:?}"),
+            }
+        }
+
+        /// Every table key is one of the app's curated wire spellings,
+        /// normalized — a typo here would be a stand-in nobody can reach.
+        #[test]
+        fn every_stand_in_key_is_a_curated_wire_spelling() {
+            let curated = [
+                "helveticaNeue",
+                "avenirNext",
+                "gillSans",
+                "futura",
+                "trebuchetMS",
+                "georgia",
+                "palatino",
+                "timesNewRoman",
+                "americanTypewriter",
+                "courierNew",
+                "chalkboard",
+                "markerFelt",
+                "snellRoundhand",
+            ];
+            let normalized: Vec<String> = curated.iter().map(|n| normalized_family(n)).collect();
+            for (key, candidates) in STAND_INS {
+                assert!(
+                    normalized.iter().any(|n| n == key),
+                    "`{key}` is not a curated wire spelling"
+                );
+                assert!(!candidates.is_empty(), "`{key}` lists no candidates");
+            }
+        }
     }
 
     /// Every step of the blur control has to do something. The box radius is

@@ -247,8 +247,22 @@ lavapipe (mesa software Vulkan), distro ffmpeg, DejaVu fonts. Results:
   the geometry and colour agree.
 
 So the portable claim is now measured, not inferred: rendering works on
-Linux today with no GPU at all. The known gap is fonts; the untested gap
-remains DMA-BUF import (lavapipe exercised the CPU-pixels path).
+Linux today with no GPU at all. The untested gap remains DMA-BUF import
+(lavapipe exercised the CPU-pixels path).
+
+**The fonts gap, closed the same day.** The curated picker faces now carry
+libre STAND-INS (`promo-text::STAND_INS`) consulted only when the named
+family is absent — Liberation and the URW base35 clones are
+metric-compatible for the classics, Gelasio for Georgia — so a Linux render
+of a Mac-authored project gets "a serif shaped like Times", not the UI
+sans. The resolver is proved hermetically against a test-built font
+database (fixture: Tuffy, public domain — a family no OS ships, so the
+tests answer the same on any machine), and the environment probe arms
+itself on any installed face or stand-in: on Debian, `fonts-liberation` is
+enough, and CI should install it for exactly that reason. Verified live in
+the bare container (guard states its reason, suite green) and with
+fonts-liberation (the picker test passes genuinely, through the
+stand-in).
 
 **R1 done** (2026-08-14). Next: R2 or R3 — independent of each other. R3 is
 expanded in [EDITOR-PLAN.md](EDITOR-PLAN.md); its first slice is the lane
