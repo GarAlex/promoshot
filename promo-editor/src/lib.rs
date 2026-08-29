@@ -3,7 +3,7 @@
 //! App state and commands — no rendering, no I/O, no platform crates — so the
 //! Mac app (through `promo-ffi`), an egui app and a Windows app all drive the
 //! SAME behaviour rather than each reimplementing it. See
-//! `../EDITOR-PLAN.md`; this is Stage 1, whose slices move only derived and
+//! `../docs/EDITOR-PLAN.md`; this is Stage 1, whose slices move only derived and
 //! ephemeral state and leave document ownership where it is.
 
 pub mod selection;

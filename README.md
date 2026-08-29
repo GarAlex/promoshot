@@ -177,9 +177,9 @@ promo validate Demo.promo && promo still Demo.promo --out look.png --time 1
 ## Invariants and plans
 
 - `SPECS.md` — the invariants the tests pin.
-- `LINUX-READY-PLAN.md` — how the engine became portable, measured; the
+- [docs/LINUX-READY-PLAN.md](docs/LINUX-READY-PLAN.md) — how the engine became portable, measured; the
   first real-Linux run's results are in its Status section.
-- `EDITOR-PLAN.md` — where `promo-editor` is heading: the core owns the
+- [docs/EDITOR-PLAN.md](docs/EDITOR-PLAN.md) — where `promo-editor` is heading: the core owns the
   document, front ends send commands.
 
 ## License

@@ -212,7 +212,7 @@ fn inspect(project: &Project) -> Result<(), String> {
     }
     if renderable == 0 && !layers.is_empty() {
         println!(
-            "\nNothing in this project renders yet. Video decoding (LINUX-READY-PLAN R2)\n\
+            "\nNothing in this project renders yet. Video decoding (docs/LINUX-READY-PLAN R2)\n\
              and text rasterization are the two gaps."
         );
     }
