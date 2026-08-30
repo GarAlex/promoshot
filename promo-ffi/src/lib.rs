@@ -3,12 +3,14 @@
 
 pub mod compose;
 pub mod editor;
+pub mod export;
 pub mod preview;
 pub mod project;
 pub mod renderer;
 pub mod vector;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use compose::*;
+pub use export::*;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use preview::*;
 pub use project::*;

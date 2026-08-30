@@ -356,6 +356,92 @@ impl Renderer {
     }
 }
 
+/// How an export ended, when it did not fail.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExportOutcome {
+    Finished,
+    /// The progress callback said stop. The partial file is REMOVED: an
+    /// mp4 that ends mid-scene but plays looks exported, and a cancelled
+    /// export must never leave something that looks like an answer.
+    Cancelled,
+}
+
+/// Everything an mp4 export needs decided up front.
+pub struct ExportSettings {
+    pub width: u32,
+    pub height: u32,
+    /// Seconds on the composition timeline.
+    pub start: f64,
+    pub end: f64,
+    pub fps: f64,
+}
+
+/// Renders `project` straight into the encoder as raw BGRA — no
+/// intermediate PNGs, no temp directory the size of the uncompressed
+/// video. Encoding lives in promo-media, so every front end writes video
+/// the same way.
+///
+/// `progress` is called once per encoded frame with (done, total);
+/// returning false cancels. The CLI prints from it; the FFI's export job
+/// stores it for polling.
+pub fn export_video(
+    project: &Project,
+    out: &std::path::Path,
+    settings: &ExportSettings,
+    progress: &mut dyn FnMut(usize, usize) -> bool,
+) -> Result<ExportOutcome, String> {
+    let ExportSettings {
+        width,
+        height,
+        start,
+        end,
+        fps,
+    } = *settings;
+    let count = (((end - start) * fps).round() as usize).max(1);
+
+    let mut renderer = Renderer::new(project, width, height)?;
+    let audio = build_soundtrack(project, end - start)?;
+    let spec = promo_media::EncodeSpec {
+        width,
+        height,
+        fps,
+        quality: 18,
+        audio,
+    };
+    let registry = Registry::with_defaults();
+    let mut encoder = registry
+        .open_encoder(out, &spec)
+        .map_err(|e| e.to_string())?;
+
+    for i in 0..count {
+        let time = start + i as f64 / fps;
+        let bgra = renderer.frame_bgra(time)?;
+        encoder.write_frame(&bgra).map_err(|e| e.to_string())?;
+        if !progress(i + 1, count) {
+            // Dropping the encoder kills its ffmpeg (promo-media's Drop),
+            // which is what releases the file for deletion on Windows.
+            drop(encoder);
+            match std::fs::remove_file(out) {
+                Ok(()) => {}
+                // A cancel that lands before ffmpeg created the file is the
+                // promised state already: nothing left behind.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                // Said out loud: a partial mp4 that survives a cancel looks
+                // exported, which is worse than an error.
+                Err(e) => {
+                    return Err(format!(
+                        "cancelled, but the partial file could not be removed ({}): {e}",
+                        out.display()
+                    ))
+                }
+            }
+            return Ok(ExportOutcome::Cancelled);
+        }
+    }
+    encoder.finish().map_err(|e| e.to_string())?;
+    Ok(ExportOutcome::Finished)
+}
+
 /// Writes RGBA rows as a PNG.
 pub fn write_png(
     path: &std::path::Path,

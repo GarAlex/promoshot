@@ -263,40 +263,24 @@ fn video(project: &Project, opts: &Options) -> Result<(), String> {
     let (w, h) = opts.size(project);
     let (start, end, fps) = range(project, opts);
     let count = frame_count(start, end, fps);
-    if count == 0 {
-        return Err("nothing to render: the time range is empty".into());
-    }
 
-    let mut renderer = render::Renderer::new(project, w, h)?;
-    // Encoding lives in promo-media, so every front end writes video the same
-    // way — the CLI used to spawn ffmpeg itself, which would have left an
-    // egui app to reinvent it.
-    let registry = promo_media::Registry::with_defaults();
-    let audio = render::build_soundtrack(project, end - start)?;
-    if let Some(track) = &audio {
-        println!("  mixing {:.1}s of audio", track.duration_s());
-    }
-    let spec = promo_media::EncodeSpec {
+    // The export itself lives in the lib (render::export_video), because
+    // the app exports through the same code over the FFI — the CLI only
+    // narrates it.
+    let settings = render::ExportSettings {
         width: w,
         height: h,
+        start,
+        end,
         fps,
-        quality: 18,
-        audio,
     };
-    let mut encoder = registry
-        .open_encoder(out, &spec)
-        .map_err(|e| e.to_string())?;
-
-    for i in 0..count {
-        let time = start + i as f64 / fps;
-        let bgra = renderer.frame_bgra(time)?;
-        encoder.write_frame(&bgra).map_err(|e| e.to_string())?;
-        if i % 30 == 0 || i + 1 == count {
-            eprint!("\r  {}/{count} frames", i + 1);
+    render::export_video(project, out, &settings, &mut |done, total| {
+        if done % 30 == 0 || done == total {
+            eprint!("\r  {done}/{total} frames");
         }
-    }
+        true
+    })?;
     eprintln!();
-    encoder.finish().map_err(|e| e.to_string())?;
 
     println!(
         "wrote {} ({w}x{h}, {count} frames @ {fps}fps)",

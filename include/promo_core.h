@@ -124,6 +124,36 @@ double promo_renderer_duration(const PromoRenderer *renderer);
 int32_t promo_renderer_frame_bgra(PromoRenderer *renderer, double time,
                                   uint8_t *out_pixels, size_t out_len);
 
+/* ---- Video export (every platform) --------------------------------------
+ * The same render->encode loop `promo video` runs, as a job the host
+ * polls. The job renders on its own engine-side thread; nothing calls
+ * back into the host. */
+
+/* Opaque export job. */
+typedef struct PromoExport PromoExport;
+
+/* Starts exporting the project folder to out_path (mp4, needs ffmpeg on
+ * PATH) at width x height. fps <= 0 means the project's own rate (else
+ * 30). The whole composition is exported. NULL when the project cannot be
+ * opened (reason on stderr); later failures report through
+ * promo_export_progress. Free with promo_export_free. */
+PromoExport *promo_export_start(const char *project_dir, const char *out_path,
+                                int32_t width, int32_t height, double fps);
+
+/* The job's state: 0 running, 1 finished, 2 cancelled, -4 failed (reason
+ * on stderr), -1 bad handle. Fills out_done/out_total (frames) when
+ * non-NULL. */
+int32_t promo_export_progress(const PromoExport *job, uint64_t *out_done,
+                              uint64_t *out_total);
+
+/* Asks the job to stop; asynchronous — poll until state 2. The partial
+ * file is removed by then: a cancelled export leaves nothing that looks
+ * exported. A finished job ignores this. */
+void promo_export_cancel(const PromoExport *job);
+
+/* Frees the job. A still-running export is cancelled and joined first. */
+void promo_export_free(PromoExport *job);
+
 /* ---- Phase 2: GPU compositor (macOS) ------------------------------------ */
 
 /* Opaque compositor (GPU context + pipeline, reused across frames). */

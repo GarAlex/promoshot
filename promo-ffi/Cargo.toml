@@ -22,6 +22,8 @@ serde.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+# The export test proves the file plays by decoding it back.
+promo-media = { path = "../promo-media" }
 
 [[bench]]
 name = "ffi_bench"

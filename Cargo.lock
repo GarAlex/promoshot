@@ -1055,6 +1055,7 @@ dependencies = [
  "promo-editor",
  "promo-engine",
  "promo-gpu",
+ "promo-media",
  "promo-model",
  "promo-text",
  "promo-timeline",
