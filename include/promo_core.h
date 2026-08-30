@@ -146,6 +146,11 @@ uint64_t promo_doc_version(const PromoDoc *doc);   /* bumps per change */
 /* 0 ok; -2 not a command; -3 command failed (stderr; document, version
  * and history untouched). */
 int32_t promo_doc_apply(PromoDoc *doc, const char *command_json);
+
+/* A JSON ARRAY of commands as ONE undo step (a gesture that mints two
+ * things deserves one Ctrl+Z). Atomic: a failure anywhere applies and
+ * records nothing. Same return codes as promo_doc_apply. */
+int32_t promo_doc_apply_group(PromoDoc *doc, const char *commands_json);
 int32_t promo_doc_undo(PromoDoc *doc);             /* 1 stepped, 0 empty */
 int32_t promo_doc_redo(PromoDoc *doc);
 int32_t promo_doc_can_undo(const PromoDoc *doc);

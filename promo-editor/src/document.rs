@@ -152,6 +152,25 @@ impl Document {
         Ok(())
     }
 
+    /// Applies several commands as ONE undo step — what a single user
+    /// gesture that mints two things (a resource and its layer) deserves.
+    /// Atomic: a failure anywhere applies nothing, records nothing.
+    pub fn apply_group(&mut self, commands: &[Command]) -> Result<(), String> {
+        if commands.is_empty() {
+            return Ok(());
+        }
+        let snapshot = self.to_json()?;
+        let mut edited = self.meta.clone();
+        for command in commands {
+            Self::run(&mut edited, command)?;
+        }
+        self.meta = edited;
+        self.undo.push(snapshot);
+        self.redo.clear();
+        self.version += 1;
+        Ok(())
+    }
+
     pub fn undo(&mut self) -> bool {
         let Some(snapshot) = self.undo.pop() else {
             return false;
@@ -458,6 +477,44 @@ mod tests {
             assert!(doc.undo());
         }
         assert_eq!(doc.to_json().unwrap(), original);
+    }
+
+    /// One gesture, one undo step — and a group with a bad member applies
+    /// none of its good ones.
+    #[test]
+    fn a_group_is_one_undo_step_and_fails_whole() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+        let slide = layer_id(&doc, 1);
+
+        doc.apply_group(&[
+            command(serde_json::json!({
+                "kind": "renameLayer", "layerID": slide, "name": "Grouped"})),
+            command(serde_json::json!({
+                "kind": "setLayerEnabled", "layerID": slide, "enabled": false})),
+        ])
+        .unwrap();
+        assert_eq!(doc.version(), 1, "one gesture, one version bump");
+        assert!(doc.undo());
+        assert_eq!(
+            doc.to_json().unwrap(),
+            original,
+            "one undo unwinds the pair"
+        );
+
+        let err = doc.apply_group(&[
+            command(serde_json::json!({
+                "kind": "renameLayer", "layerID": slide, "name": "Half"})),
+            command(serde_json::json!({
+                "kind": "renameLayer", "layerID": "GHOST", "name": "x"})),
+        ]);
+        assert!(err.is_err());
+        assert_eq!(
+            doc.to_json().unwrap(),
+            original,
+            "a failing group applies nothing at all"
+        );
+        assert!(doc.can_redo(), "the undone pair is still redoable");
     }
 
     /// The add group: a resource arrives whole, a layer lands on top of

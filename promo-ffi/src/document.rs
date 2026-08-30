@@ -110,6 +110,43 @@ pub extern "C" fn promo_doc_apply(handle: *mut DocHandle, command_json: *const c
     })
 }
 
+/// Applies a JSON ARRAY of commands as ONE undo step — what a single
+/// user gesture that mints several things deserves. Atomic: a failure
+/// anywhere applies nothing and records nothing. Same return codes as
+/// `promo_doc_apply`.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_doc_apply_group(
+    handle: *mut DocHandle,
+    commands_json: *const c_char,
+) -> c_int {
+    crate::ffi_guard(-3, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
+        };
+        if commands_json.is_null() {
+            return -1;
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(commands_json) }).to_str() else {
+            return -1;
+        };
+        let commands: Vec<Command> = match serde_json::from_str(text) {
+            Ok(commands) => commands,
+            Err(e) => {
+                eprintln!("promo_doc_apply_group: {e}");
+                return -2;
+            }
+        };
+        match handle.document.apply_group(&commands) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("promo_doc_apply_group: {e}");
+                -3
+            }
+        }
+    })
+}
+
 /// 1 = a step was undone/redone, 0 = nothing to step. -1 bad handle.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
