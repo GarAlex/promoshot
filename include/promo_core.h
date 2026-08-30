@@ -124,6 +124,22 @@ double promo_renderer_duration(const PromoRenderer *renderer);
 int32_t promo_renderer_frame_bgra(PromoRenderer *renderer, double time,
                                   uint8_t *out_pixels, size_t out_len);
 
+/* Mixes the composition's soundtrack (the SAME mix the export muxes) and
+ * reports its shape; mixed once, cached on the handle. Fills the out-params
+ * when non-NULL. 0 = audio present, 1 = the composition has no audio (a
+ * real answer, not an error), -1 bad handle, -4 mix failed (stderr). */
+int32_t promo_renderer_soundtrack_info(PromoRenderer *renderer,
+                                       uint64_t *out_frames,
+                                       uint32_t *out_sample_rate,
+                                       uint32_t *out_channels);
+
+/* Copies the mixed soundtrack as interleaved f32. out_len is in FLOATS and
+ * must equal frames * channels exactly (-2 otherwise). Call _info first —
+ * this is a plain copy and refuses (-1) to mix implicitly. 0 ok, 1 no
+ * audio. */
+int32_t promo_renderer_soundtrack_pcm(const PromoRenderer *renderer,
+                                      float *out_samples, size_t out_len);
+
 /* ---- Video export (every platform) --------------------------------------
  * The same render->encode loop `promo video` runs, as a job the host
  * polls. The job renders on its own engine-side thread; nothing calls

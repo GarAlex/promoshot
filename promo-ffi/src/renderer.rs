@@ -26,6 +26,10 @@ pub struct RendererHandle {
     width: u32,
     height: u32,
     duration: f64,
+    /// Kept for the soundtrack call, which mixes lazily on first ask.
+    project: Project,
+    /// None = not asked yet; Some(None) = asked, composition has no audio.
+    soundtrack: Option<Option<promo_media::AudioBuffer>>,
 }
 
 /// Opens a `.promo` project folder and builds a renderer producing
@@ -70,6 +74,8 @@ pub extern "C" fn promo_renderer_new(
                         width: width as u32,
                         height: height as u32,
                         duration,
+                        project,
+                        soundtrack: None,
                     })),
                     Err(e) => {
                         eprintln!("promo_renderer_new: {e}");
@@ -154,6 +160,93 @@ pub extern "C" fn promo_renderer_frame_bgra(
     })
 }
 
+/// Mixes the composition's soundtrack — the SAME mix the export muxes, via
+/// `render::build_soundtrack` — and reports its shape. Mixed once, cached
+/// on the handle. Fills the out-params when non-null.
+/// 0 = audio present, 1 = the composition has no audio (a real answer, not
+/// an error — an empty preview must be silent because there is nothing to
+/// play, never because nothing could be asked), -1 bad handle, -4 the mix
+/// failed (reason on stderr).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_renderer_soundtrack_info(
+    handle: *mut RendererHandle,
+    out_frames: *mut u64,
+    out_sample_rate: *mut u32,
+    out_channels: *mut u32,
+) -> c_int {
+    crate::ffi_guard(-4, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
+        };
+        if handle.soundtrack.is_none() {
+            match promo_cli::render::build_soundtrack(&handle.project, handle.duration) {
+                Ok(mixed) => handle.soundtrack = Some(mixed),
+                Err(e) => {
+                    eprintln!("promo_renderer_soundtrack_info: {e}");
+                    return -4;
+                }
+            }
+        }
+        match handle.soundtrack.as_ref().unwrap() {
+            None => 1,
+            Some(audio) => {
+                unsafe {
+                    if !out_frames.is_null() {
+                        *out_frames = (audio.samples.len() / audio.channels as usize) as u64;
+                    }
+                    if !out_sample_rate.is_null() {
+                        *out_sample_rate = audio.sample_rate;
+                    }
+                    if !out_channels.is_null() {
+                        *out_channels = audio.channels as u32;
+                    }
+                }
+                0
+            }
+        }
+    })
+}
+
+/// Copies the mixed soundtrack as interleaved f32 samples. `out_len` is in
+/// FLOATS and must equal frames × channels from
+/// `promo_renderer_soundtrack_info` exactly — any other size is refused
+/// (-2) rather than written past. 0 ok, 1 no audio, -1 bad handle/pointer
+/// or info not yet asked.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_renderer_soundtrack_pcm(
+    handle: *const RendererHandle,
+    out_samples: *mut f32,
+    out_len: usize,
+) -> c_int {
+    crate::ffi_guard(-4, move || {
+        let Some(handle) = (unsafe { handle.as_ref() }) else {
+            return -1;
+        };
+        let Some(soundtrack) = handle.soundtrack.as_ref() else {
+            // No implicit mixing here: info() owns the (fallible, slow)
+            // mix, and this call stays a plain copy.
+            return -1;
+        };
+        match soundtrack {
+            None => 1,
+            Some(audio) => {
+                if out_samples.is_null() {
+                    return -1;
+                }
+                if out_len != audio.samples.len() {
+                    return -2;
+                }
+                unsafe {
+                    std::ptr::copy_nonoverlapping(audio.samples.as_ptr(), out_samples, out_len)
+                };
+                0
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +264,79 @@ mod tests {
             "resources":[],"layers":[]}"#;
         std::fs::write(dir.join("metadata.json"), json).unwrap();
         CString::new(dir.to_str().unwrap()).unwrap()
+    }
+
+    /// "No audio" is a real answer (1), distinct from failure — and pcm
+    /// without info first is refused, because the copy call must never
+    /// hide a fallible mix inside itself.
+    #[test]
+    fn a_silent_project_says_no_audio_and_pcm_needs_info_first() {
+        let dir = std::env::temp_dir().join(format!("promo-ffi-silent-{}", std::process::id()));
+        let cdir = solid_background_project(&dir);
+        let handle = promo_renderer_new(cdir.as_ptr(), 160, 120);
+        if handle.is_null() {
+            eprintln!("no GPU adapter; skipping");
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let mut sample = 0.0f32;
+        assert_eq!(
+            promo_renderer_soundtrack_pcm(handle, &mut sample, 1),
+            -1,
+            "pcm before info must refuse, not mix"
+        );
+        assert_eq!(
+            promo_renderer_soundtrack_info(
+                handle,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut()
+            ),
+            1
+        );
+        assert_eq!(promo_renderer_soundtrack_pcm(handle, &mut sample, 1), 1);
+        promo_renderer_free(handle);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The example project carries real audio; the mix must have the
+    /// advertised shape and actual signal in it.
+    #[test]
+    fn the_example_projects_soundtrack_has_signal() {
+        let project = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/LinuxSmoke.promo");
+        let cdir = CString::new(project).unwrap();
+        let handle = promo_renderer_new(cdir.as_ptr(), 320, 180);
+        if handle.is_null() {
+            eprintln!("no GPU adapter (or ffmpeg); skipping");
+            return;
+        }
+        let (mut frames, mut rate, mut channels) = (0u64, 0u32, 0u32);
+        let rc = promo_renderer_soundtrack_info(handle, &mut frames, &mut rate, &mut channels);
+        if rc == -4 {
+            eprintln!("mix failed (ffmpeg absent?); skipping");
+            promo_renderer_free(handle);
+            return;
+        }
+        assert_eq!(rc, 0, "the example project has audio");
+        assert_eq!((rate, channels), (48_000, 2));
+        assert!(frames > 0);
+
+        let len = (frames * channels as u64) as usize;
+        let mut pcm = vec![0.0f32; len];
+        assert_eq!(
+            promo_renderer_soundtrack_pcm(handle, pcm.as_mut_ptr(), len),
+            0
+        );
+        assert_eq!(
+            promo_renderer_soundtrack_pcm(handle, pcm.as_mut_ptr(), len - 1),
+            -2,
+            "a wrong-size buffer is refused, not written past"
+        );
+        assert!(
+            pcm.iter().any(|s| s.abs() > 1e-4),
+            "the mix must carry signal, not silence shaped like an answer"
+        );
+        promo_renderer_free(handle);
     }
 
     #[test]

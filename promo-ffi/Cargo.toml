@@ -12,6 +12,8 @@ promo-model = { path = "../promo-model" }
 # The CLI's host (render::Renderer), re-exposed over the C ABI so non-Rust
 # front ends drive the same implementation the render oracle runs.
 promo-cli = { path = "../promo-cli" }
+# For AudioBuffer, which the soundtrack call caches on the renderer handle.
+promo-media = { path = "../promo-media" }
 promo-timeline = { path = "../promo-timeline" }
 promo-editor = { path = "../promo-editor" }
 promo-engine = { path = "../promo-engine" }
@@ -22,8 +24,6 @@ serde.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-# The export test proves the file plays by decoding it back.
-promo-media = { path = "../promo-media" }
 
 [[bench]]
 name = "ffi_bench"
