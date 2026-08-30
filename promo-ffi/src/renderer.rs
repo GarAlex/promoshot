@@ -160,6 +160,50 @@ pub extern "C" fn promo_renderer_frame_bgra(
     })
 }
 
+/// Sets (or, with NULL, clears) a host-rasterized overlay composited over
+/// every subsequent frame — the watermark seam, and the same final quad
+/// the export's overlay is, so a watermarked preview matches a
+/// watermarked export. `bgra` is PREMULTIPLIED BGRA stretched over the
+/// canvas; `len` must equal `width * height * 4` exactly (refused with -2
+/// rather than read past). Uploaded once here; per-frame cost is one quad.
+/// 0 ok, -1 bad handle, -2 size mismatch, -4 upload failed (stderr).
+///
+/// Safety contract (C ABI): `bgra` is NULL or addresses `len` readable
+/// bytes; copied/uploaded during the call.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_renderer_set_overlay(
+    handle: *mut RendererHandle,
+    bgra: *const u8,
+    len: usize,
+    width: c_int,
+    height: c_int,
+) -> c_int {
+    crate::ffi_guard(-4, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
+        };
+        if bgra.is_null() {
+            let _ = handle.renderer.set_overlay(None);
+            return 0;
+        }
+        if width <= 0 || height <= 0 || len != (width as usize * height as usize * 4) {
+            return -2;
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(bgra, len) };
+        match handle
+            .renderer
+            .set_overlay(Some((bytes, width as u32, height as u32)))
+        {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("promo_renderer_set_overlay: {e}");
+                -4
+            }
+        }
+    })
+}
+
 /// Mixes the composition's soundtrack — the SAME mix the export muxes, via
 /// `render::build_soundtrack` — and reports its shape. Mixed once, cached
 /// on the handle. Fills the out-params when non-null.
@@ -264,6 +308,70 @@ mod tests {
             "resources":[],"layers":[]}"#;
         std::fs::write(dir.join("metadata.json"), json).unwrap();
         CString::new(dir.to_str().unwrap()).unwrap()
+    }
+
+    /// The overlay is the watermark seam: set, every frame carries it;
+    /// cleared, frames come back clean. A solid blue canvas under a solid
+    /// red overlay proves both directions of that.
+    #[test]
+    fn an_overlay_covers_the_frame_and_clears_away() {
+        let dir = std::env::temp_dir().join(format!("promo-ffi-overlay-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let json = r#"{"id":"AAAAAAAA-0000-0000-0000-0000000000V1","name":"blue",
+            "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+            "videoDuration":1,"subtitles":[],
+            "compositionSettings":{"canvasWidth":160,"canvasHeight":120,
+              "backgroundColorHex":"0000FF"},
+            "resources":[],"layers":[]}"#;
+        std::fs::write(dir.join("metadata.json"), json).unwrap();
+        let cdir = CString::new(dir.to_str().unwrap()).unwrap();
+        let handle = promo_renderer_new(cdir.as_ptr(), 160, 120);
+        if handle.is_null() {
+            eprintln!("no GPU adapter; skipping");
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let center = (60 * 160 + 80) * 4;
+        let mut pixels = vec![0u8; 160 * 120 * 4];
+        let red_at = |px: &[u8]| (px[center], px[center + 2]); // (b, r)
+
+        // Opaque red, premultiplied BGRA, tiny — the quad stretches it.
+        let overlay = [0u8, 0, 255, 255].repeat(4 * 4);
+        assert_eq!(
+            promo_renderer_set_overlay(handle, overlay.as_ptr(), overlay.len() - 1, 4, 4),
+            -2,
+            "a mismatched overlay buffer is refused, not read past"
+        );
+        assert_eq!(
+            promo_renderer_set_overlay(handle, overlay.as_ptr(), overlay.len(), 4, 4),
+            0
+        );
+        assert_eq!(
+            promo_renderer_frame_bgra(handle, 0.5, pixels.as_mut_ptr(), pixels.len()),
+            0
+        );
+        let (b, r) = red_at(&pixels);
+        assert!(
+            r > 200 && b < 40,
+            "overlaid frame should be red, got b={b} r={r}"
+        );
+
+        assert_eq!(
+            promo_renderer_set_overlay(handle, std::ptr::null(), 0, 0, 0),
+            0
+        );
+        assert_eq!(
+            promo_renderer_frame_bgra(handle, 0.5, pixels.as_mut_ptr(), pixels.len()),
+            0
+        );
+        let (b, r) = red_at(&pixels);
+        assert!(
+            b > 200 && r < 40,
+            "cleared frame should be blue again, got b={b} r={r}"
+        );
+
+        promo_renderer_free(handle);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// "No audio" is a real answer (1), distinct from failure — and pcm

@@ -888,11 +888,46 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(), GpuError> {
-        let scenes = self.build_scenes(time, output_width, output_height)?;
+        self.render_to_texture_with_overlay(time, output, output_width, output_height, None)
+    }
+
+    /// [`render_to_texture`](Self::render_to_texture) plus a host-provided
+    /// overlay (an already-uploaded texture, premultiplied BGRA) composited
+    /// last as a canvas-spanning quad — the portable twin of
+    /// [`render_with_overlay`](Self::render_with_overlay), and the same
+    /// final quad, so a watermarked preview matches a watermarked export.
+    /// The caller uploads once ([`Compositor::upload_texture`]) and hands
+    /// the texture back per frame: a watermark is static content, and an
+    /// upload per frame at export sizes is real money.
+    pub fn render_to_texture_with_overlay(
+        &mut self,
+        time: f64,
+        output: &promo_gpu::wgpu::Texture,
+        output_width: u32,
+        output_height: u32,
+        overlay: Option<&InputTexture>,
+    ) -> Result<(), GpuError> {
+        let mut scenes = self.build_scenes(time, output_width, output_height)?;
+        if overlay.is_some() {
+            let canvas = Size::new(
+                self.meta.composition_settings.canvas_width,
+                self.meta.composition_settings.canvas_height,
+            );
+            // The overlay rides EVERY sub-sample identically; the average of
+            // N identical overlays over N varying scenes is the overlay over
+            // the average — exact, so blur needs no special casing.
+            for (scene, used) in &mut scenes {
+                scene.quads.push(SceneQuad {
+                    texture: Some(used.len()),
+                    rect: [0.0, 0.0, canvas.width(), canvas.height()],
+                    ..Default::default()
+                });
+            }
+        }
         let count = scenes.len();
         for (index, (scene, used)) in scenes.iter().enumerate() {
             // Field-disjoint lookup, as in `render_with_overlay`.
-            let textures: Vec<&InputTexture> = used
+            let mut textures: Vec<&InputTexture> = used
                 .iter()
                 .map(|id| {
                     let frame = self
@@ -903,6 +938,9 @@ impl PreviewEngine {
                     &frame.frame.texture
                 })
                 .collect();
+            if let Some(overlay) = overlay {
+                textures.push(overlay);
+            }
             if count == 1 {
                 return self
                     .compositor

@@ -273,6 +273,9 @@ fn video(project: &Project, opts: &Options) -> Result<(), String> {
         start,
         end,
         fps,
+        // The CLI is the oracle and renders clean; watermark policy is the
+        // apps' concern.
+        overlay: None,
     };
     render::export_video(project, out, &settings, &mut |done, total| {
         if done % 30 == 0 || done == total {

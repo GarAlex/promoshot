@@ -50,6 +50,59 @@ pub extern "C" fn promo_export_start(
     fps: c_double,
 ) -> *mut ExportHandle {
     crate::ffi_guard(std::ptr::null_mut(), move || {
+        export_start_impl(project_dir, out_path, width, height, fps, None)
+    })
+}
+
+/// [`promo_export_start`] with a host-rasterized overlay (watermark)
+/// composited over every frame: PREMULTIPLIED BGRA, `overlay_len` ==
+/// `overlay_width * overlay_height * 4` exactly (refused otherwise —
+/// never read past), stretched over the canvas. The bytes are copied
+/// during this call; the caller may free them the moment it returns. A
+/// NULL overlay is a plain export.
+///
+/// Safety contract (C ABI): strings as above; `overlay_bgra` is NULL or
+/// addresses `overlay_len` readable bytes.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_export_start_with_overlay(
+    project_dir: *const c_char,
+    out_path: *const c_char,
+    width: c_int,
+    height: c_int,
+    fps: c_double,
+    overlay_bgra: *const u8,
+    overlay_len: usize,
+    overlay_width: c_int,
+    overlay_height: c_int,
+) -> *mut ExportHandle {
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        let overlay = if overlay_bgra.is_null() {
+            None
+        } else {
+            if overlay_width <= 0
+                || overlay_height <= 0
+                || overlay_len != (overlay_width as usize * overlay_height as usize * 4)
+            {
+                eprintln!("promo_export_start_with_overlay: overlay size mismatch");
+                return std::ptr::null_mut();
+            }
+            let bytes = unsafe { std::slice::from_raw_parts(overlay_bgra, overlay_len) }.to_vec();
+            Some((bytes, overlay_width as u32, overlay_height as u32))
+        };
+        export_start_impl(project_dir, out_path, width, height, fps, overlay)
+    })
+}
+
+fn export_start_impl(
+    project_dir: *const c_char,
+    out_path: *const c_char,
+    width: c_int,
+    height: c_int,
+    fps: c_double,
+    overlay: Option<(Vec<u8>, u32, u32)>,
+) -> *mut ExportHandle {
+    {
         if project_dir.is_null() || out_path.is_null() || width <= 0 || height <= 0 {
             return std::ptr::null_mut();
         }
@@ -78,6 +131,7 @@ pub extern "C" fn promo_export_start(
                 project.meta.composition_settings.fps.unwrap_or(30.0)
             }
             .max(1.0),
+            overlay,
         };
         let total = (((settings.end - settings.start) * settings.fps).round() as usize).max(1);
 
@@ -117,7 +171,7 @@ pub extern "C" fn promo_export_start(
             shared,
             thread: Some(thread),
         }))
-    })
+    }
 }
 
 /// The job's state: 0 running, 1 finished, 2 cancelled, -4 failed (reason

@@ -124,6 +124,16 @@ double promo_renderer_duration(const PromoRenderer *renderer);
 int32_t promo_renderer_frame_bgra(PromoRenderer *renderer, double time,
                                   uint8_t *out_pixels, size_t out_len);
 
+/* Sets (or, with NULL bgra, clears) a host-rasterized overlay composited
+ * over every subsequent frame — the watermark seam, and the same final
+ * quad the export's overlay is. PREMULTIPLIED BGRA stretched over the
+ * canvas; len must equal width * height * 4 exactly (-2 otherwise, never
+ * read past). Uploaded once; the bytes may be freed on return. 0 ok, -1
+ * bad handle, -4 upload failed (stderr). */
+int32_t promo_renderer_set_overlay(PromoRenderer *renderer,
+                                   const uint8_t *bgra, size_t len,
+                                   int32_t width, int32_t height);
+
 /* Mixes the composition's soundtrack (the SAME mix the export muxes) and
  * reports its shape; mixed once, cached on the handle. Fills the out-params
  * when non-NULL. 0 = audio present, 1 = the composition has no audio (a
@@ -155,6 +165,15 @@ typedef struct PromoExport PromoExport;
  * promo_export_progress. Free with promo_export_free. */
 PromoExport *promo_export_start(const char *project_dir, const char *out_path,
                                 int32_t width, int32_t height, double fps);
+
+/* promo_export_start with a host-rasterized overlay (watermark) over
+ * every frame: PREMULTIPLIED BGRA, overlay_len == overlay_width *
+ * overlay_height * 4 exactly (NULL otherwise), stretched over the canvas.
+ * Bytes are copied during the call. NULL overlay_bgra = a plain export. */
+PromoExport *promo_export_start_with_overlay(
+    const char *project_dir, const char *out_path, int32_t width,
+    int32_t height, double fps, const uint8_t *overlay_bgra,
+    size_t overlay_len, int32_t overlay_width, int32_t overlay_height);
 
 /* The job's state: 0 running, 1 finished, 2 cancelled, -4 failed (reason
  * on stderr), -1 bad handle. Fills out_done/out_total (frames) when

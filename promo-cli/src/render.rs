@@ -162,6 +162,11 @@ pub struct Renderer {
     target: wgpu::Texture,
     width: u32,
     height: u32,
+    /// Host-rasterized overlay (watermark), uploaded once and composited
+    /// over every frame until cleared — the same final quad the Apple
+    /// path's overlay is, so a watermarked preview matches a watermarked
+    /// export.
+    overlay: Option<promo_gpu::compositor::InputTexture>,
 }
 
 impl Renderer {
@@ -274,7 +279,23 @@ impl Renderer {
             target,
             width,
             height,
+            overlay: None,
         })
+    }
+
+    /// Sets (or clears, with None) the overlay composited over every
+    /// subsequent frame. `bgra` is PREMULTIPLIED BGRA, stretched over the
+    /// canvas — rasterize it at canvas size for crisp pixels. Uploaded
+    /// once here; per-frame cost is one extra quad.
+    pub fn set_overlay(&mut self, overlay: Option<(&[u8], u32, u32)>) -> Result<(), String> {
+        self.overlay = match overlay {
+            None => None,
+            Some((bgra, width, height)) => Some(
+                promo_gpu::compositor::Compositor::upload_texture(self.ctx, bgra, width, height)
+                    .map_err(|e| format!("overlay upload: {e:?}"))?,
+            ),
+        };
+        Ok(())
     }
 
     /// Renders one frame and returns it as RGBA rows, ready for PNG.
@@ -299,7 +320,13 @@ impl Renderer {
             state.retain_only_active(time, &self.registry);
         }
         self.engine
-            .render_to_texture(time, &self.target, self.width, self.height)
+            .render_to_texture_with_overlay(
+                time,
+                &self.target,
+                self.width,
+                self.height,
+                self.overlay.as_ref(),
+            )
             .map_err(|e| format!("render at {time}s: {e:?}"))?;
         Ok(self.read_back())
     }
@@ -374,6 +401,9 @@ pub struct ExportSettings {
     pub start: f64,
     pub end: f64,
     pub fps: f64,
+    /// Host-rasterized overlay (watermark) over every frame: PREMULTIPLIED
+    /// BGRA, stretched over the canvas. None exports clean.
+    pub overlay: Option<(Vec<u8>, u32, u32)>,
 }
 
 /// Renders `project` straight into the encoder as raw BGRA — no
@@ -396,10 +426,14 @@ pub fn export_video(
         start,
         end,
         fps,
+        ref overlay,
     } = *settings;
     let count = (((end - start) * fps).round() as usize).max(1);
 
     let mut renderer = Renderer::new(project, width, height)?;
+    if let Some((bgra, overlay_width, overlay_height)) = overlay {
+        renderer.set_overlay(Some((bgra, *overlay_width, *overlay_height)))?;
+    }
     let audio = build_soundtrack(project, end - start)?;
     let spec = promo_media::EncodeSpec {
         width,
