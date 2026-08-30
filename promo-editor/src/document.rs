@@ -81,6 +81,22 @@ pub enum Command {
         #[serde(rename = "keyframeID")]
         keyframe_id: String,
     },
+    /// Adds a resource entry. The HOST has already staged the file into
+    /// Resources/ (I/O is the host's); the whole entry crosses as the
+    /// model's own type. A duplicate id is an error.
+    #[serde(rename_all = "camelCase")]
+    AddResource {
+        resource: Box<promo_model::ProjectResource>,
+    },
+    /// Adds a layer on TOP of the stack (end of sort order, like every
+    /// editor's new layer), renumbering sortIndex sequentially; place it
+    /// elsewhere with moveLayer. A duplicate id is an error, and a
+    /// resourceID naming no resource in the document is too — a layer
+    /// pointing at nothing renders as a hole that looks like a choice.
+    #[serde(rename_all = "camelCase")]
+    AddLayer {
+        layer: Box<promo_model::ProjectLayer>,
+    },
 }
 
 pub struct Document {
@@ -235,6 +251,35 @@ impl Document {
                 layer.keyframes.retain(|k| k.id != *keyframe_id);
                 if layer.keyframes.len() == before {
                     return Err(format!("no keyframe with id {keyframe_id}"));
+                }
+            }
+            Command::AddResource { resource } => {
+                let resources = meta.resources.get_or_insert_with(Vec::new);
+                if resources.iter().any(|r| r.id == resource.id) {
+                    return Err(format!("a resource with id {} already exists", resource.id));
+                }
+                resources.push((**resource).clone());
+            }
+            Command::AddLayer { layer } => {
+                if layers.iter().any(|l| l.id == layer.id) {
+                    return Err(format!("a layer with id {} already exists", layer.id));
+                }
+                if let Some(resource_id) = &layer.resource_id {
+                    let known = meta
+                        .resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .any(|r| r.id == *resource_id);
+                    if !known {
+                        return Err(format!("layer references unknown resource {resource_id}"));
+                    }
+                }
+                let layers = meta.layers.get_or_insert_with(Vec::new);
+                layers.sort_by_key(|l| l.sort_index);
+                layers.push((**layer).clone());
+                for (i, layer) in layers.iter_mut().enumerate() {
+                    layer.sort_index = i as i64;
                 }
             }
             Command::MoveLayer { layer_id, index } => {
@@ -412,6 +457,65 @@ mod tests {
         for _ in 0..4 {
             assert!(doc.undo());
         }
+        assert_eq!(doc.to_json().unwrap(), original);
+    }
+
+    /// The add group: a resource arrives whole, a layer lands on top of
+    /// the stack, a layer naming an unknown resource is refused, and the
+    /// pair undoes to the exact original.
+    #[test]
+    fn adds_land_on_top_and_refuse_dangling_references() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+
+        // A caption layer with no resource must be refused too? No — a
+        // caption NEEDS its resource; but a layer with NO resourceID at
+        // all (a background) is fine. First: dangling reference refused.
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "addLayer",
+                "layer": {"id": "L-NEW", "name": "Cap", "sortIndex": 0,
+                          "kind": "caption", "isEnabled": true,
+                          "startTime": 0.0, "resourceID": "R-GHOST",
+                          "keyframes": []}})))
+            .is_err());
+
+        doc.apply(&command(serde_json::json!({
+            "kind": "addResource",
+            "resource": {"id": "R-CAP", "kind": "caption", "filename": "",
+                          "displayName": "Words", "addedAt": 0.0,
+                          "captionText": "Hello"},
+        })))
+        .unwrap();
+        // Same id again: refused.
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "addResource",
+                "resource": {"id": "R-CAP", "kind": "caption", "filename": "",
+                              "displayName": "Twice", "addedAt": 0.0}})))
+            .is_err());
+
+        doc.apply(&command(serde_json::json!({
+            "kind": "addLayer",
+            "layer": {"id": "L-CAP", "name": "Cap", "sortIndex": 0,
+                      "kind": "caption", "isEnabled": true,
+                      "startTime": 1.0, "duration": 3.0,
+                      "resourceID": "R-CAP", "keyframes": []},
+        })))
+        .unwrap();
+        {
+            let layers = doc.meta().layers.as_ref().unwrap();
+            let top = layers.iter().max_by_key(|l| l.sort_index).unwrap();
+            assert_eq!(top.id, "L-CAP", "a new layer lands on top of the stack");
+            let indices: Vec<i64> = {
+                let mut sorted: Vec<i64> = layers.iter().map(|l| l.sort_index).collect();
+                sorted.sort();
+                sorted
+            };
+            assert_eq!(indices, vec![0, 1, 2, 3], "renumbered sequentially");
+        }
+        assert!(doc.undo());
+        assert!(doc.undo());
         assert_eq!(doc.to_json().unwrap(), original);
     }
 

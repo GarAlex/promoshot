@@ -179,74 +179,7 @@ impl Renderer {
         let ctx = GpuContext::shared().ok_or("no GPU adapter available")?;
 
         let registry = Registry::with_defaults();
-        let mut frames = HashMap::new();
-        let mut videos = HashMap::new();
-        for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
-            if project.unsupported(layer).is_some() {
-                continue;
-            }
-            // Every resource this layer can show: its own, plus anything a
-            // keyframe swaps to. Loading only the first would leave the rest
-            // of the layer blank.
-            let mut candidates: Vec<String> = layer.resource_id.iter().cloned().collect();
-            candidates.extend(layer.keyframes.iter().filter_map(|k| k.resource_id.clone()));
-            candidates.dedup();
-            // Only stills are preloaded; video opens while it is on screen.
-            // Video keys on the BASE resource (swaps never target video).
-            if layer.kind == promo_model::ProjectLayerKind::Video {
-                let Some(resource) = candidates.first().and_then(|id| project.resource(id)) else {
-                    continue;
-                };
-                let Some(path) = project.resource_path(resource) else {
-                    continue;
-                };
-                // Open once now so a broken file fails here rather than
-                // mid-render, then drop it: the render reopens what it needs.
-                registry
-                    .open_decoder(&path)
-                    .map_err(|e| format!("{}: {e}", path.display()))?;
-                let start = layer.start_time.max(0.0);
-                let end = layer.duration.map(|d| start + d).unwrap_or(f64::MAX);
-                videos.insert(
-                    layer.id.clone(),
-                    VideoLayer {
-                        path,
-                        start,
-                        end,
-                        decoder: None,
-                        last: None,
-                    },
-                );
-                continue;
-            }
-            for candidate in &candidates {
-                let Some(resource) = project.resource(candidate) else {
-                    continue;
-                };
-                let Some(path) = project.resource_path(resource) else {
-                    continue;
-                };
-                if frames.contains_key(candidate) {
-                    continue;
-                }
-                let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let rgba = decoded.to_rgba8();
-                let (w, h) = rgba.dimensions();
-                // The compositor samples premultiplied BGRA; a PNG decodes to
-                // straight RGBA, so convert both channel order and alpha or every
-                // soft edge in the image saturates.
-                let mut bgra = rgba.into_raw();
-                for px in bgra.chunks_exact_mut(4) {
-                    px.swap(0, 2);
-                    let a = px[3] as u32;
-                    for channel in px.iter_mut().take(3) {
-                        *channel = ((*channel as u32 * a + 127) / 255) as u8;
-                    }
-                }
-                frames.insert(candidate.clone(), (bgra, w, h));
-            }
-        }
-
+        let (frames, videos) = Self::stage(project, &registry)?;
         let state = Box::new(Mutex::new(HostState { frames, videos }));
         let user = &*state as *const Mutex<HostState> as *mut c_void;
         let mut engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
@@ -283,14 +216,104 @@ impl Renderer {
         })
     }
 
+    /// Reads what every renderable layer needs off disk: images decoded to
+    /// premultiplied BGRA up front (the compositor samples premultiplied;
+    /// straight alpha saturates every soft edge), videos opened once so a
+    /// broken file fails here rather than mid-render, then closed — the
+    /// render reopens what its playhead needs. Every resource a layer can
+    /// show is staged: its own, plus anything a keyframe swaps to.
+    #[allow(clippy::type_complexity)]
+    fn stage(
+        project: &Project,
+        registry: &Registry,
+    ) -> Result<
+        (
+            HashMap<String, (Vec<u8>, u32, u32)>,
+            HashMap<String, VideoLayer>,
+        ),
+        String,
+    > {
+        let mut frames = HashMap::new();
+        let mut videos = HashMap::new();
+        for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
+            if project.unsupported(layer).is_some() {
+                continue;
+            }
+            let mut candidates: Vec<String> = layer.resource_id.iter().cloned().collect();
+            candidates.extend(layer.keyframes.iter().filter_map(|k| k.resource_id.clone()));
+            candidates.dedup();
+            // Only stills are preloaded; video opens while it is on screen.
+            // Video keys on the BASE resource (swaps never target video).
+            if layer.kind == promo_model::ProjectLayerKind::Video {
+                let Some(resource) = candidates.first().and_then(|id| project.resource(id)) else {
+                    continue;
+                };
+                let Some(path) = project.resource_path(resource) else {
+                    continue;
+                };
+                registry
+                    .open_decoder(&path)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                let start = layer.start_time.max(0.0);
+                let end = layer.duration.map(|d| start + d).unwrap_or(f64::MAX);
+                videos.insert(
+                    layer.id.clone(),
+                    VideoLayer {
+                        path,
+                        start,
+                        end,
+                        decoder: None,
+                        last: None,
+                    },
+                );
+                continue;
+            }
+            for candidate in &candidates {
+                let Some(resource) = project.resource(candidate) else {
+                    continue;
+                };
+                let Some(path) = project.resource_path(resource) else {
+                    continue;
+                };
+                if frames.contains_key(candidate) {
+                    continue;
+                }
+                let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let rgba = decoded.to_rgba8();
+                let (w, h) = rgba.dimensions();
+                let mut bgra = rgba.into_raw();
+                for px in bgra.chunks_exact_mut(4) {
+                    px.swap(0, 2);
+                    let a = px[3] as u32;
+                    for channel in px.iter_mut().take(3) {
+                        *channel = ((*channel as u32 * a + 127) / 255) as u8;
+                    }
+                }
+                frames.insert(candidate.clone(), (bgra, w, h));
+            }
+        }
+        Ok((frames, videos))
+    }
+
     /// Replaces the engine's project, keeping the GPU pipeline and every
     /// cached frame whose layer did not change — what an editor calls per
-    /// edit instead of rebuilding the renderer. The provider's staged
-    /// media is NOT rebuilt: fine for edits that leave `resources` alone
-    /// (the current command set), and the seam to widen when a command
-    /// grows the resource list.
-    pub fn set_project(&mut self, meta: promo_model::ProjectMetadata) {
-        self.engine.set_project(meta);
+    /// edit instead of rebuilding the renderer. The staged media is
+    /// re-read from the project too, so a command that grew the resource
+    /// list previews without a reopen. The state swaps INSIDE the mutex:
+    /// the engine holds a raw pointer to the box, so the box must never
+    /// move.
+    pub fn set_project(&mut self, project: &Project) -> Result<(), String> {
+        let (frames, videos) = Self::stage(project, &self.registry)?;
+        {
+            let mut state = self
+                ._state
+                .lock()
+                .map_err(|_| "host state poisoned".to_string())?;
+            state.frames = frames;
+            state.videos = videos;
+        }
+        self.engine.set_project(project.meta.clone());
+        Ok(())
     }
 
     /// Sets (or clears, with None) the overlay composited over every

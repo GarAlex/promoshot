@@ -193,10 +193,15 @@ pub extern "C" fn promo_renderer_set_project(
                 return -2;
             }
         };
-        handle.project.meta = meta.clone();
+        handle.project.meta = meta;
         handle.duration = handle.project.duration();
         handle.soundtrack = None;
-        handle.renderer.set_project(meta);
+        // Re-stages the media too, so a command that grew the resource
+        // list previews without a reopen.
+        if let Err(e) = handle.renderer.set_project(&handle.project) {
+            eprintln!("promo_renderer_set_project: {e}");
+            return -4;
+        }
         0
     })
 }
