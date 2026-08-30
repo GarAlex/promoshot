@@ -144,7 +144,10 @@ int32_t promo_renderer_set_project(PromoRenderer *renderer,
  * "addLayer" carry whole entries (update replaces by id — a missing id is
  * an error, never an insert; delete is refused while referenced;
  * setLayerMediaCut / setLayerImageCut refuse a cut the layer's resource
- * does not hold, and an absent cut id clears the pointer).
+ * does not hold, and an absent cut id clears the pointer;
+ * "setLayerResource" re-points a layer at a resource of its own KIND,
+ * clearing stale cut pointers — absent resourceID is allowed only on a
+ * background layer, which then paints the settings ground).
  * "selectPalette" selects the THEME the project follows (absent
  * paletteResourceID deselects): entries materialize into
  * settings.palette, factory-default colours point at the stated roles,

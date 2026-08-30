@@ -137,6 +137,21 @@ pub enum Command {
         #[serde(rename = "resourceID")]
         resource_id: String,
     },
+    /// Re-points a layer at a resource — the "repoint the layers first"
+    /// that deleteResource's refusal asks for, and the way an existing
+    /// background layer gains its plate. The resource must exist and its
+    /// kind must MATCH the layer's (an editor must not aim a video layer
+    /// at a caption). Absent resourceID clears the pointer, and only on a
+    /// BACKGROUND layer — a background without a plate paints the
+    /// settings ground, but any other kind without a resource renders as
+    /// a hole that looks like a choice.
+    #[serde(rename_all = "camelCase")]
+    SetLayerResource {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(default, rename = "resourceID")]
+        resource_id: Option<String>,
+    },
     /// Selects (or, absent, deselects) the palette resource — the THEME —
     /// the project follows. Selection is the one moment the theme's whole
     /// look lands: the entries materialize into `settings.palette`,
@@ -440,6 +455,60 @@ impl Document {
                 if resources.len() == before {
                     return Err(format!("no resource with id {resource_id}"));
                 }
+            }
+            Command::SetLayerResource {
+                layer_id,
+                resource_id,
+            } => {
+                let layer_kind = find(layers, layer_id)?.kind;
+                if let Some(rid) = resource_id {
+                    let wanted = match layer_kind {
+                        promo_model::ProjectLayerKind::Background => {
+                            promo_model::ProjectResourceKind::Background
+                        }
+                        promo_model::ProjectLayerKind::Video => {
+                            promo_model::ProjectResourceKind::Video
+                        }
+                        promo_model::ProjectLayerKind::Image => {
+                            promo_model::ProjectResourceKind::Image
+                        }
+                        promo_model::ProjectLayerKind::Caption => {
+                            promo_model::ProjectResourceKind::Caption
+                        }
+                        promo_model::ProjectLayerKind::Drawing => {
+                            promo_model::ProjectResourceKind::Drawing
+                        }
+                        promo_model::ProjectLayerKind::Audio => {
+                            promo_model::ProjectResourceKind::Audio
+                        }
+                    };
+                    let resource = meta
+                        .resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| r.id == *rid)
+                        .ok_or_else(|| format!("no resource with id {rid}"))?;
+                    if resource.kind != wanted {
+                        return Err(format!(
+                            "resource {rid} is {:?}, not what a {layer_kind:?} layer shows",
+                            resource.kind
+                        ));
+                    }
+                } else if layer_kind != promo_model::ProjectLayerKind::Background {
+                    return Err(format!(
+                        "only a background layer may show nothing (it paints the settings ground); a {layer_kind:?} layer without a resource is a hole"
+                    ));
+                }
+                let layers = meta.layers.get_or_insert_with(Vec::new);
+                let layer = find(layers, layer_id)?;
+                if layer.resource_id != *resource_id {
+                    // Cut pointers belong to the OLD resource; carrying them
+                    // to a new one leaves ids nobody defines.
+                    layer.media_cut_id = None;
+                    layer.image_cut_id = None;
+                }
+                layer.resource_id = resource_id.clone();
             }
             Command::SelectPalette {
                 palette_resource_id,
@@ -943,6 +1012,81 @@ mod tests {
             assert!(doc.undo());
         }
         assert_eq!(doc.to_json().unwrap(), original);
+    }
+
+    /// Re-pointing: kind must match, cut pointers die with the old
+    /// resource, and only a background layer may be cleared.
+    #[test]
+    fn set_layer_resource_matches_kinds_and_drops_stale_cuts() {
+        let mut doc = doc();
+        let slide = layer_id(&doc, 1);
+        let background = layer_id(&doc, 0);
+        // A second image resource with a cut on the FIRST one's layer.
+        let first = doc.meta().layers.as_ref().unwrap()[1]
+            .resource_id
+            .clone()
+            .unwrap();
+        let mut with_cut = doc
+            .meta()
+            .resources
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|r| r.id == first)
+            .unwrap()
+            .clone();
+        with_cut.image_cuts = vec![serde_json::from_value(serde_json::json!({
+            "id": "IC", "rect": [[0.0, 0.0], [0.5, 0.5]],
+            "filename": "c.png", "createdAt": 0}))
+        .unwrap()];
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(with_cut),
+        })
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerImageCut", "layerID": slide, "imageCutID": "IC"})))
+            .unwrap();
+        doc.apply(&command(
+            serde_json::json!({"kind": "addResource", "resource": {
+            "id": "R2", "kind": "image", "filename": "other.png",
+            "displayName": "Other", "addedAt": 0}}),
+        ))
+        .unwrap();
+
+        // Repoint: the stale cut pointer dies with the old resource.
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerResource", "layerID": slide, "resourceID": "R2"})))
+            .unwrap();
+        let layer = &doc.meta().layers.as_ref().unwrap()[1];
+        assert_eq!(layer.resource_id.as_deref(), Some("R2"));
+        assert_eq!(
+            layer.image_cut_id, None,
+            "cut ids belong to the old resource"
+        );
+
+        // Kind mismatch refused; clearing allowed only on background.
+        doc.apply(&command(
+            serde_json::json!({"kind": "addResource", "resource": {
+            "id": "A1", "kind": "audio", "filename": "a.mp3",
+            "displayName": "A", "addedAt": 0}}),
+        ))
+        .unwrap();
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "setLayerResource", "layerID": slide, "resourceID": "A1"})))
+            .is_err());
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "setLayerResource", "layerID": slide})))
+            .is_err());
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerResource", "layerID": background})))
+            .unwrap();
+        assert_eq!(
+            doc.meta().layers.as_ref().unwrap()[0].resource_id,
+            None,
+            "a background may show nothing; it paints the settings ground"
+        );
     }
 
     #[test]
