@@ -6,6 +6,7 @@
 //! `../docs/EDITOR-PLAN.md`; this is Stage 1, whose slices move only derived and
 //! ephemeral state and leave document ownership where it is.
 
+pub mod author;
 pub mod selection;
 pub mod timeline;
 pub mod transport;

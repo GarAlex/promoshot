@@ -384,6 +384,58 @@ pub extern "C" fn promo_selection_reconcile(params_json: *const c_char) -> *mut 
     })
 }
 
+// --- wizard authoring ------------------------------------------------------
+
+/// Authors a slideshow / carousel / App Store project from staged media —
+/// the same show the Mac wizard builds, arranged by the core so every
+/// front end (and the CLI, and MCP) authors identically. The host has
+/// already copied the media into Resources/ and read each file's pixel
+/// size and clip length; this arranges and returns the complete
+/// `metadata.json` payload, canonical and reader-version-gated.
+///
+/// Input (camelCase): `{"name", "kind": "classic"|"carousel"|"appStore",
+/// "transition": "none"|"crossfade"|"wipe"|"slide"|"push"|"scale",
+/// "transitionEdge"?: "left"|"right"|"top"|"bottom",
+/// "direction": "rightToLeft"|"leftToRight", "sizing": "fit"|"fill",
+/// "device": "iPhone"|"iPad"|"mac", "framing": "flat"|"angled",
+/// "canvasWidth"?, "canvasHeight"?, "backgroundColorHex"?, "createdAt",
+/// "slides": [{"filename", "displayName"?, "kind": "image"|"video",
+/// "pixelWidth"?, "pixelHeight"?, "duration"?, "transitionDuration"?,
+/// "caption"?, "looped"?}]}`.
+///
+/// Free with `promo_string_free`. NULL on malformed input or an authoring
+/// failure (reason on stderr).
+///
+/// Safety contract (C ABI): `params_json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_author_slideshow(params_json: *const c_char) -> *mut c_char {
+    crate::ffi_guard(std::ptr::null_mut(), move || {
+        if params_json.is_null() {
+            return std::ptr::null_mut();
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(params_json) }).to_str() else {
+            return std::ptr::null_mut();
+        };
+        let spec: promo_editor::author::AuthorSpec = match serde_json::from_str(text) {
+            Ok(spec) => spec,
+            Err(e) => {
+                eprintln!("promo_author_slideshow: {e}");
+                return std::ptr::null_mut();
+            }
+        };
+        match promo_editor::author::author(&spec) {
+            Ok(json) => CString::new(json)
+                .map(|c| c.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
+            Err(e) => {
+                eprintln!("promo_author_slideshow: {e}");
+                std::ptr::null_mut()
+            }
+        }
+    })
+}
+
 // --- transport (Stage 1 slice 1.3) ---------------------------------------
 //
 // Stateless like the selection rules: the host holds the machine's state in

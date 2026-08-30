@@ -379,6 +379,19 @@ char *promo_selection_reveal_anchor(const char *params_json);
 int32_t promo_selection_is_pinned_outside_window(const char *params_json);
 char *promo_selection_reconcile(const char *params_json);
 
+/* Authors a slideshow / carousel / App Store project from staged media —
+ * the same show the Mac wizard builds. The host copies media into
+ * Resources/ and reads pixel sizes / clip lengths; this arranges and
+ * returns the complete metadata.json payload (canonical,
+ * reader-version-gated). Params (camelCase): {"name", "kind":
+ * "classic"|"carousel"|"appStore", "transition", "transitionEdge"?,
+ * "direction", "sizing", "device", "framing", "canvasWidth"?,
+ * "canvasHeight"?, "backgroundColorHex"?, "createdAt", "slides":
+ * [{"filename", "displayName"?, "kind", "pixelWidth"?, "pixelHeight"?,
+ * "duration"?, "transitionDuration"?, "caption"?, "looped"?}]}.
+ * Free with promo_string_free; NULL on malformed input (stderr says why). */
+char *promo_author_slideshow(const char *params_json);
+
 /* Transport state machine (Stage 1 slice 1.3). Stateless: the host holds the
  * machine's state and hands it over per event.
  *
