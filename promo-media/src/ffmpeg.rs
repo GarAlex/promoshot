@@ -551,6 +551,23 @@ fn write_wav(audio: &AudioBuffer) -> Result<PathBuf, MediaError> {
     Ok(path)
 }
 
+impl Drop for FfmpegEncoder {
+    fn drop(&mut self) {
+        // An encoder dropped without finish() is an ABANDONED export, and
+        // ffmpeg must die with it: left alone it reads EOF off the closed
+        // pipe, flushes the trailer, and completes a half-export that then
+        // looks exported — while holding the output file open, so a
+        // Windows caller cannot even delete it. finish() has already
+        // waited by the time this runs; kill/wait on a reaped child are
+        // no-ops worth ignoring, a live one dies and is reaped.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        if let Some(wav) = &self.audio_temp {
+            let _ = std::fs::remove_file(wav);
+        }
+    }
+}
+
 impl VideoEncoder for FfmpegEncoder {
     fn write_frame(&mut self, bgra: &[u8]) -> Result<(), MediaError> {
         let stdin = self
@@ -583,6 +600,39 @@ impl VideoEncoder for FfmpegEncoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Dropping an encoder without finish() abandons the export: ffmpeg
+    /// must be dead and the file deletable IMMEDIATELY. A leaked child
+    /// reads EOF, completes a half-export behind the caller's back, and on
+    /// Windows holds the file against the deletion a cancel needs.
+    #[test]
+    fn a_dropped_encoder_releases_its_output_at_once() {
+        let dir = std::env::temp_dir().join("promo-media-tests");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let out = dir.join(format!("abandoned-{}.mp4", std::process::id()));
+        let spec = crate::EncodeSpec {
+            width: 64,
+            height: 64,
+            fps: 30.0,
+            quality: 18,
+            audio: None,
+        };
+        let Ok(mut encoder) = crate::Registry::with_defaults().open_encoder(&out, &spec) else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        // Feed frames until ffmpeg has demonstrably created the output:
+        // dropping before that proves nothing — an absent file cannot say
+        // whether the child is dead or merely slow.
+        let mut frames = 0;
+        while !out.exists() && frames < 300 {
+            encoder.write_frame(&[0u8; 64 * 64 * 4]).expect("frame in");
+            frames += 1;
+        }
+        assert!(out.exists(), "ffmpeg never created the output");
+        drop(encoder);
+        std::fs::remove_file(&out).expect("the abandoned output is closed and deletable");
+    }
 
     /// Builds a clip whose colour changes over time, so a decoded frame can
     /// be checked against the moment it claims to be.
