@@ -62,6 +62,25 @@ pub enum Command {
         layer_id: String,
         index: usize,
     },
+    /// Inserts or replaces one keyframe — matched by its id, the whole
+    /// object crossing as the model's own type so the format, not this
+    /// enum, says what a keyframe can carry. The layer's keyframes are
+    /// re-sorted by time afterwards: their order is time's spelling.
+    #[serde(rename_all = "camelCase")]
+    UpsertKeyframe {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        /// Boxed: a keyframe is the widest thing a command can carry, and
+        /// every other variant should not pay its size.
+        keyframe: Box<promo_model::ProjectLayerKeyframe>,
+    },
+    #[serde(rename_all = "camelCase")]
+    DeleteKeyframe {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(rename = "keyframeID")]
+        keyframe_id: String,
+    },
 }
 
 pub struct Document {
@@ -192,6 +211,32 @@ impl Document {
                     return Err(format!("no layer with id {layer_id}"));
                 }
             }
+            Command::UpsertKeyframe { layer_id, keyframe } => {
+                if !keyframe.time.is_finite() || keyframe.time < 0.0 {
+                    return Err(format!("bad keyframe time {}", keyframe.time));
+                }
+                let layer = find(layers, layer_id)?;
+                match layer.keyframes.iter_mut().find(|k| k.id == keyframe.id) {
+                    Some(existing) => *existing = (**keyframe).clone(),
+                    None => layer.keyframes.push((**keyframe).clone()),
+                }
+                layer.keyframes.sort_by(|a, b| {
+                    a.time
+                        .partial_cmp(&b.time)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+            Command::DeleteKeyframe {
+                layer_id,
+                keyframe_id,
+            } => {
+                let layer = find(layers, layer_id)?;
+                let before = layer.keyframes.len();
+                layer.keyframes.retain(|k| k.id != *keyframe_id);
+                if layer.keyframes.len() == before {
+                    return Err(format!("no keyframe with id {keyframe_id}"));
+                }
+            }
             Command::MoveLayer { layer_id, index } => {
                 layers.sort_by_key(|l| l.sort_index);
                 let from = layers
@@ -307,6 +352,67 @@ mod tests {
         assert_eq!(sorted, vec![0, 1, 2]);
         let last = layers.iter().max_by_key(|l| l.sort_index).unwrap();
         assert_eq!(last.id, background, "clamped to the end, not dropped");
+    }
+
+    /// The keyframe group: an upsert with a fresh id inserts, the same id
+    /// replaces, order follows time, delete removes — and the whole dance
+    /// undoes to the exact original.
+    #[test]
+    fn keyframes_upsert_sorted_edit_in_place_and_delete() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+        let slide = layer_id(&doc, 1);
+        doc.apply(&command(serde_json::json!({
+            "kind": "upsertKeyframe", "layerID": slide,
+            "keyframe": {"id": "K2", "time": 2.0, "transitionDuration": 0.5,
+                          "zoom": 2.0, "easing": "easeInOut"},
+        })))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "upsertKeyframe", "layerID": slide,
+            "keyframe": {"id": "K1", "time": 1.0, "transitionDuration": 0.0,
+                          "opacity": 0.5},
+        })))
+        .unwrap();
+        {
+            let layer = &doc.meta().layers.as_ref().unwrap()[1];
+            let times: Vec<f64> = layer.keyframes.iter().map(|k| k.time).collect();
+            assert!(
+                times.windows(2).all(|w| w[0] <= w[1]),
+                "sorted by time: {times:?}"
+            );
+            assert_eq!(layer.keyframes.len(), 3, "the authored keyframe plus two");
+        }
+        // Same id, new values: replaced, not duplicated.
+        doc.apply(&command(serde_json::json!({
+            "kind": "upsertKeyframe", "layerID": slide,
+            "keyframe": {"id": "K2", "time": 2.5, "transitionDuration": 0.5,
+                          "zoom": 3.0},
+        })))
+        .unwrap();
+        {
+            let layer = &doc.meta().layers.as_ref().unwrap()[1];
+            assert_eq!(layer.keyframes.len(), 3);
+            let k2 = layer.keyframes.iter().find(|k| k.id == "K2").unwrap();
+            assert_eq!(k2.zoom, Some(3.0));
+        }
+        doc.apply(&command(serde_json::json!({
+            "kind": "deleteKeyframe", "layerID": slide, "keyframeID": "K1",
+        })))
+        .unwrap();
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "deleteKeyframe", "layerID": slide, "keyframeID": "K1"})))
+            .is_err());
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "upsertKeyframe", "layerID": slide,
+                "keyframe": {"id": "KX", "time": -1.0, "transitionDuration": 0.0}})))
+            .is_err());
+        for _ in 0..4 {
+            assert!(doc.undo());
+        }
+        assert_eq!(doc.to_json().unwrap(), original);
     }
 
     #[test]
