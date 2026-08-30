@@ -60,6 +60,17 @@ pub enum Command {
         #[serde(default, rename = "mediaCutID")]
         media_cut_id: Option<String>,
     },
+    /// The image twin of [`Command::SetLayerMediaCut`]: aims the layer at
+    /// one of its resource's imageCuts (a crop, whose pixels are the cut's
+    /// own staged file). Same contract — absent clears, a cut the resource
+    /// does not hold is refused.
+    #[serde(rename_all = "camelCase")]
+    SetLayerImageCut {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(default, rename = "imageCutID")]
+        image_cut_id: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     DeleteLayer {
         #[serde(rename = "layerID")]
@@ -290,6 +301,29 @@ impl Document {
                 }
                 let layers = meta.layers.get_or_insert_with(Vec::new);
                 find(layers, layer_id)?.media_cut_id = media_cut_id.clone();
+            }
+            Command::SetLayerImageCut {
+                layer_id,
+                image_cut_id,
+            } => {
+                if let Some(cut_id) = image_cut_id {
+                    let resource_id = find(layers, layer_id)?
+                        .resource_id
+                        .clone()
+                        .ok_or_else(|| format!("layer {layer_id} has no resource to cut"))?;
+                    let holds_cut = meta
+                        .resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| r.id == resource_id)
+                        .is_some_and(|r| r.image_cuts.iter().any(|c| c.id == *cut_id));
+                    if !holds_cut {
+                        return Err(format!("resource {resource_id} has no image cut {cut_id}"));
+                    }
+                }
+                let layers = meta.layers.get_or_insert_with(Vec::new);
+                find(layers, layer_id)?.image_cut_id = image_cut_id.clone();
             }
             Command::DeleteLayer { layer_id } => {
                 let before = layers.len();
@@ -753,6 +787,53 @@ mod tests {
             assert!(doc.undo());
         }
         assert_eq!(doc.to_json().unwrap(), original);
+    }
+
+    /// The image twin: same pointer contract as the media cut, against
+    /// imageCuts (a crop with staged pixels) instead of a time range.
+    #[test]
+    fn set_layer_image_cut_points_clears_and_refuses_ghosts() {
+        let mut doc = doc();
+        let slide = layer_id(&doc, 1);
+        let resource_id = doc.meta().layers.as_ref().unwrap()[1]
+            .resource_id
+            .clone()
+            .expect("wizard slides show a resource");
+        let mut with_cut = doc
+            .meta()
+            .resources
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|r| r.id == resource_id)
+            .unwrap()
+            .clone();
+        with_cut.image_cuts = vec![serde_json::from_value(serde_json::json!({
+            "id": "IC1", "rect": [[0.1, 0.1], [0.5, 0.5]],
+            "filename": "crop.png", "createdAt": 0
+        }))
+        .unwrap()];
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(with_cut),
+        })
+        .unwrap();
+
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerImageCut", "layerID": slide, "imageCutID": "IC1"})))
+            .unwrap();
+        assert_eq!(
+            doc.meta().layers.as_ref().unwrap()[1].image_cut_id,
+            Some("IC1".into())
+        );
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerImageCut", "layerID": slide})))
+            .unwrap();
+        assert_eq!(doc.meta().layers.as_ref().unwrap()[1].image_cut_id, None);
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "setLayerImageCut", "layerID": slide,
+                "imageCutID": "GHOST"})))
+            .is_err());
     }
 
     #[test]

@@ -21,8 +21,14 @@ use std::sync::Mutex;
 /// cannot be held that way: a clip is far too big as frames, and the engine
 /// asks for one source time at a time.
 struct HostState {
-    /// layer id → BGRA pixels + size
+    /// resource id → BGRA pixels + size
     frames: HashMap<String, (Vec<u8>, u32, u32)>,
+    /// layer id → the CUT it shows instead of its resource's whole file:
+    /// (the base resource id, the cut file's pixels). An image cut's pixels
+    /// live in the cut's own staged file, exactly as the Mac app draws them;
+    /// the redirect is keyed by LAYER and applies only while the layer shows
+    /// its own resource, so a keyframe swap still swaps.
+    cuts: HashMap<String, (String, Vec<u8>, u32, u32)>,
     /// layer id → its clip, decoder opened only while it is on screen.
     videos: HashMap<String, VideoLayer>,
 }
@@ -94,6 +100,26 @@ extern "C" fn provider(
     let resource = unsafe { CStr::from_ptr(resource_id) }
         .to_string_lossy()
         .to_string();
+    // A layer aimed at an image cut shows the cut's staged file, not the
+    // source — but only while the engine says it shows its OWN resource:
+    // a keyframe swap outranks the cut, whose id means nothing to the
+    // swapped-in material.
+    if let Some((base, pixels, width, height)) = state.cuts.get(&id) {
+        if *base == resource {
+            unsafe {
+                *out_surface = HostSurface {
+                    kind: SURFACE_CPU_PIXELS,
+                    data: pixels.as_ptr(),
+                    width: *width,
+                    height: *height,
+                    bytes_per_row: width * 4,
+                    ..Default::default()
+                };
+                *out_flags = 0;
+            }
+            return 0;
+        }
+    }
     if let Some((pixels, width, height)) = state.frames.get(&resource) {
         unsafe {
             *out_surface = HostSurface {
@@ -179,8 +205,12 @@ impl Renderer {
         let ctx = GpuContext::shared().ok_or("no GPU adapter available")?;
 
         let registry = Registry::with_defaults();
-        let (frames, videos) = Self::stage(project, &registry)?;
-        let state = Box::new(Mutex::new(HostState { frames, videos }));
+        let (frames, cuts, videos) = Self::stage(project, &registry)?;
+        let state = Box::new(Mutex::new(HostState {
+            frames,
+            cuts,
+            videos,
+        }));
         let user = &*state as *const Mutex<HostState> as *mut c_void;
         let mut engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
             .map_err(|e| format!("engine: {e:?}"))?;
@@ -229,11 +259,13 @@ impl Renderer {
     ) -> Result<
         (
             HashMap<String, (Vec<u8>, u32, u32)>,
+            HashMap<String, (String, Vec<u8>, u32, u32)>,
             HashMap<String, VideoLayer>,
         ),
         String,
     > {
         let mut frames = HashMap::new();
+        let mut cuts = HashMap::new();
         let mut videos = HashMap::new();
         for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
             if project.unsupported(layer).is_some() {
@@ -278,21 +310,51 @@ impl Renderer {
                 if frames.contains_key(candidate) {
                     continue;
                 }
-                let decoded = image::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let rgba = decoded.to_rgba8();
-                let (w, h) = rgba.dimensions();
-                let mut bgra = rgba.into_raw();
-                for px in bgra.chunks_exact_mut(4) {
-                    px.swap(0, 2);
-                    let a = px[3] as u32;
-                    for channel in px.iter_mut().take(3) {
-                        *channel = ((*channel as u32 * a + 127) / 255) as u8;
+                frames.insert(candidate.clone(), Self::decode_premultiplied(&path)?);
+            }
+            // The layer's image cut, if it names one its resource holds: the
+            // crop's pixels are its own staged file, sitting beside the
+            // source (the Mac app's layout). A cut with no file yet stages
+            // nothing and the layer keeps showing the whole image — a
+            // half-authored cut degrades, it does not blank the layer.
+            if let (Some(cut_id), Some(resource_id)) =
+                (layer.image_cut_id.as_ref(), layer.resource_id.as_ref())
+            {
+                if let Some(resource) = project.resource(resource_id) {
+                    let cut = resource.image_cuts.iter().find(|c| &c.id == cut_id);
+                    if let Some(cut) = cut.filter(|c| !c.filename.is_empty()) {
+                        if let Some(path) = project
+                            .resource_path(resource)
+                            .map(|p| p.with_file_name(&cut.filename))
+                            .filter(|p| p.is_file())
+                        {
+                            cuts.insert(layer.id.clone(), {
+                                let (px, w, h) = Self::decode_premultiplied(&path)?;
+                                (resource_id.clone(), px, w, h)
+                            });
+                        }
                     }
                 }
-                frames.insert(candidate.clone(), (bgra, w, h));
             }
         }
-        Ok((frames, videos))
+        Ok((frames, cuts, videos))
+    }
+
+    /// One image file as the compositor wants it: premultiplied BGRA.
+    /// Straight alpha saturates every soft edge.
+    fn decode_premultiplied(path: &std::path::Path) -> Result<(Vec<u8>, u32, u32), String> {
+        let decoded = image::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let rgba = decoded.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        let mut bgra = rgba.into_raw();
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+            let a = px[3] as u32;
+            for channel in px.iter_mut().take(3) {
+                *channel = ((*channel as u32 * a + 127) / 255) as u8;
+            }
+        }
+        Ok((bgra, w, h))
     }
 
     /// Replaces the engine's project, keeping the GPU pipeline and every
@@ -303,13 +365,14 @@ impl Renderer {
     /// the engine holds a raw pointer to the box, so the box must never
     /// move.
     pub fn set_project(&mut self, project: &Project) -> Result<(), String> {
-        let (frames, videos) = Self::stage(project, &self.registry)?;
+        let (frames, cuts, videos) = Self::stage(project, &self.registry)?;
         {
             let mut state = self
                 ._state
                 .lock()
                 .map_err(|_| "host state poisoned".to_string())?;
             state.frames = frames;
+            state.cuts = cuts;
             state.videos = videos;
         }
         self.engine.set_project(project.meta.clone());
@@ -684,6 +747,68 @@ mod tests {
         );
         std::fs::write(dir.join("metadata.json"), json).ok()?;
         Project::open(dir).ok()
+    }
+
+    /// A layer aimed at an image cut draws the cut's own staged file — the
+    /// Mac app's contract, which the portable path used to ignore (it
+    /// honoured only the cut's frame, so a crop rendered as the whole
+    /// picture). Red source, blue crop: the pointed layer must come out
+    /// blue, and dropping the pointer via set_project brings red back.
+    #[test]
+    fn an_image_cut_layer_draws_the_cut_file() {
+        let dir = std::env::temp_dir().join("promo-cli-imagecut");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let paint = |name: &str, rgba: [u8; 4]| {
+            let img = image::RgbaImage::from_pixel(8, 8, image::Rgba(rgba));
+            img.save(dir.join("Resources").join(name)).unwrap();
+        };
+        paint("red.png", [255, 0, 0, 255]);
+        paint("crop.png", [0, 0, 255, 255]);
+        let json = r#"{"id":"AAAAAAAA-0000-0000-0000-0000000000IC","name":"cut",
+            "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+            "videoDuration":2,"subtitles":[],
+            "compositionSettings":{"canvasWidth":160,"canvasHeight":120,
+              "backgroundColorHex":"00FF00"},
+            "resources":[{"id":"R","kind":"image","filename":"red.png",
+              "displayName":"Red","addedAt":0,
+              "imageCuts":[{"id":"IC","rect":[[0.25,0.25],[0.5,0.5]],
+                "filename":"crop.png","createdAt":0}]}],
+            "layers":[{"id":"L","name":"Red","sortIndex":0,"kind":"image",
+              "isEnabled":true,"startTime":0.0,"duration":2.0,"resourceID":"R",
+              "imageCutID":"IC",
+              "keyframes":[{"id":"K","time":0.0,"transitionDuration":0.0,
+                "placement":{"mode":"fill","anchor":"center"}}]}]}"#;
+        std::fs::write(dir.join("metadata.json"), json).unwrap();
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 160, 120).expect("renderer");
+        let center = |px: &[u8]| {
+            let at = (60 * 160 + 80) * 4;
+            (px[at], px[at + 2]) // (b, r)
+        };
+        let (b, r) = center(&renderer.frame_bgra(1.0).expect("cut frame"));
+        assert!(
+            b > 200 && r < 40,
+            "the cut layer should draw the blue crop file, got b={b} r={r}"
+        );
+
+        std::fs::write(
+            dir.join("metadata.json"),
+            json.replace(r#""imageCutID":"IC","#, ""),
+        )
+        .unwrap();
+        let uncut = crate::project::Project::open(&dir).expect("project");
+        renderer.set_project(&uncut).expect("set_project");
+        let (b, r) = center(&renderer.frame_bgra(1.0).expect("uncut frame"));
+        assert!(
+            r > 200 && b < 40,
+            "without the pointer the source shows again, got b={b} r={r}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Decoders must follow the playhead, not the composition.

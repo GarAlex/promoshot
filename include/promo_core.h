@@ -137,13 +137,14 @@ int32_t promo_renderer_set_project(PromoRenderer *renderer,
  * A front end holds a handle, sends commands as JSON, and re-reads; undo
  * lives here because there is only one place edits happen. Commands:
  * {"kind": "renameLayer"|"setLayerEnabled"|"setLayerTiming"|
- *  "setLayerAudioFocus"|"setLayerMediaCut"|"deleteLayer"|"moveLayer",
+ *  "setLayerAudioFocus"|"setLayerMediaCut"|"setLayerImageCut"|
+ *  "deleteLayer"|"moveLayer",
  *  "layerID": …, …} for layers; "upsertKeyframe"/"deleteKeyframe" carry a
  * whole keyframe; "addResource"/"updateResource"/"deleteResource"/
  * "addLayer" carry whole entries (update replaces by id — a missing id is
  * an error, never an insert; delete is refused while referenced;
- * setLayerMediaCut refuses a cut the layer's resource does not hold, and
- * absent mediaCutID clears the pointer). */
+ * setLayerMediaCut / setLayerImageCut refuse a cut the layer's resource
+ * does not hold, and an absent cut id clears the pointer). */
 typedef struct PromoDoc PromoDoc;
 
 PromoDoc *promo_doc_open(const char *json);        /* NULL on refusal */
