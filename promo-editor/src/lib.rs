@@ -9,6 +9,7 @@
 pub mod author;
 pub mod document;
 pub mod selection;
+mod theme;
 pub mod timeline;
 pub mod transport;
 

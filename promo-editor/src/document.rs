@@ -137,6 +137,19 @@ pub enum Command {
         #[serde(rename = "resourceID")]
         resource_id: String,
     },
+    /// Selects (or, absent, deselects) the palette resource — the THEME —
+    /// the project follows. Selection is the one moment the theme's whole
+    /// look lands: the entries materialize into `settings.palette`,
+    /// factory-default settings colours are pointed at the roles the theme
+    /// states, and its `captionStyle` typography is folded over fields
+    /// nobody moved off the default (see [`crate::theme`] for the ported
+    /// Mac rules). Deselecting clears only the pointer — the materialized
+    /// copy stays, so nothing on screen changes.
+    #[serde(rename_all = "camelCase")]
+    SelectPalette {
+        #[serde(default, rename = "paletteResourceID")]
+        palette_resource_id: Option<String>,
+    },
 }
 
 pub struct Document {
@@ -393,6 +406,21 @@ impl Document {
                     Some(existing) => *existing = (**resource).clone(),
                     None => return Err(format!("no resource with id {}", resource.id)),
                 }
+                // Editing the SELECTED theme refreshes its materialized
+                // copy at once — the Mac does this on every save, and a
+                // copy that goes stale until the next open is a colour
+                // that edits right and renders wrong. Not the selection
+                // moment, so typography is left alone.
+                if meta.composition_settings.palette_resource_id.as_deref()
+                    == Some(resource.id.as_str())
+                    && resource.kind == promo_model::ProjectResourceKind::Palette
+                {
+                    crate::theme::sync_selected_palette(
+                        &mut meta.composition_settings,
+                        resource,
+                        false,
+                    );
+                }
             }
             Command::DeleteResource { resource_id } => {
                 let referenced = layers.iter().any(|l| {
@@ -413,6 +441,30 @@ impl Document {
                     return Err(format!("no resource with id {resource_id}"));
                 }
             }
+            Command::SelectPalette {
+                palette_resource_id,
+            } => match palette_resource_id {
+                None => meta.composition_settings.palette_resource_id = None,
+                Some(id) => {
+                    let resource = meta
+                        .resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| r.id == *id)
+                        .ok_or_else(|| format!("no resource with id {id}"))?
+                        .clone();
+                    if resource.kind != promo_model::ProjectResourceKind::Palette {
+                        return Err(format!("resource {id} is not a palette"));
+                    }
+                    meta.composition_settings.palette_resource_id = Some(id.clone());
+                    crate::theme::sync_selected_palette(
+                        &mut meta.composition_settings,
+                        &resource,
+                        true,
+                    );
+                }
+            },
             Command::MoveLayer { layer_id, index } => {
                 layers.sort_by_key(|l| l.sort_index);
                 let from = layers
@@ -834,6 +886,63 @@ mod tests {
                 "kind": "setLayerImageCut", "layerID": slide,
                 "imageCutID": "GHOST"})))
             .is_err());
+    }
+
+    /// The theme commands end to end: selecting a palette materializes its
+    /// entries and points default colours at the roles; EDITING the
+    /// selected palette refreshes the materialized copy at once; a
+    /// non-palette refuses; deselecting clears only the pointer; and the
+    /// whole dance undoes to the exact original.
+    #[test]
+    fn select_palette_materializes_refreshes_on_edit_and_undoes() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+        doc.apply(&command(
+            serde_json::json!({"kind": "addResource", "resource": {
+            "id": "T", "kind": "palette", "filename": "", "displayName": "Studio",
+            "addedAt": 0, "palette": [{"name": "text", "colorHex": "F2F2F7"}]}}),
+        ))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "selectPalette", "paletteResourceID": "T"})))
+            .unwrap();
+        let settings = |doc: &Document| doc.meta().composition_settings.clone();
+        assert_eq!(settings(&doc).palette_resource_id.as_deref(), Some("T"));
+        assert_eq!(settings(&doc).subtitle_color_hex, "@text");
+        assert_eq!(settings(&doc).palette.unwrap()[0].color_hex, "F2F2F7");
+
+        // Editing the selected theme refreshes the copy immediately.
+        let mut edited = doc
+            .meta()
+            .resources
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|r| r.id == "T")
+            .unwrap()
+            .clone();
+        edited.palette.as_mut().unwrap()[0].color_hex = "AABBCC".into();
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(edited),
+        })
+        .unwrap();
+        assert_eq!(settings(&doc).palette.unwrap()[0].color_hex, "AABBCC");
+
+        // A non-palette is refused; deselecting clears only the pointer.
+        let image_id = doc.meta().resources.as_ref().unwrap()[0].id.clone();
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "selectPalette", "paletteResourceID": image_id})))
+            .is_err());
+        doc.apply(&command(serde_json::json!({"kind": "selectPalette"})))
+            .unwrap();
+        assert_eq!(settings(&doc).palette_resource_id, None);
+        assert!(settings(&doc).palette.is_some(), "the copy stays");
+
+        for _ in 0..4 {
+            assert!(doc.undo());
+        }
+        assert_eq!(doc.to_json().unwrap(), original);
     }
 
     #[test]
