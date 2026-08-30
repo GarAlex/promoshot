@@ -48,6 +48,18 @@ pub enum Command {
         layer_id: String,
         focus: bool,
     },
+    /// Points the layer at one of its resource's mediaCuts (absent clears
+    /// it — the layer plays the resource's own trim again). Naming a cut
+    /// the layer's resource does not hold is an error: render-time
+    /// degradation exists for a cut that later VANISHES, but an editor
+    /// must never mint a dangling pointer on purpose.
+    #[serde(rename_all = "camelCase")]
+    SetLayerMediaCut {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(default, rename = "mediaCutID")]
+        media_cut_id: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     DeleteLayer {
         #[serde(rename = "layerID")]
@@ -255,6 +267,29 @@ impl Document {
             }
             Command::SetLayerAudioFocus { layer_id, focus } => {
                 find(layers, layer_id)?.audio_focus = Some(*focus);
+            }
+            Command::SetLayerMediaCut {
+                layer_id,
+                media_cut_id,
+            } => {
+                if let Some(cut_id) = media_cut_id {
+                    let resource_id = find(layers, layer_id)?
+                        .resource_id
+                        .clone()
+                        .ok_or_else(|| format!("layer {layer_id} has no resource to cut"))?;
+                    let holds_cut = meta
+                        .resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| r.id == resource_id)
+                        .is_some_and(|r| r.media_cuts.iter().any(|c| c.id == *cut_id));
+                    if !holds_cut {
+                        return Err(format!("resource {resource_id} has no media cut {cut_id}"));
+                    }
+                }
+                let layers = meta.layers.get_or_insert_with(Vec::new);
+                find(layers, layer_id)?.media_cut_id = media_cut_id.clone();
             }
             Command::DeleteLayer { layer_id } => {
                 let before = layers.len();
@@ -661,6 +696,59 @@ mod tests {
         doc.apply(&command(serde_json::json!({
             "kind": "deleteResource", "resourceID": resource_id})))
             .unwrap();
+        for _ in 0..3 {
+            assert!(doc.undo());
+        }
+        assert_eq!(doc.to_json().unwrap(), original);
+    }
+
+    /// The cuts pointer: a layer aims at one of its resource's mediaCuts,
+    /// clears back to the resource's own trim, and can never be aimed at a
+    /// cut that is not there — render-time degradation covers a cut that
+    /// VANISHES, not an editor minting a dangling pointer on purpose.
+    #[test]
+    fn set_layer_media_cut_points_clears_and_refuses_ghosts() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+        doc.apply_group(&[
+            command(serde_json::json!({"kind": "addResource", "resource": {
+                "id": "V-CUT", "kind": "video", "filename": "clip.mp4",
+                "displayName": "Clip", "addedAt": 0,
+                "mediaCuts": [{"id": "C1", "name": "Intro",
+                                "trimStart": 1.0, "trimEnd": 3.0}]}})),
+            command(serde_json::json!({"kind": "addLayer", "layer": {
+                "id": "L-CUT", "name": "Clip", "sortIndex": 99, "kind": "video",
+                "isEnabled": true, "startTime": 0.0, "duration": 2.0,
+                "resourceID": "V-CUT", "keyframes": []}})),
+        ])
+        .unwrap();
+
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerMediaCut", "layerID": "L-CUT", "mediaCutID": "C1"})))
+            .unwrap();
+        let cut_of = |doc: &Document| doc.meta().layers.as_ref().unwrap()[3].media_cut_id.clone();
+        assert_eq!(cut_of(&doc), Some("C1".into()));
+
+        // Absent mediaCutID clears the pointer.
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerMediaCut", "layerID": "L-CUT"})))
+            .unwrap();
+        assert_eq!(cut_of(&doc), None);
+
+        // A cut the resource does not hold, and a layer with no resource
+        // to cut, are both errors and no-ops.
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "setLayerMediaCut", "layerID": "L-CUT",
+                "mediaCutID": "GHOST"})))
+            .is_err());
+        let background = layer_id(&doc, 0);
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "setLayerMediaCut", "layerID": background,
+                "mediaCutID": "C1"})))
+            .is_err());
+
         for _ in 0..3 {
             assert!(doc.undo());
         }

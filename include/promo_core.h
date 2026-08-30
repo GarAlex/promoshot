@@ -126,8 +126,10 @@ int32_t promo_renderer_frame_bgra(PromoRenderer *renderer, double time,
 
 /* Replaces the renderer's project with an edited document, keeping the
  * GPU pipeline and frame cache warm — the editor's per-command path.
- * Drops the cached soundtrack (timing edits change the mix). Valid while
- * commands leave `resources` alone. 0 ok, -1 bad handle, -2 no parse. */
+ * Drops the cached soundtrack (timing edits change the mix) and re-reads
+ * the staged media from the project, so a command that grew or retrimmed
+ * the resource list previews without a reopen. 0 ok, -1 bad handle,
+ * -2 no parse. */
 int32_t promo_renderer_set_project(PromoRenderer *renderer,
                                    const char *json);
 
@@ -135,7 +137,13 @@ int32_t promo_renderer_set_project(PromoRenderer *renderer,
  * A front end holds a handle, sends commands as JSON, and re-reads; undo
  * lives here because there is only one place edits happen. Commands:
  * {"kind": "renameLayer"|"setLayerEnabled"|"setLayerTiming"|
- *  "setLayerAudioFocus"|"deleteLayer"|"moveLayer", "layerID": …, …}. */
+ *  "setLayerAudioFocus"|"setLayerMediaCut"|"deleteLayer"|"moveLayer",
+ *  "layerID": …, …} for layers; "upsertKeyframe"/"deleteKeyframe" carry a
+ * whole keyframe; "addResource"/"updateResource"/"deleteResource"/
+ * "addLayer" carry whole entries (update replaces by id — a missing id is
+ * an error, never an insert; delete is refused while referenced;
+ * setLayerMediaCut refuses a cut the layer's resource does not hold, and
+ * absent mediaCutID clears the pointer). */
 typedef struct PromoDoc PromoDoc;
 
 PromoDoc *promo_doc_open(const char *json);        /* NULL on refusal */

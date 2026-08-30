@@ -461,6 +461,96 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The trim editor's path: set_project introduces a VIDEO (with audio,
+    /// trims and a mediaCut) to a renderer opened on a project that had
+    /// none — the first frame and the soundtrack must both answer, not
+    /// bring the process down. Every earlier set_project exercise re-staged
+    /// stills only; this is the drive that crashed the Windows app.
+    #[test]
+    fn set_project_can_introduce_a_trimmed_video() {
+        let dir = std::env::temp_dir().join(format!("promo-ffi-setvid-{}", std::process::id()));
+        let cdir = solid_background_project(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let clip = dir.join("Resources").join("clip.mp4");
+        let status = std::process::Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=320x240:rate=30:duration=3",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=3",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+            ])
+            .arg(&clip)
+            .status();
+        if !status.map(|s| s.success()).unwrap_or(false) {
+            eprintln!("no ffmpeg; skipping");
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let handle = promo_renderer_new(cdir.as_ptr(), 160, 120);
+        if handle.is_null() {
+            eprintln!("no GPU adapter; skipping");
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let edited = std::fs::read_to_string(dir.join("metadata.json"))
+            .unwrap()
+            .replace(
+                r#""resources":[],"layers":[]"#,
+                r#""resources":[{"id":"V","kind":"video","filename":"clip.mp4",
+                    "displayName":"Clip","addedAt":0,"trimStart":1.0,"trimEnd":2.5,
+                    "mediaCuts":[{"id":"C","name":"Finale","trimStart":0.5,"trimEnd":1.5}]}],
+                   "layers":[{"id":"L","name":"Clip","sortIndex":0,"kind":"video",
+                    "isEnabled":true,"startTime":0.0,"duration":1.5,"resourceID":"V",
+                    "keyframes":[{"id":"K","time":0.0,"transitionDuration":0.0,
+                     "placement":{"mode":"fit","anchor":"center"}}]}]"#,
+            );
+        let cjson = CString::new(edited.clone()).unwrap();
+        assert_eq!(promo_renderer_set_project(handle, cjson.as_ptr()), 0);
+        let mut pixels = vec![0u8; 160 * 120 * 4];
+        assert_eq!(
+            promo_renderer_frame_bgra(handle, 0.5, pixels.as_mut_ptr(), pixels.len()),
+            0,
+            "a frame of the introduced video renders"
+        );
+        // Retrim while the previous staging holds a LIVE decoder for the
+        // same layer — the frame above opened one. The app's crash path.
+        let retrimmed = edited.replace("\"trimStart\":1.0,\"trimEnd\":2.5,", "");
+        let cjson = CString::new(retrimmed).unwrap();
+        assert_eq!(promo_renderer_set_project(handle, cjson.as_ptr()), 0);
+        assert_eq!(
+            promo_renderer_frame_bgra(handle, 0.5, pixels.as_mut_ptr(), pixels.len()),
+            0,
+            "a frame after the retrim renders"
+        );
+        let (mut frames, mut rate, mut channels) = (0u64, 0u32, 0u32);
+        let info = promo_renderer_soundtrack_info(handle, &mut frames, &mut rate, &mut channels);
+        assert!(
+            info == 0 || info == 1,
+            "soundtrack info answers (mixed or none), got {info}"
+        );
+        if info == 0 {
+            let mut pcm = vec![0f32; frames as usize * channels as usize];
+            assert_eq!(
+                promo_renderer_soundtrack_pcm(handle, pcm.as_mut_ptr(), pcm.len()),
+                0
+            );
+        }
+        promo_renderer_free(handle);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// "No audio" is a real answer (1), distinct from failure — and pcm
     /// without info first is refused, because the copy call must never
     /// hide a fallible mix inside itself.
