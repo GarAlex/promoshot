@@ -160,6 +160,47 @@ pub extern "C" fn promo_renderer_frame_bgra(
     })
 }
 
+/// Replaces the renderer's project with an edited document (the same
+/// metadata.json payload everything else exchanges), keeping the GPU
+/// pipeline and frame cache warm — the editor calls this after every
+/// applied command instead of reopening. Timing edits change the mix, so
+/// the cached soundtrack is dropped; ask `promo_renderer_soundtrack_info`
+/// again. The staged media is NOT rebuilt: valid while commands leave
+/// `resources` alone, which the current command set does.
+/// 0 ok, -1 bad handle/pointer, -2 the payload does not parse.
+///
+/// Safety contract (C ABI): `json` is a valid NUL-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn promo_renderer_set_project(
+    handle: *mut RendererHandle,
+    json: *const c_char,
+) -> c_int {
+    crate::ffi_guard(-2, move || {
+        let Some(handle) = (unsafe { handle.as_mut() }) else {
+            return -1;
+        };
+        if json.is_null() {
+            return -1;
+        }
+        let Ok(text) = (unsafe { CStr::from_ptr(json) }).to_str() else {
+            return -1;
+        };
+        let meta = match promo_model::ProjectMetadata::from_json(text) {
+            Ok(meta) => meta,
+            Err(e) => {
+                eprintln!("promo_renderer_set_project: {e}");
+                return -2;
+            }
+        };
+        handle.project.meta = meta.clone();
+        handle.duration = handle.project.duration();
+        handle.soundtrack = None;
+        handle.renderer.set_project(meta);
+        0
+    })
+}
+
 /// Sets (or, with NULL, clears) a host-rasterized overlay composited over
 /// every subsequent frame — the watermark seam, and the same final quad
 /// the export's overlay is, so a watermarked preview matches a
@@ -370,6 +411,47 @@ mod tests {
             "cleared frame should be blue again, got b={b} r={r}"
         );
 
+        promo_renderer_free(handle);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The editor's per-command path: replace the project in place and the
+    /// very next frame is the edited document's, no reopen.
+    #[test]
+    fn set_project_changes_the_next_frame_and_the_duration() {
+        let dir = std::env::temp_dir().join(format!("promo-ffi-setproj-{}", std::process::id()));
+        let cdir = solid_background_project(&dir);
+        let handle = promo_renderer_new(cdir.as_ptr(), 160, 120);
+        if handle.is_null() {
+            eprintln!("no GPU adapter; skipping");
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let mut pixels = vec![0u8; 160 * 120 * 4];
+        assert_eq!(
+            promo_renderer_frame_bgra(handle, 0.5, pixels.as_mut_ptr(), pixels.len()),
+            0
+        );
+        let center = (60 * 160 + 80) * 4;
+        assert!(pixels[center + 2] > 200, "starts red");
+
+        let edited = std::fs::read_to_string(dir.join("metadata.json"))
+            .unwrap()
+            .replace("FF0000", "0000FF")
+            .replace("\"videoDuration\":2", "\"videoDuration\":5");
+        let cjson = CString::new(edited).unwrap();
+        assert_eq!(promo_renderer_set_project(handle, cjson.as_ptr()), 0);
+        assert!((promo_renderer_duration(handle) - 5.0).abs() < 1e-9);
+        assert_eq!(
+            promo_renderer_frame_bgra(handle, 0.5, pixels.as_mut_ptr(), pixels.len()),
+            0
+        );
+        assert!(
+            pixels[center] > 200 && pixels[center + 2] < 40,
+            "the edited document renders blue, got b={} r={}",
+            pixels[center],
+            pixels[center + 2]
+        );
         promo_renderer_free(handle);
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -283,6 +283,16 @@ impl Renderer {
         })
     }
 
+    /// Replaces the engine's project, keeping the GPU pipeline and every
+    /// cached frame whose layer did not change — what an editor calls per
+    /// edit instead of rebuilding the renderer. The provider's staged
+    /// media is NOT rebuilt: fine for edits that leave `resources` alone
+    /// (the current command set), and the seam to widen when a command
+    /// grows the resource list.
+    pub fn set_project(&mut self, meta: promo_model::ProjectMetadata) {
+        self.engine.set_project(meta);
+    }
+
     /// Sets (or clears, with None) the overlay composited over every
     /// subsequent frame. `bgra` is PREMULTIPLIED BGRA, stretched over the
     /// canvas — rasterize it at canvas size for crisp pixels. Uploaded

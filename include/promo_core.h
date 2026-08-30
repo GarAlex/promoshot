@@ -124,6 +124,33 @@ double promo_renderer_duration(const PromoRenderer *renderer);
 int32_t promo_renderer_frame_bgra(PromoRenderer *renderer, double time,
                                   uint8_t *out_pixels, size_t out_len);
 
+/* Replaces the renderer's project with an edited document, keeping the
+ * GPU pipeline and frame cache warm — the editor's per-command path.
+ * Drops the cached soundtrack (timing edits change the mix). Valid while
+ * commands leave `resources` alone. 0 ok, -1 bad handle, -2 no parse. */
+int32_t promo_renderer_set_project(PromoRenderer *renderer,
+                                   const char *json);
+
+/* ---- Document (Stage 2 slice 1): the core owns the document -------------
+ * A front end holds a handle, sends commands as JSON, and re-reads; undo
+ * lives here because there is only one place edits happen. Commands:
+ * {"kind": "renameLayer"|"setLayerEnabled"|"setLayerTiming"|
+ *  "setLayerAudioFocus"|"deleteLayer"|"moveLayer", "layerID": …, …}. */
+typedef struct PromoDoc PromoDoc;
+
+PromoDoc *promo_doc_open(const char *json);        /* NULL on refusal */
+void promo_doc_free(PromoDoc *doc);
+char *promo_doc_to_json(const PromoDoc *doc);      /* promo_string_free */
+uint64_t promo_doc_version(const PromoDoc *doc);   /* bumps per change */
+
+/* 0 ok; -2 not a command; -3 command failed (stderr; document, version
+ * and history untouched). */
+int32_t promo_doc_apply(PromoDoc *doc, const char *command_json);
+int32_t promo_doc_undo(PromoDoc *doc);             /* 1 stepped, 0 empty */
+int32_t promo_doc_redo(PromoDoc *doc);
+int32_t promo_doc_can_undo(const PromoDoc *doc);
+int32_t promo_doc_can_redo(const PromoDoc *doc);
+
 /* Sets (or, with NULL bgra, clears) a host-rasterized overlay composited
  * over every subsequent frame — the watermark seam, and the same final
  * quad the export's overlay is. PREMULTIPLIED BGRA stretched over the

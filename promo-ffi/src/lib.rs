@@ -2,6 +2,7 @@
 //! until Phase 5 (see RUST-CORE-PLAN.md §3/§7 in the app repo).
 
 pub mod compose;
+pub mod document;
 pub mod editor;
 pub mod export;
 pub mod preview;
@@ -10,6 +11,7 @@ pub mod renderer;
 pub mod vector;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use compose::*;
+pub use document::*;
 pub use export::*;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use preview::*;

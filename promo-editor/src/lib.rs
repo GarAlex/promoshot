@@ -7,9 +7,12 @@
 //! ephemeral state and leave document ownership where it is.
 
 pub mod author;
+pub mod document;
 pub mod selection;
 pub mod timeline;
 pub mod transport;
+
+pub use document::{Command, Document};
 
 pub use selection::{RevealAnchor, Selection};
 pub use timeline::{
