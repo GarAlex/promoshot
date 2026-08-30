@@ -97,6 +97,23 @@ pub enum Command {
     AddLayer {
         layer: Box<promo_model::ProjectLayer>,
     },
+    /// Replaces one resource entry wholesale, matched by id — the resource
+    /// editors' command, the same whole-object contract the keyframe
+    /// carries: what a caption or a trim can hold is the format's say, not
+    /// this enum's.
+    #[serde(rename_all = "camelCase")]
+    UpdateResource {
+        resource: Box<promo_model::ProjectResource>,
+    },
+    /// Removes a resource entry. Refused while any layer references it —
+    /// deleting the material out from under a layer leaves a hole that
+    /// looks like a choice; delete or repoint the layers first. The FILE in
+    /// Resources/ is the host's to clean up.
+    #[serde(rename_all = "camelCase")]
+    DeleteResource {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+    },
 }
 
 pub struct Document {
@@ -299,6 +316,32 @@ impl Document {
                 layers.push((**layer).clone());
                 for (i, layer) in layers.iter_mut().enumerate() {
                     layer.sort_index = i as i64;
+                }
+            }
+            Command::UpdateResource { resource } => {
+                let resources = meta.resources.get_or_insert_with(Vec::new);
+                match resources.iter_mut().find(|r| r.id == resource.id) {
+                    Some(existing) => *existing = (**resource).clone(),
+                    None => return Err(format!("no resource with id {}", resource.id)),
+                }
+            }
+            Command::DeleteResource { resource_id } => {
+                let referenced = layers.iter().any(|l| {
+                    l.resource_id.as_deref() == Some(resource_id.as_str())
+                        || l.keyframes
+                            .iter()
+                            .any(|k| k.resource_id.as_deref() == Some(resource_id.as_str()))
+                });
+                if referenced {
+                    return Err(format!(
+                        "resource {resource_id} is still referenced by a layer; delete or repoint the layers first"
+                    ));
+                }
+                let resources = meta.resources.get_or_insert_with(Vec::new);
+                let before = resources.len();
+                resources.retain(|r| r.id != *resource_id);
+                if resources.len() == before {
+                    return Err(format!("no resource with id {resource_id}"));
                 }
             }
             Command::MoveLayer { layer_id, index } => {
@@ -573,6 +616,54 @@ mod tests {
         }
         assert!(doc.undo());
         assert!(doc.undo());
+        assert_eq!(doc.to_json().unwrap(), original);
+    }
+
+    /// The resource editors' pair: update replaces wholesale, delete is
+    /// refused while a layer still points at the material — and the whole
+    /// dance undoes to the original.
+    #[test]
+    fn resources_update_wholesale_and_refuse_referenced_deletes() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+        let resource_id = doc.meta().resources.as_ref().unwrap()[0].id.clone();
+        let layer_id = layer_id(&doc, 1);
+
+        // Update: the whole object crosses; a new displayName arrives.
+        let mut edited = doc.meta().resources.as_ref().unwrap()[0].clone();
+        edited.display_name = "Retitled".into();
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(edited),
+        })
+        .unwrap();
+        assert_eq!(
+            doc.meta().resources.as_ref().unwrap()[0].display_name,
+            "Retitled"
+        );
+        // An unknown id is an error, not an insert — adds have their own
+        // command, and an editor must never create what it meant to edit.
+        let mut ghost = doc.meta().resources.as_ref().unwrap()[0].clone();
+        ghost.id = "R-GHOST".into();
+        assert!(doc
+            .apply(&Command::UpdateResource {
+                resource: Box::new(ghost)
+            })
+            .is_err());
+
+        // Delete: refused while referenced, allowed once the layer is gone.
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "deleteResource", "resourceID": resource_id})))
+            .is_err());
+        doc.apply(&command(serde_json::json!({
+            "kind": "deleteLayer", "layerID": layer_id})))
+            .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "deleteResource", "resourceID": resource_id})))
+            .unwrap();
+        for _ in 0..3 {
+            assert!(doc.undo());
+        }
         assert_eq!(doc.to_json().unwrap(), original);
     }
 
