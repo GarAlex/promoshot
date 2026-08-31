@@ -1,16 +1,21 @@
-//! An MCP server for rendering PromoShot projects with no app attached.
+//! An MCP server for making PromoShot projects with no app attached.
 //!
 //! Speaks Model Context Protocol over stdio — newline-delimited JSON-RPC on
 //! stdin/stdout, logs on stderr — which is the transport agent clients spawn
-//! themselves: no port, no token, no daemon. The Mac app's automation server
-//! is the same seven-tool idea over HTTP for a running GUI; this binary is
-//! the headless half, and it deliberately owns no rendering code. Every
-//! render goes through the `promo` CLI, so there is exactly one command-line
-//! contract to keep honest and the server can never disagree with it.
+//! themselves: no port, no token, no daemon. The Mac app's automation
+//! server shares the core tool names over HTTP for a running GUI; this
+//! binary is the headless half, and the fuller one.
 //!
-//! The one answer served in-process is `promo_schema`: the format text lives
-//! in `promo-model` and is compiled in, the same single source the CLI
-//! prints.
+//! The tool surface is the whole agent loop, and each piece keeps to one
+//! source of truth. The three schema faces (`promo_schema`, `_full`,
+//! `_types`) are compiled in from `promo-model`, the same files and structs
+//! the parser runs. The senses (`promo_media_probe` / `_filmstrip` /
+//! `_silences`) shell to the ffmpeg/ffprobe the render pipeline already
+//! requires. The scaffold (`promo_init` / `promo_upsert_layer`, in
+//! `authoring`) writes metadata.json through the format's own parser. And
+//! every RENDER goes through the `promo` CLI beside this executable — this
+//! server owns no rendering code, so it can never disagree with the one
+//! command-line contract.
 //!
 //! Configuration is three flags, everything else defaulted:
 //!   --workspace <dir>   where promo_workspace points (else
