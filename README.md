@@ -214,8 +214,10 @@ docker build -t promoshot-mcp .
 Projects live under the mount; `promo_workspace` answers `/projects`. All
 the [examples](examples/) are baked in, so the image proves itself with no
 mount at all — render `ProductCard.promo` first; the device-framed app
-demo is the one that teaches the product-promo path. `server.json` is the MCP registry manifest for the published
-image (`ghcr.io/garalex/promoshot-mcp`).
+demo is the one that teaches the product-promo path. `server.json` is the MCP Registry manifest (`io.github.garalex/promoshot`) for the published
+image (`ghcr.io/garalex/promoshot-mcp`). GitHub's [MCP Registry](https://github.com/mcp) consumes that feed after `mcp-publisher publish`.
+
+mcp-name: io.github.garalex/promoshot
 
 The skill is drift-tested: a test pins it to the server's actual tool
 list, so it cannot teach tools that do not exist.
