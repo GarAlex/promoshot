@@ -106,10 +106,6 @@ A keyframe animates a layer over its LOCAL time:
     "motionPath": { "pathResourceID": "<a path resource's uuid>",
                     "flipped": false, "startAt": 0, "endAt": 1 } }
 
-EVERY id in the file is a UUID string — project, resources, layers,
-keyframes, cuts. Short ids like "V0" pass the core's parser (it stores
-strings) but the app cannot decode them, so the project will not open.
-
 Semantics worth knowing:
 
 - transitionDuration is the ramp INTO this keyframe's value; the value
@@ -642,14 +638,17 @@ Semantics worth knowing:
   (horizontalShift, verticalShift) in canvas coordinates, and is scaled
   by (canvasHeight / sourceHeight) * zoom. So zoom = scale *
   sourceHeight / canvasHeight.
-- Captions are placed by the subtitle margins, and
-  subtitleVerticalMargin is measured from the TOP of the canvas.
-- A caption layer reuses the keyframe fields for its STYLE, with
-  absolute values: zoom = font size, verticalShift = vertical margin,
-  horizontalShift = left margin. They interpolate like any other
-  value, so a title can start centred and animate into place. An
-  omitted field falls back to the base style, not to the previous
-  keyframe.
+- Captions are placed by the subtitle margins (subtitleVerticalMargin
+  measured from the TOP of the canvas) — or by `captionStyle.placement`,
+  which wins and leaves the margins their wrap-width job (see the
+  typography paragraph near the top).
+- A caption keyframe animates its size as `fontSize`, in points. The
+  LEGACY spelling reused the transform fields with absolute values —
+  zoom = font size, verticalShift = vertical margin, horizontalShift =
+  left margin — and is read forever, with `fontSize` winning when both
+  are present. Either spelling interpolates like any other value, so a
+  title can start small and animate into place. An omitted field falls
+  back to the base style, not to the previous keyframe.
 - Every caption look field follows one rule: what THIS caption's
   captionStyle says, then what the composition says. Leaving a field
   out is how a caption follows the project; there is no separate

@@ -799,6 +799,38 @@ mod schema_doc_tests {
 }
 
 #[cfg(test)]
+mod doctrine_tests {
+    /// The full schema is the doc nobody re-reads after a rule reverses —
+    /// the quick subset gets rewritten, the old paragraph deep in the
+    /// essay survives, and anyone who reads promo_schema_full believes
+    /// last month's format. Each phrase here is the tombstone of a
+    /// REPEALED doctrine: it must never reappear in either document.
+    /// When a rule reverses, bury its old wording here.
+    #[test]
+    fn no_document_preaches_a_repealed_doctrine() {
+        let tombstones = [
+            // Short ids became first-class when the apps grew the minting
+            // door; the app refusing them is last month's truth.
+            "the project will not open",
+            "the app cannot decode",
+            "EVERY id in the file is a UUID",
+            "Generate UUIDs",
+        ];
+        for (name, doc) in [
+            ("SCHEMA", super::SCHEMA),
+            ("SCHEMA_QUICK", super::SCHEMA_QUICK),
+        ] {
+            for phrase in tombstones {
+                assert!(
+                    !doc.contains(phrase),
+                    "{name} still preaches a repealed doctrine: \"{phrase}\""
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod wire_schema_tests {
     use super::*;
 
