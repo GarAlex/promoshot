@@ -517,6 +517,11 @@ Semantics worth knowing:
   other. A fadeOut counts back from the layer's end, so it does
   nothing on a layer with no `duration` — that layer runs to the end
   of the project, which the layer itself cannot see.
+- The rule of the format: transitions dress an EDGE OF VISIBILITY — a
+  layer's own start and end here, a content swap mid-life on a swap
+  keyframe — while keyframes animate properties. The two compose (the
+  envelope multiplies over the choreography), so neither has to know
+  about the other.
 - `transitionIn` / `transitionOut` are how a layer ENTERS and LEAVES
   when a plain fade is not it: { "kind": "wipe", "from": "left",
   "duration": 0.5, "easing": "easeOut" }. Five kinds. `wipe` reveals
