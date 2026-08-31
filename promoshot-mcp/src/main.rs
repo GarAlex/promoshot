@@ -19,6 +19,8 @@
 //!   --promo <path>      the CLI binary (else next to this executable,
 //!                       else PATH)
 
+mod authoring;
+
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
@@ -271,6 +273,50 @@ fn tool_descriptors() -> Value {
             "description": "The folder this machine keeps assistant-authored projects in. \
                 Create new .promo folders here.",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "promo_init",
+            "description": "Create a project folder: metadata.json boilerplate, canvas, \
+                palette, a background layer, ids minted. The file it writes is ordinary \
+                metadata.json — hand-edit it freely afterwards; the schema stays the \
+                source of truth. Never overwrites.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "project": project,
+                    "canvas": { "type": "string", "description":
+                        "\"1920x1080\" (or {width, height})" },
+                    "palette": { "type": "object", "description":
+                        "Named colours: {\"canvas\": \"10182B\", \"text\": \"F3F5FF\"} \
+                         (or [{name, colorHex}]). \"canvas\" becomes the background." },
+                    "name": { "type": "string" }
+                },
+                "required": ["project", "canvas"] }
+        },
+        {
+            "name": "promo_upsert_layer",
+            "description": "Add or update one layer — image, video or caption — with a \
+                placement. Media is copied into Resources/; a video's duration is read \
+                from the file; the composition re-stretches to cover its layers on \
+                every call. Pass the returned layer id to update instead of add.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "project": project,
+                    "kind": { "type": "string", "enum": ["image", "video", "caption"] },
+                    "file": { "type": "string", "description":
+                        "Path to the image/video to copy in (not for captions)" },
+                    "captionText": { "type": "string" },
+                    "fontSize": { "type": "number", "description": "Caption points" },
+                    "placement": { "type": "object", "description":
+                        "{height|width|mode, anchor, offset} — media sizes too; a \
+                         caption takes anchor and offset only" },
+                    "startTime": { "type": "number" },
+                    "duration": { "type": "number", "description":
+                        "Seconds (default: a video's own length, else 3)" },
+                    "id": { "type": "string", "description":
+                        "An existing layer's id makes this an UPDATE" },
+                    "name": { "type": "string" }
+                },
+                "required": ["project", "kind"] }
         }
     ])
 }
@@ -300,6 +346,8 @@ where
 {
     match name {
         "promo_schema" => Ok(promo_model::SCHEMA_QUICK.to_string()),
+        "promo_init" => authoring::init(args, config.root.as_deref()),
+        "promo_upsert_layer" => authoring::upsert_layer(args, config.root.as_deref()),
         "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
         "promo_workspace" => {
             std::fs::create_dir_all(&config.workspace)
@@ -457,7 +505,9 @@ mod tests {
                 "promo_render_still",
                 "promo_render_frames",
                 "promo_render_video",
-                "promo_workspace"
+                "promo_workspace",
+                "promo_init",
+                "promo_upsert_layer"
             ],
             "no promo_open headless, no gif until the CLI has one"
         );

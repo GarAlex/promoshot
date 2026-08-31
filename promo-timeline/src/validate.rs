@@ -72,6 +72,44 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     }
 
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        // A placement that positions or sizes an unmeasured source resolves
+        // against a SQUARE — the schema says so, and now the validator does
+        // too, instead of a centred 4:3 photo quietly hanging off-centre.
+        for layer in meta.layers.as_deref().unwrap_or(&[]) {
+            if !matches!(
+                layer.kind,
+                ProjectLayerKind::Image | ProjectLayerKind::Video
+            ) {
+                continue;
+            }
+            let placed = layer.keyframes.iter().any(|k| k.placement.is_some());
+            if !placed {
+                continue;
+            }
+            let measured = layer
+                .resource_id
+                .as_ref()
+                .and_then(|id| {
+                    meta.resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| &r.id == id)
+                })
+                .is_some_and(|r| {
+                    (r.pixel_width.is_some() && r.pixel_height.is_some())
+                        || (r.video_natural_width.is_some() && r.video_natural_height.is_some())
+                });
+            if !measured {
+                out.push(format!(
+                    "layer \"{}\": placement resolves against a SQUARE source — the \
+                 resource stores no pixelWidth/pixelHeight (or videoNatural \
+                 size), so anchoring and width use a guessed aspect",
+                    layer.name
+                ));
+            }
+        }
+
         // A caption placement reads anchor and offset only: the box's size
         // is the text at its fontSize plus padding, so a size field here is
         // a statement nothing reads.

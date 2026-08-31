@@ -12,3 +12,7 @@ path = "src/main.rs"
 [dependencies]
 promo-model = { path = "../promo-model" }
 serde_json.workspace = true
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+promo-timeline = { path = "../promo-timeline" }

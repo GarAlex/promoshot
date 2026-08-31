@@ -21,7 +21,9 @@ This is the authoring subset; `promo_schema_full` is the whole format.
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
   `Resources/`), `displayName`, `addedAt: 0`, `imageCuts: []`,
   `disabledAudioTrackIndices: []`; videos also carry `duration`,
-  `trimStart`, `trimEnd`. Declare what you use.
+  `trimStart`, `trimEnd`; images `pixelWidth`/`pixelHeight` — placement
+  anchors against the aspect, and an unmeasured source positions as a
+  SQUARE (validate names it). Declare what you use.
 
 Keyframes animate a layer over its LOCAL time, hold-then-ease: a value
 holds until `transitionDuration` seconds before the keyframe, then ramps
@@ -85,6 +87,7 @@ palette ground, title above, 6 seconds:
  "resources":[{"id":"shot","kind":"image","filename":"shot.png",
    "displayName":"Screenshot","addedAt":0,"imageCuts":[],
    "disabledAudioTrackIndices":[],
+   "pixelWidth":1290,"pixelHeight":2796,
    "frame":{"kind":"device","material":"spaceBlack","tiltY":10}}],
  "layers":[
   {"id":"bg","name":"Ground","sortIndex":0,"kind":"background",
@@ -187,6 +190,7 @@ redesign:
  "resources":[{"id":"shot","kind":"image","filename":"shot.png",
    "displayName":"Screenshot","addedAt":0,"imageCuts":[],
    "disabledAudioTrackIndices":[],
+   "pixelWidth":1290,"pixelHeight":2796,
    "frame":{"kind":"device","material":"spaceBlack","tiltY":10}}],
  "layers":[
   {"id":"bg","name":"Ground","sortIndex":0,"kind":"background",

@@ -82,10 +82,16 @@ Client configuration (Claude Code, or any MCP client):
 }
 ```
 
-Tools: `promo_schema`, `promo_validate`, `promo_inspect`, `promo_render_still`,
-`promo_render_frames`, `promo_render_video`, `promo_workspace`. Renders
-default their output into the project's `Exports/` folder and return the path
-written, never the bytes.
+Tools: `promo_schema` (authoring subset + four validated recipes;
+`promo_schema_full` is the whole format), `promo_validate`, `promo_inspect`,
+`promo_render_still`, `promo_render_frames`, `promo_render_video`,
+`promo_workspace` — and the editor pair, `promo_init` and
+`promo_upsert_layer`: create a project, add image/video/caption layers with
+placements; the server mints UUIDs, stamps pixel sizes, and keeps the
+composition covering its layers. The tools write ordinary `metadata.json`
+through the format's own parser — the schema stays the source of truth, and
+hand-editing remains first-class. Renders default their output into the
+project's `Exports/` folder and return the path written, never the bytes.
 
 Flags, all optional: `--workspace <dir>` (where `promo_workspace` points;
 else `$PROMOSHOT_WORKSPACE`, else the XDG data dir), `--root <dir>` (refuse
@@ -162,7 +168,8 @@ promo video examples/LinuxSmoke.promo --out smoke.mp4
 ## Authoring a project
 
 Start with `promo schema`. The short version: a project folder holds
-`metadata.json` and `Resources/`; every id is a UUID; layers place resources
+`metadata.json` and `Resources/`; ids are unique strings (short mnemonics
+are fine — apps mint UUIDs on adoption); layers place resources
 on a timeline with keyframes (hold-then-ease), placement rules, transitions
 and palette-named colours (`@accent`). Validate before rendering — the
 validator names what the renderer would silently correct, undefined colour
