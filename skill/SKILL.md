@@ -51,8 +51,11 @@ projects.
 ## The rules that are not in the schema
 
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
-  first-class here; the apps mint UUIDs when they adopt the file. Never
-  reuse a spelling: validate names the collision.
+  first-class here; the apps mint UUIDs when they adopt the file. The
+  tools speak the same language: pass your own short ids (`id`,
+  `resourceId`; init's background layer is always "bg") and only what
+  you leave unnamed gets a canonical UUID. Never reuse a spelling:
+  validate names the collision.
 - **Stamp `"minReaderVersion": 18`** and think no more about it.
 - **Measure what you place.** A placed image resource wants
   `pixelWidth`/`pixelHeight` (videos: `videoNaturalWidth`/`Height`) or

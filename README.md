@@ -99,8 +99,9 @@ and `promo_media_silences` (silence spans and their inverse), so an agent
 knows what footage holds before composing with it — and the editor pair,
 `promo_init` and
 `promo_upsert_layer`: create a project, add image/video/caption layers with
-placements; the server mints UUIDs, stamps pixel sizes, and keeps the
-composition covering its layers. The tools write ordinary `metadata.json`
+placements; your short ids are used verbatim, unnamed ones get canonical
+UUIDs, pixel sizes are stamped, and the composition keeps covering its
+layers. The tools write ordinary `metadata.json`
 through the format's own parser — the schema stays the source of truth, and
 hand-editing remains first-class. Renders default their output into the
 project's `Exports/` folder and return the path written, never the bytes.

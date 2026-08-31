@@ -119,14 +119,23 @@ pub fn init(args: &Value, root: Option<&Path>) -> Result<String, String> {
     }
     // The background layer states the ground; with a palette the colour is
     // the settings' own "@canvas", so the layer needs no keyframe at all.
+    // Short ids are the author's vocabulary and the tool is an author:
+    // a stated `id` is used verbatim, the background layer is always
+    // "bg" (documented, and the file reads like the recipes), and only
+    // what nobody named gets a canonical UUID.
+    let project_id = args
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(mint);
     let document = json!({
-        "id": mint(), "name": name, "createdAt": 0, "state": "recorded",
+        "id": project_id, "name": name, "createdAt": 0, "state": "recorded",
         "minReaderVersion": 18,
         "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
         "compositionSettings": settings,
         "resources": [],
         "layers": [{
-            "id": mint(), "name": "Background", "sortIndex": 0,
+            "id": "bg", "name": "Background", "sortIndex": 0,
             "kind": "background", "isEnabled": true, "startTime": 0,
             "duration": 0.1, "keyframes": []
         }]
@@ -220,7 +229,11 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>) -> Result<String, String>
                 return Err(format!("file {} does not exist", source.display()));
             }
             let filename = copy_into_resources(&dir, &source)?;
-            let id = mint();
+            let id = args
+                .get("resourceId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(mint);
             let mut record = json!({
                 "id": id, "kind": kind_name, "filename": filename,
                 "displayName": source.file_stem().unwrap_or_default().to_string_lossy(),
@@ -782,6 +795,43 @@ mod tests {
         assert_eq!(captions.len(), 1, "updated, not duplicated");
         assert_eq!(captions[0].caption_text.as_deref(), Some("second"));
         assert!((meta.video_duration - 7.0).abs() < 1e-9, "re-stretched");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Short ids are the author's vocabulary and the tools are authors:
+    /// stated ids land verbatim — project, layer, resource — the
+    /// background is always "bg", and only the unnamed gets a UUID.
+    #[test]
+    fn stated_short_ids_land_verbatim() {
+        let root = scratch();
+        let dir = root.join("Short.promo");
+        let shot = root.join("s.png");
+        std::fs::write(&shot, PNG_1X1).unwrap();
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1280x720",
+                    "id": "card"}),
+            None,
+        )
+        .unwrap();
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "image",
+                    "id": "shot", "resourceId": "shot-media",
+                    "file": shot.to_string_lossy(),
+                    "placement": {"height": 400, "anchor": "center"}}),
+            None,
+        )
+        .unwrap();
+        let meta = read(&dir);
+        assert_eq!(meta.id, "card");
+        let layers = meta.layers.as_deref().unwrap();
+        assert!(
+            layers.iter().any(|l| l.id == "bg"),
+            "the ground reads as bg"
+        );
+        let layer = layers.iter().find(|l| l.id == "shot").expect("verbatim");
+        assert_eq!(layer.resource_id.as_deref(), Some("shot-media"));
+        let warnings = promo_timeline::validate::warnings(&meta);
+        assert!(warnings.is_empty(), "{warnings:?}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 

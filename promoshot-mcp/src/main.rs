@@ -332,6 +332,9 @@ fn tool_descriptors() -> Value {
                     "palette": { "type": "object", "description":
                         "Named colours: {\"canvas\": \"10182B\", \"text\": \"F3F5FF\"} \
                          (or [{name, colorHex}]). \"canvas\" becomes the background." },
+                    "id": { "type": "string", "description":
+                        "Your own short project id; unnamed mints a UUID. The \
+                         background layer is always \"bg\"." },
                     "name": { "type": "string" }
                 },
                 "required": ["project", "canvas"] }
@@ -367,7 +370,11 @@ fn tool_descriptors() -> Value {
                     "duration": { "type": "number", "description":
                         "Seconds (default: a video's own length, else 3)" },
                     "id": { "type": "string", "description":
-                        "An existing layer's id makes this an UPDATE" },
+                        "An existing layer's id makes this an UPDATE; on create, \
+                         your own short id (\"card\") is used verbatim" },
+                    "resourceId": { "type": "string", "description":
+                        "Your own short id for the created resource; unnamed \
+                         mints a UUID" },
                     "name": { "type": "string" }
                 },
                 "required": ["project", "kind"] }
