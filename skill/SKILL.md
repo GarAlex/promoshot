@@ -25,12 +25,15 @@ author here opens in the PromoShot apps unchanged.
      time each cell samples. Read it before deciding what a clip shows.
    - `promo_media_silences` — silence spans and their inverse; cuts and
      captions land on those boundaries.
-3. **Author** — either write `metadata.json` directly (start from a
-   recipe), or let the server spend the boilerplate:
-   - `promo_init` — folder, canvas, palette, background, ids minted.
-   - `promo_upsert_layer` — image/video/caption with a placement; media
-     copied in, durations and pixel sizes probed, the composition
-     re-stretched every call. Pass a returned layer id to update.
+3. **Author** — tools scaffold; motion is JSON. `promo_init` lays the
+   folder, canvas, palette, background; `promo_upsert_layer` adds an
+   image/video/caption with a placement, a fadeIn, a device frame —
+   media copied in, sizes and durations probed, the composition
+   re-stretched every call. Updating by id changes only what you pass
+   (placement merges into the first keyframe; hand-added keyframes
+   survive). Everything beyond the scaffold — a second placement
+   keyframe for a push-in, a viewport ride, a wipe — is an ordinary
+   JSON edit; start from the recipe that matches.
 4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
    means "renders"; anything else is a silent correction named before you
    see it in pixels. `promo_inspect` summarizes what is in the project —

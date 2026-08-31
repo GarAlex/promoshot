@@ -338,16 +338,26 @@ fn tool_descriptors() -> Value {
         },
         {
             "name": "promo_upsert_layer",
-            "description": "Add or update one layer — image, video or caption — with a \
-                placement. Media is copied into Resources/; a video's duration is read \
-                from the file; the composition re-stretches to cover its layers on \
-                every call. Pass the returned layer id to update instead of add.",
+            "description": "SCAFFOLD one layer — image, video or caption — with a \
+                placement, a fadeIn, a device/border frame. Media is copied in, sizes \
+                and durations probed, the composition re-stretched every call. Pass an \
+                existing id to UPDATE: only the fields you pass change, placement \
+                merges into the first keyframe, hand-added keyframes survive. This is \
+                the scaffold, not the whole format: motion (a second keyframe), \
+                viewport, transitions beyond fadeIn are ordinary JSON edits — start \
+                from a promo_schema recipe.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,
                     "kind": { "type": "string", "enum": ["image", "video", "caption"] },
                     "file": { "type": "string", "description":
-                        "Path to the image/video to copy in (not for captions)" },
+                        "Image/video to copy in — required to create, optional on \
+                         update (a repoint)" },
+                    "fadeIn": { "type": "number", "description": "Seconds" },
+                    "frame": { "type": "object", "description":
+                        "Resource dressing: {kind: \"device\"|\"border\", material, \
+                         tiltY, borderWidth, cornerRadius} — define @edge in the \
+                         palette when you frame" },
                     "captionText": { "type": "string" },
                     "fontSize": { "type": "number", "description": "Caption points" },
                     "placement": { "type": "object", "description":

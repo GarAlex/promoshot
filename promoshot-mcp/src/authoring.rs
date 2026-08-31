@@ -170,7 +170,13 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>) -> Result<String, String>
     if !matches!(kind_name, "image" | "video" | "caption") {
         return Err(format!("kind `{kind_name}` — image, video or caption"));
     }
-    let start_time = args.get("startTime").and_then(Value::as_f64).unwrap_or(0.0);
+    let start_time = args.get("startTime").and_then(Value::as_f64);
+    let explicit_duration = args.get("duration").and_then(Value::as_f64);
+    let fade_in = args.get("fadeIn").and_then(Value::as_f64);
+    let frame = args.get("frame").cloned();
+    if frame.is_some() && kind_name == "caption" {
+        return Err("`frame` dresses media resources; a caption has none".into());
+    }
     let placement: Option<Placement> = match args.get("placement") {
         Some(v) => Some(
             serde_json::from_value(v.clone())
@@ -178,124 +184,211 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>) -> Result<String, String>
         ),
         None => None,
     };
+    if let Some(rule) = &placement {
+        if kind_name == "caption" && rule.sizes() {
+            return Err(
+                "a caption placement takes anchor and offset only — its size is fontSize".into(),
+            );
+        }
+    }
 
-    // The resource half: media is copied in; a caption needs none.
+    // Whether this call CREATES or UPDATES decides everything below: a
+    // create is a template, an update touches only the fields the call
+    // states, because the untouched half of an existing layer is someone's
+    // work — a hand-added motion keyframe, a transition, a release pool.
+    let wanted_id = args.get("id").and_then(Value::as_str).map(str::to_string);
+    let existing_index = {
+        let layers = meta.layers.get_or_insert_with(Vec::new);
+        wanted_id
+            .as_ref()
+            .and_then(|id| layers.iter().position(|l| &l.id == id))
+    };
+
+    // The resource half: media is copied in when a `file` is given —
+    // REQUIRED on create for image/video, optional on update (a repoint).
     let mut resource_note = String::new();
     let mut probed_duration = None;
-    let resource_id = if kind_name == "caption" {
-        None
-    } else {
-        let source = PathBuf::from(required_str(args, "file")?);
-        let filename = copy_into_resources(&dir, &source)?;
-        let id = mint();
-        let mut record = json!({
-            "id": id, "kind": kind_name, "filename": filename,
-            "displayName": source.file_stem().unwrap_or_default().to_string_lossy(),
-            "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": []
-        });
-        // The source's own pixels, stamped the way the app stamps them on
-        // import: placement anchors and widths resolve against the aspect,
-        // and an unmeasured source is positioned as a SQUARE — which the
-        // validator now names. ffprobe reads image headers too.
-        let staged = dir.join("Resources").join(&filename);
-        if let Ok((w, h)) = probe_pixels(&staged) {
-            if kind_name == "video" {
-                record["videoNaturalWidth"] = json!(w);
-                record["videoNaturalHeight"] = json!(h);
-            } else {
-                record["pixelWidth"] = json!(w);
-                record["pixelHeight"] = json!(h);
+    let file_arg = args.get("file").and_then(Value::as_str);
+    if kind_name != "caption" && existing_index.is_none() && file_arg.is_none() {
+        return Err("`file` is required when creating an image or video layer".into());
+    }
+    let resource_id = match (kind_name, file_arg) {
+        ("caption", _) | (_, None) => None,
+        (_, Some(file)) => {
+            let source = PathBuf::from(file);
+            if !source.exists() {
+                return Err(format!("file {} does not exist", source.display()));
             }
+            let filename = copy_into_resources(&dir, &source)?;
+            let id = mint();
+            let mut record = json!({
+                "id": id, "kind": kind_name, "filename": filename,
+                "displayName": source.file_stem().unwrap_or_default().to_string_lossy(),
+                "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": []
+            });
+            // The source's own pixels, stamped the way the app stamps them
+            // on import: placement anchors and widths resolve against the
+            // aspect, and an unmeasured source is positioned as a SQUARE —
+            // which the validator names. ffprobe reads image headers too.
+            let staged = dir.join("Resources").join(&filename);
+            if let Ok((w, h)) = probe_pixels(&staged) {
+                if kind_name == "video" {
+                    record["videoNaturalWidth"] = json!(w);
+                    record["videoNaturalHeight"] = json!(h);
+                } else {
+                    record["pixelWidth"] = json!(w);
+                    record["pixelHeight"] = json!(h);
+                }
+            }
+            if kind_name == "video" {
+                let seconds = match explicit_duration {
+                    Some(d) => d,
+                    None => probe_duration(&staged)?,
+                };
+                probed_duration = Some(seconds);
+                record["duration"] = json!(seconds);
+                record["trimStart"] = json!(0);
+                record["trimEnd"] = json!(seconds);
+            }
+            if let Some(dress) = &frame {
+                record["frame"] = dress.clone();
+            }
+            let resource: ProjectResource = serde_json::from_value(record)
+                .map_err(|e| format!("resource template rejected by the format: {e}"))?;
+            resource_note = format!(", resource {id} ({filename})");
+            meta.resources.get_or_insert_with(Vec::new).push(resource);
+            Some(id)
         }
-        if kind_name == "video" {
-            let seconds = match args.get("duration").and_then(Value::as_f64) {
-                Some(d) => d,
-                None => probe_duration(&staged)?,
-            };
-            probed_duration = Some(seconds);
-            record["duration"] = json!(seconds);
-            record["trimStart"] = json!(0);
-            record["trimEnd"] = json!(seconds);
-        }
-        let resource: ProjectResource = serde_json::from_value(record)
-            .map_err(|e| format!("resource template rejected by the format: {e}"))?;
-        resource_note = format!(", resource {id} ({filename})");
-        meta.resources.get_or_insert_with(Vec::new).push(resource);
-        Some(id)
     };
 
-    let duration = args
-        .get("duration")
-        .and_then(Value::as_f64)
-        .or(probed_duration)
-        .unwrap_or(3.0);
-
-    // The layer half: found by id when one is given — that is the UPSERT —
-    // minted otherwise.
     let layers = meta.layers.get_or_insert_with(Vec::new);
     let next_sort = layers.iter().map(|l| l.sort_index + 1).max().unwrap_or(0);
-    let wanted_id = args.get("id").and_then(Value::as_str).map(str::to_string);
-    let index = wanted_id
-        .as_ref()
-        .and_then(|id| layers.iter().position(|l| &l.id == id));
     let layer_id = wanted_id.unwrap_or_else(mint);
-    let default_name = match kind_name {
-        "caption" => "Caption",
-        "video" => "Clip",
-        _ => "Picture",
-    };
-    let name = args
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or(default_name);
 
-    let mut record = json!({
-        "id": layer_id, "name": name,
-        "sortIndex": index.map(|i| layers[i].sort_index).unwrap_or(next_sort),
-        "kind": kind_name, "isEnabled": true,
-        "startTime": start_time, "duration": duration, "keyframes": []
-    });
-    if let Some(id) = &resource_id {
-        record["resourceID"] = json!(id);
-    }
-    if kind_name == "caption" {
-        if let Some(words) = args.get("captionText").and_then(Value::as_str) {
-            record["captionText"] = json!(words);
-        }
-        let mut style = index
-            .and_then(|i| layers[i].caption_style.clone())
-            .map(|s| serde_json::to_value(s).unwrap_or_else(|_| json!({})))
-            .unwrap_or_else(|| json!({}));
-        if let Some(rule) = &placement {
-            if rule.sizes() {
-                return Err(
-                    "a caption placement takes anchor and offset only — its size is fontSize"
-                        .into(),
-                );
+    match existing_index {
+        // UPDATE: mutate exactly what was stated. Nothing here rebuilds the
+        // layer — the first version of this tool did, and "nudge the card
+        // 20px" deleted the push-in keyframe someone had added by hand.
+        Some(i) => {
+            let wire_kind: ProjectLayerKind =
+                serde_json::from_value(json!(kind_name)).map_err(|e| e.to_string())?;
+            if layers[i].kind != wire_kind {
+                return Err(format!(
+                    "layer {layer_id} is a {:?} — upsert cannot change a layer's kind",
+                    layers[i].kind
+                ));
             }
-            style["placement"] = serde_json::to_value(rule).map_err(|e| e.to_string())?;
+            if let Some(name) = args.get("name").and_then(Value::as_str) {
+                layers[i].name = name.to_string();
+            }
+            if let Some(t) = start_time {
+                layers[i].start_time = t;
+            }
+            if let Some(d) = explicit_duration.or(probed_duration) {
+                layers[i].duration = Some(d);
+            }
+            if let Some(f) = fade_in {
+                layers[i].fade_in = Some(f);
+            }
+            if let Some(id) = &resource_id {
+                layers[i].resource_id = Some(id.clone());
+            }
+            // A frame with no new file dresses the resource the layer
+            // already shows.
+            if let (Some(dress), None) = (&frame, &resource_id) {
+                let shown = layers[i]
+                    .resource_id
+                    .clone()
+                    .ok_or("`frame` needs a resource — this layer shows none")?;
+                let parsed = serde_json::from_value(dress.clone())
+                    .map_err(|e| format!("frame: {e} (see promo_schema)"))?;
+                let resources = meta.resources.get_or_insert_with(Vec::new);
+                let resource = resources
+                    .iter_mut()
+                    .find(|r| r.id == shown)
+                    .ok_or("the layer's resource is not in this project")?;
+                resource.frame = Some(parsed);
+            }
+            if kind_name == "caption" {
+                if let Some(words) = args.get("captionText").and_then(Value::as_str) {
+                    layers[i].caption_text = Some(words.to_string());
+                }
+                if placement.is_some() || args.get("fontSize").is_some() {
+                    let mut style = layers[i].caption_style.take().unwrap_or_default();
+                    if let Some(rule) = &placement {
+                        style.placement = Some(rule.clone());
+                    }
+                    if let Some(size) = args.get("fontSize").and_then(Value::as_f64) {
+                        style.font_size = Some(size);
+                    }
+                    layers[i].caption_style = Some(style);
+                }
+            } else if let Some(rule) = &placement {
+                // Placement MERGES into the earliest keyframe; every other
+                // keyframe — the motion someone added in JSON — survives.
+                match layers[i]
+                    .keyframes
+                    .iter_mut()
+                    .min_by(|a, b| a.time.total_cmp(&b.time))
+                {
+                    Some(first) => first.placement = Some(rule.clone()),
+                    None => {
+                        let keyframe: promo_model::ProjectLayerKeyframe =
+                            serde_json::from_value(json!({
+                                "id": mint(), "time": 0, "transitionDuration": 0,
+                                "placement": serde_json::to_value(rule)
+                                    .map_err(|e| e.to_string())?
+                            }))
+                            .map_err(|e| format!("keyframe: {e}"))?;
+                        layers[i].keyframes.push(keyframe);
+                    }
+                }
+            }
         }
-        if let Some(size) = args.get("fontSize").and_then(Value::as_f64) {
-            style["fontSize"] = json!(size);
+        // CREATE: the template, decoded by the format's own parser.
+        None => {
+            let mut record = json!({
+                "id": layer_id, "name": args
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or(match kind_name {
+                        "caption" => "Caption",
+                        "video" => "Clip",
+                        _ => "Picture",
+                    }),
+                "sortIndex": next_sort, "kind": kind_name, "isEnabled": true,
+                "startTime": start_time.unwrap_or(0.0),
+                "duration": explicit_duration.or(probed_duration).unwrap_or(3.0),
+                "keyframes": []
+            });
+            if let Some(id) = &resource_id {
+                record["resourceID"] = json!(id);
+            }
+            if let Some(f) = fade_in {
+                record["fadeIn"] = json!(f);
+            }
+            if kind_name == "caption" {
+                if let Some(words) = args.get("captionText").and_then(Value::as_str) {
+                    record["captionText"] = json!(words);
+                }
+                let mut style = json!({});
+                if let Some(rule) = &placement {
+                    style["placement"] = serde_json::to_value(rule).map_err(|e| e.to_string())?;
+                }
+                if let Some(size) = args.get("fontSize").and_then(Value::as_f64) {
+                    style["fontSize"] = json!(size);
+                }
+                record["captionStyle"] = style;
+            } else if let Some(rule) = &placement {
+                record["keyframes"] = json!([{
+                    "id": mint(), "time": 0, "transitionDuration": 0,
+                    "placement": serde_json::to_value(rule).map_err(|e| e.to_string())?
+                }]);
+            }
+            let layer: ProjectLayer = serde_json::from_value(record)
+                .map_err(|e| format!("layer template rejected by the format: {e}"))?;
+            layers.push(layer);
         }
-        record["captionStyle"] = style;
-    } else if let Some(rule) = &placement {
-        // Placement rides keyframe 0 — the upsert's contract is "this is
-        // the layer's framing now".
-        record["keyframes"] = json!([{
-            "id": mint(), "time": 0, "transitionDuration": 0,
-            "placement": serde_json::to_value(rule).map_err(|e| e.to_string())?
-        }]);
-    }
-    let mut layer: ProjectLayer = serde_json::from_value(record)
-        .map_err(|e| format!("layer template rejected by the format: {e}"))?;
-    if kind_name == "caption" && layer.caption_text.is_none() {
-        layer.caption_text = index.and_then(|i| layers[i].caption_text.clone());
-    }
-
-    match index {
-        Some(i) => layers[i] = layer,
-        None => layers.push(layer),
     }
 
     // The boilerplate arithmetic: composition and background cover the show.
@@ -424,6 +517,17 @@ fn fence_new_path(path: &Path, root: Option<&Path>) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// A real 1x1 PNG: tools stamp pixel sizes with ffprobe, and the
+    /// validator warns on an unmeasured placed source — tests that hold
+    /// "zero warnings" need a measurable fixture.
+    const PNG_1X1: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
     fn scratch() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("promo-authoring-{}", mint()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -444,16 +548,6 @@ mod tests {
         let root = scratch();
         let dir = root.join("Built.promo");
         let shot = root.join("shot.png");
-        // A real 1x1 PNG: the tool stamps pixel size with ffprobe, and the
-        // validator warns on an unmeasured placed source — this test holds
-        // the whole chain to "zero warnings".
-        const PNG_1X1: &[u8] = &[
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
-            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
-            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
-            0x9C, 0x62, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
-            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-        ];
         std::fs::write(&shot, PNG_1X1).unwrap();
 
         init(
@@ -509,6 +603,145 @@ mod tests {
         assert!(
             dir.join("Resources/shot.png").exists(),
             "media copied into the project"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The clobber case, verbatim from review: add a push-in keyframe by
+    /// hand, then "nudge the card 20px" through the tool — the motion must
+    /// SURVIVE, the placement must merge into the first keyframe, and the
+    /// timing the call never mentioned must stay put.
+    #[test]
+    fn a_nudge_survives_the_hand_added_motion() {
+        let root = scratch();
+        let dir = root.join("Nudge.promo");
+        let shot = root.join("s.png");
+        std::fs::write(&shot, PNG_1X1).unwrap();
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1920x1080"}),
+            None,
+        )
+        .unwrap();
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "image",
+                    "id": "CARD", "file": shot.to_string_lossy(),
+                    "startTime": 1.0, "duration": 6.0,
+                    "placement": {"height": 640, "anchor": "center"}}),
+            None,
+        )
+        .unwrap();
+
+        // The hand edit: a second keyframe — the push-in — in ordinary JSON.
+        let meta_path = dir.join("metadata.json");
+        let mut meta =
+            ProjectMetadata::from_json(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
+        {
+            let layers = meta.layers.as_mut().unwrap();
+            let card = layers.iter_mut().find(|l| l.id == "CARD").unwrap();
+            let motion: promo_model::ProjectLayerKeyframe = serde_json::from_value(json!({
+                "id": "K1", "time": 5.5, "transitionDuration": 5.0,
+                "easing": "easeInOut",
+                "placement": {"height": 720, "anchor": "center"}
+            }))
+            .unwrap();
+            card.keyframes.push(motion);
+        }
+        std::fs::write(&meta_path, meta.to_json().unwrap()).unwrap();
+
+        // The nudge: same id, ONLY a new placement offset.
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "image",
+                    "id": "CARD",
+                    "placement": {"height": 640, "anchor": "center",
+                                   "offset": [20, 0]}}),
+            None,
+        )
+        .unwrap();
+
+        let meta = read(&dir);
+        let card = meta
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "CARD")
+            .unwrap();
+        assert_eq!(card.keyframes.len(), 2, "the push-in survived");
+        let first = card
+            .keyframes
+            .iter()
+            .min_by(|a, b| a.time.total_cmp(&b.time))
+            .unwrap();
+        assert_eq!(
+            first.placement.as_ref().unwrap().offset,
+            Some([20.0, 0.0]),
+            "the nudge landed on the first keyframe"
+        );
+        let motion = card.keyframes.iter().find(|k| k.id == "K1").unwrap();
+        assert_eq!(
+            motion.placement.as_ref().unwrap().height,
+            Some(720.0),
+            "the motion keyframe is untouched"
+        );
+        assert!((card.start_time - 1.0).abs() < 1e-9, "unstated timing kept");
+        assert_eq!(card.duration, Some(6.0), "unstated duration kept");
+        assert_eq!(
+            meta.resources.as_deref().unwrap().len(),
+            1,
+            "no phantom re-copy of the media"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The scaffold fields the product-promo recipe needs: a device frame
+    /// on the resource and a fadeIn on the layer — and a kind change is a
+    /// refusal, not a rebuild.
+    #[test]
+    fn frame_and_fade_scaffold_and_kind_is_identity() {
+        let root = scratch();
+        let dir = root.join("Framed.promo");
+        let shot = root.join("s.png");
+        std::fs::write(&shot, PNG_1X1).unwrap();
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1920x1080",
+                    "palette": {"canvas": "10182B", "edge": "26364F"}}),
+            None,
+        )
+        .unwrap();
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "image",
+                    "id": "CARD", "file": shot.to_string_lossy(),
+                    "fadeIn": 0.4,
+                    "frame": {"kind": "device", "material": "spaceBlack",
+                               "tiltY": 10},
+                    "placement": {"height": 640, "anchor": "center"}}),
+            None,
+        )
+        .unwrap();
+        let meta = read(&dir);
+        let warnings = promo_timeline::validate::warnings(&meta);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let card = meta
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "CARD")
+            .unwrap();
+        assert_eq!(card.fade_in, Some(0.4));
+        let resource = &meta.resources.as_deref().unwrap()[0];
+        let frame = resource.frame.as_ref().expect("frame landed");
+        assert!((frame.tilt_y - 10.0).abs() < 1e-9);
+
+        let refused = upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "caption",
+                    "id": "CARD", "captionText": "nope"}),
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            refused.contains("cannot change a layer's kind"),
+            "{refused}"
         );
         std::fs::remove_dir_all(&root).unwrap();
     }
