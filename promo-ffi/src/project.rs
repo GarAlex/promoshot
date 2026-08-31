@@ -357,6 +357,13 @@ pub extern "C" fn promo_project_warnings(json: *const c_char) -> *mut c_char {
 /// describing different formats.
 #[no_mangle]
 pub extern "C" fn promo_schema_text() -> *mut c_char {
+    to_c_string(promo_model::SCHEMA_QUICK)
+}
+
+/// The whole format, for `promo_schema_full` — the quick text above names
+/// this door, and both come from single files in promo-model.
+#[no_mangle]
+pub extern "C" fn promo_schema_full_text() -> *mut c_char {
     to_c_string(promo_model::SCHEMA)
 }
 

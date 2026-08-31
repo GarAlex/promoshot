@@ -21,7 +21,7 @@ promo — render a PromoShot project folder
 
 USAGE:
     promo validate <project-dir>
-    promo schema
+    promo schema [--full]
     promo inspect <project-dir>
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
     promo frames  <project-dir> --out <dir> [--fps <n>] [--from <s>] [--to <s>] [--size <WxH>]
@@ -40,8 +40,10 @@ OPTIONS:
     the renderer would silently correct. Exit 0 when it is clean, 2 when the
     project cannot be decoded at all.
 
-    `schema` prints the format — the same text the app's `promo_schema` tool
-    serves, read from one file in the core so the two cannot disagree.
+    `schema` prints the authoring subset plus four complete recipes — the
+    same text the app's `promo_schema` tool serves. `schema --full` is the
+    whole format (`promo_schema_full`); one file in the core backs each, so
+    no reader can disagree.
 
 NOTES:
     Reading and writing video needs `ffmpeg` (and `ffprobe`) on PATH. Frames
@@ -69,7 +71,15 @@ fn run(args: &[String]) -> Result<(), String> {
     // Describes the FORMAT, not a project, so it takes no directory — and
     // must be answered before the prelude below demands one.
     if command == "schema" {
-        print!("{}", promo_model::SCHEMA);
+        let full = rest.iter().any(|a| a == "--full");
+        print!(
+            "{}",
+            if full {
+                promo_model::SCHEMA
+            } else {
+                promo_model::SCHEMA_QUICK
+            }
+        );
         return Ok(());
     }
     let dir = rest

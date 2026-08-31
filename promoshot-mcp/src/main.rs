@@ -209,8 +209,16 @@ fn tool_descriptors() -> Value {
         },
         {
             "name": "promo_schema",
-            "description": "The .promo format, from the same single file the engine \
-                compiles in. Read it once before authoring.",
+            "description": "The authoring subset of the .promo format plus four \
+                complete, validated recipes. Read this once before authoring; \
+                promo_schema_full is the whole format.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "promo_schema_full",
+            "description": "The whole .promo format, from the same single file the \
+                engine compiles in — sprites, masks, motion paths, duration rules, \
+                waits, gradients, palette roles and all.",
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
@@ -291,7 +299,8 @@ where
     R: Fn(&Config, &[String]) -> Result<String, String>,
 {
     match name {
-        "promo_schema" => Ok(promo_model::SCHEMA.to_string()),
+        "promo_schema" => Ok(promo_model::SCHEMA_QUICK.to_string()),
+        "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
         "promo_workspace" => {
             std::fs::create_dir_all(&config.workspace)
                 .map_err(|e| format!("could not create workspace: {e}"))?;
@@ -444,6 +453,7 @@ mod tests {
                 "promo_validate",
                 "promo_inspect",
                 "promo_schema",
+                "promo_schema_full",
                 "promo_render_still",
                 "promo_render_frames",
                 "promo_render_video",
@@ -465,6 +475,10 @@ mod tests {
         assert!(
             text.contains("minReaderVersion"),
             "the compiled-in format text, not a stub"
+        );
+        assert!(
+            text.contains("promo_schema_full"),
+            "the subset names the full door"
         );
     }
 

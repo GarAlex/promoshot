@@ -24,6 +24,12 @@ pub use project::*;
 /// is how they start disagreeing. `MCPTools.schemaText` reads this through
 /// the FFI, so the app and the CLI answer with the same bytes.
 pub const SCHEMA: &str = include_str!("schema.md");
+/// The authoring subset plus four complete recipes — what `promo_schema`
+/// serves, sized to be READ rather than searched. Every fenced ```json
+/// block in it is a whole project that must decode and validate clean;
+/// a test extracts and runs them, so a recipe cannot rot as the format
+/// moves. The full document stays the authority behind both.
+pub const SCHEMA_QUICK: &str = include_str!("schema-quick.md");
 
 pub const METADATA_SCHEMA: u32 = 1;
 

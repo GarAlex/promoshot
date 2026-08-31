@@ -270,47 +270,12 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
-    // Ids are UUIDs — all of them. The Rust side reads them as strings and
-    // never minds, which is exactly the trap: `validate` said "ok" to a
-    // project whose layers were named "CAP" and "B", and the app then
-    // refused to LIST it — no error, no row, a project that exists on disk
-    // and nowhere else. The one place that can say why is here.
-    let uuid_ok = |id: &str| {
-        let bytes = id.as_bytes();
-        bytes.len() == 36
-            && bytes.iter().enumerate().all(|(i, b)| match i {
-                8 | 13 | 18 | 23 => *b == b'-',
-                _ => b.is_ascii_hexdigit(),
-            })
-    };
-    for layer in meta.layers.as_deref().unwrap_or(&[]) {
-        if !uuid_ok(&layer.id) {
-            out.push(format!(
-                "layer \"{}\": id \"{}\" is not a UUID — the app reads ids as \
-                 UUIDs and will refuse to open the project (silently: it \
-                 just never appears in the list)",
-                layer.name, layer.id
-            ));
-        }
-        for keyframe in &layer.keyframes {
-            if !uuid_ok(&keyframe.id) {
-                out.push(format!(
-                    "layer \"{}\": keyframe id \"{}\" is not a UUID — the app \
-                     will refuse to open the project",
-                    layer.name, keyframe.id
-                ));
-            }
-        }
-    }
-    for resource in meta.resources.as_deref().unwrap_or(&[]) {
-        if !uuid_ok(&resource.id) {
-            out.push(format!(
-                "resource \"{}\": id \"{}\" is not a UUID — the app will \
-                 refuse to open the project",
-                resource.display_name, resource.id
-            ));
-        }
-    }
+    // Short ids stopped being a trap when the app grew its minting door:
+    // every non-UUID id is swapped for a fresh UUID on adoption, references
+    // remapped through one map. The warning that lived here — "the app will
+    // refuse to open the project" — became FALSE that day, and a validator
+    // that cries wolf teaches people to stop reading it. What remains true
+    // is uniqueness, and duplicate_id_warnings above names that.
 
     // A shutter is a fraction of one frame interval, open (0, 1]. Zero or
     // negative does nothing, and more than 1 is a shutter open longer than
@@ -778,29 +743,21 @@ mod tests {
         );
     }
 
-    /// The CLI reads ids as strings; the app reads them as UUIDs and
-    /// silently refuses a project whose ids are not. Validate is the only
-    /// place that can say so before someone loses an afternoon to a project
-    /// that "just never shows up".
+    /// The doctrine REVERSED with the app's minting door: a short id is
+    /// first-class now — the app swaps it for a UUID on adoption, every
+    /// reference remapped — so validate must NOT cry wolf over "clip". The
+    /// warning this test replaces said "the app will refuse to open"; it
+    /// was true when written, and false the day the door landed.
     #[test]
-    fn a_non_uuid_id_is_named_before_the_app_silently_refuses_it() {
-        let bad = r#"{"id":"CAP","name":"Words","sortIndex":0,"kind":"caption",
+    fn a_short_id_validates_clean() {
+        let short = r#"{"id":"cap","name":"Words","sortIndex":0,"kind":"caption",
                       "isEnabled":true,"startTime":0,"duration":4,
                       "captionText":"hi","keyframes":[]}"#;
         assert!(
-            warnings(&project(bad, ""))
+            !warnings(&project(short, ""))
                 .iter()
-                .any(|w| w.contains("not a UUID")),
-            "a layer id of \"CAP\" must be named",
-        );
-        let good = r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A11","name":"Words",
-                       "sortIndex":0,"kind":"caption","isEnabled":true,
-                       "startTime":0,"duration":4,"captionText":"hi","keyframes":[]}"#;
-        assert!(
-            !warnings(&project(good, ""))
-                .iter()
-                .any(|w| w.contains("not a UUID")),
-            "a real UUID passes",
+                .any(|w| w.contains("UUID")),
+            "a short id is the headless spelling, not a mistake",
         );
     }
 
@@ -1018,6 +975,52 @@ mod palette_tests {
     #[test]
     fn a_defined_name_says_nothing() {
         assert!(warnings(&project(PALETTE, "", &caption("@text"))).is_empty());
+    }
+
+    /// Every fenced ```json block in the quick schema is a COMPLETE
+    /// project the doc tells people to copy — so each must decode with the
+    /// renderers' own parser and validate without a single warning. This
+    /// is what keeps a recipe from rotting as the format moves: break a
+    /// spelling anywhere and the doc's own examples fail here first.
+    #[test]
+    fn every_quick_schema_recipe_validates_clean() {
+        let doc = promo_model::SCHEMA_QUICK;
+        let mut recipes = Vec::new();
+        let mut rest = doc;
+        while let Some(start) = rest.find("```json") {
+            let body = &rest[start + 7..];
+            let end = body.find("```").expect("unclosed fence");
+            recipes.push(body[..end].trim());
+            rest = &body[end + 3..];
+        }
+        assert_eq!(recipes.len(), 4, "four recipes, as promised");
+        for (index, recipe) in recipes.iter().enumerate() {
+            let meta = promo_model::ProjectMetadata::from_json(recipe)
+                .unwrap_or_else(|e| panic!("recipe {index} does not decode: {e}"));
+            let found = warnings(&meta);
+            assert!(
+                found.is_empty(),
+                "recipe {index} ({}) warns: {found:?}",
+                meta.name
+            );
+            // The doc's advice is ONE version: stamp current, think no
+            // more. So a recipe stamps 18 even when its fields need less —
+            // never less than they need.
+            assert_eq!(meta.min_reader_version, Some(18), "recipe {index} stamp");
+            assert!(
+                meta.minimum_reader_version() <= 18,
+                "recipe {index} uses fields beyond the stamp"
+            );
+        }
+        let prose_lines = doc[..doc.find("```json").unwrap()].lines().count();
+        assert!(
+            prose_lines <= 90,
+            "the subset stayed readable once; keep it that way ({prose_lines} lines)"
+        );
+        assert!(
+            doc.contains("promo_schema_full"),
+            "and it names the full door"
+        );
     }
 
     /// A caption's size is its fontSize; a placement that also states
