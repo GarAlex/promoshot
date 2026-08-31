@@ -2,9 +2,10 @@
 //!
 //! `promo_media_probe` answers the facts (streams, sizes, fps, duration),
 //! `promo_media_filmstrip` gives eyes (a tiled contact sheet of evenly
-//! spaced frames, with the times each cell samples), and
+//! spaced frames, with the times each cell samples),
 //! `promo_media_silences` gives ears (where the sound isn't, which is where
-//! cuts want to land). All three ride the same ffmpeg/ffprobe the render
+//! cuts want to land), and `promo_media_scenes` finds the cuts the picture
+//! itself makes. All of them ride the same ffmpeg/ffprobe the render
 //! pipeline already requires — no new dependency, and nothing here touches
 //! a project: these inspect INPUT media so authoring decisions can be made
 //! about it. The distillation parsers are pure functions, tested against
@@ -277,6 +278,71 @@ pub fn distill_silences(log: &str, duration: f64, threshold_db: f64, min_seconds
     })
 }
 
+/// Eyes for CUTS (issue #3): ffmpeg's per-frame scene-change score,
+/// distilled to cut times and the SHOTS between them — the footage-first
+/// answer when a clip has no silence gaps to cut on. The score is
+/// ffmpeg's scene score — min(mafd, |mafd - previous mafd|)/100 over the
+/// luma plane, clamped 0..1 — so sustained motion is suppressed and 0.4
+/// catches hard cuts.
+pub fn scenes(args: &Value) -> Result<String, String> {
+    let path = required_file(args)?;
+    let threshold = args.get("threshold").and_then(Value::as_f64).unwrap_or(0.4);
+    let duration = probe_duration(&path)?;
+    let out = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-i"])
+        .arg(&path)
+        .args([
+            "-vf",
+            &format!("select='gt(scene,{threshold})',metadata=print:file=-"),
+            "-an",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .map_err(|e| format!("ffmpeg: {e}"))?;
+    let log = String::from_utf8_lossy(&out.stdout);
+    let value = distill_scenes(&log, duration, threshold);
+    serde_json::to_string_pretty(&value).map_err(|e| e.to_string())
+}
+
+/// Pure: the metadata-print log in, cut times and shot spans out — the
+/// same span shape `silences` answers in, so an edit can treat either as
+/// its cut list.
+pub fn distill_scenes(log: &str, duration: f64, threshold: f64) -> Value {
+    let mut cuts: Vec<f64> = Vec::new();
+    let mut pending: Option<f64> = None;
+    for line in log.lines() {
+        if let Some(rest) = line.split("pts_time:").nth(1) {
+            pending = rest.split_whitespace().next().and_then(|t| t.parse().ok());
+        } else if line.contains("lavfi.scene_score=") {
+            if let Some(t) = pending.take() {
+                cuts.push(t);
+            }
+        }
+    }
+    let mut shots: Vec<(f64, f64)> = Vec::new();
+    let mut cursor = 0.0;
+    for &cut in &cuts {
+        if cut > cursor + 0.01 {
+            shots.push((cursor, cut));
+        }
+        cursor = cursor.max(cut);
+    }
+    if duration > cursor + 0.01 {
+        shots.push((cursor, duration));
+    }
+    json!({
+        "duration": duration,
+        "threshold": threshold,
+        "cuts": cuts,
+        "shots": shots
+            .iter()
+            .map(|(s, e)| json!({ "start": s, "end": e }))
+            .collect::<Vec<_>>(),
+    })
+}
+
 /// The server's answer to promo-author's probe seam: ffprobe, best
 /// effort — absent facts stay absent and the document logic degrades the
 /// way the format does.
@@ -367,6 +433,29 @@ mod tests {
 
     /// The silence distiller: spans parsed, an unterminated silence runs to
     /// the end, and the INVERSE — the sound — is what the edit reads.
+    /// The scenes distiller on canned metadata-print output: two hard cuts
+    /// become three shots, spans in the same shape silences answers in.
+    #[test]
+    fn scene_cuts_and_their_shots_come_out_of_the_log() {
+        let log = "frame:0    pts:2562  pts_time:5.004\n\
+                   lavfi.scene_score=0.523\n\
+                   frame:1    pts:5124  pts_time:10.008\n\
+                   lavfi.scene_score=0.671\n";
+        let value = distill_scenes(log, 15.0, 0.4);
+        assert_eq!(value["cuts"], serde_json::json!([5.004, 10.008]));
+        let shots = value["shots"].as_array().unwrap();
+        assert_eq!(shots.len(), 3, "{value}");
+        assert_eq!(shots[0], serde_json::json!({"start": 0.0, "end": 5.004}));
+        assert_eq!(shots[2], serde_json::json!({"start": 10.008, "end": 15.0}));
+        let quiet = distill_scenes("", 8.0, 0.4);
+        assert_eq!(quiet["cuts"], serde_json::json!([]));
+        assert_eq!(
+            quiet["shots"],
+            serde_json::json!([{"start": 0.0, "end": 8.0}]),
+            "no cuts means one shot, and an edit can still read the span"
+        );
+    }
+
     #[test]
     fn silences_and_their_inverse_come_out_of_the_log() {
         let log = "\

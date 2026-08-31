@@ -453,6 +453,163 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
     ))
 }
 
+/// The motion half of the scaffold (issue #1): one keyframe, created or
+/// merged, in the format's own language — a second placement keyframe is a
+/// push-in, viewport keyframes are a Ken Burns, colorHex keyframes ramp a
+/// background. UPDATE touches only the stated fields, exactly the
+/// discipline `upsert_layer` learned the hard way; CREATE without a stated
+/// ramp defaults `transitionDuration` to span from the previous keyframe —
+/// "ramp the whole way there" is what a push-in means, and a stated 0 is
+/// preserved. Deeper structures — swaps, waits, motion paths — stay
+/// ordinary JSON edits.
+pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, String> {
+    let dir = PathBuf::from(required_str(args, "project")?);
+    let dir = std::fs::canonicalize(&dir).map_err(|e| format!("project: {e}"))?;
+    if let Some(root) = root {
+        let root = std::fs::canonicalize(root).map_err(|e| format!("--root: {e}"))?;
+        if !dir.starts_with(&root) {
+            return Err(format!(
+                "project is outside the served root {}",
+                root.display()
+            ));
+        }
+    }
+    let meta_path = dir.join("metadata.json");
+    let text = std::fs::read_to_string(&meta_path)
+        .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
+    let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+
+    let layer_id = required_str(args, "layer")?.to_string();
+    let layers = meta.layers.get_or_insert_with(Vec::new);
+    let layer = layers
+        .iter_mut()
+        .find(|l| l.id == layer_id)
+        .ok_or_else(|| format!("no layer `{layer_id}` — promo_inspect lists the ids"))?;
+
+    if let Some(spelling) = args.get("easing").and_then(Value::as_str) {
+        if !matches!(spelling, "linear" | "easeIn" | "easeOut" | "easeInOut") {
+            return Err(format!(
+                "easing `{spelling}` — linear, easeIn, easeOut or easeInOut \
+                 (the renderer would degrade a typo to linear silently; \
+                 this tool refuses it instead)"
+            ));
+        }
+    }
+    let placement: Option<Placement> = match args.get("placement") {
+        Some(v) => Some(
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("placement: {e} (see promo_schema)"))?,
+        ),
+        None => None,
+    };
+    let viewport: Option<[f64; 4]> = match args.get("viewport") {
+        Some(v) => Some(
+            serde_json::from_value(v.clone())
+                .map_err(|_| "viewport is [x, y, w, h], unit source coordinates".to_string())?,
+        ),
+        None => None,
+    };
+    let time = args.get("time").and_then(Value::as_f64);
+
+    let wanted_id = args.get("id").and_then(Value::as_str).map(str::to_string);
+    let existing = wanted_id
+        .as_ref()
+        .and_then(|id| layer.keyframes.iter().position(|k| &k.id == id));
+
+    let number = |key: &str| -> Option<f64> { args.get(key).and_then(Value::as_f64) };
+    let (keyframe_id, moment) = match existing {
+        Some(i) => {
+            let k = &mut layer.keyframes[i];
+            if let Some(t) = time {
+                k.time = t;
+            }
+            if let Some(rule) = placement {
+                k.placement = Some(rule);
+            }
+            if let Some(window) = viewport {
+                k.viewport = Some(window);
+            }
+            if let Some(v) = number("opacity") {
+                k.opacity = Some(v);
+            }
+            if let Some(v) = number("zoom") {
+                k.zoom = Some(v);
+            }
+            if let Some(v) = number("fontSize") {
+                k.font_size = Some(v);
+            }
+            if let Some(v) = number("transitionDuration") {
+                k.transition_duration = v;
+            }
+            if let Some(v) = number("tiltX") {
+                k.tilt_x = Some(v);
+            }
+            if let Some(v) = number("tiltY") {
+                k.tilt_y = Some(v);
+            }
+            if let Some(hex) = args.get("colorHex").and_then(Value::as_str) {
+                k.color_hex = Some(hex.to_string());
+            }
+            if let Some(spelling) = args.get("easing") {
+                k.easing =
+                    Some(serde_json::from_value(spelling.clone()).map_err(|e| e.to_string())?);
+            }
+            (k.id.clone(), k.time)
+        }
+        None => {
+            let t = time.ok_or("`time` is required when creating a keyframe")?;
+            // The default ramp: from the previous keyframe all the way here.
+            let previous = layer
+                .keyframes
+                .iter()
+                .map(|k| k.time)
+                .filter(|earlier| *earlier < t)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let ramp = number("transitionDuration").unwrap_or(if previous.is_finite() {
+                t - previous
+            } else {
+                0.0
+            });
+            let mut record = json!({
+                "id": wanted_id.clone().unwrap_or_else(mint),
+                "time": t, "transitionDuration": ramp,
+            });
+            for key in ["opacity", "zoom", "fontSize", "tiltX", "tiltY"] {
+                if let Some(v) = number(key) {
+                    record[key] = json!(v);
+                }
+            }
+            if let Some(rule) = &placement {
+                record["placement"] = serde_json::to_value(rule).map_err(|e| e.to_string())?;
+            }
+            if let Some(window) = viewport {
+                record["viewport"] = json!(window);
+            }
+            if let Some(hex) = args.get("colorHex").and_then(Value::as_str) {
+                record["colorHex"] = json!(hex);
+            }
+            if let Some(spelling) = args.get("easing") {
+                record["easing"] = spelling.clone();
+            }
+            let keyframe: promo_model::ProjectLayerKeyframe =
+                serde_json::from_value(record).map_err(|e| format!("keyframe: {e}"))?;
+            let id = keyframe.id.clone();
+            layer.keyframes.push(keyframe);
+            (id, t)
+        }
+    };
+    // Keyframes read in time order; hand-authored order is preserved for
+    // equal times (stable sort).
+    layer.keyframes.sort_by(|a, b| a.time.total_cmp(&b.time));
+    let count = layer.keyframes.len();
+
+    write_metadata(&meta, &meta_path)?;
+    Ok(format!(
+        "upserted keyframe {keyframe_id} on layer {layer_id} at {moment}s — \
+         the layer has {count} keyframe(s)"
+    ))
+}
+
 fn copy_into_resources(project: &Path, source: &Path) -> Result<String, String> {
     if !source.exists() {
         return Err(format!("file {} does not exist", source.display()));
@@ -850,6 +1007,160 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("outside the served root"), "{err}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Issue #1's done-when, as a test: schema → init → upsert_layer →
+    /// upsert_keyframe builds the ProductCard push-in — a second placement
+    /// keyframe with the default ramp spanning from the first — without a
+    /// hand JSON edit, and the file validates clean.
+    #[test]
+    fn a_keyframe_upsert_builds_the_push_in_without_hand_json() {
+        let root = scratch();
+        let dir = root.join("Push.promo");
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1920x1080",
+                    "palette": {"canvas": "10182B"}}),
+            Some(&root),
+        )
+        .unwrap();
+        let shot = root.join("shot.png");
+        std::fs::write(&shot, PNG_1X1).unwrap();
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "image", "id": "card",
+                    "file": shot.to_string_lossy(), "duration": 6,
+                    "placement": {"height": 620, "anchor": "center"}}),
+            Some(&root),
+            &measured,
+        )
+        .unwrap();
+
+        let answer = upsert_keyframe(
+            &json!({"project": dir.to_string_lossy(), "layer": "card",
+                    "id": "k1", "time": 6, "zoom": 1.25, "easing": "easeInOut"}),
+            Some(&root),
+        )
+        .unwrap();
+        assert!(answer.contains("k1"), "{answer}");
+
+        let meta = read(&dir);
+        let card = meta
+            .layers
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "card")
+            .unwrap();
+        assert_eq!(card.keyframes.len(), 2, "placement kf0 plus the push-in");
+        let k1 = card.keyframes.iter().find(|k| k.id == "k1").unwrap();
+        assert_eq!(k1.zoom, Some(1.25));
+        assert!(
+            (k1.transition_duration - 6.0).abs() < 1e-9,
+            "the default ramp spans from the previous keyframe: {}",
+            k1.transition_duration
+        );
+        let warnings = promo_timeline::validate::warnings(&meta);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The FocusPush shape: viewport keyframes make a Ken Burns through the
+    /// tool. And an UPDATE touches only what it states — the viewport and
+    /// ramp survive an opacity nudge.
+    #[test]
+    fn viewport_keyframes_ride_and_updates_never_clobber() {
+        let root = scratch();
+        let dir = root.join("Ken.promo");
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1920x1080"}),
+            Some(&root),
+        )
+        .unwrap();
+        let shot = root.join("rec.png");
+        std::fs::write(&shot, PNG_1X1).unwrap();
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "image", "id": "rec",
+                    "file": shot.to_string_lossy(), "duration": 8}),
+            Some(&root),
+            &measured,
+        )
+        .unwrap();
+        for (id, time, window) in [
+            ("v0", 0.0, [0.0, 0.0, 1.0, 1.0]),
+            ("v1", 8.0, [0.25, 0.25, 0.5, 0.5]),
+        ] {
+            upsert_keyframe(
+                &json!({"project": dir.to_string_lossy(), "layer": "rec",
+                        "id": id, "time": time, "viewport": window}),
+                Some(&root),
+            )
+            .unwrap();
+        }
+        upsert_keyframe(
+            &json!({"project": dir.to_string_lossy(), "layer": "rec",
+                    "id": "v1", "opacity": 0.9}),
+            Some(&root),
+        )
+        .unwrap();
+
+        let meta = read(&dir);
+        let rec = meta
+            .layers
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "rec")
+            .unwrap();
+        let v1 = rec.keyframes.iter().find(|k| k.id == "v1").unwrap();
+        assert_eq!(
+            v1.viewport,
+            Some([0.25, 0.25, 0.5, 0.5]),
+            "the ride survives"
+        );
+        assert_eq!(v1.opacity, Some(0.9), "the nudge landed");
+        assert!(
+            (v1.transition_duration - 8.0).abs() < 1e-9,
+            "the ramp survives"
+        );
+        assert_eq!(
+            rec.keyframes.iter().map(|k| k.time).collect::<Vec<_>>(),
+            vec![0.0, 8.0],
+            "keyframes read in time order"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The refusals that keep a script honest: no time on create, a typo'd
+    /// easing (the renderer would silently degrade it to linear), a layer
+    /// that is not there.
+    #[test]
+    fn keyframe_refusals_name_the_problem() {
+        let root = scratch();
+        let dir = root.join("No.promo");
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1280x720"}),
+            Some(&root),
+        )
+        .unwrap();
+        let project = dir.to_string_lossy();
+        let err = upsert_keyframe(
+            &json!({"project": project, "layer": "bg", "zoom": 1.0}),
+            Some(&root),
+        )
+        .unwrap_err();
+        assert!(err.contains("`time` is required"), "{err}");
+        let err = upsert_keyframe(
+            &json!({"project": project, "layer": "bg", "time": 0, "easing": "easInOut"}),
+            Some(&root),
+        )
+        .unwrap_err();
+        assert!(err.contains("easeInOut"), "{err}");
+        let err = upsert_keyframe(
+            &json!({"project": project, "layer": "ghost", "time": 0}),
+            Some(&root),
+        )
+        .unwrap_err();
+        assert!(err.contains("promo_inspect"), "{err}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

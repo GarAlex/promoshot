@@ -25,18 +25,26 @@ author here opens in the PromoShot apps unchanged.
      time each cell samples. Read it before deciding what a clip shows.
    - `promo_media_silences` — silence spans and their inverse; cuts and
      captions land on those boundaries.
-3. **Author** — tools scaffold; motion is JSON. `promo_init` lays the
-   folder, canvas, palette, background; `promo_upsert_layer` adds an
-   image/video/caption with a placement, a fadeIn, a device frame —
-   media copied in, sizes and durations probed, the composition
-   re-stretched every call. Updating by id changes only what you pass
-   (placement merges into the first keyframe; hand-added keyframes
-   survive). Everything beyond the scaffold — a second placement
-   keyframe for a push-in, a viewport ride, a wipe — is an ordinary
-   JSON edit; start from the recipe that matches. Init, upsert and
-   validate each answer with a small thumbnail ATTACHED — sampled at the
-   touched layer's midpoint, past its fadeIn — and write the same image
-   to `Exports/preview.png`. Look at it before the next edit; it is the
+   - `promo_media_scenes` — scene-change cuts and the shots between
+     them; the cut list when the footage has no silence gaps.
+   The repo's `examples/media/talktrack.mp4` is a practice clip whose
+   silences and cuts are both real.
+3. **Author** — `promo_init` lays the folder, canvas, palette,
+   background; `promo_upsert_layer` adds an image/video/caption with a
+   placement, a fadeIn, a device frame — media copied in, sizes and
+   durations probed, the composition re-stretched every call; and
+   `promo_upsert_keyframe` is the MOTION: one keyframe, created or
+   merged — a second placement keyframe is a push-in, viewport
+   keyframes are a Ken Burns ride, colorHex ramps a background — and a
+   created keyframe's ramp defaults to span from the previous one,
+   which is what a push-in means. Updating by id changes only what you
+   pass; hand-added keyframes survive. What the tools do not say — a
+   wipe or swap, waits, motion paths — is an ordinary JSON edit; start
+   from the recipe that matches. The authoring tools and validate each
+   answer with a small thumbnail ATTACHED — a keyframe's glance looks
+   where the motion arrives; the others sample the touched layer's
+   midpoint, past its fadeIn — and write the same image to
+   `Exports/preview.png`. Look at it before the next edit; it is the
    editor viewport. (`preview: false` turns it off.)
 4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
    means "renders"; anything else is a silent correction named before you

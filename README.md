@@ -76,12 +76,18 @@ render shells to `promo` (found next to the executable, or on PATH, or via
 Two pieces: the MCP server (tools) and the skill (workflow).
 Neither is vendor-specific. Agents do not find this repo by themselves.
 
-**1. Build**
+**1. Build — or don't**
 
 ```bash
 cargo build --release -p promo-cli -p promoshot-mcp
 # binaries: target/release/promo  target/release/promoshot-mcp
 ```
+
+No Rust toolchain? Grab the prebuilt pair from
+[Releases](https://github.com/GarAlex/promoshot/releases) (linux-x64,
+macos-arm64), or pull the image:
+`docker pull ghcr.io/garalex/promoshot-mcp` — both carry `promo` and
+`promoshot-mcp` together.
 
 Put both on PATH, or pass `--promo` to the server. Rendering video also
 wants `ffmpeg`/`ffprobe` on PATH.

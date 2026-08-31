@@ -133,12 +133,25 @@ fn promo_binary(config: &Config) -> PathBuf {
 
 /// Runs the CLI and hands back stdout, or stderr as the error. The CLI
 /// already writes human-usable answers on both streams; nothing here needs
-/// to interpret them.
+/// to interpret them. A FAILED SPAWN explains itself — "No such file" cost
+/// a fresh Linux box a debugging session (issue #2) when all it meant was
+/// "the render CLI is not installed yet".
 fn run_promo(config: &Config, args: &[String]) -> Result<String, String> {
-    let output = std::process::Command::new(promo_binary(config))
+    let binary = promo_binary(config);
+    let output = std::process::Command::new(&binary)
         .args(args)
         .output()
-        .map_err(|e| format!("could not run `promo`: {e}"))?;
+        .map_err(|e| {
+            format!(
+                "could not run the `promo` CLI at `{}` ({e}). Every render \
+                 shells to that binary. Fix one of: put `promo` beside \
+                 promoshot-mcp, start the server with --promo /path/to/promo, \
+                 or install it — download a release binary from \
+                 github.com/GarAlex/promoshot/releases, or build with \
+                 `cargo build --release -p promo-cli`.",
+                binary.display()
+            )
+        })?;
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     if output.status.success() {
@@ -345,6 +358,19 @@ fn tool_descriptors() -> Value {
                 "required": ["file"] }
         },
         {
+            "name": "promo_media_scenes",
+            "description": "Eyes for CUTS: per-frame scene-change scores distilled to \
+                cut times and the shots between them — the footage-first answer when \
+                a clip has no silence gaps to cut on. Scores are ffmpeg's scene \
+                score (0..1, motion-suppressed); 0.4 catches hard cuts.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "file": { "type": "string" },
+                    "threshold": { "type": "number", "description": "Default 0.4" }
+                },
+                "required": ["file"] }
+        },
+        {
             "name": "promo_init",
             "description": "Create a project folder: metadata.json boilerplate, canvas, \
                 palette, a background layer, ids minted. The file it writes is ordinary \
@@ -373,10 +399,11 @@ fn tool_descriptors() -> Value {
                 and durations probed, the composition re-stretched every call. Pass an \
                 existing id to UPDATE: only the fields you pass change, placement \
                 merges into the first keyframe, hand-added keyframes survive. This is \
-                the scaffold, not the whole format: motion (a second keyframe), \
-                viewport, transitions beyond fadeIn are ordinary JSON edits — start \
-                from a promo_schema recipe. A thumbnail sampled at the touched \
-                layer's midpoint comes attached — LOOK at it before the next edit.",
+                the scaffold, not the whole format: motion and viewport ride \
+                promo_upsert_keyframe; transitions beyond fadeIn are ordinary JSON \
+                edits — start from a promo_schema recipe. A thumbnail sampled at \
+                the touched layer's midpoint comes attached — LOOK at it before \
+                the next edit.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,
@@ -407,6 +434,45 @@ fn tool_descriptors() -> Value {
                     "name": { "type": "string" }
                 },
                 "required": ["project", "kind"] }
+        },
+        {
+            "name": "promo_upsert_keyframe",
+            "description": "MOTION in the format's own language: create or merge ONE \
+                keyframe on a layer. A second placement keyframe is a push-in, \
+                viewport keyframes are a Ken Burns ride, colorHex ramps a \
+                background. Pass an existing keyframe id to UPDATE — only the \
+                fields you pass change. Creating without transitionDuration ramps \
+                from the previous keyframe (a stated 0 holds). Swaps, waits and \
+                motion paths stay ordinary JSON edits.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "project": project,
+                    "layer": { "type": "string", "description":
+                        "The layer's id — promo_inspect lists them" },
+                    "id": { "type": "string", "description":
+                        "An existing keyframe's id makes this an UPDATE; on \
+                         create, your own short id (\"k1\") is used verbatim" },
+                    "time": { "type": "number", "description":
+                        "Seconds, layer-local — required to create" },
+                    "placement": { "type": "object", "description":
+                        "{height|width|mode, anchor, offset} — a stored rule, \
+                         re-resolved on every read" },
+                    "viewport": { "type": "array", "description":
+                        "[x, y, w, h] window onto the source, unit coordinates" },
+                    "opacity": { "type": "number" },
+                    "zoom": { "type": "number" },
+                    "fontSize": { "type": "number", "description": "Caption points" },
+                    "colorHex": { "type": "string", "description":
+                        "Background layers only — ramps the colour" },
+                    "tiltX": { "type": "number" },
+                    "tiltY": { "type": "number" },
+                    "easing": { "type": "string",
+                        "enum": ["linear", "easeIn", "easeOut", "easeInOut"] },
+                    "transitionDuration": { "type": "number", "description":
+                        "Seconds of ramp INTO this keyframe" },
+                    "preview": preview
+                },
+                "required": ["project", "layer"] }
         },
         {
             "name": "promo_speak",
@@ -466,10 +532,12 @@ where
         "promo_media_probe" => media::probe(args),
         "promo_media_filmstrip" => media::filmstrip(args, &config.workspace),
         "promo_media_silences" => media::silences(args),
+        "promo_media_scenes" => media::scenes(args),
         "promo_init" => promo_author::init(args, config.root.as_deref()),
         "promo_upsert_layer" => {
             promo_author::upsert_layer(args, config.root.as_deref(), &media::host_probe)
         }
+        "promo_upsert_keyframe" => promo_author::upsert_keyframe(args, config.root.as_deref()),
         "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
         "promo_schema_types" => {
             serde_json::to_string_pretty(&promo_model::wire_schema()).map_err(|e| e.to_string())
@@ -651,8 +719,10 @@ mod tests {
                 "promo_media_probe",
                 "promo_media_filmstrip",
                 "promo_media_silences",
+                "promo_media_scenes",
                 "promo_init",
                 "promo_upsert_layer",
+                "promo_upsert_keyframe",
                 "promo_speak"
             ],
             "everything the app offers except promo_open, which needs a window"
@@ -848,6 +918,20 @@ mod tests {
             "preview:false never shells out at all: {text}"
         );
         std::fs::remove_dir_all(&project).unwrap();
+    }
+
+    /// Issue #2's sharpest paper cut: a missing CLI died with "No such
+    /// file". The refusal must hand the operator the fix.
+    #[test]
+    fn a_missing_promo_cli_explains_how_to_get_one() {
+        let broken = Config {
+            promo: Some(PathBuf::from("/nonexistent/promo-cli-binary")),
+            ..config()
+        };
+        let err = run_promo(&broken, &["schema".into()]).unwrap_err();
+        for hint in ["--promo", "beside promoshot-mcp", "releases", "cargo build"] {
+            assert!(err.contains(hint), "the error omits `{hint}`: {err}");
+        }
     }
 
     #[test]

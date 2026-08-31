@@ -15,3 +15,12 @@ the two together — so what the doc teaches is exactly what renders here.
 Render any of them:
 
     promo video examples/ProductCard.promo --out card.mp4
+
+## Practice footage
+
+`media/talktrack.mp4` is a 15s narrated clip whose silences and scene
+cuts are both REAL — synthesized speech with deliberate pauses over
+three hard-cut color segments. It exists so the footage-first loop can
+demo itself: `promo_media_silences` finds the pauses,
+`promo_media_scenes` finds the cuts at 5s and 10s, and the sound spans
+are where captions land.

@@ -386,6 +386,13 @@ pub extern "C" fn promo_author_init(args_json: *const c_char) -> *mut c_char {
     author_envelope(args_json, |args| promo_author::init(args, None))
 }
 
+/// The motion half of the scaffold, same one shared implementation the
+/// headless server runs (issue #1).
+#[no_mangle]
+pub extern "C" fn promo_author_upsert_keyframe(args_json: *const c_char) -> *mut c_char {
+    author_envelope(args_json, |args| promo_author::upsert_keyframe(args, None))
+}
+
 /// `media_info_json` is the HOST's probing — {"duration": s?, "pixelWidth":
 /// w?, "pixelHeight": h?} for the file being staged — because the app
 /// measures with its own stack, not ffprobe. Empty or null means unprobed.

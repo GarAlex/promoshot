@@ -29,11 +29,13 @@ use crate::Config;
 /// caption.
 const LONG_EDGE: f64 = 480.0;
 
-/// Does this tool answer with a thumbnail? The authoring pair and the
+/// Does this tool answer with a thumbnail? The authoring tools and the
 /// check step do; renders return paths, and everything else returns facts.
 pub fn wanted(tool: &str, args: &Value) -> bool {
-    matches!(tool, "promo_init" | "promo_upsert_layer" | "promo_validate")
-        && args.get("preview").and_then(Value::as_bool) != Some(false)
+    matches!(
+        tool,
+        "promo_init" | "promo_upsert_layer" | "promo_upsert_keyframe" | "promo_validate"
+    ) && args.get("preview").and_then(Value::as_bool) != Some(false)
 }
 
 /// Render the thumbnail and hand back the MCP image block. Any failure is
@@ -49,7 +51,10 @@ where
         .map_err(|_| "no metadata.json".to_string())?;
     let doc: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
 
-    let time = sample_time(&doc, touched_layer(tool, args, &doc));
+    let keyframe_time = (tool == "promo_upsert_keyframe")
+        .then(|| args.get("time").and_then(Value::as_f64))
+        .flatten();
+    let time = sample_time(&doc, touched_layer(tool, args, &doc), keyframe_time);
     let (width, height) = thumb_size(&doc);
     let exports = dir.join("Exports");
     std::fs::create_dir_all(&exports).map_err(|e| e.to_string())?;
@@ -76,34 +81,42 @@ where
     }))
 }
 
-/// The layer this call touched: an upsert's `id` when it names one, else
-/// the newest layer (an upsert CREATE appends). Init and validate touch
-/// the whole composition — no single layer.
+/// The layer this call touched: a layer upsert's `id` when it names one,
+/// else the newest layer (an upsert CREATE appends); a keyframe upsert
+/// names its layer outright. Init and validate touch the whole
+/// composition — no single layer.
 fn touched_layer<'d>(tool: &str, args: &Value, doc: &'d Value) -> Option<&'d Value> {
-    if tool != "promo_upsert_layer" {
-        return None;
-    }
     let layers = doc.get("layers")?.as_array()?;
-    if let Some(id) = args.get("id").and_then(Value::as_str) {
-        if let Some(layer) = layers
+    let by_id = |id: &str| {
+        layers
             .iter()
             .find(|l| l.get("id").and_then(Value::as_str) == Some(id))
-        {
-            return Some(layer);
-        }
+    };
+    match tool {
+        "promo_upsert_layer" => args
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(by_id)
+            .or_else(|| layers.last()),
+        "promo_upsert_keyframe" => args.get("layer").and_then(Value::as_str).and_then(by_id),
+        _ => None,
     }
-    layers.last()
 }
 
-/// Where to look: the touched layer's temporal midpoint — past its fadeIn,
-/// squarely inside its life — else the composition's midpoint. Never a
-/// default of t=0, where fade-ins show an empty canvas.
-fn sample_time(doc: &Value, touched: Option<&Value>) -> f64 {
+/// Where to look: a keyframe upsert's own moment (start + its layer-local
+/// time — where the motion ARRIVES), else the touched layer's temporal
+/// midpoint — past its fadeIn, squarely inside its life — else the
+/// composition's midpoint. Never a default of t=0, where fade-ins show an
+/// empty canvas.
+fn sample_time(doc: &Value, touched: Option<&Value>, keyframe_time: Option<f64>) -> f64 {
     if let Some(layer) = touched {
         let start = layer
             .get("startTime")
             .and_then(Value::as_f64)
             .unwrap_or(0.0);
+        if let Some(local) = keyframe_time {
+            return start + local;
+        }
         if let Some(duration) = layer.get("duration").and_then(Value::as_f64) {
             return start + duration / 2.0;
         }
@@ -182,11 +195,20 @@ mod tests {
             ]
         });
         let card = &doc["layers"][1];
-        assert_eq!(sample_time(&doc, Some(card)), 3.0, "start + duration/2");
-        assert_eq!(sample_time(&doc, None), 3.0, "composition midpoint");
+        assert_eq!(
+            sample_time(&doc, Some(card), None),
+            3.0,
+            "start + duration/2"
+        );
+        assert_eq!(sample_time(&doc, None, None), 3.0, "composition midpoint");
+        assert_eq!(
+            sample_time(&doc, Some(card), Some(4.0)),
+            5.0,
+            "a keyframe glance looks where the motion arrives: start + local time"
+        );
         let bg = &doc["layers"][0];
         assert_eq!(
-            sample_time(&doc, Some(bg)),
+            sample_time(&doc, Some(bg), None),
             3.0,
             "a layer with no duration falls back to the composition"
         );
