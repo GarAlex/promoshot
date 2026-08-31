@@ -33,7 +33,11 @@ author here opens in the PromoShot apps unchanged.
    (placement merges into the first keyframe; hand-added keyframes
    survive). Everything beyond the scaffold — a second placement
    keyframe for a push-in, a viewport ride, a wipe — is an ordinary
-   JSON edit; start from the recipe that matches.
+   JSON edit; start from the recipe that matches. Init, upsert and
+   validate each answer with a small thumbnail ATTACHED — sampled at the
+   touched layer's midpoint, past its fadeIn — and write the same image
+   to `Exports/preview.png`. Look at it before the next edit; it is the
+   editor viewport. (`preview: false` turns it off.)
 4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
    means "renders"; anything else is a silent correction named before you
    see it in pixels. `promo_inspect` summarizes what is in the project —
@@ -71,8 +75,10 @@ new projects.
   `pixelWidth`/`pixelHeight` (videos: `videoNaturalWidth`/`Height`) or
   the rule anchors a square guess — validate says so. `promo_upsert_layer`
   stamps them for you.
-- **Look before you ship.** A render is the only honest check of layout;
-  validation cannot see that a caption sits on top of the subject.
+- **Look before you ship.** The attached thumbnails are the running
+  glance, but a full-size render is the honest check of layout —
+  validation cannot see that a caption sits on top of the subject, and a
+  480px preview can hide small text sitting slightly wrong.
 - **Two captions never cross-fade**, and cross-dissolving layers need
   OVERLAP — simultaneous end/start flashes the background.
 - **The app owns the file once it opens it.** If a person opens your

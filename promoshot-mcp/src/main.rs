@@ -27,6 +27,7 @@
 //!                       else PATH)
 
 mod media;
+mod preview;
 mod speak;
 
 use std::io::{BufRead, Write};
@@ -200,13 +201,17 @@ fn initialize(request: &Value) -> Value {
 fn tool_descriptors() -> Value {
     let project = json!({ "type": "string", "description":
         "Path to the .promo project folder (metadata.json + Resources/)" });
+    let preview = json!({ "type": "boolean", "description":
+        "Attach an inline thumbnail of the composition (default true); the \
+         same image lands at <project>/Exports/preview.png" });
     json!([
         {
             "name": "promo_validate",
             "description": "Decode a project with the renderer's own parser and report \
-                everything it would silently correct. 'ok' means it will render.",
+                everything it would silently correct. 'ok' means it will render. A \
+                mid-composition thumbnail comes attached — glance at it.",
             "inputSchema": { "type": "object",
-                "properties": { "project": project },
+                "properties": { "project": project, "preview": preview },
                 "required": ["project"] }
         },
         {
@@ -344,10 +349,11 @@ fn tool_descriptors() -> Value {
             "description": "Create a project folder: metadata.json boilerplate, canvas, \
                 palette, a background layer, ids minted. The file it writes is ordinary \
                 metadata.json — hand-edit it freely afterwards; the schema stays the \
-                source of truth. Never overwrites.",
+                source of truth. Never overwrites. A thumbnail comes attached.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,
+                    "preview": preview,
                     "canvas": { "type": "string", "description":
                         "\"1920x1080\" (or {width, height})" },
                     "palette": { "type": "object", "description":
@@ -369,10 +375,12 @@ fn tool_descriptors() -> Value {
                 merges into the first keyframe, hand-added keyframes survive. This is \
                 the scaffold, not the whole format: motion (a second keyframe), \
                 viewport, transitions beyond fadeIn are ordinary JSON edits — start \
-                from a promo_schema recipe.",
+                from a promo_schema recipe. A thumbnail sampled at the touched \
+                layer's midpoint comes attached — LOOK at it before the next edit.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,
+                    "preview": preview,
                     "kind": { "type": "string", "enum": ["image", "video", "caption"] },
                     "file": { "type": "string", "description":
                         "Image/video to copy in — required to create, optional on \
@@ -427,7 +435,21 @@ where
     let empty = json!({});
     let args = request.pointer("/params/arguments").unwrap_or(&empty);
     match dispatch_tool(name, args, config, run) {
-        Ok(text) => json!({ "content": [{ "type": "text", "text": text }] }),
+        Ok(text) => {
+            // The authoring pair and validate answer with a glance attached
+            // — and a failed glance never fails the call it rides on.
+            let mut content = vec![json!({ "type": "text", "text": text })];
+            if preview::wanted(name, args) {
+                match preview::thumbnail(name, args, config, run) {
+                    Ok(image) => content.push(image),
+                    Err(note) => {
+                        content[0]["text"] =
+                            json!(format!("{text}\n(preview unavailable: {note})"));
+                    }
+                }
+            }
+            json!({ "content": content })
+        }
         Err(message) => json!({
             "content": [{ "type": "text", "text": message }],
             "isError": true
@@ -732,6 +754,95 @@ mod tests {
             skill.contains("minReaderVersion\": 18"),
             "the stamp the skill teaches must be the current one"
         );
+    }
+
+    /// The glance: an authoring call answers text PLUS an image block, the
+    /// still is sampled at the touched layer's midpoint (never a fade-in's
+    /// empty t=0), sized to the canvas aspect, and written to the stable
+    /// Exports/preview.png a person can keep open.
+    #[test]
+    fn authoring_answers_with_a_thumbnail_of_the_touched_layer() {
+        let project = std::env::temp_dir().join(format!("mcp-thumb-{}", std::process::id()));
+        let seen = std::cell::RefCell::new(Vec::<Vec<String>>::new());
+        let drawing = |_: &Config, args: &[String]| {
+            seen.borrow_mut().push(args.to_vec());
+            let out = &args[args.iter().position(|a| a == "--out").unwrap() + 1];
+            std::fs::write(out, b"foobar").unwrap();
+            Ok("wrote a still".into())
+        };
+        let init = serde_json::json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": { "name": "promo_init", "arguments": {
+                "project": project.display().to_string(), "canvas": "1920x1080" } } });
+        handle(&init, &config(), &drawing).unwrap();
+        let upsert = serde_json::json!({ "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+            "params": { "name": "promo_upsert_layer", "arguments": {
+                "project": project.display().to_string(), "kind": "caption",
+                "captionText": "Hi", "startTime": 1.0, "duration": 4.0 } } });
+        let answer = handle(&upsert, &config(), &drawing).unwrap();
+
+        let content = answer
+            .pointer("/result/content")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert_eq!(content.len(), 2, "text plus the glance");
+        assert_eq!(content[1]["mimeType"], "image/png");
+        assert_eq!(
+            content[1]["data"], "Zm9vYmFy",
+            "the image block carries preview.png, base64"
+        );
+        let argv = seen.borrow().last().unwrap().clone();
+        assert_eq!(argv[0], "still");
+        let flag = |name: &str| argv[argv.iter().position(|a| a == name).unwrap() + 1].clone();
+        assert_eq!(flag("--time"), "3", "the caption's midpoint, not t=0");
+        assert_eq!(
+            flag("--size"),
+            "480x270",
+            "canvas aspect at thumbnail scale"
+        );
+        assert!(
+            flag("--out").ends_with("preview.png"),
+            "the stable path a person can watch"
+        );
+        std::fs::remove_dir_all(&project).unwrap();
+    }
+
+    /// A scaffold that succeeded reports success: the preview failing —
+    /// no CLI beside the server, a render error — degrades to a note,
+    /// never to isError.
+    #[test]
+    fn a_failed_preview_never_fails_the_call_it_rides_on() {
+        let project = std::env::temp_dir().join(format!("mcp-noglance-{}", std::process::id()));
+        let broken = |_: &Config, _: &[String]| Err("no `promo` on PATH".to_string());
+        let init = serde_json::json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+            "params": { "name": "promo_init", "arguments": {
+                "project": project.display().to_string(), "canvas": "1920x1080" } } });
+        let answer = handle(&init, &config(), &broken).unwrap();
+        assert_eq!(
+            answer.pointer("/result/isError"),
+            None,
+            "the init still succeeded"
+        );
+        let text = answer
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("initialized"), "{text}");
+        assert!(text.contains("preview unavailable"), "{text}");
+
+        let off = serde_json::json!({ "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+            "params": { "name": "promo_upsert_layer", "arguments": {
+                "project": project.display().to_string(), "kind": "caption",
+                "captionText": "Hi", "preview": false } } });
+        let answer = handle(&off, &config(), &never).unwrap();
+        let text = answer
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(
+            text.contains("upserted") && !text.contains("preview"),
+            "preview:false never shells out at all: {text}"
+        );
+        std::fs::remove_dir_all(&project).unwrap();
     }
 
     #[test]
