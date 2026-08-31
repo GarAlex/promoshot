@@ -1,4 +1,4 @@
-# promo-core
+# promoshot
 
 <p align="center">
   <img src="docs/rendered-on-linux.png" width="720"
