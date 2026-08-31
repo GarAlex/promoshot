@@ -17,8 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Side by side on purpose: promoshot-mcp finds `promo` next to itself.
 COPY --from=build /src/target/release/promo /usr/local/bin/
 COPY --from=build /src/target/release/promoshot-mcp /usr/local/bin/
-# A complete project baked in, so the image can prove itself:
-#   promo_render_still on examples/LinuxSmoke.promo, no mounts needed.
+# Every recipe's example baked in, so the image can prove itself with no
+# mounts — start with the one that teaches the product:
+#   promo_render_still on /usr/local/share/promoshot/examples/ProductCard.promo
 COPY examples /usr/local/share/promoshot/examples
 # Mount your projects here; promo_workspace points at it.
 ENV PROMOSHOT_WORKSPACE=/projects

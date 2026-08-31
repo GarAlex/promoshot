@@ -132,9 +132,10 @@ docker build -t promoshot-mcp .
 }
 ```
 
-Projects live under the mount; `promo_workspace` answers `/projects`. The
-image bakes in `examples/LinuxSmoke.promo`, so it can prove itself with no
-mount at all. `server.json` is the MCP registry manifest for the published
+Projects live under the mount; `promo_workspace` answers `/projects`. All
+the [examples](examples/) are baked in, so the image proves itself with no
+mount at all — render `ProductCard.promo` first; the device-framed app
+demo is the one that teaches the product-promo path. `server.json` is the MCP registry manifest for the published
 image (`ghcr.io/garalex/promoshot-mcp`).
 
 ### The skill
