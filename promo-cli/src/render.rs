@@ -6,7 +6,7 @@
 //! — on Apple the same engine is fed zero-copy IOSurfaces instead.
 
 use crate::project::Project;
-use promo_engine::{HostSurface, PreviewEngine, SURFACE_CPU_PIXELS};
+use promo_engine::{HostSurface, PreviewEngine, FLAG_PRE_FRAMED, SURFACE_CPU_PIXELS};
 use promo_gpu::{wgpu, GpuContext, GpuSurface};
 use promo_media::{Registry, VideoDecoder};
 use std::collections::HashMap;
@@ -22,13 +22,13 @@ use std::sync::Mutex;
 /// asks for one source time at a time.
 struct HostState {
     /// resource id → BGRA pixels + size
-    frames: HashMap<String, (Vec<u8>, u32, u32)>,
+    frames: HashMap<String, (Vec<u8>, u32, u32, i32)>,
     /// layer id → the CUT it shows instead of its resource's whole file:
     /// (the base resource id, the cut file's pixels). An image cut's pixels
     /// live in the cut's own staged file, exactly as the Mac app draws them;
     /// the redirect is keyed by LAYER and applies only while the layer shows
     /// its own resource, so a keyframe swap still swaps.
-    cuts: HashMap<String, (String, Vec<u8>, u32, u32)>,
+    cuts: HashMap<String, (String, Vec<u8>, u32, u32, i32)>,
     /// layer id → its clip, decoder opened only while it is on screen.
     videos: HashMap<String, VideoLayer>,
 }
@@ -104,7 +104,7 @@ extern "C" fn provider(
     // source — but only while the engine says it shows its OWN resource:
     // a keyframe swap outranks the cut, whose id means nothing to the
     // swapped-in material.
-    if let Some((base, pixels, width, height)) = state.cuts.get(&id) {
+    if let Some((base, pixels, width, height, flags)) = state.cuts.get(&id) {
         if *base == resource {
             unsafe {
                 *out_surface = HostSurface {
@@ -115,12 +115,12 @@ extern "C" fn provider(
                     bytes_per_row: width * 4,
                     ..Default::default()
                 };
-                *out_flags = 0;
+                *out_flags = *flags;
             }
             return 0;
         }
     }
-    if let Some((pixels, width, height)) = state.frames.get(&resource) {
+    if let Some((pixels, width, height, flags)) = state.frames.get(&resource) {
         unsafe {
             *out_surface = HostSurface {
                 kind: SURFACE_CPU_PIXELS,
@@ -130,7 +130,7 @@ extern "C" fn provider(
                 bytes_per_row: width * 4,
                 ..Default::default()
             };
-            *out_flags = 0;
+            *out_flags = *flags;
         }
         return 0;
     }
@@ -258,8 +258,8 @@ impl Renderer {
         registry: &Registry,
     ) -> Result<
         (
-            HashMap<String, (Vec<u8>, u32, u32)>,
-            HashMap<String, (String, Vec<u8>, u32, u32)>,
+            HashMap<String, (Vec<u8>, u32, u32, i32)>,
+            HashMap<String, (String, Vec<u8>, u32, u32, i32)>,
             HashMap<String, VideoLayer>,
         ),
         String,
@@ -310,7 +310,14 @@ impl Renderer {
                 if frames.contains_key(candidate) {
                     continue;
                 }
-                frames.insert(candidate.clone(), Self::decode_premultiplied(&path)?);
+                let wears = (resource.kind == promo_model::ProjectResourceKind::Image
+                    && resource.sprite.is_none())
+                .then_some(resource.frame.as_ref())
+                .flatten();
+                frames.insert(
+                    candidate.clone(),
+                    Self::baked(Self::decode_premultiplied(&path)?, wears),
+                );
             }
             // The layer's image cut, if it names one its resource holds: the
             // crop's pixels are its own staged file, sitting beside the
@@ -329,8 +336,10 @@ impl Renderer {
                             .filter(|p| p.is_file())
                         {
                             cuts.insert(layer.id.clone(), {
-                                let (px, w, h) = Self::decode_premultiplied(&path)?;
-                                (resource_id.clone(), px, w, h)
+                                let wears = cut.frame.as_ref().or(resource.frame.as_ref());
+                                let (px, w, h, flags) =
+                                    Self::baked(Self::decode_premultiplied(&path)?, wears);
+                                (resource_id.clone(), px, w, h, flags)
                             });
                         }
                     }
@@ -338,6 +347,25 @@ impl Renderer {
             }
         }
         Ok((frames, cuts, videos))
+    }
+
+    /// Bakes a device slab into freshly decoded pixels — the SAME bake the
+    /// apps run with Core Graphics (`promo_timeline::bake_slab`), so a
+    /// headless texture arrives already framed and flagged, and the
+    /// slab-sized box layout resolves is the box the picture actually fills
+    /// (issue #6: the frame silently rendered as nothing, and the bare
+    /// picture drew mis-sized inside slab-sized layout).
+    fn baked(
+        decoded: (Vec<u8>, u32, u32),
+        frame: Option<&promo_model::ResourceFrame>,
+    ) -> (Vec<u8>, u32, u32, i32) {
+        let (px, w, h) = decoded;
+        if let Some(f) = frame {
+            if let Some((baked, bw, bh)) = promo_timeline::bake_slab(&px, w, h, f) {
+                return (baked, bw, bh, FLAG_PRE_FRAMED);
+            }
+        }
+        (px, w, h, 0)
     }
 
     /// One image file as the compositor wants it: premultiplied BGRA.

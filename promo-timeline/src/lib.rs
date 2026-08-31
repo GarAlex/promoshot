@@ -25,7 +25,7 @@ pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
     level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
 };
-pub use frame::{framed_pixel_size, slab_geometry, SlabGeometry};
+pub use frame::{bake_slab, framed_pixel_size, slab_geometry, SlabGeometry};
 pub use gradient::layer_background_gradient;
 pub use interpolation::{
     interpolate_color_hex, layer_adjustments, layer_background_color_hex, layer_caption_values,

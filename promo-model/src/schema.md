@@ -194,7 +194,10 @@ Semantics worth knowing:
   share of the screen's short edge — turned in 2.5D by `tiltY`
   (around the vertical axis) and `tiltX` (around the horizontal),
   in degrees, so the box's side faces come into view. A layer's
-  `tiltX`/`tiltY` KEYFRAMES animate the slab's turn from there.
+  `tiltX`/`tiltY` KEYFRAMES animate the slab's turn from there —
+  re-baked per frame by the apps; a headless render (CLI/MCP) bakes
+  the frame's stored tilt and validate names the difference when
+  keyframes animate it.
   Legacy "phone" reads as "device"; any other kind reads as "none",
   because an unknown string is a typo rather than an older frame.
   The slab is built around the picture before the layer is laid out,

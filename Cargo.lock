@@ -1457,7 +1457,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "promo-author"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "promo-model",
  "promo-timeline",
@@ -1467,7 +1467,7 @@ dependencies = [
 
 [[package]]
 name = "promo-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "image",
  "promo-editor",
@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "promo-editor"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "promo-model",
  "promo-timeline",
@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "promo-engine"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "criterion",
  "promo-gpu",
@@ -1504,7 +1504,7 @@ dependencies = [
 
 [[package]]
 name = "promo-ffi"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "criterion",
  "promo-author",
@@ -1522,7 +1522,7 @@ dependencies = [
 
 [[package]]
 name = "promo-gpu"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "core-foundation 0.10.1",
  "criterion",
@@ -1536,7 +1536,7 @@ dependencies = [
 
 [[package]]
 name = "promo-media"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "promo-gpu",
  "promo-model",
@@ -1545,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "promo-model"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "jsonschema",
  "schemars",
@@ -1555,7 +1555,7 @@ dependencies = [
 
 [[package]]
 name = "promo-text"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "cosmic-text",
  "image",
@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "promo-timeline"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "criterion",
  "promo-model",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "promoshot-mcp"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "promo-author",
  "promo-model",

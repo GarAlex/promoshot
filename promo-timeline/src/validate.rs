@@ -44,6 +44,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     duplicate_id_warnings(meta, &mut out);
     duration_rule_warnings(meta, &mut out);
     palette_warnings(meta, &mut out);
+    tilt_keyframe_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -432,6 +433,39 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 /// checked, fields added since this was written included. The palette's own
 /// entries are skipped — they are the definitions references point at, not
 /// uses of a colour.
+/// The one seam left in the slab bake (issue #6): every host draws the
+/// device frame now, but at the resource's STORED tilt — only the apps
+/// re-bake per frame when keyframes animate `tiltX`/`tiltY`. Layout follows
+/// the keyframed angle everywhere, so a headless render of an animated
+/// tilt holds one angle inside a moving box. Say so, before someone reads
+/// it in pixels.
+fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        let wears_slab = layer
+            .resource_id
+            .as_ref()
+            .and_then(|id| resources.iter().find(|r| &r.id == id))
+            .and_then(|r| r.frame.as_ref())
+            .is_some_and(|f| f.kind == promo_model::ResourceFrameKind::Device);
+        if !wears_slab {
+            continue;
+        }
+        if layer
+            .keyframes
+            .iter()
+            .any(|k| k.tilt_x.is_some() || k.tilt_y.is_some())
+        {
+            out.push(format!(
+                "layer \"{}\": tilt keyframes on a device frame re-bake per frame \
+                 only in the apps — a headless render (CLI/MCP) holds the frame's \
+                 stored tilt",
+                layer.name
+            ));
+        }
+    }
+}
+
 fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let settings = &meta.composition_settings;
     let defined: std::collections::BTreeSet<String> = settings
@@ -796,6 +830,38 @@ mod tests {
                 .iter()
                 .any(|w| w.contains("UUID")),
             "a short id is the headless spelling, not a mistake",
+        );
+    }
+
+    /// Issue #6's remaining seam, named before pixels: tilt keyframes on a
+    /// device-framed layer re-bake only in the apps, so validate says so —
+    /// and stays quiet for a static tilt, which every host now bakes.
+    #[test]
+    fn animated_tilt_on_a_slab_is_named_and_static_tilt_is_not() {
+        let framed = |keyframe_extra: &str| {
+            let layers = format!(
+                r#"{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A03","name":"Shot",
+                     "sortIndex":0,"kind":"image","isEnabled":true,
+                     "startTime":0,"duration":4,
+                     "resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A01",
+                     "keyframes":[{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A04",
+                       "time":2,"transitionDuration":0{keyframe_extra}}}]}}"#
+            );
+            let extra = r#","resources":[{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A01",
+                "kind":"image","filename":"a.png","displayName":"A","addedAt":0,
+                "imageCuts":[],"disabledAudioTrackIndices":[],
+                "frame":{"kind":"device","material":"spaceBlack","tiltY":10}}]"#;
+            warnings(&project(&layers, extra))
+        };
+        assert!(
+            framed(r#","tiltY":25"#)
+                .iter()
+                .any(|w| w.contains("stored tilt")),
+            "an animated tilt is named"
+        );
+        assert!(
+            !framed("").iter().any(|w| w.contains("stored tilt")),
+            "a static tilt bakes everywhere and earns no warning"
         );
     }
 

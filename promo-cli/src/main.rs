@@ -520,7 +520,12 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&answer).expect("valid JSON");
         assert_eq!(value["name"], "Machine");
         assert_eq!(value["canvas"]["width"], 1280.0);
-        assert_eq!(value["layers"], 1);
+        // Layers answer as an ARRAY of handles (issue #1's validation:
+        // ids are what promo_upsert_keyframe takes), not a bare count.
+        let layers = value["layers"].as_array().expect("layers array");
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0]["id"], "bg");
+        assert_eq!(layers[0]["kind"], "background");
 
         // And the prose stays prose without the flag.
         let prose = validate(&project, &Options::default()).unwrap();
