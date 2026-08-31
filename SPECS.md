@@ -67,9 +67,12 @@ discipline as rustrator-core).
   their editor, never as a file race their next save silently wins.
   Corollary for ids: adoption must not orphan the other author's
   handles — minting short ids to UUIDs has to be deterministic, so a
-  spelling maps to the same UUID on every load. Until adoption is
-  whole-document, the honest doctrine stands and the skill says it: the
-  app owns the file once it opens it. The staged repeal is the app
-  repo's ROADMAP entry "Two authors, one file"; each stage that lands
-  moves the sentence, and the tombstone test keeps the old wording from
-  surviving it.
+  spelling maps to the same UUID on every load. LANDED 2026-08-31 (app
+  repo, ROADMAP "Two authors, one file", stages 1–3): adoption is
+  whole-document (clean → disk wins wholesale; dirty → additions and
+  speech land, the person wins conflicts), an app-server upsert on an
+  open document arrives as ONE undoable step in the person's own edit
+  history, and minting is UUIDv5 salted by the project id, pinned by
+  vector — changing that derivation orphans every in-flight project.
+  The old one-way ownership sentence is repealed and tombstoned;
+  `updated:` in inspect is the turn signal.

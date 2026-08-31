@@ -231,6 +231,7 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
             "name": project.meta.name,
             "canvas": { "width": w, "height": h },
             "duration": project.duration(),
+            "updated": project.meta.updated_at,
             "layers": layers.len(),
             "resources": project.resources().len(),
             "renderable": renderable,
@@ -247,6 +248,11 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
     out.push_str(&format!("project:   {}\n", project.meta.name));
     out.push_str(&format!("canvas:    {w:.0}x{h:.0}\n"));
     out.push_str(&format!("duration:  {:.2}s\n", project.duration()));
+    // The turn signal (SPECS D5): a raw change marker, not a calendar date —
+    // compare it with the last inspect to learn whether someone else edited.
+    if let Some(stamp) = project.meta.updated_at {
+        out.push_str(&format!("updated:   {stamp}\n"));
+    }
     out.push_str(&format!("layers:    {}\n", layers.len()));
     out.push_str(&format!("resources: {}\n", project.resources().len()));
     out.push_str(&format!("\nrenderable: {renderable} of {}", layers.len()));

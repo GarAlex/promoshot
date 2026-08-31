@@ -754,6 +754,11 @@ mod tests {
             skill.contains("minReaderVersion\": 18"),
             "the stamp the skill teaches must be the current one"
         );
+        assert!(
+            !skill.contains("owns the file"),
+            "one-way ownership was repealed by SPECS D5 stages 1-3 — \
+             the file is shared and every writer merges"
+        );
     }
 
     /// The glance: an authoring call answers text PLUS an image block, the

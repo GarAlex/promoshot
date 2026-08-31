@@ -815,6 +815,10 @@ mod doctrine_tests {
             "the app cannot decode",
             "EVERY id in the file is a UUID",
             "Generate UUIDs",
+            // Repealed by SPECS D5 stages 1-3: the file is shared and every
+            // writer merges — one-way ownership is last week's truth.
+            "owns the file once it opens it",
+            "owns the file once it has opened it",
         ];
         for (name, doc) in [
             ("SCHEMA", super::SCHEMA),
