@@ -1,6 +1,6 @@
 ---
 name: promoshot
-description: Author and render PromoShot video projects headless — App Store shots, promo reels, slideshows — by writing metadata.json (or using the server's editor tools), validating, and rendering through the promoshot-mcp server or the promo CLI. Use when asked to make a promo video, marketing screenshots, or to edit a .promo project without the PromoShot app.
+description: Author and render PromoShot .promo video projects (App Store shots, promo reels, slideshows) via promoshot-mcp or the promo CLI. Use when the user wants a promo video, marketing screenshot, device-framed app demo, or to edit a .promo folder without the Mac app.
 ---
 
 # Authoring PromoShot projects, headless
