@@ -55,3 +55,21 @@ discipline as rustrator-core).
   transitions belong on ONE swapping layer (the store listing's shape).
   Coordinated two-layer transitions are future compositor work, rung-worthy,
   parked in the app repo's ROADMAP until a use case demands them.
+- D5 **Two authors, one file** (settled 2026-08-31). The `.promo` folder
+  is the collaboration medium between a person in an editor and an agent
+  behind the tools — not a baton passed one way. The contract has three
+  clauses. Every WRITER merges before writing: the app's save already
+  folds external speech results in before encoding, and that merge is
+  the template — it must grow until it covers the whole document. Every
+  EDITOR adopts external edits into its open document: the metadata.json
+  watcher exists; adoption is speech-only today. And a write tool
+  aimed at a project a person has OPEN must land as an undoable step in
+  their editor, never as a file race their next save silently wins.
+  Corollary for ids: adoption must not orphan the other author's
+  handles — minting short ids to UUIDs has to be deterministic, so a
+  spelling maps to the same UUID on every load. Until adoption is
+  whole-document, the honest doctrine stands and the skill says it: the
+  app owns the file once it opens it. The staged repeal is the app
+  repo's ROADMAP entry "Two authors, one file"; each stage that lands
+  moves the sentence, and the tombstone test keeps the old wording from
+  surviving it.

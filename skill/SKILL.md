@@ -105,6 +105,14 @@ what only an app can do:
 
 - `promo_open` puts the project in front of the person — and adopting it
   is when the app takes ownership of the file (stop hand-editing then).
+  While the person has it OPEN, that ownership covers the WRITE tools
+  too: `promo_init` and `promo_upsert_layer` write the file underneath
+  the editor, which merges back only speak results today — the person's
+  next save silently discards anything else. On an open project the
+  safe verbs are validate, inspect, the renders and speak. Work turns
+  instead: author → open → the person edits and closes → re-run
+  `promo_inspect` before touching anything (adoption rewrites short ids
+  to UUIDs; re-anchor by the ids and names inspect lists).
 - `promo_speak` there uses the provider key in the person's Keychain, so
   no environment variable is needed.
 - Access is per-folder: a tool answering `access_required: <path>` means
