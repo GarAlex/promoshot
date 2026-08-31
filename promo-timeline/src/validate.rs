@@ -7,6 +7,32 @@
 use crate::viewport;
 use promo_model::{ProjectLayerKind, ProjectMetadata};
 
+/// Ids are any string here — the engine never asks what shape they are, and
+/// headless authors write "clip" where the apps write UUIDs. What an id must
+/// be is UNIQUE: every reference resolves by it, and the apps' door mints
+/// UUIDs for short ids BY VALUE, so two records sharing a spelling would
+/// silently become one. Named here, where every other silent correction is.
+fn duplicate_id_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let mut seen = std::collections::BTreeMap::<&str, u32>::new();
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        *seen.entry(resource.id.as_str()).or_default() += 1;
+    }
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        *seen.entry(layer.id.as_str()).or_default() += 1;
+        for keyframe in &layer.keyframes {
+            *seen.entry(keyframe.id.as_str()).or_default() += 1;
+        }
+    }
+    for (id, count) in seen {
+        if count > 1 && !id.is_empty() {
+            out.push(format!(
+                "id \"{id}\" is used by {count} records — ids resolve references \
+                 and must be unique; the app would fold these into one"
+            ));
+        }
+    }
+}
+
 /// Every warning for `meta`, in the order an author would read the file.
 ///
 /// Strings rather than a typed enum: the two callers (the CLI and the MCP
@@ -15,6 +41,7 @@ use promo_model::{ProjectLayerKind, ProjectMetadata};
 /// warnings the app already emits, so the two lists read as one.
 pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     let mut out = Vec::new();
+    duplicate_id_warnings(meta, &mut out);
     duration_rule_warnings(meta, &mut out);
     palette_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
@@ -975,6 +1002,22 @@ mod palette_tests {
     #[test]
     fn a_defined_name_says_nothing() {
         assert!(warnings(&project(PALETTE, "", &caption("@text"))).is_empty());
+    }
+
+    /// Two records wearing one id would be folded into ONE by the apps'
+    /// door — short ids are minted into UUIDs by value — so the collision
+    /// is named before it becomes a merge.
+    #[test]
+    fn a_shared_id_is_named() {
+        let layers = r#"{"id":"clip","name":"A","sortIndex":0,"kind":"image",
+            "isEnabled":true,"startTime":0,"keyframes":[]},
+            {"id":"clip","name":"B","sortIndex":1,"kind":"image",
+            "isEnabled":true,"startTime":0,"keyframes":[]}"#;
+        let found = warnings(&project("", "", layers));
+        assert!(
+            found.iter().any(|w| w.contains(r#""clip" is used by 2"#)),
+            "{found:?}"
+        );
     }
 
     /// A palette entry is a DEFINITION. Its own name is not a USE — but a

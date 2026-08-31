@@ -75,6 +75,15 @@ The format is ONE version: stamp "minReaderVersion": 17 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
+Ids are strings, unique within the file — that is the whole rule the
+ENGINE asks. UUIDs are the canonical spelling and what the apps write;
+a headless author may use short mnemonic ids instead ("bg", "clip",
+"k0") and the CLI, the MCP server and the renderers take them as-is.
+When the app adopts such a project it mints a UUID for every short id
+and every reference follows through the same map — so keep ids UNIQUE:
+two records sharing a spelling would be folded into one, and
+promo_validate names exactly that before it happens.
+
 A keyframe animates a layer over its LOCAL time:
 
   { "id": "<uuid>", "time": 0.45, "zoom": 0.76,
