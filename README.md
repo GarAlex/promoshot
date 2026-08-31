@@ -67,25 +67,59 @@ stdout, errors included, exit codes unchanged.
 ## The MCP server
 
 `promoshot-mcp` speaks Model Context Protocol over stdio, so any MCP client
-can validate and render projects. It owns no rendering code — every render
-shells to `promo` (found next to the executable, or on PATH, or via
+can author, inspect and render projects. It owns no rendering code — every
+render shells to `promo` (found next to the executable, or on PATH, or via
 `--promo`), so the CLI stays the single contract.
 
-```
-cargo build --release -p promoshot-mcp -p promo-cli
+### Connect an agent
+
+Two pieces: the MCP server (tools) and the skill (workflow).
+Neither is vendor-specific. Agents do not find this repo by themselves.
+
+**1. Build**
+
+```bash
+cargo build --release -p promo-cli -p promoshot-mcp
+# binaries: target/release/promo  target/release/promoshot-mcp
 ```
 
-Client configuration (Claude Code, or any MCP client):
+`promoshot-mcp` finds `promo` next to itself; rendering video also wants
+`ffmpeg`/`ffprobe` on PATH.
+
+**2. Register the server** with whatever speaks MCP:
 
 ```json
 {
   "mcpServers": {
     "promoshot": {
-      "command": "/path/to/target/release/promoshot-mcp"
+      "command": "/absolute/path/to/target/release/promoshot-mcp"
     }
   }
 }
 ```
+
+(Claude Code: `claude mcp add promoshot /absolute/path/to/promoshot-mcp`.
+Prefer the Docker image below when the host should not need ffmpeg or a
+GPU.)
+
+**3. Install the skill** — the workflow layer the tools do not carry:
+
+```bash
+cp -r skill ~/.claude/skills/promoshot
+```
+
+— or hand [skill/SKILL.md](skill/SKILL.md) to any agent that reads
+instructions; it assumes only these tools (or the CLI).
+
+**4. Verify** — ask the agent for a render:
+
+> Render examples/ProductCard.promo to a still at 3s.
+
+One `promo_validate`, one `promo_render_still`, and a device-framed app
+demo comes back as a path. From there, "make me a promo for <my app>" is
+the loop the skill teaches.
+
+### The tools
 
 Tools: `promo_schema` (authoring subset + four validated recipes;
 `promo_schema_full` is the whole format; `promo_schema_types` is the format
@@ -138,19 +172,7 @@ mount at all — render `ProductCard.promo` first; the device-framed app
 demo is the one that teaches the product-promo path. `server.json` is the MCP registry manifest for the published
 image (`ghcr.io/garalex/promoshot-mcp`).
 
-### The skill
-
-[skill/SKILL.md](skill/SKILL.md) is the workflow layer for agents — the
-loop (learn, look at the footage, author, check, render), the rules the
-schema does not carry, and the store-work guidance. Install it for Claude
-Code with:
-
-```
-cp -r skill ~/.claude/skills/promoshot
-```
-
-— or hand the file to any agent that reads instructions; it assumes only
-the MCP tools (or the CLI). A test pins it to the server's actual tool
+The skill is drift-tested: a test pins it to the server's actual tool
 list, so it cannot teach tools that do not exist.
 
 The Mac app carries its own MCP server (Settings → Automation) sharing the
