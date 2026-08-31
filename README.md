@@ -103,9 +103,20 @@ Claude Code / Cursor / any `mcp.json`:
 
 `--workspace` is where new projects go; `--root` fences which projects the
 server will touch — pointing both at one folder is the tidy setup. Both
-optional. (Claude Code one-liner: `claude mcp add promoshot
-/ABS/PATH/promoshot-mcp`. Prefer the Docker image below when the host
-should not need ffmpeg or a GPU.)
+optional. Prefer the Docker image below when the host should not need
+ffmpeg or a GPU.
+
+Client one-liners:
+
+```bash
+# Claude Code
+claude mcp add promoshot /ABS/PATH/target/release/promoshot-mcp
+
+# Grok Build
+grok mcp add promoshot -- /ABS/PATH/target/release/promoshot-mcp \
+  --workspace /ABS/PATH/Promo --root /ABS/PATH/Promo
+grok inspect   # confirms the server registered
+```
 
 **3. Install the skill** — the workflow layer the tools do not carry:
 
