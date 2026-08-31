@@ -83,24 +83,29 @@ cargo build --release -p promo-cli -p promoshot-mcp
 # binaries: target/release/promo  target/release/promoshot-mcp
 ```
 
-`promoshot-mcp` finds `promo` next to itself; rendering video also wants
-`ffmpeg`/`ffprobe` on PATH.
+Put both on PATH, or pass `--promo` to the server. Rendering video also
+wants `ffmpeg`/`ffprobe` on PATH.
 
-**2. Register the server** with whatever speaks MCP:
+**2. MCP (required for tools)**
+
+Claude Code / Cursor / any `mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "promoshot": {
-      "command": "/absolute/path/to/target/release/promoshot-mcp"
+      "command": "/ABS/PATH/target/release/promoshot-mcp",
+      "args": ["--workspace", "/ABS/PATH/Promo", "--root", "/ABS/PATH/Promo"]
     }
   }
 }
 ```
 
-(Claude Code: `claude mcp add promoshot /absolute/path/to/promoshot-mcp`.
-Prefer the Docker image below when the host should not need ffmpeg or a
-GPU.)
+`--workspace` is where new projects go; `--root` fences which projects the
+server will touch — pointing both at one folder is the tidy setup. Both
+optional. (Claude Code one-liner: `claude mcp add promoshot
+/ABS/PATH/promoshot-mcp`. Prefer the Docker image below when the host
+should not need ffmpeg or a GPU.)
 
 **3. Install the skill** — the workflow layer the tools do not carry:
 
