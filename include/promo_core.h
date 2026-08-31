@@ -148,6 +148,10 @@ int32_t promo_renderer_set_project(PromoRenderer *renderer,
  * "setLayerResource" re-points a layer at a resource of its own KIND,
  * clearing stale cut pointers — absent resourceID is allowed only on a
  * background layer, which then paints the settings ground).
+ * "updateSettings" replaces compositionSettings wholesale (a dangling
+ * paletteResourceID is refused; a selected theme's materialized palette
+ * is re-synced from the resource after the replace) and
+ * "renameProject" renames it (blank refused).
  * "selectPalette" selects the THEME the project follows (absent
  * paletteResourceID deselects): entries materialize into
  * settings.palette, factory-default colours point at the stated roles,

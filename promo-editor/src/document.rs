@@ -152,6 +152,21 @@ pub enum Command {
         #[serde(default, rename = "resourceID")]
         resource_id: Option<String>,
     },
+    /// Replaces the composition settings wholesale — the settings form's
+    /// command, the same whole-object contract every resource editor
+    /// uses: what settings can hold is the format's say, not this enum's.
+    /// A paletteResourceID naming no palette resource is refused (an
+    /// editor must not mint a dangling theme pointer), and when one IS
+    /// selected the materialized palette is refreshed from the resource
+    /// after the replace, so the copy cannot drift from the authority.
+    #[serde(rename_all = "camelCase")]
+    UpdateSettings {
+        settings: Box<promo_model::CompositionSettings>,
+    },
+    /// Renames the project. Blank is refused — a nameless project is a
+    /// hole in every list that shows one.
+    #[serde(rename_all = "camelCase")]
+    RenameProject { name: String },
     /// Selects (or, absent, deselects) the palette resource — the THEME —
     /// the project follows. Selection is the one moment the theme's whole
     /// look lands: the entries materialize into `settings.palette`,
@@ -509,6 +524,40 @@ impl Document {
                     layer.image_cut_id = None;
                 }
                 layer.resource_id = resource_id.clone();
+            }
+            Command::UpdateSettings { settings } => {
+                if let Some(id) = settings.palette_resource_id.as_deref() {
+                    let is_palette =
+                        meta.resources.as_deref().unwrap_or(&[]).iter().any(|r| {
+                            r.id == id && r.kind == promo_model::ProjectResourceKind::Palette
+                        });
+                    if !is_palette {
+                        return Err(format!("paletteResourceID {id} names no palette resource"));
+                    }
+                }
+                meta.composition_settings = (**settings).clone();
+                if let Some(id) = meta.composition_settings.palette_resource_id.clone() {
+                    if let Some(resource) = meta
+                        .resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| r.id == id)
+                        .cloned()
+                    {
+                        crate::theme::sync_selected_palette(
+                            &mut meta.composition_settings,
+                            &resource,
+                            false,
+                        );
+                    }
+                }
+            }
+            Command::RenameProject { name } => {
+                if name.trim().is_empty() {
+                    return Err("a project needs a name".into());
+                }
+                meta.name = name.clone();
             }
             Command::SelectPalette {
                 palette_resource_id,
@@ -1087,6 +1136,68 @@ mod tests {
             None,
             "a background may show nothing; it paints the settings ground"
         );
+    }
+
+    /// The settings form's commands: wholesale settings replace (with the
+    /// selected theme's copy refreshed and a dangling theme refused), a
+    /// rename that refuses blank, and the whole dance undoes exactly.
+    #[test]
+    fn update_settings_and_rename_hold_the_theme_line() {
+        let mut doc = doc();
+        let original = doc.to_json().unwrap();
+        doc.apply(&command(
+            serde_json::json!({"kind": "addResource", "resource": {
+            "id": "T", "kind": "palette", "filename": "", "displayName": "Studio",
+            "addedAt": 0, "palette": [{"name": "text", "colorHex": "F2F2F7"}]}}),
+        ))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "selectPalette", "paletteResourceID": "T"})))
+            .unwrap();
+
+        // Wholesale replace, carrying the pointer along — and even a stale
+        // materialized copy in the payload comes back true, because the
+        // resource is the authority and the command re-syncs from it.
+        let mut settings = doc.meta().composition_settings.clone();
+        settings.subtitle_font_size = 96.0;
+        settings.palette = Some(vec![promo_model::PaletteColor {
+            name: "text".into(),
+            color_hex: "STALE0".into(),
+        }]);
+        doc.apply(&Command::UpdateSettings {
+            settings: Box::new(settings),
+        })
+        .unwrap();
+        let now = &doc.meta().composition_settings;
+        assert_eq!(now.subtitle_font_size, 96.0);
+        assert_eq!(
+            now.palette.as_ref().unwrap()[0].color_hex,
+            "F2F2F7",
+            "the materialized copy follows the RESOURCE, not the payload"
+        );
+
+        // A dangling theme pointer is refused; so is a blank name.
+        let mut dangling = doc.meta().composition_settings.clone();
+        dangling.palette_resource_id = Some("GHOST".into());
+        assert!(doc
+            .apply(&Command::UpdateSettings {
+                settings: Box::new(dangling)
+            })
+            .is_err());
+        assert!(doc
+            .apply(&command(
+                serde_json::json!({"kind": "renameProject", "name": "  "})
+            ))
+            .is_err());
+        doc.apply(&command(serde_json::json!({
+            "kind": "renameProject", "name": "Retitled"})))
+            .unwrap();
+        assert_eq!(doc.meta().name, "Retitled");
+
+        for _ in 0..4 {
+            assert!(doc.undo());
+        }
+        assert_eq!(doc.to_json().unwrap(), original);
     }
 
     #[test]
