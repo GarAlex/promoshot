@@ -35,6 +35,7 @@ OPTIONS:
                    exactly, where 30 resamples it.
     --from/--to    Time range (default: the whole composition)
     --size <WxH>   Output size (default: the project's canvas size)
+    --json         Machine output: one JSON object on stdout (errors too)
 
     `validate` decodes the project, resolves its attachments and reports what
     the renderer would silently correct. Exit 0 when it is clean, 2 when the
@@ -59,6 +60,12 @@ fn main() -> ExitCode {
     match run(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
+            // With --json anywhere on the line, the failure is machine
+            // output too: one object on stdout, the prose on stderr, the
+            // exit code unchanged.
+            if args.iter().any(|a| a == "--json") {
+                println!("{}", serde_json::json!({ "error": e }));
+            }
             eprintln!("promo: {e}");
             ExitCode::FAILURE
         }
@@ -91,18 +98,21 @@ fn run(args: &[String]) -> Result<(), String> {
     let opts = Options::parse(&rest[1..])?;
     let project = Project::open(Path::new(dir))?;
 
-    match command {
-        "inspect" => inspect(&project),
-        "validate" => validate(&project),
+    let answer = match command {
+        "inspect" => inspect(&project, &opts),
+        "validate" => validate(&project, &opts),
         "still" => still(&project, &opts),
         "frames" => frames(&project, &opts),
         "video" => video(&project, &opts),
         other => Err(format!("unknown command `{other}`\n\n{USAGE}")),
-    }
+    }?;
+    println!("{answer}");
+    Ok(())
 }
 
 #[derive(Default)]
 struct Options {
+    json: bool,
     out: Option<PathBuf>,
     time: Option<f64>,
     fps: Option<f64>,
@@ -123,6 +133,11 @@ impl Options {
                     .ok_or_else(|| format!("{flag}: expected a value"))
             };
             match flag {
+                "--json" => {
+                    opts.json = true;
+                    i += 1;
+                    continue;
+                }
                 "--out" => opts.out = Some(PathBuf::from(value()?)),
                 "--time" => opts.time = Some(parse_f64(&value()?, flag)?),
                 "--fps" => opts.fps = Some(parse_f64(&value()?, flag)?),
@@ -175,36 +190,32 @@ fn parse_f64(raw: &str, flag: &str) -> Result<f64, String> {
 /// viewport on a layer kind that ignores it, an attachment that could not
 /// resolve, a file that uses features it does not declare a reader version
 /// for. Each of those changes what you see and none of them said so.
-fn validate(project: &Project) -> Result<(), String> {
+fn validate(project: &Project, opts: &Options) -> Result<String, String> {
     let mut warnings = project.attachment_problems.clone();
     warnings.extend(promo_timeline::validate::warnings(&project.meta));
 
-    if warnings.is_empty() {
-        println!("ok — nothing the renderer would quietly correct");
-        return Ok(());
+    if opts.json {
+        return Ok(serde_json::json!({ "ok": true, "warnings": warnings }).to_string());
     }
-    println!(
+    if warnings.is_empty() {
+        return Ok("ok — nothing the renderer would quietly correct".into());
+    }
+    let mut out = format!(
         "ok — the project decodes, with {} warning(s):",
         warnings.len()
     );
     for warning in &warnings {
-        println!("  - {warning}");
+        out.push_str(&format!("\n  - {warning}"));
     }
-    Ok(())
+    Ok(out)
 }
 
-fn inspect(project: &Project) -> Result<(), String> {
+fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
     let layers = project.meta.layers.as_deref().unwrap_or(&[]);
     let (w, h) = (
         project.meta.composition_settings.canvas_width,
         project.meta.composition_settings.canvas_height,
     );
-    println!("project:   {}", project.meta.name);
-    println!("canvas:    {w:.0}x{h:.0}");
-    println!("duration:  {:.2}s", project.duration());
-    println!("layers:    {}", layers.len());
-    println!("resources: {}", project.resources().len());
-
     let mut renderable = 0;
     let mut skipped: Vec<(&str, Unsupported)> = Vec::new();
     for layer in layers {
@@ -213,34 +224,63 @@ fn inspect(project: &Project) -> Result<(), String> {
             Some(why) => skipped.push((layer.name.as_str(), why)),
         }
     }
-    println!("\nrenderable: {renderable} of {}", layers.len());
+    if opts.json {
+        return Ok(serde_json::json!({
+            "name": project.meta.name,
+            "canvas": { "width": w, "height": h },
+            "duration": project.duration(),
+            "layers": layers.len(),
+            "resources": project.resources().len(),
+            "renderable": renderable,
+            "skipped": skipped
+                .iter()
+                .map(|(name, why)| serde_json::json!({
+                    "layer": name, "reason": why.to_string()
+                }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string());
+    }
+    let mut out = String::new();
+    out.push_str(&format!("project:   {}\n", project.meta.name));
+    out.push_str(&format!("canvas:    {w:.0}x{h:.0}\n"));
+    out.push_str(&format!("duration:  {:.2}s\n", project.duration()));
+    out.push_str(&format!("layers:    {}\n", layers.len()));
+    out.push_str(&format!("resources: {}\n", project.resources().len()));
+    out.push_str(&format!("\nrenderable: {renderable} of {}", layers.len()));
     if !skipped.is_empty() {
-        println!("skipped:");
+        out.push_str("\nskipped:");
         for (name, why) in &skipped {
-            println!("  - {name}: {why}");
+            out.push_str(&format!("\n  - {name}: {why}"));
         }
     }
     if renderable == 0 && !layers.is_empty() {
-        println!(
-            "\nNothing in this project renders yet. Video decoding (docs/LINUX-READY-PLAN R2)\n\
-             and text rasterization are the two gaps."
+        out.push_str(
+            "\n\nNothing in this project renders yet. Video decoding (docs/LINUX-READY-PLAN R2)\n\
+             and text rasterization are the two gaps.",
         );
     }
-    Ok(())
+    Ok(out)
 }
 
-fn still(project: &Project, opts: &Options) -> Result<(), String> {
+fn still(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let time = opts.time.unwrap_or(0.0);
     let mut renderer = render::Renderer::new(project, w, h)?;
     let rgba = renderer.frame_rgba(time)?;
     render::write_png(out, &rgba, w, h)?;
-    println!("wrote {} ({w}x{h} at {time:.2}s)", out.display());
-    Ok(())
+    if opts.json {
+        return Ok(serde_json::json!({
+            "wrote": out.display().to_string(),
+            "width": w, "height": h, "time": time,
+        })
+        .to_string());
+    }
+    Ok(format!("wrote {} ({w}x{h} at {time:.2}s)", out.display()))
 }
 
-fn frames(project: &Project, opts: &Options) -> Result<(), String> {
+fn frames(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let (start, end, fps) = range(project, opts);
@@ -258,11 +298,18 @@ fn frames(project: &Project, opts: &Options) -> Result<(), String> {
         }
     }
     eprintln!();
-    println!(
+    if opts.json {
+        return Ok(serde_json::json!({
+            "wroteDir": out.display().to_string(),
+            "frames": count, "width": w, "height": h,
+            "fps": fps, "from": start, "to": end,
+        })
+        .to_string());
+    }
+    Ok(format!(
         "wrote {count} frames to {} ({w}x{h} @ {fps}fps)",
         out.display()
-    );
-    Ok(())
+    ))
 }
 
 /// Renders straight into ffmpeg's stdin as raw BGRA — no intermediate PNGs,
@@ -270,7 +317,7 @@ fn frames(project: &Project, opts: &Options) -> Result<(), String> {
 ///
 /// ffmpeg is invoked as a separate program, not linked, so this borrows
 /// nothing from its licence.
-fn video(project: &Project, opts: &Options) -> Result<(), String> {
+fn video(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let (start, end, fps) = range(project, opts);
@@ -297,11 +344,17 @@ fn video(project: &Project, opts: &Options) -> Result<(), String> {
     })?;
     eprintln!();
 
-    println!(
+    if opts.json {
+        return Ok(serde_json::json!({
+            "wrote": out.display().to_string(),
+            "frames": count, "width": w, "height": h, "fps": fps,
+        })
+        .to_string());
+    }
+    Ok(format!(
         "wrote {} ({w}x{h}, {count} frames @ {fps}fps)",
         out.display()
-    );
-    Ok(())
+    ))
 }
 
 fn range(project: &Project, opts: &Options) -> (f64, f64, f64) {
@@ -349,5 +402,57 @@ mod tests {
     fn unknown_options_are_rejected_rather_than_ignored() {
         assert!(Options::parse(&["--nope".into(), "1".into()]).is_err());
         assert!(Options::parse(&["--time".into()]).is_err());
+    }
+
+    /// --json is a lone flag among value-taking options, and it must not
+    /// eat its neighbour.
+    #[test]
+    fn json_is_a_boolean_flag() {
+        let opts = Options::parse(&["--json".into(), "--time".into(), "2".into()]).unwrap();
+        assert!(opts.json);
+        assert_eq!(opts.time, Some(2.0));
+    }
+
+    /// Machine output is one parseable object per command — validate's
+    /// warnings as an array, inspect's facts as fields — because "output
+    /// defaults to prose" is how a tool stays unscriptable.
+    #[test]
+    fn validate_and_inspect_speak_json_when_asked() {
+        let dir = std::env::temp_dir().join(format!("promo-json-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Machine","createdAt":0,"state":"recorded",
+                "minReaderVersion":18,"trimStart":0,"trimEnd":3,"videoDuration":3,
+                "subtitles":[],
+                "compositionSettings":{"canvasWidth":1280,"canvasHeight":720},
+                "layers":[{"id":"bg","name":"Ground","sortIndex":0,
+                  "kind":"background","isEnabled":true,"startTime":0,
+                  "duration":3,"keyframes":[
+                    {"id":"k","time":0,"colorHex":"101014","transitionDuration":0}]}]}"#,
+        )
+        .unwrap();
+        let project = Project::open(&dir).expect("opens");
+        let json_opts = Options {
+            json: true,
+            ..Options::default()
+        };
+
+        let answer = validate(&project, &json_opts).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&answer).expect("valid JSON");
+        assert_eq!(value["ok"], true);
+        assert!(value["warnings"].is_array());
+
+        let answer = inspect(&project, &json_opts).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&answer).expect("valid JSON");
+        assert_eq!(value["name"], "Machine");
+        assert_eq!(value["canvas"]["width"], 1280.0);
+        assert_eq!(value["layers"], 1);
+
+        // And the prose stays prose without the flag.
+        let prose = validate(&project, &Options::default()).unwrap();
+        assert!(serde_json::from_str::<serde_json::Value>(&prose).is_err());
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

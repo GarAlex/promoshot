@@ -61,6 +61,9 @@ promo frames   <project> --out frames/ --fps 30 --from 0 --to 4
 promo video    <project> --out out.mp4 --fps 30
 ```
 
+Add `--json` to any project command for machine output — one object on
+stdout, errors included, exit codes unchanged.
+
 ## The MCP server
 
 `promoshot-mcp` speaks Model Context Protocol over stdio, so any MCP client
