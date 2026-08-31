@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "io.github.garalex/promoshot",
-  "description": "Render PromoShot (.promo) video projects headless: validate, inspect, and render stills, frame sequences and mp4 with mixed audio. Videos authored as JSON; Rust + wgpu + ffmpeg.",
-  "websiteUrl": "https://promoshot.app",
+  "description": "Headless MCP for PromoShot .promo projects: agents validate, inspect, author layers and motion, and render stills, GIFs, and video. Rust + wgpu + ffmpeg.",
+  "websiteUrl": "https://promoshot.app/mcp",
   "status": "active",
   "repository": {
     "url": "https://github.com/GarAlex/promoshot",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.2.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/garalex/promoshot-mcp:0.1.0",
+      "identifier": "ghcr.io/garalex/promoshot-mcp:v0.2.1",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"

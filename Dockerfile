@@ -22,6 +22,7 @@ COPY --from=build /src/target/release/promoshot-mcp /usr/local/bin/
 #   promo_render_still on /usr/local/share/promoshot/examples/ProductCard.promo
 COPY examples /usr/local/share/promoshot/examples
 # Mount your projects here; promo_workspace points at it.
+LABEL io.modelcontextprotocol.server.name="io.github.garalex/promoshot"
 ENV PROMOSHOT_WORKSPACE=/projects
 WORKDIR /projects
 ENTRYPOINT ["promoshot-mcp"]
