@@ -49,7 +49,8 @@ author here opens in the PromoShot apps unchanged.
 4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
    means "renders"; anything else is a silent correction named before you
    see it in pixels. `promo_inspect` summarizes what is in the project —
-   canvas, layers by kind, undefined colours, missing media.
+   canvas, each layer with its ID (the handle the upsert tools take,
+   spelled as the file spells it), undefined colours, missing media.
 5. **Render** — `promo_render_still` at a few moments to LOOK (a mis-aimed
    viewport or an invisible caption costs seconds here, minutes in a
    video), `promo_render_frames` for a sheet of moments across a range,

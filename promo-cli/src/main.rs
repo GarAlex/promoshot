@@ -232,7 +232,13 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
             "canvas": { "width": w, "height": h },
             "duration": project.duration(),
             "updated": project.meta.updated_at,
-            "layers": layers.len(),
+            "layers": layers
+                .iter()
+                .map(|l| serde_json::json!({
+                    "id": l.id, "name": l.name, "kind": l.kind,
+                    "startTime": l.start_time, "duration": l.duration,
+                }))
+                .collect::<Vec<_>>(),
             "resources": project.resources().len(),
             "renderable": renderable,
             "skipped": skipped
@@ -254,6 +260,23 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
         out.push_str(&format!("updated:   {stamp}\n"));
     }
     out.push_str(&format!("layers:    {}\n", layers.len()));
+    // Each layer with its ID — the handle promo_upsert_keyframe takes.
+    // The trial that validated the keyframe tool (issue #1) had to read
+    // metadata.json to learn a layer's id; this listing is the fix.
+    for layer in layers {
+        let end = layer
+            .duration
+            .map(|d| format!("{:.2}", layer.start_time + d))
+            .unwrap_or_else(|| "…".into());
+        let kind = serde_json::to_value(layer.kind)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_else(|| format!("{:?}", layer.kind));
+        out.push_str(&format!(
+            "  {}  {kind}  {:.2}–{end}s  \"{}\"\n",
+            layer.id, layer.start_time, layer.name
+        ));
+    }
     out.push_str(&format!("resources: {}\n", project.resources().len()));
     out.push_str(&format!("\nrenderable: {renderable} of {}", layers.len()));
     if !skipped.is_empty() {
