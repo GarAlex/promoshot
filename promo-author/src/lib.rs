@@ -1,4 +1,16 @@
-//! The two authoring tools: `promo_init` and `promo_upsert_layer`.
+//! The scaffold over the .promo format: `promo_init` and
+//! `promo_upsert_layer`, as ONE implementation for every server.
+//!
+//! The headless MCP server calls this directly; the apps reach it over the
+//! C ABI (`promo_author_*` in promo-ffi) — so "the same tool" on two
+//! servers is the same code, not two interpretations. The one thing a host
+//! must bring is MEDIA PROBING: the server probes with ffprobe, an app
+//! with its own stack (AVFoundation), injected as a closure — everything
+//! else, the file layout included, is shared ground.
+//!
+//! The eventual home for mutation is `promo-editor`'s command system (the
+//! core owns the document); this crate is the scaffold-shaped doorway
+//! until those commands cover it.
 //!
 //! The schema stays the source of truth — these tools build every record
 //! THROUGH the wire: a `json!` template decoded by the format's own parser,
@@ -154,11 +166,25 @@ pub fn init(args: &Value, root: Option<&Path>) -> Result<String, String> {
     ))
 }
 
+/// What a host knows about a media file it is staging. The server fills
+/// this with ffprobe; an app with AVFoundation; a test with a literal.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MediaInfo {
+    pub duration: Option<f64>,
+    /// (width, height) in source pixels.
+    pub pixels: Option<(f64, f64)>,
+}
+
+/// How a host measures media: handed the SOURCE path and whether the file
+/// is being staged as video. Best effort — absent facts degrade exactly as
+/// the format degrades (a video still needs a duration from somewhere).
+pub type Probe<'a> = &'a dyn Fn(&Path, bool) -> MediaInfo;
+
 /// Add or update one layer: image, video or caption, with a placement.
 /// Media is COPIED into `Resources/`; a caption is words plus style. Every
 /// call re-stretches the background and the composition to cover the
 /// layers, so a project built one call at a time is coherent after each.
-pub fn upsert_layer(args: &Value, root: Option<&Path>) -> Result<String, String> {
+pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<String, String> {
     let dir = PathBuf::from(required_str(args, "project")?);
     let dir = std::fs::canonicalize(&dir).map_err(|e| format!("project: {e}"))?;
     if let Some(root) = root {
@@ -242,9 +268,10 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>) -> Result<String, String>
             // The source's own pixels, stamped the way the app stamps them
             // on import: placement anchors and widths resolve against the
             // aspect, and an unmeasured source is positioned as a SQUARE —
-            // which the validator names. ffprobe reads image headers too.
-            let staged = dir.join("Resources").join(&filename);
-            if let Ok((w, h)) = probe_pixels(&staged) {
+            // which the validator names. The HOST measures (ffprobe here,
+            // AVFoundation in an app); this code only writes what it learns.
+            let info = probe(&source, kind_name == "video");
+            if let Some((w, h)) = info.pixels {
                 if kind_name == "video" {
                     record["videoNaturalWidth"] = json!(w);
                     record["videoNaturalHeight"] = json!(h);
@@ -254,10 +281,12 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>) -> Result<String, String>
                 }
             }
             if kind_name == "video" {
-                let seconds = match explicit_duration {
-                    Some(d) => d,
-                    None => probe_duration(&staged)?,
-                };
+                let seconds = explicit_duration.or(info.duration).ok_or_else(|| {
+                    format!(
+                        "no duration for {} — pass `duration`, or probe the file",
+                        source.display()
+                    )
+                })?;
                 probed_duration = Some(seconds);
                 record["duration"] = json!(seconds);
                 record["trimStart"] = json!(0);
@@ -448,56 +477,6 @@ fn copy_into_resources(project: &Path, source: &Path) -> Result<String, String> 
     Ok(target.file_name().unwrap().to_string_lossy().into_owned())
 }
 
-/// The frame size ffprobe reads from the first stream — images included.
-fn probe_pixels(path: &Path) -> Result<(f64, f64), String> {
-    let out = std::process::Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height",
-            "-of",
-            "csv=p=0",
-        ])
-        .arg(path)
-        .output()
-        .map_err(|e| e.to_string())?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    let mut parts = text.trim().split(',');
-    let width: f64 = parts
-        .next()
-        .and_then(|w| w.parse().ok())
-        .ok_or("no width")?;
-    let height: f64 = parts
-        .next()
-        .and_then(|h| h.parse().ok())
-        .ok_or("no height")?;
-    Ok((width, height))
-}
-
-/// A clip's length is the file's own — read with ffprobe, the same tool the
-/// render pipeline already requires on PATH.
-fn probe_duration(path: &Path) -> Result<f64, String> {
-    let out = std::process::Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "csv=p=0",
-        ])
-        .arg(path)
-        .output()
-        .map_err(|e| format!("ffprobe (needed for a video's duration): {e}"))?;
-    String::from_utf8_lossy(&out.stdout)
-        .trim()
-        .parse()
-        .map_err(|_| format!("ffprobe could not read a duration from {}", path.display()))
-}
-
 fn write_metadata(meta: &ProjectMetadata, path: &Path) -> Result<(), String> {
     let json = meta.to_json().map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| format!("write: {e}"))
@@ -530,9 +509,18 @@ fn fence_new_path(path: &Path, root: Option<&Path>) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    /// A real 1x1 PNG: tools stamp pixel sizes with ffprobe, and the
-    /// validator warns on an unmeasured placed source — tests that hold
-    /// "zero warnings" need a measurable fixture.
+    /// The probe a test injects: a literal, which is the point of the
+    /// seam — these tests hold the DOCUMENT logic, not a host's media
+    /// stack, so they run identically with or without ffmpeg installed.
+    fn measured(_: &Path, video: bool) -> MediaInfo {
+        MediaInfo {
+            duration: video.then_some(4.0),
+            pixels: Some((800.0, 600.0)),
+        }
+    }
+
+    /// A 1x1 PNG fixture: the bytes only need to EXIST — measuring is the
+    /// injected probe's job now.
     const PNG_1X1: &[u8] = &[
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
         0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
@@ -581,6 +569,7 @@ mod tests {
                 "placement": {"height": 640, "anchor": "center", "offset": [0, 40]}
             }),
             Some(&root),
+            &measured,
         )
         .unwrap();
 
@@ -592,6 +581,7 @@ mod tests {
                 "placement": {"anchor": "top", "offset": [0, 72]}
             }),
             Some(&root),
+            &measured,
         )
         .unwrap();
 
@@ -641,6 +631,7 @@ mod tests {
                     "startTime": 1.0, "duration": 6.0,
                     "placement": {"height": 640, "anchor": "center"}}),
             None,
+            &measured,
         )
         .unwrap();
 
@@ -668,6 +659,7 @@ mod tests {
                     "placement": {"height": 640, "anchor": "center",
                                    "offset": [20, 0]}}),
             None,
+            &measured,
         )
         .unwrap();
 
@@ -729,6 +721,7 @@ mod tests {
                                "tiltY": 10},
                     "placement": {"height": 640, "anchor": "center"}}),
             None,
+            &measured,
         )
         .unwrap();
         let meta = read(&dir);
@@ -750,6 +743,7 @@ mod tests {
             &json!({"project": dir.to_string_lossy(), "kind": "caption",
                     "id": "CARD", "captionText": "nope"}),
             None,
+            &measured,
         )
         .unwrap_err();
         assert!(
@@ -776,12 +770,14 @@ mod tests {
             &json!({"project": dir.to_string_lossy(), "kind": "caption",
                     "id": "HEADLINE", "captionText": "first", "duration": 3.0}),
             None,
+            &measured,
         )
         .unwrap();
         upsert_layer(
             &json!({"project": dir.to_string_lossy(), "kind": "caption",
                     "id": "HEADLINE", "captionText": "second", "duration": 7.0}),
             None,
+            &measured,
         )
         .unwrap();
         let meta = read(&dir);
@@ -819,6 +815,7 @@ mod tests {
                     "file": shot.to_string_lossy(),
                     "placement": {"height": 400, "anchor": "center"}}),
             None,
+            &measured,
         )
         .unwrap();
         let meta = read(&dir);

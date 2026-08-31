@@ -277,6 +277,44 @@ pub fn distill_silences(log: &str, duration: f64, threshold_db: f64, min_seconds
     })
 }
 
+/// The server's answer to promo-author's probe seam: ffprobe, best
+/// effort — absent facts stay absent and the document logic degrades the
+/// way the format does.
+pub fn host_probe(path: &Path, _video: bool) -> promo_author::MediaInfo {
+    promo_author::MediaInfo {
+        duration: probe_duration(path).ok(),
+        pixels: probe_pixels(path).ok(),
+    }
+}
+
+fn probe_pixels(path: &Path) -> Result<(f64, f64), String> {
+    let out = std::process::Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(path)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut parts = text.trim().split(',');
+    let width: f64 = parts
+        .next()
+        .and_then(|w| w.parse().ok())
+        .ok_or("no width")?;
+    let height: f64 = parts
+        .next()
+        .and_then(|h| h.parse().ok())
+        .ok_or("no height")?;
+    Ok((width, height))
+}
+
 fn probe_duration(path: &Path) -> Result<f64, String> {
     let out = std::process::Command::new("ffprobe")
         .args([

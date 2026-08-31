@@ -8,6 +8,7 @@ license.workspace = true
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
+promo-author = { path = "../promo-author" }
 promo-model = { path = "../promo-model" }
 # The CLI's host (render::Renderer), re-exposed over the C ABI so non-Rust
 # front ends drive the same implementation the render oracle runs.

@@ -367,6 +367,72 @@ pub extern "C" fn promo_schema_full_text() -> *mut c_char {
     to_c_string(promo_model::SCHEMA)
 }
 
+/// The format as a generated, types-only JSON Schema — the same
+/// `wire_schema` the headless server serves, so an app's
+/// `promo_schema_types` cannot drift from it.
+#[no_mangle]
+pub extern "C" fn promo_schema_types_text() -> *mut c_char {
+    let text = serde_json::to_string_pretty(&promo_model::wire_schema()).unwrap_or_default();
+    to_c_string(&text)
+}
+
+/// The scaffold, over the C ABI: the SAME implementation the headless
+/// server runs (`promo-author`), so "promo_init on the app's server" and
+/// "promo_init headless" are one behavior. Answers a JSON envelope —
+/// {"ok": message} or {"error": message} — because a C boundary has no
+/// Result.
+#[no_mangle]
+pub extern "C" fn promo_author_init(args_json: *const c_char) -> *mut c_char {
+    author_envelope(args_json, |args| promo_author::init(args, None))
+}
+
+/// `media_info_json` is the HOST's probing — {"duration": s?, "pixelWidth":
+/// w?, "pixelHeight": h?} for the file being staged — because the app
+/// measures with its own stack, not ffprobe. Empty or null means unprobed.
+#[no_mangle]
+pub extern "C" fn promo_author_upsert_layer(
+    args_json: *const c_char,
+    media_info_json: *const c_char,
+) -> *mut c_char {
+    let info = parse_c_json(media_info_json).unwrap_or(serde_json::Value::Null);
+    let probe = move |_: &std::path::Path, _: bool| promo_author::MediaInfo {
+        duration: info.get("duration").and_then(|v| v.as_f64()),
+        pixels: match (
+            info.get("pixelWidth").and_then(|v| v.as_f64()),
+            info.get("pixelHeight").and_then(|v| v.as_f64()),
+        ) {
+            (Some(w), Some(h)) => Some((w, h)),
+            _ => None,
+        },
+    };
+    author_envelope(args_json, |args| {
+        promo_author::upsert_layer(args, None, &probe)
+    })
+}
+
+fn parse_c_json(raw: *const c_char) -> Option<serde_json::Value> {
+    if raw.is_null() {
+        return None;
+    }
+    let text = unsafe { std::ffi::CStr::from_ptr(raw) }.to_str().ok()?;
+    serde_json::from_str(text).ok()
+}
+
+fn author_envelope(
+    args_json: *const c_char,
+    run: impl FnOnce(&serde_json::Value) -> Result<String, String>,
+) -> *mut c_char {
+    let answer = match parse_c_json(args_json) {
+        Some(args) => run(&args),
+        None => Err("arguments are not valid JSON".into()),
+    };
+    let envelope = match answer {
+        Ok(message) => serde_json::json!({ "ok": message }),
+        Err(message) => serde_json::json!({ "error": message }),
+    };
+    to_c_string(&envelope.to_string())
+}
+
 fn to_c_string(message: &str) -> *mut c_char {
     match CString::new(message) {
         Ok(c) => c.into_raw(),

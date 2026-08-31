@@ -81,3 +81,19 @@ typography across the set; the headline must describe what the picture
 shows. Prefer a canvas the source drops into at native size. A set of
 stills is a slideshow with hard cuts — every frame is then a finished
 screenshot, and the same project doubles as a promo reel.
+
+## With the app attached
+
+The Mac app runs the same tool contract from Settings → Automation, plus
+what only an app can do:
+
+- `promo_open` puts the project in front of the person — and adopting it
+  is when the app takes ownership of the file (stop hand-editing then).
+- `promo_speak` writes and synthesizes narration with the person's own
+  provider key (never yours, never shipped).
+- `promo_render_gif` renders the looping GIF the app's Export tab makes.
+- Access is per-folder: a tool answering `access_required: <path>` means
+  the person approves that folder in PromoShot once, then retry. The
+  app's `promo_workspace` names a pre-approved folder.
+- Free-tier renders through the app carry the PromoShot watermark,
+  exactly as in the app.

@@ -1,16 +1,11 @@
 [package]
-name = "promoshot-mcp"
+name = "promo-author"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "MCP server for rendering PromoShot projects headless, over the promo CLI"
-
-[[bin]]
-name = "promoshot-mcp"
-path = "src/main.rs"
+description = "Scaffold tools over the .promo format: init and upsert, one implementation for every server"
 
 [dependencies]
-promo-author = { path = "../promo-author" }
 promo-model = { path = "../promo-model" }
 serde_json.workspace = true
 uuid = { version = "1", features = ["v4"] }

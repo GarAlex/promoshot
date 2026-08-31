@@ -24,7 +24,6 @@
 //!   --promo <path>      the CLI binary (else next to this executable,
 //!                       else PATH)
 
-mod authoring;
 mod media;
 
 use std::io::{BufRead, Write};
@@ -415,8 +414,10 @@ where
         "promo_media_probe" => media::probe(args),
         "promo_media_filmstrip" => media::filmstrip(args, &config.workspace),
         "promo_media_silences" => media::silences(args),
-        "promo_init" => authoring::init(args, config.root.as_deref()),
-        "promo_upsert_layer" => authoring::upsert_layer(args, config.root.as_deref()),
+        "promo_init" => promo_author::init(args, config.root.as_deref()),
+        "promo_upsert_layer" => {
+            promo_author::upsert_layer(args, config.root.as_deref(), &media::host_probe)
+        }
         "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
         "promo_schema_types" => {
             serde_json::to_string_pretty(&promo_model::wire_schema()).map_err(|e| e.to_string())
