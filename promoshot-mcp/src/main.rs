@@ -217,6 +217,13 @@ fn tool_descriptors() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "promo_schema_types",
+            "description": "The format as a JSON Schema, types only, GENERATED from the \
+                parser's own structs — fill a structured object against this instead of \
+                freehanding JSON; the prose lives in promo_schema.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
             "name": "promo_schema_full",
             "description": "The whole .promo format, from the same single file the \
                 engine compiles in — sprites, masks, motion paths, duration rules, \
@@ -349,6 +356,9 @@ where
         "promo_init" => authoring::init(args, config.root.as_deref()),
         "promo_upsert_layer" => authoring::upsert_layer(args, config.root.as_deref()),
         "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
+        "promo_schema_types" => {
+            serde_json::to_string_pretty(&promo_model::wire_schema()).map_err(|e| e.to_string())
+        }
         "promo_workspace" => {
             std::fs::create_dir_all(&config.workspace)
                 .map_err(|e| format!("could not create workspace: {e}"))?;
@@ -501,6 +511,7 @@ mod tests {
                 "promo_validate",
                 "promo_inspect",
                 "promo_schema",
+                "promo_schema_types",
                 "promo_schema_full",
                 "promo_render_still",
                 "promo_render_frames",

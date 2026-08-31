@@ -214,4 +214,9 @@ redesign:
 
 Everything else — sprites, masks, motion paths, drawings, narration,
 duration rules, waits, gradients, tiled plates, palette roles — is in
-`promo_schema_full`, with the same one-file authority behind both.
+`promo_schema_full`, with the same one-file authority behind both. And
+`promo_schema_types` is the format as a JSON Schema, generated from the
+parser's own structs — fill a structured object against it instead of
+freehanding, and put
+`"$schema": "https://raw.githubusercontent.com/GarAlex/promoshot/main/docs/promo.schema.json"`
+in a metadata.json for editor autocomplete.

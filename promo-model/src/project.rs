@@ -34,7 +34,7 @@ macro_rules! tolerant_enum {
     // variant. They never serialize, so they stay out of the enum itself.
     ($name:ident, $fallback:ident, [$(($variant:ident, $raw:literal)),+ $(,)?],
      legacy: [$(($legacy_variant:ident, $legacy_raw:literal)),* $(,)?]) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
         pub enum $name {
             $(#[serde(rename = $raw)] $variant,)+
         }
@@ -65,7 +65,7 @@ macro_rules! tolerant_enum {
 /// which throws on unknown values — decoding must fail the same way).
 macro_rules! strict_enum {
     ($name:ident, [$(($variant:ident, $raw:literal)),+ $(,)?]) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
         pub enum $name {
             $(#[serde(rename = $raw)] $variant,)+
         }
@@ -190,7 +190,7 @@ tolerant_enum!(PlacementMode, Fit, [(Fit, "fit"), (Fill, "fill")]);
 /// every reader computes the same numbers. A placement with none of
 /// `height`/`width`/`mode` is a position-only rule: the box keeps the
 /// keyframe's own zoom and only hangs from the anchor.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Placement {
     /// Drawn height in canvas pixels.
@@ -335,7 +335,7 @@ tolerant_enum!(
 /// one or the other; `promo validate` names the conflict when a caption
 /// states both. With neither, the reveal spreads across the layer's own
 /// duration, so it lands with the caption rather than at some fixed rate.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TextReveal {
     #[serde(default = "reveal_unit_default")]
@@ -414,7 +414,7 @@ impl TextReveal {
 /// `brightness` is additive around 0; `tint` multiplies `tintHex` in at
 /// `tintAmount` (a gel — 1 is fully gelled). Applied in that order, so
 /// saturation 0 plus a warm tint reads as a duotone.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerAdjustments {
     #[serde(default, skip_serializing_if = "is_none")]
@@ -441,7 +441,7 @@ pub struct LayerAdjustments {
 /// EDITOR added (moves, zooms, pans, rotations, rising words), which is
 /// what reads as "rendered" without it. Footage carries its own camera
 /// blur already, and re-deriving it would mean N decodes per output frame.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MotionBlur {
     pub shutter: f64,
@@ -458,7 +458,7 @@ pub struct MotionBlur {
 /// Push only has something to push at a resource SWAP, where the outgoing
 /// material is known. At a layer's own edge there is nothing underneath that
 /// belongs to it, so it behaves as a slide.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerTransition {
     pub kind: TransitionKind,
@@ -555,7 +555,7 @@ tolerant_enum!(
 // ---------------------------------------------------------------------------
 // Subtitles
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleStyle {
     /// Where the caption BOX hangs, in the same placement language media
@@ -622,7 +622,7 @@ pub struct SubtitleStyle {
     pub reveal: Option<TextReveal>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SubtitleVoiceClip {
     pub filename: String,
     pub kind: SubtitleVoiceKind,
@@ -678,7 +678,7 @@ impl<'de> Deserialize<'de> for SubtitleEntry {
 
 impl Serialize for SubtitleEntry {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        #[derive(Serialize)]
+        #[derive(Serialize, schemars::JsonSchema)]
         struct Wire<'a> {
             id: &'a str,
             text: &'a str,
@@ -701,7 +701,7 @@ impl Serialize for SubtitleEntry {
 // ---------------------------------------------------------------------------
 // Composition settings + keyframes
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoKeyframe {
     #[serde(default)]
@@ -719,7 +719,7 @@ fn default_transition() -> f64 {
     0.5
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BackgroundKeyframe {
     #[serde(default)]
@@ -882,7 +882,7 @@ impl Default for CompositionSettings {
     }
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 struct CompositionSettingsWire {
     background_gradient: Option<BackgroundGradient>,
@@ -1026,7 +1026,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
 
 impl Serialize for CompositionSettings {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        #[derive(Serialize)]
+        #[derive(Serialize, schemars::JsonSchema)]
         #[serde(rename_all = "camelCase")]
         struct Wire<'a> {
             canvas_width: f64,
@@ -1131,7 +1131,7 @@ impl Serialize for CompositionSettings {
 // ---------------------------------------------------------------------------
 // Layers
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLayerKeyframe {
     pub id: String,
@@ -1302,7 +1302,7 @@ pub struct ProjectLayerKeyframe {
 /// with ffmpeg (about 0.3s for a few seconds of 1440x900) and play the reversed
 /// copy forward — but as a cached derived artifact, not as a playback mode:
 /// decoding an inter-frame codec backwards costs a seek per frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BeyondEnd {
     /// Freeze on the last frame. The default, and what happens today.
@@ -1329,7 +1329,7 @@ pub enum BeyondEnd {
 /// no path at all, which makes "add a path" a safe, visible first step). One
 /// control is a quadratic curve, two a cubic — the pen-tool shape everyone
 /// already knows from vector editors.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PathDocument {
     pub start: Point,
@@ -1370,7 +1370,7 @@ impl CompositionSettings {
 }
 
 /// The shape of a background gradient.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum GradientKind {
     /// Colours run along the line from `start` to `end`.
@@ -1386,7 +1386,7 @@ pub enum GradientKind {
 /// them, animating `start` and `end` along the axis by exactly one period
 /// moves the pattern without the ends ever coming into view. Under `Clamp`
 /// the same animation just drags two flat regions across the canvas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum GradientRepeat {
     /// The end colours extend outward forever. The default.
@@ -1407,7 +1407,7 @@ pub enum GradientRepeat {
 /// opened happily made the engine refuse the whole project. Refusing to
 /// decode is this format's version gate (see `ProjectResourceKind`), not
 /// its authoring-mistake channel; `promo_validate` is that.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientStop {
     #[serde(default = "default_black")]
@@ -1425,7 +1425,7 @@ pub struct GradientStop {
 /// look. They also make a scroll expressible as a number rather than a pixel
 /// count: shifting `start` and `end` by 1.0 along the axis is exactly one
 /// period.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BackgroundGradient {
     pub kind: GradientKind,
@@ -1536,7 +1536,7 @@ impl BackgroundGradient {
 }
 
 /// How a resource's pixels are sampled when the renderer scales them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ResourceSampling {
     /// Bilinear. The default everywhere, and what a photograph wants.
@@ -1557,7 +1557,7 @@ pub enum ResourceSampling {
 /// SAMPLING and the movement happens in the geometry. The two never meet.
 ///
 /// Frames run left to right, top to bottom — the order every exporter writes.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SpriteSheet {
     pub columns: u32,
@@ -1668,7 +1668,7 @@ impl SpriteSheet {
 /// which absorbs the path's own scale, rotation and place on the canvas. So
 /// one curve is a swoop for any pair of keyframes, at any distance or angle,
 /// and removing it leaves a straight line — exactly today's behaviour.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MotionPath {
     /// The `path` resource to follow.
@@ -1691,7 +1691,7 @@ pub struct MotionPath {
     pub end_at: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLayer {
     pub id: String,
@@ -1829,7 +1829,7 @@ pub struct ProjectLayer {
 /// run — a UI can treat one as a group without storing a group. Cycles become
 /// possible (two neighbours each waiting on the other) and are found while
 /// resolving rather than prevented by the shape.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerTiming {
     /// Absent means the layer's own `start_time` stands.
@@ -1841,7 +1841,7 @@ pub struct LayerTiming {
     pub end: Option<TimingAnchor>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TimingAnchor {
     pub from: TimingReference,
@@ -1849,7 +1849,7 @@ pub struct TimingAnchor {
     pub offset: f64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TimingReference {
     PreviousStart,
@@ -1870,7 +1870,7 @@ pub enum TimingReference {
 /// The time-twin of `placement`: stored, never baked, resolved on every open.
 /// `start_time`/`duration` remain the resolved answer — every renderer keeps
 /// reading plain numbers, exactly as with anchors.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DurationRule {
     pub kind: DurationRuleKind,
@@ -1879,7 +1879,7 @@ pub struct DurationRule {
     pub tail: Option<f64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum DurationRuleKind {
     /// Duration is the RESOURCE's content length — an audio layer that plays
@@ -1903,7 +1903,7 @@ impl ProjectLayer {
 // ---------------------------------------------------------------------------
 // Resources
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoTrimKeyframe {
     pub id: String,
@@ -1913,7 +1913,7 @@ pub struct VideoTrimKeyframe {
     pub extended_pause_duration: Option<f64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct VideoTrimRange {
     pub start: f64,
     pub end: f64,
@@ -1934,7 +1934,7 @@ impl VideoTrimRange {
 /// A cut's fields shadow the resource's. Nothing else changes: a layer that
 /// names one is mapped through exactly the same code as a layer that does
 /// not, because the cut is resolved into a resource before mapping sees it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaCut {
     pub id: String,
@@ -1962,7 +1962,7 @@ pub struct MediaCut {
 
 /// Mirrors `ProjectImageCut` custom decode: `filename` defaults to "", the
 /// rect is re-normalized into the unit square.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectImageCut {
     pub id: String,
@@ -2000,7 +2000,7 @@ impl<'de> Deserialize<'de> for ProjectImageCut {
 
 /// Mirrors `ResourceFrame`: every field decodes tolerantly to its default and
 /// every field is always encoded.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ResourceFrame {
     pub kind: ResourceFrameKind,
@@ -2052,7 +2052,7 @@ impl Default for ResourceFrame {
 
 // Drawings ------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingShape {
     pub id: String,
@@ -2077,7 +2077,7 @@ pub struct DrawingShape {
 
 /// Mirrors `DrawingDocument`: legacy `canvasSize` is ignored on decode and
 /// never re-encoded.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DrawingDocument {
     pub shapes: Vec<DrawingShape>,
@@ -2109,7 +2109,7 @@ impl<'de> Deserialize<'de> for DrawingDocument {
 /// over the colour), and optionally an image drawn per `fill`. A
 /// background is scenery, not media — it never takes borders, corner
 /// radius or shadows. Rung 16 rides on the KIND, not these fields.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct BackgroundStyle {
     pub fill: BackgroundFill,
@@ -2158,7 +2158,7 @@ impl Default for BackgroundFill {
 }
 
 /// One layer's start or end, as something that frees a waiting keyframe.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerRelease {
     /// The layer whose moment this is.
@@ -2179,7 +2179,7 @@ tolerant_enum!(ReleaseMoment, End, [(Start, "start"), (End, "end"),]);
 
 /// `audioGain` (0…4) collapses into `volume` (0…1) when `volume` is absent,
 /// and `disabledAudioTrackIndices` is deduped / filtered / sorted.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectResource {
     pub id: String,
@@ -2400,7 +2400,7 @@ impl ProjectResource {
 /// and a row next to the videos would be noise. The SET is a resource —
 /// `ProjectResourceKind::Palette`, which is how a whole theme is shared and
 /// swapped — but that is a different object at a different grain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteColor {
     /// Referenced as `@name`. Matched case-insensitively, because a person
@@ -2409,7 +2409,7 @@ pub struct PaletteColor {
     pub color_hex: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectExport {
     pub id: String,
@@ -2426,7 +2426,7 @@ pub struct ProjectExport {
 }
 
 /// Top-level `metadata.json` (Swift `ProjectMetadata`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub id: String,
@@ -3567,5 +3567,28 @@ mod sprite_tests {
         let text = serde_json::to_string(&plain).unwrap();
         assert!(!text.contains("sprite"), "{text}");
         assert!(!text.contains("sampling"), "{text}");
+    }
+}
+
+// The machine schema delegates to the WIRE structs where the public type
+// encodes through one: the wire struct carries the serde attributes, so its
+// generated schema is the shape a file actually holds. SubtitleEntry is the
+// legacy exception — always [] in an authored file — and answers a plain
+// object rather than dignifying its migration shim with a shape.
+impl schemars::JsonSchema for CompositionSettings {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CompositionSettings".into()
+    }
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        CompositionSettingsWire::json_schema(generator)
+    }
+}
+
+impl schemars::JsonSchema for SubtitleEntry {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "SubtitleEntry".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": "object" })
     }
 }

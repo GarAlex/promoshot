@@ -31,6 +31,41 @@ pub const SCHEMA: &str = include_str!("schema.md");
 /// moves. The full document stays the authority behind both.
 pub const SCHEMA_QUICK: &str = include_str!("schema-quick.md");
 
+/// The machine half of the format: a JSON Schema GENERATED from the same
+/// serde structs the parser runs, so it cannot say anything the parser
+/// would not accept. Types only — descriptions are stripped, because the
+/// essay is `SCHEMA` and duplicating it here would just be a second copy
+/// to rot. Structured-output models fill this; humans read the markdown.
+pub fn wire_schema() -> serde_json::Value {
+    let schema = schemars::schema_for!(ProjectMetadata);
+    let mut value = serde_json::to_value(schema).unwrap_or_default();
+    strip_descriptions(&mut value);
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "title".into(),
+            serde_json::Value::String(".promo metadata.json".into()),
+        );
+    }
+    value
+}
+
+fn strip_descriptions(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("description");
+            for entry in map.values_mut() {
+                strip_descriptions(entry);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                strip_descriptions(item);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub const METADATA_SCHEMA: u32 = 1;
 
 /// Core library version, surfaced through the FFI for the host gate test.
@@ -546,7 +581,7 @@ mod schema_doc_tests {
         }
     }
 
-    fn kitchen_sink() -> ProjectMetadata {
+    pub(crate) fn kitchen_sink() -> ProjectMetadata {
         ProjectMetadata {
             id: "T".into(),
             name: "Everything".into(),
@@ -744,5 +779,69 @@ mod schema_doc_tests {
         let meta = kitchen_sink();
         let back = ProjectMetadata::from_json(&meta.to_json().expect("encodes")).expect("decodes");
         assert_eq!(back, meta);
+    }
+}
+
+#[cfg(test)]
+mod wire_schema_tests {
+    use super::*;
+
+    /// The generated schema must accept everything the format calls a
+    /// project: the fully populated fixture (every wire key), and all four
+    /// quick-schema recipes. Held with a real validator, so "generated
+    /// from the structs" is proven against documents, not assumed.
+    #[test]
+    fn the_recipes_and_the_full_fixture_satisfy_the_machine_schema() {
+        let schema = wire_schema();
+        let validator = jsonschema::validator_for(&schema).expect("schema compiles");
+
+        let mut checked = 0;
+        let mut rest = SCHEMA_QUICK;
+        while let Some(start) = rest.find("```json") {
+            let body = &rest[start + 7..];
+            let end = body.find("```").expect("unclosed fence");
+            let recipe: serde_json::Value =
+                serde_json::from_str(body[..end].trim()).expect("recipe parses");
+            let errors: Vec<String> = validator
+                .iter_errors(&recipe)
+                .map(|e| format!("{} at {}", e, e.instance_path))
+                .collect();
+            assert!(errors.is_empty(), "recipe {checked}: {errors:?}");
+            checked += 1;
+            rest = &body[end + 3..];
+        }
+        assert_eq!(checked, 4);
+
+        let full =
+            serde_json::to_value(super::schema_doc_tests::kitchen_sink()).expect("fixture encodes");
+        let errors: Vec<String> = validator
+            .iter_errors(&full)
+            .map(|e| format!("{} at {}", e, e.instance_path))
+            .collect();
+        assert!(errors.is_empty(), "full fixture: {errors:?}");
+    }
+
+    /// The checked-in copy (docs/promo.schema.json — what a metadata.json
+    /// can reference as $schema for editor autocomplete) must BE the
+    /// generator's output. Regenerate with:
+    ///   cargo run -p promo-cli -- schema --types > docs/promo.schema.json
+    #[test]
+    fn the_checked_in_schema_is_the_generated_one() {
+        let committed = include_str!("../../docs/promo.schema.json");
+        let generated = serde_json::to_string_pretty(&wire_schema()).expect("serializes") + "\n";
+        assert_eq!(
+            committed, generated,
+            "docs/promo.schema.json is stale — regenerate with \
+             `cargo run -p promo-cli -- schema --types > docs/promo.schema.json`"
+        );
+    }
+
+    /// Types only: the essay stays in the markdown. A description leaking
+    /// in means the doc-comment stripper broke, and two copies of the
+    /// prose begin to drift.
+    #[test]
+    fn the_machine_schema_carries_no_prose() {
+        let text = wire_schema().to_string();
+        assert!(!text.contains("\"description\""), "types only, as promised");
     }
 }

@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// `CGPoint` — serializes as `[x, y]`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default, schemars::JsonSchema)]
 pub struct Point(pub f64, pub f64);
 
 impl Point {
@@ -19,7 +19,7 @@ impl Point {
 }
 
 /// `CGSize` — serializes as `[width, height]`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default, schemars::JsonSchema)]
 pub struct Size(pub f64, pub f64);
 
 impl Size {
@@ -35,7 +35,7 @@ impl Size {
 }
 
 /// `CGRect` — serializes as `[[x, y], [width, height]]`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default, schemars::JsonSchema)]
 pub struct Rect(pub Point, pub Size);
 
 impl Rect {

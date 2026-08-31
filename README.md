@@ -83,7 +83,10 @@ Client configuration (Claude Code, or any MCP client):
 ```
 
 Tools: `promo_schema` (authoring subset + four validated recipes;
-`promo_schema_full` is the whole format), `promo_validate`, `promo_inspect`,
+`promo_schema_full` is the whole format; `promo_schema_types` is the format
+as a generated, types-only JSON Schema — also checked in at
+[docs/promo.schema.json](docs/promo.schema.json) for `$schema` editor
+autocomplete), `promo_validate`, `promo_inspect`,
 `promo_render_still`, `promo_render_frames`, `promo_render_video`,
 `promo_workspace` — and the editor pair, `promo_init` and
 `promo_upsert_layer`: create a project, add image/video/caption layers with

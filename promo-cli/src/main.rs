@@ -21,7 +21,7 @@ promo — render a PromoShot project folder
 
 USAGE:
     promo validate <project-dir>
-    promo schema [--full]
+    promo schema [--full|--types]
     promo inspect <project-dir>
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
     promo frames  <project-dir> --out <dir> [--fps <n>] [--from <s>] [--to <s>] [--size <WxH>]
@@ -71,15 +71,17 @@ fn run(args: &[String]) -> Result<(), String> {
     // Describes the FORMAT, not a project, so it takes no directory — and
     // must be answered before the prelude below demands one.
     if command == "schema" {
-        let full = rest.iter().any(|a| a == "--full");
-        print!(
-            "{}",
-            if full {
-                promo_model::SCHEMA
-            } else {
-                promo_model::SCHEMA_QUICK
-            }
-        );
+        if rest.iter().any(|a| a == "--types") {
+            let schema = promo_model::wire_schema();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        } else if rest.iter().any(|a| a == "--full") {
+            print!("{}", promo_model::SCHEMA);
+        } else {
+            print!("{}", promo_model::SCHEMA_QUICK);
+        }
         return Ok(());
     }
     let dir = rest
