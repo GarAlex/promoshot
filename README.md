@@ -159,13 +159,13 @@ caption asks the question, the two frames answer it.
        alt="The same frame rendered on macOS (left) and Linux (right), near-identical: a bordered gradient card over a dark background, captioned 'Same pixels as the Mac?'.">
 </p>
 
-Try it yourself — [examples/LinuxSmoke.promo](examples/LinuxSmoke.promo)
-is a complete project (synthetic media, ~450 KB): a clip with audio, an
-image, palette-named colours, placement rules, easing, and a keyframe
-that waits for another layer:
+Try it yourself — [examples/](examples/) holds one runnable project per
+`promo_schema` recipe (each metadata.json IS its recipe, pinned by a
+test), from the device-framed product card to the 9:16 re-stamp — plus
+the kitchen-sink [LinuxSmoke.promo](examples/LinuxSmoke.promo):
 
 ```
-promo video examples/LinuxSmoke.promo --out smoke.mp4
+promo video examples/ProductCard.promo --out card.mp4
 ```
 
 ## Authoring a project

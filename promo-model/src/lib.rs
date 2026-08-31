@@ -49,6 +49,22 @@ pub fn wire_schema() -> serde_json::Value {
     value
 }
 
+/// The four complete projects embedded in `SCHEMA_QUICK`, in document
+/// order — every ```json fence is one. The recipe tests, the machine-schema
+/// tests and the examples' own golden all read THIS, so "the recipes" is
+/// one list everywhere.
+pub fn quick_schema_recipes() -> Vec<&'static str> {
+    let mut out = Vec::new();
+    let mut rest = SCHEMA_QUICK;
+    while let Some(start) = rest.find("```json") {
+        let body = &rest[start + 7..];
+        let Some(end) = body.find("```") else { break };
+        out.push(body[..end].trim());
+        rest = &body[end + 3..];
+    }
+    out
+}
+
 fn strip_descriptions(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
@@ -795,22 +811,16 @@ mod wire_schema_tests {
         let schema = wire_schema();
         let validator = jsonschema::validator_for(&schema).expect("schema compiles");
 
-        let mut checked = 0;
-        let mut rest = SCHEMA_QUICK;
-        while let Some(start) = rest.find("```json") {
-            let body = &rest[start + 7..];
-            let end = body.find("```").expect("unclosed fence");
-            let recipe: serde_json::Value =
-                serde_json::from_str(body[..end].trim()).expect("recipe parses");
+        let recipes = quick_schema_recipes();
+        assert_eq!(recipes.len(), 4);
+        for (index, text) in recipes.iter().enumerate() {
+            let recipe: serde_json::Value = serde_json::from_str(text).expect("recipe parses");
             let errors: Vec<String> = validator
                 .iter_errors(&recipe)
                 .map(|e| format!("{} at {}", e, e.instance_path))
                 .collect();
-            assert!(errors.is_empty(), "recipe {checked}: {errors:?}");
-            checked += 1;
-            rest = &body[end + 3..];
+            assert!(errors.is_empty(), "recipe {index}: {errors:?}");
         }
-        assert_eq!(checked, 4);
 
         let full =
             serde_json::to_value(super::schema_doc_tests::kitchen_sink()).expect("fixture encodes");
@@ -819,6 +829,41 @@ mod wire_schema_tests {
             .map(|e| format!("{} at {}", e, e.instance_path))
             .collect();
         assert!(errors.is_empty(), "full fixture: {errors:?}");
+    }
+
+    /// Each recipe ships as a runnable example — synthetic media included —
+    /// and the example's metadata.json IS the recipe, byte for byte. Edit
+    /// either and this test walks you to the other; the doc can never teach
+    /// one thing while examples/ demonstrates another.
+    #[test]
+    fn the_examples_are_the_recipes() {
+        let examples = [
+            (
+                "ProductCard",
+                include_str!("../../examples/ProductCard.promo/metadata.json"),
+            ),
+            (
+                "TwoClips",
+                include_str!("../../examples/TwoClips.promo/metadata.json"),
+            ),
+            (
+                "FocusPush",
+                include_str!("../../examples/FocusPush.promo/metadata.json"),
+            ),
+            (
+                "Story",
+                include_str!("../../examples/Story.promo/metadata.json"),
+            ),
+        ];
+        let recipes = quick_schema_recipes();
+        assert_eq!(recipes.len(), examples.len());
+        for ((name, staged), recipe) in examples.iter().zip(recipes) {
+            assert_eq!(
+                staged.trim(),
+                recipe,
+                "examples/{name}.promo drifted from its recipe in schema-quick.md"
+            );
+        }
     }
 
     /// The checked-in copy (docs/promo.schema.json — what a metadata.json

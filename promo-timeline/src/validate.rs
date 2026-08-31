@@ -1023,14 +1023,7 @@ mod palette_tests {
     #[test]
     fn every_quick_schema_recipe_validates_clean() {
         let doc = promo_model::SCHEMA_QUICK;
-        let mut recipes = Vec::new();
-        let mut rest = doc;
-        while let Some(start) = rest.find("```json") {
-            let body = &rest[start + 7..];
-            let end = body.find("```").expect("unclosed fence");
-            recipes.push(body[..end].trim());
-            rest = &body[end + 3..];
-        }
+        let recipes = promo_model::quick_schema_recipes();
         assert_eq!(recipes.len(), 4, "four recipes, as promised");
         for (index, recipe) in recipes.iter().enumerate() {
             let meta = promo_model::ProjectMetadata::from_json(recipe)
