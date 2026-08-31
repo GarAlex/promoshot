@@ -121,14 +121,34 @@ docker build -t promoshot-mcp .
 # then command: docker, args: ["run","-i","--rm","-v","/ABS/PATH/Promo:/projects","promoshot-mcp"]
 ```
 
-**3. Install the skill** — the workflow layer the tools do not carry:
+**3. Skill (the workflow)**
+
+Same file everywhere: [skill/SKILL.md](skill/SKILL.md).
 
 ```bash
-cp -r skill ~/.claude/skills/promoshot
+REPO=https://github.com/GarAlex/promoshot
+git clone --depth 1 $REPO /tmp/promoshot
+
+# Claude Code (Grok Build also scans this folder)
+mkdir -p ~/.claude/skills/promoshot
+cp /tmp/promoshot/skill/SKILL.md ~/.claude/skills/promoshot/SKILL.md
+
+# Grok Build explicit path
+mkdir -p ~/.grok/skills/promoshot
+cp /tmp/promoshot/skill/SKILL.md ~/.grok/skills/promoshot/SKILL.md
+
+# OpenAI Codex / many others
+mkdir -p ~/.agents/skills/promoshot
+cp /tmp/promoshot/skill/SKILL.md ~/.agents/skills/promoshot/SKILL.md
+
+# Cursor project (in the repo the user is editing, not this engine repo)
+mkdir -p .cursor/rules
+cp /tmp/promoshot/skill/SKILL.md .cursor/rules/promoshot.md
+# or: mkdir -p .agents/skills/promoshot && cp SKILL.md there
 ```
 
-— or hand [skill/SKILL.md](skill/SKILL.md) to any agent that reads
-instructions; it assumes only these tools (or the CLI).
+Any agent that reads instructions can be handed the file directly; it
+assumes only these tools (or the CLI).
 
 **4. Verify** — ask the agent for a render:
 
