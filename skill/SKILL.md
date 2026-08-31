@@ -1,0 +1,77 @@
+---
+name: promoshot
+description: Author and render PromoShot video projects headless — App Store shots, promo reels, slideshows — by writing metadata.json (or using the server's editor tools), validating, and rendering through the promoshot-mcp server or the promo CLI. Use when asked to make a promo video, marketing screenshots, or to edit a .promo project without the PromoShot app.
+---
+
+# Authoring PromoShot projects, headless
+
+A PromoShot project is a **folder named `<Name>.promo`**: `metadata.json`
+plus `Resources/` holding the media it names. The file is the interface —
+everything below writes, checks, or renders that file, and a project you
+author here opens in the PromoShot apps unchanged.
+
+## The loop
+
+1. **Learn the format** — `promo_schema` once: the authoring subset plus
+   four complete, validated recipes (a device-framed product card, two
+   clips under a wipe, a Ken Burns push with a lower caption, a 9:16
+   re-stamp). `promo_schema_full` is the whole format when a field is not
+   in the subset; `promo_schema_types` is a generated, types-only JSON
+   Schema to fill structured output against.
+2. **Look at the footage first** — the senses, before composing:
+   - `promo_media_probe` — container, duration, streams, fps, display
+     rotation, channels.
+   - `promo_media_filmstrip` — a contact sheet of a SOURCE clip, with the
+     time each cell samples. Read it before deciding what a clip shows.
+   - `promo_media_silences` — silence spans and their inverse; cuts and
+     captions land on those boundaries.
+3. **Author** — either write `metadata.json` directly (start from a
+   recipe), or let the server spend the boilerplate:
+   - `promo_init` — folder, canvas, palette, background, ids minted.
+   - `promo_upsert_layer` — image/video/caption with a placement; media
+     copied in, durations and pixel sizes probed, the composition
+     re-stretched every call. Pass a returned layer id to update.
+4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
+   means "renders"; anything else is a silent correction named before you
+   see it in pixels. `promo_inspect` summarizes what is in the project —
+   canvas, layers by kind, undefined colours, missing media.
+5. **Render** — `promo_render_still` at a few moments to LOOK (a mis-aimed
+   viewport or an invisible caption costs seconds here, minutes in a
+   video), `promo_render_frames` for a sheet of moments across a range,
+   then `promo_render_video` for the mp4. Outputs land in the project's
+   `Exports/` and return paths, never bytes.
+
+The `promo` CLI is the same contract (`promo schema | validate | inspect |
+still | frames | video`), and `promo_workspace` names a folder for new
+projects.
+
+## The rules that are not in the schema
+
+- **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
+  first-class here; the apps mint UUIDs when they adopt the file. Never
+  reuse a spelling: validate names the collision.
+- **Stamp `"minReaderVersion": 18`** and think no more about it.
+- **Measure what you place.** A placed image resource wants
+  `pixelWidth`/`pixelHeight` (videos: `videoNaturalWidth`/`Height`) or
+  the rule anchors a square guess — validate says so. `promo_upsert_layer`
+  stamps them for you.
+- **Look before you ship.** A render is the only honest check of layout;
+  validation cannot see that a caption sits on top of the subject.
+- **Two captions never cross-fade**, and cross-dissolving layers need
+  OVERLAP — simultaneous end/start flashes the background.
+- **The app owns the file once it opens it.** If a person opens your
+  project in PromoShot, stop editing the JSON by hand; further changes
+  race the app.
+- Colours can be palette names (`"@accent"`); an undefined name renders
+  BLACK and validate names it. `@edge` is what a device frame's border
+  reads by default — define it when you frame.
+- For editor autocomplete in hand-written files, point `"$schema"` at
+  `docs/promo.schema.json` in this repo.
+
+## Design guidance for store work
+
+One short headline per shot, above the device; same background and
+typography across the set; the headline must describe what the picture
+shows. Prefer a canvas the source drops into at native size. A set of
+stills is a slideshow with hard cuts — every frame is then a finished
+screenshot, and the same project doubles as a promo reel.

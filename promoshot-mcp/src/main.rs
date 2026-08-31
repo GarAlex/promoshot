@@ -645,6 +645,25 @@ mod tests {
         std::fs::remove_dir_all(&outside).unwrap();
     }
 
+    /// The shipped skill (skill/SKILL.md) is the workflow layer over this
+    /// server, and a skill that names tools the server does not offer — or
+    /// misses ones it does — teaches wrongly. Held here, where the tool
+    /// list lives, the same discipline as the app's SkillDriftTests.
+    #[test]
+    fn the_skill_teaches_exactly_the_tools_the_server_offers() {
+        let skill = include_str!("../../skill/SKILL.md");
+        assert!(skill.starts_with("---\n"), "front matter, so it installs");
+        let tools = tool_descriptors();
+        for tool in tools.as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            assert!(skill.contains(name), "the skill never mentions `{name}`");
+        }
+        assert!(
+            skill.contains("minReaderVersion\": 18"),
+            "the stamp the skill teaches must be the current one"
+        );
+    }
+
     #[test]
     fn an_unknown_method_with_an_id_is_a_jsonrpc_error() {
         let req = serde_json::json!({ "jsonrpc": "2.0", "id": 6, "method": "resources/list" });

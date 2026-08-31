@@ -133,10 +133,25 @@ image bakes in `examples/LinuxSmoke.promo`, so it can prove itself with no
 mount at all. `server.json` is the MCP registry manifest for the published
 image (`ghcr.io/garalex/promoshot-mcp`).
 
+### The skill
+
+[skill/SKILL.md](skill/SKILL.md) is the workflow layer for agents — the
+loop (learn, look at the footage, author, check, render), the rules the
+schema does not carry, and the store-work guidance. Install it for Claude
+Code with:
+
+```
+cp -r skill ~/.claude/skills/promoshot
+```
+
+— or hand the file to any agent that reads instructions; it assumes only
+the MCP tools (or the CLI). A test pins it to the server's actual tool
+list, so it cannot teach tools that do not exist.
+
 The Mac app carries its own MCP server (Settings → Automation) sharing the
 core tool names, plus app-only abilities — opening the editor, speech
-synthesis. One skill drives both; the authoring pair and the types schema
-are headless-first.
+synthesis. The authoring pair, the senses and the types schema are
+headless-first.
 
 What a session looks like — three requests in, a validated project and a
 rendered frame out (the frame at the top of this page was made exactly this
