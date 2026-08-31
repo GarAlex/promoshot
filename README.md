@@ -90,7 +90,11 @@ as a generated, types-only JSON Schema — also checked in at
 [docs/promo.schema.json](docs/promo.schema.json) for `$schema` editor
 autocomplete), `promo_validate`, `promo_inspect`,
 `promo_render_still`, `promo_render_frames`, `promo_render_video`,
-`promo_workspace` — and the editor pair, `promo_init` and
+`promo_workspace`; the senses — `promo_media_probe`,
+`promo_media_filmstrip` (a contact sheet of a SOURCE clip, times per cell)
+and `promo_media_silences` (silence spans and their inverse), so an agent
+knows what footage holds before composing with it — and the editor pair,
+`promo_init` and
 `promo_upsert_layer`: create a project, add image/video/caption layers with
 placements; the server mints UUIDs, stamps pixel sizes, and keeps the
 composition covering its layers. The tools write ordinary `metadata.json`

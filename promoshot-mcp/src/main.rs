@@ -20,6 +20,7 @@
 //!                       else PATH)
 
 mod authoring;
+mod media;
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -282,6 +283,42 @@ fn tool_descriptors() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "promo_media_probe",
+            "description": "The facts of a source file before composing with it: container, \
+                duration, streams — codec, size, fps, display rotation, channels. \
+                Distilled JSON, not ffprobe's firehose.",
+            "inputSchema": { "type": "object",
+                "properties": { "file": { "type": "string" } },
+                "required": ["file"] }
+        },
+        {
+            "name": "promo_media_filmstrip",
+            "description": "Eyes on the footage: N evenly spaced frames tiled into one \
+                PNG contact sheet, sampled times returned so a cell maps to a moment. \
+                Look at this before deciding what a clip shows.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "file": { "type": "string" },
+                    "count": { "type": "number", "description": "Frames (default 12, max 48)" },
+                    "out": { "type": "string", "description":
+                        "Output PNG (default: the workspace folder)" }
+                },
+                "required": ["file"] }
+        },
+        {
+            "name": "promo_media_silences",
+            "description": "Ears on the footage: where the sound is NOT — silence spans \
+                and their inverse, the sound spans an edit actually wants. Cuts and \
+                captions land on these boundaries.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "file": { "type": "string" },
+                    "thresholdDb": { "type": "number", "description": "Default -35" },
+                    "minSeconds": { "type": "number", "description": "Default 0.35" }
+                },
+                "required": ["file"] }
+        },
+        {
             "name": "promo_init",
             "description": "Create a project folder: metadata.json boilerplate, canvas, \
                 palette, a background layer, ids minted. The file it writes is ordinary \
@@ -353,6 +390,9 @@ where
 {
     match name {
         "promo_schema" => Ok(promo_model::SCHEMA_QUICK.to_string()),
+        "promo_media_probe" => media::probe(args),
+        "promo_media_filmstrip" => media::filmstrip(args, &config.workspace),
+        "promo_media_silences" => media::silences(args),
         "promo_init" => authoring::init(args, config.root.as_deref()),
         "promo_upsert_layer" => authoring::upsert_layer(args, config.root.as_deref()),
         "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
@@ -517,6 +557,9 @@ mod tests {
                 "promo_render_frames",
                 "promo_render_video",
                 "promo_workspace",
+                "promo_media_probe",
+                "promo_media_filmstrip",
+                "promo_media_silences",
                 "promo_init",
                 "promo_upsert_layer"
             ],
