@@ -15,7 +15,7 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "minReaderVersion": 17, "trimStart": 0, "trimEnd": 0,
+  "minReaderVersion": 18, "trimStart": 0, "trimEnd": 0,
   "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
@@ -71,7 +71,7 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 17 at the top
+The format is ONE version: stamp "minReaderVersion": 18 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
@@ -83,6 +83,17 @@ When the app adopts such a project it mints a UUID for every short id
 and every reference follows through the same map — so keep ids UNIQUE:
 two records sharing a spelling would be folded into one, and
 promo_validate names exactly that before it happens.
+
+A CAPTION is typography, said in its own words: `fontSize` on a keyframe
+is the size in points (its own field; the legacy spelling on a caption
+layer was `zoom` carrying points, which is read forever — `fontSize` wins
+when both are present). `captionStyle.placement` hangs the caption box in
+the same placement language media layers use — `{ "anchor": "bottom",
+"offset": [0, -40] }` — where only `anchor` and `offset` are read: the
+box's size is the text at its fontSize plus padding, and validation names
+a height/width/mode here. With a placement present the margins keep only
+their other job, the WRAP width; without one the caption sits where the
+margins have always put it. Both fields are rung 18.
 
 A keyframe animates a layer over its LOCAL time:
 

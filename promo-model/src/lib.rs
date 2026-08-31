@@ -222,6 +222,13 @@ mod schema_doc_tests {
 
     fn full_caption_style() -> SubtitleStyle {
         SubtitleStyle {
+            placement: Some(Placement {
+                height: None,
+                width: None,
+                mode: None,
+                anchor: Some(Anchor::Bottom),
+                offset: Some([0.0, -40.0]),
+            }),
             left_margin: Some(90.0),
             right_margin: Some(90.0),
             vertical_margin: Some(880.0),
@@ -298,6 +305,7 @@ mod schema_doc_tests {
             time: 1.0,
             wait: true,
             zoom: Some(0.8),
+            font_size: Some(64.0),
             vertical_shift: Some(150.0),
             horizontal_shift: Some(240.0),
             color_hex: Some("@accent".into()),

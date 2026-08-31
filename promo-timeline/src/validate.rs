@@ -72,6 +72,22 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     }
 
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        // A caption placement reads anchor and offset only: the box's size
+        // is the text at its fontSize plus padding, so a size field here is
+        // a statement nothing reads.
+        if let Some(rule) = layer
+            .caption_style
+            .as_ref()
+            .and_then(|s| s.placement.as_ref())
+        {
+            if rule.sizes() {
+                out.push(format!(
+                    "layer \"{}\": captionStyle.placement sets height/width/mode — \
+                     a caption's size is its fontSize; only anchor and offset are read",
+                    layer.name
+                ));
+            }
+        }
         // Two ways to say one thing, saying different things. The renderer
         // picks the richer one; nothing said so until now.
         for (side, rich, fade) in [
@@ -1002,6 +1018,23 @@ mod palette_tests {
     #[test]
     fn a_defined_name_says_nothing() {
         assert!(warnings(&project(PALETTE, "", &caption("@text"))).is_empty());
+    }
+
+    /// A caption's size is its fontSize; a placement that also states
+    /// height/width/mode is saying something nothing reads.
+    #[test]
+    fn a_sizing_caption_placement_is_named() {
+        let layers = r#"{"id":"C","name":"Headline","sortIndex":0,"kind":"caption",
+            "isEnabled":true,"startTime":0,"captionText":"words",
+            "captionStyle":{"placement":{"height":300,"anchor":"bottom"}},
+            "keyframes":[]}"#;
+        let found = warnings(&project("", "", layers));
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("only anchor and offset are read")),
+            "{found:?}"
+        );
     }
 
     /// Two records wearing one id would be folded into ONE by the apps'

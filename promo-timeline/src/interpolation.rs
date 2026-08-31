@@ -540,13 +540,18 @@ pub fn layer_caption_values(
     base: CaptionValues,
 ) -> Option<CaptionValues> {
     let sorted = sorted_by_time(&layer.keyframes, |k| {
-        k.zoom.is_some() || k.vertical_shift.is_some() || k.horizontal_shift.is_some()
+        k.font_size.is_some()
+            || k.zoom.is_some()
+            || k.vertical_shift.is_some()
+            || k.horizontal_shift.is_some()
     });
     if sorted.is_empty() {
         return None;
     }
     let values = |k: &ProjectLayerKeyframe| CaptionValues {
-        font_size: k.zoom.unwrap_or(base.font_size),
+        // `fontSize` is the field; `zoom` is the legacy spelling of the
+        // same points and is read forever. The richer statement wins.
+        font_size: k.font_size.or(k.zoom).unwrap_or(base.font_size),
         vertical_margin: k.vertical_shift.unwrap_or(base.vertical_margin),
         left_margin: k.horizontal_shift.unwrap_or(base.left_margin),
     };
@@ -1020,6 +1025,28 @@ mod opacity_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `fontSize` is the field; `zoom` is the legacy spelling of the same
+    /// points on a caption layer. When a keyframe carries both, the richer
+    /// statement wins — and the legacy spelling alone still reads, forever.
+    #[test]
+    fn font_size_outranks_the_zoom_it_replaces() {
+        let both = layer(r#"{"id":"K","time":0,"zoom":54,"fontSize":72,"transitionDuration":0}"#);
+        let base = CaptionValues {
+            font_size: 48.0,
+            vertical_margin: 80.0,
+            left_margin: 60.0,
+        };
+        let resolved = layer_caption_values(&both, 0.0, base).expect("values");
+        assert!((resolved.font_size - 72.0).abs() < 1e-9, "fontSize wins");
+
+        let legacy = layer(r#"{"id":"K","time":0,"zoom":54,"transitionDuration":0}"#);
+        let resolved = layer_caption_values(&legacy, 0.0, base).expect("values");
+        assert!(
+            (resolved.font_size - 54.0).abs() < 1e-9,
+            "zoom alone still means points"
+        );
+    }
 
     fn layer(keyframes: &str) -> ProjectLayer {
         serde_json::from_str(&format!(

@@ -217,6 +217,44 @@ impl Placement {
     pub fn sizes(&self) -> bool {
         self.height.is_some() || self.width.is_some() || self.mode.is_some()
     }
+
+    /// Where a box of KNOWN size hangs: the anchor cell aligns the box's
+    /// own corner/edge/centre with the canvas's, offset nudges from there.
+    /// This is the caption flavour of placement — the box is the text at
+    /// its fontSize plus padding, already measured, so only `anchor` and
+    /// `offset` are read. Media placement resolves through the zoom track
+    /// instead (`promo-timeline::placement_position`), but the two share
+    /// this grid arithmetic by construction.
+    pub fn position_box(
+        &self,
+        box_width: f64,
+        box_height: f64,
+        canvas_width: f64,
+        canvas_height: f64,
+    ) -> (f64, f64) {
+        let anchor = self.anchor.unwrap_or(Anchor::Center);
+        let (column, row) = match anchor {
+            Anchor::TopLeft => (0, 0),
+            Anchor::Top => (1, 0),
+            Anchor::TopRight => (2, 0),
+            Anchor::Left => (0, 1),
+            Anchor::Center => (1, 1),
+            Anchor::Right => (2, 1),
+            Anchor::BottomLeft => (0, 2),
+            Anchor::Bottom => (1, 2),
+            Anchor::BottomRight => (2, 2),
+        };
+        let place = |span: f64, drawn: f64, cell: i32| match cell {
+            0 => 0.0,
+            1 => (span - drawn) / 2.0,
+            _ => span - drawn,
+        };
+        let offset = self.offset.unwrap_or([0.0, 0.0]);
+        (
+            place(canvas_width, box_width, column) + offset[0],
+            place(canvas_height, box_height, row) + offset[1],
+        )
+    }
 }
 strict_enum!(
     ImageOrientation,
@@ -520,6 +558,15 @@ tolerant_enum!(
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleStyle {
+    /// Where the caption BOX hangs, in the same placement language media
+    /// layers use — `anchor` on the nine-point grid plus `offset` pixels
+    /// (rung 18). Only those two fields are read on a caption: the box's
+    /// size is the text at `fontSize` plus padding, so `height`/`width`/
+    /// `mode` mean nothing here and validation says so. Margins keep their
+    /// other job — the WRAP WIDTH — and when a placement is present they
+    /// stop deciding position.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub placement: Option<Placement>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub left_margin: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -1111,6 +1158,12 @@ pub struct ProjectLayerKeyframe {
     pub wait: bool,
     #[serde(default, skip_serializing_if = "is_none")]
     pub zoom: Option<f64>,
+    /// Caption font size in points, its own field (rung 18). On a caption
+    /// layer the legacy spelling is `zoom` — points wearing a zoom's name —
+    /// and it is read forever; this field WINS when both are present, the
+    /// richer-statement rule every shorthand pair here follows.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub font_size: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub vertical_shift: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2488,6 +2541,19 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 18 is caption typography said in its own words: a keyframe
+        // `fontSize`, or a caption `placement`. Saved by an older reader the
+        // fields drop, the caption snaps back to zoom-as-points and margin
+        // position — the same destruction test every rung passed.
+        let caption_placed =
+            |style: &Option<SubtitleStyle>| style.as_ref().is_some_and(|s| s.placement.is_some());
+        if any_keyframe(|k| k.font_size.is_some())
+            || layers.iter().any(|l| caption_placed(&l.caption_style))
+            || resources.iter().any(|r| caption_placed(&r.caption_style))
+        {
+            return 18;
+        }
+
         // 17 is a PALETTE resource — the same strict-kind rule as 16.
         if resources
             .iter()
@@ -3252,6 +3318,64 @@ mod placement_model_tests {
                 .expect("re-decode");
         assert_eq!(back.padding, Some(30.0));
         assert_eq!(back.corner_radius, Some(4.0));
+    }
+}
+
+#[cfg(test)]
+mod caption_typography_tests {
+    use super::*;
+
+    /// Rung 18: caption typography in its own words. A keyframe `fontSize`
+    /// or a caption `placement` — dropped by an older reader's save, the
+    /// caption snaps back to zoom-as-points and margin position, so the
+    /// file must refuse to open there instead.
+    #[test]
+    fn caption_font_size_and_placement_are_rung_18_and_round_trip() {
+        let json = serde_json::json!({
+            "id": "P", "name": "p", "createdAt": 0.0, "state": "recorded",
+            "subtitles": [], "trimStart": 0.0, "trimEnd": 0.0,
+            "videoDuration": 0.0,
+            "compositionSettings": {},
+            "layers": [{
+                "id": "C", "name": "Headline", "sortIndex": 0,
+                "kind": "caption", "isEnabled": true, "startTime": 0.0,
+                "captionText": "Anchored",
+                "captionStyle": {"placement": {"anchor": "bottom", "offset": [0.0, -40.0]}},
+                "keyframes": [
+                    {"id": "K", "time": 0.0, "fontSize": 72.0, "transitionDuration": 0.0}
+                ]
+            }]
+        });
+        let project = ProjectMetadata::from_json(&json.to_string()).expect("decodes");
+        assert_eq!(project.minimum_reader_version(), 18);
+
+        let layer = &project.layers.as_ref().unwrap()[0];
+        assert_eq!(layer.keyframes[0].font_size, Some(72.0));
+        let rule = layer
+            .caption_style
+            .as_ref()
+            .and_then(|s| s.placement.as_ref())
+            .expect("placement survives");
+        assert_eq!(rule.anchor, Some(Anchor::Bottom));
+
+        let out = project.to_json().expect("encodes");
+        assert!(out.contains("fontSize"), "its own field on the wire");
+        assert!(out.contains("placement"), "and the rule beside the margins");
+
+        // Either field ALONE earns the rung.
+        let only_size = serde_json::json!({
+            "id": "P", "name": "p", "createdAt": 0.0, "state": "recorded",
+            "subtitles": [], "trimStart": 0.0, "trimEnd": 0.0,
+            "videoDuration": 0.0, "compositionSettings": {},
+            "layers": [{
+                "id": "C", "name": "H", "sortIndex": 0, "kind": "caption",
+                "isEnabled": true, "startTime": 0.0,
+                "keyframes": [{"id": "K", "time": 0.0, "fontSize": 60.0,
+                               "transitionDuration": 0.0}]
+            }]
+        });
+        let project = ProjectMetadata::from_json(&only_size.to_string()).expect("decodes");
+        assert_eq!(project.minimum_reader_version(), 18);
     }
 }
 

@@ -59,6 +59,12 @@ pub struct TextStyle {
     pub vertical_margin: f64,
     /// Line height as a multiple of font size.
     pub line_height: f64,
+    /// Where the box hangs, when a placement rule says so — the same
+    /// nine-anchor grid media layers use, only `anchor` and `offset` read
+    /// (a caption's size is typography, not a rule). Present, it decides
+    /// the position outright and the margins keep only their wrap-width
+    /// job.
+    pub placement: Option<promo_model::Placement>,
     /// Outline drawn around the glyphs, in canvas pixels. Zero width is no
     /// outline.
     ///
@@ -126,6 +132,7 @@ impl TextStyle {
             shadow_rgba,
             shadow_radius,
             shadow_offset,
+            placement,
             smoothing,
         } = self;
         TextStyle {
@@ -148,6 +155,14 @@ impl TextStyle {
             shadow_rgba: *shadow_rgba,
             shadow_radius: shadow_radius * factor,
             shadow_offset: [shadow_offset[0] * factor, shadow_offset[1] * factor],
+            // The offset is a length; the anchor is not.
+            placement: placement.as_ref().map(|rule| {
+                let mut scaled = rule.clone();
+                if let Some(offset) = scaled.offset {
+                    scaled.offset = Some([offset[0] * factor, offset[1] * factor]);
+                }
+                scaled
+            }),
             // Coverage gamma — dimensionless.
             smoothing: *smoothing,
         }
@@ -175,6 +190,7 @@ impl Default for TextStyle {
             right_margin: 60.0,
             vertical_margin: 80.0,
             line_height: 1.25,
+            placement: None,
             smoothing: None,
         }
     }
@@ -777,6 +793,15 @@ fn rasterize_inner(
         Align::Trailing => style.left_margin + panel_width - bg_width,
     };
 
+    // A placement rule positions the measured box outright — anchor cell
+    // plus offset — and the margins keep only the wrap width they already
+    // decided above. Without one, the box sits where it always has: at the
+    // align-derived x, vertical_margin down from the top.
+    let (bg_x, bg_y) = match &style.placement {
+        Some(rule) => rule.position_box(bg_width, bg_height, canvas_width, canvas_height),
+        None => (bg_x, style.vertical_margin),
+    };
+
     let width = bg_width.round().max(1.0) as u32;
     let height = bg_height.round().max(1.0) as u32;
     if !draw {
@@ -788,7 +813,7 @@ fn rasterize_inner(
             width,
             height,
             x: bg_x,
-            y: style.vertical_margin,
+            y: bg_y,
             lines: line_count.max(1) as u32,
         });
     }
@@ -989,8 +1014,7 @@ fn rasterize_inner(
     // flipped to top-left in `makeBitmapContext`) treat the vertical margin as
     // a distance from the TOP. This module used to measure from the bottom,
     // which put every caption somewhere else than the app drew it.
-    let _ = canvas_height;
-    let y = style.vertical_margin;
+    let y = bg_y;
 
     Some(RasterizedText {
         rgba,
@@ -1147,6 +1171,40 @@ mod tests {
 
     /// The app measures the vertical margin from the bottom; a caller reading
     /// this as "from the top" would put every caption in the wrong half.
+    #[test]
+    fn a_placement_hangs_the_measured_box_on_the_grid() {
+        let mut style = TextStyle {
+            font_size: 48.0,
+            ..TextStyle::default()
+        };
+        let plain = measure("Anchored words", 1920.0, 1080.0, &style).expect("box");
+
+        style.placement = Some(promo_model::Placement {
+            height: None,
+            width: None,
+            mode: None,
+            anchor: Some(promo_model::Anchor::BottomRight),
+            offset: Some([-24.0, -12.0]),
+        });
+        let placed = measure("Anchored words", 1920.0, 1080.0, &style).expect("box");
+
+        assert_eq!(
+            (placed.width, placed.height),
+            (plain.width, plain.height),
+            "placement moves the box, never sizes it"
+        );
+        assert!(
+            (placed.x - (1920.0 - placed.width - 24.0)).abs() < 0.6,
+            "bottom-right anchor, nudged 24 left: x={}",
+            placed.x
+        );
+        assert!(
+            (placed.y - (1080.0 - placed.height - 12.0)).abs() < 0.6,
+            "and 12 up: y={}",
+            placed.y
+        );
+    }
+
     #[test]
     fn vertical_margin_is_measured_from_the_top() {
         // The app's own two renderers both place a caption's TOP edge at

@@ -1262,6 +1262,9 @@ impl PreviewEngine {
             stamp(style.padding).hash(&mut hasher);
             stamp(style.corner_radius).hash(&mut hasher);
             stamp(style.right_margin).hash(&mut hasher);
+            // The cached entry carries the ORIGIN, and a placement decides
+            // it — an offset nudge must miss, or the box stays put.
+            format!("{:?}", style.placement).hash(&mut hasher);
             hasher.finish()
         };
         let key = (
@@ -2696,6 +2699,11 @@ pub fn caption_style(
         left_margin: get(|s| s.left_margin, settings.subtitle_left_margin),
         right_margin: get(|s| s.right_margin, settings.subtitle_right_margin),
         vertical_margin: get(|s| s.vertical_margin, settings.subtitle_vertical_margin),
+        // Per caption only — there is no composition-wide caption placement,
+        // and that is a choice: the settings margins are the composition's
+        // statement of where captions live, and a placement is one caption
+        // saying otherwise.
+        placement: style.and_then(|s| s.placement.clone()),
         line_height: 1.25,
         // Let promo-text choose from the text colour.
         smoothing: None,
