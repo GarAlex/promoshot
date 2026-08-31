@@ -17,9 +17,11 @@ The design bet is that **the format is the interface**. An assistant, a
 script, or a person writes `metadata.json`; the engine renders it the same
 everywhere — the Mac and iOS apps (Metal + VideoToolbox), this repo's CLI,
 or a headless Linux box with no GPU at all (wgpu on lavapipe, ffmpeg as a
-subprocess). The schema is one compiled-in document (`promo_model::SCHEMA`,
-served by `promo schema`), and the parser the validator runs is the parser
-the renderers use, so "validates" means "renders".
+subprocess). The format has three faces behind one truth: an authoring
+subset with four validated recipes (`promo schema`), the full document
+(`--full`), and a types-only JSON Schema generated from the parser's own
+structs (`--types`) — and the parser the validator runs is the parser the
+renderers use, so "validates" means "renders".
 
 ## Crates
 
@@ -31,7 +33,7 @@ the renderers use, so "validates" means "renders".
 | `promo-text` | Caption shaping and effects (cosmic-text) |
 | `promo-engine` | Preview/export orchestration, frame cache, memory governor, PCM mixer |
 | `promo-media` | Decoder/encoder trait registry; ffmpeg-subprocess backend + conformance suite |
-| `promo-editor` | Front-end-agnostic editor state: lanes, viewport, transport, selection |
+| `promo-editor` | The editor brain, front-end-agnostic: the core owns the document — commands, undo, lanes, viewport, transport, selection |
 | `promo-ffi` | The C ABI the Swift apps link |
 | `promo-cli` | `promo` — render a project from the command line |
 | `promoshot-mcp` | MCP server over stdio, for agents |
@@ -51,7 +53,7 @@ Linux machine, `mesa-vulkan-drivers` (lavapipe) is enough of a GPU.
 ```
 cargo build --release -p promo-cli     # -> target/release/promo
 
-promo schema                            # the format, read this first
+promo schema                            # authoring subset + recipes; --full, --types
 promo validate <project>                # exit 0 == this will render
 promo inspect  <project>                # canvas, layers, missing media, undefined colours
 promo still    <project> --out f.png --time 2.5
@@ -127,9 +129,10 @@ image bakes in `examples/LinuxSmoke.promo`, so it can prove itself with no
 mount at all. `server.json` is the MCP registry manifest for the published
 image (`ghcr.io/garalex/promoshot-mcp`).
 
-The Mac app carries its own MCP server (Settings → Automation) with the same
-tool names plus app-only abilities — opening the editor, speech synthesis.
-One skill drives both.
+The Mac app carries its own MCP server (Settings → Automation) sharing the
+core tool names, plus app-only abilities — opening the editor, speech
+synthesis. One skill drives both; the authoring pair and the types schema
+are headless-first.
 
 What a session looks like — three requests in, a validated project and a
 rendered frame out (the frame at the top of this page was made exactly this
@@ -183,6 +186,10 @@ mkdir -p Demo.promo/Resources
 # write Demo.promo/metadata.json, copy media into Resources/
 promo validate Demo.promo && promo still Demo.promo --out look.png --time 1
 ```
+
+Or let the MCP server spend the boilerplate (`promo_init`,
+`promo_upsert_layer`), and give your editor autocomplete by pointing
+`"$schema"` at [docs/promo.schema.json](docs/promo.schema.json).
 
 ## Invariants and plans
 
