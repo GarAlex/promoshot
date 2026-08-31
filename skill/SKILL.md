@@ -41,12 +41,22 @@ author here opens in the PromoShot apps unchanged.
 5. **Render** — `promo_render_still` at a few moments to LOOK (a mis-aimed
    viewport or an invisible caption costs seconds here, minutes in a
    video), `promo_render_frames` for a sheet of moments across a range,
-   then `promo_render_video` for the mp4. Outputs land in the project's
-   `Exports/` and return paths, never bytes.
+   then `promo_render_video` for the mp4 or `promo_render_gif` for the
+   looping preview. Outputs land in the project's `Exports/` and return
+   paths, never bytes.
+
+Narration: `promo_speak` synthesizes every resource whose `speech.text`
+says something, spending the person's OWN provider key — headless it
+reads OPENAI_API_KEY / ELEVENLABS_API_KEY / GOOGLE_API_KEY from the
+server's environment; in the app it uses the key in the person's
+Keychain. Unchanged text is reused by receipt, never billed twice.
+**Without a key an agent cannot narrate** — do not pretend: record or
+obtain a voice file, drop it into `Resources/`, and reference it as an
+ordinary audio resource.
 
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
-still | frames | video`), and `promo_workspace` names a folder for new
-projects.
+still | frames | video | gif`), and `promo_workspace` names a folder for
+new projects.
 
 ## The rules that are not in the schema
 
@@ -89,9 +99,8 @@ what only an app can do:
 
 - `promo_open` puts the project in front of the person — and adopting it
   is when the app takes ownership of the file (stop hand-editing then).
-- `promo_speak` writes and synthesizes narration with the person's own
-  provider key (never yours, never shipped).
-- `promo_render_gif` renders the looping GIF the app's Export tab makes.
+- `promo_speak` there uses the provider key in the person's Keychain, so
+  no environment variable is needed.
 - Access is per-folder: a tool answering `access_required: <path>` means
   the person approves that folder in PromoShot once, then retry. The
   app's `promo_workspace` names a pre-approved folder.

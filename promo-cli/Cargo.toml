@@ -24,4 +24,4 @@ promo-media = { path = "../promo-media" }
 serde_json.workspace = true
 # PNG/JPEG only: this decodes project images and writes frames, it is not an
 # image-processing tool.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }

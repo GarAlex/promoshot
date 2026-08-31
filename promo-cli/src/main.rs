@@ -26,6 +26,7 @@ USAGE:
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
     promo frames  <project-dir> --out <dir> [--fps <n>] [--from <s>] [--to <s>] [--size <WxH>]
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
+    promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
 
 OPTIONS:
     --time <s>     Timestamp for a still (default 0)
@@ -104,6 +105,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "still" => still(&project, &opts),
         "frames" => frames(&project, &opts),
         "video" => video(&project, &opts),
+        "gif" => gif(&project, &opts),
         other => Err(format!("unknown command `{other}`\n\n{USAGE}")),
     }?;
     println!("{answer}");
@@ -353,6 +355,48 @@ fn video(project: &Project, opts: &Options) -> Result<String, String> {
     }
     Ok(format!(
         "wrote {} ({w}x{h}, {count} frames @ {fps}fps)",
+        out.display()
+    ))
+}
+
+/// A looping GIF, the same frames `video` renders — encoded with the
+/// image crate rather than ffmpeg, because a GIF needs no codec licence
+/// and no external tool. Default 12fps: a GIF is a preview, not a master.
+fn gif(project: &Project, opts: &Options) -> Result<String, String> {
+    let out = opts.out()?;
+    let (w, h) = opts.size(project);
+    let start = opts.from.unwrap_or(0.0).max(0.0);
+    let end = opts.to.unwrap_or_else(|| project.duration()).max(start);
+    let fps = opts.fps.unwrap_or(12.0).max(1.0);
+    let count = frame_count(start, end, fps);
+
+    let file = std::fs::File::create(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let mut encoder = image::codecs::gif::GifEncoder::new(std::io::BufWriter::new(file));
+    encoder
+        .set_repeat(image::codecs::gif::Repeat::Infinite)
+        .map_err(|e| e.to_string())?;
+    let delay = image::Delay::from_numer_denom_ms((1000.0 / fps).round() as u32, 1);
+    let mut renderer = render::Renderer::new(project, w, h)?;
+    for i in 0..count {
+        let time = start + i as f64 / fps;
+        let rgba = renderer.frame_rgba(time)?;
+        let buffer = image::RgbaImage::from_raw(w, h, rgba).ok_or("frame buffer size mismatch")?;
+        let frame = image::Frame::from_parts(buffer, 0, 0, delay);
+        encoder.encode_frame(frame).map_err(|e| e.to_string())?;
+        if i % 12 == 0 || i + 1 == count {
+            eprint!("\r  {}/{count} frames", i + 1);
+        }
+    }
+    eprintln!();
+    if opts.json {
+        return Ok(serde_json::json!({
+            "wrote": out.display().to_string(),
+            "frames": count, "width": w, "height": h, "fps": fps,
+        })
+        .to_string());
+    }
+    Ok(format!(
+        "wrote {} ({w}x{h}, {count} frames @ {fps}fps, looping)",
         out.display()
     ))
 }

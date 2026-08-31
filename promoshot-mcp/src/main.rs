@@ -12,7 +12,9 @@
 //! the parser runs. The senses (`promo_media_probe` / `_filmstrip` /
 //! `_silences`) shell to the ffmpeg/ffprobe the render pipeline already
 //! requires. The scaffold (`promo_init` / `promo_upsert_layer`, in
-//! `authoring`) writes metadata.json through the format's own parser. And
+//! `authoring`) writes metadata.json through the format's own parser.
+//! Narration (`promo_speak`, in `speak`) spends the person's own provider
+//! key from the environment, under the app's exact receipt discipline. And
 //! every RENDER goes through the `promo` CLI beside this executable — this
 //! server owns no rendering code, so it can never disagree with the one
 //! command-line contract.
@@ -25,6 +27,7 @@
 //!                       else PATH)
 
 mod media;
+mod speak;
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -192,8 +195,8 @@ fn initialize(request: &Value) -> Value {
 }
 
 /// The tool surface, mirroring the Mac app's names so one skill drives both.
-/// `promo_open` has no meaning headless and `promo_render_gif` waits on the
-/// CLI growing a gif command; neither is offered rather than offered broken.
+/// Only `promo_open` stays app-side — putting a window in front of a person
+/// has no headless meaning.
 fn tool_descriptors() -> Value {
     let project = json!({ "type": "string", "description":
         "Path to the .promo project folder (metadata.json + Resources/)" });
@@ -277,6 +280,20 @@ fn tool_descriptors() -> Value {
                     "size": { "type": "string", "description": "WxH (default: canvas)" },
                     "out": { "type": "string", "description":
                         "Output file (default: <project>/Exports/export.mp4)" }
+                },
+                "required": ["project"] }
+        },
+        {
+            "name": "promo_render_gif",
+            "description": "Render a looping GIF — the preview format, needing no ffmpeg. \
+                Default 12fps. Returns the path written.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "project": project,
+                    "fps": { "type": "number", "description": "Default 12" },
+                    "size": { "type": "string", "description": "WxH (default: canvas)" },
+                    "out": { "type": "string", "description":
+                        "Output file (default: <project>/Exports/export.gif)" }
                 },
                 "required": ["project"] }
         },
@@ -382,6 +399,19 @@ fn tool_descriptors() -> Value {
                     "name": { "type": "string" }
                 },
                 "required": ["project", "kind"] }
+        },
+        {
+            "name": "promo_speak",
+            "description": "Synthesize narration for every resource whose speech.text \
+                says something, spending the PERSON'S OWN provider key from the \
+                environment: OPENAI_API_KEY, ELEVENLABS_API_KEY or GOOGLE_API_KEY, \
+                matching each script's provider (default openai/alloy). Unchanged \
+                text is reused by receipt, never billed twice. Without a key an \
+                agent CANNOT narrate — record a voice file into Resources/ and \
+                reference it as an ordinary audio resource instead.",
+            "inputSchema": { "type": "object",
+                "properties": { "project": project },
+                "required": ["project"] }
         }
     ])
 }
@@ -463,6 +493,21 @@ where
             push_size(&mut argv, args);
             run(config, &argv)
         }
+        "promo_render_gif" => {
+            let project = fenced_project(args, config)?;
+            let out = default_out(args, "out", &project, "export.gif")?;
+            let mut argv = vec!["gif".to_string(), project, "--out".into(), out];
+            if let Some(fps) = args.get("fps").and_then(Value::as_f64) {
+                argv.extend(["--fps".into(), fps.to_string()]);
+            }
+            push_size(&mut argv, args);
+            run(config, &argv)
+        }
+        "promo_speak" => speak::speak(args, config.root.as_deref(), &speak::LiveSynth, &|path| {
+            media::host_probe(path, true)
+                .duration
+                .ok_or_else(|| format!("could not measure {}", path.display()))
+        }),
         other => Err(format!("unknown tool `{other}`")),
     }
 }
@@ -579,14 +624,16 @@ mod tests {
                 "promo_render_still",
                 "promo_render_frames",
                 "promo_render_video",
+                "promo_render_gif",
                 "promo_workspace",
                 "promo_media_probe",
                 "promo_media_filmstrip",
                 "promo_media_silences",
                 "promo_init",
-                "promo_upsert_layer"
+                "promo_upsert_layer",
+                "promo_speak"
             ],
-            "no promo_open headless, no gif until the CLI has one"
+            "everything the app offers except promo_open, which needs a window"
         );
     }
 
