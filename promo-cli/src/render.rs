@@ -811,6 +811,50 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A drawing layer renders on the PORTABLE path — the engine's own
+    /// wgpu rasterizer, no Apple anywhere. This failed before the device
+    /// carried TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES: the vector
+    /// pipeline asked for 8x MSAA on the adapter's word alone, which
+    /// Metal allowed and D3D12 refused at pipeline creation.
+    #[test]
+    fn a_drawing_layer_renders_portably() {
+        let dir = std::env::temp_dir().join("promo-cli-drawing");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let json = r#"{"id":"AAAAAAAA-0000-0000-0000-0000000000DR","name":"ink",
+            "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+            "videoDuration":2,"subtitles":[],
+            "compositionSettings":{"canvasWidth":160,"canvasHeight":120,
+              "backgroundColorHex":"000000"},
+            "resources":[{"id":"D","kind":"drawing","filename":"",
+              "displayName":"Ink","addedAt":0,
+              "drawing":{"shapes":[{"id":"S","kind":"oval",
+                "points":[[0,0],[400,300]],
+                "strokeColorHex":"FF0000","strokeWidth":8,
+                "fillColorHex":"FF0000",
+                "arrowStart":false,"arrowEnd":false}]}}],
+            "layers":[{"id":"L","name":"Ink","sortIndex":0,"kind":"drawing",
+              "isEnabled":true,"startTime":0.0,"duration":2.0,"resourceID":"D",
+              "keyframes":[{"id":"K","time":0.0,"transitionDuration":0.0,
+                "placement":{"mode":"fit","anchor":"center"}}]}]}"#;
+        std::fs::write(dir.join("metadata.json"), json).unwrap();
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 160, 120).expect("renderer");
+        let pixels = renderer.frame_bgra(1.0).expect("drawing frame");
+        let at = (60 * 160 + 80) * 4;
+        assert!(
+            pixels[at + 2] > 180 && pixels[at] < 60,
+            "the filled oval's ink should reach the frame, got b={} r={}",
+            pixels[at],
+            pixels[at + 2]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Decoders must follow the playhead, not the composition.
     ///
     /// Each open decoder is a live ffmpeg process. Holding one per clip for

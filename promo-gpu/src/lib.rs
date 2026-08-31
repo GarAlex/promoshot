@@ -53,10 +53,17 @@ impl GpuContext {
             force_fallback_adapter: false,
         }))
         .ok_or(GpuError::NoAdapter)?;
+        // Adapter-specific format features unlock MSAA counts past the
+        // spec-guaranteed [1, 4] — the vector rasterizer wants 8, whose
+        // finer coverage the stills golden gate measures. QUERYING the
+        // adapter is not enough: without this device feature, pipeline
+        // creation refuses 8 even where the adapter reports it (it did,
+        // on D3D12 — Metal happened to allow it and hid the gap).
+        let wanted = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
         let (device, queue) = pollster_block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("promo-core"),
-                required_features: wgpu::Features::empty(),
+                required_features: adapter.features() & wanted,
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
             },

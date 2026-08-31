@@ -106,11 +106,23 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 /// strokes; 8 halves that error. Chosen from what the adapter actually
 /// supports, highest first.
 fn sample_count(ctx: &GpuContext) -> u32 {
+    // The adapter's answer only counts when the DEVICE holds the
+    // adapter-specific-format-features flag; without it the WebGPU spec's
+    // [1, 4] is the whole menu, and asking for 8 anyway is a pipeline
+    // refused at creation (it was, on D3D12 — Metal allowed it and hid
+    // this for every Apple-side run).
+    let adapter_specific = ctx
+        .device
+        .features()
+        .contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
     let flags = ctx
         .adapter
         .get_texture_format_features(wgpu::TextureFormat::Bgra8Unorm)
         .flags;
     for count in [8u32, 4, 2] {
+        if count > 4 && !adapter_specific {
+            continue;
+        }
         if flags.sample_count_supported(count) {
             return count;
         }
