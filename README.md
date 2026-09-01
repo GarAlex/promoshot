@@ -194,9 +194,9 @@ sizes are stamped, and the composition keeps covering its layers. Device
 frames bake headless too — the same slab the apps draw. `promo_slideshow`
 is the wizard: pictures and clips in, a complete classic, carousel or
 store-listing show out, a caption on any slide becoming a layer that
-lives with its picture. `promo_speak`
-synthesizes narration with the person's own provider key from the
-environment, reusing unchanged text by receipt. The authoring tools answer
+lives with its picture. `promo_voices`
+lists a provider's voices and `promo_speak` synthesizes narration with the
+person's own provider key, reusing unchanged text by receipt. The authoring tools answer
 with an inline thumbnail of the composition, so a misplaced layer is caught
 at the moment it happens. The tools write ordinary `metadata.json`
 through the format's own parser — the schema stays the source of truth, and
@@ -206,6 +206,26 @@ project's `Exports/` folder and return the path written, never the bytes.
 Flags, all optional: `--workspace <dir>` (where `promo_workspace` points;
 else `$PROMOSHOT_WORKSPACE`, else the XDG data dir), `--root <dir>` (refuse
 projects outside this tree), `--promo <path>`.
+
+### Narration keys
+
+Narration spends the person's own provider account, and the key never
+passes through the agent: no tool takes one, none shows one. Register it
+once in the OS keyring — macOS Keychain, the Secret Service on Linux
+(GNOME Keyring, KWallet), the Credential Manager on Windows:
+
+```bash
+promoshot-mcp key set openai        # reads the key from stdin: paste, then Ctrl-D
+promoshot-mcp key status            # where each provider's key comes from, never the key
+promoshot-mcp key remove openai
+```
+
+Providers: `openai`, `elevenlabs`, `google`. The key is read from stdin so
+it lands in no shell history, no config file and no argument list. A box
+with no keyring — a container, a CI runner — falls back to
+`OPENAI_API_KEY`, `ELEVENLABS_API_KEY` or `GOOGLE_API_KEY` in the server's
+environment (`-e OPENAI_API_KEY=…` on `docker run`). Keys travel in
+request headers, never URLs, and nothing logs them.
 
 ### Docker
 

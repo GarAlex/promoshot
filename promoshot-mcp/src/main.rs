@@ -41,7 +41,22 @@ use serde_json::{json, Value};
 const PROTOCOL_FALLBACK: &str = "2025-03-26";
 
 fn main() {
-    let config = match Config::from_args(std::env::args().skip(1)) {
+    // `promoshot-mcp key …` is the person's door to the keyring, not a
+    // server session: handled and done before any stdio framing.
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some("key") {
+        match speak::key_command(&argv[1..], &mut std::io::stdin()) {
+            Ok(answer) => {
+                println!("{answer}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        }
+    }
+    let config = match Config::from_args(argv.into_iter()) {
         Ok(config) => config,
         Err(message) => {
             eprintln!("promoshot-mcp: {message}");
@@ -600,10 +615,26 @@ fn tool_descriptors() -> Value {
                 "required": ["project", "against"] }
         },
         {
+            "name": "promo_voices",
+            "description": "A narration provider's voices — id, name and a line of detail per \
+                voice (openai's fixed roster; elevenlabs and google list live) — with the \
+                person's own key: the OS keyring (`promoshot-mcp key set <provider>`), else \
+                OPENAI_API_KEY / ELEVENLABS_API_KEY / GOOGLE_API_KEY in the server's \
+                environment. Use before promo_speak to pick a voiceID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "provider": { "type": "string", "enum": ["openai", "elevenlabs", "google"],
+                        "description": "Default openai" }
+                }
+            }
+        },
+        {
             "name": "promo_speak",
             "description": "Synthesize narration for every resource whose speech.text \
                 says something, spending the PERSON'S OWN provider key from the \
-                environment: OPENAI_API_KEY, ELEVENLABS_API_KEY or GOOGLE_API_KEY, \
+                OS keyring (`promoshot-mcp key set <provider>`) or environment \
+                (OPENAI_API_KEY, ELEVENLABS_API_KEY, GOOGLE_API_KEY), \
                 matching each script's provider (default openai/alloy). Unchanged \
                 text is reused by receipt, never billed twice. Without a key an \
                 agent CANNOT narrate — record a voice file into Resources/ and \
@@ -725,7 +756,8 @@ where
             push_size(&mut argv, args);
             run(config, &argv)
         }
-        "promo_speak" => speak::speak(args, config.root.as_deref(), &speak::LiveSynth, &|path| {
+        "promo_voices" => speak::voices(args, &promo_speech::SystemKeys),
+        "promo_speak" => speak::speak(args, config.root.as_deref(), &speak::live(), &|path| {
             media::host_probe(path, true)
                 .duration
                 .ok_or_else(|| format!("could not measure {}", path.display()))
@@ -860,6 +892,7 @@ mod tests {
                 "promo_slideshow",
                 "promo_explain",
                 "promo_diff",
+                "promo_voices",
                 "promo_speak"
             ],
             "everything the app offers except promo_open, which needs a window"

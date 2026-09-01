@@ -13,9 +13,8 @@ path = "src/main.rs"
 promo-author = { path = "../promo-author" }
 promo-editor = { path = "../promo-editor" }
 promo-model = { path = "../promo-model" }
+promo-speech = { path = "../promo-speech" }
 serde_json.workspace = true
-sha2 = "0.10"
-ureq = "2"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

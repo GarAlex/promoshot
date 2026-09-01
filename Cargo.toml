@@ -10,6 +10,7 @@ members = [
     "promo-media",
     "promo-engine",
     "promo-author",
+    "promo-speech",
     "promoshot-mcp",
 ]
 

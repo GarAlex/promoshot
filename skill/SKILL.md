@@ -77,11 +77,15 @@ author here opens in the PromoShot apps unchanged.
    looping preview. Outputs land in the project's `Exports/` and return
    paths, never bytes.
 
-Narration: `promo_speak` synthesizes every resource whose `speech.text`
-says something, spending the person's OWN provider key — headless it
-reads OPENAI_API_KEY / ELEVENLABS_API_KEY / GOOGLE_API_KEY from the
-server's environment; in the app it uses the key in the person's
-Keychain. Unchanged text is reused by receipt, never billed twice.
+Narration: `promo_voices` lists a provider's voices (pick a voiceID
+from it); `promo_speak` synthesizes every resource whose `speech.text`
+says something, spending the person's OWN provider key — headless from
+the OS keyring, where the person registers it once with
+`promoshot-mcp key set <provider>` (the key is read from stdin, never
+from an argument), else from OPENAI_API_KEY / ELEVENLABS_API_KEY /
+GOOGLE_API_KEY in the server's environment; in the app from the
+person's Keychain. No tool takes a key and none ever shows one.
+Unchanged text is reused by receipt, never billed twice.
 **Without a key an agent cannot narrate** — do not pretend: record or
 obtain a voice file, drop it into `Resources/`, and reference it as an
 ordinary audio resource.
