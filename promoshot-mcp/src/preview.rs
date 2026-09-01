@@ -38,6 +38,7 @@ pub fn wanted(tool: &str, args: &Value) -> bool {
             | "promo_upsert_layer"
             | "promo_upsert_keyframe"
             | "promo_apply"
+            | "promo_slideshow"
             | "promo_validate"
     ) && args.get("preview").and_then(Value::as_bool) != Some(false)
 }

@@ -34,8 +34,10 @@ author here opens in the PromoShot apps unchanged.
    silences and cuts are both real.
 3. **Author** — `promo_slideshow` is the wizard: pictures and clips in,
    a complete show out — classic, carousel, or an App Store listing
-   sized by the store with a headline per shot — then refine it with
-   the tools below. `promo_init` lays the folder, canvas, palette,
+   sized by the store — a `caption` on any slide becomes a caption layer
+   that lives and arrives with its picture (a headline band for the
+   store, a lower third otherwise); the answer carries the glance like
+   every authoring tool — then refine it with the tools below. `promo_init` lays the folder, canvas, palette,
    background; `promo_upsert_layer` adds an image/video/caption with a
    placement, a fadeIn, a device frame — media copied in, sizes and
    durations probed, the composition re-stretched every call; and

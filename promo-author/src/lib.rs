@@ -1733,9 +1733,19 @@ mod tests {
         .unwrap();
         assert!(answer.contains("2 slide(s)"), "{answer}");
         let meta = read(&dir);
-        assert!(
-            meta.layers.as_ref().unwrap().len() >= 3,
-            "background + a layer per slide at least"
+        let layers = meta.layers.as_ref().unwrap();
+        assert_eq!(
+            layers.len(),
+            4,
+            "background, two pictures, and a caption for the slide that had words"
+        );
+        assert_eq!(
+            layers
+                .iter()
+                .filter(|l| l.kind == promo_model::ProjectLayerKind::Caption)
+                .count(),
+            1,
+            "issue #7: a classic slide's caption is a layer"
         );
         assert_eq!(meta.min_reader_version, Some(18));
         assert!(dir.join("Resources/a.png").exists() && dir.join("Resources/b.png").exists());

@@ -196,6 +196,34 @@ fn crossfade(spec: &AuthorSpec, index: usize) -> f64 {
         .max(0.0)
 }
 
+/// The wizard's caption typography. A store shot's headline sits in the
+/// band above the device (a top margin); every other show's caption is a
+/// lower third — anchored to the bottom by rule, lifted clear of the edge,
+/// stroked so it reads over any picture — and re-resolves if the canvas is
+/// re-stamped for another size.
+fn caption_style(app_store: bool, font: f64, canvas_w: f64, canvas_h: f64) -> Value {
+    let mut style = json!({
+        "fontSize": font,
+        "isBold": true,
+        "alignment": "center",
+        "backgroundOpacity": 0.0,
+        "shadowOpacity": 0.35,
+        "shadowRadius": font * 0.22,
+        "shadowOffset": [0.0, font * 0.08],
+        "leftMargin": canvas_w * 0.08,
+        "rightMargin": canvas_w * 0.08,
+    });
+    if app_store {
+        style["verticalMargin"] = json!(canvas_h * 0.06);
+    } else {
+        style["placement"] = json!({"anchor": "bottom", "offset": [0.0, -(canvas_h * 0.07)]});
+        style["strokeWidth"] = json!(font * 0.08);
+        style["strokeColorHex"] = json!("000000");
+        style["textColorHex"] = json!("FFFFFF");
+    }
+    style
+}
+
 /// The carousel's flight time: short shows shorten it rather than spending
 /// their whole length in motion.
 fn carousel_ramp(duration: f64) -> f64 {
@@ -408,12 +436,19 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
         layers.push(layer);
         sort += 1;
 
-        // A styled caption per store shot, text left as typed (empty is
-        // fine): layout, typography and shadow are what a wizard can
-        // decide; the words are what only the author can. Colours stay
-        // UNSTATED so a theme can move them later.
-        if app_store {
-            let font = canvas_w * 0.062;
+        // A styled caption per slide: layout, typography and shadow are
+        // what a wizard can decide; the words are what only the author
+        // can. A store shot always carries its headline band, text left as
+        // typed (empty is fine); a classic or carousel slide takes a lower
+        // third only when words were given — until this, `slides[].caption`
+        // was accepted for every kind and honoured for one (issue #7).
+        // Colours stay UNSTATED so a theme can move them later.
+        if app_store || !slide.caption.is_empty() {
+            let font = if app_store {
+                canvas_w * 0.062
+            } else {
+                canvas_h * 0.055
+            };
             let caption_id = ids.take();
             resources.push(json!({
                 "id": caption_id,
@@ -426,18 +461,7 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
                 },
                 "addedAt": spec.created_at,
                 "captionText": slide.caption,
-                "captionStyle": {
-                    "fontSize": font,
-                    "isBold": true,
-                    "alignment": "center",
-                    "backgroundOpacity": 0.0,
-                    "shadowOpacity": 0.35,
-                    "shadowRadius": font * 0.22,
-                    "shadowOffset": [0.0, font * 0.08],
-                    "verticalMargin": canvas_h * 0.06,
-                    "leftMargin": canvas_w * 0.08,
-                    "rightMargin": canvas_w * 0.08,
-                },
+                "captionStyle": caption_style(app_store, font, canvas_w, canvas_h),
             }));
             let mut caption_layer = json!({
                 "id": ids.take(),
@@ -653,11 +677,15 @@ mod tests {
     fn classic_lays_slides_end_to_end_and_dissolves_collapse_to_fade_in() {
         let doc = parsed(&spec("classic", "crossfade", 3));
         let layers = layers(&doc);
-        assert_eq!(layers.len(), 4, "background + one per slide");
+        assert_eq!(
+            layers.len(),
+            7,
+            "background + a picture and its caption per slide"
+        );
         // Slide 2 arrives over slide 1: starts half a second early, spans
         // the overlap extra, and carries the one-number shorthand rather
         // than a transitionIn object that says nothing more.
-        let second = &layers[2];
+        let second = &layers[3];
         assert_eq!(second["startTime"], json!(2.5));
         assert_eq!(second["duration"], json!(3.5));
         assert_eq!(second["fadeIn"], json!(0.5));
@@ -670,7 +698,7 @@ mod tests {
         let doc = parsed(&spec("classic", "push", 2));
         let layers = layers(&doc);
         let first = &layers[1];
-        let second = &layers[2];
+        let second = &layers[3];
         assert_eq!(second["transitionIn"]["kind"], json!("push"));
         assert_eq!(second["transitionIn"]["from"], json!("right"));
         assert_eq!(first["transitionOut"]["kind"], json!("push"));
@@ -686,21 +714,26 @@ mod tests {
         let doc = parsed(&spec("carousel", "crossfade", 3));
         let layers = layers(&doc);
         // Cards state their motion in keyframes and take no edge
-        // transitions at all.
-        for layer in &layers[1..] {
+        // transitions at all (their captions ride along, plain).
+        let cards: Vec<&Value> = layers[1..]
+            .iter()
+            .filter(|l| l["kind"] == json!("image"))
+            .collect();
+        assert_eq!(cards.len(), 3);
+        for layer in &cards {
             assert!(layer.get("transitionIn").is_none());
             assert!(layer.get("fadeIn").is_none());
         }
         // 3s slides: ramp = 0.9; the second card starts one ramp early.
-        assert_eq!(layers[2]["startTime"], json!(3.0 - 0.9));
+        assert_eq!(cards[1]["startTime"], json!(3.0 - 0.9));
         // The first card is already settled at its first instant — a show
         // that flew it would open (and be postered) on an empty canvas.
-        let first_keyframes = layers[1]["keyframes"].as_array().unwrap();
+        let first_keyframes = cards[0]["keyframes"].as_array().unwrap();
         let opening = &first_keyframes[0]["placement"];
         assert_eq!(opening["height"], json!(680.0 / 1080.0 * 1080.0));
         // A middle card flies in, drifts, and flies out: 8 keyframes
         // across the placement and rotation tracks.
-        assert_eq!(layers[2]["keyframes"].as_array().unwrap().len(), 8);
+        assert_eq!(cards[1]["keyframes"].as_array().unwrap().len(), 8);
     }
 
     #[test]
@@ -738,8 +771,55 @@ mod tests {
     fn hard_cuts_overlap_nothing() {
         let doc = parsed(&spec("classic", "none", 2));
         let layers = layers(&doc);
-        assert_eq!(layers[2]["startTime"], json!(3.0));
-        assert!(layers[2].get("fadeIn").is_none());
+        assert_eq!(layers[3]["startTime"], json!(3.0));
+        assert!(layers[3].get("fadeIn").is_none());
+    }
+
+    /// Issue #7: `slides[].caption` was accepted for every kind and became
+    /// a layer for one. A classic or carousel slide with words now carries
+    /// a lower third that lives and arrives with its picture; a slide
+    /// without words carries nothing, so a show of bare pictures is
+    /// unchanged.
+    #[test]
+    fn every_kind_captions_the_slides_that_have_words() {
+        for kind in ["classic", "carousel"] {
+            let mut spec = spec(kind, "crossfade", 3);
+            spec.slides[1].caption = String::new();
+            let doc = parsed(&spec);
+            let layers = layers(&doc);
+            let captions: Vec<&Value> = layers
+                .iter()
+                .filter(|l| l["kind"] == json!("caption"))
+                .collect();
+            assert_eq!(captions.len(), 2, "{kind}: two slides had words");
+            let picture = &layers[1];
+            let caption = &layers[2];
+            assert_eq!(caption["startTime"], picture["startTime"], "{kind}");
+            assert_eq!(caption["duration"], picture["duration"], "{kind}");
+            assert_eq!(
+                caption.get("fadeIn"),
+                picture.get("fadeIn"),
+                "{kind}: arrives with it"
+            );
+            let resource = doc["resources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r["id"] == caption["resourceID"])
+                .unwrap();
+            assert_eq!(resource["captionText"], json!("Cap 0"));
+            assert_eq!(
+                resource["captionStyle"]["placement"]["anchor"],
+                json!("bottom"),
+                "{kind}: a lower third"
+            );
+            assert!(resource["captionStyle"].get("verticalMargin").is_none());
+            let meta = promo_model::ProjectMetadata::from_json(&author(&spec).unwrap()).unwrap();
+            assert!(
+                promo_timeline::validate::warnings(&meta).is_empty(),
+                "{kind}"
+            );
+        }
     }
 
     #[test]

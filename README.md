@@ -191,7 +191,10 @@ project, add image/video/caption layers with placements, then animate —
 a second placement keyframe is a push-in, viewport keyframes a Ken Burns;
 your short ids are used verbatim, unnamed ones get canonical UUIDs, pixel
 sizes are stamped, and the composition keeps covering its layers. Device
-frames bake headless too — the same slab the apps draw. `promo_speak`
+frames bake headless too — the same slab the apps draw. `promo_slideshow`
+is the wizard: pictures and clips in, a complete classic, carousel or
+store-listing show out, a caption on any slide becoming a layer that
+lives with its picture. `promo_speak`
 synthesizes narration with the person's own provider key from the
 environment, reusing unchanged text by receipt. The authoring tools answer
 with an inline thumbnail of the composition, so a misplaced layer is caught

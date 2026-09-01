@@ -554,7 +554,9 @@ fn tool_descriptors() -> Value {
                         "type": "object",
                         "properties": {
                             "file": { "type": "string", "description": "Image or clip to copy in" },
-                            "caption": { "type": "string" },
+                            "caption": { "type": "string", "description":
+                                "Words over the slide — a caption layer that lives and arrives with \
+                                 its picture: the headline band for appStore, a lower third otherwise" },
                             "duration": { "type": "number", "description":
                                 "Seconds on screen (default 3; a clip's own length)" },
                             "transitionDuration": { "type": "number", "description":
@@ -1014,6 +1016,73 @@ mod tests {
             "the stable path a person can watch"
         );
         std::fs::remove_dir_all(&project).unwrap();
+    }
+
+    /// Issue #7: the wizard answered with text alone while every other
+    /// authoring tool attached its glance, and `preview` on it was a no-op.
+    /// It rides the same thumbnail now — the composition's midpoint, since
+    /// the wizard touches every layer — and honours `preview: false`.
+    #[test]
+    fn the_wizard_answers_with_a_glance_too() {
+        let root = std::env::temp_dir().join(format!("mcp-showglance-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let png: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0x9C, 0x62, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+        let slide = root.join("a.png");
+        std::fs::write(&slide, png).unwrap();
+        let seen = std::cell::RefCell::new(Vec::<Vec<String>>::new());
+        let drawing = |_: &Config, args: &[String]| {
+            seen.borrow_mut().push(args.to_vec());
+            let out = &args[args.iter().position(|a| a == "--out").unwrap() + 1];
+            std::fs::write(out, b"foobar").unwrap();
+            Ok("wrote a still".into())
+        };
+        let project = root.join("Show.promo");
+        let show = serde_json::json!({ "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+            "params": { "name": "promo_slideshow", "arguments": {
+                "project": project.display().to_string(),
+                "slides": [{ "file": slide.display().to_string(), "caption": "One" },
+                           { "file": slide.display().to_string() }] } } });
+        let answer = handle(&show, &config(), &drawing).unwrap();
+        let content = answer
+            .pointer("/result/content")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert_eq!(content.len(), 2, "text plus the glance: {answer}");
+        assert_eq!(content[1]["mimeType"], "image/png");
+        let argv = seen.borrow().last().unwrap().clone();
+        assert_eq!(argv[0], "still");
+        assert!(project.join("Exports/preview.png").is_file());
+        // And the classic show carries its caption as a layer.
+        let meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(project.join("metadata.json")).unwrap())
+                .unwrap();
+        let captions = meta["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|l| l["kind"] == "caption")
+            .count();
+        assert_eq!(captions, 1, "the slide with words has a caption layer");
+
+        let quiet = root.join("Quiet.promo");
+        let off = serde_json::json!({ "jsonrpc": "2.0", "id": 12, "method": "tools/call",
+            "params": { "name": "promo_slideshow", "arguments": {
+                "project": quiet.display().to_string(), "preview": false,
+                "slides": [{ "file": slide.display().to_string() }] } } });
+        let answer = handle(&off, &config(), &never).unwrap();
+        let content = answer
+            .pointer("/result/content")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert_eq!(content.len(), 1, "preview: false attaches nothing");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// A scaffold that succeeded reports success: the preview failing —
