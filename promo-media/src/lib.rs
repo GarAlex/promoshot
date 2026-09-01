@@ -98,6 +98,33 @@ impl AudioBuffer {
 /// Reads an asset's audio as PCM. Whole-buffer rather than streaming: a
 /// composition's audio is minutes of f32 at most, and the mixer wants random
 /// access across overlapping layers anyway.
+/// Which of an asset's audio tracks to sum. The apps insert every kept
+/// track of a multi-track recording into the mix at unity (AVFoundation's
+/// mixer adds them), so summing is the parity-correct reading, not a
+/// per-track average.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TrackSelection {
+    /// Every audio track, summed.
+    All,
+    /// Only the first audio track (sound layers, narration).
+    First,
+    /// Every track except these zero-based indices.
+    Except(Vec<i64>),
+}
+
+impl TrackSelection {
+    /// Which zero-based tracks out of `count` this selection keeps, in order.
+    pub fn kept(&self, count: usize) -> Vec<usize> {
+        match self {
+            TrackSelection::All => (0..count).collect(),
+            TrackSelection::First => (0..count.min(1)).collect(),
+            TrackSelection::Except(disabled) => (0..count)
+                .filter(|i| !disabled.contains(&(*i as i64)))
+                .collect(),
+        }
+    }
+}
+
 pub trait AudioReader: Send + Sync {
     /// `None` when the asset carries no audio track — which is not an error,
     /// it is most screen recordings.
@@ -108,6 +135,27 @@ pub trait AudioReader: Send + Sync {
         channels: u16,
     ) -> Result<Option<AudioBuffer>, MediaError> {
         self.read_at_speed(path, sample_rate, channels, 1.0)
+    }
+
+    /// `read_at_speed` over a subset of the asset's audio tracks, summed.
+    /// `None` when nothing is kept — a recording whose every track the
+    /// person switched off is silent, not an error. Backends that cannot
+    /// pick tracks refuse anything but `All` rather than quietly summing
+    /// everything.
+    fn read_tracks(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        speed: f64,
+        tracks: &TrackSelection,
+    ) -> Result<Option<AudioBuffer>, MediaError> {
+        match tracks {
+            TrackSelection::All => self.read_at_speed(path, sample_rate, channels, speed),
+            other => Err(MediaError::Backend(format!(
+                "this audio reader cannot select tracks ({other:?})"
+            ))),
+        }
     }
 
     /// Reads the asset time-stretched by `speed`, PITCH PRESERVED — 1.5 is

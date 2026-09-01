@@ -9,6 +9,16 @@ discipline as rustrator-core).
   `offset = floor(local/period)*period`. Mirrors Swift
   `ProjectResource.loopFolded` — the two must stay value-identical
   (Phase-1 parity harness enforces via shared fixtures).
+- T2 The mix graph is decided once: `audio_inputs` (which layers sound,
+  the slice each plays, its volume automation, who ducks whom),
+  `placed_segments`/`scaled_segments` (trims and pauses laid end to end,
+  output placement divided by speed) and `level_points` (automation
+  through the perceptual taper × the focus duck gate). Executors differ —
+  AVFoundation in the apps, `mix_chunk` in the CLI — the graph does not,
+  and `promo video`'s soundtrack runs the whole of it (a multi-track
+  recording is the SUM of its kept tracks). A gain keyframe with no ramp
+  is a step: its pre-step breakpoint sits 1 ms early so the level holds
+  until the keyframe, exactly as `layer_gain` reports it.
 
 ## GPU
 - G1 GpuSurface raw handles are inert until an import module touches them on

@@ -3,7 +3,10 @@
 //! Values are `f32` exactly where Swift uses `Float`, so results are
 //! bit-identical with the Swift implementation.
 
-use promo_model::{ProjectLayer, ProjectMetadata};
+use crate::mapping::ExtendedPause;
+use promo_model::{
+    ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResourceKind, VideoTrimRange,
+};
 
 /// Anchor tuple from Swift `volumeAnchors(defaultGain:)`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -348,4 +351,333 @@ pub fn level_points(
         return Vec::new();
     }
     points
+}
+
+// ---------------------------------------------------------------------------
+// The mix graph's INPUTS (Swift `AudioTimelineBuilder.audioInputs`,
+// `placedSegments`, `scaledSegments`): which layers make sound, which slice
+// of their file plays where on the output timeline, and at what level. The
+// executor differs per host — AVFoundation in the apps, `mix_chunk` in the
+// CLI — but the graph they execute is decided here, once.
+
+/// While any focused layer plays, every other audible track is ducked to
+/// this fraction of its amplitude (≈ −14 dB). Swift `duckFactor`.
+pub const DUCK_FACTOR: f32 = 0.2;
+/// Seconds of linear fade into and out of a duck, so it never clicks.
+/// Swift `duckRamp`.
+pub const DUCK_RAMP: f64 = 0.1;
+
+/// One source slice placed on the output timeline. Swift `PlacedSegment`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlacedSegment {
+    pub source_start: f64,
+    pub duration: f64,
+    pub output_start: f64,
+}
+
+/// Swift `placedSegments`: lay a layer's trim `ranges` end to end from
+/// `start_output`, stopping once `layer_limit` output seconds are consumed
+/// (the last range truncated to fit). Extended pauses open silent gaps at
+/// their media time and push everything after them later. Empty or inverted
+/// ranges are skipped. Pure — no media is touched.
+pub fn placed_segments(
+    ranges: &[VideoTrimRange],
+    start_output: f64,
+    layer_limit: f64,
+    extended_pauses: &[ExtendedPause],
+) -> Vec<PlacedSegment> {
+    if layer_limit <= 0.0 {
+        return Vec::new();
+    }
+    struct MediaPause {
+        media_time: f64,
+        duration: f64,
+    }
+    let mut sorted: Vec<&ExtendedPause> = extended_pauses
+        .iter()
+        .filter(|p| p.duration > 0.000_1 && p.start_time < layer_limit)
+        .collect();
+    sorted.sort_by(|a, b| {
+        a.start_time
+            .partial_cmp(&b.start_time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut inserted = 0.0;
+    let media_pauses: Vec<MediaPause> = sorted
+        .iter()
+        .map(|p| {
+            let pause = MediaPause {
+                media_time: (p.start_time - inserted).max(0.0),
+                duration: p.duration,
+            };
+            inserted += p.duration;
+            pause
+        })
+        .collect();
+
+    let mut result = Vec::new();
+    let mut media_cursor = 0.0;
+    'ranges: for r in ranges.iter().filter(|r| r.end > r.start) {
+        let media_end = media_cursor + (r.end - r.start);
+        let cuts: Vec<f64> = media_pauses
+            .iter()
+            .map(|p| p.media_time)
+            .filter(|&t| t > media_cursor + 0.000_1 && t < media_end - 0.000_1)
+            .collect();
+        let mut boundaries = vec![media_cursor];
+        boundaries.extend(cuts);
+        boundaries.push(media_end);
+        for pair in boundaries.windows(2) {
+            let (piece_start, piece_end) = (pair[0], pair[1]);
+            let pause_offset: f64 = media_pauses
+                .iter()
+                .filter(|p| p.media_time <= piece_start + 0.000_1)
+                .map(|p| p.duration)
+                .sum();
+            let local_output_start = piece_start + pause_offset;
+            if local_output_start >= layer_limit {
+                break 'ranges;
+            }
+            let segment_duration = (piece_end - piece_start).min(layer_limit - local_output_start);
+            if segment_duration <= 0.0 {
+                continue;
+            }
+            result.push(PlacedSegment {
+                source_start: r.start + (piece_start - media_cursor),
+                duration: segment_duration,
+                output_start: start_output + local_output_start,
+            });
+        }
+        media_cursor = media_end;
+    }
+    result
+}
+
+/// A `PlacedSegment` on the TIMELINE clock: the source slice is unchanged,
+/// where it lands and how long it occupies the timeline are divided by the
+/// playback speed. Swift `ScaledSegment`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScaledSegment {
+    pub source_start: f64,
+    pub source_duration: f64,
+    pub output_start: f64,
+    pub output_duration: f64,
+}
+
+/// Swift `scaledSegments`: the concatenation walk runs on the source-side 1x
+/// clock (ranges, pauses and the length cap all in source seconds), and only
+/// the OUTPUT placement is divided by `speed` at the end. `layer_limit` is
+/// timeline seconds, converted to source seconds on the way in.
+pub fn scaled_segments(
+    ranges: &[VideoTrimRange],
+    start_output: f64,
+    layer_limit: f64,
+    extended_pauses: &[ExtendedPause],
+    speed: f64,
+) -> Vec<ScaledSegment> {
+    let clamped = if speed.is_finite() {
+        speed.clamp(0.1, 10.0)
+    } else {
+        1.0
+    };
+    placed_segments(ranges, 0.0, layer_limit * clamped, extended_pauses)
+        .into_iter()
+        .map(|seg| ScaledSegment {
+            source_start: seg.source_start,
+            source_duration: seg.duration,
+            output_start: start_output + seg.output_start / clamped,
+            output_duration: seg.duration / clamped,
+        })
+        .collect()
+}
+
+/// Where an input's sound comes from.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AudioSource {
+    /// A declared resource's file (by resource id).
+    Resource(String),
+    /// A caption's narration clip, by filename under `Resources/`.
+    VoiceClip(String),
+}
+
+/// One audible layer's fully resolved contribution. Swift `AudioInput`,
+/// minus the URL — resolving files is the host's job; the graph is not.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AudioInput {
+    pub layer_id: String,
+    pub source: AudioSource,
+    /// Source-time slices to include. None means the whole asset; an empty
+    /// list means the person excluded everything.
+    pub included_ranges: Option<Vec<VideoTrimRange>>,
+    /// Where the layer begins on the output timeline (may be negative; the
+    /// executor clamps).
+    pub start_time: f64,
+    /// Output-time length cap (`layer.duration`).
+    pub duration_cap: Option<f64>,
+    /// Held-frame spans on this video layer's output timeline.
+    pub extended_pauses: Vec<ExtendedPause>,
+    /// Constant playback volume 0…1, used when `volume_points` is None.
+    pub volume: f32,
+    /// Volume automation in OUTPUT time, fraction domain; None = constant.
+    pub volume_points: Option<Vec<VolumePoint>>,
+    /// Zero-based source audio tracks to omit (multi-track video).
+    pub disabled_audio_track_indices: Vec<i64>,
+    /// Use only the first source audio track (sound layers, narration).
+    pub single_track: bool,
+    /// Ducks every other input while it plays; never ducked itself.
+    pub is_focused: bool,
+    /// Playback rate; the audio is time-stretched with pitch preserved.
+    pub speed: f64,
+}
+
+/// Swift `audioInputs`: every enabled, renderable layer that makes sound,
+/// with the focus spans the ducking runs on. `is_renderable` is the host's
+/// "its media is still there" answer (Swift `renderableLayers`) — a layer
+/// whose file is gone contributes nothing rather than an asset that fails
+/// to load. Layers are walked in `sortIndex` order, as the apps do.
+pub fn audio_inputs(
+    project: &ProjectMetadata,
+    is_renderable: &dyn Fn(&ProjectLayer) -> bool,
+) -> (Vec<AudioInput>, Vec<(f64, f64)>) {
+    let mut inputs = Vec::new();
+    let mut focus = Vec::new();
+
+    // Per-layer volume automation (output time, fraction domain): keyframe
+    // values are absolute; the resource's own volume fills the gaps.
+    let automation = |layer: &ProjectLayer, base: f32| -> Option<Vec<VolumePoint>> {
+        let segments = gain_ramp_segments(layer, base);
+        let first = segments.first()?;
+        let offset = layer.start_time.max(0.0);
+        let frac = |v: f32| v.clamp(0.0, 1.0);
+        let mut points = vec![VolumePoint {
+            time: offset + first.start_time,
+            volume: frac(first.start_value),
+        }];
+        for s in &segments {
+            points.push(VolumePoint {
+                time: offset + s.end_time,
+                volume: frac(s.end_value),
+            });
+        }
+        // A step (a keyframe with no ramp into it) arrives as two points at
+        // one time. Consecutive points describe a ramp, so left as they are
+        // the step smeared back to the previous breakpoint — a gain cut to
+        // 25% at 6s faded from 4s. Pull the pre-step point one millisecond
+        // early: the mix now holds until the keyframe, as `layer_gain` says.
+        for i in 1..points.len() {
+            if (points[i].time - points[i - 1].time).abs() < 0.000_1 {
+                let floor = if i >= 2 { points[i - 2].time } else { f64::MIN };
+                let early = points[i].time - 0.001;
+                if early > floor {
+                    points[i - 1].time = early;
+                }
+            }
+        }
+        Some(points)
+    };
+
+    let mut layers: Vec<&ProjectLayer> = project.layers.as_deref().unwrap_or(&[]).iter().collect();
+    layers.sort_by_key(|l| l.sort_index);
+    let resources = project.resources.as_deref().unwrap_or(&[]);
+
+    for layer in layers {
+        if !layer.is_enabled || !is_renderable(layer) {
+            continue;
+        }
+        // What the layer plays when it names no duration: its trimmed
+        // ranges (or the whole clip) at the rate it runs.
+        let mut played_length = 0.0;
+        match layer.kind {
+            ProjectLayerKind::Video | ProjectLayerKind::Audio => {
+                let want = if layer.kind == ProjectLayerKind::Video {
+                    ProjectResourceKind::Video
+                } else {
+                    ProjectResourceKind::Audio
+                };
+                let Some(stored) = layer
+                    .resource_id
+                    .as_deref()
+                    .and_then(|rid| resources.iter().find(|r| r.id == rid && r.kind == want))
+                else {
+                    continue;
+                };
+                // The layer's cut decides which part plays and at what speed.
+                let res = crate::mapping::resource_for_cut(stored, layer.media_cut_id.as_deref());
+                let ranges = crate::mapping::playback_video_trim_ranges(&res);
+                let rate = crate::mapping::effective_speed(&res);
+                let rate = if rate.abs() > 0.0001 { rate.abs() } else { 1.0 };
+                played_length = ranges
+                    .as_ref()
+                    .map(|rs| rs.iter().map(|r| (r.end - r.start).max(0.0)).sum())
+                    .unwrap_or_else(|| res.duration.unwrap_or(0.0))
+                    / rate;
+                let is_video = layer.kind == ProjectLayerKind::Video;
+                inputs.push(AudioInput {
+                    layer_id: layer.id.clone(),
+                    source: AudioSource::Resource(stored.id.clone()),
+                    included_ranges: ranges,
+                    start_time: layer.start_time,
+                    duration_cap: layer.duration,
+                    extended_pauses: if is_video {
+                        crate::mapping::extended_video_pauses(&res)
+                    } else {
+                        Vec::new()
+                    },
+                    volume: res.effective_volume(),
+                    volume_points: automation(layer, res.effective_volume()),
+                    disabled_audio_track_indices: if is_video {
+                        res.disabled_audio_track_indices.clone()
+                    } else {
+                        Vec::new()
+                    },
+                    single_track: !is_video,
+                    is_focused: layer.is_audio_focused(),
+                    speed: crate::mapping::effective_speed(&res),
+                });
+            }
+            ProjectLayerKind::Caption => {
+                let caption_resource = layer.resource_id.as_deref().and_then(|rid| {
+                    resources
+                        .iter()
+                        .find(|r| r.id == rid && r.kind == ProjectResourceKind::Caption)
+                });
+                let Some(clip) = caption_resource
+                    .and_then(|r| r.caption_voice_clip.as_ref())
+                    .or(layer.caption_voice_clip.as_ref())
+                else {
+                    continue;
+                };
+                let base = caption_resource
+                    .map(|r| r.effective_volume())
+                    .unwrap_or(1.0);
+                inputs.push(AudioInput {
+                    layer_id: layer.id.clone(),
+                    source: AudioSource::VoiceClip(clip.filename.clone()),
+                    included_ranges: None,
+                    start_time: layer.start_time,
+                    duration_cap: None,
+                    extended_pauses: Vec::new(),
+                    volume: base,
+                    volume_points: automation(layer, base),
+                    disabled_audio_track_indices: Vec::new(),
+                    single_track: true,
+                    is_focused: layer.is_audio_focused(),
+                    speed: 1.0,
+                });
+            }
+            _ => continue,
+        }
+
+        if layer.is_audio_focused() {
+            let start = layer.start_time.max(0.0);
+            // A layer with no duration plays its whole clip, so it ducks for
+            // as long as it speaks — reading the absent duration as zero
+            // made such a layer audible while ducking nothing.
+            let end = start + layer.duration.unwrap_or(played_length).max(0.0);
+            if end > start {
+                focus.push((start, end));
+            }
+        }
+    }
+    (inputs, focus)
 }

@@ -412,6 +412,114 @@ impl AudioReader for FfmpegAudioReader {
             sample_rate,
         }))
     }
+
+    fn read_tracks(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        speed: f64,
+        tracks: &crate::TrackSelection,
+    ) -> Result<Option<AudioBuffer>, MediaError> {
+        let count = audio_stream_count(path);
+        if count == 0 {
+            return Ok(None);
+        }
+        let kept = tracks.kept(count);
+        if kept.is_empty() {
+            return Ok(None);
+        }
+        // Only a single-track asset can take the plain path: with no -map,
+        // ffmpeg picks ONE "best" audio stream, so a multi-track recording
+        // read that way is its first track, not the sum the apps play.
+        if count == 1 {
+            return self.read_at_speed(path, sample_rate, channels, speed);
+        }
+        let mut command = Command::new("ffmpeg");
+        command.args(["-v", "error", "-nostdin", "-i"]).arg(path);
+        let tempo = crate::atempo_chain(speed);
+        if kept.len() == 1 {
+            command.args(["-map", &format!("0:a:{}", kept[0])]);
+            if let Some(filter) = tempo {
+                command.args(["-filter:a", &filter]);
+            }
+        } else {
+            // Sum the kept tracks at unity (normalize=0), as the apps'
+            // composition mixer does when each is its own track.
+            let inputs: String = kept.iter().map(|i| format!("[0:a:{i}]")).collect();
+            let mut graph = format!("{inputs}amix=inputs={}:normalize=0", kept.len());
+            if let Some(filter) = tempo {
+                graph.push(',');
+                graph.push_str(&filter);
+            }
+            graph.push_str("[out]");
+            command.args(["-filter_complex", &graph, "-map", "[out]"]);
+        }
+        let output = command
+            .args([
+                "-vn",
+                "-f",
+                "f32le",
+                "-acodec",
+                "pcm_f32le",
+                "-ac",
+                &channels.to_string(),
+                "-ar",
+                &sample_rate.to_string(),
+                "-",
+            ])
+            .output()
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    MediaError::ToolMissing("ffmpeg", "not found on PATH".into())
+                }
+                _ => MediaError::Backend(format!("ffmpeg: {e}")),
+            })?;
+        if !output.status.success() {
+            return Err(MediaError::Backend(format!(
+                "{}: ffmpeg could not read its audio tracks",
+                path.display()
+            )));
+        }
+        let samples: Vec<f32> = output
+            .stdout
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
+        if samples.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(AudioBuffer {
+            samples,
+            channels,
+            sample_rate,
+        }))
+    }
+}
+
+/// How many audio streams the asset carries (0 when ffprobe is missing or
+/// the file has none).
+fn audio_stream_count(path: &Path) -> usize {
+    let Ok(output) = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(path)
+        .output()
+    else {
+        return 0;
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count()
 }
 
 /// Does this asset have an audio track at all? Most screen recordings do not,
@@ -872,6 +980,83 @@ mod tests {
             },
         )
         .expect("conformant on a rotated asset");
+    }
+
+    /// A two-track recording — silence on track 0, a tone on track 1, the
+    /// shape of a screen capture with the mic muted. Track selection must
+    /// keep exactly the tracks asked for and sum the rest at unity.
+    #[test]
+    fn track_selection_keeps_what_it_is_asked_to() {
+        use crate::TrackSelection;
+        let dir = std::env::temp_dir().join("promo-media-tests");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let two = dir.join("two-tracks.mp4");
+        let ok = Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=64x48:rate=30:duration=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=48000:cl=stereo:d=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=1",
+                "-map",
+                "0:v",
+                "-map",
+                "1:a",
+                "-map",
+                "2:a",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+            ])
+            .arg(&two)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        let rms = |audio: Option<AudioBuffer>| -> f32 {
+            let Some(audio) = audio else { return 0.0 };
+            let n = audio.samples.len().max(1) as f32;
+            (audio.samples.iter().map(|s| s * s).sum::<f32>() / n).sqrt()
+        };
+        let reader = FfmpegAudioReader;
+        let read = |sel: TrackSelection| {
+            reader
+                .read_tracks(&two, 48_000, 2, 1.0, &sel)
+                .expect("read")
+        };
+        let all = rms(read(TrackSelection::All));
+        let first = rms(read(TrackSelection::First));
+        let without_tone = rms(read(TrackSelection::Except(vec![1])));
+        let without_silence = rms(read(TrackSelection::Except(vec![0])));
+        assert!(all > 0.01, "the summed tracks carry the tone: {all}");
+        assert!(first < 0.001, "track 0 alone is silence: {first}");
+        assert!(
+            without_tone < 0.001,
+            "dropping the tone leaves silence: {without_tone}"
+        );
+        assert!(
+            (without_silence - all).abs() < all * 0.05,
+            "dropping silence changes nothing audible: {without_silence} vs {all}"
+        );
+        assert!(
+            read(TrackSelection::Except(vec![0, 1])).is_none(),
+            "every track switched off is None, not an error"
+        );
     }
 
     /// A clip with a tone: audio must come back as PCM at the rate asked

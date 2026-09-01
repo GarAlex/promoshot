@@ -22,8 +22,10 @@ pub mod viewport;
 
 pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
 pub use audio::{
-    amplitude_for_fraction, audio_focus_intervals, duck_gate, gain_ramp_segments, layer_gain,
-    level_points, merge_intervals, sample_automation, GainRampSegment, VolumePoint,
+    amplitude_for_fraction, audio_focus_intervals, audio_inputs, duck_gate, gain_ramp_segments,
+    layer_gain, level_points, merge_intervals, placed_segments, sample_automation, scaled_segments,
+    AudioInput, AudioSource, GainRampSegment, PlacedSegment, ScaledSegment, VolumePoint,
+    DUCK_FACTOR, DUCK_RAMP,
 };
 pub use frame::{bake_slab, framed_pixel_size, slab_geometry, SlabGeometry};
 pub use gradient::layer_background_gradient;
@@ -79,7 +81,7 @@ pub fn loop_fold(local: f64, period: f64) -> LoopFold {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use promo_model::{ProjectMetadata, ProjectResource, Size};
+    use promo_model::{ProjectMetadata, ProjectResource, Size, VideoTrimRange};
 
     // Values mirror ReVoiceTests/GifExportTests.testLoopedResource_timeMappingWraps.
     #[test]
@@ -383,6 +385,205 @@ mod tests {
         let intervals = audio_focus_intervals(&p);
         // Only the "Looping clip" layer is audio-focused: 2.5 … 27.5.
         assert_eq!(intervals, vec![(2.5, 27.5)]);
+    }
+
+    // ---- mix graph (Swift AudioTimelineBuilderTests vectors) --------------
+
+    fn segs(ranges: &[(f64, f64)], start: f64, limit: f64) -> Vec<(f64, f64, f64)> {
+        let ranges: Vec<VideoTrimRange> = ranges
+            .iter()
+            .map(|&(start, end)| VideoTrimRange { start, end })
+            .collect();
+        placed_segments(&ranges, start, limit, &[])
+            .iter()
+            .map(|s| (s.source_start, s.duration, s.output_start))
+            .collect()
+    }
+
+    fn pause(start_time: f64, duration: f64) -> ExtendedPause {
+        ExtendedPause {
+            start_time,
+            duration,
+        }
+    }
+
+    #[test]
+    fn placed_segments_match_the_swift_vectors() {
+        assert!(segs(&[], 0.0, 10.0).is_empty());
+        assert!(segs(&[(0.0, 5.0)], 0.0, 0.0).is_empty());
+        assert!(segs(&[(0.0, 5.0)], 0.0, -1.0).is_empty());
+        assert!(segs(&[(3.0, 3.0)], 0.0, 10.0).is_empty());
+        assert!(segs(&[(8.0, 3.0)], 0.0, 10.0).is_empty());
+        assert_eq!(segs(&[(3.0, 8.0)], 0.0, 10.0), vec![(3.0, 5.0, 0.0)]);
+        assert_eq!(segs(&[(3.0, 8.0)], 2.5, 10.0), vec![(3.0, 5.0, 2.5)]);
+        assert_eq!(segs(&[(0.0, 10.0)], 0.0, 4.0), vec![(0.0, 4.0, 0.0)]);
+        assert_eq!(
+            segs(&[(0.0, 2.0), (5.0, 8.0)], 1.0, 100.0),
+            vec![(0.0, 2.0, 1.0), (5.0, 3.0, 3.0)]
+        );
+        assert_eq!(
+            segs(&[(0.0, 2.0), (10.0, 14.0)], 0.0, 3.5),
+            vec![(0.0, 2.0, 0.0), (10.0, 1.5, 2.0)]
+        );
+        assert_eq!(
+            segs(&[(0.0, 3.0), (10.0, 12.0)], 0.0, 3.0),
+            vec![(0.0, 3.0, 0.0)]
+        );
+        let total: f64 = segs(&[(0.0, 4.0), (4.0, 8.0), (8.0, 12.0)], 0.0, 7.0)
+            .iter()
+            .map(|s| s.1)
+            .sum();
+        assert!((total - 7.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn extended_pauses_open_silent_gaps_in_the_placement() {
+        let one = |r: &[(f64, f64)], start: f64, limit: f64, pauses: &[ExtendedPause]| {
+            let ranges: Vec<VideoTrimRange> = r
+                .iter()
+                .map(|&(start, end)| VideoTrimRange { start, end })
+                .collect();
+            placed_segments(&ranges, start, limit, pauses)
+                .iter()
+                .map(|s| (s.source_start, s.duration, s.output_start))
+                .collect::<Vec<_>>()
+        };
+        // Output 4…6 is intentionally empty: only this video's audio pauses.
+        assert_eq!(
+            one(&[(0.0, 10.0)], 1.0, 12.0, &[pause(3.0, 2.0)]),
+            vec![(0.0, 3.0, 1.0), (3.0, 7.0, 6.0)]
+        );
+        assert_eq!(
+            one(&[(0.0, 2.0), (5.0, 8.0)], 0.0, 7.0, &[pause(2.0, 2.0)]),
+            vec![(0.0, 2.0, 0.0), (5.0, 3.0, 4.0)]
+        );
+        assert_eq!(
+            one(
+                &[(0.0, 10.0)],
+                0.0,
+                13.0,
+                &[pause(3.0, 2.0), pause(8.0, 1.0)]
+            ),
+            vec![(0.0, 3.0, 0.0), (3.0, 3.0, 5.0), (6.0, 4.0, 9.0)]
+        );
+    }
+
+    #[test]
+    fn scaled_segments_divide_only_the_output_placement_by_speed() {
+        let scaled =
+            |r: (f64, f64), start: f64, limit: f64, pauses: &[ExtendedPause], speed: f64| {
+                scaled_segments(
+                    &[VideoTrimRange {
+                        start: r.0,
+                        end: r.1,
+                    }],
+                    start,
+                    limit,
+                    pauses,
+                    speed,
+                )
+                .iter()
+                .map(|s| {
+                    (
+                        s.source_start,
+                        s.source_duration,
+                        s.output_start,
+                        s.output_duration,
+                    )
+                })
+                .collect::<Vec<_>>()
+            };
+        assert_eq!(
+            scaled((3.0, 8.0), 2.5, 10.0, &[], 1.0),
+            vec![(3.0, 5.0, 2.5, 5.0)]
+        );
+        assert_eq!(
+            scaled((0.0, 8.0), 10.0, 100.0, &[], 2.0),
+            vec![(0.0, 8.0, 10.0, 4.0)]
+        );
+        assert_eq!(
+            scaled((0.0, 8.0), 0.0, 3.0, &[], 2.0),
+            vec![(0.0, 6.0, 0.0, 3.0)]
+        );
+        assert_eq!(
+            scaled((2.0, 4.0), 0.0, 100.0, &[], 0.5),
+            vec![(2.0, 2.0, 0.0, 4.0)]
+        );
+        assert_eq!(
+            scaled((0.0, 8.0), 1.0, 100.0, &[pause(4.0, 2.0)], 2.0),
+            vec![(0.0, 4.0, 1.0, 2.0), (4.0, 4.0, 4.0, 2.0)]
+        );
+    }
+
+    #[test]
+    fn audio_inputs_derive_the_apps_mix_graph() {
+        let p = fixture_project();
+        let (inputs, focus) = audio_inputs(&p, &|_| true);
+        assert_eq!(inputs.len(), 2, "the looping clip and the voice");
+        let clip = &inputs[0];
+        assert_eq!(clip.source, AudioSource::Resource(clip_resource_id(&p)));
+        assert!(clip.is_focused && !clip.single_track);
+        assert_eq!(clip.start_time, 2.5);
+        assert_eq!(clip.duration_cap, Some(25.0));
+        assert!((clip.volume - 1.0).abs() < 1e-6);
+        let voice = &inputs[1];
+        assert!(voice.single_track && !voice.is_focused);
+        assert!((voice.volume - 0.8).abs() < 1e-6);
+        // Two gain keyframes become output-time automation offset by the
+        // layer's start, in the fraction domain.
+        let points = voice
+            .volume_points
+            .as_ref()
+            .expect("keyframed gain is automation");
+        assert!(
+            (points[0].time - 1.0).abs() < 1e-9,
+            "offset by the layer start"
+        );
+        assert!(points.iter().all(|p| (0.0..=1.0).contains(&p.volume)));
+        assert_eq!(focus, vec![(2.5, 27.5)]);
+
+        // A layer whose media is gone contributes nothing.
+        let (without, _) = audio_inputs(&p, &|l| l.name != "Voice");
+        assert_eq!(without.len(), 1);
+    }
+
+    /// A gain keyframe with no ramp is a STEP. Two breakpoints at one
+    /// time read as a ramp from the previous breakpoint, which faded a cut
+    /// to 25% at 6s in from 4s; the pre-step point sits a millisecond early
+    /// so the level holds until the keyframe, as `layer_gain` reports.
+    #[test]
+    fn a_gain_step_holds_until_its_keyframe_in_the_mix_graph() {
+        let raw = r#"{"id":"P","name":"s","createdAt":0,"state":"recorded",
+            "trimStart":0,"trimEnd":0,"videoDuration":0,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"000000"},
+            "resources":[{"id":"M","kind":"audio","filename":"m.wav","displayName":"m","addedAt":0,"duration":8,
+                          "imageCuts":[],"disabledAudioTrackIndices":[]}],
+            "layers":[{"id":"L","name":"m","sortIndex":0,"kind":"audio","isEnabled":true,"startTime":1,"duration":8,"resourceID":"M",
+                       "keyframes":[{"id":"K0","time":0,"gain":1,"transitionDuration":0},
+                                    {"id":"K1","time":6,"gain":0.25,"transitionDuration":0}]}]}"#;
+        let p = ProjectMetadata::from_json(raw).expect("decode");
+        let (inputs, _) = audio_inputs(&p, &|_| true);
+        let points = inputs[0].volume_points.clone().expect("automation");
+        let flat: Vec<(f64, f32)> = points.iter().map(|p| (p.time, p.volume)).collect();
+        assert_eq!(flat, vec![(1.0, 1.0), (6.999, 1.0), (7.0, 0.25)]);
+        assert!(
+            (sample_automation(6.5, &points) - 1.0).abs() < 1e-6,
+            "holds before the step"
+        );
+        assert!(
+            (sample_automation(7.0, &points) - 0.25).abs() < 1e-6,
+            "and cuts at it"
+        );
+    }
+
+    fn clip_resource_id(p: &ProjectMetadata) -> String {
+        p.layers
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .find(|l| l.name == "Looping clip")
+            .and_then(|l| l.resource_id.clone())
+            .expect("fixture has the looping clip")
     }
 
     // ---- layout -------------------------------------------------------------

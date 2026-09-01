@@ -614,16 +614,22 @@ pub fn write_png(
         .map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// The composition's soundtrack: every audio-bearing layer decoded, placed at
-/// its position on the output timeline, and mixed.
-///
-/// Uses `promo_engine::mix_chunk`, the same summing the app's preview and
-/// export use, so the CLI cannot drift into its own idea of a mix.
+/// The composition's soundtrack: the apps' mix graph (`audio_inputs` —
+/// which layers sound, which slice plays where, at what level, ducked by
+/// whom) executed by the core mixer. Trims, media cuts, extended pauses,
+/// speed (pitch preserved), keyframed volume through the perceptual taper,
+/// focus ducking and disabled tracks all land here, so `promo video` and
+/// the Mac export describe the same sound.
 pub fn build_soundtrack(
     project: &Project,
     duration: f64,
 ) -> Result<Option<promo_media::AudioBuffer>, String> {
     use promo_engine::{mix_chunk, MixInput};
+    use promo_media::TrackSelection;
+    use promo_timeline::{
+        audio_inputs, level_points, scaled_segments, AudioSource, VolumePoint, DUCK_FACTOR,
+        DUCK_RAMP,
+    };
 
     const SAMPLE_RATE: u32 = 48_000;
     const CHANNELS: u16 = 2;
@@ -634,73 +640,141 @@ pub fn build_soundtrack(
     let registry = Registry::with_defaults();
     let reader = registry.audio_reader();
 
-    // Decode first: a layer contributes only if its asset actually has audio,
-    // which most screen recordings do not.
-    let mut sources: Vec<(f64, promo_media::AudioBuffer)> = Vec::new();
-    for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
-        if !layer.is_enabled {
-            continue;
+    // A layer whose file is gone contributes nothing (Swift `renderableLayers`).
+    let renderable = |layer: &promo_model::ProjectLayer| -> bool {
+        match layer.resource_id.as_deref() {
+            Some(id) => !project.is_missing(id),
+            None => true,
         }
-        let kind = layer.kind;
-        if kind != promo_model::ProjectLayerKind::Video
-            && kind != promo_model::ProjectLayerKind::Audio
-        {
-            continue;
-        }
-        let Some(resource) = layer
-            .resource_id
-            .as_ref()
-            .and_then(|id| project.resource(id))
-        else {
-            continue;
-        };
-        let Some(path) = project.resource_path(resource) else {
-            continue;
-        };
-        // Read through the cut's view so its speed (and trim) apply.
-        let view = promo_timeline::resource_for_cut(resource, layer.media_cut_id.as_deref());
-        let decoded = reader
-            .read_at_speed(&path, SAMPLE_RATE, CHANNELS, view.speed.unwrap_or(1.0))
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        let Some(mut audio) = decoded else { continue };
+    };
+    let (inputs, focus) = audio_inputs(&project.meta, &renderable);
 
-        // The layer plays a window of the source; cut the PCM to match rather
-        // than trusting the mixer to clip it. A named cut shadows the
-        // resource's own trim, so audio cuts and video cuts mean the same
-        // thing and are resolved by the same helper.
-        // The stretched stream has its own clock: a trim of 4s into a source
-        // played at 2x begins 2s into the stretched PCM.
-        let speed = view.speed.unwrap_or(1.0).clamp(0.1, 10.0);
-        let trim_start = view.trim_start.unwrap_or(0.0).max(0.0) / speed;
-        let layer_len = layer
-            .duration
-            .unwrap_or_else(|| audio.duration_s() - trim_start)
-            .max(0.0);
-        let frame = CHANNELS as usize;
-        let from = (trim_start * SAMPLE_RATE as f64) as usize * frame;
-        let take = (layer_len * SAMPLE_RATE as f64) as usize * frame;
-        if from >= audio.samples.len() {
-            continue;
-        }
-        let end = (from + take).min(audio.samples.len());
-        audio.samples = audio.samples[from..end].to_vec();
-        if audio.samples.is_empty() {
-            continue;
-        }
-        sources.push((layer.start_time.max(0.0), audio));
+    // One placed slice of decoded PCM with its level curve.
+    struct Placed {
+        samples: Vec<f32>,
+        start_time: f64,
+        points: Vec<VolumePoint>,
     }
-    if sources.is_empty() {
+    let mut placed: Vec<Placed> = Vec::new();
+
+    for input in &inputs {
+        let path = match &input.source {
+            AudioSource::Resource(id) => project
+                .resource(id)
+                .and_then(|res| project.resource_path(res)),
+            AudioSource::VoiceClip(filename) => {
+                let candidate = project.dir.join("Resources").join(filename);
+                candidate.is_file().then_some(candidate)
+            }
+        };
+        let Some(path) = path else { continue };
+
+        let speed = if input.speed.is_finite() {
+            input.speed.clamp(0.1, 10.0)
+        } else {
+            1.0
+        };
+        let selection = if input.single_track {
+            TrackSelection::First
+        } else if input.disabled_audio_track_indices.is_empty() {
+            TrackSelection::All
+        } else {
+            TrackSelection::Except(input.disabled_audio_track_indices.clone())
+        };
+        // Decode first: a layer contributes only if its asset has audio,
+        // which most screen recordings do not. The stretched stream has its
+        // own clock; source seconds divide by `speed` to index it.
+        let decoded = reader
+            .read_tracks(&path, SAMPLE_RATE, CHANNELS, speed, &selection)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let Some(audio) = decoded else { continue };
+        let asset_seconds = audio.duration_s() * speed;
+
+        let ranges = match &input.included_ranges {
+            Some(ranges) => ranges.clone(),
+            None => vec![promo_model::VideoTrimRange {
+                start: 0.0,
+                end: asset_seconds,
+            }],
+        };
+        if ranges.is_empty() {
+            continue;
+        }
+        let start_output = input.start_time.max(0.0);
+        if start_output >= duration {
+            continue;
+        }
+        let layer_limit = input
+            .duration_cap
+            .unwrap_or(f64::MAX)
+            .min(duration - start_output);
+        if layer_limit <= 0.0 {
+            continue;
+        }
+        let segments = scaled_segments(
+            &ranges,
+            start_output,
+            layer_limit,
+            &input.extended_pauses,
+            speed,
+        );
+        if segments.is_empty() {
+            continue;
+        }
+        let track_start = segments
+            .iter()
+            .map(|s| s.output_start)
+            .fold(f64::MAX, f64::min);
+        let track_end = segments
+            .iter()
+            .map(|s| s.output_start + s.output_duration)
+            .fold(f64::MIN, f64::max);
+        let base_volume = input.volume.clamp(0.0, 1.0);
+        let automation = input.volume_points.clone().unwrap_or_else(|| {
+            vec![VolumePoint {
+                time: track_start,
+                volume: base_volume,
+            }]
+        });
+        let points = level_points(
+            &automation,
+            track_start,
+            track_end,
+            &focus,
+            input.is_focused,
+            DUCK_FACTOR,
+            DUCK_RAMP,
+        );
+
+        let frame = CHANNELS as usize;
+        for seg in segments {
+            // Index the STRETCHED stream: a slice at source 4s of a 2x clip
+            // begins 2s into the PCM ffmpeg produced.
+            let from = ((seg.source_start / speed) * SAMPLE_RATE as f64).round() as usize * frame;
+            let take = (seg.output_duration * SAMPLE_RATE as f64).round() as usize * frame;
+            if from >= audio.samples.len() || take == 0 {
+                continue;
+            }
+            let to = (from + take).min(audio.samples.len());
+            placed.push(Placed {
+                samples: audio.samples[from..to].to_vec(),
+                start_time: seg.output_start,
+                points: points.clone(),
+            });
+        }
+    }
+    if placed.is_empty() {
         return Ok(None);
     }
 
     let frames = (duration * SAMPLE_RATE as f64).ceil() as usize;
     let mut output = vec![0.0f32; frames * CHANNELS as usize];
-    let inputs: Vec<MixInput> = sources
+    let mix_inputs: Vec<MixInput> = placed
         .iter()
-        .map(|(start, audio)| MixInput {
-            samples: &audio.samples,
-            start_time: *start,
-            points: &[],
+        .map(|p| MixInput {
+            samples: &p.samples,
+            start_time: p.start_time,
+            points: &p.points,
         })
         .collect();
     mix_chunk(
@@ -708,7 +782,7 @@ pub fn build_soundtrack(
         CHANNELS as usize,
         SAMPLE_RATE as f64,
         0.0,
-        &inputs,
+        &mix_inputs,
     );
 
     Ok(Some(promo_media::AudioBuffer {
@@ -722,6 +796,112 @@ pub fn build_soundtrack(
 mod tests {
     use super::*;
     use std::process::Command;
+
+    /// Writes a tone file with ffmpeg's `sine` source; None when ffmpeg is
+    /// not around.
+    fn tone(path: &std::path::Path, hz: u32, seconds: f64) -> bool {
+        Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                &format!("sine=frequency={hz}:sample_rate=48000:duration={seconds}"),
+                "-c:a",
+                "pcm_s16le",
+            ])
+            .arg(path)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    fn rms(audio: &promo_media::AudioBuffer, from: f64, to: f64) -> f32 {
+        let frame = audio.channels as usize;
+        let a = (from * audio.sample_rate as f64) as usize * frame;
+        let b = ((to * audio.sample_rate as f64) as usize * frame).min(audio.samples.len());
+        let slice = &audio.samples[a..b];
+        (slice.iter().map(|s| s * s).sum::<f32>() / slice.len().max(1) as f32).sqrt()
+    }
+
+    /// The headless soundtrack is the apps' mix: keyframed volume through
+    /// the perceptual taper, a focused layer ducking everything else while
+    /// it plays, trims placing a slice where the layer starts. Before this
+    /// the CLI mixed every source at unity and `promo video` of a narrated
+    /// project came out with the music never dipping under the voice.
+    #[test]
+    fn the_soundtrack_executes_the_apps_mix_graph() {
+        let dir = std::env::temp_dir().join("promo-cli-soundtrack-test.promo");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).expect("dir");
+        if !tone(&dir.join("Resources/music.wav"), 440, 8.0)
+            || !tone(&dir.join("Resources/voice.wav"), 660, 2.0)
+        {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        // Music 0…8s with a gain step to 0.25 at 6s (taper → 0.0625);
+        // a SILENT focused voice at 2…4s that only ducks; a trimmed cut
+        // of the music (4…5s of the file) placed at 9s.
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"mix","createdAt":0,"state":"recorded",
+                "trimStart":0,"trimEnd":0,"videoDuration":0,"subtitles":[],
+                "compositionSettings":{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"000000"},
+                "resources":[
+                  {"id":"M","kind":"audio","filename":"music.wav","displayName":"m","addedAt":0,"duration":8,
+                   "imageCuts":[],"disabledAudioTrackIndices":[],
+                   "mediaCuts":[{"id":"C","name":"cut","trimStart":4,"trimEnd":5}]},
+                  {"id":"V","kind":"audio","filename":"voice.wav","displayName":"v","addedAt":0,"duration":2,
+                   "volume":0,"imageCuts":[],"disabledAudioTrackIndices":[]}],
+                "layers":[
+                  {"id":"BG","name":"bg","sortIndex":0,"kind":"background","isEnabled":true,"startTime":0,"duration":11,"keyframes":[]},
+                  {"id":"L1","name":"music","sortIndex":1,"kind":"audio","isEnabled":true,"startTime":0,"duration":8,"resourceID":"M",
+                   "keyframes":[{"id":"K0","time":0,"gain":1,"transitionDuration":0},{"id":"K1","time":6,"gain":0.25,"transitionDuration":0}]},
+                  {"id":"L2","name":"voice","sortIndex":2,"kind":"audio","isEnabled":true,"startTime":2,"duration":2,"resourceID":"V",
+                   "audioFocus":true,"keyframes":[]},
+                  {"id":"L3","name":"cut","sortIndex":3,"kind":"audio","isEnabled":true,"startTime":9,"resourceID":"M","mediaCutID":"C","keyframes":[]}
+                ]}"#,
+        )
+        .expect("metadata");
+        let project = Project::open(&dir).expect("opens");
+        let audio = build_soundtrack(&project, 11.0)
+            .expect("mixes")
+            .expect("has sound");
+        let full = rms(&audio, 1.0, 1.5);
+        assert!(full > 0.01, "music plays at full level: {full}");
+        let ducked = rms(&audio, 3.0, 3.5);
+        assert!(
+            (ducked / full - DUCK_FACTOR_FOR_TEST).abs() < 0.02,
+            "under the focused voice the music sits at the duck factor: {ducked} / {full}"
+        );
+        let back = rms(&audio, 5.0, 5.5);
+        assert!(
+            (back / full - 1.0).abs() < 0.02,
+            "and comes back after it: {back} / {full}"
+        );
+        let tapered = rms(&audio, 7.0, 7.5);
+        assert!(
+            (tapered / full - 0.0625).abs() < 0.01,
+            "a 0.25 gain keyframe lands at 0.25² through the taper: {tapered} / {full}"
+        );
+        let gap = rms(&audio, 8.2, 8.8);
+        assert!(
+            gap < 0.001,
+            "nothing plays between the music and the cut: {gap}"
+        );
+        let cut = rms(&audio, 9.2, 9.8);
+        assert!(
+            (cut / full - 1.0).abs() < 0.02,
+            "the cut plays its slice at 9s: {cut} / {full}"
+        );
+        let after = rms(&audio, 10.2, 10.8);
+        assert!(after < 0.001, "and only its one second: {after}");
+    }
+
+    const DUCK_FACTOR_FOR_TEST: f32 = promo_timeline::DUCK_FACTOR;
 
     /// Builds a project with three sequential clips over one generated file.
     fn three_clip_project(dir: &std::path::Path) -> Option<Project> {

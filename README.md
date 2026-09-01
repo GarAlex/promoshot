@@ -63,6 +63,11 @@ promo video    <project> --out out.mp4 --fps 30
 Add `--json` to any project command for machine output — one object on
 stdout, errors included, exit codes unchanged.
 
+`promo video` mixes the soundtrack the apps would: trims and media cuts,
+held frames, speed with pitch preserved, keyframed volume, a focused
+narration ducking everything under it, and only the audio tracks the
+project keeps.
+
 Headless renders are CLEAN — no watermark, and no license, serial or key
 will ever be asked for. (The Mac and iOS apps watermark free-tier renders;
 that is their App Store Pro line, and it stays on their side of the fence.)
