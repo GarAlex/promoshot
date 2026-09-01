@@ -25,8 +25,11 @@ discipline as rustrator-core).
   `promo video`, `promo_export_start` and the apps' loop (through
   `promo_project_export_plan`) all run it. The composition's end for
   rendering (`composition_duration`) is the furthest declared layer or
-  the recording; a layer with no duration ends where it starts for this
-  purpose.
+  the recording, backgrounds included; a layer with no duration ends
+  where it starts for this purpose. The apps take this end from the plan
+  too (`layerTimelineEnd`) and keep only their legacy trim fields as an
+  overlay; a parallel export seeks each segment's reader from
+  `promo_layer_source_time`, the engine's own mapping.
 - T4 A layer's `imageOrientation` turns the picture BEFORE anything else
   happens to it — before a slab is baked, before a placement rule sizes
   the box. A quarter turn therefore swaps the source size placement
