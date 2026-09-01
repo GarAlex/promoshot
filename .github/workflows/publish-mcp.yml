@@ -1,7 +1,14 @@
 # Publish to the official MCP Registry (GitHub's MCP Registry consumes this).
 name: publish-mcp
 
+# The release workflow creates the GitHub Release with GITHUB_TOKEN, and
+# events raised by that token never start other workflows — so `release:
+# published` alone would sleep through every real release (it did, for
+# v0.2.3). workflow_run on the release workflow is exempt from that rule.
 on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
   release:
     types: [published]
   workflow_dispatch:
@@ -13,6 +20,7 @@ permissions:
 
 jobs:
   docker:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,14 +29,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Image tag
+      - name: Image tag (from server.json — the manifest names the image it publishes)
         id: tag
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=v0.2.1" >> "$GITHUB_OUTPUT"
-          fi
+          tag=$(python3 -c "import json; print(json.load(open('server.json'))['packages'][0]['identifier'].split(':')[-1])")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
