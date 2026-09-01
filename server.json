@@ -8,11 +8,11 @@
     "url": "https://github.com/GarAlex/promoshot",
     "source": "github"
   },
-  "version": "0.2.6",
+  "version": "0.2.7",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/garalex/promoshot-mcp:v0.2.6",
+      "identifier": "ghcr.io/garalex/promoshot-mcp:v0.2.7",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"

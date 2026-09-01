@@ -618,9 +618,9 @@ fn tool_descriptors() -> Value {
             "name": "promo_voices",
             "description": "A narration provider's voices — id, name and a line of detail per \
                 voice (openai's fixed roster; elevenlabs and google list live) — with the \
-                person's own key: the OS keyring (`promoshot-mcp key set <provider>`), else \
-                OPENAI_API_KEY / ELEVENLABS_API_KEY / GOOGLE_API_KEY in the server's \
-                environment. Use before promo_speak to pick a voiceID.",
+                person's own key: the OS keyring (`promoshot-mcp key set <provider>`), else a \
+                secrets file (OPENAI_API_KEY_FILE, or /run/secrets/OPENAI_API_KEY) where \
+                there is no keyring. Use before promo_speak to pick a voiceID.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -633,8 +633,8 @@ fn tool_descriptors() -> Value {
             "name": "promo_speak",
             "description": "Synthesize narration for every resource whose speech.text \
                 says something, spending the PERSON'S OWN provider key from the \
-                OS keyring (`promoshot-mcp key set <provider>`) or environment \
-                (OPENAI_API_KEY, ELEVENLABS_API_KEY, GOOGLE_API_KEY), \
+                OS keyring (`promoshot-mcp key set <provider>`) or, where there is none, a \
+                secrets file (OPENAI_API_KEY_FILE or /run/secrets/OPENAI_API_KEY), \
                 matching each script's provider (default openai/alloy). Unchanged \
                 text is reused by receipt, never billed twice. Keys are checked for EVERY pending narration before \
                 anything is bought, and each bought receipt is written back at once. Without a key an \

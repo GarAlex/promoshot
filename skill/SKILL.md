@@ -82,9 +82,10 @@ from it); `promo_speak` synthesizes every resource whose `speech.text`
 says something, spending the person's OWN provider key — headless from
 the OS keyring, where the person registers it once with
 `promoshot-mcp key set <provider>` (the key is read from stdin, never
-from an argument), else from OPENAI_API_KEY / ELEVENLABS_API_KEY /
-GOOGLE_API_KEY in the server's environment; in the app from the
-person's Keychain. No tool takes a key and none ever shows one.
+from an argument), else — where there is no keyring, a container — from
+a secrets file (`/run/secrets/OPENAI_API_KEY`, or the path in
+`OPENAI_API_KEY_FILE`; likewise ELEVENLABS and GOOGLE), never from an
+environment variable; in the app from the person's Keychain. No tool takes a key and none ever shows one.
 Before planning a narrated piece, ask `promo_speak {"check": true}`
 (with or without a project): it spends nothing and says, per provider,
 whether a key is present and what a real call would synthesize —

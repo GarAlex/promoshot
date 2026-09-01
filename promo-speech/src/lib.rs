@@ -5,10 +5,11 @@
 //!
 //! Keys: the OS keyring first (macOS Keychain, the Secret Service on
 //! Linux, the Credential Manager on Windows — service `promoshot`, one
-//! entry per provider), then the environment (`OPENAI_API_KEY`,
-//! `ELEVENLABS_API_KEY`, `GOOGLE_API_KEY`) for a container or a CI box
-//! that has no keyring. A key travels in a request header, never a URL;
-//! nothing here stores or logs one. Without a key an agent CANNOT
+//! entry per provider), then a secrets file (`OPENAI_API_KEY_FILE`, else
+//! `/run/secrets/OPENAI_API_KEY`) for a container or a CI box that has
+//! no keyring — never an environment variable holding the key. A key
+//! travels in a request header, never a URL; nothing here stores or logs
+//! one. Without a key an agent CANNOT
 //! narrate: the honest fallback is a recorded file dropped into
 //! Resources/ and referenced like any audio.
 
@@ -21,7 +22,8 @@ pub mod stress;
 pub mod voices;
 
 pub use keys::{
-    FixedKeys, KeySource, KeyStatus, KeyStore, SystemKeys, ENV_VARS, PROVIDERS, SERVICE,
+    secrets_path, FixedKeys, KeySource, KeyStatus, KeyStore, SystemKeys, PROVIDERS, SECRETS,
+    SERVICE,
 };
 pub use stress::{google_input, marking_stress};
 pub use voices::{voices_with_key, Voice};

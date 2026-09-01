@@ -221,18 +221,28 @@ promoshot-mcp key remove openai
 ```
 
 Providers: `openai`, `elevenlabs`, `google`. The key is read from stdin so
-it lands in no shell history, no config file and no argument list. A box
-with no keyring — a container, a CI runner — falls back to
-`OPENAI_API_KEY`, `ELEVENLABS_API_KEY` or `GOOGLE_API_KEY` in the server's
-environment (`-e OPENAI_API_KEY=…` on `docker run`). Keys travel in
-request headers, never URLs, and nothing logs them.
+it lands in no shell history, no config file and no argument list.
+
+Where there is no keyring — the Docker image, a CI runner — the key is
+read from a **secrets file**, the way Docker, Kubernetes and CI systems
+hand secrets over: `/run/secrets/OPENAI_API_KEY` (likewise
+`ELEVENLABS_API_KEY`, `GOOGLE_API_KEY`), or the path named by
+`OPENAI_API_KEY_FILE`. A mode-0400 file, never an environment variable
+that `docker inspect` and every same-user process can read:
+
+```bash
+docker run -i --rm \
+  -v "$HOME/.secrets/openai:/run/secrets/OPENAI_API_KEY:ro" \
+  -v /path/to/your/projects:/projects promoshot-mcp
+```
 
 An agent can ask before it plans: `promo_speak` with `{"check": true}`
 spends nothing and reports, per provider, whether a key is present and
 what a real call would synthesize. A real call checks every pending
 narration's key before buying anything, and writes each receipt back the
 moment it is paid for, so a failure part-way never makes the next call
-pay twice.
+pay twice. Keys travel in request headers, never URLs, and nothing logs
+them.
 
 ### Docker
 

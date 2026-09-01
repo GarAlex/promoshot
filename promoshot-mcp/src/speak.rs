@@ -117,9 +117,10 @@ fn key_report(keys: &dyn promo_speech::KeyStore, providers: Vec<String>) -> Stri
         .iter()
         .map(|provider| match keys.key(provider) {
             Some((_, promo_speech::KeySource::Keyring)) => format!("{provider} — OS keyring"),
-            Some((_, promo_speech::KeySource::Environment)) => {
-                format!("{provider} — environment")
+            Some((_, promo_speech::KeySource::SecretsFile)) => {
+                format!("{provider} — secrets file")
             }
+            Some((_, promo_speech::KeySource::Given)) => format!("{provider} — given"),
             None => format!("{provider} — NO KEY (`promoshot-mcp key set {provider}`)"),
         })
         .collect();
@@ -188,7 +189,9 @@ pub fn key_command(args: &[String], stdin: &mut dyn std::io::Read) -> Result<Str
             for p in providers {
                 let status = match promo_speech::keys::status(p)? {
                     promo_speech::KeyStatus::Keyring => "OS keyring".to_string(),
-                    promo_speech::KeyStatus::Environment(var) => format!("environment ({var})"),
+                    promo_speech::KeyStatus::SecretsFile(path) => {
+                        format!("secrets file ({})", path.display())
+                    }
                     promo_speech::KeyStatus::Missing => "none".to_string(),
                 };
                 lines.push(format!("{p}: {status}"));
