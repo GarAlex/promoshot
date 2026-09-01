@@ -6,7 +6,7 @@
 //! store: the OS keyring first, the environment behind it.
 
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub use promo_speech::Synth;
 
@@ -20,20 +20,34 @@ pub fn live() -> LiveSynth {
 }
 
 /// The whole tool: read the document raw (every unknown key preserved),
-/// settle each narration, write it back. `measure` answers a written
+/// check that every pending narration's provider has a key BEFORE a
+/// request goes out, settle each narration writing the document back
+/// after every one bought, and report. `measure` answers a written
 /// file's duration in seconds (ffprobe in production, a literal in tests).
+/// `check: true` spends nothing: it reports where each needed key comes
+/// from (never the key) and what a real call would synthesize; with no
+/// `project` it reports the keys alone.
 pub fn speak(
     args: &Value,
     root: Option<&Path>,
     synth: &dyn Synth,
+    keys: &dyn promo_speech::KeyStore,
     measure: &dyn Fn(&Path) -> Result<f64, String>,
 ) -> Result<String, String> {
-    let dir = PathBuf::from(
-        args.get("project")
-            .and_then(Value::as_str)
-            .ok_or("`project` is required")?,
-    );
-    let dir = std::fs::canonicalize(&dir).map_err(|e| format!("project: {e}"))?;
+    let check = args.get("check").and_then(Value::as_bool) == Some(true);
+    let Some(project) = args.get("project").and_then(Value::as_str) else {
+        if check {
+            return Ok(key_report(
+                keys,
+                promo_speech::PROVIDERS
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect(),
+            ));
+        }
+        return Err("`project` is required (or `check: true` alone, for the keys)".into());
+    };
+    let dir = std::fs::canonicalize(project).map_err(|e| format!("project: {e}"))?;
     if let Some(root) = root {
         let root = std::fs::canonicalize(root).map_err(|e| format!("--root: {e}"))?;
         if !dir.starts_with(&root) {
@@ -50,12 +64,66 @@ pub fn speak(
     if doc.get("resources").and_then(Value::as_array).is_none() {
         return Ok("no resources — nothing to narrate".into());
     }
-    let report = promo_speech::settle(&mut doc, &dir.join("Resources"), synth, measure)?;
+    let resources_dir = dir.join("Resources");
+
+    let plan = promo_speech::plan(&doc, &resources_dir, measure);
+    let missing = promo_speech::missing_keys(&plan, keys);
+    if check {
+        let verdict = if plan.pending.is_empty() {
+            "nothing to synthesize".to_string()
+        } else if missing.is_empty() {
+            format!(
+                "ready — would synthesize {} with {}",
+                plan.pending.len(),
+                plan.providers().join(", ")
+            )
+        } else {
+            format!("blocked — no key for {}", missing.join(", "))
+        };
+        return Ok(format!(
+            "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}",
+            key_report(keys, plan.providers()),
+            dir.display(),
+            plan.settled + plan.pending.len(),
+            plan.settled,
+            plan.pending.len()
+        ));
+    }
+    if !missing.is_empty() {
+        return Err(format!(
+            "nothing was synthesized: {} narration(s) pending, but no key for {} — {}",
+            plan.pending.len(),
+            missing.join(", "),
+            promo_speech::keys::missing_key_message(&missing[0])
+        ));
+    }
+
+    let mut persist = |doc: &Value| {
+        std::fs::write(&meta_path, doc.to_string()).map_err(|e| format!("write: {e}"))
+    };
+    let report = promo_speech::settle(&mut doc, &resources_dir, synth, measure, &mut persist)?;
     if report.is_empty() {
         return Ok("no narration scripts with text — nothing to do".into());
     }
-    std::fs::write(&meta_path, doc.to_string()).map_err(|e| format!("write: {e}"))?;
     Ok(report.join("\n"))
+}
+
+/// Where each provider's key comes from — never the key. One line.
+fn key_report(keys: &dyn promo_speech::KeyStore, providers: Vec<String>) -> String {
+    if providers.is_empty() {
+        return "narration keys: none needed".into();
+    }
+    let parts: Vec<String> = providers
+        .iter()
+        .map(|provider| match keys.key(provider) {
+            Some((_, promo_speech::KeySource::Keyring)) => format!("{provider} — OS keyring"),
+            Some((_, promo_speech::KeySource::Environment)) => {
+                format!("{provider} — environment")
+            }
+            None => format!("{provider} — NO KEY (`promoshot-mcp key set {provider}`)"),
+        })
+        .collect();
+    format!("narration keys: {}", parts.join("; "))
 }
 
 /// `promo_voices`: a provider's roster, one line per voice — id, name,
@@ -172,6 +240,7 @@ mod tests {
             &json!({ "project": dir.to_string_lossy() }),
             Some(&root),
             &Fake,
+            &FixedKeys(vec![("openai".into(), "k".into())]),
             &|_| Ok(1.5),
         )
         .unwrap();
@@ -191,12 +260,100 @@ mod tests {
             &json!({ "project": outside.to_string_lossy() }),
             Some(&root),
             &Fake,
+            &FixedKeys(vec![("openai".into(), "k".into())]),
             &|_| Ok(1.0),
         )
         .unwrap_err();
         assert!(err.contains("outside the served root"), "{err}");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    /// `check: true` tells an agent whether narration is possible before
+    /// it plans one — per provider, never the key — and a walk that
+    /// would need a missing key refuses BEFORE buying anything.
+    #[test]
+    fn check_answers_readiness_and_a_missing_key_refuses_before_spending() {
+        let root = std::env::temp_dir().join(format!("mcp-speak-check-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Talk.promo");
+        project_with_script(&dir);
+        struct Never;
+        impl Synth for Never {
+            fn synthesize(&self, _: &str, _: &str, _: &str) -> Result<Vec<u8>, String> {
+                panic!("must not spend")
+            }
+        }
+        let no_keys = FixedKeys(vec![]);
+        let alone = speak(
+            &json!({ "check": true }),
+            Some(&root),
+            &Never,
+            &no_keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        assert!(
+            alone.contains("openai — NO KEY (`promoshot-mcp key set openai`)"),
+            "{alone}"
+        );
+        let blocked = speak(
+            &json!({ "project": dir.to_string_lossy(), "check": true }),
+            Some(&root),
+            &Never,
+            &no_keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        assert!(
+            blocked.contains("1 pending — blocked — no key for openai"),
+            "{blocked}"
+        );
+        let err = speak(
+            &json!({ "project": dir.to_string_lossy() }),
+            Some(&root),
+            &Never,
+            &no_keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap_err();
+        assert!(err.starts_with("nothing was synthesized"), "{err}");
+        assert!(err.contains("key set openai"), "{err}");
+        let keys = FixedKeys(vec![("openai".into(), "sk-secret".into())]);
+        let ready = speak(
+            &json!({ "project": dir.to_string_lossy(), "check": true }),
+            Some(&root),
+            &Never,
+            &keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        assert!(
+            ready.contains("ready — would synthesize 1 with openai"),
+            "{ready}"
+        );
+        assert!(!ready.contains("sk-secret"), "never the key");
+        speak(
+            &json!({ "project": dir.to_string_lossy() }),
+            Some(&root),
+            &Fake,
+            &keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        let settled = speak(
+            &json!({ "project": dir.to_string_lossy(), "check": true }),
+            Some(&root),
+            &Never,
+            &keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        assert!(
+            settled.contains("1 settled, 0 pending — nothing to synthesize"),
+            "{settled}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// Voices need a key and say how to register one; OpenAI's roster

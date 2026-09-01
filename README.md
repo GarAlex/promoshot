@@ -227,6 +227,13 @@ with no keyring — a container, a CI runner — falls back to
 environment (`-e OPENAI_API_KEY=…` on `docker run`). Keys travel in
 request headers, never URLs, and nothing logs them.
 
+An agent can ask before it plans: `promo_speak` with `{"check": true}`
+spends nothing and reports, per provider, whether a key is present and
+what a real call would synthesize. A real call checks every pending
+narration's key before buying anything, and writes each receipt back the
+moment it is paid for, so a failure part-way never makes the next call
+pay twice.
+
 ### Docker
 
 The image is the whole render environment — server, CLI, ffmpeg, a

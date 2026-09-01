@@ -195,6 +195,140 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
 // Google's wire conversions, ported from the Swift and held to the same
 // vectors: the SSML door, and the friendly stress spellings.
 
+/// One narration the walk would still have to buy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pending {
+    pub id: String,
+    pub provider: String,
+}
+
+/// What a walk over `doc` would find: how many narrations are already
+/// settled (receipt holds and the file is there) and which are pending,
+/// with their providers — so keys can be checked BEFORE anything is
+/// bought, and a person can be told what a call would spend.
+pub struct Plan {
+    pub settled: usize,
+    pub pending: Vec<Pending>,
+}
+
+impl Plan {
+    /// The providers the pending narrations need, each once, in order.
+    pub fn providers(&self) -> Vec<String> {
+        let mut seen = Vec::new();
+        for p in &self.pending {
+            if !seen.contains(&p.provider) {
+                seen.push(p.provider.clone());
+            }
+        }
+        seen
+    }
+}
+
+/// A narration resource's words, provider, voice, receipt, id and file —
+/// or None when it has nothing to say.
+struct Script {
+    id: String,
+    words: String,
+    provider: String,
+    voice: String,
+    receipt: Option<String>,
+    filename: String,
+}
+
+fn script(index: usize, resource: &Value) -> Option<Script> {
+    let speech = resource.get("speech")?;
+    let words = speech
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if words.trim().is_empty() {
+        return None;
+    }
+    let id = resource
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("R{index}"));
+    let filename = match resource.get("filename").and_then(Value::as_str) {
+        Some(name) if !name.is_empty() => name.to_string(),
+        _ => format!("narration-{id}.mp3"),
+    };
+    Some(Script {
+        id,
+        words,
+        provider: speech
+            .get("provider")
+            .and_then(Value::as_str)
+            .unwrap_or("openai")
+            .to_string(),
+        voice: speech
+            .get("voiceID")
+            .and_then(Value::as_str)
+            .unwrap_or("alloy")
+            .to_string(),
+        receipt: speech
+            .get("renderedHash")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        filename,
+    })
+}
+
+fn is_settled(
+    script: &Script,
+    resources_dir: &Path,
+    measure: &dyn Fn(&Path) -> Result<f64, String>,
+) -> Option<f64> {
+    let destination = resources_dir.join(&script.filename);
+    let print = fingerprint(&script.provider, &script.voice, &script.words);
+    if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
+        return measure(&destination).ok();
+    }
+    None
+}
+
+/// The plan for `doc` without touching anything.
+pub fn plan(
+    doc: &Value,
+    resources_dir: &Path,
+    measure: &dyn Fn(&Path) -> Result<f64, String>,
+) -> Plan {
+    let mut settled = 0;
+    let mut pending = Vec::new();
+    for (index, resource) in doc
+        .get("resources")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .enumerate()
+    {
+        let Some(script) = script(index, resource) else {
+            continue;
+        };
+        if is_settled(&script, resources_dir, measure).is_some() {
+            settled += 1;
+        } else {
+            pending.push(Pending {
+                id: script.id,
+                provider: script.provider,
+            });
+        }
+    }
+    Plan { settled, pending }
+}
+
+/// The providers a plan needs that `keys` has no key for — checked BEFORE
+/// a single request goes out, so a walk never buys two narrations and
+/// then stops at a third for want of a key.
+pub fn missing_keys(plan: &Plan, keys: &dyn KeyStore) -> Vec<String> {
+    plan.providers()
+        .into_iter()
+        .filter(|provider| keys.key(provider).is_none())
+        .collect()
+}
+
 /// The receipt walk, the app's rule mirrored field for field: every
 /// resource whose `speech.text` says something is settled — reused when
 /// the receipt (`renderedHash`) still matches the fingerprint of
@@ -203,86 +337,68 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
 /// component is refused BEFORE paying; a fresh take voids old trims; the
 /// receipt is written back beside what it paid for. `measure` answers a
 /// written file's duration in seconds (ffprobe in the server, a literal
-/// in tests). Answers the report lines; the caller owns the document's
-/// file.
+/// in tests). `persist` is called with the document after EVERY newly
+/// bought narration — a receipt is worth money the moment it exists, and
+/// a later failure must not lose it. Answers the report lines; on an
+/// error, everything settled before it has already been persisted.
 pub fn settle(
     doc: &mut Value,
     resources_dir: &Path,
     synth: &dyn Synth,
     measure: &dyn Fn(&Path) -> Result<f64, String>,
+    persist: &mut dyn FnMut(&Value) -> Result<(), String>,
 ) -> Result<Vec<String>, String> {
     std::fs::create_dir_all(resources_dir).map_err(|e| e.to_string())?;
-    let Some(resources) = doc.get_mut("resources").and_then(Value::as_array_mut) else {
-        return Ok(Vec::new());
-    };
+    let count = doc
+        .get("resources")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
     let mut report: Vec<String> = Vec::new();
     let mut spent = 0usize;
-    for (index, resource) in resources.iter_mut().enumerate() {
-        let Some(speech) = resource.get("speech") else {
-            continue;
+    for index in 0..count {
+        let script = {
+            let resource = &doc["resources"][index];
+            match script(index, resource) {
+                Some(script) => script,
+                None => continue,
+            }
         };
-        let words = speech
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        if words.trim().is_empty() {
-            continue;
-        }
-        let provider = speech
-            .get("provider")
-            .and_then(Value::as_str)
-            .unwrap_or("openai")
-            .to_string();
-        let voice = speech
-            .get("voiceID")
-            .and_then(Value::as_str)
-            .unwrap_or("alloy")
-            .to_string();
-        let receipt = speech
-            .get("renderedHash")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        let id = resource
-            .get("id")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("R{index}"));
-        let filename = match resource.get("filename").and_then(Value::as_str) {
-            Some(name) if !name.is_empty() => name.to_string(),
-            _ => format!("narration-{id}.mp3"),
-        };
-        if filename.contains('/') || filename.contains('\\') || filename.starts_with('.') {
+        let id = script.id.clone();
+        if script.filename.contains('/')
+            || script.filename.contains('\\')
+            || script.filename.starts_with('.')
+        {
             return Err(format!(
-                "{id}: filename \"{filename}\" must be a plain file name inside Resources/"
+                "{id}: filename \"{}\" must be a plain file name inside Resources/",
+                script.filename
             ));
         }
-        let destination = resources_dir.join(&filename);
-        let print = fingerprint(&provider, &voice, &words);
-
-        if receipt.as_deref() == Some(print.as_str()) && destination.exists() {
-            if let Ok(seconds) = measure(&destination) {
-                report.push(format!("{id}: reused ({seconds:.2}s) — receipt holds"));
-                continue;
-            }
+        if let Some(seconds) = is_settled(&script, resources_dir, measure) {
+            report.push(format!("{id}: reused ({seconds:.2}s) — receipt holds"));
+            continue;
         }
-
-        let audio = synth.synthesize(&provider, &voice, &words)?;
+        let destination = resources_dir.join(&script.filename);
+        let print = fingerprint(&script.provider, &script.voice, &script.words);
+        let audio = synth.synthesize(&script.provider, &script.voice, &script.words)?;
         std::fs::write(&destination, &audio).map_err(|e| format!("{id}: write: {e}"))?;
         let seconds = measure(&destination)?;
         spent += 1;
-
-        resource["filename"] = json!(filename);
-        resource["duration"] = json!(seconds);
-        resource["kind"] = json!("audio");
-        if let Some(object) = resource.as_object_mut() {
-            object.remove("trimStart");
-            object.remove("trimEnd");
-            object.remove("trimKeyframes");
+        {
+            let resource = &mut doc["resources"][index];
+            resource["filename"] = json!(script.filename);
+            resource["duration"] = json!(seconds);
+            resource["kind"] = json!("audio");
+            if let Some(object) = resource.as_object_mut() {
+                object.remove("trimStart");
+                object.remove("trimEnd");
+                object.remove("trimKeyframes");
+            }
+            resource["speech"]["renderedHash"] = json!(print);
+            resource["speech"]["provider"] = json!(script.provider);
+            resource["speech"]["voiceID"] = json!(script.voice);
         }
-        resource["speech"]["renderedHash"] = json!(print);
-        resource["speech"]["provider"] = json!(provider);
-        resource["speech"]["voiceID"] = json!(voice);
+        persist(doc)?;
         report.push(format!("{id}: generated ({seconds:.2}s)"));
     }
     if !report.is_empty() {
@@ -413,7 +529,8 @@ mod tests {
         let resources = dir.join("Resources");
         let measure = |_: &Path| Ok(2.5);
         let mut doc = script();
-        let first = settle(&mut doc, &resources, &Fake, &measure).unwrap();
+        let mut nop = |_: &Value| Ok(());
+        let first = settle(&mut doc, &resources, &Fake, &measure, &mut nop).unwrap();
         assert!(first[0].contains("generated"), "{first:?}");
         assert!(resources.join("voice.mp3").is_file());
         let v1 = &doc["resources"][0];
@@ -428,15 +545,80 @@ mod tests {
             json!(fingerprint("openai", "alloy", "Hello there"))
         );
 
-        let second = settle(&mut doc, &resources, &Fake, &measure).unwrap();
+        let second = settle(&mut doc, &resources, &Fake, &measure, &mut nop).unwrap();
         assert!(second[0].contains("reused"), "{second:?}");
         assert!(second.last().unwrap().contains("0 newly synthesized"));
 
         doc["resources"][0]["speech"]["text"] = json!("Hello again");
-        let third = settle(&mut doc, &resources, &Fake, &measure).unwrap();
+        let third = settle(&mut doc, &resources, &Fake, &measure, &mut nop).unwrap();
         assert!(
             third[0].contains("generated"),
             "editing the words spends again"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The plan names what a walk would buy, keys are checked against it
+    /// before anything is bought, and every bought receipt is persisted
+    /// at once — so a failure on the third narration cannot make the next
+    /// call pay for the first two again.
+    #[test]
+    fn keys_are_checked_first_and_receipts_survive_a_failure_mid_walk() {
+        let dir = std::env::temp_dir().join(format!("promo-speech-midwalk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let resources = dir.join("Resources");
+        let measure = |_: &Path| Ok(1.0);
+        let mut doc = json!({ "resources": [
+            { "id": "A", "kind": "audio", "filename": "a.mp3", "displayName": "a", "addedAt": 0,
+              "speech": { "text": "first", "provider": "openai", "voiceID": "alloy" } },
+            { "id": "B", "kind": "audio", "filename": "b.mp3", "displayName": "b", "addedAt": 0,
+              "speech": { "text": "second", "provider": "elevenlabs", "voiceID": "v" } },
+            { "id": "C", "kind": "audio", "filename": "c.mp3", "displayName": "c", "addedAt": 0,
+              "speech": { "text": "third", "provider": "openai", "voiceID": "alloy" } }
+        ] });
+        let first = plan(&doc, &resources, &measure);
+        assert_eq!(first.settled, 0);
+        assert_eq!(
+            first.providers(),
+            vec!["openai".to_string(), "elevenlabs".to_string()]
+        );
+        let keys = FixedKeys(vec![("openai".into(), "k".into())]);
+        assert_eq!(missing_keys(&first, &keys), vec!["elevenlabs".to_string()]);
+
+        // A synth that refuses the second provider: the first receipt is
+        // persisted before the refusal surfaces.
+        struct Picky;
+        impl Synth for Picky {
+            fn synthesize(&self, provider: &str, _: &str, _: &str) -> Result<Vec<u8>, String> {
+                if provider == "elevenlabs" {
+                    Err("elevenlabs said no".into())
+                } else {
+                    Ok(b"ID3ok".to_vec())
+                }
+            }
+        }
+        let mut persisted: Vec<Value> = Vec::new();
+        let err = settle(&mut doc, &resources, &Picky, &measure, &mut |d| {
+            persisted.push(d.clone());
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(err.contains("elevenlabs said no"), "{err}");
+        assert_eq!(persisted.len(), 1, "the one bought narration was persisted");
+        assert_eq!(
+            persisted[0]["resources"][0]["speech"]["renderedHash"],
+            json!(fingerprint("openai", "alloy", "first"))
+        );
+        // Re-planning finds A settled and only B and C pending.
+        let again = plan(&doc, &resources, &measure);
+        assert_eq!(again.settled, 1);
+        assert_eq!(
+            again
+                .pending
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["B", "C"]
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -452,7 +634,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("promo-speech-refuse-{}", std::process::id()));
         let mut doc = script();
         doc["resources"][0]["filename"] = json!("../escape.mp3");
-        let err = settle(&mut doc, &dir.join("Resources"), &Never, &|_| Ok(1.0)).unwrap_err();
+        let err = settle(
+            &mut doc,
+            &dir.join("Resources"),
+            &Never,
+            &|_| Ok(1.0),
+            &mut |_| Ok(()),
+        )
+        .unwrap_err();
         assert!(err.contains("plain file name"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }

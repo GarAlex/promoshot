@@ -85,7 +85,13 @@ the OS keyring, where the person registers it once with
 from an argument), else from OPENAI_API_KEY / ELEVENLABS_API_KEY /
 GOOGLE_API_KEY in the server's environment; in the app from the
 person's Keychain. No tool takes a key and none ever shows one.
-Unchanged text is reused by receipt, never billed twice.
+Before planning a narrated piece, ask `promo_speak {"check": true}`
+(with or without a project): it spends nothing and says, per provider,
+whether a key is present and what a real call would synthesize —
+ready, blocked, or nothing to do. A real call checks every pending
+narration's key BEFORE buying anything, and writes each receipt back
+the moment it is paid for. Unchanged text is reused by receipt, never
+billed twice.
 **Without a key an agent cannot narrate** — do not pretend: record or
 obtain a voice file, drop it into `Resources/`, and reference it as an
 ordinary audio resource.

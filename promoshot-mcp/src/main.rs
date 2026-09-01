@@ -636,12 +636,17 @@ fn tool_descriptors() -> Value {
                 OS keyring (`promoshot-mcp key set <provider>`) or environment \
                 (OPENAI_API_KEY, ELEVENLABS_API_KEY, GOOGLE_API_KEY), \
                 matching each script's provider (default openai/alloy). Unchanged \
-                text is reused by receipt, never billed twice. Without a key an \
+                text is reused by receipt, never billed twice. Keys are checked for EVERY pending narration before \
+                anything is bought, and each bought receipt is written back at once. Without a key an \
                 agent CANNOT narrate — record a voice file into Resources/ and \
                 reference it as an ordinary audio resource instead.",
             "inputSchema": { "type": "object",
-                "properties": { "project": project },
-                "required": ["project"] }
+                "properties": { "project": project,
+                    "check": { "type": "boolean", "description":
+                        "Spend nothing: report where each needed provider's key comes from \
+                         (never the key) and what a real call would synthesize — ready, blocked, \
+                         or nothing to do. With no project, the keys alone." } },
+                "required": [] }
         }
     ])
 }
@@ -757,11 +762,17 @@ where
             run(config, &argv)
         }
         "promo_voices" => speak::voices(args, &promo_speech::SystemKeys),
-        "promo_speak" => speak::speak(args, config.root.as_deref(), &speak::live(), &|path| {
-            media::host_probe(path, true)
-                .duration
-                .ok_or_else(|| format!("could not measure {}", path.display()))
-        }),
+        "promo_speak" => speak::speak(
+            args,
+            config.root.as_deref(),
+            &speak::live(),
+            &promo_speech::SystemKeys,
+            &|path| {
+                media::host_probe(path, true)
+                    .duration
+                    .ok_or_else(|| format!("could not measure {}", path.display()))
+            },
+        ),
         other => Err(format!("unknown tool `{other}`")),
     }
 }
