@@ -92,6 +92,19 @@ fn placement_aspect(
         });
     let source = resource
         .and_then(crate::layout::resource_source_size)
+        // The layer's `imageOrientation` turns the picture before anything
+        // else happens to it (the apps rotate, THEN bake the slab), so a
+        // quarter turn swaps the size the rule resolves against. Resolving
+        // against the stored, unturned size laid a 16-wide box for a
+        // picture drawn 8 wide: the quad stretched to the box, and the
+        // texture's left half covered it — every host, every renderer.
+        .map(|size| match layer.image_orientation {
+            Some(promo_model::ImageOrientation::RotateLeft)
+            | Some(promo_model::ImageOrientation::RotateRight) => {
+                promo_model::Size::new(size.height(), size.width())
+            }
+            _ => size,
+        })
         // A device frame is baked into the picture BEFORE anything lays the
         // layer out, so what the layer shows is the slab, not the screenshot
         // inside it. Resolving the rule against the bare pixels sized the
@@ -1628,6 +1641,56 @@ mod tests {
         // Windowed aspect 0.5: the box is 250 wide, 500 tall, centered.
         assert!((tr.horizontal_shift - 375.0).abs() < 1e-9);
         assert!((tr.vertical_shift - 250.0).abs() < 1e-9);
+    }
+
+    /// A quarter turn swaps the size a placement rule resolves against: a
+    /// tall 8×16 picture turned right is 16 wide, so `{"height": 60}` on
+    /// it must land a 120-wide box, not a 30-wide one.
+    #[test]
+    fn a_quarter_turn_swaps_the_size_a_placement_resolves_against() {
+        let make = |orientation: &str| {
+            let raw = format!(
+                r#"{{"id":"P","name":"t","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                    "videoDuration":0,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"000000"}},
+                    "resources":[{{"id":"R","kind":"image","filename":"tall.png","displayName":"t","addedAt":0,
+                                   "pixelWidth":8,"pixelHeight":16,"imageCuts":[]}}],
+                    "layers":[{{"id":"L","name":"t","sortIndex":0,"kind":"image","isEnabled":true,"startTime":0,
+                                "duration":2,"resourceID":"R","imageOrientation":"{orientation}",
+                                "keyframes":[{{"id":"K","time":0,"transitionDuration":0,
+                                              "placement":{{"height":60,"anchor":"topLeft"}}}}]}}]}}"#
+            );
+            promo_model::ProjectMetadata::from_json(&raw).expect("decode")
+        };
+        let box_for = |orientation: &str| {
+            let meta = make(orientation);
+            let layer = &meta.layers.as_deref().unwrap()[0];
+            let resources = meta.resources.as_deref().unwrap();
+            let tr = layer_transform_along_paths(layer, 1.0, &meta.composition_settings, resources);
+            // The drawn box: zoom scales the source's height onto the canvas.
+            let source_h = match orientation {
+                "rotateLeft" | "rotateRight" => 8.0,
+                _ => 16.0,
+            };
+            let source_w = 24.0 - source_h;
+            let scale = (180.0 / source_h) * tr.zoom;
+            (source_w * scale, source_h * scale)
+        };
+        let (w, h) = box_for("original");
+        assert!(
+            (h - 60.0).abs() < 1e-6 && (w - 30.0).abs() < 1e-6,
+            "upright: {w}×{h}"
+        );
+        let (w, h) = box_for("rotateRight");
+        assert!(
+            (h - 60.0).abs() < 1e-6 && (w - 120.0).abs() < 1e-6,
+            "turned: {w}×{h}"
+        );
+        let (w, h) = box_for("upsideDown");
+        assert!(
+            (h - 60.0).abs() < 1e-6 && (w - 30.0).abs() < 1e-6,
+            "half a turn keeps the size: {w}×{h}"
+        );
     }
 
     /// No stored size: the rule still resolves, assuming a square source —

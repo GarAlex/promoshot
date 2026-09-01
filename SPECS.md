@@ -19,6 +19,20 @@ discipline as rustrator-core).
   recording is the SUM of its kept tracks). A gain keyframe with no ramp
   is a step: its pre-step breakpoint sits 1 ms early so the level holds
   until the keyframe, exactly as `layer_gain` reports it.
+- T3 The export clock is one rule (`export_plan`): the rate is an
+  override, else the project's, else 30, banded 1…240; the count is
+  `round((end − start) · fps)`, never 0; frame `i` samples `start + i/fps`.
+  `promo video`, `promo_export_start` and the apps' loop (through
+  `promo_project_export_plan`) all run it. The composition's end for
+  rendering (`composition_duration`) is the furthest declared layer or
+  the recording; a layer with no duration ends where it starts for this
+  purpose.
+- T4 A layer's `imageOrientation` turns the picture BEFORE anything else
+  happens to it — before a slab is baked, before a placement rule sizes
+  the box. A quarter turn therefore swaps the source size placement
+  resolves against (`placement_aspect`), on every host. Headless, the
+  turned copy is staged per layer (`rotate_bgra`); the apps turn the
+  bitmap they hand in. `rotateRight` is clockwise as a person sees it.
 
 ## GPU
 - G1 GpuSurface raw handles are inert until an import module touches them on

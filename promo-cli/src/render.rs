@@ -346,6 +346,51 @@ impl Renderer {
                 }
             }
         }
+        // A layer's `imageOrientation` is baked into ITS pixels — a layer
+        // field, so the turned copy is keyed by layer like a cut (a keyframe
+        // swap outranks it the same way). The apps turn the picture before
+        // any device slab is baked, so the slab is baked around the turned
+        // picture here too. Until this the field was parsed and ignored,
+        // and a sideways photo rendered upright headless and turned in the
+        // app.
+        for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
+            let Some(orientation) = layer.image_orientation else {
+                continue;
+            };
+            if matches!(orientation, promo_model::ImageOrientation::Original)
+                || layer.kind != promo_model::ProjectLayerKind::Image
+            {
+                continue;
+            }
+            let Some(resource) = layer
+                .resource_id
+                .as_ref()
+                .and_then(|id| project.resource(id))
+            else {
+                continue;
+            };
+            let Some(base_path) = project.resource_path(resource) else {
+                continue;
+            };
+            // The cut's file when the layer shows one, else the source.
+            let cut = layer
+                .image_cut_id
+                .as_ref()
+                .and_then(|cid| resource.image_cuts.iter().find(|c| &c.id == cid))
+                .filter(|c| !c.filename.is_empty());
+            let path = cut
+                .map(|c| base_path.with_file_name(&c.filename))
+                .filter(|p| p.is_file())
+                .unwrap_or(base_path);
+            let wears = cut
+                .and_then(|c| c.frame.as_ref())
+                .or(resource.frame.as_ref())
+                .filter(|_| resource.sprite.is_none());
+            let (px, w, h) = Self::decode_premultiplied(&path)?;
+            let turned = promo_timeline::rotate_bgra(&px, w, h, orientation);
+            let (px, w, h, flags) = Self::baked(turned, wears);
+            cuts.insert(layer.id.clone(), (resource.id.clone(), px, w, h, flags));
+        }
         Ok((frames, cuts, videos))
     }
 
@@ -962,6 +1007,78 @@ mod tests {
     /// honoured only the cut's frame, so a crop rendered as the whole
     /// picture). Red source, blue crop: the pointed layer must come out
     /// blue, and dropping the pointer via set_project brings red back.
+    /// `imageOrientation` is a LAYER field the parser read and every
+    /// headless render ignored: a photo turned right in the app rendered
+    /// upright from the CLI. A red-over-blue picture turned right puts red
+    /// on the right — sampled left and right of centre.
+    #[test]
+    fn a_layers_image_orientation_turns_its_picture() {
+        let dir = std::env::temp_dir().join("promo-cli-orientation");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let mut img = image::RgbaImage::from_pixel(8, 16, image::Rgba([0, 0, 255, 255]));
+        for y in 0..8 {
+            for x in 0..8 {
+                img.put_pixel(x, y, image::Rgba([255, 0, 0, 255]));
+            }
+        }
+        img.save(dir.join("Resources/tall.png")).unwrap();
+        let json = |orientation: &str| {
+            format!(
+                r#"{{"id":"AAAAAAAA-0000-0000-0000-0000000000OR","name":"turn",
+            "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+            "videoDuration":2,"subtitles":[],
+            "compositionSettings":{{"canvasWidth":160,"canvasHeight":120,
+              "backgroundColorHex":"00FF00"}},
+            "resources":[{{"id":"R","kind":"image","filename":"tall.png",
+              "displayName":"Tall","addedAt":0,"pixelWidth":8,"pixelHeight":16,"imageCuts":[]}}],
+            "layers":[{{"id":"L","name":"Tall","sortIndex":0,"kind":"image",
+              "isEnabled":true,"startTime":0.0,"duration":2.0,"resourceID":"R",
+              "imageOrientation":"{orientation}",
+              "keyframes":[{{"id":"K","time":0.0,"transitionDuration":0.0,
+                "placement":{{"mode":"fill","anchor":"center"}}}}]}}]}}"#
+            )
+        };
+        std::fs::write(dir.join("metadata.json"), json("rotateRight")).unwrap();
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let project = crate::project::Project::open(&dir).expect("project");
+        // Staged first: the turned copy sits under the layer's key, 16 wide.
+        let (_, cuts, _) = Renderer::stage(&project, &Registry::with_defaults()).expect("stage");
+        let (base, _, w, h, _) = cuts.get("L").expect("the turned copy is staged by layer");
+        assert_eq!((base.as_str(), *w, *h), ("R", 16, 8));
+        let mut renderer = Renderer::new(&project, 160, 120).expect("renderer");
+        let sample = |px: &[u8], x: usize| {
+            let at = (60 * 160 + x) * 4;
+            (px[at], px[at + 2]) // (b, r)
+        };
+        let frame = renderer.frame_bgra(1.0).expect("frame");
+        let (lb, lr) = sample(&frame, 40);
+        let (rb, rr) = sample(&frame, 120);
+        assert!(
+            lb > 200 && lr < 40,
+            "turned right, blue is on the left: b={lb} r={lr}"
+        );
+        assert!(rr > 200 && rb < 40, "and red on the right: b={rb} r={rr}");
+
+        std::fs::write(dir.join("metadata.json"), json("original")).unwrap();
+        let upright = crate::project::Project::open(&dir).expect("project");
+        renderer.set_project(&upright).expect("set_project");
+        let frame = renderer.frame_bgra(1.0).expect("frame");
+        let at = (20 * 160 + 80) * 4;
+        let top = (frame[at], frame[at + 2]);
+        let at = (100 * 160 + 80) * 4;
+        let bottom = (frame[at], frame[at + 2]);
+        assert!(top.1 > 200 && top.0 < 40, "upright, red is on top: {top:?}");
+        assert!(
+            bottom.0 > 200 && bottom.1 < 40,
+            "and blue below: {bottom:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn an_image_cut_layer_draws_the_cut_file() {
         let dir = std::env::temp_dir().join("promo-cli-imagecut");

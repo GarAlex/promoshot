@@ -124,16 +124,7 @@ impl Project {
     /// Composition length: the furthest any layer runs, falling back to the
     /// recorded video duration.
     pub fn duration(&self) -> f64 {
-        let from_layers = self
-            .meta
-            .layers
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .filter_map(|l| l.duration.map(|d| l.start_time.max(0.0) + d.max(0.0)))
-            .fold(0.0f64, f64::max);
-        let recorded = self.meta.video_duration.max(0.0);
-        from_layers.max(recorded)
+        promo_timeline::composition_duration(&self.meta)
     }
 
     /// Is this layer's media present and openable? `None` = fine.

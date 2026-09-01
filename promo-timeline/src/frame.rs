@@ -564,6 +564,43 @@ fn geo_back_z(geo: &PhoneFrameGeometry) -> f64 {
     -geo.depth / 2.0
 }
 
+/// Bakes a layer's `imageOrientation` into the pixels — the Swift
+/// `rotated(_:orientation:)` twin. `rotateRight` turns the picture
+/// clockwise as a person sees it (the left edge goes to the top),
+/// `rotateLeft` counter-clockwise, `upsideDown` half a turn. `original`
+/// is a copy. Rows are `width * 4` bytes, no padding.
+pub fn rotate_bgra(
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+    orientation: promo_model::ImageOrientation,
+) -> (Vec<u8>, u32, u32) {
+    use promo_model::ImageOrientation as O;
+    let (w, h) = (width as usize, height as usize);
+    if pixels.len() < w * h * 4 || matches!(orientation, O::Original) {
+        return (pixels.to_vec(), width, height);
+    }
+    let (ow, oh) = match orientation {
+        O::UpsideDown | O::Original => (w, h),
+        O::RotateLeft | O::RotateRight => (h, w),
+    };
+    let mut out = vec![0u8; ow * oh * 4];
+    for y in 0..h {
+        for x in 0..w {
+            let (nx, ny) = match orientation {
+                O::RotateRight => (h - 1 - y, x),
+                O::RotateLeft => (y, w - 1 - x),
+                O::UpsideDown => (w - 1 - x, h - 1 - y),
+                O::Original => (x, y),
+            };
+            let src = (y * w + x) * 4;
+            let dst = (ny * ow + nx) * 4;
+            out[dst..dst + 4].copy_from_slice(&pixels[src..src + 4]);
+        }
+    }
+    (out, ow as u32, oh as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -693,5 +730,34 @@ mod tests {
         assert_eq!(framed_pixel_size(raw, Some(&border)).width(), 800.0);
         let none = ResourceFrame::default();
         assert_eq!(framed_pixel_size(raw, Some(&none)).height(), 600.0);
+    }
+
+    /// A two-pixel strip, A then B. Turned right (clockwise) the left end
+    /// comes to the top; turned left it goes to the bottom; upside down it
+    /// reads B then A. The Swift twin is pinned to the same strip.
+    #[test]
+    fn rotation_turns_the_way_its_name_says() {
+        use promo_model::ImageOrientation as O;
+        let a = [1u8, 2, 3, 255];
+        let b = [9u8, 8, 7, 255];
+        let strip: Vec<u8> = [a, b].concat();
+        let (right, w, h) = rotate_bgra(&strip, 2, 1, O::RotateRight);
+        assert_eq!((w, h), (1, 2));
+        assert_eq!(
+            (&right[0..4], &right[4..8]),
+            (&a[..], &b[..]),
+            "left end on top"
+        );
+        let (left, _, _) = rotate_bgra(&strip, 2, 1, O::RotateLeft);
+        assert_eq!(
+            (&left[0..4], &left[4..8]),
+            (&b[..], &a[..]),
+            "left end at the bottom"
+        );
+        let (flipped, w, h) = rotate_bgra(&strip, 2, 1, O::UpsideDown);
+        assert_eq!((w, h), (2, 1));
+        assert_eq!((&flipped[0..4], &flipped[4..8]), (&b[..], &a[..]));
+        let (same, _, _) = rotate_bgra(&strip, 2, 1, O::Original);
+        assert_eq!(same, strip);
     }
 }

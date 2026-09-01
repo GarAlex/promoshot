@@ -14,6 +14,7 @@ pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 pub mod motion;
+pub mod plan;
 pub mod reveal;
 pub mod sprite;
 pub mod transition;
@@ -27,7 +28,7 @@ pub use audio::{
     AudioInput, AudioSource, GainRampSegment, PlacedSegment, ScaledSegment, VolumePoint,
     DUCK_FACTOR, DUCK_RAMP,
 };
-pub use frame::{bake_slab, framed_pixel_size, slab_geometry, SlabGeometry};
+pub use frame::{bake_slab, framed_pixel_size, rotate_bgra, slab_geometry, SlabGeometry};
 pub use gradient::layer_background_gradient;
 pub use interpolation::{
     interpolate_color_hex, layer_adjustments, layer_background_color_hex, layer_caption_values,
@@ -49,6 +50,9 @@ pub use mapping::{
     VideoSegment,
 };
 pub use motion::{path_document_polyline, path_polyline, point_along, point_along_range, Polyline};
+pub use plan::{
+    composition_duration, export_fps, export_plan, frame_count, ExportPlan, DEFAULT_FPS, MAX_FPS,
+};
 pub use sprite::{
     frame_at as sprite_frame_at, is_nearest, layer_resource_id, sheet_for, SpriteFrame,
 };

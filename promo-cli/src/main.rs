@@ -430,23 +430,16 @@ fn gif(project: &Project, opts: &Options) -> Result<String, String> {
     ))
 }
 
+/// The export clock — `promo_timeline::export_plan`, the one rule the FFI
+/// export job and the apps' loop also run. The project decides its own
+/// frame rate; --fps is an override for a one-off render.
 fn range(project: &Project, opts: &Options) -> (f64, f64, f64) {
-    let start = opts.from.unwrap_or(0.0).max(0.0);
-    let end = opts.to.unwrap_or_else(|| project.duration()).max(start);
-    // The project decides its own frame rate; --fps is an override for a
-    // one-off render, not the place the answer normally lives.
-    let fps = opts
-        .fps
-        .or(project.meta.composition_settings.fps)
-        .unwrap_or(30.0)
-        .max(1.0);
-    (start, end, fps)
+    let plan = promo_timeline::export_plan(&project.meta, opts.fps, opts.from, opts.to);
+    (plan.start, plan.end, plan.fps)
 }
 
 fn frame_count(start: f64, end: f64, fps: f64) -> usize {
-    // A zero-length composition still yields one frame — asking for a poster
-    // of a single-image project should not produce nothing.
-    (((end - start) * fps).round() as usize).max(1)
+    promo_timeline::frame_count(start, end, fps)
 }
 
 #[cfg(test)]
