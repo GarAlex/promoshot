@@ -68,28 +68,44 @@ impl KeyStore for FixedKeys {
     }
 }
 
-fn entry(provider: &str) -> Result<keyring::Entry, String> {
-    if !PROVIDERS.contains(&provider) {
-        return Err(format!(
+fn known(provider: &str) -> Result<(), String> {
+    if PROVIDERS.contains(&provider) {
+        Ok(())
+    } else {
+        Err(format!(
             "provider `{provider}` — openai, elevenlabs or google"
-        ));
+        ))
     }
+}
+
+#[cfg(feature = "keyring")]
+fn entry(provider: &str) -> Result<keyring::Entry, String> {
+    known(provider)?;
     keyring::Entry::new(SERVICE, provider).map_err(|e| format!("keyring: {e}"))
 }
 
 /// The keyring's answer for a provider: Ok(None) when there is no entry
-/// (or no keyring on this machine), Err when the keyring refused.
+/// (or no keyring on this machine, or this build carries none), Err when
+/// the keyring refused.
 pub fn keyring_get(provider: &str) -> Result<Option<String>, String> {
-    match entry(provider)?.get_password() {
-        Ok(key) => Ok(Some(key)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        // No usable store here (a container, a headless box without a
-        // Secret Service): not an error to READ through — the environment
-        // is next.
-        Err(keyring::Error::NoStorageAccess(_)) | Err(keyring::Error::PlatformFailure(_)) => {
-            Ok(None)
+    known(provider)?;
+    #[cfg(feature = "keyring")]
+    {
+        match entry(provider)?.get_password() {
+            Ok(key) => Ok(Some(key)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            // No usable store here (a container, a headless box without a
+            // Secret Service): not an error to READ through — the
+            // environment is next.
+            Err(keyring::Error::NoStorageAccess(_)) | Err(keyring::Error::PlatformFailure(_)) => {
+                Ok(None)
+            }
+            Err(e) => Err(format!("keyring: {e}")),
         }
-        Err(e) => Err(format!("keyring: {e}")),
+    }
+    #[cfg(not(feature = "keyring"))]
+    {
+        Ok(None)
     }
 }
 
@@ -98,21 +114,37 @@ pub fn keyring_get(provider: &str) -> Result<Option<String>, String> {
 /// header value with whitespace in it is a 401 that looks exactly like a
 /// wrong key.
 pub fn keyring_set(provider: &str, key: &str) -> Result<(), String> {
+    known(provider)?;
     let key = key.trim();
     if key.is_empty() {
         return Err("an empty key was not stored".into());
     }
-    entry(provider)?
-        .set_password(key)
-        .map_err(|e| format!("keyring: {e}"))
+    #[cfg(feature = "keyring")]
+    {
+        entry(provider)?
+            .set_password(key)
+            .map_err(|e| format!("keyring: {e}"))
+    }
+    #[cfg(not(feature = "keyring"))]
+    {
+        Err("this build carries no keyring; set the provider's environment variable instead".into())
+    }
 }
 
 /// Removes a provider's key from the keyring; Ok(false) when there was none.
 pub fn keyring_remove(provider: &str) -> Result<bool, String> {
-    match entry(provider)?.delete_credential() {
-        Ok(()) => Ok(true),
-        Err(keyring::Error::NoEntry) => Ok(false),
-        Err(e) => Err(format!("keyring: {e}")),
+    known(provider)?;
+    #[cfg(feature = "keyring")]
+    {
+        match entry(provider)?.delete_credential() {
+            Ok(()) => Ok(true),
+            Err(keyring::Error::NoEntry) => Ok(false),
+            Err(e) => Err(format!("keyring: {e}")),
+        }
+    }
+    #[cfg(not(feature = "keyring"))]
+    {
+        Ok(false)
     }
 }
 
@@ -163,7 +195,7 @@ mod tests {
             Some(("sk-test".into(), KeySource::Environment))
         );
         assert_eq!(keys.key("google"), None);
-        assert!(entry("nope").is_err());
+        assert!(keyring_get("nope").is_err());
         assert_eq!(env_var("elevenlabs"), Some("ELEVENLABS_API_KEY"));
         assert!(missing_key_message("google").contains("key set google"));
         assert!(missing_key_message("google").contains("GOOGLE_API_KEY"));
@@ -173,6 +205,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "keyring")]
     /// The keyring round trip, on a machine that has one. A box without a
     /// usable store (CI, a container) reads as "no entry" rather than an
     /// error, so the environment stays reachable behind it.

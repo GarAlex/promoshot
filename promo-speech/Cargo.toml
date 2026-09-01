@@ -9,4 +9,11 @@ description = "Narration for PromoShot: the providers, the receipt, the stress s
 serde_json.workspace = true
 sha2 = "0.10"
 ureq = "2"
-keyring = "4"
+keyring = { version = "4", optional = true }
+
+[features]
+# The OS keyring as the key store. On by default for the server; the
+# apps' FFI build leaves it out — they keep their own Keychain and hand
+# the key in — and iOS has no use for a second store.
+default = ["keyring"]
+keyring = ["dep:keyring"]
