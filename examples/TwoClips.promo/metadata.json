@@ -1,0 +1,22 @@
+{"id":"seq","name":"Two Clips","createdAt":0,"state":"recorded",
+ "minReaderVersion":18,"trimStart":0,"trimEnd":9.4,"videoDuration":9.4,
+ "subtitles":[],
+ "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
+   "backgroundColorHex":"0E1726"},
+ "resources":[
+  {"id":"clipA","kind":"video","filename":"a.mp4","displayName":"A",
+   "addedAt":0,"duration":5,"trimStart":0,"trimEnd":5,"imageCuts":[],
+   "disabledAudioTrackIndices":[]},
+  {"id":"clipB","kind":"video","filename":"b.mp4","displayName":"B",
+   "addedAt":0,"duration":5,"trimStart":0,"trimEnd":5,"imageCuts":[],
+   "disabledAudioTrackIndices":[]}],
+ "layers":[
+  {"id":"bg","name":"Ground","sortIndex":0,"kind":"background",
+   "isEnabled":true,"startTime":0,"duration":9.4,"keyframes":[]},
+  {"id":"first","name":"Clip A","sortIndex":1,"kind":"video",
+   "isEnabled":true,"startTime":0,"duration":5,"resourceID":"clipA",
+   "fadeIn":0.3,"keyframes":[]},
+  {"id":"second","name":"Clip B","sortIndex":2,"kind":"video",
+   "isEnabled":true,"startTime":4.4,"duration":5,"resourceID":"clipB",
+   "transitionIn":{"kind":"wipe","from":"left","duration":0.6},
+   "keyframes":[]}]}

@@ -1,0 +1,57 @@
+# Prebuilt binaries and a pullable image, on every version tag (issue #2):
+# using the MCP server should be a connect, not a compile. Push a tag like
+# v0.2.0 and this publishes:
+#   - promoshot-<tag>-linux-x64.tar.gz  (promo + promoshot-mcp)
+#   - promoshot-<tag>-macos-arm64.tar.gz
+#   - ghcr.io/garalex/promoshot-mcp:<tag> and :latest
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: macos-latest
+            target: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the pair
+        run: cargo build --release -p promo-cli -p promoshot-mcp
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar -czf "dist/promoshot-${GITHUB_REF_NAME}-${{ matrix.target }}.tar.gz" \
+            -C target/release promo promoshot-mcp
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/garalex/promoshot-mcp:${{ github.ref_name }}
+            ghcr.io/garalex/promoshot-mcp:latest

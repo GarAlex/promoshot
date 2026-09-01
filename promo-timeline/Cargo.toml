@@ -1,0 +1,23 @@
+[package]
+name = "promo-timeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+promo-model = { path = "../promo-model" }
+# For the palette check only: the undefined-name walk runs over the
+# SERIALIZED document so it cannot fall behind the model. Pure, no I/O.
+serde_json.workspace = true
+# For the reveal: where each word or letter sits in a laid-out caption. text
+# depends on model only, so there is no cycle.
+promo-text = { path = "../promo-text" }
+
+[dev-dependencies]
+criterion.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+
+[[bench]]
+name = "timeline_bench"
+harness = false

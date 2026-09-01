@@ -1,0 +1,240 @@
+{
+ "id": "2AFCAFF6-D2CE-4D3E-905A-CC41E044A907",
+ "name": "LinuxSmoke",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 17,
+ "trimStart": 0,
+ "trimEnd": 8,
+ "videoDuration": 8,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1280,
+  "canvasHeight": 720,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "10182B"
+   },
+   {
+    "name": "text",
+    "colorHex": "F3F5FF"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas",
+  "videoCornerRadius": 12,
+  "videoBorderWidth": 2,
+  "videoBorderColorHex": "@accent",
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 48,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 14,
+  "subtitleLeftMargin": 90,
+  "subtitleRightMargin": 90,
+  "subtitleVerticalMargin": 40,
+  "subtitleStrokeWidth": 4,
+  "subtitleStrokeColorHex": "0A0A14",
+  "subtitleShadowOpacity": 0.5,
+  "subtitleShadowRadius": 8
+ },
+ "resources": [
+  {
+   "id": "A3240537-8949-4127-9EA0-CD5148F8CAE9",
+   "kind": "video",
+   "filename": "clip.mp4",
+   "displayName": "Clip",
+   "addedAt": 0,
+   "duration": 4.0,
+   "trimStart": 0,
+   "trimEnd": 4.0,
+   "videoNaturalWidth": 640,
+   "videoNaturalHeight": 360,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "5C9CA670-AB71-4DAD-8359-15A58F4C33D4",
+   "kind": "image",
+   "filename": "photo.png",
+   "displayName": "Photo",
+   "addedAt": 0,
+   "pixelWidth": 800,
+   "pixelHeight": 600,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  }
+ ],
+ "layers": [
+  {
+   "id": "FF6E648B-4B6B-4051-9B4E-3A9B9B0A6B7A",
+   "name": "Ground",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 8,
+   "keyframes": [
+    {
+     "id": "CA008FD1-998F-4A9F-B3AD-04BC26AE0A92",
+     "time": 0,
+     "colorHex": "@canvas",
+     "transitionDuration": 0
+    },
+    {
+     "id": "AA074784-C0EE-4BDB-A943-019D88C489E6",
+     "time": 6,
+     "colorHex": "2B1830",
+     "transitionDuration": 3,
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "92453360-7EAB-400F-9C03-35B4DF5A2E90",
+   "name": "Clip",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "duration": 4.0,
+   "resourceID": "A3240537-8949-4127-9EA0-CD5148F8CAE9",
+   "fadeIn": 0.4,
+   "keyframes": [
+    {
+     "id": "12A44E35-FEE5-43F1-B70C-734D37AD844B",
+     "time": 0,
+     "placement": {
+      "height": 480,
+      "anchor": "center",
+      "offset": [
+       0,
+       -20
+      ]
+     },
+     "transitionDuration": 0
+    },
+    {
+     "id": "976BD2A6-EB54-4A3A-8427-FE9613F88AE9",
+     "time": 3.5,
+     "placement": {
+      "height": 560,
+      "anchor": "center",
+      "offset": [
+       0,
+       -20
+      ]
+     },
+     "transitionDuration": 3.0,
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "608FD3CE-6B54-4B26-8076-DCC3E7CFAEB6",
+   "name": "Photo",
+   "sortIndex": 2,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 4.2,
+   "duration": 3.8,
+   "resourceID": "5C9CA670-AB71-4DAD-8359-15A58F4C33D4",
+   "fadeIn": 0.4,
+   "releases": [
+    {
+     "layerId": "92453360-7EAB-400F-9C03-35B4DF5A2E90"
+    }
+   ],
+   "keyframes": [
+    {
+     "id": "3C8EEB8C-9E2E-4DC0-9456-311E8B27C506",
+     "time": 0,
+     "placement": {
+      "height": 430,
+      "anchor": "bottom",
+      "offset": [
+       0,
+       -60
+      ]
+     },
+     "opacity": 1,
+     "transitionDuration": 0
+    },
+    {
+     "id": "82B698AD-F1C1-4F9C-95DC-BDC648CEBA1A",
+     "time": 1.0,
+     "wait": true,
+     "placement": {
+      "height": 500,
+      "anchor": "bottom",
+      "offset": [
+       0,
+       -60
+      ]
+     },
+     "transitionDuration": 1.2,
+     "easing": "easeOut"
+    }
+   ]
+  },
+  {
+   "id": "9B86002C-E619-4C74-A7B4-9197F11C357E",
+   "name": "Headline",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.6,
+   "duration": 3.4,
+   "captionText": "Rendered on Linux",
+   "captionStyle": {
+    "alignment": "center"
+   },
+   "keyframes": [
+    {
+     "id": "A9E21D80-88CA-4173-9D29-53862A613DA8",
+     "time": 0,
+     "opacity": 0,
+     "transitionDuration": 0
+    },
+    {
+     "id": "5EBC45E4-4DAF-47F7-8ED0-716D67D1D7CB",
+     "time": 0.3,
+     "opacity": 1,
+     "transitionDuration": 0.3
+    }
+   ]
+  },
+  {
+   "id": "0B2FDD0A-CC7D-44F0-892E-85CC0B1572F2",
+   "name": "Second",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.4,
+   "duration": 3.4,
+   "captionText": "Same pixels as the Mac?",
+   "captionStyle": {
+    "alignment": "center"
+   },
+   "keyframes": [
+    {
+     "id": "6D6427B5-CB10-438A-B050-8AE48D6C67ED",
+     "time": 0,
+     "opacity": 0,
+     "transitionDuration": 0
+    },
+    {
+     "id": "0BE2EFBF-7603-42B0-86CB-82F6E19BAC54",
+     "time": 0.3,
+     "opacity": 1,
+     "transitionDuration": 0.3
+    }
+   ]
+  }
+ ]
+}

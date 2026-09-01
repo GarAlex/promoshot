@@ -1,0 +1,24 @@
+[package]
+name = "promo-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+promo-model = { path = "../promo-model" }
+promo-timeline = { path = "../promo-timeline" }
+promo-media = { path = "../promo-media" }
+promo-gpu = { path = "../promo-gpu" }
+promo-text = { path = "../promo-text" }
+
+[dev-dependencies]
+serde_json = "1"
+criterion.workspace = true
+
+[[bench]]
+name = "preview_bench"
+harness = false
+
+[[bench]]
+name = "mixer_bench"
+harness = false

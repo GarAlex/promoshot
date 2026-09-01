@@ -1,0 +1,2549 @@
+{
+  "$defs": {
+    "Anchor": {
+      "enum": [
+        "topLeft",
+        "top",
+        "topRight",
+        "left",
+        "center",
+        "right",
+        "bottomLeft",
+        "bottom",
+        "bottomRight"
+      ],
+      "type": "string"
+    },
+    "BackgroundFill": {
+      "enum": [
+        "stretch",
+        "fit",
+        "tile"
+      ],
+      "type": "string"
+    },
+    "BackgroundGradient": {
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/GradientKind"
+        },
+        "repeat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GradientRepeat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stops": {
+          "items": {
+            "$ref": "#/$defs/GradientStop"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "stops"
+      ],
+      "type": "object"
+    },
+    "BackgroundKeyframe": {
+      "properties": {
+        "colorHex": {
+          "default": "000000",
+          "type": "string"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "time": {
+          "format": "double",
+          "type": "number"
+        },
+        "transitionDuration": {
+          "default": 0.5,
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time"
+      ],
+      "type": "object"
+    },
+    "BackgroundStyle": {
+      "properties": {
+        "anchor": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "colorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fill": {
+          "$ref": "#/$defs/BackgroundFill",
+          "default": "stretch"
+        },
+        "gradient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundGradient"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scale": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "BeyondEnd": {
+      "oneOf": [
+        {
+          "const": "hold",
+          "type": "string"
+        },
+        {
+          "const": "loop",
+          "type": "string"
+        },
+        {
+          "const": "hide",
+          "type": "string"
+        }
+      ]
+    },
+    "BlendMode": {
+      "enum": [
+        "normal",
+        "multiply",
+        "screen",
+        "add"
+      ],
+      "type": "string"
+    },
+    "CompositionSettings": {
+      "properties": {
+        "backgroundColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backgroundGradient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundGradient"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "backgroundKeyframes": {
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/BackgroundKeyframe"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "canvasHeight": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "canvasWidth": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fps": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gifExportFPS": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gifExportScalePercent": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "imageExportScalePercent": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "palette": {
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/PaletteColor"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "paletteResourceID": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitleAlignment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleTextAlignment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "subtitleBackgroundColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitleBackgroundCornerRadius": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleBackgroundOpacity": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleBackgroundPadding": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleBold": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "subtitleColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitleFontFamily": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleFontFamily"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "subtitleFontSize": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleItalic": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "subtitleLeftMargin": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleReveal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextReveal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "subtitleRightMargin": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleShadowColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitleShadowOffset": {
+          "default": null,
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "subtitleShadowOpacity": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleShadowRadius": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleStrokeColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitleStrokeWidth": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subtitleVerticalMargin": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoBorderColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "videoBorderWidth": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoCornerRadius": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoExportHeight": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoExportWidth": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoKeyframes": {
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/VideoKeyframe"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "videoShadowColorHex": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "videoShadowOffset": {
+          "default": null,
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "videoShadowOpacity": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoShadowRadius": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "DrawingDocument": {
+      "properties": {
+        "backgroundColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shapes": {
+          "items": {
+            "$ref": "#/$defs/DrawingShape"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "shapes"
+      ],
+      "type": "object"
+    },
+    "DrawingShape": {
+      "properties": {
+        "arrowEnd": {
+          "type": "boolean"
+        },
+        "arrowStart": {
+          "type": "boolean"
+        },
+        "evenOddFill": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fillColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fillOpacity": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "groupID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/DrawingShapeKind"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/Point"
+          },
+          "type": "array"
+        },
+        "strokeColorHex": {
+          "type": "string"
+        },
+        "strokeOpacity": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "strokeWidth": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "points",
+        "strokeColorHex",
+        "strokeWidth",
+        "arrowStart",
+        "arrowEnd"
+      ],
+      "type": "object"
+    },
+    "DrawingShapeKind": {
+      "enum": [
+        "pen",
+        "line",
+        "oval"
+      ],
+      "type": "string"
+    },
+    "DurationRule": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DurationRuleKind"
+        },
+        "tail": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "DurationRuleKind": {
+      "oneOf": [
+        {
+          "const": "fitContent",
+          "type": "string"
+        },
+        {
+          "const": "fitDependents",
+          "type": "string"
+        }
+      ]
+    },
+    "Easing": {
+      "enum": [
+        "linear",
+        "easeIn",
+        "easeOut",
+        "easeInOut"
+      ],
+      "type": "string"
+    },
+    "FrameMaterial": {
+      "enum": [
+        "spaceBlack",
+        "naturalTitanium",
+        "silver",
+        "gold",
+        "deepBlue",
+        "plasticWhite",
+        "plasticBlack",
+        "plasticBlue",
+        "plasticRed",
+        "plasticGreen",
+        "plasticYellow",
+        "plasticPink"
+      ],
+      "type": "string"
+    },
+    "GradientKind": {
+      "oneOf": [
+        {
+          "const": "linear",
+          "type": "string"
+        },
+        {
+          "const": "radial",
+          "type": "string"
+        }
+      ]
+    },
+    "GradientRepeat": {
+      "oneOf": [
+        {
+          "const": "clamp",
+          "type": "string"
+        },
+        {
+          "const": "repeat",
+          "type": "string"
+        },
+        {
+          "const": "mirror",
+          "type": "string"
+        }
+      ]
+    },
+    "GradientStop": {
+      "properties": {
+        "at": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "colorHex": {
+          "default": "000000",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ImageOrientation": {
+      "enum": [
+        "original",
+        "rotateLeft",
+        "rotateRight",
+        "upsideDown"
+      ],
+      "type": "string"
+    },
+    "LayerAdjustments": {
+      "properties": {
+        "brightness": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "contrast": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "saturation": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tintAmount": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tintHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LayerRelease": {
+      "properties": {
+        "layerId": {
+          "type": "string"
+        },
+        "on": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReleaseMoment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "layerId"
+      ],
+      "type": "object"
+    },
+    "LayerTiming": {
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimingAnchor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimingAnchor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LayerTransition": {
+      "properties": {
+        "duration": {
+          "format": "double",
+          "type": "number"
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionEdge"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/TransitionKind"
+        }
+      },
+      "required": [
+        "kind",
+        "duration"
+      ],
+      "type": "object"
+    },
+    "MediaCut": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "speed": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "trimEnd": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "trimKeyframes": {
+          "items": {
+            "$ref": "#/$defs/VideoTrimKeyframe"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trimStart": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "MotionBlur": {
+      "properties": {
+        "shutter": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "shutter"
+      ],
+      "type": "object"
+    },
+    "MotionPath": {
+      "properties": {
+        "endAt": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "flipped": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pathResourceID": {
+          "type": "string"
+        },
+        "startAt": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "pathResourceID"
+      ],
+      "type": "object"
+    },
+    "PaletteColor": {
+      "properties": {
+        "colorHex": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "colorHex"
+      ],
+      "type": "object"
+    },
+    "PathDocument": {
+      "properties": {
+        "controls": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Point"
+          },
+          "type": "array"
+        },
+        "end": {
+          "$ref": "#/$defs/Point"
+        },
+        "start": {
+          "$ref": "#/$defs/Point"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
+    },
+    "Placement": {
+      "properties": {
+        "anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Anchor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlacementMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "width": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PlacementMode": {
+      "enum": [
+        "fit",
+        "fill"
+      ],
+      "type": "string"
+    },
+    "Point": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "format": "double",
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    },
+    "ProjectExport": {
+      "additionalProperties": true,
+      "properties": {
+        "createdAt": {
+          "format": "double",
+          "type": "number"
+        },
+        "filenames": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProjectExportKind"
+        },
+        "watermarked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "createdAt",
+        "filenames"
+      ],
+      "type": "object"
+    },
+    "ProjectExportKind": {
+      "enum": [
+        "video",
+        "images",
+        "gif"
+      ],
+      "type": "string"
+    },
+    "ProjectImageCut": {
+      "properties": {
+        "createdAt": {
+          "format": "double",
+          "type": "number"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceFrame"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        }
+      },
+      "required": [
+        "id",
+        "rect",
+        "filename",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "ProjectLayer": {
+      "additionalProperties": true,
+      "properties": {
+        "adjustments": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerAdjustments"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "audioFocus": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "beyondEnd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BeyondEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blendMode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlendMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "captionStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "captionText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "captionVoiceClip": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleVoiceClip"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "durationRule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DurationRule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fadeIn": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fadeOut": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "imageBorderColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageBorderWidth": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "imageCutID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageFilename": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageOrientation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageOrientation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "isEnabled": {
+          "type": "boolean"
+        },
+        "keyframes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectLayerKeyframe"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProjectLayerKind"
+        },
+        "maskInverted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "maskResourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mediaCutID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "motionBlur": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionBlur"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "releases": {
+          "items": {
+            "$ref": "#/$defs/LayerRelease"
+          },
+          "type": "array"
+        },
+        "resourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sortIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "startTime": {
+          "format": "double",
+          "type": "number"
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerTiming"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionIn": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerTransition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionOut": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerTransition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "sortIndex",
+        "kind",
+        "isEnabled",
+        "startTime"
+      ],
+      "type": "object"
+    },
+    "ProjectLayerKeyframe": {
+      "properties": {
+        "brightness": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "colorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contrast": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fontSize": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gain": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gradient": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundGradient"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "horizontalShift": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "maskOffsetX": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "maskOffsetY": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "maskRotation": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "maskZoom": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "maskZoomY": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "motionPath": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Placement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rotation": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "saturation": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shutter": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tiltX": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tiltY": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "time": {
+          "format": "double",
+          "type": "number"
+        },
+        "tintAmount": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerTransition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionDuration": {
+          "format": "double",
+          "type": "number"
+        },
+        "transitionPercent": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "verticalShift": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "viewport": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "wait": {
+          "type": "boolean"
+        },
+        "zoom": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "time",
+        "transitionDuration"
+      ],
+      "type": "object"
+    },
+    "ProjectLayerKind": {
+      "enum": [
+        "background",
+        "video",
+        "image",
+        "caption",
+        "drawing",
+        "audio"
+      ],
+      "type": "string"
+    },
+    "ProjectResource": {
+      "additionalProperties": true,
+      "properties": {
+        "addedAt": {
+          "format": "double",
+          "type": "number"
+        },
+        "audioGain": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "background": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "captionStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "captionText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "captionVoiceClip": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleVoiceClip"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabledAudioTrackIndices": {
+          "items": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "drawing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DrawingDocument"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "filename": {
+          "type": "string"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceFrame"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "imageCuts": {
+          "items": {
+            "$ref": "#/$defs/ProjectImageCut"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProjectResourceKind"
+        },
+        "looped": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "mediaCuts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MediaCut"
+          },
+          "type": "array"
+        },
+        "palette": {
+          "items": {
+            "$ref": "#/$defs/PaletteColor"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathDocument"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pixelHeight": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pixelWidth": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sampling": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceSampling"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speed": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sprite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpriteSheet"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trimEnd": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "trimKeyframes": {
+          "items": {
+            "$ref": "#/$defs/VideoTrimKeyframe"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trimStart": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoNaturalHeight": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "videoNaturalWidth": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "volume": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "filename",
+        "displayName",
+        "addedAt",
+        "imageCuts",
+        "disabledAudioTrackIndices"
+      ],
+      "type": "object"
+    },
+    "ProjectResourceKind": {
+      "enum": [
+        "video",
+        "image",
+        "caption",
+        "drawing",
+        "audio",
+        "path",
+        "background",
+        "palette"
+      ],
+      "type": "string"
+    },
+    "Rect": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/Point"
+        },
+        {
+          "$ref": "#/$defs/Size"
+        }
+      ],
+      "type": "array"
+    },
+    "ReleaseMoment": {
+      "enum": [
+        "start",
+        "end"
+      ],
+      "type": "string"
+    },
+    "ResourceFrame": {
+      "properties": {
+        "bezelFraction": {
+          "default": 0.03,
+          "format": "double",
+          "type": "number"
+        },
+        "borderColorHex": {
+          "default": "@edge",
+          "type": "string"
+        },
+        "borderWidth": {
+          "default": 12.0,
+          "format": "double",
+          "type": "number"
+        },
+        "cornerRadius": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "depthFraction": {
+          "default": 0.06,
+          "format": "double",
+          "type": "number"
+        },
+        "kind": {
+          "$ref": "#/$defs/ResourceFrameKind",
+          "default": "none"
+        },
+        "material": {
+          "$ref": "#/$defs/FrameMaterial",
+          "default": "spaceBlack"
+        },
+        "shadowColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shadowOffset": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "shadowOpacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shadowRadius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tiltX": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "tiltY": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "ResourceFrameKind": {
+      "enum": [
+        "none",
+        "border",
+        "device"
+      ],
+      "type": "string"
+    },
+    "ResourceSampling": {
+      "oneOf": [
+        {
+          "const": "smooth",
+          "type": "string"
+        },
+        {
+          "const": "nearest",
+          "type": "string"
+        }
+      ]
+    },
+    "RevealMode": {
+      "enum": [
+        "wipe",
+        "fade",
+        "rise",
+        "scale",
+        "highlight"
+      ],
+      "type": "string"
+    },
+    "RevealUnit": {
+      "enum": [
+        "character",
+        "word",
+        "line"
+      ],
+      "type": "string"
+    },
+    "Size": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "format": "double",
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    },
+    "SpriteSheet": {
+      "properties": {
+        "columns": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fps": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "frameCount": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "frameDurations": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rows": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "type": "object"
+    },
+    "SubtitleEntry": {
+      "type": "object"
+    },
+    "SubtitleFontFamily": {
+      "enum": [
+        "system",
+        "rounded",
+        "serif",
+        "monospaced",
+        "helveticaNeue",
+        "avenirNext",
+        "gillSans",
+        "futura",
+        "trebuchetMS",
+        "georgia",
+        "palatino",
+        "timesNewRoman",
+        "americanTypewriter",
+        "courierNew",
+        "chalkboard",
+        "markerFelt",
+        "snellRoundhand"
+      ],
+      "type": "string"
+    },
+    "SubtitleStyle": {
+      "properties": {
+        "alignment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleTextAlignment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backgroundColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backgroundOpacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cornerRadius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fontFamily": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleFontFamily"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fontSize": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "isBold": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "isItalic": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "leftMargin": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "padding": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Placement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reveal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextReveal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rightMargin": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shadowColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shadowOffset": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "shadowOpacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shadowRadius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "strokeColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strokeWidth": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "textColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verticalMargin": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SubtitleTextAlignment": {
+      "enum": [
+        "leading",
+        "center",
+        "trailing"
+      ],
+      "type": "string"
+    },
+    "SubtitleVoiceClip": {
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SubtitleVoiceKind"
+        }
+      },
+      "required": [
+        "filename",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "SubtitleVoiceKind": {
+      "enum": [
+        "recorded"
+      ],
+      "type": "string"
+    },
+    "TextReveal": {
+      "properties": {
+        "by": {
+          "$ref": "#/$defs/RevealUnit",
+          "default": "word"
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "highlightColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/RevealMode",
+          "default": "wipe"
+        },
+        "rise": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "seconds": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "secondsPer": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unitSeconds": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "TimingAnchor": {
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/TimingReference"
+        },
+        "offset": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "from"
+      ],
+      "type": "object"
+    },
+    "TimingReference": {
+      "oneOf": [
+        {
+          "enum": [
+            "previousStart",
+            "previousEnd",
+            "nextStart",
+            "nextEnd",
+            "previousPeerEnd",
+            "nextPeerStart",
+            "nextPeerEnd"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "previousPeerStart",
+          "type": "string"
+        }
+      ]
+    },
+    "TransitionEdge": {
+      "enum": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "type": "string"
+    },
+    "TransitionKind": {
+      "enum": [
+        "fade",
+        "wipe",
+        "slide",
+        "push",
+        "scale"
+      ],
+      "type": "string"
+    },
+    "VideoKeyframe": {
+      "properties": {
+        "horizontalShift": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "time": {
+          "format": "double",
+          "type": "number"
+        },
+        "transitionDuration": {
+          "default": 0.5,
+          "format": "double",
+          "type": "number"
+        },
+        "verticalShift": {
+          "format": "double",
+          "type": "number"
+        },
+        "zoom": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time",
+        "zoom",
+        "verticalShift"
+      ],
+      "type": "object"
+    },
+    "VideoTrimKeyframe": {
+      "properties": {
+        "extendedPauseDuration": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "isIncluded": {
+          "type": "boolean"
+        },
+        "time": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "time",
+        "isIncluded"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "compositionSettings": {
+      "$ref": "#/$defs/CompositionSettings"
+    },
+    "createdAt": {
+      "format": "double",
+      "type": "number"
+    },
+    "exports": {
+      "items": {
+        "$ref": "#/$defs/ProjectExport"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "formatVersion": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "id": {
+      "type": "string"
+    },
+    "layers": {
+      "items": {
+        "$ref": "#/$defs/ProjectLayer"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "minReaderVersion": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/ProjectResource"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "state": {
+      "type": "string"
+    },
+    "subtitles": {
+      "items": {
+        "$ref": "#/$defs/SubtitleEntry"
+      },
+      "type": "array"
+    },
+    "trimEnd": {
+      "format": "double",
+      "type": "number"
+    },
+    "trimKeyframes": {
+      "items": {
+        "$ref": "#/$defs/VideoTrimKeyframe"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "trimStart": {
+      "format": "double",
+      "type": "number"
+    },
+    "updatedAt": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "videoDuration": {
+      "format": "double",
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "createdAt",
+    "subtitles",
+    "trimStart",
+    "trimEnd",
+    "videoDuration",
+    "compositionSettings",
+    "state"
+  ],
+  "title": ".promo metadata.json",
+  "type": "object"
+}

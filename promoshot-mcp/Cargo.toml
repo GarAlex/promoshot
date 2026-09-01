@@ -1,0 +1,22 @@
+[package]
+name = "promoshot-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MCP server for rendering PromoShot projects headless, over the promo CLI"
+
+[[bin]]
+name = "promoshot-mcp"
+path = "src/main.rs"
+
+[dependencies]
+promo-author = { path = "../promo-author" }
+promo-editor = { path = "../promo-editor" }
+promo-model = { path = "../promo-model" }
+serde_json.workspace = true
+sha2 = "0.10"
+ureq = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+promo-timeline = { path = "../promo-timeline" }

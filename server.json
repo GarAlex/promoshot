@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.GarAlex/promoshot",
+  "description": "Headless MCP: author and render PromoShot .promo video projects (stills, GIFs, video).",
+  "websiteUrl": "https://promoshot.app/mcp",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/GarAlex/promoshot",
+    "source": "github"
+  },
+  "version": "0.2.3",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/garalex/promoshot-mcp:v0.2.3",
+      "runtimeHint": "docker",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

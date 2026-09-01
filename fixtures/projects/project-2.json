@@ -1,0 +1,104 @@
+{
+  "compositionSettings": {
+    "videoKeyframes": [
+      {
+        "transitionDuration": 0.5,
+        "id": "0F0FCBF1-B89A-4A75-94E7-34374DB661F2",
+        "horizontalShift": 0,
+        "verticalShift": 0,
+        "time": 0,
+        "zoom": 1
+      }
+    ],
+    "subtitleBold": true,
+    "backgroundKeyframes": [
+      {
+        "transitionDuration": 0.5,
+        "id": "B4B269F0-D809-46CC-AC83-40241A18F179",
+        "time": 0,
+        "colorHex": "000000"
+      }
+    ],
+    "backgroundColorHex": "000000",
+    "subtitleColorHex": "FFFFFF",
+    "subtitleRightMargin": 60,
+    "videoBorderWidth": 0,
+    "subtitleVerticalMargin": 80,
+    "subtitleFontFamily": "system",
+    "subtitleBackgroundOpacity": 0.7,
+    "subtitleFontSize": 72,
+    "subtitleBackgroundPadding": 16,
+    "subtitleBackgroundCornerRadius": 8,
+    "canvasHeight": 1080,
+    "videoBorderColorHex": "FFFFFF",
+    "subtitleLeftMargin": 720,
+    "subtitleItalic": false,
+    "subtitleBackgroundColorHex": "000000",
+    "videoCornerRadius": 0,
+    "canvasWidth": 1920
+  },
+  "trimEnd": 16.963333333333335,
+  "createdAt": 804718607.685907,
+  "id": "9A399D2F-B3C4-41F6-BA69-00FE0C7589A5",
+  "subtitles": [],
+  "name": "Recording 2026-07-02 13:56",
+  "trimStart": 0,
+  "trimKeyframes": [],
+  "resources": [
+    {
+      "trimStart": 0,
+      "imageCuts": [],
+      "addedAt": 804718607.693626,
+      "id": "A1484DA0-6F50-4534-A008-F3D5AD27BBDC",
+      "filename": "video-00E80CF7-FCC7-411A-8448-E605BB4D3ED4.mp4",
+      "kind": "video",
+      "disabledAudioTrackIndices": [],
+      "duration": 16.963333333333335,
+      "displayName": "Screen Recording",
+      "trimEnd": 16.963333333333335
+    }
+  ],
+  "updatedAt": 804719204.961454,
+  "exports": [],
+  "layers": [
+    {
+      "isEnabled": true,
+      "name": "Background",
+      "id": "D942A1F1-1D04-482D-8573-E4DDEC09A369",
+      "startTime": 0,
+      "kind": "background",
+      "sortIndex": 0,
+      "duration": 16.963333333333335,
+      "keyframes": [
+        {
+          "transitionDuration": 0.5,
+          "id": "62CEC3D7-2E1F-452C-A953-EAC350153246",
+          "time": 0,
+          "colorHex": "000000"
+        }
+      ]
+    },
+    {
+      "isEnabled": true,
+      "name": "Screen Recording",
+      "id": "E937955F-FA13-4EA0-8638-049220A78169",
+      "startTime": 0,
+      "kind": "video",
+      "sortIndex": 1,
+      "resourceID": "A1484DA0-6F50-4534-A008-F3D5AD27BBDC",
+      "duration": 16.963333333333335,
+      "keyframes": [
+        {
+          "transitionDuration": 0.5,
+          "id": "013ADA2F-DD71-4CB5-AD34-71D2E72A8E64",
+          "horizontalShift": 0,
+          "verticalShift": 0,
+          "time": 0,
+          "zoom": 1
+        }
+      ]
+    }
+  ],
+  "videoDuration": 16.963333333333335,
+  "state": "recorded"
+}
