@@ -724,6 +724,7 @@ pub fn export_video(
         .collect();
     let spec = promo_media::EncodeSpec {
         chapters,
+        chapters_end: (settings.end - settings.start).max(0.0),
         width,
         height,
         fps,
@@ -1494,6 +1495,11 @@ mod tests {
                 Some(a) => format!(r#","adjustments":{{"lutResourceID":"K","lutAmount":{a}}}"#),
                 None => String::new(),
             };
+            // A plain neighbour on the right: the strip must never land on
+            // it (texture slots are per quad; the strip joins after them).
+            let neighbour = r#",{"id":"N","name":"plain","sortIndex":1,"kind":"image","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"I",
+                  "keyframes":[{"id":"nk","time":0,"placement":{"width":16,"anchor":"topRight"},"transitionDuration":0}]}"#;
             format!(
                 r#"{{"id":"P","name":"Lut","createdAt":0,"state":"recorded","minReaderVersion":23,
                 "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
@@ -1503,7 +1509,7 @@ mod tests {
                   {{"id":"K","kind":"lut","filename":"invert.cube","displayName":"invert","addedAt":0,
                   "imageCuts":[],"disabledAudioTrackIndices":[]}}],
                 "layers":[{{"id":"L","name":"plate","sortIndex":0,"kind":"image","isEnabled":true,
-                  "startTime":0,"duration":2,"resourceID":"I"{adjustments},"keyframes":[]}}]}}"#
+                  "startTime":0,"duration":2,"resourceID":"I"{adjustments},"keyframes":[]}}{neighbour}]}}"#
             )
         };
         let render = |json: &str| -> Vec<u8> {
@@ -1517,6 +1523,12 @@ mod tests {
             [frame[i + 2], frame[i + 1], frame[i]]
         };
         let graded = render(&doc(Some(1.0)));
+        // The 16-px neighbour in the top-right corner is the plain plate.
+        let corner = px(&graded, 62, 1);
+        assert!(
+            corner[1] > 200 && corner[0] < 40 && corner[2] < 40,
+            "the neighbour stays green: {corner:?}"
+        );
         let plain = render(&doc(None));
         let zero = render(&doc(Some(0.0)));
         assert_eq!(

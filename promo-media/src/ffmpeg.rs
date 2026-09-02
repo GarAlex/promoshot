@@ -601,7 +601,7 @@ impl FfmpegEncoder {
         let chapters_temp = if spec.chapters.is_empty() {
             None
         } else {
-            Some(write_chapters(&spec.chapters)?)
+            Some(write_chapters(&spec.chapters, spec.chapters_end)?)
         };
         let mut command = Command::new("ffmpeg");
         command.args([
@@ -663,7 +663,7 @@ impl FfmpegEncoder {
 /// An ffmetadata file with one [CHAPTER] per entry, in milliseconds; each
 /// chapter ends where the next begins, the last a day later (the container
 /// clamps it to the stream's end).
-fn write_chapters(chapters: &[(f64, String)]) -> Result<PathBuf, MediaError> {
+fn write_chapters(chapters: &[(f64, String)], end_s: f64) -> Result<PathBuf, MediaError> {
     let dir = std::env::temp_dir().join("promo-media");
     std::fs::create_dir_all(&dir).map_err(|e| MediaError::Backend(format!("temp dir: {e}")))?;
     let path = dir.join(format!(
@@ -678,7 +678,11 @@ fn write_chapters(chapters: &[(f64, String)]) -> Result<PathBuf, MediaError> {
         let end = sorted
             .get(i + 1)
             .map(|next| next.0)
-            .unwrap_or(start + 86_400.0);
+            .unwrap_or(if end_s > *start {
+                end_s
+            } else {
+                start + 86_400.0
+            });
         let title = title
             .replace('\\', "\\\\")
             .replace('=', "\\=")
@@ -789,6 +793,7 @@ mod tests {
         let out = dir.join(format!("abandoned-{}.mp4", std::process::id()));
         let spec = crate::EncodeSpec {
             chapters: Vec::new(),
+            chapters_end: 0.0,
             width: 64,
             height: 64,
             fps: 30.0,
@@ -1206,6 +1211,7 @@ mod tests {
         let _ = std::fs::remove_file(&out);
         let spec = EncodeSpec {
             chapters: Vec::new(),
+            chapters_end: 0.0,
             width: 64,
             height: 48,
             fps: 30.0,
@@ -1243,6 +1249,7 @@ mod tests {
         let out = dir.join("chapters.mp4");
         let spec = EncodeSpec {
             chapters: vec![(0.0, "Open".into()), (1.0, "Pricing = plans".into())],
+            chapters_end: 2.0,
             width: 64,
             height: 48,
             fps: 30.0,

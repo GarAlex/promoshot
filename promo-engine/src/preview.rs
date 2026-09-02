@@ -1741,6 +1741,9 @@ impl PreviewEngine {
         // Placement resolves on the GEOMETRY clock (`time`, the blur
         // sub-sample) — a flying window smears like any other motion.
         let mut mask_requests: Vec<(usize, String, bool, Option<tl::MaskPlacement>)> = Vec::new();
+        // LUT strips join the texture list AFTER the content, like masks:
+        // `used` stays one frame per quad until the positional patch below.
+        let mut lut_requests: Vec<(usize, u64)> = Vec::new();
 
         for layer in &layers {
             if !tl::layer_is_visible(layer, time) {
@@ -2075,10 +2078,7 @@ impl PreviewEngine {
                         quads.push(quad);
                         used.push(id);
                         if let Some(lut) = lut_id {
-                            if let Some(last) = quads.last_mut() {
-                                last.lut = Some(used.len());
-                            }
-                            used.push(lut);
+                            lut_requests.push((quads.len() - 1, lut));
                         }
                         // The window frames the OUTGOING material too: a
                         // swap happens inside the porthole, not around it.
@@ -2109,10 +2109,6 @@ impl PreviewEngine {
                 continue;
             };
             used.push(frame_id);
-            if let Some(lut) = lut_id {
-                quad.lut = Some(used.len());
-                used.push(lut);
-            }
             if let Some(swap) = swap.as_ref() {
                 // The incoming material arrives over it.
                 apply_effect(&mut quad, swap.effect, canvas);
@@ -2122,6 +2118,9 @@ impl PreviewEngine {
             let pre_transition = quad.rect;
             apply_transition(&mut quad, layer, time, canvas);
             quads.push(quad);
+            if let Some(lut) = lut_id {
+                lut_requests.push((quads.len() - 1, lut));
+            }
             if let Some(mut sq) = shadow {
                 // The transition moved or faded the layer — the shadow
                 // travels glued to it. Delta'd rather than recomputed: a
@@ -2146,6 +2145,16 @@ impl PreviewEngine {
         // caller borrows the textures in this same order.
         for (i, quad) in quads.iter_mut().enumerate() {
             quad.texture = Some(i);
+        }
+        for (quad_index, id) in lut_requests {
+            let slot = match used.iter().position(|&u| u == id) {
+                Some(slot) => slot,
+                None => {
+                    used.push(id);
+                    used.len() - 1
+                }
+            };
+            quads[quad_index].lut = Some(slot);
         }
 
         // Masks join the texture list AFTER the content: `used` is complete,
