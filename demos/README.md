@@ -24,6 +24,16 @@ demos/
   import_templates.py, prompts.json, task.md   the importer from a template library
 ```
 
+## Two kinds of demo
+
+`NN-slug/` is a **conformance** run: the prompt names the technique, and
+the rubric — derived from a hand-built reference — asks whether the
+agent got there. `cN-slug/` is a **creative** run: a goal, the material
+and the tools, nothing about how (`creative.py` writes them). Its score
+is only the floor — valid, rendered, the asked length, the given
+material used, a few features reached for, words on screen — and the
+page shows the piece beside the agent's own notes, which is the answer.
+
 ## Running
 
 ```

@@ -43,9 +43,44 @@ def asked_for(key, prompt):
     p = prompt.lower()
     return any(w in p for w in words)
 
+def score_creative(rubric, meta, project):
+    """A goal, not a recipe: valid, rendered, in the asked length, uses
+    what it was given, and reaches for the vocabulary on its own."""
+    checks = []
+    def check(name, ok, detail=""):
+        checks.append({"check": name, "ok": bool(ok), "detail": detail})
+    promo = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'target', 'release', 'promo')
+    valid = True
+    if os.path.exists(promo):
+        import subprocess
+        r = subprocess.run([promo, 'validate', project], capture_output=True, text=True)
+        valid = r.returncode == 0
+    check("valid", valid, "promo validate")
+    exports = os.path.join(project, 'Exports')
+    rendered = os.path.isdir(exports) and any(f.endswith('.mp4') for f in os.listdir(exports))
+    check("rendered", rendered, "an mp4 in Exports/")
+    layers = meta.get('layers', [])
+    dur = meta.get('videoDuration') or (max(l.get('startTime', 0) + (l.get('duration') or 0) for l in layers) if layers else 0)
+    lo, hi = rubric.get('duration', [0, 1e9])
+    check("length", lo <= dur <= hi, f"{dur:.1f}s, asked {lo}–{hi}s")
+    used_files = {r.get('filename') for r in meta.get('resources', [])}
+    for f in rubric.get('must_use', []):
+        check(f"uses:{f}", f in used_files, "referenced by a resource" if f in used_files else "not used")
+    f = features(meta)
+    used = [k for k, v in f.items() if k != 'placement' and (v is True or (isinstance(v, (int, list)) and not isinstance(v, bool) and v))]
+    check("vocabulary", len(used) >= 3, f"{len(used)} features: {', '.join(used) or 'none'}")
+    check("words", len(phrases(meta)) >= 1, f"{len(phrases(meta))} captions")
+    check("layers", len(layers) >= 3, f"{len(layers)} layers")
+    passed = sum(1 for c in checks if c['ok'])
+    return {"template": rubric['template'], "kind": "creative", "score": round(100 * passed / max(1, len(checks))),
+            "passed": passed, "total": len(checks), "checks": checks, "used": used,
+            "duration": round(dur, 1), "layers": len(layers), "captions": phrases(meta)}
+
 def score(demo, project):
     rubric = json.load(open(os.path.join(demo, 'rubric.json')))
     meta = json.load(open(os.path.join(project, 'metadata.json')))
+    if rubric.get('kind') == 'creative':
+        return score_creative(rubric, meta, project)
     prompt_path = os.path.join(demo, 'prompt.md')
     prompt = open(prompt_path).read() if os.path.exists(prompt_path) else ''
     checks = []

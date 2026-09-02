@@ -5,7 +5,7 @@ HERE="${0:A:h}"; MODEL=""; SKIP=0
 for a in "$@"; do case "$a" in --skip-done) SKIP=1;; *) MODEL="$a";; esac; done
 OUT="$HERE/summary.md"
 { echo "# Demo runs — $(date '+%Y-%m-%d %H:%M')"; echo; echo "| demo | score | turns | cost | secs |"; echo "|---|---|---|---|---|"; } > "$OUT"
-for d in "$HERE"/[0-9][0-9]-*; do
+for d in "$HERE"/[0-9][0-9]-* "$HERE"/c[0-9]-*; do
   [ -d "$d" ] || continue
   if [ "$SKIP" = 1 ] && ls "$d"/runs/*/score.json > /dev/null 2>&1; then
     echo "== $(basename "$d"): scored already, skipping"

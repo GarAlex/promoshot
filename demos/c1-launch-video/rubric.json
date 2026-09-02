@@ -1,0 +1,20 @@
+{
+ "kind": "creative",
+ "template": "C1 Launch video",
+ "media": [
+  "ui_lumen_1.png",
+  "ui_lumen_2.png",
+  "ui_lumen_5.png",
+  "ui_pulse_1.png",
+  "ui_verse_1.png",
+  "green_lumen.mp4"
+ ],
+ "duration": [
+  20,
+  30
+ ],
+ "must_use": [
+  "ui_lumen_1.png",
+  "green_lumen.mp4"
+ ]
+}

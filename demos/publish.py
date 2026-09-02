@@ -97,10 +97,11 @@ BLURBS = json.load(open(os.path.join(HERE, 'blurbs.json'))) if os.path.exists(os
 
 def main():
     os.makedirs(ASSETS, exist_ok=True)
-    manifest, rows, pages = [], [], []
+    manifest, rows, crows, pages = [], [], [], []
     for name in sorted(os.listdir(HERE)):
         demo = os.path.join(HERE, name)
-        if not (os.path.isdir(demo) and name[:2].isdigit() and os.path.exists(os.path.join(demo, 'rubric.json'))):
+        creative = name[:1] == 'c' and name[1:2].isdigit()
+        if not (os.path.isdir(demo) and (name[:2].isdigit() or creative) and os.path.exists(os.path.join(demo, 'rubric.json'))):
             continue
         rubric = json.load(open(os.path.join(demo, 'rubric.json')))
         prompt = open(os.path.join(demo, 'prompt.md')).read().strip()
@@ -136,7 +137,12 @@ def main():
             summary = open(summary_path).read().strip() if os.path.exists(summary_path) else ''
             result = {"score": score['score'], "passed": score['passed'], "total": score['total'],
                       "checks": score['checks'], "summary": summary.split(' result=')[0],
-                      "run": run_stats(run)}
+                      "run": run_stats(run), "used": score.get('used'), "captions": score.get('captions')}
+            try:
+                notes = json.load(open(os.path.join(run, 'agent.json'))).get('result') or ''
+                result["notes"] = notes.strip()[:1800]
+            except Exception:
+                pass
             for f, key in (('contact-agent.png', 'contact'), ('contact-reference.png', 'reference_contact')):
                 src = os.path.join(run, f)
                 if os.path.exists(src):
@@ -174,7 +180,7 @@ def main():
             t = os.path.join(out, 'thumb.png')
             if thumb(os.path.join(CORE, result['video']), t):
                 result['thumb'] = f"docs/demo/{name}/thumb.png"
-        blurb = BLURBS.get(name[:2], user_prompt.split('.')[0] + '.')
+        blurb = BLURBS.get(name[:2], user_prompt.split('.')[0].strip() + '.')
         manifest.append({"id": name[:2], "slug": name, "title": rubric['template'][3:], "blurb": blurb,
                          "canvas": rubric['canvas'], "duration": rubric['duration'],
                          "prompt": user_prompt, "resources": resources, "result": result,
@@ -185,7 +191,8 @@ def main():
         pg = [f"# {rubric['template']}", "",
               f"{blurb}", "",
               f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration']:.0f} s.* "
-              "Part of [the demos](../../demo.md): a fresh agent, the media and the prompt below, "
+              ("A **creative run**: a goal, the material and the tools, nothing about how. " if creative else "")
+              + "Part of [the demos](../../demo.md): a fresh agent, the media and the prompt below, "
               "the public skill and the headless MCP, nothing else.", "",
               "## Resources given to the agent", ""]
         if not resources:
@@ -237,6 +244,11 @@ def main():
                 links.append(f"[the project it wrote]({rel(result['metadata'])})")
             if links:
                 pg += [" · ".join(links), ""]
+            if creative:
+                if result.get('used'):
+                    pg += ["What it reached for on its own: " + ", ".join(result['used']) + ".", ""]
+                if result.get('notes'):
+                    pg += ["The agent's own notes:", "", "> " + result['notes'].replace("\n", "\n> "), ""]
             pg += ["| check | | detail |", "|---|---|---|"]
             for c in result['checks']:
                 pg.append(f"| {c['check']} | {'✓' if c['ok'] else '✗'} | {c['detail']} |")
@@ -262,7 +274,8 @@ def main():
             pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
         else:
             status, pic = "not run yet", ""
-        rows.append(f"| {pic} | [{rubric['template']}](docs/demo/demo{name[:2]}.md) | {blurb} | {status} |")
+        page_id = name[:2] if not creative else name[:2]
+        (crows if creative else rows).append(f"| {pic} | [{rubric['template']}](docs/demo/demo{page_id}.md) | {blurb} | {status} |")
 
     head = """# Demos — prompt in, video out
 
@@ -292,7 +305,21 @@ million-odd tokens costs a couple of dollars at list.
 | | demo | what the brief asks for | result · the agent's work |
 |---|---|---|---|
 """
-    open(os.path.join(CORE, 'demo.md'), 'w').write(head + "\n".join(rows) + "\n")
+    creative_head = """
+
+## Creative runs — a goal, the material, the tools
+
+The prompts above name the technique, and the score asks whether the
+agent got there. These give only a goal, the material and the tools —
+nothing about how — and ask what the agent makes of it. The score here is
+the floor (valid, rendered, the asked length, the given material used, a
+few features reached for, words on screen); the piece and the agent's own
+notes on its page are the answer.
+
+| | run | the brief | result · the agent's work |
+|---|---|---|---|
+"""
+    open(os.path.join(CORE, 'demo.md'), 'w').write(head + "\n".join(rows) + "\n" + creative_head + "\n".join(crows) + "\n")
     json.dump(manifest, open(os.path.join(ASSETS, 'demo.json'), 'w'), indent=1)
     done = sum(1 for m in manifest if m['result'])
     print(f"demo.md: {len(manifest)} demos, {done} with results; pages and assets in docs/demo")

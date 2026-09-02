@@ -46,11 +46,16 @@ OUT="$WS/out.promo"
 if [ -f "$OUT/metadata.json" ]; then
   python3 "$HERE/score.py" "$DEMO" "$OUT" | tee "$RUN/score.txt"
   python3 "$HERE/score.py" "$DEMO" "$OUT" --json > "$RUN/score.json"
-  # The reference, materialised from reference.json and the same media.
-  REF="$RUN/reference.promo"; mkdir -p "$REF/Resources"
-  cp "$DEMO/reference.json" "$REF/metadata.json"; cp -R "$WS/resources/." "$REF/Resources/" 2>/dev/null || true
+  # The reference, materialised from reference.json and the same media —
+  # a creative run has none, and shows only what the agent made.
+  SIDES="agent"
+  if [ -f "$DEMO/reference.json" ]; then
+    REF="$RUN/reference.promo"; mkdir -p "$REF/Resources"
+    cp "$DEMO/reference.json" "$REF/metadata.json"; cp -R "$WS/resources/." "$REF/Resources/" 2>/dev/null || true
+    SIDES="agent reference"
+  fi
   DUR=$(python3 -c "import json;print(json.load(open('$OUT/metadata.json')).get('videoDuration') or 10)")
-  for side in agent reference; do
+  for side in ${=SIDES}; do
     SRC="$OUT"; [ "$side" = reference ] && SRC="$REF"
     mkdir -p "$RUN/frames-$side"
     for f in 0.08 0.25 0.42 0.6 0.78 0.95; do

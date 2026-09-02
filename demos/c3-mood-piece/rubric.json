@@ -1,0 +1,17 @@
+{
+ "kind": "creative",
+ "template": "C3 Mood piece",
+ "media": [
+  "ui_lumen_1.png",
+  "look_warm.cube",
+  "look_cool.cube",
+  "look_mono.cube"
+ ],
+ "duration": [
+  10,
+  14
+ ],
+ "must_use": [
+  "ui_lumen_1.png"
+ ]
+}

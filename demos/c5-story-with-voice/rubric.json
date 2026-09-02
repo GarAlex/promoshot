@@ -1,0 +1,18 @@
+{
+ "kind": "creative",
+ "template": "C5 Story with a voice",
+ "media": [
+  "ui_lumen_1.png",
+  "ui_lumen_2.png",
+  "ui_lumen_5.png",
+  "green_lumen.mp4",
+  "look_warm.cube"
+ ],
+ "duration": [
+  24,
+  36
+ ],
+ "must_use": [
+  "green_lumen.mp4"
+ ]
+}

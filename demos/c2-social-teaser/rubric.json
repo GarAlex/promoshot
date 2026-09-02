@@ -1,0 +1,15 @@
+{
+ "kind": "creative",
+ "template": "C2 Social teaser",
+ "media": [
+  "bbb_test.mp4",
+  "ui_lumen_1.png"
+ ],
+ "duration": [
+  12,
+  18
+ ],
+ "must_use": [
+  "bbb_test.mp4"
+ ]
+}
