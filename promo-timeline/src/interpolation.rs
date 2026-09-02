@@ -471,6 +471,58 @@ pub fn layer_mask_placement(layer: &ProjectLayer, time: f64) -> Option<MaskPlace
     })
 }
 
+/// A layer's image effects at `time`, keyframe tracks over constants,
+/// clamped to their ranges. `None` when every amount is zero — the
+/// common case, and the one the compositor must not pay for.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedEffects {
+    /// Canvas px.
+    pub blur: f64,
+    /// Degrees; `None` is a round blur.
+    pub blur_angle: Option<f64>,
+    pub glow: f64,
+    pub glow_radius: f64,
+    pub glow_threshold: f64,
+    pub vignette: f64,
+    pub vignette_softness: f64,
+    pub grain: f64,
+    pub sharpen: f64,
+}
+
+pub fn layer_effects(layer: &ProjectLayer, time: f64) -> Option<ResolvedEffects> {
+    let local = layer_local_time(layer, time);
+    let field =
+        |pick: fn(&ProjectLayerKeyframe) -> Option<f64>, constant: Option<f64>, identity: f64| {
+            layer_interpolated_scalar(layer, local, pick)
+                .or(constant)
+                .unwrap_or(identity)
+        };
+    let base = layer.effects.as_ref();
+    let out = ResolvedEffects {
+        blur: field(|k| k.blur, base.and_then(|e| e.blur), 0.0).max(0.0),
+        blur_angle: base.and_then(|e| e.blur_angle),
+        glow: field(|k| k.glow, base.and_then(|e| e.glow), 0.0).clamp(0.0, 1.0),
+        glow_radius: base.and_then(|e| e.glow_radius).unwrap_or(24.0).max(0.0),
+        glow_threshold: base
+            .and_then(|e| e.glow_threshold)
+            .unwrap_or(0.6)
+            .clamp(0.0, 1.0),
+        vignette: field(|k| k.vignette, base.and_then(|e| e.vignette), 0.0).clamp(0.0, 1.0),
+        vignette_softness: base
+            .and_then(|e| e.vignette_softness)
+            .unwrap_or(0.5)
+            .clamp(0.0, 1.0),
+        grain: base.and_then(|e| e.grain).unwrap_or(0.0).clamp(0.0, 1.0),
+        sharpen: base.and_then(|e| e.sharpen).unwrap_or(0.0).clamp(0.0, 2.0),
+    };
+    let identity = out.blur == 0.0
+        && out.glow == 0.0
+        && out.vignette == 0.0
+        && out.grain == 0.0
+        && out.sharpen == 0.0;
+    (!identity).then_some(out)
+}
+
 pub fn layer_adjustments(layer: &ProjectLayer, time: f64) -> Option<ResolvedAdjustments> {
     let local = layer_local_time(layer, time);
     let field =

@@ -894,6 +894,7 @@ mod tests {
             adjustments: None,
             blend_mode: None,
             chroma_key: None,
+            effects: None,
             mask_resource_id: None,
             mask_inverted: None,
             start_time: start,

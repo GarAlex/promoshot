@@ -142,6 +142,13 @@ new projects.
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
   "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
   and tint, on every host alike. Stamp `minReaderVersion: 23`.
+- **Image effects on a layer.** `"effects": { "blur": 12, "glow": 0.5,
+  "vignette": 0.4, "grain": 0.15, "sharpen": 0.5 }` on any layer, each
+  optional; `"blurAngle": 45` makes the blur a directional smear, and
+  `glowRadius` / `glowThreshold` / `vignetteSoftness` tune the rest. Put
+  `blur`, `glow` or `vignette` on a KEYFRAME to ramp it — a blur-in
+  headline is `"blur": 20` at 0 and `"blur": 0` a third of a second
+  later. Stamp `minReaderVersion: 24`.
 - **Chroma key on a layer.** `"chromaKey": { "colorHex": "00FF00",
   "tolerance": 0.3, "softness": 0.1 }` on a video or image layer makes
   the plate transparent before the grade, border and mask — footage on

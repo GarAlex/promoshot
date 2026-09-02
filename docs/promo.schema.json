@@ -902,6 +902,74 @@
       },
       "type": "object"
     },
+    "LayerEffects": {
+      "properties": {
+        "blur": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "blurAngle": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "glow": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "glowRadius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "glowThreshold": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "grain": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sharpen": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "vignette": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "vignetteSoftness": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "LayerRelease": {
       "properties": {
         "layerId": {
@@ -1388,6 +1456,16 @@
             }
           ]
         },
+        "effects": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerEffects"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "fadeIn": {
           "format": "double",
           "type": [
@@ -1547,6 +1625,13 @@
     },
     "ProjectLayerKeyframe": {
       "properties": {
+        "blur": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "brightness": {
           "format": "double",
           "type": [
@@ -1586,6 +1671,13 @@
         },
         "gain": {
           "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "glow": {
+          "format": "double",
           "type": [
             "number",
             "null"
@@ -1762,6 +1854,13 @@
           "minItems": 4,
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "vignette": {
+          "format": "double",
+          "type": [
+            "number",
             "null"
           ]
         },

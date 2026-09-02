@@ -101,6 +101,26 @@ pub struct SceneQuad {
     pub lut: Option<usize>,
     /// x = 1 on / 0 off, y = amount, z = the cube's size N.
     pub lut_params: [f32; 4],
+    /// Blur radius in CANVAS px (0 = none): the quad's texture is blurred
+    /// before it is drawn — round, or directional along `blur_angle`. The
+    /// compositor scales the radius to texels from the rect the texture
+    /// is drawn into, so a 4K source and a 720p one blur the same on
+    /// screen.
+    pub blur: f32,
+    /// Degrees clockwise from +x; `None` is a round blur.
+    pub blur_angle: Option<f32>,
+    /// Glow: [amount 0…1, spread in canvas px, luminance threshold 0…1].
+    /// The parts of the texture brighter than the threshold, blurred over
+    /// the spread and ADDED back at the amount.
+    pub glow: [f32; 3],
+    /// Vignette: [amount 0…1, softness 0…1] — darkening toward the rect's
+    /// corners, black at the amount, over a band `softness` wide.
+    pub vignette: [f32; 2],
+    /// Film grain: [amount 0…1, seed]. Monochrome noise per output pixel;
+    /// a new seed is a new pattern.
+    pub grain: [f32; 2],
+    /// Unsharp-mask amount (0 = none, 1 = strong).
+    pub sharpen: f32,
 }
 
 impl Default for SceneQuad {
@@ -133,6 +153,12 @@ impl Default for SceneQuad {
             key_params: [0.3, 0.1, 0.0, 0.0],
             lut: None,
             lut_params: [0.0, 1.0, 2.0, 0.0],
+            blur: 0.0,
+            blur_angle: None,
+            glow: [0.0, 24.0, 0.6],
+            vignette: [0.0, 0.5],
+            grain: [0.0, 0.0],
+            sharpen: 0.0,
         }
     }
 }
@@ -247,6 +273,11 @@ struct Quad {
     key_params: vec4<f32>,
     // LUT: x = 1 on / 0 off, y = amount (0…1), z = size N of the cube.
     lut_params: vec4<f32>,
+    // Effects: x = vignette amount, y = vignette softness, z = grain amount,
+    // w = grain seed.
+    fx_a: vec4<f32>,
+    // x = sharpen amount, y = glow amount (the glow texture is `quad_fx`).
+    fx_b: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -256,6 +287,8 @@ struct Quad {
 @group(1) @binding(3) var quad_mask: texture_2d<f32>;
 // A colour look-up table as N slices of N×N side by side (N² wide, N tall).
 @group(1) @binding(4) var quad_lut: texture_2d<f32>;
+// The quad's glow: its bright parts, blurred, in the texture's own uv space.
+@group(1) @binding(5) var quad_fx: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -389,8 +422,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     var color: vec4<f32>;
+    var uv = quad.uv_rect.xy + (in.local / size) * quad.uv_rect.zw;
     if quad.params.y > 0.5 {
-        var uv = quad.uv_rect.xy + (in.local / size) * quad.uv_rect.zw;
         if quad.extra.y > 0.0 {
             // Tiled: wrap the unit position through the repeat grid,
             // phase-shifted so the pattern STARTS at the anchor.
@@ -399,6 +432,20 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             uv = quad.uv_rect.xy + tiled * quad.uv_rect.zw;
         }
         color = textureSample(quad_tex, quad_samp, uv);
+        // Unsharp mask on the texture itself: the pixel pushed away from
+        // the mean of its four neighbours. Before the colour work, so a
+        // grade or a key sees the sharpened picture like any other.
+        if quad.fx_b.x > 0.0 {
+            let texel = vec2<f32>(1.0) / vec2<f32>(textureDimensions(quad_tex));
+            var near = textureSample(quad_tex, quad_samp, uv - vec2<f32>(texel.x, 0.0));
+            near += textureSample(quad_tex, quad_samp, uv + vec2<f32>(texel.x, 0.0));
+            near += textureSample(quad_tex, quad_samp, uv - vec2<f32>(0.0, texel.y));
+            near += textureSample(quad_tex, quad_samp, uv + vec2<f32>(0.0, texel.y));
+            let soft = (near + color * 4.0) / 8.0;
+            let a = color.a;
+            color = clamp(color + (color - soft) * quad.fx_b.x, vec4<f32>(0.0), vec4<f32>(1.0));
+            color.a = a;
+        }
         if quad.params.z > 0.5 {
             // Video frames are opaque (alpha 1), so premultiplied rgb == rgb.
             color = vec4<f32>(bt709_to_srgb(color.rgb), color.a);
@@ -468,6 +515,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let graded = mix(straight, looked, clamp(quad.lut_params.y, 0.0, 1.0));
         color = vec4<f32>(graded * color.a, color.a);
     }
+    // The glow, added over the graded picture: the texture's bright parts,
+    // blurred in a pre-pass into `quad_fx`, in the same uv space.
+    if quad.fx_b.y > 0.0 {
+        let g = textureSample(quad_fx, quad_samp, uv);
+        color = clamp(color + g * quad.fx_b.y, vec4<f32>(0.0), vec4<f32>(1.0));
+    }
     // Inside border: ring between the outer edge and the inset rounded rect.
     let bw = quad.rot_radius_border.w;
     if bw > 0.0 {
@@ -479,6 +532,27 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let border_pm = vec4<f32>(b.rgb * b.a, b.a) * border_cov;
         // border over content (premultiplied source-over).
         color = border_pm + color * (1.0 - border_pm.a);
+    }
+
+    // Vignette: darkening toward the rect's corners. Distance from the
+    // centre normalised so the corners sit at 1; the band is `softness` of
+    // that, ending at the corner, and it dims rgb only (alpha keeps the
+    // edge as it was).
+    if quad.fx_a.x > 0.0 {
+        let p = (in.local / size - vec2<f32>(0.5)) * 2.0;
+        let d = length(p) / 1.41421356;
+        let soft = max(quad.fx_a.y, 0.001);
+        let v = 1.0 - quad.fx_a.x * smoothstep(1.0 - soft, 1.0, d);
+        color = vec4<f32>(color.rgb * v, color.a);
+    }
+    // Film grain: one hash per OUTPUT pixel, offset by the seed so a new
+    // frame is a new pattern; ±0.175 of full scale at amount 1, scaled by
+    // the coverage so the grain does not leak past the edge.
+    if quad.fx_a.z > 0.0 {
+        let cell = floor(in.pos.xy) + vec2<f32>(quad.fx_a.w * 13.37, quad.fx_a.w * 7.91);
+        let n = fract(sin(dot(cell, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+        let g = (n - 0.5) * quad.fx_a.z * 0.35 * color.a;
+        color = vec4<f32>(clamp(color.rgb + vec3<f32>(g), vec3<f32>(0.0), vec3<f32>(1.0)), color.a);
     }
 
     // The mask is a WINDOW over the whole layer — content, adjustments and
@@ -552,6 +626,8 @@ struct QuadRaw {
     key: [f32; 4],
     key_params: [f32; 4],
     lut_params: [f32; 4],
+    fx_a: [f32; 4],
+    fx_b: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -592,7 +668,7 @@ impl Fence {
 
 /// Uniform stride for the per-quad block, padded to the alignment every
 /// backend accepts for dynamic offsets (256 B).
-const QUAD_STRIDE: u64 = 256;
+const QUAD_STRIDE: u64 = 512;
 
 /// The persistent compositor: pipeline, sampler, and the GPU resources
 /// reused across frames. Creating a uniform buffer and a bind group per
@@ -614,9 +690,13 @@ pub struct Compositor {
     /// texture view — and therefore the IOSurface behind it — so an unbounded
     /// map pins every frame's surfaces in memory (measured: +38 GB across a
     /// 600-frame 4K export before this cap existed).
-    binds: std::collections::HashMap<(u64, u64), wgpu::BindGroup>,
+    binds: std::collections::HashMap<(u64, u64, u64), wgpu::BindGroup>,
     /// Insertion order for eviction.
-    bind_order: std::collections::VecDeque<(u64, u64)>,
+    bind_order: std::collections::VecDeque<(u64, u64, u64)>,
+    /// The blur pipeline and its scratch textures, made on first use: most
+    /// frames blur nothing and pay nothing.
+    fx: Option<FxResources>,
+    fx_targets: Vec<FxTarget>,
     /// IOSurface→texture adoption cache (macOS/iOS), keyed by IOSurfaceID +
     /// render-attachment flag. Adopting is a per-call Metal object creation
     /// (~100 µs each) that used to run for EVERY input surface of EVERY
@@ -650,6 +730,96 @@ pub struct Compositor {
     /// ordinary compose, `accum` sums them.
     accum_targets: Option<AccumTargets>,
 }
+
+/// Per quad: a blurred stand-in for its texture, and its glow texture.
+type EffectTextures = Vec<(Option<InputTexture>, Option<InputTexture>)>;
+
+/// The blur pipeline, made on first use.
+struct FxResources {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    /// `FX_SLOTS` blocks of `FX_STRIDE`, one per pass, dynamic offsets.
+    params: wgpu::Buffer,
+    /// One bind group per source texture identity, cleared when it grows.
+    binds: std::collections::HashMap<u64, wgpu::BindGroup>,
+}
+
+/// A scratch texture a blur pass renders into; reused across frames.
+struct FxTarget {
+    width: u32,
+    height: u32,
+    input: InputTexture,
+    _tex: std::sync::Arc<wgpu::Texture>,
+    used: bool,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct FxParamsRaw {
+    /// xy = uv step per tap, z = sigma in taps, w = taps each side.
+    dir: [f32; 4],
+    /// xy = uv min, zw = uv max — the sample window (a sprite cell).
+    bounds: [f32; 4],
+    /// x = bright-pass threshold (0 = plain blur).
+    extra: [f32; 4],
+}
+
+const FX_STRIDE: u64 = 256;
+const FX_SLOTS: usize = 32;
+
+/// One separable Gaussian pass. The source is sampled bilinearly, which
+/// is also the downsample when the target is smaller than the source.
+const FX_SHADER: &str = r#"
+struct Params {
+    dir: vec4<f32>,
+    bounds: vec4<f32>,
+    extra: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> params: Params;
+@group(0) @binding(1) var src: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+
+struct VsOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
+    var corners = array<vec2<f32>, 4>(
+        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0),
+    );
+    let u = corners[vi];
+    var out: VsOut;
+    out.pos = vec4<f32>(u.x * 2.0 - 1.0, 1.0 - u.y * 2.0, 0.0, 1.0);
+    out.uv = u;
+    return out;
+}
+
+@fragment
+fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
+    let n = i32(params.dir.w);
+    let sigma = max(params.dir.z, 0.001);
+    let threshold = params.extra.x;
+    var sum = vec4<f32>(0.0);
+    var weight = 0.0;
+    for (var i = -n; i <= n; i = i + 1) {
+        let w = exp(-f32(i * i) / (2.0 * sigma * sigma));
+        let uv = clamp(in.uv + params.dir.xy * f32(i), params.bounds.xy, params.bounds.zw);
+        var c = textureSampleLevel(src, samp, uv, 0.0);
+        if threshold > 0.0 {
+            // The bright pass: keep what is lighter than the threshold,
+            // with a soft knee so the glow has no hard rim.
+            let luma = dot(c.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+            c = c * smoothstep(threshold - 0.15, threshold + 0.05, luma);
+        }
+        sum = sum + c * w;
+        weight = weight + w;
+    }
+    return sum / max(weight, 0.000001);
+}
+"#;
 
 struct AccumTargets {
     width: u32,
@@ -744,6 +914,16 @@ impl Compositor {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -933,6 +1113,8 @@ impl Compositor {
             quad_capacity,
             binds: std::collections::HashMap::new(),
             bind_order: std::collections::VecDeque::new(),
+            fx: None,
+            fx_targets: Vec::new(),
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             imports: std::collections::HashMap::new(),
             #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -979,13 +1161,16 @@ impl Compositor {
         nearest: bool,
         mask: Option<&InputTexture>,
         lut: Option<&InputTexture>,
-    ) -> (u64, u64) {
+        fx: Option<&InputTexture>,
+    ) -> (u64, u64, u64) {
         let texture = texture.unwrap_or(&self.dummy);
         let mask = mask.unwrap_or(&self.dummy);
         let lut = lut.unwrap_or(&self.dummy);
+        let fx = fx.unwrap_or(&self.dummy);
         let id = (
             (texture.id << 1) | u64::from(nearest),
             mask.id ^ (lut.id << 32),
+            fx.id,
         );
         if !self.binds.contains_key(&id) {
             let sampler = if nearest {
@@ -1020,6 +1205,10 @@ impl Compositor {
                     wgpu::BindGroupEntry {
                         binding: 4,
                         resource: wgpu::BindingResource::TextureView(&lut.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(&fx.view),
                     },
                 ],
             });
@@ -1310,9 +1499,13 @@ impl Compositor {
         quads.extend_from_slice(&scene.quads);
         self.ensure_quad_capacity(ctx, quads.len());
 
+        // Blur and glow are pre-passes over the quad's texture; each quad
+        // that asks gets a blurred stand-in and/or a glow texture.
+        let effects = self.run_effect_passes(ctx, &quads, textures)?;
+
         // One staging write for the whole frame's quad uniforms.
         let mut staging = vec![0u8; QUAD_STRIDE as usize * quads.len()];
-        let mut binds: Vec<(u64, u64)> = Vec::with_capacity(quads.len());
+        let mut binds: Vec<(u64, u64, u64)> = Vec::with_capacity(quads.len());
         for (i, q) in quads.iter().enumerate() {
             let rot = q.rotation_deg.to_radians();
             let raw = QuadRaw {
@@ -1369,16 +1562,29 @@ impl Compositor {
                 key: q.key_rgba,
                 key_params: q.key_params,
                 lut_params: q.lut_params,
+                fx_a: [q.vignette[0], q.vignette[1], q.grain[0], q.grain[1]],
+                fx_b: [
+                    q.sharpen,
+                    if effects[i].1.is_some() {
+                        q.glow[0]
+                    } else {
+                        0.0
+                    },
+                    0.0,
+                    0.0,
+                ],
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
                 .copy_from_slice(as_bytes(&raw));
-            let texture = match q.texture {
-                Some(index) => Some(*textures.get(index).ok_or_else(|| {
+            let texture = match (&effects[i].0, q.texture) {
+                (Some(blurred), _) => Some(blurred),
+                (None, Some(index)) => Some(*textures.get(index).ok_or_else(|| {
                     GpuError::Import(format!("texture index {index} out of range"))
                 })?),
-                None => None,
+                (None, None) => None,
             };
+            let fx = effects[i].1.as_ref();
             let mask = match q.mask {
                 Some(index) => Some(*textures.get(index).ok_or_else(|| {
                     GpuError::Import(format!("mask texture index {index} out of range"))
@@ -1391,7 +1597,7 @@ impl Compositor {
                 })?),
                 None => None,
             };
-            binds.push(self.bind_group_for(ctx, texture, q.nearest, mask, lut));
+            binds.push(self.bind_group_for(ctx, texture, q.nearest, mask, lut, fx));
         }
         ctx.queue.write_buffer(&self.quad_buf, 0, &staging);
 
@@ -1482,6 +1688,320 @@ impl Compositor {
         self.compose_to_texture_borrowed(ctx, scene, textures, &texture)
     }
 
+    /// The blur pipeline: one separable pass per call, a Gaussian along
+    /// `dir` with an optional bright-pass threshold (the glow's first pass).
+    fn ensure_fx(&mut self, ctx: &GpuContext) {
+        if self.fx.is_some() {
+            return;
+        }
+        let device = &ctx.device;
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("compositor-fx"),
+            source: wgpu::ShaderSource::Wgsl(FX_SHADER.into()),
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("fx"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<FxParamsRaw>() as u64
+                        ),
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("fx"),
+            bind_group_layouts: &[&layout],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("fx"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            multiview: None,
+            cache: None,
+        });
+        let params = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fx-params"),
+            size: FX_STRIDE * FX_SLOTS as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.fx = Some(FxResources {
+            pipeline,
+            layout,
+            params,
+            binds: std::collections::HashMap::new(),
+        });
+    }
+
+    /// A scratch render target of exactly `width`×`height`, unused this
+    /// frame; grown on demand and kept across frames.
+    fn fx_target(&mut self, ctx: &GpuContext, width: u32, height: u32) -> usize {
+        if let Some(index) = self
+            .fx_targets
+            .iter()
+            .position(|t| !t.used && t.width == width && t.height == height)
+        {
+            self.fx_targets[index].used = true;
+            return index;
+        }
+        let tex = std::sync::Arc::new(ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("fx-target"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        }));
+        let input = InputTexture {
+            view: std::sync::Arc::new(tex.create_view(&Default::default())),
+            id: next_texture_id(),
+            _texture: tex.clone(),
+        };
+        self.fx_targets.push(FxTarget {
+            width,
+            height,
+            input,
+            _tex: tex,
+            used: true,
+        });
+        self.fx_targets.len() - 1
+    }
+
+    /// The bind group the fx pipeline reads `source` through (cached by
+    /// texture identity; the params buffer is shared and offset per pass).
+    fn fx_bind(&mut self, ctx: &GpuContext, source: &InputTexture) -> u64 {
+        let fx = self.fx.as_mut().expect("fx resources made before use");
+        if fx.binds.len() > 64 {
+            fx.binds.clear();
+        }
+        if !fx.binds.contains_key(&source.id) {
+            let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("fx"),
+                layout: &fx.layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &fx.params,
+                            offset: 0,
+                            size: wgpu::BufferSize::new(std::mem::size_of::<FxParamsRaw>() as u64),
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&source.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
+            fx.binds.insert(source.id, bind);
+        }
+        source.id
+    }
+
+    /// Blur and glow, as pre-passes: for every quad that asks, a blurred
+    /// stand-in for its texture and/or a glow texture, in the texture's own
+    /// uv space. Radii arrive in canvas px and are scaled to texels by the
+    /// rect the texture is drawn into; a large radius blurs a downsampled
+    /// copy (at most 16 texels of sigma) and lets bilinear sampling smooth
+    /// the result, so the cost stays bounded at any radius.
+    fn run_effect_passes(
+        &mut self,
+        ctx: &GpuContext,
+        quads: &[SceneQuad],
+        textures: &[&InputTexture],
+    ) -> Result<EffectTextures, GpuError> {
+        let mut out = vec![(None, None); quads.len()];
+        let wants = |q: &SceneQuad| q.texture.is_some() && (q.blur > 0.0 || q.glow[0] > 0.0);
+        if !quads.iter().any(wants) {
+            return Ok(out);
+        }
+        self.ensure_fx(ctx);
+        for target in &mut self.fx_targets {
+            target.used = false;
+        }
+        // Plan every pass first: (source, target index, params).
+        struct Pass {
+            source: InputTexture,
+            target: usize,
+            params: FxParamsRaw,
+        }
+        let mut passes: Vec<Pass> = Vec::new();
+        for (i, q) in quads.iter().enumerate() {
+            if !wants(q) {
+                continue;
+            }
+            let index = q.texture.unwrap();
+            let source = *textures
+                .get(index)
+                .ok_or_else(|| GpuError::Import(format!("texture index {index} out of range")))?;
+            let size = source._texture.size();
+            let (tw, th) = (size.width.max(1) as f64, size.height.max(1) as f64);
+            let rect_w = q.rect[2].max(1e-3);
+            // Canvas px → texels, through the rect and the uv window.
+            let per_canvas = tw * q.uv_rect[2].max(1e-6) as f64 / rect_w;
+            let bounds = [
+                q.uv_rect[0],
+                q.uv_rect[1],
+                q.uv_rect[0] + q.uv_rect[2],
+                q.uv_rect[1] + q.uv_rect[3],
+            ];
+            let mut plan = |radius_canvas: f32,
+                            angle: Option<f32>,
+                            threshold: f32|
+             -> Option<InputTexture> {
+                let r_tex = radius_canvas as f64 * per_canvas;
+                if r_tex < 0.35 {
+                    return None;
+                }
+                let ds = (16.0 / r_tex).min(1.0);
+                let sw = ((tw * ds).ceil() as u32).max(1);
+                let sh = ((th * ds).ceil() as u32).max(1);
+                let sigma = (r_tex * ds * 0.5).max(0.5) as f32;
+                let taps = ((sigma * 2.0).ceil() as i32).clamp(1, 24) as f32;
+                let params = |dir: [f32; 2], thr: f32| FxParamsRaw {
+                    dir: [dir[0], dir[1], sigma, taps],
+                    bounds,
+                    extra: [thr, 0.0, 0.0, 0.0],
+                };
+                match angle {
+                    Some(deg) => {
+                        let (s, c) = (deg as f64).to_radians().sin_cos();
+                        let target = self.fx_target(ctx, sw, sh);
+                        passes.push(Pass {
+                            source: source.clone(),
+                            target,
+                            params: params([c as f32 / sw as f32, s as f32 / sh as f32], threshold),
+                        });
+                        Some(self.fx_targets[target].input.clone())
+                    }
+                    None => {
+                        let first = self.fx_target(ctx, sw, sh);
+                        passes.push(Pass {
+                            source: source.clone(),
+                            target: first,
+                            params: params([1.0 / sw as f32, 0.0], threshold),
+                        });
+                        let second = self.fx_target(ctx, sw, sh);
+                        passes.push(Pass {
+                            source: self.fx_targets[first].input.clone(),
+                            target: second,
+                            params: params([0.0, 1.0 / sh as f32], 0.0),
+                        });
+                        Some(self.fx_targets[second].input.clone())
+                    }
+                }
+            };
+            if q.blur > 0.0 {
+                out[i].0 = plan(q.blur, q.blur_angle, 0.0);
+            }
+            if q.glow[0] > 0.0 {
+                out[i].1 = plan(q.glow[1].max(1.0), None, q.glow[2].clamp(0.0, 1.0));
+            }
+        }
+        if passes.is_empty() {
+            return Ok(out);
+        }
+        // Encode them in order — the vertical pass reads what the
+        // horizontal wrote — with one params buffer and dynamic offsets. A
+        // frame with more passes than slots runs them in batches.
+        for batch in passes.chunks(FX_SLOTS) {
+            let mut staging = vec![0u8; FX_STRIDE as usize * batch.len()];
+            for (slot, pass) in batch.iter().enumerate() {
+                let offset = FX_STRIDE as usize * slot;
+                staging[offset..offset + std::mem::size_of::<FxParamsRaw>()]
+                    .copy_from_slice(as_bytes(&pass.params));
+            }
+            let binds: Vec<u64> = batch
+                .iter()
+                .map(|pass| self.fx_bind(ctx, &pass.source))
+                .collect();
+            let fx = self.fx.as_ref().expect("fx resources made above");
+            ctx.queue.write_buffer(&fx.params, 0, &staging);
+            let mut encoder = ctx
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("fx") });
+            for (slot, pass) in batch.iter().enumerate() {
+                let view = self.fx_targets[pass.target].input.view.clone();
+                let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("fx"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                rp.set_pipeline(&fx.pipeline);
+                let bind = fx.binds.get(&binds[slot]).expect("fx bind cached above");
+                rp.set_bind_group(0, bind, &[(FX_STRIDE as usize * slot) as u32]);
+                rp.draw(0..4, 0..1);
+            }
+            ctx.queue.submit([encoder.finish()]);
+        }
+        Ok(out)
+    }
+
     fn ensure_accum_targets(&mut self, ctx: &GpuContext, width: u32, height: u32) {
         if self
             .accum_targets
@@ -1566,10 +2086,12 @@ impl Compositor {
             key: [0.0, 0.0, 0.0, 0.0],
             key_params: [0.3, 0.1, 0.0, 0.0],
             lut_params: [0.0, 1.0, 2.0, 0.0],
+            fx_a: [0.0; 4],
+            fx_b: [0.0; 4],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
-        let bind_id = self.bind_group_for(ctx, Some(&source), true, None, None);
+        let bind_id = self.bind_group_for(ctx, Some(&source), true, None, None, None);
 
         let mut encoder = ctx
             .device
@@ -2507,6 +3029,260 @@ mod tests {
         assert!(
             (p[0] as i32 - 128).abs() <= 1,
             "50% white over black, got {p:?}"
+        );
+    }
+
+    fn px64(pixels: &[u8], x: usize, y: usize) -> [u8; 4] {
+        px(pixels, 64, x, y)
+    }
+
+    fn full_scene(quad: SceneQuad, background: [f32; 4]) -> Scene {
+        Scene {
+            canvas_width: 64.0,
+            canvas_height: 64.0,
+            background_rgba: background,
+            background_gradient: None,
+            output_width: 64,
+            output_height: 64,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![quad],
+        }
+    }
+
+    /// 64×64 opaque texture: white on the left of `split`, black beyond.
+    fn split_texture(ctx: &GpuContext, split: usize) -> InputTexture {
+        let mut bytes = vec![0u8; 64 * 64 * 4];
+        for y in 0..64 {
+            for x in 0..64 {
+                let i = (y * 64 + x) * 4;
+                let v = if x < split { 255 } else { 0 };
+                bytes[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+            }
+        }
+        Compositor::upload_texture(ctx, &bytes, 64, 64).expect("texture")
+    }
+
+    /// 64×64 opaque black with a white 8×8 square at the centre.
+    fn dot_texture(ctx: &GpuContext) -> InputTexture {
+        let mut bytes = vec![0u8; 64 * 64 * 4];
+        for y in 0..64 {
+            for x in 0..64 {
+                let i = (y * 64 + x) * 4;
+                let v = if (28..36).contains(&x) && (28..36).contains(&y) {
+                    255
+                } else {
+                    0
+                };
+                bytes[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+            }
+        }
+        Compositor::upload_texture(ctx, &bytes, 64, 64).expect("texture")
+    }
+
+    #[test]
+    fn a_blur_softens_a_hard_edge_and_leaves_the_far_field() {
+        let ctx = GpuContext::new().expect("gpu");
+        let tex = split_texture(&ctx, 32);
+        let quad = |blur: f32| SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            blur,
+            ..Default::default()
+        };
+        let sharp = compose(
+            &full_scene(quad(0.0), [0.0, 0.0, 0.0, 1.0]),
+            std::slice::from_ref(&tex),
+            &ctx,
+        );
+        assert!(
+            px64(&sharp, 30, 32)[0] > 240 && px64(&sharp, 33, 32)[0] < 15,
+            "sharp edge"
+        );
+        let soft = compose(&full_scene(quad(10.0), [0.0, 0.0, 0.0, 1.0]), &[tex], &ctx);
+        let left = px64(&soft, 30, 32)[0];
+        let right = px64(&soft, 33, 32)[0];
+        assert!(left < 235 && left > 20, "left of the edge mixes: {left}");
+        assert!(
+            right > 20 && right < 235,
+            "right of the edge mixes: {right}"
+        );
+        assert!(px64(&soft, 3, 32)[0] > 240, "far white stays white");
+        assert!(px64(&soft, 60, 32)[0] < 15, "far black stays black");
+    }
+
+    #[test]
+    fn a_directional_blur_smears_along_its_angle_only() {
+        let ctx = GpuContext::new().expect("gpu");
+        let tex = dot_texture(&ctx);
+        let quad = |angle: f32| SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            blur: 12.0,
+            blur_angle: Some(angle),
+            ..Default::default()
+        };
+        let along_x = compose(
+            &full_scene(quad(0.0), [0.0, 0.0, 0.0, 1.0]),
+            std::slice::from_ref(&tex),
+            &ctx,
+        );
+        assert!(
+            px64(&along_x, 42, 32)[0] > 10,
+            "smeared to the right: {:?}",
+            px64(&along_x, 42, 32)
+        );
+        assert!(
+            px64(&along_x, 32, 42)[0] < 5,
+            "not smeared down: {:?}",
+            px64(&along_x, 32, 42)
+        );
+        let along_y = compose(&full_scene(quad(90.0), [0.0, 0.0, 0.0, 1.0]), &[tex], &ctx);
+        assert!(
+            px64(&along_y, 32, 42)[0] > 10,
+            "smeared down: {:?}",
+            px64(&along_y, 32, 42)
+        );
+        assert!(
+            px64(&along_y, 42, 32)[0] < 5,
+            "not smeared right: {:?}",
+            px64(&along_y, 42, 32)
+        );
+    }
+
+    #[test]
+    fn a_vignette_darkens_the_corners_and_not_the_centre() {
+        let ctx = GpuContext::new().expect("gpu");
+        let tex = split_texture(&ctx, 64);
+        let quad = SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            vignette: [1.0, 0.5],
+            ..Default::default()
+        };
+        let px = compose(&full_scene(quad, [0.0, 0.0, 0.0, 1.0]), &[tex], &ctx);
+        assert!(
+            px64(&px, 32, 32)[0] >= 250,
+            "centre untouched: {:?}",
+            px64(&px, 32, 32)
+        );
+        assert!(
+            px64(&px, 2, 2)[0] < 60,
+            "corner dark: {:?}",
+            px64(&px, 2, 2)
+        );
+        assert_eq!(px64(&px, 2, 2)[3], 255, "alpha keeps the edge");
+    }
+
+    #[test]
+    fn grain_speckles_a_flat_field_within_bounds_and_by_seed() {
+        let ctx = GpuContext::new().expect("gpu");
+        let grey = Compositor::upload_texture(&ctx, &[128, 128, 128, 255], 1, 1).expect("texture");
+        let quad = |seed: f32| SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            grain: [1.0, seed],
+            ..Default::default()
+        };
+        let a = compose(
+            &full_scene(quad(1.0), [0.0, 0.0, 0.0, 1.0]),
+            std::slice::from_ref(&grey),
+            &ctx,
+        );
+        let b = compose(&full_scene(quad(2.0), [0.0, 0.0, 0.0, 1.0]), &[grey], &ctx);
+        let samples: Vec<u8> = (0..20).map(|i| px64(&a, 3 + i * 3, 10 + i)[0]).collect();
+        assert!(
+            samples.iter().any(|&v| v != samples[0]),
+            "speckled: {samples:?}"
+        );
+        assert!(
+            samples.iter().all(|&v| (v as i32 - 128).abs() <= 50),
+            "bounded: {samples:?}"
+        );
+        assert!(
+            (0..20).any(|i| px64(&a, 3 + i * 3, 10 + i)[0] != px64(&b, 3 + i * 3, 10 + i)[0]),
+            "a new seed is a new pattern"
+        );
+    }
+
+    #[test]
+    fn a_glow_lights_up_beyond_a_bright_shape() {
+        let ctx = GpuContext::new().expect("gpu");
+        let tex = dot_texture(&ctx);
+        let quad = |amount: f32| SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            glow: [amount, 12.0, 0.5],
+            ..Default::default()
+        };
+        let plain = compose(
+            &full_scene(quad(0.0), [0.0, 0.0, 0.0, 1.0]),
+            std::slice::from_ref(&tex),
+            &ctx,
+        );
+        assert_eq!(
+            px64(&plain, 40, 32)[0],
+            0,
+            "no glow, no light past the square"
+        );
+        let lit = compose(&full_scene(quad(1.0), [0.0, 0.0, 0.0, 1.0]), &[tex], &ctx);
+        assert!(
+            px64(&lit, 40, 32)[0] > 15,
+            "the halo reaches past the square: {:?}",
+            px64(&lit, 40, 32)
+        );
+        assert!(
+            px64(&lit, 32, 32)[0] >= 250,
+            "the square itself stays white"
+        );
+        assert_eq!(px64(&lit, 4, 4)[0], 0, "far black stays black");
+    }
+
+    #[test]
+    fn sharpen_pushes_a_step_apart() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut bytes = Vec::new();
+        for x in 0..8 {
+            let v = if x < 4 { 64 } else { 192 };
+            bytes.extend_from_slice(&[v, v, v, 255]);
+        }
+        let step = Compositor::upload_texture(&ctx, &bytes, 8, 1).expect("texture");
+        let quad = |amount: f32| SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 8.0, 8.0],
+            nearest: true,
+            sharpen: amount,
+            ..Default::default()
+        };
+        let scene = |amount: f32| Scene {
+            canvas_width: 8.0,
+            canvas_height: 8.0,
+            background_rgba: [0.0, 0.0, 0.0, 1.0],
+            background_gradient: None,
+            output_width: 8,
+            output_height: 8,
+            bars_rgba: [0.0, 0.0, 0.0, 1.0],
+            quads: vec![quad(amount)],
+        };
+        let px8 = |pixels: &[u8], x: usize, y: usize| px(pixels, 8, x, y);
+        let plain = compose(&scene(0.0), std::slice::from_ref(&step), &ctx);
+        assert!(
+            (px8(&plain, 3, 4)[0] as i32 - 64).abs() <= 1
+                && (px8(&plain, 4, 4)[0] as i32 - 192).abs() <= 1
+        );
+        let sharp = compose(&scene(1.0), &[step], &ctx);
+        assert!(
+            px8(&sharp, 3, 4)[0] < 56,
+            "dark side pushed darker: {:?}",
+            px8(&sharp, 3, 4)
+        );
+        assert!(
+            px8(&sharp, 4, 4)[0] > 200,
+            "light side pushed lighter: {:?}",
+            px8(&sharp, 4, 4)
+        );
+        assert!(
+            (px8(&sharp, 0, 4)[0] as i32 - 64).abs() <= 1,
+            "flat field untouched"
         );
     }
 }

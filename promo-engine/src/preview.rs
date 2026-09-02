@@ -672,6 +672,27 @@ impl PreviewEngine {
         self.render_with_overlay(time, output, output_width, output_height, None)
     }
 
+    /// The layer's image effects at `time`, onto its quad. Radii stay in
+    /// canvas px — the compositor scales them to texels from the rect.
+    fn apply_effects(quad: &mut SceneQuad, layer: &promo_model::ProjectLayer, time: f64) {
+        if let Some(fx) = tl::layer_effects(layer, time) {
+            quad.blur = fx.blur as f32;
+            quad.blur_angle = fx.blur_angle.map(|a| a as f32);
+            quad.glow = [
+                fx.glow as f32,
+                fx.glow_radius as f32,
+                fx.glow_threshold as f32,
+            ];
+            quad.vignette = [fx.vignette as f32, fx.vignette_softness as f32];
+            // A fresh pattern every frame: the seed walks with time.
+            quad.grain = [
+                fx.grain as f32,
+                ((time * 1000.0).round() as i64 % 100_000) as f32,
+            ];
+            quad.sharpen = fx.sharpen as f32;
+        }
+    }
+
     fn blend_for(layer: &promo_model::ProjectLayer) -> promo_gpu::compositor::QuadBlend {
         use promo_gpu::compositor::QuadBlend;
         match layer.blend_mode {
@@ -1119,6 +1140,7 @@ impl PreviewEngine {
                 0.0,
             ];
         }
+        Self::apply_effects(&mut quad, layer, time);
         quad.blend = Self::blend_for(layer);
 
         // The drop shadow, as its own soft-edged solid quad under this one.
@@ -1337,6 +1359,7 @@ impl PreviewEngine {
                 quad.adjust = adjust;
                 quad.tint_rgba = tint;
             }
+            Self::apply_effects(&mut quad, layer, time);
             quad.blend = Self::blend_for(layer);
             return Some((quad, id));
         }
@@ -1402,6 +1425,7 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        Self::apply_effects(&mut quad, layer, time);
         quad.blend = Self::blend_for(layer);
         Some((quad, id))
     }
@@ -1484,6 +1508,7 @@ impl PreviewEngine {
                 quad.adjust = adjust;
                 quad.tint_rgba = tint;
             }
+            Self::apply_effects(&mut quad, layer, time);
             quad.blend = Self::blend_for(layer);
             return Some((quad, id));
         }
@@ -1522,6 +1547,7 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        Self::apply_effects(&mut quad, layer, time);
         quad.blend = Self::blend_for(layer);
         Some((quad, id))
     }

@@ -1489,6 +1489,127 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Image effects (rung 24) through a real project: a blur softens the
+    /// plate's hard edge, a keyframed blur ramps from sharp, a vignette
+    /// darkens the plate's corner, a glow spills light past the bright
+    /// half, grain speckles a flat field — and the twin without effects
+    /// is untouched.
+    #[test]
+    fn image_effects_render_through_the_project() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-fx-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        // White on the left half, black on the right.
+        let (w, h) = (64u32, 48u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 4;
+                let v = if x < 32 { 255 } else { 0 };
+                rgba[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+            }
+        }
+        write_png(&dir.join("Resources/plate.png"), &rgba, w, h).unwrap();
+        let doc = |effects: &str, keyframes: &str| {
+            format!(
+                r#"{{"id":"P","name":"Fx","createdAt":0,"state":"recorded","minReaderVersion":24,
+                "trimStart":0,"trimEnd":3,"videoDuration":3,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":64,"canvasHeight":48,"backgroundColorHex":"000000"}},
+                "resources":[{{"id":"I","kind":"image","filename":"plate.png","displayName":"plate","addedAt":0,
+                  "pixelWidth":64,"pixelHeight":48,"imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                "layers":[{{"id":"L","name":"plate","sortIndex":0,"kind":"image","isEnabled":true,
+                  "startTime":0,"duration":3,"resourceID":"I"{effects},"keyframes":[{keyframes}]}}]}}"#
+            )
+        };
+        let render = |json: &str, at: f64| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 64, 48).expect("renderer");
+            renderer.frame_bgra(at).expect("frame")
+        };
+        let lum = |frame: &[u8], x: usize, y: usize| -> u8 { frame[(y * 64 + x) * 4 + 1] };
+
+        let plain = render(&doc("", ""), 1.0);
+        assert!(
+            lum(&plain, 30, 24) > 240 && lum(&plain, 33, 24) < 10,
+            "the twin is a hard edge"
+        );
+
+        let blurred = render(&doc(r#","effects":{"blur":8}"#, ""), 1.0);
+        assert!(
+            lum(&blurred, 33, 24) > 25,
+            "blur spills white past the edge: {}",
+            lum(&blurred, 33, 24)
+        );
+        assert!(
+            lum(&blurred, 30, 24) < 230,
+            "and black into the white: {}",
+            lum(&blurred, 30, 24)
+        );
+        assert!(lum(&blurred, 3, 24) > 240, "the far field is untouched");
+
+        let ramp = render(
+            &doc(
+                "",
+                r#"{"id":"K1","time":0,"blur":0,"transitionDuration":0},{"id":"K2","time":2,"blur":12,"transitionDuration":2}"#,
+            ),
+            0.0,
+        );
+        assert!(lum(&ramp, 33, 24) < 10, "keyframed blur starts sharp");
+        let ramp_end = render(
+            &doc(
+                "",
+                r#"{"id":"K1","time":0,"blur":0,"transitionDuration":0},{"id":"K2","time":2,"blur":12,"transitionDuration":2}"#,
+            ),
+            2.0,
+        );
+        assert!(
+            lum(&ramp_end, 33, 24) > 25,
+            "and arrives blurred: {}",
+            lum(&ramp_end, 33, 24)
+        );
+
+        let vignetted = render(&doc(r#","effects":{"vignette":1.0}"#, ""), 1.0);
+        assert!(
+            lum(&vignetted, 2, 2) < 80,
+            "the corner darkens: {}",
+            lum(&vignetted, 2, 2)
+        );
+        assert!(
+            lum(&vignetted, 20, 24) > 150,
+            "nearer the centre it does not: {}",
+            lum(&vignetted, 20, 24)
+        );
+
+        let glowing = render(
+            &doc(
+                r#","effects":{"glow":1.0,"glowRadius":10,"glowThreshold":0.5}"#,
+                "",
+            ),
+            1.0,
+        );
+        assert!(
+            lum(&glowing, 36, 24) > 20,
+            "the glow spills past the bright half: {}",
+            lum(&glowing, 36, 24)
+        );
+
+        let grainy = render(&doc(r#","effects":{"grain":1.0}"#, ""), 1.0);
+        let samples: Vec<u8> = (0..16).map(|i| lum(&grainy, 2 + i, 10 + i)).collect();
+        assert!(
+            samples.iter().any(|&v| v < 250),
+            "grain speckles the white: {samples:?}"
+        );
+        assert!(
+            samples.iter().all(|&v| v >= 200),
+            "within bounds: {samples:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// B3.4 (LUT): an inverting cube on the plate turns red into cyan and
     /// green into magenta; the unlutted twin keeps its colours; amount 0
     /// is the twin.

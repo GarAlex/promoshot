@@ -783,6 +783,18 @@ plane) become transparent, feathered over `softness` beyond it, before
 the layer's grade, border and mask. A palette name (`"@green"`) works.
 A project with a keyed layer carries `minReaderVersion: 22`.
 
+Image effects (rung 24). A layer may carry `"effects": { "blur": 12,
+"blurAngle": 45, "glow": 0.6, "glowRadius": 24, "glowThreshold": 0.6,
+"vignette": 0.5, "vignetteSoftness": 0.5, "grain": 0.2, "sharpen": 0.5 }`,
+each optional, on its own pixels: a Gaussian blur of `blur` canvas px
+(directional along `blurAngle` degrees when given), a glow that blurs the
+parts brighter than `glowThreshold` over `glowRadius` px and adds them
+back at `glow`, a vignette darkening toward the layer's corners, film
+grain fresh every frame, and an unsharp-mask sharpen. Blur, glow and
+vignette RAMP: a keyframe's `blur`, `glow` or `vignette` wins over the
+constant of the same name, like the grade's tracks. A project with any
+effect carries `minReaderVersion: 24`.
+
 Colour look-up tables (rung 23). A resource of `"kind": "lut"` is a
 `.cube` file in `Resources/` (`"filename": "look.cube"`); a layer's
 `adjustments` name it — `{ "lutResourceID": "<uuid>", "lutAmount": 0.8 }`

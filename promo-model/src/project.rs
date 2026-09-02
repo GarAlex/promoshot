@@ -509,6 +509,63 @@ pub struct ChromaKey {
     pub softness: Option<f64>,
 }
 
+/// Per-layer image effects (rung 24), on this layer's own pixels and
+/// nobody else's: a blur (Gaussian, or directional when `blurAngle` is
+/// given), a glow (the bright parts, blurred and added back), a vignette
+/// (darkening toward the layer's own edges), film grain (monochrome,
+/// fresh every frame) and an unsharp-mask sharpen. The constants here
+/// are the shorthand; the keyframe fields `blur`, `glow` and `vignette`
+/// are the full form and win per field when present — the grade's rule.
+/// Absent means none. Radii are canvas px, like a corner radius.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerEffects {
+    /// Blur radius in canvas px; 0 is sharp.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub blur: Option<f64>,
+    /// Degrees, clockwise from the x axis; present makes the blur
+    /// DIRECTIONAL along that angle (a motion smear) instead of round.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub blur_angle: Option<f64>,
+    /// Glow amount 0…1; 0 is none.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub glow: Option<f64>,
+    /// How far the glow spreads, canvas px; default 24.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub glow_radius: Option<f64>,
+    /// Luminance (0…1) above which pixels glow; default 0.6.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub glow_threshold: Option<f64>,
+    /// Vignette amount 0…1; 0 is none. Black at the amount, at the
+    /// layer's corners.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub vignette: Option<f64>,
+    /// How wide the falloff band is, 0…1 of the half-diagonal; default 0.5.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub vignette_softness: Option<f64>,
+    /// Film grain amount 0…1; 0 is none.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub grain: Option<f64>,
+    /// Unsharp-mask amount 0…2; 0 is none.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub sharpen: Option<f64>,
+}
+
+impl LayerEffects {
+    /// Nothing set: the block says no more than its absence would.
+    pub fn is_empty(&self) -> bool {
+        self.blur.is_none()
+            && self.blur_angle.is_none()
+            && self.glow.is_none()
+            && self.glow_radius.is_none()
+            && self.glow_threshold.is_none()
+            && self.vignette.is_none()
+            && self.vignette_softness.is_none()
+            && self.grain.is_none()
+            && self.sharpen.is_none()
+    }
+}
+
 /// A per-layer colour grade, applied to the layer's own pixels only —
 /// the screenshot goes black-and-white while everything around it keeps
 /// its colour. NOT an adjustment layer: nothing beneath is touched.
@@ -1341,6 +1398,15 @@ pub struct ProjectLayerKeyframe {
     pub brightness: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub tint_amount: Option<f64>,
+    /// The effects' scalar tracks (rung 24), for a focus pull, a glow that
+    /// pulses, a vignette that closes in. Same rule as the grade: a
+    /// keyframed field beats the layer constant of the same name.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub blur: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub glow: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub vignette: Option<f64>,
     /// The mask's own placement — the WINDOW flies while the footage holds
     /// still, the inverse of `viewport`. Offsets in canvas px, zoom a
     /// uniform factor about the rect's centre (1 = as placed), rotation
@@ -1858,6 +1924,11 @@ pub struct ProjectLayer {
     /// A chroma key on this layer's pixels (rung 22).
     #[serde(default, skip_serializing_if = "is_none")]
     pub chroma_key: Option<ChromaKey>,
+    /// This layer's own image effects (rung 24): blur, glow, vignette,
+    /// grain, sharpen. Constants; the keyframe fields of the same names
+    /// win per field when present, like the grade.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub effects: Option<LayerEffects>,
     /// The drawing whose ink is this layer's WINDOW: rasterized and
     /// stretched over the layer's rect, the layer only shows where the
     /// drawing has ink. Absent means the whole rect, as always. A static
@@ -2695,6 +2766,16 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 24 is image effects on a layer or its keyframes. Dropped by an
+        // older reader's save, the blur, glow and vignette are simply gone.
+        if layers
+            .iter()
+            .any(|l| l.effects.as_ref().is_some_and(|e| !e.is_empty()))
+            || any_keyframe(|k| k.blur.is_some() || k.glow.is_some() || k.vignette.is_some())
+        {
+            return 24;
+        }
+
         // 23 is a LUT resource — a kind, so an older reader refuses the
         // file rather than failing mid-decode.
         if resources.iter().any(|r| r.kind == ProjectResourceKind::Lut) {
@@ -3448,6 +3529,26 @@ mod placement_model_tests {
         assert_eq!(
             meta(&layer(r#","maskOffsetX":-320"#)).minimum_reader_version(),
             14
+        );
+        // 24: image effects, as a keyframe track or a layer constant.
+        assert_eq!(meta(&layer(r#","blur":4"#)).minimum_reader_version(), 24);
+        assert_eq!(meta(&layer(r#","glow":0.5"#)).minimum_reader_version(), 24);
+        assert_eq!(
+            meta(&layer(r#","vignette":0.5"#)).minimum_reader_version(),
+            24
+        );
+        let mut with_effects = meta(&layer(""));
+        with_effects.layers.as_mut().unwrap()[0].effects = Some(LayerEffects {
+            sharpen: Some(0.5),
+            ..Default::default()
+        });
+        assert_eq!(with_effects.minimum_reader_version(), 24);
+        let mut empty_block = meta(&layer(""));
+        empty_block.layers.as_mut().unwrap()[0].effects = Some(LayerEffects::default());
+        assert_eq!(
+            empty_block.minimum_reader_version(),
+            meta(&layer("")).minimum_reader_version(),
+            "an empty block claims nothing"
         );
     }
 

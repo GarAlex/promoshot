@@ -375,6 +375,14 @@ and a softness: the plate becomes transparent before the layer's grade,
 border and mask, in the compositor, so a green-screen clip composes
 over anything on every host alike.
 
+## Image effects
+
+A layer may carry `effects`: a `blur` (round, or directional along a
+`blurAngle`), a `glow` of its bright parts, a `vignette` toward its own
+corners, film `grain` and an unsharp `sharpen`, each on the layer's own
+pixels in the compositor. Blur, glow and vignette are keyframe tracks
+too, so a focus pull or a glow that pulses ramps like the grade does.
+
 ## Looks from a `.cube`
 
 A resource of kind `lut` is a `.cube` file in `Resources/`; a layer's
