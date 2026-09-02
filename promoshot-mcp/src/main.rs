@@ -548,7 +548,8 @@ fn tool_descriptors() -> Value {
                 patchSettings as JSON merge patches (only the fields you pass change; \
                 null removes) — a wipe is {\"transitionIn\": {\"kind\": \"wipe\", \
                 \"duration\": 0.5}}, a swap is upsertKeyframe with resourceID and a \
-                transition, a trim is patchResource. Every command succeeds or nothing is \
+                transition, a trim is patchResource; setMarkers replaces the timeline's \
+                markers and chapters whole. Every command succeeds or nothing is \
                 written. The schema of `commands` IS the editor's Command enum.",
             "inputSchema": { "type": "object",
                 "$defs": command_defs,

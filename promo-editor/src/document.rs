@@ -219,6 +219,13 @@ pub enum Command {
     /// dangling `paletteResourceID` is refused the same way.
     #[serde(rename_all = "camelCase")]
     PatchSettings { patch: serde_json::Value },
+    /// The project's markers and chapters (rung 20), replaced whole. The
+    /// list is short and a ruler edit — add, drag, rename, delete — is one
+    /// step either way; a drag's successive steps merge like any other
+    /// same-kind burst. Sorted by time on the way in. Refused for a time
+    /// that is negative or not a number, and for an empty or repeated id.
+    #[serde(rename_all = "camelCase")]
+    SetMarkers { markers: Vec<promo_model::Marker> },
     /// A command addressed INSIDE a composition resource: the same
     /// command, run on the composition's layers as if they were the
     /// document's — with the project's resources and settings, the
@@ -1101,6 +1108,27 @@ impl Document {
                         settings: Box::new(patched),
                     },
                 );
+            }
+            Command::SetMarkers { markers } => {
+                let mut seen = std::collections::HashSet::new();
+                for marker in markers {
+                    if !marker.time.is_finite() || marker.time < 0.0 {
+                        return Err(format!(
+                            "marker {} has time {}; markers sit at or after 0",
+                            marker.id, marker.time
+                        ));
+                    }
+                    if marker.id.trim().is_empty() || !seen.insert(marker.id.as_str()) {
+                        return Err(format!("marker id {:?} is empty or repeated", marker.id));
+                    }
+                }
+                let mut sorted = markers.clone();
+                sorted.sort_by(|a, b| {
+                    a.time
+                        .partial_cmp(&b.time)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                meta.markers = if sorted.is_empty() { None } else { Some(sorted) };
             }
             Command::MoveLayer { layer_id, index } => {
                 // The z-order is `sortIndex`, not array position: the move
@@ -2348,5 +2376,60 @@ mod tests {
             })
             .unwrap_err()
             .contains("not a composition"));
+    }
+
+    #[test]
+    fn set_markers_sorts_logs_a_project_change_and_refuses_bad_ones() {
+        let mut doc = doc();
+        let markers: Vec<promo_model::Marker> = serde_json::from_value(serde_json::json!([
+            {"id": "M2", "time": 4.0, "name": "Two", "kind": "chapter"},
+            {"id": "M1", "time": 1.5, "name": "One"}
+        ]))
+        .unwrap();
+        doc.apply(&Command::SetMarkers {
+            markers: markers.clone(),
+        })
+        .unwrap();
+        let ids: Vec<&str> = doc
+            .meta()
+            .markers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .map(|m| m.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["M1", "M2"], "sorted by time on the way in");
+        let c = doc.changes_since(0);
+        assert!(
+            c.project && c.layers.is_empty() && !c.settings && !c.order,
+            "a marker edit is a project-level change: {c:?}"
+        );
+        // Undo restores the empty list, and the wire round-trips the kind.
+        assert!(doc.undo());
+        assert!(doc.meta().markers.is_none());
+        assert!(doc.redo());
+        assert_eq!(
+            doc.meta().markers.as_deref().unwrap()[1].kind,
+            promo_model::MarkerKind::Chapter
+        );
+        // Refusals: a negative time, a repeated id, an empty id.
+        for bad in [
+            serde_json::json!([{"id": "X", "time": -1.0}]),
+            serde_json::json!([{"id": "X", "time": 1.0}, {"id": "X", "time": 2.0}]),
+            serde_json::json!([{"id": " ", "time": 1.0}]),
+        ] {
+            let markers: Vec<promo_model::Marker> = serde_json::from_value(bad).unwrap();
+            assert!(doc.apply(&Command::SetMarkers { markers }).is_err());
+        }
+        assert_eq!(doc.meta().markers.as_deref().unwrap().len(), 2, "a refusal changes nothing");
+        // Empty clears the field rather than writing [].
+        doc.apply(&Command::SetMarkers { markers: vec![] }).unwrap();
+        assert!(doc.meta().markers.is_none());
+        // The wire name.
+        let cmd: Command = serde_json::from_value(serde_json::json!({
+            "kind": "setMarkers", "markers": [{"id": "A", "time": 0.5, "name": "a"}]
+        }))
+        .unwrap();
+        assert!(matches!(cmd, Command::SetMarkers { .. }));
     }
 }
