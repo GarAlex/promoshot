@@ -4,7 +4,7 @@ kinds, the features the prompt implied, and the words on screen.
 
     python3 score.py <demo dir> <project dir> [--json]
 """
-import json, os, sys
+import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from features import features, kinds, phrases, words  # noqa: E402
 
@@ -57,7 +57,7 @@ def score(demo, project):
     same_aspect = all(got_canvas) and all(want_canvas) and \
         abs(got_canvas[0] / got_canvas[1] - want_canvas[0] / want_canvas[1]) < 0.02
     # The canvas counts when the brief named one ("1440 by 900", "vertical").
-    names_size = any(t in prompt.lower() for t in (" by ", "×", "vertical", "portrait", "landscape"))
+    names_size = bool(re.search(r'\b\d{3,4}\s*(by|×|x)\s*\d{3,4}\b|\bvertical\b|\bportrait\b', prompt.lower()))
     if names_size:
         check("canvas", got_canvas == want_canvas or same_aspect, f"{got_canvas} vs {want_canvas}")
     layers = meta.get('layers', [])
