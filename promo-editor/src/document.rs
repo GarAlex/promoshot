@@ -126,7 +126,11 @@ pub enum Command {
     /// Replaces one resource entry wholesale, matched by id — the resource
     /// editors' command, the same whole-object contract the keyframe
     /// carries: what a caption or a trim can hold is the format's say, not
-    /// this enum's.
+    /// this enum's. When the playable length of a video or audio resource
+    /// changes, the layers that played all of it follow the new length, a
+    /// layer you shortened yourself keeps its length until the trim caps
+    /// it, looped and beyond-end layers are left alone, and the background
+    /// stretches over the content.
     #[serde(rename_all = "camelCase")]
     UpdateResource {
         resource: Box<promo_model::ProjectResource>,

@@ -51,9 +51,11 @@ author here opens in the PromoShot apps unchanged.
    as ONE atomic step — delete, move, retime, a wipe or any transition
    (`updateLayer` with a merge patch: only the fields you pass change,
    null removes), a swap (`upsertKeyframe` with `resourceID` and a
-   `transition`), a trim (`patchResource`), a canvas change
-   (`patchSettings`), waits and motion paths (keyframe fields). Its
-   schema is in the tool; ids are the file's own. Hand-editing the JSON
+   `transition`), a trim (`patchResource` — the layers that played the
+   whole resource follow the new length and the background stretches
+   over them; a layer you shortened yourself keeps its length), a
+   canvas change (`patchSettings`), waits and motion paths (keyframe
+   fields). Its schema is in the tool; ids are the file's own. Hand-editing the JSON
    stays first-class for anything a recipe shows. The authoring tools and validate each
    answer with a small thumbnail ATTACHED — a keyframe's glance looks
    where the motion arrives; the others sample the touched layer's
