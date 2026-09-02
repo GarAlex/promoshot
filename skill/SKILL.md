@@ -130,6 +130,12 @@ new projects.
   to STABLE UUIDs (the same spelling in the same project always mints
   the same one), so re-run `promo_inspect` after a person's turn and
   re-anchor; its `updated:` line is the turn signal.
+- **Long sources: build proxies once.** `promo_proxy {project}` makes a
+  tier-1 proxy (960 px long edge, every frame a keyframe) for each video
+  resource, in a cache outside the package. Stills, frames and small
+  renders then read proxies by default (`proxy: "auto"`), so an hour-long
+  4K source scrubs and renders like a short one; `proxy: "off"` reads the
+  source, and a full-size render always does.
 - **Reuse a card: make it a composition.** A resource of `kind:
   "composition"` carries its own `canvasWidth`/`canvasHeight`, an optional
   `backgroundColorHex` plate (absent = transparent) and ordinary `layers`

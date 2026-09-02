@@ -342,3 +342,14 @@ Or let the MCP server spend the boilerplate (`promo_init`,
 
 Apache-2.0. The PromoShot applications built on this engine are separate,
 proprietary products.
+
+## Proxies for long sources
+
+`promo proxy <project>` builds a tier-1 proxy (960 px long edge, every
+frame a keyframe) for each video resource, in a cache outside the
+package (`$PROMO_PROXY_DIR`, else the platform cache directory under
+`promoshot/proxies`). `still`, `frames`, `gif` and `video` take
+`--proxy auto|on|off`: `auto` (default) reads a built proxy when the
+output's long edge fits it, `on` builds missing proxies first, `off`
+reads the source — and a full-size render always does. The MCP tools
+take the same `proxy` argument; `promo_proxy` builds them.

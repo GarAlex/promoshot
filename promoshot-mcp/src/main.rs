@@ -295,6 +295,9 @@ fn tool_descriptors() -> Value {
                     "project": project,
                     "time": { "type": "number", "description": "Seconds (default 0)" },
                     "size": { "type": "string", "description": "WxH (default: canvas)" },
+                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
+                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
+                         missing proxies first; off never reads one. A full-size render never does." },
                     "out": { "type": "string", "description":
                         "Output file (default: <project>/Exports/still-<time>s.png)" }
                 },
@@ -311,6 +314,9 @@ fn tool_descriptors() -> Value {
                     "to": { "type": "number" },
                     "fps": { "type": "number" },
                     "size": { "type": "string", "description": "WxH (default: canvas)" },
+                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
+                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
+                         missing proxies first; off never reads one. A full-size render never does." },
                     "outDir": { "type": "string", "description":
                         "Output directory (default: <project>/Exports/frames)" }
                 },
@@ -326,6 +332,9 @@ fn tool_descriptors() -> Value {
                     "fps": { "type": "number", "description":
                         "Default: the project's own, else 30" },
                     "size": { "type": "string", "description": "WxH (default: canvas)" },
+                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
+                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
+                         missing proxies first; off never reads one. A full-size render never does." },
                     "out": { "type": "string", "description":
                         "Output file (default: <project>/Exports/export.mp4)" }
                 },
@@ -340,9 +349,22 @@ fn tool_descriptors() -> Value {
                     "project": project,
                     "fps": { "type": "number", "description": "Default 12" },
                     "size": { "type": "string", "description": "WxH (default: canvas)" },
+                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
+                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
+                         missing proxies first; off never reads one. A full-size render never does." },
                     "out": { "type": "string", "description":
                         "Output file (default: <project>/Exports/export.gif)" }
                 },
+                "required": ["project"] }
+        },
+        {
+            "name": "promo_proxy",
+            "description": "Build tier-1 proxies (960 px long edge, every frame a keyframe) for every \
+                video resource in a project, in the proxy cache outside the package. Stills, \
+                frames and small renders then read them by default (proxy: auto) — what makes \
+                an hour-long 4K source scrub and render like a short one.",
+            "inputSchema": { "type": "object",
+                "properties": { "project": { "type": "string" } },
                 "required": ["project"] }
         },
         {
@@ -725,6 +747,9 @@ where
             let time = args.get("time").and_then(Value::as_f64).unwrap_or(0.0);
             let out = default_out(args, "out", &project, &format!("still-{time}s.png"))?;
             let mut argv = vec!["still".to_string(), project, "--out".into(), out];
+            if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
+                argv.extend(["--proxy".into(), policy.to_string()]);
+            }
             argv.extend(["--time".into(), time.to_string()]);
             push_size(&mut argv, args);
             run(config, &argv)
@@ -733,6 +758,9 @@ where
             let project = fenced_project(args, config)?;
             let out = default_out(args, "outDir", &project, "frames")?;
             let mut argv = vec!["frames".to_string(), project, "--out".into(), out];
+            if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
+                argv.extend(["--proxy".into(), policy.to_string()]);
+            }
             for (key, flag) in [("from", "--from"), ("to", "--to"), ("fps", "--fps")] {
                 if let Some(v) = args.get(key).and_then(Value::as_f64) {
                     argv.extend([flag.to_string(), v.to_string()]);
@@ -745,16 +773,26 @@ where
             let project = fenced_project(args, config)?;
             let out = default_out(args, "out", &project, "export.mp4")?;
             let mut argv = vec!["video".to_string(), project, "--out".into(), out];
+            if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
+                argv.extend(["--proxy".into(), policy.to_string()]);
+            }
             if let Some(fps) = args.get("fps").and_then(Value::as_f64) {
                 argv.extend(["--fps".into(), fps.to_string()]);
             }
             push_size(&mut argv, args);
             run(config, &argv)
         }
+        "promo_proxy" => {
+            let project = fenced_project(args, config)?;
+            run(config, &["proxy".to_string(), project, "--json".into()])
+        }
         "promo_render_gif" => {
             let project = fenced_project(args, config)?;
             let out = default_out(args, "out", &project, "export.gif")?;
             let mut argv = vec!["gif".to_string(), project, "--out".into(), out];
+            if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
+                argv.extend(["--proxy".into(), policy.to_string()]);
+            }
             if let Some(fps) = args.get("fps").and_then(Value::as_f64) {
                 argv.extend(["--fps".into(), fps.to_string()]);
             }
@@ -890,6 +928,7 @@ mod tests {
                 "promo_render_frames",
                 "promo_render_video",
                 "promo_render_gif",
+                "promo_proxy",
                 "promo_workspace",
                 "promo_media_probe",
                 "promo_media_filmstrip",

@@ -43,6 +43,8 @@ struct VideoLayer {
     /// whole render costs a process per clip whether or not it is visible.
     /// Five is fine; fifty is a scaling cliff.
     decoder: Option<Box<dyn VideoDecoder>>,
+    /// True when `path` is a tier-1 proxy of the resource's file.
+    proxied: bool,
     /// The decoded frame, held so the provider can hand out a pointer to it.
     /// The engine copies during the call, but the buffer must outlive the
     /// call itself.
@@ -179,6 +181,29 @@ extern "C" fn provider(
     0
 }
 
+/// Whether a render reads proxies (B3.1): `Auto` uses a tier-1 proxy when
+/// one is already built AND the output's long edge fits the proxy's;
+/// `On` builds missing proxies first; `Off` never opens one — a full-size
+/// export never does either way, by the size rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProxyPolicy {
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
+impl ProxyPolicy {
+    pub fn parse(text: &str) -> Result<Self, String> {
+        match text {
+            "auto" => Ok(ProxyPolicy::Auto),
+            "on" => Ok(ProxyPolicy::On),
+            "off" => Ok(ProxyPolicy::Off),
+            other => Err(format!("--proxy: expected auto, on or off, got `{other}`")),
+        }
+    }
+}
+
 pub struct Renderer {
     ctx: &'static GpuContext,
     registry: Registry,
@@ -202,10 +227,23 @@ impl Renderer {
     /// corrupt file an error at startup rather than a silently blank layer
     /// halfway through a render.
     pub fn new(project: &Project, width: u32, height: u32) -> Result<Self, String> {
+        Self::with_proxy(project, width, height, ProxyPolicy::Auto)
+    }
+
+    /// `new`, with a say on proxies. When any video layer opens a proxy the
+    /// engine is asked for tier 1, so its own tier rule and the proxy agree.
+    pub fn with_proxy(
+        project: &Project,
+        width: u32,
+        height: u32,
+        proxy: ProxyPolicy,
+    ) -> Result<Self, String> {
         let ctx = GpuContext::shared().ok_or("no GPU adapter available")?;
 
         let registry = Registry::with_defaults();
-        let (frames, cuts, videos) = Self::stage(project, &registry)?;
+        let (frames, cuts, videos) =
+            Self::stage_with(project, &registry, proxy, width.max(height))?;
+        let used_proxies = videos.values().any(|v| v.proxied);
         let state = Box::new(Mutex::new(HostState {
             frames,
             cuts,
@@ -214,6 +252,9 @@ impl Renderer {
         let user = &*state as *const Mutex<HostState> as *mut c_void;
         let mut engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
             .map_err(|e| format!("engine: {e:?}"))?;
+        if used_proxies {
+            engine.set_preferred_tier(1);
+        }
         // Offline renderer: the export clock is monotonic and quality is
         // the point — per-time frames skip the cache, and a motion-blur
         // walk gets the export-grade sample cap rather than the preview's.
@@ -252,10 +293,57 @@ impl Renderer {
     /// broken file fails here rather than mid-render, then closed — the
     /// render reopens what its playhead needs. Every resource a layer can
     /// show is staged: its own, plus anything a keyframe swaps to.
+    /// The file a video layer decodes from: the source, or its tier-1
+    /// proxy when the policy and the output size say so.
+    fn pick_proxy(
+        source: &std::path::Path,
+        proxy: ProxyPolicy,
+        output_long_edge: u32,
+    ) -> Result<(PathBuf, bool), String> {
+        use promo_media::proxy;
+        let fits = output_long_edge <= proxy::TIER1_LONG_EDGE;
+        let cache = proxy::cache_dir();
+        match proxy {
+            ProxyPolicy::Off => Ok((source.to_path_buf(), false)),
+            ProxyPolicy::Auto => Ok(match proxy::available(&cache, source, 1) {
+                Some(ready) if fits => (ready, true),
+                _ => (source.to_path_buf(), false),
+            }),
+            ProxyPolicy::On => {
+                let ready = proxy::ensure(&cache, source, proxy::TIER1_LONG_EDGE)
+                    .map_err(|e| e.to_string())?;
+                Ok(if fits {
+                    (ready, true)
+                } else {
+                    (source.to_path_buf(), false)
+                })
+            }
+        }
+    }
+
     #[allow(clippy::type_complexity)]
     fn stage(
         project: &Project,
         registry: &Registry,
+    ) -> Result<
+        (
+            HashMap<String, (Vec<u8>, u32, u32, i32)>,
+            HashMap<String, (String, Vec<u8>, u32, u32, i32)>,
+            HashMap<String, VideoLayer>,
+        ),
+        String,
+    > {
+        Self::stage_with(project, registry, ProxyPolicy::Off, u32::MAX)
+    }
+
+    /// `stage`, choosing a proxy for each video layer by `proxy` and the
+    /// output's long edge.
+    #[allow(clippy::type_complexity)]
+    fn stage_with(
+        project: &Project,
+        registry: &Registry,
+        proxy: ProxyPolicy,
+        output_long_edge: u32,
     ) -> Result<
         (
             HashMap<String, (Vec<u8>, u32, u32, i32)>,
@@ -280,9 +368,10 @@ impl Renderer {
                 let Some(resource) = candidates.first().and_then(|id| project.resource(id)) else {
                     continue;
                 };
-                let Some(path) = project.resource_path(resource) else {
+                let Some(source) = project.resource_path(resource) else {
                     continue;
                 };
+                let (path, proxied) = Self::pick_proxy(&source, proxy, output_long_edge)?;
                 registry
                     .open_decoder(&path)
                     .map_err(|e| format!("{}: {e}", path.display()))?;
@@ -296,6 +385,7 @@ impl Renderer {
                         end,
                         decoder: None,
                         last: None,
+                        proxied,
                     },
                 );
                 continue;
@@ -588,6 +678,7 @@ pub fn export_video(
     out: &std::path::Path,
     settings: &ExportSettings,
     progress: &mut dyn FnMut(usize, usize) -> bool,
+    proxy: ProxyPolicy,
 ) -> Result<ExportOutcome, String> {
     let ExportSettings {
         width,
@@ -599,7 +690,7 @@ pub fn export_video(
     } = *settings;
     let count = (((end - start) * fps).round() as usize).max(1);
 
-    let mut renderer = Renderer::new(project, width, height)?;
+    let mut renderer = Renderer::with_proxy(project, width, height, proxy)?;
     if let Some((bgra, overlay_width, overlay_height)) = overlay {
         renderer.set_overlay(Some((bgra, *overlay_width, *overlay_height)))?;
     }
@@ -1177,6 +1268,78 @@ mod tests {
             pixels[at],
             pixels[at + 2]
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// B3.1: `auto` reads a proxy only when one is built AND the output
+    /// fits it; `off` never; `on` builds it. The staged path says which.
+    #[test]
+    fn proxy_policy_picks_the_proxy_only_when_small_and_told_to() {
+        if std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-proxy-policy-{}", std::process::id()));
+        let cache = dir.join("cache");
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::env::set_var("PROMO_PROXY_DIR", &cache);
+        let clip = dir.join("Resources/clip.mp4");
+        assert!(std::process::Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-nostdin",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=1280x720:rate=30:duration=1",
+                "-pix_fmt",
+                "yuv420p"
+            ])
+            .arg(&clip)
+            .status()
+            .unwrap()
+            .success());
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Proxy","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":1,
+            "videoDuration":1,"subtitles":[],"compositionSettings":{"canvasWidth":1280,"canvasHeight":720},
+            "resources":[{"id":"V","kind":"video","filename":"clip.mp4","displayName":"clip","addedAt":0,
+              "duration":1,"imageCuts":[],"disabledAudioTrackIndices":[]}],
+            "layers":[{"id":"L","name":"clip","sortIndex":0,"kind":"video","isEnabled":true,
+              "startTime":0,"duration":1,"resourceID":"V","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let registry = Registry::with_defaults();
+        let staged = |policy: ProxyPolicy, long_edge: u32| -> (bool, PathBuf) {
+            let (_, _, videos) =
+                Renderer::stage_with(&project, &registry, policy, long_edge).expect("stage");
+            let v = videos.get("L").expect("staged by layer");
+            (v.proxied, v.path.clone())
+        };
+        // Nothing built yet: auto reads the source.
+        assert!(!staged(ProxyPolicy::Auto, 640).0);
+        // On builds it, and uses it for a small output.
+        let (used, path) = staged(ProxyPolicy::On, 640);
+        assert!(used && path.starts_with(&cache), "{}", path.display());
+        // Now auto finds it — for a small output only.
+        assert!(staged(ProxyPolicy::Auto, 640).0);
+        assert!(
+            !staged(ProxyPolicy::Auto, 1280).0,
+            "a full-size render reads the source"
+        );
+        // Off never.
+        assert!(!staged(ProxyPolicy::Off, 640).0);
+        std::env::remove_var("PROMO_PROXY_DIR");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

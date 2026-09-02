@@ -11,6 +11,7 @@
 
 pub mod conformance;
 pub mod ffmpeg;
+pub mod proxy;
 
 use promo_gpu::GpuSurface;
 use std::path::Path;

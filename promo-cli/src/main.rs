@@ -102,6 +102,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let answer = match command {
         "inspect" => inspect(&project, &opts),
         "validate" => validate(&project, &opts),
+        "proxy" => build_proxies(&project, &opts),
         "still" => still(&project, &opts),
         "frames" => frames(&project, &opts),
         "video" => video(&project, &opts),
@@ -121,6 +122,7 @@ struct Options {
     from: Option<f64>,
     to: Option<f64>,
     size: Option<(u32, u32)>,
+    proxy: render::ProxyPolicy,
 }
 
 impl Options {
@@ -143,6 +145,7 @@ impl Options {
                 "--out" => opts.out = Some(PathBuf::from(value()?)),
                 "--time" => opts.time = Some(parse_f64(&value()?, flag)?),
                 "--fps" => opts.fps = Some(parse_f64(&value()?, flag)?),
+                "--proxy" => opts.proxy = render::ProxyPolicy::parse(&value()?)?,
                 "--from" => opts.from = Some(parse_f64(&value()?, flag)?),
                 "--to" => opts.to = Some(parse_f64(&value()?, flag)?),
                 "--size" => {
@@ -192,6 +195,54 @@ fn parse_f64(raw: &str, flag: &str) -> Result<f64, String> {
 /// viewport on a layer kind that ignores it, an attachment that could not
 /// resolve, a file that uses features it does not declare a reader version
 /// for. Each of those changes what you see and none of them said so.
+/// `promo proxy <project>`: a tier-1 proxy for every video resource the
+/// project has (B3.1) — idempotent, built into the proxy cache, never
+/// into the package.
+fn build_proxies(project: &Project, opts: &Options) -> Result<String, String> {
+    use promo_media::proxy;
+    let cache = proxy::cache_dir();
+    let mut built = Vec::new();
+    for resource in project
+        .resources()
+        .iter()
+        .filter(|r| r.kind == promo_model::ProjectResourceKind::Video)
+    {
+        let Some(source) = project.resource_path(resource) else {
+            continue;
+        };
+        let fresh = proxy::available(&cache, &source, 1).is_none();
+        let path =
+            proxy::ensure(&cache, &source, proxy::TIER1_LONG_EDGE).map_err(|e| e.to_string())?;
+        let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        built.push((resource.display_name.clone(), path, bytes, fresh));
+    }
+    if opts.json {
+        return Ok(serde_json::json!({
+            "cacheDir": cache.display().to_string(),
+            "proxies": built.iter().map(|(name, path, bytes, fresh)| serde_json::json!({
+                "resource": name, "path": path.display().to_string(), "bytes": bytes, "built": fresh,
+            })).collect::<Vec<_>>(),
+        })
+        .to_string());
+    }
+    if built.is_empty() {
+        return Ok("no video resources — nothing to proxy".into());
+    }
+    let mut out = format!("proxies in {}:", cache.display());
+    for (name, path, bytes, fresh) in &built {
+        out.push_str(&format!(
+            "\n  {}  {}  {:.1} MB{}",
+            name,
+            path.file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            *bytes as f64 / 1_048_576.0,
+            if *fresh { "  (built)" } else { "" }
+        ));
+    }
+    Ok(out)
+}
+
 fn validate(project: &Project, opts: &Options) -> Result<String, String> {
     let mut warnings = project.attachment_problems.clone();
     warnings.extend(promo_timeline::validate::warnings(&project.meta));
@@ -330,7 +381,7 @@ fn still(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let time = opts.time.unwrap_or(0.0);
-    let mut renderer = render::Renderer::new(project, w, h)?;
+    let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
     let rgba = renderer.frame_rgba(time)?;
     render::write_png(out, &rgba, w, h)?;
     if opts.json {
@@ -350,7 +401,7 @@ fn frames(project: &Project, opts: &Options) -> Result<String, String> {
     let count = frame_count(start, end, fps);
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
 
-    let mut renderer = render::Renderer::new(project, w, h)?;
+    let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
     for i in 0..count {
         let time = start + i as f64 / fps;
         let rgba = renderer.frame_rgba(time)?;
@@ -399,12 +450,18 @@ fn video(project: &Project, opts: &Options) -> Result<String, String> {
         // apps' concern.
         overlay: None,
     };
-    render::export_video(project, out, &settings, &mut |done, total| {
-        if done % 30 == 0 || done == total {
-            eprint!("\r  {done}/{total} frames");
-        }
-        true
-    })?;
+    render::export_video(
+        project,
+        out,
+        &settings,
+        &mut |done, total| {
+            if done % 30 == 0 || done == total {
+                eprint!("\r  {done}/{total} frames");
+            }
+            true
+        },
+        opts.proxy,
+    )?;
     eprintln!();
 
     if opts.json {
@@ -437,7 +494,7 @@ fn gif(project: &Project, opts: &Options) -> Result<String, String> {
         .set_repeat(image::codecs::gif::Repeat::Infinite)
         .map_err(|e| e.to_string())?;
     let delay = image::Delay::from_numer_denom_ms((1000.0 / fps).round() as u32, 1);
-    let mut renderer = render::Renderer::new(project, w, h)?;
+    let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
     for i in 0..count {
         let time = start + i as f64 / fps;
         let rgba = renderer.frame_rgba(time)?;
