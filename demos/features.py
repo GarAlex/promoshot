@@ -76,7 +76,8 @@ def rubric_from(meta, name, media):
     return {
         "template": name,
         "canvas": [cs.get('canvasWidth'), cs.get('canvasHeight')],
-        "duration": meta.get('videoDuration'),
+        "duration": meta.get('videoDuration') or max(
+            (l.get('startTime', 0) + (l.get('duration') or 0) for l in meta.get('layers', [])), default=0),
         "kinds": kinds(meta),
         "features": features(meta),
         "phrases": phrases(meta),

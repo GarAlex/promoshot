@@ -31,7 +31,8 @@ def main(lib):
         meta = json.load(open(os.path.join(lib, d, 'metadata.json')))
         name = d[:-6]
         folder = os.path.join(HERE, f"{nn}-{slug(name[3:])}")
-        shutil.rmtree(folder, ignore_errors=True)
+        # Refresh the inputs; runs/ is history and stays.
+        shutil.rmtree(os.path.join(folder, 'resources'), ignore_errors=True)
         os.makedirs(os.path.join(folder, 'resources'))
         media = []
         for f in sorted(os.listdir(os.path.join(lib, d, 'Resources'))):
