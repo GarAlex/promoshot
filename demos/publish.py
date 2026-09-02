@@ -29,8 +29,8 @@ def poster(video, out):
 
 def gif(project, out):
     env = {**os.environ, 'PATH': '/opt/homebrew/bin:' + os.environ.get('PATH', '')}
-    subprocess.run([PROMO, 'gif', project, '--out', out, '--fps', '8', '--size', '360x225'], check=False, env=env)
-    if os.path.exists(out) and os.path.getsize(out) < 3_000_000:
+    subprocess.run([PROMO, 'gif', project, '--out', out, '--fps', '6', '--size', '320x200'], check=False, env=env)
+    if os.path.exists(out) and os.path.getsize(out) < 6_000_000:
         return True
     if os.path.exists(out):
         os.remove(out)

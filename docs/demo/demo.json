@@ -608,7 +608,8 @@
    "contact": "docs/demo/23-soft-focus/contact-result.png",
    "reference_contact": "docs/demo/23-soft-focus/contact-reference.png",
    "video": "docs/demo/23-soft-focus/result.mp4",
-   "metadata": "docs/demo/23-soft-focus/result-metadata.json"
+   "metadata": "docs/demo/23-soft-focus/result-metadata.json",
+   "gif": "docs/demo/23-soft-focus/result.gif"
   }
  }
 ]

@@ -567,6 +567,8 @@ Foundation, CC BY 3.0) where a screen recording stands in.
 
 **What the agent made** — score 100% (6/6 rubric checks), turns=65 cost=$3.90 secs=566
 
+<img src="docs/demo/23-soft-focus/result.gif" width="480" alt="result">
+
 <img src="docs/demo/23-soft-focus/contact-result.png" width="720" alt="six moments of the result">
 
 [video](docs/demo/23-soft-focus/result.mp4) · [the project it wrote](docs/demo/23-soft-focus/result-metadata.json)
