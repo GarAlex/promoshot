@@ -1,0 +1,293 @@
+{
+  "id": "soft-focus-lumen",
+  "name": "Soft Focus",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas",          "colorHex": "05070E" },
+      { "name": "text",            "colorHex": "F2F6FF" },
+      { "name": "text-bg",         "colorHex": "0A0F1C" },
+      { "name": "edge",            "colorHex": "2A3A57" },
+      { "name": "caption-outline", "colorHex": "060912" },
+      { "name": "caption-shadow",  "colorHex": "01030A" },
+      { "name": "media-shadow",    "colorHex": "000208" },
+      { "name": "highlight",       "colorHex": "5B8CFF" },
+      { "name": "accent",          "colorHex": "5B8CFF" },
+      { "name": "muted",           "colorHex": "AEBBD6" }
+    ],
+    "backgroundColorHex": "@canvas",
+
+    "videoCornerRadius": 16,
+    "videoBorderWidth": 1,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.55,
+    "videoShadowRadius": 48,
+    "videoShadowOffset": [0, 22],
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 74,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 18,
+    "subtitleLeftMargin": 110,
+    "subtitleRightMargin": 110,
+    "subtitleVerticalMargin": 900,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.6,
+    "subtitleShadowRadius": 20,
+    "subtitleShadowOffset": [0, 8]
+  },
+
+  "resources": [
+    {
+      "id": "shot",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen — Overview",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 2, "cornerRadius": 16 }
+    },
+    {
+      "id": "shotbg",
+      "kind": "image",
+      "filename": "ui_lumen_1_backdrop.png",
+      "displayName": "Lumen — Backdrop",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "frame": { "kind": "none", "borderWidth": 0, "cornerRadius": 0, "shadowOpacity": 0 }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": []
+    },
+
+    {
+      "id": "backdrop",
+      "name": "Backdrop — blur / vignette / grain",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "shotbg",
+      "adjustments": { "saturation": 0.7, "contrast": 1.04, "brightness": -0.05 },
+      "effects": { "blur": 34, "vignette": 0.78, "vignetteSoftness": 0.55, "grain": 0.22 },
+      "keyframes": [
+        {
+          "id": "bd0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 1250, "anchor": "center", "offset": [0, 0] }
+        },
+        {
+          "id": "bd1", "time": 12, "transitionDuration": 12, "easing": "easeInOut",
+          "placement": { "height": 1345, "anchor": "center", "offset": [0, 0] }
+        }
+      ]
+    },
+
+    {
+      "id": "sharp",
+      "name": "Sharp copy",
+      "sortIndex": 2,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0.3,
+      "duration": 8.65,
+      "resourceID": "shot",
+      "fadeIn": 0.5,
+      "fadeOut": 0.35,
+      "effects": { "sharpen": 0.45 },
+      "keyframes": [
+        {
+          "id": "s0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 706, "anchor": "center", "offset": [0, 18] }
+        },
+        {
+          "id": "s1", "time": 1.35, "transitionDuration": 1.35, "easing": "easeOut",
+          "placement": { "height": 648, "anchor": "center", "offset": [0, 18] }
+        },
+        {
+          "id": "s2", "time": 8.65, "transitionDuration": 7.3, "easing": "easeInOut",
+          "placement": { "height": 662, "anchor": "center", "offset": [0, 18] }
+        }
+      ]
+    },
+
+    {
+      "id": "arrival",
+      "name": "Arrival — heavy blur dissolving off the sharp copy",
+      "sortIndex": 3,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0.3,
+      "duration": 1.9,
+      "resourceID": "shot",
+      "fadeIn": 0.5,
+      "fadeOut": 1.15,
+      "effects": { "blur": 52 },
+      "keyframes": [
+        {
+          "id": "a0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 706, "anchor": "center", "offset": [0, 18] }
+        },
+        {
+          "id": "a1", "time": 1.35, "transitionDuration": 1.35, "easing": "easeOut",
+          "placement": { "height": 648, "anchor": "center", "offset": [0, 18] }
+        }
+      ]
+    },
+
+    {
+      "id": "smear",
+      "name": "Exit — sideways smear",
+      "sortIndex": 4,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 8.65,
+      "duration": 1.85,
+      "resourceID": "shot",
+      "fadeIn": 0.3,
+      "fadeOut": 1.0,
+      "effects": { "blur": 120, "blurAngle": 0 },
+      "motionBlur": { "shutter": 0.7 },
+      "keyframes": [
+        {
+          "id": "m0", "time": 0.3, "transitionDuration": 0,
+          "placement": { "height": 662, "anchor": "center", "offset": [0, 18] }
+        },
+        {
+          "id": "m1", "time": 1.85, "transitionDuration": 1.55, "easing": "easeIn",
+          "placement": { "height": 662, "anchor": "center", "offset": [1180, 18] }
+        }
+      ]
+    },
+
+    {
+      "id": "headline",
+      "name": "Headline",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.3,
+      "duration": 4.7,
+      "fadeOut": 0.55,
+      "captionText": "Focus, pulled in the compositor.",
+      "captionStyle": {
+        "fontSize": 74,
+        "isBold": true,
+        "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 86] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 5,
+        "shadowOpacity": 0.65,
+        "shadowRadius": 22
+      },
+      "keyframes": [
+        { "id": "h0", "time": 0, "transitionDuration": 0, "opacity": 0 },
+        { "id": "h1", "time": 0.85, "transitionDuration": 0.85, "easing": "easeOut", "opacity": 1 }
+      ]
+    },
+
+    {
+      "id": "headlineblur",
+      "name": "Headline — blurred copy it resolves out of",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.3,
+      "duration": 0.95,
+      "fadeIn": 0.3,
+      "fadeOut": 0.55,
+      "captionText": "Focus, pulled in the compositor.",
+      "captionStyle": {
+        "fontSize": 74,
+        "isBold": true,
+        "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 86] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 5,
+        "shadowOpacity": 0.65,
+        "shadowRadius": 22
+      },
+      "effects": { "blur": 20 },
+      "keyframes": []
+    },
+
+    {
+      "id": "headlineglow",
+      "name": "Headline — the glow as it lands",
+      "sortIndex": 7,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.95,
+      "duration": 1.1,
+      "fadeIn": 0.3,
+      "fadeOut": 0.75,
+      "blendMode": "screen",
+      "captionText": "Focus, pulled in the compositor.",
+      "captionStyle": {
+        "fontSize": 74,
+        "isBold": true,
+        "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 86] },
+        "textColorHex": "@highlight",
+        "shadowOpacity": 0.0
+      },
+      "effects": { "glow": 2.6, "glowRadius": 48, "glowThreshold": 0.18 },
+      "keyframes": []
+    },
+
+    {
+      "id": "subline",
+      "name": "Subline",
+      "sortIndex": 8,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.4,
+      "duration": 5.3,
+      "fadeIn": 0.4,
+      "fadeOut": 0.7,
+      "captionText": "Blur, glow, vignette, grain and sharpen — on the layer, on every host.",
+      "captionStyle": {
+        "fontSize": 40,
+        "isBold": false,
+        "alignment": "center",
+        "textColorHex": "@muted",
+        "placement": { "anchor": "bottom", "offset": [0, -88] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 4,
+        "shadowOpacity": 0.6,
+        "shadowRadius": 16,
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.05 }
+      },
+      "keyframes": []
+    }
+  ]
+}
