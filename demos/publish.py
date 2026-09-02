@@ -77,12 +77,22 @@ def main():
             summary = open(summary_path).read().strip() if os.path.exists(summary_path) else ''
             result = {"score": score['score'], "passed": score['passed'], "total": score['total'],
                       "checks": score['checks'], "summary": summary.split(' result=')[0]}
-            for f, key in (('contact-agent.png', 'contact'), ('contact-reference.png', 'reference_contact'), ('agent.mp4', 'video')):
+            for f, key in (('contact-agent.png', 'contact'), ('contact-reference.png', 'reference_contact')):
                 src = os.path.join(run, f)
                 if os.path.exists(src):
                     dst = os.path.join(out, f.replace('agent', 'result'))
                     shutil.copy2(src, dst)
                     result[key] = f"docs/demo/{name}/{os.path.basename(dst)}"
+            # The video, small on purpose: 640 wide, a page's bitrate, so
+            # the repository does not carry a screening copy.
+            src = os.path.join(run, 'agent.mp4')
+            if os.path.exists(src):
+                dst = os.path.join(out, 'result.mp4')
+                subprocess.run([FFMPEG, '-v', 'error', '-y', '-i', src, '-vf', 'scale=640:-2',
+                                '-c:v', 'libx264', '-crf', '30', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+                                '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', dst], check=False)
+                if os.path.exists(dst):
+                    result['video'] = f"docs/demo/{name}/result.mp4"
             project = os.path.join(run, 'ws', 'out.promo')
             if os.path.exists(os.path.join(project, 'metadata.json')):
                 shutil.copy2(os.path.join(project, 'metadata.json'), os.path.join(out, 'result-metadata.json'))
