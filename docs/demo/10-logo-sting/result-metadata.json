@@ -1,0 +1,291 @@
+{
+  "id": "lumen-sting",
+  "name": "LUMEN Logo Sting",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 10,
+  "videoDuration": 10,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas",          "colorHex": "03050C" },
+      { "name": "text",            "colorHex": "F4F7FF" },
+      { "name": "text-bg",         "colorHex": "03050C" },
+      { "name": "edge",            "colorHex": "1E2C55" },
+      { "name": "caption-outline", "colorHex": "03050C" },
+      { "name": "caption-shadow",  "colorHex": "4E7BFF" },
+      { "name": "media-shadow",    "colorHex": "000000" },
+      { "name": "highlight",       "colorHex": "8FB2FF" },
+      { "name": "accent",          "colorHex": "6E9BFF" },
+      { "name": "bloom",           "colorHex": "1B3468" },
+      { "name": "flash",           "colorHex": "5F8AE6" },
+      { "name": "deep",            "colorHex": "08102A" },
+      { "name": "deep2",           "colorHex": "132348" },
+      { "name": "muted",           "colorHex": "AFC2EC" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.42],
+      "end": [1.30, 1.22],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@bloom",  "at": 0 },
+        { "colorHex": "@deep",   "at": 0.5 },
+        { "colorHex": "@canvas", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 26,
+    "subtitleLeftMargin": 140,
+    "subtitleRightMargin": 140,
+    "subtitleVerticalMargin": 900
+  },
+
+  "resources": [
+    {
+      "id": "rocket",
+      "kind": "image",
+      "filename": "sprite_rocket.png",
+      "displayName": "Rocket",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 288,
+      "pixelHeight": 48,
+      "sampling": "nearest",
+      "sprite": { "columns": 6, "rows": 1, "frameCount": 6, "fps": 14 }
+    },
+    {
+      "id": "spark",
+      "kind": "image",
+      "filename": "sprite_spark.png",
+      "displayName": "Spark",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 448,
+      "pixelHeight": 56,
+      "sampling": "nearest",
+      "sprite": { "columns": 8, "rows": 1, "frameCount": 8, "fps": 10 }
+    },
+    {
+      "id": "arc",
+      "kind": "path",
+      "filename": "",
+      "displayName": "Climb arc",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "path": { "start": [0, 0], "end": [100, 0], "controls": [[50, 60]] }
+    },
+    {
+      "id": "burst",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Sparkle burst",
+      "addedAt": 0,
+      "duration": 1.25,
+      "pixelWidth": 1920,
+      "pixelHeight": 1080,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1920,
+        "canvasHeight": 1080,
+        "layers": [
+          { "id": "sp1", "name": "Spark 1", "sortIndex": 0, "kind": "image",
+            "isEnabled": true, "startTime": 0.00, "duration": 0.90,
+            "resourceID": "spark", "beyondEnd": "hide", "fadeOut": 0.35,
+            "keyframes": [ { "id": "sp1k", "time": 0, "transitionDuration": 0, "rotation": 0,
+              "placement": { "height": 400, "anchor": "center", "offset": [-250, -120] } } ] },
+          { "id": "sp2", "name": "Spark 2", "sortIndex": 1, "kind": "image",
+            "isEnabled": true, "startTime": 0.06, "duration": 0.90,
+            "resourceID": "spark", "beyondEnd": "hide", "fadeOut": 0.35,
+            "keyframes": [ { "id": "sp2k", "time": 0, "transitionDuration": 0, "rotation": 20,
+              "placement": { "height": 360, "anchor": "center", "offset": [260, -180] } } ] },
+          { "id": "sp3", "name": "Spark 3", "sortIndex": 2, "kind": "image",
+            "isEnabled": true, "startTime": 0.12, "duration": 0.90,
+            "resourceID": "spark", "beyondEnd": "hide", "fadeOut": 0.35,
+            "keyframes": [ { "id": "sp3k", "time": 0, "transitionDuration": 0, "rotation": 40,
+              "placement": { "height": 340, "anchor": "center", "offset": [-150, 230] } } ] },
+          { "id": "sp4", "name": "Spark 4", "sortIndex": 3, "kind": "image",
+            "isEnabled": true, "startTime": 0.18, "duration": 0.90,
+            "resourceID": "spark", "beyondEnd": "hide", "fadeOut": 0.35,
+            "keyframes": [ { "id": "sp4k", "time": 0, "transitionDuration": 0, "rotation": 12,
+              "placement": { "height": 420, "anchor": "center", "offset": [300, 130] } } ] },
+          { "id": "sp5", "name": "Spark 5", "sortIndex": 4, "kind": "image",
+            "isEnabled": true, "startTime": 0.24, "duration": 0.90,
+            "resourceID": "spark", "beyondEnd": "hide", "fadeOut": 0.35,
+            "keyframes": [ { "id": "sp5k", "time": 0, "transitionDuration": 0, "rotation": 30,
+              "placement": { "height": 380, "anchor": "center", "offset": [10, -320] } } ] },
+          { "id": "sp6", "name": "Spark 6", "sortIndex": 5, "kind": "image",
+            "isEnabled": true, "startTime": 0.30, "duration": 0.90,
+            "resourceID": "spark", "beyondEnd": "hide", "fadeOut": 0.35,
+            "keyframes": [ { "id": "sp6k", "time": 0, "transitionDuration": 0, "rotation": 50,
+              "placement": { "height": 340, "anchor": "center", "offset": [-340, 30] } } ] }
+        ]
+      }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Bloom",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "keyframes": [
+        { "id": "g0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "radial", "start": [0.5, 0.42], "end": [0.515, 0.435], "repeat": "clamp",
+            "stops": [ { "colorHex": "@bloom", "at": 0 }, { "colorHex": "@deep", "at": 0.5 }, { "colorHex": "@canvas", "at": 1 } ] } },
+        { "id": "g1", "time": 1.5, "transitionDuration": 1.5, "easing": "easeOut",
+          "gradient": { "kind": "radial", "start": [0.5, 0.42], "end": [1.30, 1.22], "repeat": "clamp",
+            "stops": [ { "colorHex": "@bloom", "at": 0 }, { "colorHex": "@deep", "at": 0.5 }, { "colorHex": "@canvas", "at": 1 } ] } },
+        { "id": "g2", "time": 3.45, "transitionDuration": 0.18, "easing": "easeOut",
+          "gradient": { "kind": "radial", "start": [0.5, 0.42], "end": [1.30, 1.22], "repeat": "clamp",
+            "stops": [ { "colorHex": "@flash", "at": 0 }, { "colorHex": "@deep2", "at": 0.5 }, { "colorHex": "@canvas", "at": 1 } ] } },
+        { "id": "g3", "time": 4.40, "transitionDuration": 0.75, "easing": "easeOut",
+          "gradient": { "kind": "radial", "start": [0.5, 0.42], "end": [1.30, 1.22], "repeat": "clamp",
+            "stops": [ { "colorHex": "@bloom", "at": 0 }, { "colorHex": "@deep", "at": 0.5 }, { "colorHex": "@canvas", "at": 1 } ] } },
+        { "id": "g4", "time": 10.0, "transitionDuration": 5.4, "easing": "easeInOut",
+          "gradient": { "kind": "radial", "start": [0.5, 0.44], "end": [1.48, 1.38], "repeat": "clamp",
+            "stops": [ { "colorHex": "@bloom", "at": 0 }, { "colorHex": "@deep", "at": 0.5 }, { "colorHex": "@canvas", "at": 1 } ] } }
+      ]
+    },
+
+    {
+      "id": "rocket-l",
+      "name": "Rocket",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0.75,
+      "duration": 3.55,
+      "resourceID": "rocket",
+      "fadeIn": 0.35,
+      "fadeOut": 0.55,
+      "effects": { "glow": 0.3, "glowRadius": 20, "glowThreshold": 0.6 },
+      "keyframes": [
+        { "id": "r0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 340, "anchor": "center", "offset": [-620, 380] } },
+        { "id": "r1", "time": 2.65, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut",
+          "motionPath": { "pathResourceID": "arc", "flipped": false, "startAt": 0, "endAt": 1 },
+          "placement": { "height": 340, "anchor": "center", "offset": [40, -170] } },
+        { "id": "r2", "time": 3.55, "transitionDuration": 0, "transitionPercent": 100,
+          "placement": { "height": 340, "anchor": "center", "offset": [52, -238] } },
+
+        { "id": "rr0", "time": 0, "transitionDuration": 0, "rotation": 62 },
+        { "id": "rr1", "time": 2.65, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut", "rotation": 6 },
+
+        { "id": "rb0", "time": 0, "transitionDuration": 0, "shutter": 0.45 },
+        { "id": "rb1", "time": 1.35, "transitionDuration": 0, "transitionPercent": 100, "shutter": 0.95 },
+        { "id": "rb2", "time": 2.65, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeOut", "shutter": 0.2 }
+      ]
+    },
+
+    {
+      "id": "burst-l",
+      "name": "Sparkle burst",
+      "sortIndex": 2,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 3.30,
+      "duration": 1.25,
+      "resourceID": "burst",
+      "beyondEnd": "hide",
+      "blendMode": "screen",
+      "effects": { "glow": 0.55, "glowRadius": 26, "glowThreshold": 0.5 },
+      "keyframes": [
+        { "id": "b0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 700, "anchor": "center", "offset": [40, -180] } },
+        { "id": "b1", "time": 1.25, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeOut",
+          "placement": { "height": 900, "anchor": "center", "offset": [40, -180] } }
+      ]
+    },
+
+    {
+      "id": "wordmark",
+      "name": "LUMEN",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 4.15,
+      "duration": 5.85,
+      "captionText": "LUMEN",
+      "captionStyle": {
+        "fontSize": 188,
+        "isBold": true,
+        "textColorHex": "@text",
+        "alignment": "center",
+        "backgroundOpacity": 0.0,
+        "padding": 36,
+        "shadowColorHex": "@caption-shadow",
+        "shadowOpacity": 0.75,
+        "shadowRadius": 34,
+        "placement": { "anchor": "center", "offset": [0, -70] },
+        "reveal": { "by": "character", "mode": "scale", "secondsPer": 0.1, "unitSeconds": 0.24, "easing": "easeOut" }
+      },
+      "keyframes": [
+        { "id": "w0", "time": 0, "transitionDuration": 0, "fontSize": 204 },
+        { "id": "w1", "time": 0.85, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeOut", "fontSize": 188 }
+      ]
+    },
+
+    {
+      "id": "tagline",
+      "name": "Tagline",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 5.60,
+      "duration": 4.40,
+      "captionText": "see the whole picture",
+      "fadeIn": 0.45,
+      "captionStyle": {
+        "fontSize": 50,
+        "isBold": false,
+        "textColorHex": "@muted",
+        "alignment": "center",
+        "backgroundOpacity": 0.0,
+        "placement": { "anchor": "center", "offset": [0, 120] },
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.11, "unitSeconds": 0.3 }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "url",
+      "name": "URL",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.65,
+      "duration": 3.35,
+      "captionText": "lumen.app",
+      "captionStyle": {
+        "fontSize": 44,
+        "fontFamily": "monospaced",
+        "isBold": true,
+        "textColorHex": "@accent",
+        "alignment": "center",
+        "backgroundOpacity": 0.0,
+        "placement": { "anchor": "center", "offset": [0, 222] },
+        "reveal": { "by": "character", "mode": "wipe", "secondsPer": 0.075 }
+      },
+      "keyframes": []
+    }
+  ]
+}

@@ -30,7 +30,7 @@ Score **100%** (6 of 6 rubric checks).
 |---|---|
 | turns | 34 |
 | wall time | 4 min 43 s (API 4 min 29 s) |
-| cost | $2.12 |
+| cost at API list price | $2.12 — on a Claude subscription this is plan usage, not a bill |
 | tokens in | 1.9M (1.8M cache read, 69k cache write) |
 | tokens out | 20k (11k thinking) |
 | claude-haiku-4-5 | 1k in, 13 out, $0.00 |

@@ -27,7 +27,7 @@ Score **100%** (8 of 8 rubric checks).
 |---|---|
 | turns | 27 |
 | wall time | 3 min 02 s (API 3 min 06 s) |
-| cost | $1.54 |
+| cost at API list price | $1.54 — on a Claude subscription this is plan usage, not a bill |
 | tokens in | 1.3M (1.2M cache read, 59k cache write) |
 | tokens out | 13k (6k thinking) |
 | claude-opus-5 | 1.3M in, 13k out, $1.54 |

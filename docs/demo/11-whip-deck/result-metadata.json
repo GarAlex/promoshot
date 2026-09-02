@@ -1,0 +1,193 @@
+{
+  "id": "whip-deck",
+  "name": "Whip Deck",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "0A0E1A" },
+      { "name": "text", "colorHex": "F5F7FF" },
+      { "name": "text-bg", "colorHex": "0A0E1A" },
+      { "name": "edge", "colorHex": "2C3E63" },
+      { "name": "caption-outline", "colorHex": "05070E" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "6FA8FF" },
+      { "name": "accent1", "colorHex": "0B1020" },
+      { "name": "accent2", "colorHex": "141B34" },
+      { "name": "accent3", "colorHex": "1B1442" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [1, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@accent1", "at": 0 },
+        { "colorHex": "@accent2", "at": 0.55 },
+        { "colorHex": "@accent3", "at": 1 }
+      ]
+    },
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.45,
+    "videoShadowRadius": 44,
+    "videoShadowOffset": [0, 18],
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 64,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 14,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200,
+    "subtitleVerticalMargin": 900
+  },
+  "resources": [
+    {
+      "id": "shot1",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen — overview",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 1.5, "cornerRadius": 12 }
+    },
+    {
+      "id": "shot2",
+      "kind": "image",
+      "filename": "ui_lumen_2.png",
+      "displayName": "Lumen — detail",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 1.5, "cornerRadius": 12 }
+    },
+    {
+      "id": "shot3",
+      "kind": "image",
+      "filename": "ui_pulse_1.png",
+      "displayName": "Pulse",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 1.5, "cornerRadius": 12 }
+    },
+    {
+      "id": "shot4",
+      "kind": "image",
+      "filename": "ui_verse_1.png",
+      "displayName": "Verse",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 1.5, "cornerRadius": 12 }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": []
+    },
+    {
+      "id": "deck",
+      "name": "Deck",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "shot1",
+      "fadeIn": 0.4,
+      "fadeOut": 0.5,
+      "effects": { "blurAngle": 0 },
+      "keyframes": [
+        { "id": "p0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 764, "anchor": "center", "offset": [0, -80] } },
+        { "id": "p1", "time": 12, "transitionDuration": 12,
+          "placement": { "height": 806, "anchor": "center", "offset": [0, -80] } },
+
+        { "id": "sw1", "time": 3.10, "resourceID": "shot2", "transitionDuration": 0,
+          "transition": { "kind": "push", "from": "right", "duration": 0.50, "easing": "easeInOut" } },
+        { "id": "sw2", "time": 6.30, "resourceID": "shot3", "transitionDuration": 0,
+          "transition": { "kind": "push", "from": "right", "duration": 0.34, "easing": "easeInOut" } },
+        { "id": "sw3", "time": 9.30, "resourceID": "shot4", "transitionDuration": 0,
+          "transition": { "kind": "push", "from": "right", "duration": 0.20, "easing": "easeInOut" } },
+
+        { "id": "b0", "time": 0, "blur": 0, "transitionDuration": 0 },
+        { "id": "b1", "time": 3.35, "blur": 16, "transitionDuration": 0.25, "easing": "easeIn" },
+        { "id": "b2", "time": 3.70, "blur": 0, "transitionDuration": 0.35, "easing": "easeOut" },
+        { "id": "b3", "time": 6.47, "blur": 30, "transitionDuration": 0.22, "easing": "easeIn" },
+        { "id": "b4", "time": 6.80, "blur": 0, "transitionDuration": 0.33, "easing": "easeOut" },
+        { "id": "b5", "time": 9.40, "blur": 52, "transitionDuration": 0.15, "easing": "easeIn" },
+        { "id": "b6", "time": 9.68, "blur": 0, "transitionDuration": 0.28, "easing": "easeOut" },
+
+        { "id": "m0", "time": 0, "shutter": 0.05, "transitionDuration": 0 },
+        { "id": "m1", "time": 3.35, "shutter": 0.50, "transitionDuration": 0.20, "easing": "easeIn" },
+        { "id": "m2", "time": 3.70, "shutter": 0.05, "transitionDuration": 0.30, "easing": "easeOut" },
+        { "id": "m3", "time": 6.47, "shutter": 0.75, "transitionDuration": 0.18, "easing": "easeIn" },
+        { "id": "m4", "time": 6.80, "shutter": 0.05, "transitionDuration": 0.30, "easing": "easeOut" },
+        { "id": "m5", "time": 9.40, "shutter": 1.00, "transitionDuration": 0.12, "easing": "easeIn" },
+        { "id": "m6", "time": 9.68, "shutter": 0.05, "transitionDuration": 0.25, "easing": "easeOut" }
+      ]
+    },
+    {
+      "id": "cap1",
+      "name": "Caption — One deck",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.55,
+      "duration": 5.35,
+      "captionText": "One deck. Every screen.",
+      "fadeIn": 0.35,
+      "fadeOut": 0.4,
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -64] },
+        "reveal": { "by": "word", "mode": "fade", "seconds": 0.7, "easing": "easeOut" }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap2",
+      "name": "Caption — See it move",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.85,
+      "duration": 4.75,
+      "captionText": "See it move.",
+      "fadeIn": 0.3,
+      "fadeOut": 0.5,
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -64] },
+        "reveal": { "by": "word", "mode": "rise", "seconds": 0.55, "easing": "easeOut" }
+      },
+      "keyframes": []
+    }
+  ]
+}

@@ -727,7 +727,148 @@
     "poster": "docs/demo/07-narrated-tour/resources/bbb_test.poster.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 9,
+   "total": 9,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1920, 1080] vs [1920, 1080]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "21.0s vs 21.5s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:audio",
+     "ok": true,
+     "detail": "5 vs 5"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "5 vs 5"
+    },
+    {
+     "check": "feature:viewport",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:narration",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "5 of 5 lines recognisable"
+    }
+   ],
+   "summary": "turns=24 cost=$1.37 secs=182",
+   "run": {
+    "turns": 24,
+    "wall_s": 180,
+    "api_s": 166,
+    "cost_usd": 1.37,
+    "tokens": {
+     "input": 26,
+     "cache_read": 826090,
+     "cache_write": 60746,
+     "output": 13827,
+     "thinking": 6279
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1148,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 886862,
+      "output": 13827,
+      "cost_usd": 1.37
+     }
+    ],
+    "mcp": {
+     "calls": 11,
+     "ms": 13556,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 7218,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 6133,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 106,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 88,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 5,
+       "errors": 0
+      },
+      "promo_speak": {
+       "calls": 1,
+       "ms": 4,
+       "errors": 0
+      },
+      "promo_voices": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 1
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/07-narrated-tour/contact-result.png",
+   "reference_contact": "docs/demo/07-narrated-tour/contact-reference.png",
+   "video": "docs/demo/07-narrated-tour/result.mp4",
+   "metadata": "docs/demo/07-narrated-tour/result-metadata.json",
+   "gif": "docs/demo/07-narrated-tour/result.gif",
+   "thumb": "docs/demo/07-narrated-tour/thumb.png"
+  },
   "page": "docs/demo/demo07.md"
  },
  {
@@ -749,7 +890,123 @@
     "poster": "docs/demo/08-speed-ramp/resources/bbb_test.poster.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1920, 1080] vs [1920, 1080]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "14.0s vs 14.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:mediaCuts",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=21 cost=$1.28 secs=167",
+   "run": {
+    "turns": 21,
+    "wall_s": 167,
+    "api_s": 153,
+    "cost_usd": 1.28,
+    "tokens": {
+     "input": 26,
+     "cache_read": 787264,
+     "cache_write": 56649,
+     "output": 12609,
+     "thinking": 6926
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1122,
+      "output": 17,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 843939,
+      "output": 12609,
+      "cost_usd": 1.28
+     }
+    ],
+    "mcp": {
+     "calls": 8,
+     "ms": 11982,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 9619,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 2007,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 250,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 97,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/08-speed-ramp/contact-result.png",
+   "reference_contact": "docs/demo/08-speed-ramp/contact-reference.png",
+   "video": "docs/demo/08-speed-ramp/result.mp4",
+   "metadata": "docs/demo/08-speed-ramp/result-metadata.json",
+   "gif": "docs/demo/08-speed-ramp/result.gif",
+   "thumb": "docs/demo/08-speed-ramp/thumb.png"
+  },
   "page": "docs/demo/demo08.md"
  },
  {
@@ -764,7 +1021,113 @@
   "duration": 12,
   "prompt": "Make a 12-second kinetic typography piece from the lines below, on a slowly moving gradient background. Give each line a different way of arriving: a typewriter, a word-by-word rise, a pop, and a karaoke highlight that walks along the last line.\n\nText to use, in order:\n- type\n- that knows\n- where it is going\n- three tracks.\none caption.",
   "resources": [],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 5,
+   "total": 5,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 12.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=27 cost=$1.48 secs=171",
+   "run": {
+    "turns": 27,
+    "wall_s": 170,
+    "api_s": 165,
+    "cost_usd": 1.48,
+    "tokens": {
+     "input": 36,
+     "cache_read": 1168749,
+     "cache_write": 59549,
+     "output": 12068,
+     "thinking": 5460
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1080,
+      "output": 17,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1228334,
+      "output": 12068,
+      "cost_usd": 1.48
+     }
+    ],
+    "mcp": {
+     "calls": 8,
+     "ms": 4427,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 4208,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 198,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 15,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 6,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/09-kinetic-type/contact-result.png",
+   "reference_contact": "docs/demo/09-kinetic-type/contact-reference.png",
+   "video": "docs/demo/09-kinetic-type/result.mp4",
+   "metadata": "docs/demo/09-kinetic-type/result-metadata.json",
+   "gif": "docs/demo/09-kinetic-type/result.gif",
+   "thumb": "docs/demo/09-kinetic-type/thumb.png"
+  },
   "page": "docs/demo/demo09.md"
  },
  {
@@ -790,7 +1153,143 @@
     "path": "docs/demo/10-logo-sting/resources/sprite_spark.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 89,
+   "passed": 8,
+   "total": 9,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1920, 1080] vs [1920, 1080]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "10.0s vs 10.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": false,
+     "detail": "1 vs 9"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "feature:motionPath",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:sprite",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:motionBlur",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "3 of 3 lines recognisable"
+    }
+   ],
+   "summary": "turns=61 cost=$2.76 secs=365",
+   "run": {
+    "turns": 61,
+    "wall_s": 364,
+    "api_s": 338,
+    "cost_usd": 2.76,
+    "tokens": {
+     "input": 62,
+     "cache_read": 2533486,
+     "cache_write": 81732,
+     "output": 26874,
+     "thinking": 11578
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1100,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2615280,
+      "output": 26874,
+      "cost_usd": 2.76
+     }
+    ],
+    "mcp": {
+     "calls": 25,
+     "ms": 25204,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 12820,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 11501,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 11,
+       "ms": 765,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 3,
+       "ms": 90,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 20,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/10-logo-sting/contact-result.png",
+   "reference_contact": "docs/demo/10-logo-sting/contact-reference.png",
+   "video": "docs/demo/10-logo-sting/result.mp4",
+   "metadata": "docs/demo/10-logo-sting/result-metadata.json",
+   "gif": "docs/demo/10-logo-sting/result.gif",
+   "thumb": "docs/demo/10-logo-sting/thumb.png"
+  },
   "page": "docs/demo/demo10.md"
  },
  {
@@ -826,7 +1325,128 @@
     "path": "docs/demo/11-whip-deck/resources/ui_verse_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 8,
+   "total": 8,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 10.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 2"
+    },
+    {
+     "check": "feature:swaps",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "feature:transitions",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:motionBlur",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "2 of 2 lines recognisable"
+    }
+   ],
+   "summary": "turns=31 cost=$1.53 secs=194",
+   "run": {
+    "turns": 31,
+    "wall_s": 192,
+    "api_s": 182,
+    "cost_usd": 1.53,
+    "tokens": {
+     "input": 32,
+     "cache_read": 1025983,
+     "cache_write": 63350,
+     "output": 15192,
+     "thinking": 6808
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1087,
+      "output": 19,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1089365,
+      "output": 15192,
+      "cost_usd": 1.53
+     }
+    ],
+    "mcp": {
+     "calls": 13,
+     "ms": 9661,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 8707,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 6,
+       "ms": 686,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 246,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 15,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 7,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/11-whip-deck/contact-result.png",
+   "reference_contact": "docs/demo/11-whip-deck/contact-reference.png",
+   "video": "docs/demo/11-whip-deck/result.mp4",
+   "metadata": "docs/demo/11-whip-deck/result-metadata.json",
+   "gif": "docs/demo/11-whip-deck/result.gif",
+   "thumb": "docs/demo/11-whip-deck/thumb.png"
+  },
   "page": "docs/demo/demo11.md"
  },
  {
@@ -841,7 +1461,133 @@
   "duration": 12,
   "prompt": "Make a vertical 1080 by 1920 caption piece, 12 seconds, from the three statements below. Each statement replaces the previous one with a push. Give the first a word-by-word rise, the second a word-by-word fade, and walk a karaoke highlight along the last.\n\nText to use, in order:\n- Ship the story, not the spec.\n- Every word lands on time.\n- Say it once. Ship it everywhere.",
   "resources": [],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 8,
+   "total": 8,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1080, 1920] vs [1080, 1920]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 12.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:swaps",
+     "ok": true,
+     "detail": "2 vs 2"
+    },
+    {
+     "check": "feature:transitions",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "3 of 3 lines recognisable"
+    }
+   ],
+   "summary": "turns=34 cost=$1.84 secs=204",
+   "run": {
+    "turns": 34,
+    "wall_s": 203,
+    "api_s": 200,
+    "cost_usd": 1.84,
+    "tokens": {
+     "input": 46,
+     "cache_read": 1620352,
+     "cache_write": 65653,
+     "output": 14849,
+     "thinking": 6992
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1096,
+      "output": 18,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1686051,
+      "output": 14849,
+      "cost_usd": 1.84
+     }
+    ],
+    "mcp": {
+     "calls": 9,
+     "ms": 2299,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1987,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 300,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 7,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 4,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/12-word-for-word/contact-result.png",
+   "reference_contact": "docs/demo/12-word-for-word/contact-reference.png",
+   "video": "docs/demo/12-word-for-word/result.mp4",
+   "metadata": "docs/demo/12-word-for-word/result-metadata.json",
+   "gif": "docs/demo/12-word-for-word/result.gif",
+   "thumb": "docs/demo/12-word-for-word/thumb.png"
+  },
   "page": "docs/demo/demo12.md"
  },
  {

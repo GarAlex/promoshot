@@ -1,0 +1,204 @@
+{
+  "$schema": "https://raw.githubusercontent.com/GarAlex/promoshot/main/docs/promo.schema.json",
+  "id": "kinetic-type",
+  "name": "Type That Knows",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B0F1E" },
+      { "name": "text", "colorHex": "F4F7FF" },
+      { "name": "text-bg", "colorHex": "0B0F1E" },
+      { "name": "edge", "colorHex": "2A3A5E" },
+      { "name": "caption-outline", "colorHex": "070A14" },
+      { "name": "caption-shadow", "colorHex": "03060F" },
+      { "name": "media-shadow", "colorHex": "03060F" },
+      { "name": "highlight", "colorHex": "FFC960" },
+      { "name": "accent1", "colorHex": "101636" },
+      { "name": "accent2", "colorHex": "2A2F76" },
+      { "name": "accent3", "colorHex": "1B5C87" },
+      { "name": "accent4", "colorHex": "0C1B3A" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [1, 1],
+      "repeat": "mirror",
+      "stops": [
+        { "colorHex": "@accent1", "at": 0 },
+        { "colorHex": "@accent2", "at": 0.36 },
+        { "colorHex": "@accent3", "at": 0.7 },
+        { "colorHex": "@accent4", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 112,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0,
+    "subtitleBackgroundPadding": 26,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.5,
+    "subtitleShadowRadius": 18,
+    "subtitleLeftMargin": 150,
+    "subtitleRightMargin": 150,
+    "subtitleVerticalMargin": 900
+  },
+  "resources": [],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Gradient drift",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": [
+        {
+          "id": "bg-k0",
+          "time": 0,
+          "transitionDuration": 0,
+          "gradient": {
+            "kind": "linear",
+            "start": [-0.25, -0.35],
+            "end": [0.75, 0.65],
+            "repeat": "mirror",
+            "stops": [
+              { "colorHex": "@accent1", "at": 0 },
+              { "colorHex": "@accent2", "at": 0.36 },
+              { "colorHex": "@accent3", "at": 0.7 },
+              { "colorHex": "@accent4", "at": 1 }
+            ]
+          }
+        },
+        {
+          "id": "bg-k1",
+          "time": 12,
+          "transitionDuration": 12,
+          "transitionPercent": 100,
+          "easing": "linear",
+          "gradient": {
+            "kind": "linear",
+            "start": [0.75, 0.65],
+            "end": [1.75, 1.65],
+            "repeat": "mirror",
+            "stops": [
+              { "colorHex": "@accent1", "at": 0 },
+              { "colorHex": "@accent2", "at": 0.36 },
+              { "colorHex": "@accent3", "at": 0.7 },
+              { "colorHex": "@accent4", "at": 1 }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "line1",
+      "name": "Line 1 — typewriter",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.45,
+      "duration": 5.3,
+      "captionText": "type",
+      "fadeOut": 0.4,
+      "captionStyle": {
+        "fontFamily": "monospaced",
+        "fontSize": 124,
+        "textColorHex": "@text",
+        "placement": { "anchor": "center", "offset": [0, -200] },
+        "reveal": { "by": "character", "mode": "wipe", "seconds": 0.72 }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "line2",
+      "name": "Line 2 — word rise",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.85,
+      "duration": 3.9,
+      "captionText": "that knows",
+      "fadeOut": 0.4,
+      "captionStyle": {
+        "fontSize": 116,
+        "placement": { "anchor": "center", "offset": [0, -32] },
+        "reveal": {
+          "by": "word",
+          "mode": "rise",
+          "seconds": 0.8,
+          "unitSeconds": 0.38,
+          "rise": 0.7,
+          "easing": "easeOut"
+        }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "line3",
+      "name": "Line 3 — pop",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 3.4,
+      "duration": 2.35,
+      "captionText": "where it is going",
+      "fadeOut": 0.4,
+      "captionStyle": {
+        "fontSize": 104,
+        "placement": { "anchor": "center", "offset": [0, 148] },
+        "reveal": { "by": "line", "mode": "scale", "seconds": 0.24 }
+      },
+      "keyframes": [
+        { "id": "l3-f0", "time": 0, "fontSize": 122, "transitionDuration": 0 },
+        {
+          "id": "l3-f1",
+          "time": 0.42,
+          "fontSize": 104,
+          "transitionDuration": 0.24,
+          "easing": "easeOut"
+        }
+      ]
+    },
+
+    {
+      "id": "line4",
+      "name": "Line 4 — karaoke",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.3,
+      "duration": 5.7,
+      "captionText": "three tracks.\none caption.",
+      "fadeIn": 0.45,
+      "fadeOut": 0.5,
+      "captionStyle": {
+        "fontSize": 108,
+        "placement": { "anchor": "center", "offset": [0, 0] },
+        "reveal": {
+          "by": "word",
+          "mode": "highlight",
+          "highlightColorHex": "@highlight",
+          "secondsPer": 1.15,
+          "easing": "linear"
+        }
+      },
+      "keyframes": []
+    }
+  ]
+}

@@ -1,0 +1,225 @@
+{
+  "id": "speed-ramp-14s",
+  "name": "Speed Ramp",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 14,
+  "videoDuration": 14,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "07090F" },
+      { "name": "text", "colorHex": "FFFFFF" },
+      { "name": "text-bg", "colorHex": "07090F" },
+      { "name": "edge", "colorHex": "1E2637" },
+      { "name": "caption-outline", "colorHex": "07090F" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "5B8CFF" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "videoCornerRadius": 0,
+    "videoBorderWidth": 0,
+    "videoBorderColorHex": "@edge",
+    "subtitleFontFamily": "rounded",
+    "subtitleFontSize": 76,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 24,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 7,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.55,
+    "subtitleShadowRadius": 14,
+    "subtitleLeftMargin": 140,
+    "subtitleRightMargin": 140
+  },
+  "resources": [
+    {
+      "id": "clip",
+      "kind": "video",
+      "filename": "bbb_test.mp4",
+      "displayName": "Source clip",
+      "addedAt": 0,
+      "duration": 10.0,
+      "trimStart": 0,
+      "trimEnd": 10.0,
+      "videoNaturalWidth": 1920,
+      "videoNaturalHeight": 1080,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "mediaCuts": [
+        {
+          "id": "cut-drift",
+          "name": "The drift (0.5x)",
+          "trimStart": 0.0,
+          "trimEnd": 3.4,
+          "speed": 0.5
+        },
+        {
+          "id": "cut-rush",
+          "name": "The rush (2x)",
+          "trimStart": 3.4,
+          "trimEnd": 9.8,
+          "speed": 2.0
+        },
+        {
+          "id": "cut-hold",
+          "name": "The hold (0.75x)",
+          "trimStart": 5.95,
+          "trimEnd": 10.0,
+          "speed": 0.75
+        }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 14,
+      "keyframes": []
+    },
+    {
+      "id": "seg-drift",
+      "name": "0.5x drift",
+      "sortIndex": 1,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 6.8,
+      "resourceID": "clip",
+      "mediaCutID": "cut-drift",
+      "fadeIn": 0.4,
+      "keyframes": [
+        {
+          "id": "d0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "mode": "fill", "anchor": "center" }
+        }
+      ]
+    },
+    {
+      "id": "seg-rush",
+      "name": "2x rush",
+      "sortIndex": 2,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 6.1,
+      "duration": 3.2,
+      "resourceID": "clip",
+      "mediaCutID": "cut-rush",
+      "fadeIn": 0.7,
+      "keyframes": [
+        {
+          "id": "r0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "mode": "fill", "anchor": "center" }
+        }
+      ]
+    },
+    {
+      "id": "seg-hold",
+      "name": "0.75x hold",
+      "sortIndex": 3,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 8.6,
+      "duration": 5.4,
+      "resourceID": "clip",
+      "mediaCutID": "cut-hold",
+      "fadeIn": 0.7,
+      "fadeOut": 0.5,
+      "keyframes": [
+        {
+          "id": "h0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "mode": "fill", "anchor": "center" }
+        }
+      ]
+    },
+    {
+      "id": "cap-drift",
+      "name": "Caption 0.5x",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.5,
+      "duration": 5.3,
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "captionText": "0.5× — the drift",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -84] },
+        "alignment": "center"
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap-rush",
+      "name": "Caption 2x",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.9,
+      "duration": 1.6,
+      "fadeIn": 0.25,
+      "fadeOut": 0.25,
+      "captionText": "2× — the rush",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -84] },
+        "alignment": "center"
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap-hold",
+      "name": "Caption 0.75x",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 9.4,
+      "duration": 2.3,
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "captionText": "0.75× — the hold",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -84] },
+        "alignment": "center"
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap-closer",
+      "name": "Closer",
+      "sortIndex": 7,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 12.1,
+      "duration": 1.9,
+      "fadeIn": 0.4,
+      "fadeOut": 0.5,
+      "captionText": "One recording.\nThree cuts, three rates.",
+      "captionStyle": {
+        "fontSize": 62,
+        "placement": { "anchor": "center", "offset": [0, 0] },
+        "alignment": "center"
+      },
+      "keyframes": []
+    }
+  ]
+}

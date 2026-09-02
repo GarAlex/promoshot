@@ -24,7 +24,55 @@ A framed recording toured by the viewport, paced by synthesized narration, capti
 
 ## What the agent made
 
-*Not run yet.*
+Score **100%** (9 of 9 rubric checks).
+
+| the agent's work | |
+|---|---|
+| turns | 24 |
+| wall time | 3 min 00 s (API 2 min 46 s) |
+| cost | $1.37 |
+| tokens in | 887k (826k cache read, 61k cache write) |
+| tokens out | 14k (6k thinking) |
+| claude-haiku-4-5 | 1k in, 15 out, $0.00 |
+| claude-opus-5 | 887k in, 14k out, $1.37 |
+
+| MCP tool | calls | time |
+|---|---|---|
+| promo_render_video | 1 | 7 s |
+| promo_render_frames | 1 | 6 s |
+| promo_media_probe | 2 | 0 s |
+| promo_inspect | 1 | 0 s |
+| promo_validate | 1 | 0 s |
+| promo_speak | 1 | 0 s |
+| promo_voices | 1 (1 refused) | 0 s |
+| promo_schema | 1 | 0 s |
+| promo_schema_full | 1 | 0 s |
+| promo_workspace | 1 | 0 s |
+| **all** | 11 | 14 s |
+
+<img src="07-narrated-tour/result.gif" width="480" alt="the result, looping">
+
+Six moments:
+
+<img src="07-narrated-tour/contact-result.png" width="800" alt="six moments of the result">
+
+[video](07-narrated-tour/result.mp4) · [the project it wrote](07-narrated-tour/result-metadata.json)
+
+| check | | detail |
+|---|---|---|
+| canvas | ✓ | [1920, 1080] vs [1920, 1080] |
+| duration | ✓ | 21.0s vs 21.5s |
+| kind:background | ✓ | 1 vs 1 |
+| kind:video | ✓ | 1 vs 1 |
+| kind:audio | ✓ | 5 vs 5 |
+| kind:caption | ✓ | 5 vs 5 |
+| feature:viewport | ✓ | True |
+| feature:narration | ✓ | True |
+| phrases | ✓ | 5 of 5 lines recognisable |
+
+## The hand-built reference, same moments
+
+<img src="07-narrated-tour/contact-reference.png" width="800" alt="six moments of the reference">
 
 ---
 

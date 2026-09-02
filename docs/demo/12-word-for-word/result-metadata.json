@@ -1,0 +1,196 @@
+{
+  "id": "word-for-word",
+  "name": "Word for Word",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1080,
+    "canvasHeight": 1920,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B0E1A" },
+      { "name": "text", "colorHex": "F6F8FF" },
+      { "name": "text-bg", "colorHex": "0B0E1A" },
+      { "name": "edge", "colorHex": "22304D" },
+      { "name": "caption-outline", "colorHex": "05070F" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "FFC24B" },
+      { "name": "accent1", "colorHex": "0B0E1A" },
+      { "name": "accent2", "colorHex": "17224A" },
+      { "name": "accent3", "colorHex": "10182F" },
+      { "name": "accent4", "colorHex": "1E2C5E" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [1, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@accent1", "at": 0 },
+        { "colorHex": "@accent2", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 94,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 20,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.45,
+    "subtitleShadowRadius": 18,
+    "subtitleLeftMargin": 60,
+    "subtitleRightMargin": 60,
+    "subtitleVerticalMargin": 860
+  },
+  "resources": [
+    {
+      "id": "cap1",
+      "kind": "caption",
+      "filename": "",
+      "displayName": "Statement 1",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "captionText": "Ship the story,\nnot the spec.",
+      "captionStyle": {
+        "placement": { "anchor": "center", "offset": [0, -40] },
+        "reveal": {
+          "by": "word",
+          "mode": "rise",
+          "rise": 0.7,
+          "seconds": 1.8,
+          "easing": "easeOut"
+        }
+      }
+    },
+    {
+      "id": "cap2",
+      "kind": "caption",
+      "filename": "",
+      "displayName": "Statement 2",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "captionText": "Every word\nlands on time.",
+      "captionStyle": {
+        "placement": { "anchor": "center", "offset": [0, -40] },
+        "reveal": {
+          "by": "word",
+          "mode": "fade",
+          "seconds": 1.7,
+          "easing": "easeOut"
+        }
+      }
+    },
+    {
+      "id": "cap3",
+      "kind": "caption",
+      "filename": "",
+      "displayName": "Statement 3",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "captionText": "Say it once.\nShip it everywhere.",
+      "captionStyle": {
+        "placement": { "anchor": "center", "offset": [0, -40] },
+        "reveal": {
+          "by": "word",
+          "mode": "highlight",
+          "highlightColorHex": "@highlight",
+          "seconds": 3.0,
+          "easing": "easeInOut"
+        }
+      }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": [
+        {
+          "id": "bg0",
+          "time": 0,
+          "transitionDuration": 0,
+          "gradient": {
+            "kind": "linear",
+            "start": [0, 0],
+            "end": [1, 1],
+            "repeat": "clamp",
+            "stops": [
+              { "colorHex": "@accent1", "at": 0 },
+              { "colorHex": "@accent2", "at": 1 }
+            ]
+          }
+        },
+        {
+          "id": "bg1",
+          "time": 12,
+          "transitionDuration": 12,
+          "easing": "easeInOut",
+          "gradient": {
+            "kind": "linear",
+            "start": [0, 0],
+            "end": [1, 1],
+            "repeat": "clamp",
+            "stops": [
+              { "colorHex": "@accent3", "at": 0 },
+              { "colorHex": "@accent4", "at": 1 }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "line",
+      "name": "Statements",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "cap1",
+      "fadeOut": 0.4,
+      "keyframes": [
+        {
+          "id": "s2",
+          "time": 4.0,
+          "transitionDuration": 0,
+          "resourceID": "cap2",
+          "transition": {
+            "kind": "push",
+            "from": "right",
+            "duration": 0.55,
+            "easing": "easeInOut"
+          }
+        },
+        {
+          "id": "s3",
+          "time": 8.0,
+          "transitionDuration": 0,
+          "resourceID": "cap3",
+          "transition": {
+            "kind": "push",
+            "from": "right",
+            "duration": 0.55,
+            "easing": "easeInOut"
+          }
+        }
+      ]
+    }
+  ]
+}
