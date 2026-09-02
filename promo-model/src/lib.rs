@@ -5,6 +5,7 @@
 
 pub mod geometry;
 pub mod inventory;
+pub mod nesting;
 pub mod project;
 
 pub use geometry::{Point, Rect, Size};
@@ -542,6 +543,12 @@ mod schema_doc_tests {
             pixel_height: Some(2532.0),
             frame: Some(full_frame()),
             background: None,
+            composition: Some(Composition {
+                canvas_width: 1920.0,
+                canvas_height: 1080.0,
+                background_color_hex: Some("0E1726".into()),
+                layers: vec![],
+            }),
             palette: None,
             looped: Some(true),
             extra: serde_json::Map::new(),
@@ -635,6 +642,7 @@ mod schema_doc_tests {
     /// Enum wire values an author has to spell exactly. Extend alongside the
     /// enums; every entry must appear in schema.md verbatim.
     const VALUES: &[&str] = &[
+        "composition",
         // Layer and resource kinds.
         "background",
         "video",

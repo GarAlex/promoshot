@@ -49,6 +49,13 @@ metadata.json (only the fields that matter for authoring):
       "imageCuts": [], "disabledAudioTrackIndices": [],
       "path": { "start": [0, 0], "end": [100, 0],
                 "controls": [[50, -60]] } },
+    { "id": "<uuid>", "kind": "composition", "filename": "",
+      "displayName": "Title card", "addedAt": 0, "duration": 4,
+      "pixelWidth": 1920, "pixelHeight": 1080,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "composition": { "canvasWidth": 1920, "canvasHeight": 1080,
+                       "backgroundColorHex": "0E1726",
+                       "layers": [ "...ordinary layers, referencing THIS project's resources by id..." ] } },
     { "id": "<uuid>", "kind": "image", "filename": "walk.png",
       "displayName": "Walk", "addedAt": 0,
       "imageCuts": [], "disabledAudioTrackIndices": [],
@@ -731,3 +738,21 @@ Semantics worth knowing:
   promo_speak to synthesize it; the app fills in filename and duration.
   `renderedHash` is written by the app — do not set it by hand, it is
   what stops unchanged text from being paid for twice.
+
+Nested compositions (rung 19). A **composition is a resource**
+(`"kind": "composition"`) and it is shown by an ordinary `video`-kind
+layer: trims, speed, loop, `beyondEnd`, media cuts, keyframes, placement
+rules, transitions and the audio envelope all run the composition's
+clock exactly as they run a clip's. The resource's `duration` is the
+composition's length; its `pixelWidth`/`pixelHeight` mirror the nested
+canvas so a placement rule resolves without knowing the kind. The nested
+`composition.layers` are ordinary layers of every kind and reference
+**this project's resources by id** — one `Resources/` folder, one
+library, one inventory; a nested layer may itself show a composition.
+Two rules keep the recursion finite, and the reader refuses a file that
+breaks them: a composition may not contain itself, directly or through
+others, and the nesting is at most eight deep. `backgroundColorHex` is
+the plate under the nested layers, transparent when absent; typography
+and the palette are the parent's. A project with a composition carries
+`minReaderVersion: 19` — kinds decode strictly, so an older binary must
+refuse the file rather than fail halfway through a decode.

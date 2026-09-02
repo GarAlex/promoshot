@@ -111,7 +111,7 @@ new projects.
   `resourceId`; init's background layer is always "bg") and only what
   you leave unnamed gets a canonical UUID. Never reuse a spelling:
   validate names the collision.
-- **Stamp `"minReaderVersion": 18`** and think no more about it.
+- **Stamp `"minReaderVersion": 19`** and think no more about it.
 - **Measure what you place.** A placed image resource wants
   `pixelWidth`/`pixelHeight` (videos: `videoNaturalWidth`/`Height`) or
   the rule anchors a square guess — validate says so. `promo_upsert_layer`

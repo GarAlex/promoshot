@@ -58,6 +58,17 @@ impl Project {
             .into_iter()
             .map(|problem| problem.to_string())
             .collect();
+        // Nested compositions: a composition that contains itself, or nests
+        // deeper than the cap, cannot be rendered by recursion — refuse the
+        // file, as a decode failure would. Lesser problems (a nested layer
+        // naming an unknown resource) are warnings `validate` lists.
+        let mut attachment_problems = attachment_problems;
+        for problem in promo_model::nesting::problems(&meta) {
+            if problem.contains("contains itself") || problem.contains("nests deeper than") {
+                return Err(format!("{}: {problem}", meta_path.display()));
+            }
+            attachment_problems.push(problem);
+        }
         let resolved = promo_model::effective_resources(&meta, &Self::listing(dir));
         Ok(Self {
             dir: dir.to_path_buf(),

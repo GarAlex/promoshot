@@ -114,6 +114,10 @@ strict_enum!(
         // settings.palette stays what every resolver reads — the app
         // materializes the selected palette resource into it on open/save.
         (Palette, "palette"),
+        // A nested composition (rung 19): a document inside the document,
+        // shown by a video-kind layer — see `Composition`. The same strict
+        // rule as every kind before it.
+        (Composition, "composition"),
     ]
 );
 tolerant_enum!(
@@ -2177,6 +2181,25 @@ impl LayerRelease {
 
 tolerant_enum!(ReleaseMoment, End, [(Start, "start"), (End, "end"),]);
 
+/// A composition inside a composition — the document a COMPOSITION-kind
+/// resource carries. Layers here are ordinary [`ProjectLayer`]s of every
+/// kind and reference the PARENT project's resources by id: one media
+/// folder, one library, one inventory. A nested layer may itself show a
+/// composition resource; `nesting::problems` refuses a composition that
+/// contains itself and a nesting deeper than [`nesting::MAX_DEPTH`].
+/// Settings (typography, palette) are the parent's. The plate under the
+/// nested layers is `backgroundColorHex`, or transparent when absent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Composition {
+    pub canvas_width: f64,
+    pub canvas_height: f64,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub background_color_hex: Option<String>,
+    #[serde(default)]
+    pub layers: Vec<ProjectLayer>,
+}
+
 /// `audioGain` (0…4) collapses into `volume` (0…1) when `volume` is absent,
 /// and `disabledAudioTrackIndices` is deduped / filtered / sorted.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
@@ -2217,6 +2240,15 @@ pub struct ProjectResource {
     /// `settings.palette`, which a selected palette materializes into.
     #[serde(default, skip_serializing_if = "is_none")]
     pub palette: Option<Vec<PaletteColor>>,
+    /// A COMPOSITION-kind resource's document: its own canvas and clock,
+    /// ordinary layers inside that reference THIS project's resources by
+    /// id. Shown by a video-kind layer, whose trims, speed, loop and cuts
+    /// run the composition's clock exactly as they run a clip's; the
+    /// resource's `duration` is the composition's length and its
+    /// `pixelWidth`/`pixelHeight` mirror the canvas so placement rules
+    /// resolve without knowing the kind.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub composition: Option<Composition>,
     /// How the renderer samples this resource. `None` is smooth, which is
     /// right for photographs and screen captures and wrong for pixel art.
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2286,6 +2318,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     palette: Option<Vec<PaletteColor>>,
     #[serde(default)]
+    composition: Option<Composition>,
+    #[serde(default)]
     caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(default)]
     drawing: Option<DrawingDocument>,
@@ -2342,6 +2376,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             kind: w.kind,
             background: w.background,
             palette: w.palette,
+            composition: w.composition,
             media_cuts: w.media_cuts.unwrap_or_default(),
             speed: w.speed,
             filename: w.filename,
@@ -2475,6 +2510,7 @@ impl ProjectResource {
         ProjectResource {
             background: None,
             palette: None,
+            composition: None,
             id: String::new(),
             kind,
             media_cuts: Vec::new(),
@@ -2540,6 +2576,15 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 19 is a COMPOSITION resource — a document inside the document.
+        // Kinds decode strictly, so an older binary refuses the file.
+        if resources
+            .iter()
+            .any(|r| r.kind == ProjectResourceKind::Composition)
+        {
+            return 19;
+        }
 
         // 18 is caption typography said in its own words: a keyframe
         // `fontSize`, or a caption `placement`. Saved by an older reader the

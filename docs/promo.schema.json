@@ -164,6 +164,36 @@
       ],
       "type": "string"
     },
+    "Composition": {
+      "properties": {
+        "backgroundColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canvasHeight": {
+          "format": "double",
+          "type": "number"
+        },
+        "canvasWidth": {
+          "format": "double",
+          "type": "number"
+        },
+        "layers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectLayer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "canvasWidth",
+        "canvasHeight"
+      ],
+      "type": "object"
+    },
     "CompositionSettings": {
       "properties": {
         "backgroundColorHex": {
@@ -1655,6 +1685,16 @@
             }
           ]
         },
+        "composition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Composition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "disabledAudioTrackIndices": {
           "items": {
             "format": "int64",
@@ -1845,7 +1885,8 @@
         "audio",
         "path",
         "background",
-        "palette"
+        "palette",
+        "composition"
       ],
       "type": "string"
     },

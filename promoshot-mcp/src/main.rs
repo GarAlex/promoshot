@@ -1002,7 +1002,7 @@ mod tests {
             assert!(skill.contains(name), "the skill never mentions `{name}`");
         }
         assert!(
-            skill.contains("minReaderVersion\": 18"),
+            skill.contains("minReaderVersion\": 19"),
             "the stamp the skill teaches must be the current one"
         );
         assert!(

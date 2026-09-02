@@ -479,6 +479,48 @@ mod tests {
         assert_eq!(opts.time, Some(2.0));
     }
 
+    /// Nested compositions: a composition that contains itself cannot be
+    /// rendered by recursion, so the file refuses to OPEN — as a decode
+    /// failure would; a nested layer naming an unknown resource is a
+    /// warning `validate` lists, like any other quiet correction.
+    #[test]
+    fn a_composition_containing_itself_refuses_to_open_and_an_unknown_nested_reference_warns() {
+        let dir = std::env::temp_dir().join(format!("promo-nest-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc = |inner_resource: &str| {
+            format!(
+                r#"{{"id":"P","name":"Nest","createdAt":0,"state":"recorded",
+                "minReaderVersion":19,"trimStart":0,"trimEnd":4,"videoDuration":4,
+                "subtitles":[],
+                "compositionSettings":{{"canvasWidth":1280,"canvasHeight":720}},
+                "resources":[{{"id":"A","kind":"composition","filename":"","displayName":"Title",
+                  "addedAt":0,"duration":4,"pixelWidth":1280,"pixelHeight":720,"imageCuts":[],
+                  "composition":{{"canvasWidth":1280,"canvasHeight":720,"layers":[
+                    {{"id":"L","name":"inner","sortIndex":0,"kind":"video","isEnabled":true,
+                     "startTime":0,"duration":4,"resourceID":"{inner_resource}","keyframes":[]}}]}}}}],
+                "layers":[{{"id":"P1","name":"Title","sortIndex":0,"kind":"video","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"A","keyframes":[]}}]}}"#
+            )
+        };
+        std::fs::write(dir.join("metadata.json"), doc("A")).unwrap();
+        let err = Project::open(&dir)
+            .err()
+            .expect("a self-containing composition is refused");
+        assert!(err.contains("contains itself"), "{err}");
+
+        std::fs::write(dir.join("metadata.json"), doc("ghost")).unwrap();
+        let project = Project::open(&dir).expect("opens with a warning");
+        let out = validate(&project, &Options::parse(&["--json".into()]).unwrap()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let warnings = json["warnings"].as_array().unwrap();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.as_str().unwrap().contains("unknown resource ghost")),
+            "{warnings:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     /// Machine output is one parseable object per command — validate's
     /// warnings as an array, inspect's facts as fields — because "output
     /// defaults to prose" is how a tool stays unscriptable.
