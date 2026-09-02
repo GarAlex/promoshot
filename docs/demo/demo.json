@@ -3313,7 +3313,130 @@
     "path": "docs/demo/24-cuts/resources/ui_verse_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 88,
+   "passed": 7,
+   "total": 8,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "15.0s vs 14.6s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:swaps",
+     "ok": false,
+     "detail": "8 vs 10"
+    },
+    {
+     "check": "feature:transitions",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "5 of 5 lines recognisable"
+    }
+   ],
+   "summary": "turns=33 cost=$1.60 secs=176",
+   "run": {
+    "turns": 33,
+    "wall_s": 175,
+    "api_s": 168,
+    "cost_usd": 1.6,
+    "tokens": {
+     "input": 36,
+     "cache_read": 1183830,
+     "cache_write": 66079,
+     "output": 13756,
+     "thinking": 4747
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1202,
+      "output": 14,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1249945,
+      "output": 13756,
+      "cost_usd": 1.6
+     }
+    ],
+    "mcp": {
+     "calls": 12,
+     "ms": 6167,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 5137,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 471,
+       "errors": 1
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 398,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 5,
+       "ms": 154,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 7,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/24-cuts/contact-result.png",
+   "reference_contact": "docs/demo/24-cuts/contact-reference.png",
+   "video": "docs/demo/24-cuts/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/24-cuts.mp4",
+   "video_hd_bytes": 903703,
+   "metadata": "docs/demo/24-cuts/result-metadata.json",
+   "gif": "docs/demo/24-cuts/result.gif",
+   "thumb": "docs/demo/24-cuts/thumb.png"
+  },
   "page": "docs/demo/demo24.md"
  }
 ]

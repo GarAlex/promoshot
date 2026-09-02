@@ -1,6 +1,6 @@
 # promoshot
 
-**See it work:** [demo.md](demo.md) — twenty-three prompts, each given to a
+**See it work:** [demo.md](demo.md) — twenty-four prompts, each given to a
 fresh agent with only the skill and the MCP, its result beside the
 hand-built reference. The suite is in [demos/](demos/README.md).
 

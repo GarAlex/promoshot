@@ -27,7 +27,51 @@ Five screenshots on one layer, swapped through a blur dissolve, a zoom, a flash,
 
 ## What the agent made
 
-*Not run yet.*
+Score **88%** (7 of 8 rubric checks).
+
+| the agent's work | |
+|---|---|
+| turns | 33 |
+| wall time | 2 min 55 s (API 2 min 48 s) |
+| cost at API list price | $1.60 — on a Claude subscription this is plan usage, not a bill |
+| tokens in | 1.2M (1.2M cache read, 66k cache write) |
+| tokens out | 14k (5k thinking) |
+| claude-haiku-4-5 | 1k in, 14 out, $0.00 |
+| claude-opus-5 | 1.2M in, 14k out, $1.60 |
+
+| MCP tool | calls | time |
+|---|---|---|
+| promo_render_video | 1 | 5 s |
+| promo_validate | 2 (1 refused) | 0 s |
+| promo_render_frames | 1 | 0 s |
+| promo_media_probe | 5 | 0 s |
+| promo_inspect | 1 | 0 s |
+| promo_schema | 1 | 0 s |
+| promo_schema_full | 1 | 0 s |
+| **all** | 12 | 6 s |
+
+<img src="24-cuts/result.gif" width="480" alt="the result, looping">
+
+Six moments:
+
+<img src="24-cuts/contact-result.png" width="800" alt="six moments of the result">
+
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/24-cuts.mp4)** (1280 wide, 0.9 MB) · [small copy](24-cuts/result.mp4) · [the project it wrote](24-cuts/result-metadata.json)
+
+| check | | detail |
+|---|---|---|
+| duration | ✓ | 15.0s vs 14.6s |
+| kind:background | ✓ | 1 vs 1 |
+| kind:image | ✓ | 1 vs 1 |
+| kind:caption | ✓ | 1 vs 1 |
+| feature:gradient | ✓ | True |
+| feature:swaps | ✗ | 8 vs 10 |
+| feature:transitions | ✓ | True |
+| phrases | ✓ | 5 of 5 lines recognisable |
+
+## The hand-built reference, same moments
+
+<img src="24-cuts/contact-reference.png" width="800" alt="six moments of the reference">
 
 ---
 
