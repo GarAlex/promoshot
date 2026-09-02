@@ -550,7 +550,7 @@ Semantics worth knowing:
   about the other.
 - `transitionIn` / `transitionOut` are how a layer ENTERS and LEAVES
   when a plain fade is not it: { "kind": "wipe", "from": "left",
-  "duration": 0.5, "easing": "easeOut" }. Five kinds. `wipe` reveals
+  "duration": 0.5, "easing": "easeOut" }. Ten kinds. `wipe` reveals
   the picture from an edge without moving it — the picture stays put
   and its edge travels. `slide` brings it in from beyond that edge
   of the FRAME, so a layer already near an edge still starts fully
@@ -558,7 +558,16 @@ Semantics worth knowing:
   the opposite side — it only has something to push at a resource
   swap, so at a layer's own edge it behaves as a slide. `scale`
   grows the layer into place, with a short fade so it does not pop.
-  `fade` is fadeIn/fadeOut as an object. `from` is left / right /
+  `fade` is fadeIn/fadeOut as an object. Five more ride the image
+  effects (rung 25 — an older reader plays each as a fade): `blurDissolve`
+  fades with a blur that sharpens as it arrives (and, at a swap, blurs
+  what it replaces); `zoom` comes in from 35% larger, blurred, and at a
+  swap pushes the old material out through the same zoom; `flash` dips
+  through white; `glitch` pops in under a burst of torn bands and
+  split colour channels; `dip` goes through black — hidden for the
+  first half, fading in over the second, the old material fading out
+  over the first. A project using any of the five carries
+  `minReaderVersion: 25`. `from` is left / right /
   top / bottom, the edge the motion starts at; on the way OUT what
   remains collapses towards it. Absent, a wipe comes from the left,
   a slide from the bottom, a push from the right; fade and scale

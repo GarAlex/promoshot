@@ -2679,7 +2679,12 @@
         "wipe",
         "slide",
         "push",
-        "scale"
+        "scale",
+        "blurDissolve",
+        "zoom",
+        "flash",
+        "glitch",
+        "dip"
       ],
       "type": "string"
     },

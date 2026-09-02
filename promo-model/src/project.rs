@@ -361,8 +361,30 @@ tolerant_enum!(
         (Slide, "slide"),
         (Push, "push"),
         (Scale, "scale"),
+        // Rung 25: the kinds that ride the image effects. An older reader
+        // plays each as a fade and would save it as one.
+        (BlurDissolve, "blurDissolve"),
+        (Zoom, "zoom"),
+        (Flash, "flash"),
+        (Glitch, "glitch"),
+        (Dip, "dip"),
     ]
 );
+
+impl TransitionKind {
+    /// The kinds an older reader (rung 24 and before) would turn into a
+    /// fade on its next save.
+    pub fn is_rung_25(self) -> bool {
+        matches!(
+            self,
+            TransitionKind::BlurDissolve
+                | TransitionKind::Zoom
+                | TransitionKind::Flash
+                | TransitionKind::Glitch
+                | TransitionKind::Dip
+        )
+    }
+}
 tolerant_enum!(
     TransitionEdge,
     Left,
@@ -2766,6 +2788,18 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 25 is a transition of one of the newer kinds — blur dissolve,
+        // zoom, flash, glitch, dip. An older reader plays it as a fade and
+        // saves it as one.
+        let newer = |t: &Option<LayerTransition>| t.as_ref().is_some_and(|t| t.kind.is_rung_25());
+        if layers.iter().any(|l| {
+            newer(&l.transition_in)
+                || newer(&l.transition_out)
+                || l.keyframes.iter().any(|k| newer(&k.transition))
+        }) {
+            return 25;
+        }
+
         // 24 is image effects on a layer or its keyframes. Dropped by an
         // older reader's save, the blur, glow and vignette are simply gone.
         if layers
@@ -3550,6 +3584,26 @@ mod placement_model_tests {
             meta(&layer("")).minimum_reader_version(),
             "an empty block claims nothing"
         );
+        // 25: a transition of a newer kind, on a keyframe swap or a layer's edge.
+        assert_eq!(
+            meta(&layer(r#","transition":{"kind":"glitch","duration":0.5}"#))
+                .minimum_reader_version(),
+            25
+        );
+        assert_eq!(
+            meta(&layer(r#","transition":{"kind":"wipe","duration":0.5}"#))
+                .minimum_reader_version(),
+            9,
+            "the five original kinds stay at 9"
+        );
+        let mut edged = meta(&layer(""));
+        edged.layers.as_mut().unwrap()[0].transition_in = Some(LayerTransition {
+            kind: TransitionKind::BlurDissolve,
+            from: None,
+            duration: 0.4,
+            easing: None,
+        });
+        assert_eq!(edged.minimum_reader_version(), 25);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

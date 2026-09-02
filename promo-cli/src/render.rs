@@ -1610,6 +1610,110 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The five newer transition kinds (rung 25), mid-way through a
+    /// layer's own entry, each against a plain fade at the same instant:
+    /// the blur dissolve softens the plate's edge, the zoom moves it, the
+    /// flash lifts the black half, the glitch pulls the channels apart,
+    /// and the dip is still dark where the fade already shows.
+    #[test]
+    fn the_newer_transitions_read_mid_way() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-trans-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        // White for the left quarter, black beyond: an edge at x = 16.
+        let (w, h) = (64u32, 48u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 4;
+                let v = if x < 16 { 255 } else { 0 };
+                rgba[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+            }
+        }
+        write_png(&dir.join("Resources/plate.png"), &rgba, w, h).unwrap();
+        let doc = |kind: &str| {
+            format!(
+                r#"{{"id":"P","name":"Tr","createdAt":0,"state":"recorded","minReaderVersion":25,
+                "trimStart":0,"trimEnd":3,"videoDuration":3,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":64,"canvasHeight":48,"backgroundColorHex":"000000"}},
+                "resources":[{{"id":"I","kind":"image","filename":"plate.png","displayName":"plate","addedAt":0,
+                  "pixelWidth":64,"pixelHeight":48,"imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                "layers":[{{"id":"L","name":"plate","sortIndex":0,"kind":"image","isEnabled":true,
+                  "startTime":0,"duration":3,"resourceID":"I",
+                  "transitionIn":{{"kind":"{kind}","duration":1.0}},"keyframes":[]}}]}}"#
+            )
+        };
+        let render = |json: &str, at: f64| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 64, 48).expect("renderer");
+            renderer.frame_bgra(at).expect("frame")
+        };
+        let px = |frame: &[u8], x: usize, y: usize| -> [u8; 3] {
+            let i = (y * 64 + x) * 4;
+            [frame[i + 2], frame[i + 1], frame[i]]
+        };
+        let fade = render(&doc("fade"), 0.5);
+        assert!(
+            px(&fade, 14, 24)[1] > 100 && px(&fade, 18, 24)[1] < 10,
+            "the fade twin: a hard edge at half opacity — {:?} {:?} (row: {:?})",
+            px(&fade, 14, 24),
+            px(&fade, 18, 24),
+            (0..64)
+                .step_by(4)
+                .map(|x| px(&fade, x, 24)[1])
+                .collect::<Vec<_>>()
+        );
+
+        // The softness scales with the canvas: 28 px at 900 tall is 1.5 px
+        // here, so the tell is the texel beside the edge, not two away.
+        let soft = render(&doc("blurDissolve"), 0.5);
+        assert!(
+            px(&soft, 16, 24)[1] > px(&fade, 16, 24)[1] + 8,
+            "blur dissolve softens the edge: {:?} vs fade {:?}",
+            px(&soft, 16, 24),
+            px(&fade, 16, 24)
+        );
+
+        let zoom = render(&doc("zoom"), 0.5);
+        // 17.5% larger about the centre: the edge at 16 moves to about 13.
+        assert!(
+            px(&zoom, 15, 24)[1] < 60,
+            "zoom moved the edge inward: {:?}",
+            px(&zoom, 15, 24)
+        );
+
+        let flash = render(&doc("flash"), 0.5);
+        assert!(
+            px(&flash, 40, 24)[1] > 60,
+            "flash lifts the black half: {:?}",
+            px(&flash, 40, 24)
+        );
+
+        let glitch = render(&doc("glitch"), 0.5);
+        let split = (0..48).any(|y| {
+            let p = px(&glitch, 15, y);
+            (p[0] as i32 - p[2] as i32).abs() > 40
+        });
+        assert!(split, "glitch pulls the channels apart at the edge");
+
+        let dip = render(&doc("dip"), 0.25);
+        assert!(
+            px(&dip, 8, 24)[1] < 5,
+            "dip is still dark at a quarter: {:?}",
+            px(&dip, 8, 24)
+        );
+        let dip_late = render(&doc("dip"), 0.75);
+        assert!(
+            px(&dip_late, 8, 24)[1] > 100,
+            "and half way in by three quarters"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// B3.4 (LUT): an inverting cube on the plate turns red into cyan and
     /// green into magenta; the unlutted twin keeps its colours; amount 0
     /// is the twin.

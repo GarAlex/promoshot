@@ -1820,7 +1820,7 @@ impl PreviewEngine {
                         // A push shoves the outgoing material out the far
                         // side; every other kind leaves it where it is and
                         // arrives over it.
-                        apply_effect(&mut quad, swap.departing, canvas);
+                        apply_effect(&mut quad, swap.departing, canvas, time);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
@@ -1831,7 +1831,7 @@ impl PreviewEngine {
                 {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
                     if let Some(swap) = swap.as_ref() {
-                        apply_effect(&mut quad, swap.effect, canvas);
+                        apply_effect(&mut quad, swap.effect, canvas, time);
                     }
                     apply_transition(&mut quad, layer, time, canvas);
 
@@ -1885,7 +1885,12 @@ impl PreviewEngine {
                                 };
                                 let full_height = piece.rect[3];
                                 crop_to_band(&mut piece, band.uv);
-                                apply_effect(&mut piece, band.effect_for(full_height), canvas);
+                                apply_effect(
+                                    &mut piece,
+                                    band.effect_for(full_height),
+                                    canvas,
+                                    time,
+                                );
                                 quads.push(piece);
                                 used.push(piece_id);
                             }
@@ -2042,7 +2047,7 @@ impl PreviewEngine {
                     ) {
                         quad.rotation_deg = tl::layer_rotation(layer, time);
                         quad.opacity = tl::layer_opacity(layer, time) as f32;
-                        apply_effect(&mut quad, swap.departing, canvas);
+                        apply_effect(&mut quad, swap.departing, canvas, time);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
@@ -2055,7 +2060,7 @@ impl PreviewEngine {
                     quad.rotation_deg = tl::layer_rotation(layer, time);
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
                     if let Some(swap) = swap.as_ref() {
-                        apply_effect(&mut quad, swap.effect, canvas);
+                        apply_effect(&mut quad, swap.effect, canvas, time);
                     }
                     apply_transition(&mut quad, layer, time, canvas);
                     quads.push(quad);
@@ -2112,7 +2117,7 @@ impl PreviewEngine {
                         &used,
                         None,
                     ) {
-                        apply_effect(&mut quad, swap.departing, canvas);
+                        apply_effect(&mut quad, swap.departing, canvas, time);
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
@@ -2150,7 +2155,7 @@ impl PreviewEngine {
             used.push(frame_id);
             if let Some(swap) = swap.as_ref() {
                 // The incoming material arrives over it.
-                apply_effect(&mut quad, swap.effect, canvas);
+                apply_effect(&mut quad, swap.effect, canvas, time);
             }
             // After the border, so a wiped edge cuts the frame too rather
             // than leaving a stroke drawn around nothing.
@@ -2868,16 +2873,57 @@ fn apply_transition(
     time: f64,
     canvas: Size,
 ) {
-    apply_effect(quad, tl::transition::effect(layer, time), canvas);
+    // The opacity is already in the quad — `layer_opacity` multiplies the
+    // layer's own transition in — so only the rest of the effect applies
+    // here; multiplying it again made every fade-in quadratic.
+    apply_effect_with(
+        quad,
+        tl::transition::effect(layer, time),
+        canvas,
+        time,
+        false,
+    );
 }
 
-/// The geometry half, for an effect that came from somewhere other than the
-/// layer's own edges — a resource swap, say.
-fn apply_effect(quad: &mut SceneQuad, effect: tl::transition::Effect, canvas: Size) {
+/// The whole effect, for one that came from somewhere other than the
+/// layer's own edges — a resource swap, whose opacity nothing else has
+/// applied. `time` seeds the glitch, so its tear is new every frame.
+fn apply_effect(quad: &mut SceneQuad, effect: tl::transition::Effect, canvas: Size, time: f64) {
+    apply_effect_with(quad, effect, canvas, time, true);
+}
+
+fn apply_effect_with(
+    quad: &mut SceneQuad,
+    effect: tl::transition::Effect,
+    canvas: Size,
+    time: f64,
+    with_opacity: bool,
+) {
     if effect.is_identity() {
         return;
     }
-    quad.opacity *= effect.opacity as f32;
+    if with_opacity {
+        quad.opacity *= effect.opacity as f32;
+    }
+    // The blurring kinds: the wider of the transition's softness and the
+    // layer's own blur, scaled to this canvas.
+    if effect.blur > 0.0 {
+        let px = (effect.blur * canvas.height() / 900.0) as f32;
+        if px > quad.blur {
+            quad.blur = px;
+            quad.blur_angle = None;
+        }
+    }
+    if effect.flash > 0.0 {
+        // White mixed in through the grade's brightness, which clamps at 1.
+        quad.adjust[2] = (quad.adjust[2] + effect.flash as f32).min(1.0);
+    }
+    if effect.glitch > 0.0 {
+        quad.glitch = [
+            effect.glitch as f32,
+            ((time * 60.0).round() as i64 % 10_000) as f32,
+        ];
+    }
     let (rect, uv) = tl::transition::apply(
         &effect,
         quad.rect,

@@ -121,6 +121,10 @@ pub struct SceneQuad {
     pub grain: [f32; 2],
     /// Unsharp-mask amount (0 = none, 1 = strong).
     pub sharpen: f32,
+    /// Glitch: [amount 0…1, seed]. Bands of the picture torn sideways and
+    /// the colour channels split, more of each at a higher amount; a new
+    /// seed is a new tear.
+    pub glitch: [f32; 2],
 }
 
 impl Default for SceneQuad {
@@ -159,6 +163,7 @@ impl Default for SceneQuad {
             vignette: [0.0, 0.5],
             grain: [0.0, 0.0],
             sharpen: 0.0,
+            glitch: [0.0, 0.0],
         }
     }
 }
@@ -276,7 +281,8 @@ struct Quad {
     // Effects: x = vignette amount, y = vignette softness, z = grain amount,
     // w = grain seed.
     fx_a: vec4<f32>,
-    // x = sharpen amount, y = glow amount (the glow texture is `quad_fx`).
+    // x = sharpen amount, y = glow amount (the glow texture is `quad_fx`),
+    // z = glitch amount, w = glitch seed.
     fx_b: vec4<f32>,
 };
 
@@ -431,7 +437,28 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let tiled = fract((unit - quad.mask_box.zw) * quad.extra.yz);
             uv = quad.uv_rect.xy + tiled * quad.uv_rect.zw;
         }
-        color = textureSample(quad_tex, quad_samp, uv);
+        if quad.fx_b.z > 0.0 {
+            // Glitch: some horizontal bands torn sideways by an amount of
+            // their own, and the red and blue channels sampled a little
+            // apart, all inside the texture's window. Seeded per frame.
+            let amt = quad.fx_b.z;
+            let seed = quad.fx_b.w;
+            let lo = quad.uv_rect.xy;
+            let hi = quad.uv_rect.xy + quad.uv_rect.zw;
+            let band = floor(uv.y * 28.0 + seed * 3.7);
+            let h = fract(sin(band * 12.9898 + seed * 78.233) * 43758.5453);
+            var torn = uv;
+            if h > 0.72 {
+                torn.x = torn.x + (h - 0.86) * amt * 0.5 * quad.uv_rect.z;
+            }
+            let split = vec2<f32>(amt * 0.02 * quad.uv_rect.z, 0.0);
+            let r = textureSample(quad_tex, quad_samp, clamp(torn + split, lo, hi));
+            let g = textureSample(quad_tex, quad_samp, clamp(torn, lo, hi));
+            let b = textureSample(quad_tex, quad_samp, clamp(torn - split, lo, hi));
+            color = vec4<f32>(r.r, g.g, b.b, g.a);
+        } else {
+            color = textureSample(quad_tex, quad_samp, uv);
+        }
         // Unsharp mask on the texture itself: the pixel pushed away from
         // the mean of its four neighbours. Before the colour work, so a
         // grade or a key sees the sharpened picture like any other.
@@ -1570,8 +1597,8 @@ impl Compositor {
                     } else {
                         0.0
                     },
-                    0.0,
-                    0.0,
+                    q.glitch[0],
+                    q.glitch[1],
                 ],
             };
             let offset = QUAD_STRIDE as usize * i;
@@ -3282,6 +3309,46 @@ mod tests {
             px64(&px, 3, 32)[0] > 100,
             "the last frame drew: {:?}",
             px64(&px, 3, 32)
+        );
+    }
+
+    /// A glitch splits the channels apart at an edge and tears some bands
+    /// sideways; at amount zero the picture is exactly itself.
+    #[test]
+    fn a_glitch_splits_the_channels_and_tears_bands() {
+        let ctx = GpuContext::new().expect("gpu");
+        let tex = split_texture(&ctx, 32);
+        let quad = |amount: f32| SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            glitch: [amount, 7.0],
+            ..Default::default()
+        };
+        let plain = compose(
+            &full_scene(quad(0.0), [0.0, 0.0, 0.0, 1.0]),
+            std::slice::from_ref(&tex),
+            &ctx,
+        );
+        assert!(
+            (0..64).all(|y| {
+                let p = px64(&plain, 31, y);
+                p[0] == p[2]
+            }),
+            "no glitch, no split"
+        );
+        let torn = compose(
+            &full_scene(quad(1.0), [0.0, 0.0, 0.0, 1.0]),
+            std::slice::from_ref(&tex),
+            &ctx,
+        );
+        let split = (0..64).any(|y| {
+            let p = px64(&torn, 31, y);
+            (p[0] as i32 - p[2] as i32).abs() > 40
+        });
+        assert!(split, "the channels come apart at the edge");
+        assert!(
+            px64(&torn, 2, 2)[1] > 200 && px64(&torn, 61, 61)[1] < 40,
+            "far from the edge it is itself"
         );
     }
 

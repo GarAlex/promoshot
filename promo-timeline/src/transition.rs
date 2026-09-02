@@ -27,7 +27,18 @@ pub struct Effect {
     /// against the distance to the frame edge. A word rising 24px into place
     /// wants this; a layer sliding in from off-canvas wants that.
     pub offset: [f64; 2],
+    /// A blur over the quad, in canvas px at a 900-tall canvas (the engine
+    /// scales it): the blur dissolve's and the zoom's softness.
+    pub blur: f64,
+    /// White mixed in, 0…1: the flash.
+    pub flash: f64,
+    /// Torn bands and split channels, 0…1: the glitch.
+    pub glitch: f64,
 }
+
+/// The softness the blurring kinds reach at their far end, canvas px at
+/// a 900-tall canvas.
+const BLUR_PX: f64 = 28.0;
 
 impl Effect {
     pub const IDENTITY: Effect = Effect {
@@ -36,6 +47,9 @@ impl Effect {
         travel: [0.0, 0.0],
         scale: 1.0,
         offset: [0.0, 0.0],
+        blur: 0.0,
+        flash: 0.0,
+        glitch: 0.0,
     };
 
     pub fn is_identity(&self) -> bool {
@@ -106,6 +120,17 @@ pub fn effect(layer: &ProjectLayer, time: f64) -> Effect {
     }
 }
 
+/// A hump that peaks halfway and is EXACTLY zero at both ends — the
+/// sine's rounding error at π would otherwise keep a finished glitch from
+/// being the identity.
+fn burst(progress: f64) -> f64 {
+    if progress <= 0.0 || progress >= 1.0 {
+        0.0
+    } else {
+        (progress * std::f64::consts::PI).sin()
+    }
+}
+
 fn progress(raw: f64) -> f64 {
     if raw.is_nan() {
         1.0
@@ -153,6 +178,36 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
             opacity: progress,
             ..Effect::IDENTITY
         },
+        // A fade whose picture sharpens as it arrives.
+        TransitionKind::BlurDissolve => Effect {
+            opacity: progress,
+            blur: (1.0 - progress) * BLUR_PX,
+            ..Effect::IDENTITY
+        },
+        // In from 35% larger, soft, settling to size as it clears.
+        TransitionKind::Zoom => Effect {
+            scale: 1.0 + 0.35 * (1.0 - progress),
+            opacity: progress,
+            blur: (1.0 - progress) * BLUR_PX * 0.6,
+            ..Effect::IDENTITY
+        },
+        // Present almost at once, white-hot, cooling to itself.
+        TransitionKind::Flash => Effect {
+            opacity: (progress * 3.0).min(1.0),
+            flash: 1.0 - progress,
+            ..Effect::IDENTITY
+        },
+        // Pops in under a burst that peaks halfway and is gone at the end.
+        TransitionKind::Glitch => Effect {
+            opacity: (progress * 4.0).min(1.0),
+            glitch: burst(progress),
+            ..Effect::IDENTITY
+        },
+        // Through black: nothing for the first half, a fade over the second.
+        TransitionKind::Dip => Effect {
+            opacity: (progress * 2.0 - 1.0).max(0.0),
+            ..Effect::IDENTITY
+        },
     }
 }
 
@@ -178,7 +233,37 @@ pub fn departing(transition: &LayerTransition, progress: f64) -> Effect {
             },
             ..Effect::IDENTITY
         },
-        _ => Effect::IDENTITY,
+        // The old picture softens as the new one sharpens over it.
+        TransitionKind::BlurDissolve => Effect {
+            blur: progress * BLUR_PX,
+            ..Effect::IDENTITY
+        },
+        // Pushed out through the zoom: larger, softer, gone.
+        TransitionKind::Zoom => Effect {
+            scale: 1.0 + 0.35 * progress,
+            opacity: 1.0 - progress,
+            blur: progress * BLUR_PX * 0.6,
+            ..Effect::IDENTITY
+        },
+        // Goes white as the new one comes from white.
+        TransitionKind::Flash => Effect {
+            flash: progress,
+            ..Effect::IDENTITY
+        },
+        // Torn the same way, at the same moment.
+        TransitionKind::Glitch => Effect {
+            glitch: burst(progress),
+            ..Effect::IDENTITY
+        },
+        // Out over the first half; the new one is hidden until then.
+        TransitionKind::Dip => Effect {
+            opacity: 1.0 - (progress * 2.0).min(1.0),
+            ..Effect::IDENTITY
+        },
+        TransitionKind::Fade
+        | TransitionKind::Wipe
+        | TransitionKind::Slide
+        | TransitionKind::Scale => Effect::IDENTITY,
     }
 }
 
@@ -661,5 +746,55 @@ mod tests {
             "the push's travel rides the eased clock, got {}",
             swap.effect.travel[0]
         );
+    }
+
+    /// The five newer kinds turn progress into their own channels — blur,
+    /// flash, glitch, scale, opacity — and every one of them is the
+    /// identity once it has arrived.
+    #[test]
+    fn the_newer_kinds_ramp_their_own_channels_and_end_at_identity() {
+        let of = |kind: TransitionKind| LayerTransition {
+            easing: None,
+            kind,
+            from: None,
+            duration: 1.0,
+        };
+        let soft = shape(&of(TransitionKind::BlurDissolve), 0.25);
+        assert!(soft.blur > 0.0 && (soft.opacity - 0.25).abs() < 1e-9);
+        assert!(
+            departing(&of(TransitionKind::BlurDissolve), 0.75).blur > 0.0,
+            "the old one softens too"
+        );
+        let zoom = shape(&of(TransitionKind::Zoom), 0.0);
+        assert!((zoom.scale - 1.35).abs() < 1e-9 && zoom.opacity == 0.0 && zoom.blur > 0.0);
+        let gone = departing(&of(TransitionKind::Zoom), 1.0);
+        assert!(
+            gone.opacity == 0.0 && gone.scale > 1.3,
+            "pushed out through the zoom"
+        );
+        assert!((shape(&of(TransitionKind::Flash), 0.0).flash - 1.0).abs() < 1e-9);
+        assert!((departing(&of(TransitionKind::Flash), 1.0).flash - 1.0).abs() < 1e-9);
+        assert!(
+            shape(&of(TransitionKind::Glitch), 0.5).glitch > 0.99,
+            "peaks halfway"
+        );
+        assert!(
+            shape(&of(TransitionKind::Dip), 0.25).opacity == 0.0,
+            "hidden through the first half"
+        );
+        assert!((shape(&of(TransitionKind::Dip), 0.75).opacity - 0.5).abs() < 1e-9);
+        assert!((departing(&of(TransitionKind::Dip), 0.25).opacity - 0.5).abs() < 1e-9);
+        for kind in [
+            TransitionKind::BlurDissolve,
+            TransitionKind::Zoom,
+            TransitionKind::Flash,
+            TransitionKind::Glitch,
+            TransitionKind::Dip,
+        ] {
+            assert!(
+                shape(&of(kind), 1.0).is_identity(),
+                "{kind:?} arrives at identity"
+            );
+        }
     }
 }
