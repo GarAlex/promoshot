@@ -50,7 +50,7 @@ Six moments:
 
 <img src="09-kinetic-type/contact-result.png" width="800" alt="six moments of the result">
 
-[video](09-kinetic-type/result.mp4) · [the project it wrote](09-kinetic-type/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/09-kinetic-type.mp4)** (1280 wide, 0.8 MB) · [small copy](09-kinetic-type/result.mp4) · [the project it wrote](09-kinetic-type/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

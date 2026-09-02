@@ -39,7 +39,7 @@ Six moments:
 
 <img src="04-gradient-drift/contact-result.png" width="800" alt="six moments of the result">
 
-[video](04-gradient-drift/result.mp4) · [the project it wrote](04-gradient-drift/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/04-gradient-drift.mp4)** (1280 wide, 0.6 MB) · [small copy](04-gradient-drift/result.mp4) · [the project it wrote](04-gradient-drift/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

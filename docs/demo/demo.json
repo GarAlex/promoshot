@@ -114,6 +114,8 @@
    "contact": "docs/demo/01-app-store-hero/contact-result.png",
    "reference_contact": "docs/demo/01-app-store-hero/contact-reference.png",
    "video": "docs/demo/01-app-store-hero/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/01-app-store-hero.mp4",
+   "video_hd_bytes": 1691997,
    "metadata": "docs/demo/01-app-store-hero/result-metadata.json",
    "gif": "docs/demo/01-app-store-hero/result.gif",
    "thumb": "docs/demo/01-app-store-hero/thumb.png"
@@ -206,6 +208,8 @@
    "contact": "docs/demo/02-focus-follow/contact-result.png",
    "reference_contact": "docs/demo/02-focus-follow/contact-reference.png",
    "video": "docs/demo/02-focus-follow/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/02-focus-follow.mp4",
+   "video_hd_bytes": 959848,
    "metadata": "docs/demo/02-focus-follow/result-metadata.json",
    "gif": "docs/demo/02-focus-follow/result.gif",
    "thumb": "docs/demo/02-focus-follow/thumb.png"
@@ -317,6 +321,8 @@
    "contact": "docs/demo/03-sprite-arcade/contact-result.png",
    "reference_contact": "docs/demo/03-sprite-arcade/contact-reference.png",
    "video": "docs/demo/03-sprite-arcade/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/03-sprite-arcade.mp4",
+   "video_hd_bytes": 925007,
    "metadata": "docs/demo/03-sprite-arcade/result-metadata.json",
    "gif": "docs/demo/03-sprite-arcade/result.gif",
    "thumb": "docs/demo/03-sprite-arcade/thumb.png"
@@ -418,6 +424,8 @@
    "contact": "docs/demo/04-gradient-drift/contact-result.png",
    "reference_contact": "docs/demo/04-gradient-drift/contact-reference.png",
    "video": "docs/demo/04-gradient-drift/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/04-gradient-drift.mp4",
+   "video_hd_bytes": 629000,
    "metadata": "docs/demo/04-gradient-drift/result-metadata.json",
    "gif": "docs/demo/04-gradient-drift/result.gif",
    "thumb": "docs/demo/04-gradient-drift/thumb.png"
@@ -555,6 +563,8 @@
    "contact": "docs/demo/05-carousel/contact-result.png",
    "reference_contact": "docs/demo/05-carousel/contact-reference.png",
    "video": "docs/demo/05-carousel/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/05-carousel.mp4",
+   "video_hd_bytes": 1247472,
    "metadata": "docs/demo/05-carousel/result-metadata.json",
    "gif": "docs/demo/05-carousel/result.gif",
    "thumb": "docs/demo/05-carousel/thumb.png"
@@ -702,6 +712,8 @@
    "contact": "docs/demo/06-gif-board/contact-result.png",
    "reference_contact": "docs/demo/06-gif-board/contact-reference.png",
    "video": "docs/demo/06-gif-board/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/06-gif-board.mp4",
+   "video_hd_bytes": 1489968,
    "metadata": "docs/demo/06-gif-board/result-metadata.json",
    "gif": "docs/demo/06-gif-board/result.gif",
    "thumb": "docs/demo/06-gif-board/thumb.png"
@@ -865,6 +877,8 @@
    "contact": "docs/demo/07-narrated-tour/contact-result.png",
    "reference_contact": "docs/demo/07-narrated-tour/contact-reference.png",
    "video": "docs/demo/07-narrated-tour/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/07-narrated-tour.mp4",
+   "video_hd_bytes": 6796525,
    "metadata": "docs/demo/07-narrated-tour/result-metadata.json",
    "gif": "docs/demo/07-narrated-tour/result.gif",
    "thumb": "docs/demo/07-narrated-tour/thumb.png"
@@ -1003,6 +1017,8 @@
    "contact": "docs/demo/08-speed-ramp/contact-result.png",
    "reference_contact": "docs/demo/08-speed-ramp/contact-reference.png",
    "video": "docs/demo/08-speed-ramp/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/08-speed-ramp.mp4",
+   "video_hd_bytes": 7560934,
    "metadata": "docs/demo/08-speed-ramp/result-metadata.json",
    "gif": "docs/demo/08-speed-ramp/result.gif",
    "thumb": "docs/demo/08-speed-ramp/thumb.png"
@@ -1124,6 +1140,8 @@
    "contact": "docs/demo/09-kinetic-type/contact-result.png",
    "reference_contact": "docs/demo/09-kinetic-type/contact-reference.png",
    "video": "docs/demo/09-kinetic-type/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/09-kinetic-type.mp4",
+   "video_hd_bytes": 774031,
    "metadata": "docs/demo/09-kinetic-type/result-metadata.json",
    "gif": "docs/demo/09-kinetic-type/result.gif",
    "thumb": "docs/demo/09-kinetic-type/thumb.png"
@@ -1286,6 +1304,8 @@
    "contact": "docs/demo/10-logo-sting/contact-result.png",
    "reference_contact": "docs/demo/10-logo-sting/contact-reference.png",
    "video": "docs/demo/10-logo-sting/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/10-logo-sting.mp4",
+   "video_hd_bytes": 714759,
    "metadata": "docs/demo/10-logo-sting/result-metadata.json",
    "gif": "docs/demo/10-logo-sting/result.gif",
    "thumb": "docs/demo/10-logo-sting/thumb.png"
@@ -1443,6 +1463,8 @@
    "contact": "docs/demo/11-whip-deck/contact-result.png",
    "reference_contact": "docs/demo/11-whip-deck/contact-reference.png",
    "video": "docs/demo/11-whip-deck/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/11-whip-deck.mp4",
+   "video_hd_bytes": 1041881,
    "metadata": "docs/demo/11-whip-deck/result-metadata.json",
    "gif": "docs/demo/11-whip-deck/result.gif",
    "thumb": "docs/demo/11-whip-deck/thumb.png"
@@ -1584,6 +1606,8 @@
    "contact": "docs/demo/12-word-for-word/contact-result.png",
    "reference_contact": "docs/demo/12-word-for-word/contact-reference.png",
    "video": "docs/demo/12-word-for-word/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/12-word-for-word.mp4",
+   "video_hd_bytes": 893117,
    "metadata": "docs/demo/12-word-for-word/result-metadata.json",
    "gif": "docs/demo/12-word-for-word/result.gif",
    "thumb": "docs/demo/12-word-for-word/thumb.png"
@@ -1613,7 +1637,130 @@
     "path": "docs/demo/13-before-after/resources/ui_verse_2.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 86,
+   "passed": 6,
+   "total": 7,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": false,
+     "detail": "12.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 1"
+    },
+    {
+     "check": "feature:swaps",
+     "ok": true,
+     "detail": "1 vs 2"
+    },
+    {
+     "check": "feature:transitions",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "2 of 2 lines recognisable"
+    }
+   ],
+   "summary": "turns=33 cost=$1.57 secs=165",
+   "run": {
+    "turns": 33,
+    "wall_s": 164,
+    "api_s": 159,
+    "cost_usd": 1.57,
+    "tokens": {
+     "input": 40,
+     "cache_read": 1334730,
+     "cache_write": 60380,
+     "output": 12070,
+     "thinking": 5080
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1083,
+      "output": 19,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1395150,
+      "output": 12070,
+      "cost_usd": 1.57
+     }
+    ],
+    "mcp": {
+     "calls": 11,
+     "ms": 3867,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 3675,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 142,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 38,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 8,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 4,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/13-before-after/contact-result.png",
+   "reference_contact": "docs/demo/13-before-after/contact-reference.png",
+   "video": "docs/demo/13-before-after/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/13-before-after.mp4",
+   "video_hd_bytes": 380500,
+   "metadata": "docs/demo/13-before-after/result-metadata.json",
+   "gif": "docs/demo/13-before-after/result.gif",
+   "thumb": "docs/demo/13-before-after/thumb.png"
+  },
   "page": "docs/demo/demo13.md"
  },
  {
@@ -1634,7 +1781,135 @@
     "path": "docs/demo/14-spotlight/resources/ui_lumen_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 8,
+   "total": 8,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "13.0s vs 13.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 2"
+    },
+    {
+     "check": "feature:mask",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:maskInverted",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:grade",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "2 of 2 lines recognisable"
+    }
+   ],
+   "summary": "turns=26 cost=$2.02 secs=255",
+   "run": {
+    "turns": 26,
+    "wall_s": 254,
+    "api_s": 243,
+    "cost_usd": 2.02,
+    "tokens": {
+     "input": 40,
+     "cache_read": 1497137,
+     "cache_write": 76383,
+     "output": 20226,
+     "thinking": 8947
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1095,
+      "output": 20,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1573560,
+      "output": 20226,
+      "cost_usd": 2.02
+     }
+    ],
+    "mcp": {
+     "calls": 10,
+     "ms": 9678,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 5177,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 4457,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 28,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 11,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 5,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/14-spotlight/contact-result.png",
+   "reference_contact": "docs/demo/14-spotlight/contact-reference.png",
+   "video": "docs/demo/14-spotlight/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/14-spotlight.mp4",
+   "video_hd_bytes": 359999,
+   "metadata": "docs/demo/14-spotlight/result-metadata.json",
+   "gif": "docs/demo/14-spotlight/result.gif",
+   "thumb": "docs/demo/14-spotlight/thumb.png"
+  },
   "page": "docs/demo/demo14.md"
  },
  {
@@ -1948,6 +2223,8 @@
    "contact": "docs/demo/23-soft-focus/contact-result.png",
    "reference_contact": "docs/demo/23-soft-focus/contact-reference.png",
    "video": "docs/demo/23-soft-focus/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/23-soft-focus.mp4",
+   "video_hd_bytes": 4122590,
    "metadata": "docs/demo/23-soft-focus/result-metadata.json",
    "gif": "docs/demo/23-soft-focus/result.gif",
    "thumb": "docs/demo/23-soft-focus/thumb.png"

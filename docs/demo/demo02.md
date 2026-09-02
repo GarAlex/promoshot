@@ -42,7 +42,7 @@ Six moments:
 
 <img src="02-focus-follow/contact-result.png" width="800" alt="six moments of the result">
 
-[video](02-focus-follow/result.mp4) · [the project it wrote](02-focus-follow/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/02-focus-follow.mp4)** (1280 wide, 1.0 MB) · [small copy](02-focus-follow/result.mp4) · [the project it wrote](02-focus-follow/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

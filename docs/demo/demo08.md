@@ -53,7 +53,7 @@ Six moments:
 
 <img src="08-speed-ramp/contact-result.png" width="800" alt="six moments of the result">
 
-[video](08-speed-ramp/result.mp4) · [the project it wrote](08-speed-ramp/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/08-speed-ramp.mp4)** (1280 wide, 7.6 MB) · [small copy](08-speed-ramp/result.mp4) · [the project it wrote](08-speed-ramp/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

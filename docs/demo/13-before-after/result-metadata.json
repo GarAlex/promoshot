@@ -1,0 +1,149 @@
+{
+  "id": "ba-12s-crossfade",
+  "name": "Before / After",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "0E141F" },
+      { "name": "canvas-warm", "colorHex": "17140F" },
+      { "name": "text", "colorHex": "F4F1EA" },
+      { "name": "text-bg", "colorHex": "000000" },
+      { "name": "edge", "colorHex": "2A3444" },
+      { "name": "caption-outline", "colorHex": "07090C" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "8FB6FF" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "videoCornerRadius": 12,
+    "videoBorderWidth": 1,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.45,
+    "videoShadowRadius": 40,
+    "videoShadowOffset": [0, 16],
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 62,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 18,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.45,
+    "subtitleShadowRadius": 14
+  },
+  "resources": [
+    {
+      "id": "shotBefore",
+      "kind": "image",
+      "filename": "ui_pulse_2.png",
+      "displayName": "Pulse (before)",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "shotAfter",
+      "kind": "image",
+      "filename": "ui_verse_2.png",
+      "displayName": "Verse (after)",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": [
+        { "id": "bg0", "time": 0, "colorHex": "@canvas", "transitionDuration": 0 },
+        { "id": "bg1", "time": 6.75, "colorHex": "@canvas-warm", "transitionDuration": 2.4, "easing": "easeInOut" }
+      ]
+    },
+    {
+      "id": "screen",
+      "name": "Screen",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "shotBefore",
+      "fadeIn": 0.8,
+      "fadeOut": 0.8,
+      "keyframes": [
+        {
+          "id": "s0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "height": 760, "anchor": "center", "offset": [0, -64] }
+        },
+        {
+          "id": "s1",
+          "time": 4.35,
+          "transitionDuration": 0,
+          "resourceID": "shotAfter",
+          "transition": { "kind": "fade", "duration": 2.4, "easing": "easeInOut" }
+        }
+      ]
+    },
+    {
+      "id": "capBefore",
+      "name": "Caption — Before",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.9,
+      "duration": 5.1,
+      "captionText": "Before",
+      "fadeIn": 0.5,
+      "transitionOut": { "kind": "wipe", "from": "right", "duration": 0.9, "easing": "easeInOut" },
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -66] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 5
+      },
+      "keyframes": []
+    },
+    {
+      "id": "capAfter",
+      "name": "Caption — After",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 5.1,
+      "duration": 6.0,
+      "captionText": "After — one tap",
+      "transitionIn": { "kind": "wipe", "from": "left", "duration": 0.9, "easing": "easeInOut" },
+      "fadeOut": 0.8,
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -66] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 5
+      },
+      "keyframes": []
+    }
+  ]
+}

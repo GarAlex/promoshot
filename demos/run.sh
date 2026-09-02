@@ -59,8 +59,9 @@ if [ -f "$OUT/metadata.json" ]; then
     done
     ffmpeg -v error -y -pattern_type glob -i "$RUN/frames-$side/*.png" -filter_complex "tile=3x2" "$RUN/contact-$side.png" 2>/dev/null || true
   done
-  # Small on purpose: this is for a page, not a screening.
-  "$PROMO" video "$OUT" --out "$RUN/agent.mp4" --size 720x450 > /dev/null 2>&1 || true
+  # 1280 wide in the canvas's aspect: the copy the site and the page link to.
+  SIZE=$(python3 -c "import json;cs=json.load(open('$OUT/metadata.json'))['compositionSettings'];w=cs.get('canvasWidth') or 1440;h=cs.get('canvasHeight') or 900;print(f'1280x{int(round(1280*h/w/2))*2}')")
+  "$PROMO" video "$OUT" --out "$RUN/agent.mp4" --size $SIZE > /dev/null 2>&1 || true
 else
   echo "no out.promo produced" | tee "$RUN/score.txt"
 fi

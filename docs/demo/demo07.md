@@ -56,7 +56,7 @@ Six moments:
 
 <img src="07-narrated-tour/contact-result.png" width="800" alt="six moments of the result">
 
-[video](07-narrated-tour/result.mp4) · [the project it wrote](07-narrated-tour/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/07-narrated-tour.mp4)** (1280 wide, 6.8 MB) · [small copy](07-narrated-tour/result.mp4) · [the project it wrote](07-narrated-tour/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

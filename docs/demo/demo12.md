@@ -49,7 +49,7 @@ Six moments:
 
 <img src="12-word-for-word/contact-result.png" width="800" alt="six moments of the result">
 
-[video](12-word-for-word/result.mp4) · [the project it wrote](12-word-for-word/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/12-word-for-word.mp4)** (1280 wide, 0.9 MB) · [small copy](12-word-for-word/result.mp4) · [the project it wrote](12-word-for-word/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

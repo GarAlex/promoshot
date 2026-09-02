@@ -38,7 +38,7 @@ Six moments:
 
 <img src="23-soft-focus/contact-result.png" width="800" alt="six moments of the result">
 
-[video](23-soft-focus/result.mp4) · [the project it wrote](23-soft-focus/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/23-soft-focus.mp4)** (1280 wide, 4.1 MB) · [small copy](23-soft-focus/result.mp4) · [the project it wrote](23-soft-focus/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

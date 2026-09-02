@@ -45,7 +45,7 @@ Six moments:
 
 <img src="03-sprite-arcade/contact-result.png" width="800" alt="six moments of the result">
 
-[video](03-sprite-arcade/result.mp4) · [the project it wrote](03-sprite-arcade/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/03-sprite-arcade.mp4)** (1280 wide, 0.9 MB) · [small copy](03-sprite-arcade/result.mp4) · [the project it wrote](03-sprite-arcade/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

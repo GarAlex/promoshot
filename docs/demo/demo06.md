@@ -56,7 +56,7 @@ Six moments:
 
 <img src="06-gif-board/contact-result.png" width="800" alt="six moments of the result">
 
-[video](06-gif-board/result.mp4) · [the project it wrote](06-gif-board/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/06-gif-board.mp4)** (1280 wide, 1.5 MB) · [small copy](06-gif-board/result.mp4) · [the project it wrote](06-gif-board/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

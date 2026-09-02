@@ -9,6 +9,8 @@ import json, os, shutil, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORE = os.path.dirname(HERE)
 ASSETS = os.path.join(CORE, 'docs', 'demo')
+MEDIA = os.path.join(CORE, 'docs', 'demo-media')
+MEDIA_URL = 'https://github.com/garalex/promoshot/raw/demo-media'
 PROMO = os.path.join(CORE, 'target', 'release', 'promo')
 FFMPEG = '/opt/homebrew/bin/ffmpeg'
 IMAGE = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
@@ -151,6 +153,17 @@ def main():
                                 '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', dst], check=False)
                 if os.path.exists(dst):
                     result['video'] = f"docs/demo/{name}/result.mp4"
+                # The real one: 1280 wide, a viewing bitrate, kept off main
+                # (docs/demo-media is git-ignored there) and published to the
+                # demo-media branch by publish_media.sh.
+                os.makedirs(MEDIA, exist_ok=True)
+                hd = os.path.join(MEDIA, f"{name}.mp4")
+                subprocess.run([FFMPEG, '-v', 'error', '-y', '-i', src, '-vf', 'scale=1280:-2',
+                                '-c:v', 'libx264', '-crf', '22', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+                                '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', hd], check=False)
+                if os.path.exists(hd):
+                    result['video_hd'] = f"{MEDIA_URL}/{name}.mp4"
+                    result['video_hd_bytes'] = os.path.getsize(hd)
             project = os.path.join(run, 'ws', 'out.promo')
             if os.path.exists(os.path.join(project, 'metadata.json')):
                 shutil.copy2(os.path.join(project, 'metadata.json'), os.path.join(out, 'result-metadata.json'))
@@ -215,7 +228,11 @@ def main():
                 pg += [f'<img src="{rel(result["gif"])}" width="480" alt="the result, looping">', ""]
             if 'contact' in result:
                 pg += ["Six moments:", "", f'<img src="{rel(result["contact"])}" width="800" alt="six moments of the result">', ""]
-            links = [f"[video]({rel(result['video'])})"] if 'video' in result else []
+            links = []
+            if 'video_hd' in result:
+                links.append(f"**[▶ Watch the video]({result['video_hd']})** (1280 wide, {result['video_hd_bytes'] / 1_000_000:.1f} MB)")
+            if 'video' in result:
+                links.append(f"[small copy]({rel(result['video'])})")
             if 'metadata' in result:
                 links.append(f"[the project it wrote]({rel(result['metadata'])})")
             if links:
@@ -240,6 +257,8 @@ def main():
             status = f"**{result['score']}%** · {st.get('turns', '?')} turns · {fmt_secs(st.get('wall_s', 0))} · ${st.get('cost_usd', 0):.2f} · {fmt_tokens(total_in)} in / {fmt_tokens(tk.get('output', 0))} out"
             if st.get('mcp'):
                 status += f" · MCP {fmt_secs(round(st['mcp']['ms'] / 1000))} in {st['mcp']['calls']} calls"
+            if 'video_hd' in result:
+                status = f"[▶ watch]({result['video_hd']}) · " + status
             pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
         else:
             status, pic = "not run yet", ""
@@ -251,7 +270,8 @@ Every piece here was made by a **fresh agent**: a Claude Code session with
 nothing but the media shown, the prompt shown, the public
 [PromoShot skill](skill/SKILL.md) and the headless PromoShot MCP server
 fenced to an empty folder. No repository, no memory, no example to copy.
-It wrote the project, validated it, rendered it. Each page shows the
+It wrote the project, validated it, rendered it. Each page links the
+video (GitHub plays it on its own page; the inline loop is a preview) and shows the
 resources, the prompt, the result beside the piece a person built by hand
 for the same brief at the same six moments, and a structural score:
 length, the mix of layers, the features the prompt asked for, the words

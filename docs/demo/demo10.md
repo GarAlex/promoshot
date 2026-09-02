@@ -53,7 +53,7 @@ Six moments:
 
 <img src="10-logo-sting/contact-result.png" width="800" alt="six moments of the result">
 
-[video](10-logo-sting/result.mp4) · [the project it wrote](10-logo-sting/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/10-logo-sting.mp4)** (1280 wide, 0.7 MB) · [small copy](10-logo-sting/result.mp4) · [the project it wrote](10-logo-sting/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

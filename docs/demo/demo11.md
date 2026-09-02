@@ -52,7 +52,7 @@ Six moments:
 
 <img src="11-whip-deck/contact-result.png" width="800" alt="six moments of the result">
 
-[video](11-whip-deck/result.mp4) · [the project it wrote](11-whip-deck/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/11-whip-deck.mp4)** (1280 wide, 1.0 MB) · [small copy](11-whip-deck/result.mp4) · [the project it wrote](11-whip-deck/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

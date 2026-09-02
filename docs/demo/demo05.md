@@ -55,7 +55,7 @@ Six moments:
 
 <img src="05-carousel/contact-result.png" width="800" alt="six moments of the result">
 
-[video](05-carousel/result.mp4) · [the project it wrote](05-carousel/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/05-carousel.mp4)** (1280 wide, 1.2 MB) · [small copy](05-carousel/result.mp4) · [the project it wrote](05-carousel/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

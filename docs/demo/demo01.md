@@ -45,7 +45,7 @@ Six moments:
 
 <img src="01-app-store-hero/contact-result.png" width="800" alt="six moments of the result">
 
-[video](01-app-store-hero/result.mp4) · [the project it wrote](01-app-store-hero/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/01-app-store-hero.mp4)** (1280 wide, 1.7 MB) · [small copy](01-app-store-hero/result.mp4) · [the project it wrote](01-app-store-hero/result-metadata.json)
 
 | check | | detail |
 |---|---|---|

@@ -1,0 +1,248 @@
+{
+  "id": "spotlight-demo",
+  "name": "Spotlight",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 13,
+  "videoDuration": 13,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B0E14" },
+      { "name": "text", "colorHex": "F2F5FA" },
+      { "name": "text-bg", "colorHex": "05070B" },
+      { "name": "edge", "colorHex": "232B3A" },
+      { "name": "caption-outline", "colorHex": "05070B" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "5AC8FA" },
+      { "name": "accent", "colorHex": "5AC8FA" },
+      { "name": "ground-hi", "colorHex": "141A26" },
+      { "name": "ground-lo", "colorHex": "070A10" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.46],
+      "end": [1.0, 1.0],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@ground-hi", "at": 0 },
+        { "colorHex": "@ground-lo", "at": 1 }
+      ]
+    },
+    "videoCornerRadius": 12,
+    "videoBorderWidth": 1,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.45,
+    "videoShadowRadius": 40,
+    "videoShadowOffset": [0, 16],
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 60,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundPadding": 20,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 7,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.55,
+    "subtitleShadowRadius": 14,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200,
+    "subtitleVerticalMargin": 940
+  },
+
+  "resources": [
+    {
+      "id": "shot",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen UI",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760
+    },
+    {
+      "id": "softcircle",
+      "kind": "drawing",
+      "filename": "",
+      "displayName": "Soft spotlight mask",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "drawing": {
+        "shapes": [
+          { "id": "r01", "kind": "oval", "points": [[0, 0], [1000, 1000]],       "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.06, "arrowStart": false, "arrowEnd": false },
+          { "id": "r02", "kind": "oval", "points": [[22, 22], [978, 978]],       "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.08, "arrowStart": false, "arrowEnd": false },
+          { "id": "r03", "kind": "oval", "points": [[44, 44], [956, 956]],       "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.10, "arrowStart": false, "arrowEnd": false },
+          { "id": "r04", "kind": "oval", "points": [[66, 66], [934, 934]],       "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.12, "arrowStart": false, "arrowEnd": false },
+          { "id": "r05", "kind": "oval", "points": [[88, 88], [912, 912]],       "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.15, "arrowStart": false, "arrowEnd": false },
+          { "id": "r06", "kind": "oval", "points": [[110, 110], [890, 890]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.18, "arrowStart": false, "arrowEnd": false },
+          { "id": "r07", "kind": "oval", "points": [[132, 132], [868, 868]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.22, "arrowStart": false, "arrowEnd": false },
+          { "id": "r08", "kind": "oval", "points": [[154, 154], [846, 846]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.26, "arrowStart": false, "arrowEnd": false },
+          { "id": "r09", "kind": "oval", "points": [[176, 176], [824, 824]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.30, "arrowStart": false, "arrowEnd": false },
+          { "id": "r10", "kind": "oval", "points": [[198, 198], [802, 802]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.35, "arrowStart": false, "arrowEnd": false },
+          { "id": "r11", "kind": "oval", "points": [[220, 220], [780, 780]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.40, "arrowStart": false, "arrowEnd": false },
+          { "id": "r12", "kind": "oval", "points": [[242, 242], [758, 758]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.50, "arrowStart": false, "arrowEnd": false },
+          { "id": "r13", "kind": "oval", "points": [[264, 264], [736, 736]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0.60, "arrowStart": false, "arrowEnd": false },
+          { "id": "r14", "kind": "oval", "points": [[290, 290], [710, 710]],     "strokeColorHex": "FFFFFF", "strokeWidth": 0, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 1.0,  "arrowStart": false, "arrowEnd": false }
+        ]
+      }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13,
+      "keyframes": []
+    },
+
+    {
+      "id": "flat",
+      "name": "Flat copy",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13,
+      "resourceID": "shot",
+      "fadeIn": 0.6,
+      "adjustments": { "saturation": 0, "contrast": 0.9, "brightness": -0.07 },
+      "keyframes": [
+        { "id": "f0", "time": 0, "transitionDuration": 0, "opacity": 1,
+          "placement": { "height": 760, "anchor": "center", "offset": [0, -60] } },
+        { "id": "f1", "time": 9.5, "opacity": 1, "transitionDuration": 0 },
+        { "id": "f2", "time": 9.95, "opacity": 0, "transitionDuration": 0.45, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "spot",
+      "name": "Spotlight",
+      "sortIndex": 2,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0.4,
+      "duration": 9.5,
+      "resourceID": "shot",
+      "maskResourceID": "softcircle",
+      "fadeIn": 0.7,
+      "fadeOut": 0.4,
+      "adjustments": { "saturation": 1.16, "contrast": 1.04 },
+      "effects": { "glow": 0.16, "glowRadius": 26, "glowThreshold": 0.7 },
+      "keyframes": [
+        { "id": "s0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 760, "anchor": "center", "offset": [0, -60] } },
+
+        { "id": "p0", "time": 0,    "maskOffsetX": -360, "maskOffsetY":  150, "transitionDuration": 0 },
+        { "id": "p1", "time": 1.6,  "maskOffsetX":  -90, "maskOffsetY": -170, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "p2", "time": 3.3,  "maskOffsetX":  330, "maskOffsetY":  120, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "p3", "time": 5.0,  "maskOffsetX":   60, "maskOffsetY":  205, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "p4", "time": 6.6,  "maskOffsetX": -300, "maskOffsetY":  -60, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "p5", "time": 8.2,  "maskOffsetX":  250, "maskOffsetY": -180, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "p6", "time": 9.5,  "maskOffsetX":  -40, "maskOffsetY":   90, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+
+        { "id": "z0", "time": 0,    "maskZoom": 0.33, "maskZoomY": 0.27, "transitionDuration": 0 },
+        { "id": "z1", "time": 1.15, "maskZoom": 0.40, "maskZoomY": 0.33, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z2", "time": 2.30, "maskZoom": 0.32, "maskZoomY": 0.26, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z3", "time": 3.45, "maskZoom": 0.41, "maskZoomY": 0.34, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z4", "time": 4.60, "maskZoom": 0.33, "maskZoomY": 0.27, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z5", "time": 5.75, "maskZoom": 0.43, "maskZoomY": 0.35, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z6", "time": 6.90, "maskZoom": 0.31, "maskZoomY": 0.26, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z7", "time": 8.05, "maskZoom": 0.40, "maskZoomY": 0.33, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "z8", "time": 9.20, "maskZoom": 0.34, "maskZoomY": 0.28, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+
+        { "id": "t0", "time": 0,    "maskRotation": -18, "transitionDuration": 0 },
+        { "id": "t1", "time": 1.55, "maskRotation":  22, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "t2", "time": 3.10, "maskRotation": -14, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "t3", "time": 4.65, "maskRotation":  28, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "t4", "time": 6.20, "maskRotation": -22, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "t5", "time": 7.75, "maskRotation":  16, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "t6", "time": 9.30, "maskRotation": -10, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "punch",
+      "name": "Knockout",
+      "sortIndex": 3,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 9.55,
+      "duration": 3.45,
+      "resourceID": "shot",
+      "maskResourceID": "softcircle",
+      "maskInverted": true,
+      "fadeIn": 0.4,
+      "adjustments": { "saturation": 1.16, "contrast": 1.04 },
+      "keyframes": [
+        { "id": "q0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 760, "anchor": "center", "offset": [0, -60] } },
+
+        { "id": "i0", "time": 0,    "maskOffsetX":   38, "maskOffsetY":   17, "transitionDuration": 0 },
+        { "id": "i1", "time": 1.30, "maskOffsetX": -330, "maskOffsetY": -140, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "i2", "time": 2.70, "maskOffsetX":  300, "maskOffsetY":  140, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "i3", "time": 3.45, "maskOffsetX":    0, "maskOffsetY":  -60, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+
+        { "id": "j0", "time": 0,    "maskZoom": 0.34, "maskZoomY": 0.28, "transitionDuration": 0 },
+        { "id": "j1", "time": 1.10, "maskZoom": 0.46, "maskZoomY": 0.38, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "j2", "time": 2.20, "maskZoom": 0.33, "maskZoomY": 0.27, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "j3", "time": 3.30, "maskZoom": 0.50, "maskZoomY": 0.42, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+
+        { "id": "u0", "time": 0,    "maskRotation":  -7, "transitionDuration": 0 },
+        { "id": "u1", "time": 1.40, "maskRotation":  20, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "u2", "time": 2.80, "maskRotation": -16, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" },
+        { "id": "u3", "time": 3.45, "maskRotation":   8, "transitionDuration": 0, "transitionPercent": 100, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "cap1",
+      "name": "Caption one",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.0,
+      "duration": 7.0,
+      "captionText": "Point at what matters",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -76] } },
+      "fadeIn": 0.5,
+      "fadeOut": 0.6,
+      "keyframes": []
+    },
+
+    {
+      "id": "cap2",
+      "name": "Caption two",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 9.9,
+      "duration": 3.1,
+      "captionText": "Or knock the same shape out",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -76] } },
+      "fadeIn": 0.5,
+      "fadeOut": 0.5,
+      "keyframes": []
+    }
+  ]
+}
