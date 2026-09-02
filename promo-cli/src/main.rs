@@ -226,12 +226,31 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
             Some(why) => skipped.push((layer.name.as_str(), why)),
         }
     }
+    // Nested compositions: what each holds, and who places it.
+    let compositions: Vec<serde_json::Value> = project
+        .resources()
+        .iter()
+        .filter(|r| r.kind == promo_model::ProjectResourceKind::Composition)
+        .map(|r| {
+            let nested = r.composition.as_ref().map(|c| c.layers.len()).unwrap_or(0);
+            let placed_by: Vec<String> = promo_model::nesting::all_layers(&project.meta)
+                .into_iter()
+                .filter(|l| l.resource_id.as_deref() == Some(r.id.as_str()))
+                .map(|l| l.id.clone())
+                .collect();
+            serde_json::json!({
+                "id": r.id, "name": r.display_name, "duration": r.duration,
+                "layers": nested, "placedBy": placed_by,
+            })
+        })
+        .collect();
     if opts.json {
         return Ok(serde_json::json!({
             "name": project.meta.name,
             "canvas": { "width": w, "height": h },
             "duration": project.duration(),
             "updated": project.meta.updated_at,
+            "compositions": compositions,
             "layers": layers
                 .iter()
                 .map(|l| serde_json::json!({
@@ -278,6 +297,19 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
         ));
     }
     out.push_str(&format!("resources: {}\n", project.resources().len()));
+    if !compositions.is_empty() {
+        out.push_str(&format!("compositions: {}\n", compositions.len()));
+        for c in &compositions {
+            out.push_str(&format!(
+                "  {}  \"{}\"  {:.2}s  {} layers  placed by {}\n",
+                c["id"].as_str().unwrap_or(""),
+                c["name"].as_str().unwrap_or(""),
+                c["duration"].as_f64().unwrap_or(0.0),
+                c["layers"],
+                c["placedBy"].as_array().map(|p| p.len()).unwrap_or(0)
+            ));
+        }
+    }
     out.push_str(&format!("\nrenderable: {renderable} of {}", layers.len()));
     if !skipped.is_empty() {
         out.push_str("\nskipped:");
@@ -477,6 +509,45 @@ mod tests {
         let opts = Options::parse(&["--json".into(), "--time".into(), "2".into()]).unwrap();
         assert!(opts.json);
         assert_eq!(opts.time, Some(2.0));
+    }
+
+    /// A placed composition is renderable — it needs no file — and inspect
+    /// says what it holds and who places it.
+    #[test]
+    fn inspect_lists_a_composition_and_counts_its_placement_renderable() {
+        let dir = std::env::temp_dir().join(format!("promo-nest-inspect-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Nest","createdAt":0,"state":"recorded","minReaderVersion":19,
+            "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+            "compositionSettings":{"canvasWidth":1280,"canvasHeight":720},
+            "resources":[{"id":"cap","kind":"caption","filename":"","displayName":"Words","addedAt":0,
+               "captionText":"hi","imageCuts":[]},
+              {"id":"A","kind":"composition","filename":"","displayName":"Title","addedAt":0,
+               "duration":4,"pixelWidth":1280,"pixelHeight":720,"imageCuts":[],
+               "composition":{"canvasWidth":1280,"canvasHeight":720,"layers":[
+                 {"id":"L","name":"inner","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"cap","keyframes":[]}]}}],
+            "layers":[{"id":"P1","name":"Title","sortIndex":0,"kind":"video","isEnabled":true,
+              "startTime":0,"duration":4,"resourceID":"A","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        let project = Project::open(&dir).expect("opens");
+        assert!(project
+            .unsupported(&project.meta.layers.as_deref().unwrap()[0])
+            .is_none());
+        let out = inspect(&project, &Options::parse(&["--json".into()]).unwrap()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(json["renderable"], 1);
+        assert_eq!(json["compositions"][0]["layers"], 1);
+        assert_eq!(json["compositions"][0]["placedBy"][0], "P1");
+        let text = inspect(&project, &Options::parse(&[]).unwrap()).unwrap();
+        assert!(
+            text.contains("compositions: 1") && text.contains("placed by 1"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Nested compositions: a composition that contains itself cannot be

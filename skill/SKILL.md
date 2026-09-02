@@ -130,6 +130,15 @@ new projects.
   to STABLE UUIDs (the same spelling in the same project always mints
   the same one), so re-run `promo_inspect` after a person's turn and
   re-anchor; its `updated:` line is the turn signal.
+- **Reuse a card: make it a composition.** A resource of `kind:
+  "composition"` carries its own `canvasWidth`/`canvasHeight`, an optional
+  `backgroundColorHex` plate (absent = transparent) and ordinary `layers`
+  that reference THIS project's resources by id; give it a `duration` and
+  `pixelWidth`/`pixelHeight` equal to its canvas. Place it with a `video`
+  layer, as many times as you like — placement rules, trims, speed,
+  transitions and fades all apply, and its sound comes along. Edit the
+  card once and every placement follows. A composition may not contain
+  itself, and nests at most eight deep; validate says so.
 - Colours can be palette names (`"@accent"`); an undefined name renders
   BLACK and validate names it. `@edge` is what a device frame's border
   reads by default — define it when you frame.

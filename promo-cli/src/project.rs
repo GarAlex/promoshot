@@ -192,6 +192,17 @@ impl Project {
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
             // Video is decoded through promo-media now; the only question is
             // whether the file is there and a backend will take it.
+            // A composition draws itself from the document — no file to
+            // open; its own layers answer for themselves.
+            ProjectLayerKind::Video
+                if layer
+                    .resource_id
+                    .as_deref()
+                    .and_then(|id| self.resource(id))
+                    .is_some_and(|r| r.kind == promo_model::ProjectResourceKind::Composition) =>
+            {
+                None
+            }
             ProjectLayerKind::Video => self.media_problem(layer),
             ProjectLayerKind::Image => {
                 let resource = layer.resource_id.as_ref().and_then(|id| self.resource(id));
