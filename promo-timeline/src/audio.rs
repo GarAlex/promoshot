@@ -535,6 +535,224 @@ pub struct AudioInput {
 /// "its media is still there" answer (Swift `renderableLayers`) — a layer
 /// whose file is gone contributes nothing rather than an asset that fails
 /// to load. Layers are walked in `sortIndex` order, as the apps do.
+/// A layer's gain automation as absolute volume points — the ramps of
+/// `gain_ramp_segments` placed on the timeline at the layer's start, with
+/// a step's pre-point pulled 1 ms early so a step stays a step.
+fn automation_points(layer: &ProjectLayer, base: f32) -> Option<Vec<VolumePoint>> {
+    let segments = gain_ramp_segments(layer, base);
+    let first = segments.first()?;
+    let offset = layer.start_time.max(0.0);
+    let frac = |v: f32| v.clamp(0.0, 1.0);
+    let mut points = vec![VolumePoint {
+        time: offset + first.start_time,
+        volume: frac(first.start_value),
+    }];
+    for s in &segments {
+        points.push(VolumePoint {
+            time: offset + s.end_time,
+            volume: frac(s.end_value),
+        });
+    }
+    // A step (a keyframe with no ramp into it) arrives as two points at
+    // one time. Consecutive points describe a ramp, so left as they are
+    // the step smeared back to the previous breakpoint — a gain cut to
+    // 25% at 6s faded from 4s. Pull the pre-step point one millisecond
+    // early: the mix now holds until the keyframe, as `layer_gain` says.
+    for i in 1..points.len() {
+        if (points[i].time - points[i - 1].time).abs() < 0.000_1 {
+            let floor = if i >= 2 { points[i - 2].time } else { f64::MIN };
+            let early = points[i].time - 0.001;
+            if early > floor {
+                points[i - 1].time = early;
+            }
+        }
+    }
+    Some(points)
+}
+
+/// The sound of a composition placed as a clip by `parent`: every
+/// sound-making layer inside, with its window moved onto the parent's
+/// clock — offset by the parent's start, scaled by the parent's speed,
+/// clipped to the part of the composition the parent plays (trims, cut)
+/// — and a start that lands mid-clip expressed as a source offset in the
+/// nested resource's included ranges. Nested compositions recurse to the
+/// depth the model allows. v1 leaves a nested caption's narration and the
+/// parent's loop and extended pauses out; a nested clip's own pauses are
+/// not offset by a parent trim.
+fn nested_inputs(
+    parent: &ProjectLayer,
+    shown: &promo_model::ProjectResource,
+    resources: &[promo_model::ProjectResource],
+    is_renderable: &dyn Fn(&ProjectLayer) -> bool,
+    depth: usize,
+) -> (Vec<AudioInput>, Vec<(f64, f64)>) {
+    let mut inputs = Vec::new();
+    let mut focus = Vec::new();
+    let Some(composition) = shown.composition.as_ref() else {
+        return (inputs, focus);
+    };
+    if depth > promo_model::nesting::MAX_DEPTH {
+        return (inputs, focus);
+    }
+    let view = crate::mapping::resource_for_cut(shown, parent.media_cut_id.as_deref());
+    let rate = crate::mapping::effective_speed(&view).abs();
+    let rate = if rate > 0.0001 { rate } else { 1.0 };
+    let trim0 = view.trim_start.unwrap_or(0.0).max(0.0);
+    let length = view.duration.unwrap_or(0.0).max(0.0);
+    let trim1 = view.trim_end.unwrap_or(length).min(length).max(trim0);
+    let p_start = parent.start_time.max(0.0);
+    let played = (trim1 - trim0) / rate;
+    let p_end = p_start + parent.duration.unwrap_or(played).max(0.0).min(played);
+    // Composition clock -> parent clock.
+    let map = |t: f64| p_start + (t - trim0) / rate;
+
+    let mut layers: Vec<&ProjectLayer> = composition.layers.iter().collect();
+    layers.sort_by_key(|l| l.sort_index);
+    for layer in layers {
+        if !layer.is_enabled || !is_renderable(layer) {
+            continue;
+        }
+        if !matches!(
+            layer.kind,
+            ProjectLayerKind::Video | ProjectLayerKind::Audio
+        ) {
+            continue;
+        }
+        if let Some(inner) = promo_model::nesting::composition_of(layer, resources) {
+            // A composition inside the composition: its inputs on the inner
+            // clock, then moved onto ours.
+            let (nested, spans) = nested_inputs(layer, inner, resources, is_renderable, depth + 1);
+            for mut input in nested {
+                let end = map(input.start_time + input.duration_cap.unwrap_or(0.0));
+                input.start_time = map(input.start_time);
+                input.duration_cap = Some((end.min(p_end) - input.start_time).max(0.0));
+                input.speed *= rate;
+                if let Some(points) = input.volume_points.as_mut() {
+                    for point in points.iter_mut() {
+                        point.time = map(point.time);
+                    }
+                }
+                if input.duration_cap.unwrap_or(0.0) > 0.0 && input.start_time < p_end {
+                    inputs.push(input);
+                }
+            }
+            for (a, b) in spans {
+                let (a, b) = (map(a).max(p_start), map(b).min(p_end));
+                if b > a {
+                    focus.push((a, b));
+                }
+            }
+            continue;
+        }
+        let want = if layer.kind == ProjectLayerKind::Video {
+            ProjectResourceKind::Video
+        } else {
+            ProjectResourceKind::Audio
+        };
+        let Some(stored) = layer
+            .resource_id
+            .as_deref()
+            .and_then(|rid| resources.iter().find(|r| r.id == rid && r.kind == want))
+        else {
+            continue;
+        };
+        let res = crate::mapping::resource_for_cut(stored, layer.media_cut_id.as_deref());
+        let ranges = crate::mapping::playback_video_trim_ranges(&res);
+        let own_rate = crate::mapping::effective_speed(&res);
+        let own_rate = if own_rate.abs() > 0.0001 {
+            own_rate.abs()
+        } else {
+            1.0
+        };
+        let played_length = ranges
+            .as_ref()
+            .map(|rs| rs.iter().map(|r| (r.end - r.start).max(0.0)).sum())
+            .unwrap_or_else(|| res.duration.unwrap_or(0.0))
+            / own_rate;
+        // The nested layer's window on the composition clock, clipped to
+        // what the parent plays of it.
+        let n_start = layer.start_time.max(0.0);
+        let n_end = n_start + layer.duration.unwrap_or(played_length).max(0.0);
+        let (c_start, c_end) = (n_start.max(trim0), n_end.min(trim1));
+        if c_end <= c_start {
+            continue;
+        }
+        // Seconds of the nested layer the parent never plays, in the nested
+        // resource's own source time.
+        let skipped_source = (c_start - n_start) * own_rate;
+        let included_ranges = match ranges {
+            Some(rs) => Some(shift_ranges(rs, skipped_source)),
+            None if skipped_source > 0.0 => res.duration.map(|d| {
+                vec![VideoTrimRange {
+                    start: skipped_source.min(d),
+                    end: d,
+                }]
+            }),
+            None => None,
+        };
+        let start_time = map(c_start);
+        let duration_cap = ((map(c_end)).min(p_end) - start_time).max(0.0);
+        if duration_cap <= 0.0 || start_time >= p_end {
+            continue;
+        }
+        let is_video = layer.kind == ProjectLayerKind::Video;
+        let volume_points = automation_points(layer, res.effective_volume()).map(|points| {
+            points
+                .into_iter()
+                .map(|point| VolumePoint {
+                    time: map(point.time),
+                    volume: point.volume,
+                })
+                .collect()
+        });
+        inputs.push(AudioInput {
+            layer_id: layer.id.clone(),
+            source: AudioSource::Resource(stored.id.clone()),
+            included_ranges,
+            start_time,
+            duration_cap: Some(duration_cap),
+            extended_pauses: if is_video {
+                crate::mapping::extended_video_pauses(&res)
+            } else {
+                Vec::new()
+            },
+            volume: res.effective_volume(),
+            volume_points,
+            disabled_audio_track_indices: if is_video {
+                res.disabled_audio_track_indices.clone()
+            } else {
+                Vec::new()
+            },
+            single_track: !is_video,
+            is_focused: layer.is_audio_focused(),
+            speed: crate::mapping::effective_speed(&res) * rate,
+        });
+        if layer.is_audio_focused() {
+            focus.push((start_time, start_time + duration_cap));
+        }
+    }
+    (inputs, focus)
+}
+
+/// Drops `seconds` of source from the front of `ranges`.
+fn shift_ranges(ranges: Vec<VideoTrimRange>, seconds: f64) -> Vec<VideoTrimRange> {
+    let mut left = seconds.max(0.0);
+    let mut out = Vec::new();
+    for range in ranges {
+        let len = (range.end - range.start).max(0.0);
+        if left >= len {
+            left -= len;
+            continue;
+        }
+        out.push(VideoTrimRange {
+            start: range.start + left,
+            end: range.end,
+        });
+        left = 0.0;
+    }
+    out
+}
+
 pub fn audio_inputs(
     project: &ProjectMetadata,
     is_renderable: &dyn Fn(&ProjectLayer) -> bool,
@@ -544,37 +762,7 @@ pub fn audio_inputs(
 
     // Per-layer volume automation (output time, fraction domain): keyframe
     // values are absolute; the resource's own volume fills the gaps.
-    let automation = |layer: &ProjectLayer, base: f32| -> Option<Vec<VolumePoint>> {
-        let segments = gain_ramp_segments(layer, base);
-        let first = segments.first()?;
-        let offset = layer.start_time.max(0.0);
-        let frac = |v: f32| v.clamp(0.0, 1.0);
-        let mut points = vec![VolumePoint {
-            time: offset + first.start_time,
-            volume: frac(first.start_value),
-        }];
-        for s in &segments {
-            points.push(VolumePoint {
-                time: offset + s.end_time,
-                volume: frac(s.end_value),
-            });
-        }
-        // A step (a keyframe with no ramp into it) arrives as two points at
-        // one time. Consecutive points describe a ramp, so left as they are
-        // the step smeared back to the previous breakpoint — a gain cut to
-        // 25% at 6s faded from 4s. Pull the pre-step point one millisecond
-        // early: the mix now holds until the keyframe, as `layer_gain` says.
-        for i in 1..points.len() {
-            if (points[i].time - points[i - 1].time).abs() < 0.000_1 {
-                let floor = if i >= 2 { points[i - 2].time } else { f64::MIN };
-                let early = points[i].time - 0.001;
-                if early > floor {
-                    points[i - 1].time = early;
-                }
-            }
-        }
-        Some(points)
-    };
+    let automation = |layer: &ProjectLayer, base: f32| automation_points(layer, base);
 
     let mut layers: Vec<&ProjectLayer> = project.layers.as_deref().unwrap_or(&[]).iter().collect();
     layers.sort_by_key(|l| l.sort_index);
@@ -589,6 +777,15 @@ pub fn audio_inputs(
         let mut played_length = 0.0;
         match layer.kind {
             ProjectLayerKind::Video | ProjectLayerKind::Audio => {
+                // A composition placed as a clip: its layers make sound on
+                // the parent's clock — offset by the parent's start, scaled
+                // by its speed, clipped to its window.
+                if let Some(shown) = promo_model::nesting::composition_of(layer, resources) {
+                    let (nested, spans) = nested_inputs(layer, shown, resources, is_renderable, 1);
+                    inputs.extend(nested);
+                    focus.extend(spans);
+                    continue;
+                }
                 let want = if layer.kind == ProjectLayerKind::Video {
                     ProjectResourceKind::Video
                 } else {

@@ -519,6 +519,113 @@ mod tests {
         );
     }
 
+    fn nesting_doc(
+        parent_start: f64,
+        parent_speed: f64,
+        parent_trim: f64,
+        flat: bool,
+    ) -> ProjectMetadata {
+        // A clip with a gain ramp inside a composition, placed as a card.
+        let clip_layer = |start: f64, sort: i64| {
+            serde_json::json!({"id": "N", "name": "clip", "sortIndex": sort, "kind": "video", "isEnabled": true,
+                "startTime": start, "duration": 4, "resourceID": "V", "audioFocus": true,
+                "keyframes": [
+                    {"id": "K0", "time": 0, "gain": 1.0, "transitionDuration": 0},
+                    {"id": "K1", "time": 2, "gain": 0.25, "transitionDuration": 1}]})
+        };
+        let clip = serde_json::json!({"id": "V", "kind": "video", "filename": "v.mp4", "displayName": "v",
+            "addedAt": 0, "duration": 6, "imageCuts": [], "disabledAudioTrackIndices": [1]});
+        let layers = if flat {
+            serde_json::json!([clip_layer(parent_start + 0.5, 0)])
+        } else {
+            serde_json::json!([{"id": "P", "name": "card", "sortIndex": 0, "kind": "video", "isEnabled": true,
+                "startTime": parent_start, "duration": 5, "resourceID": "C", "keyframes": []}])
+        };
+        let mut resources = vec![clip];
+        if !flat {
+            resources.push(serde_json::json!({"id": "C", "kind": "composition", "filename": "", "displayName": "card",
+                "addedAt": 0, "duration": 6, "speed": parent_speed, "trimStart": parent_trim,
+                "pixelWidth": 320, "pixelHeight": 180, "imageCuts": [],
+                "composition": {"canvasWidth": 320, "canvasHeight": 180, "layers": [clip_layer(0.5, 0)]}}));
+        }
+        let json = serde_json::json!({
+            "id": "P", "name": "nest", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 10, "videoDuration": 10, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 320, "canvasHeight": 180},
+            "resources": resources, "layers": layers
+        });
+        ProjectMetadata::from_json(&json.to_string()).unwrap()
+    }
+
+    /// A composition placed as a clip makes the sound its layers would
+    /// make flattened onto the parent's clock: same inputs, same focus,
+    /// offset by the card's start.
+    #[test]
+    fn nested_audio_equals_the_flattened_graph() {
+        let nested = nesting_doc(2.0, 1.0, 0.0, false);
+        let flat = nesting_doc(2.0, 1.0, 0.0, true);
+        let (a, fa) = audio_inputs(&nested, &|_| true);
+        let (b, fb) = audio_inputs(&flat, &|_| true);
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].start_time, b[0].start_time);
+        assert_eq!(a[0].duration_cap, Some(4.0));
+        assert_eq!(a[0].speed, b[0].speed);
+        assert_eq!(
+            a[0].volume_points, b[0].volume_points,
+            "the ramp rides the card's clock"
+        );
+        assert_eq!(
+            a[0].disabled_audio_track_indices,
+            b[0].disabled_audio_track_indices
+        );
+        assert_eq!(a[0].included_ranges, b[0].included_ranges);
+        assert_eq!(fa, fb, "focus spans move with the card");
+        assert_eq!(fa, vec![(2.5, 6.5)]);
+    }
+
+    /// The card's own speed and trim reshape the nested sound: a clip
+    /// starting before the trim loses that much source, everything runs
+    /// at the card's rate, and the ramp's points land where the card
+    /// puts them.
+    #[test]
+    fn nested_audio_follows_the_cards_speed_and_trim() {
+        let doc = nesting_doc(2.0, 2.0, 1.0, false);
+        let (inputs, focus) = audio_inputs(&doc, &|_| true);
+        assert_eq!(inputs.len(), 1);
+        let input = &inputs[0];
+        // The clip plays 0.5…4.5 on the card's clock; the card plays 1.0…6
+        // at 2x from t=2 — so the clip runs 2.0…3.75 on the parent, having
+        // skipped its first half second of source.
+        assert!(
+            (input.start_time - 2.0).abs() < 1e-9,
+            "{}",
+            input.start_time
+        );
+        assert!(
+            (input.duration_cap.unwrap() - 1.75).abs() < 1e-9,
+            "{:?}",
+            input.duration_cap
+        );
+        assert_eq!(input.speed, 2.0);
+        let ranges = input.included_ranges.as_ref().unwrap();
+        assert_eq!(ranges.len(), 1);
+        assert!(
+            (ranges[0].start - 0.5).abs() < 1e-9 && (ranges[0].end - 6.0).abs() < 1e-9,
+            "{ranges:?}"
+        );
+        // Ramp points: the card's clock t maps to 2 + (t - 1) / 2. The ramp
+        // ends at card time 0.5 + 2 = 2.5 -> parent 2.75.
+        let points = input.volume_points.as_ref().unwrap();
+        let last = points.last().unwrap();
+        assert!((last.time - 2.75).abs() < 1e-6, "{points:?}");
+        assert!((last.volume - 0.25).abs() < 1e-6);
+        assert_eq!(focus.len(), 1);
+        assert!(
+            (focus[0].0 - 2.0).abs() < 1e-9 && (focus[0].1 - 3.75).abs() < 1e-9,
+            "{focus:?}"
+        );
+    }
+
     #[test]
     fn audio_inputs_derive_the_apps_mix_graph() {
         let p = fixture_project();
