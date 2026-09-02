@@ -264,12 +264,67 @@ pub fn command_schema() -> serde_json::Value {
     serde_json::to_value(schemars::schema_for!(Command)).unwrap_or(serde_json::Value::Null)
 }
 
+/// What one version bump touched — the narrow thing a front end observes,
+/// so a rename redraws one row and not every layer (EDITOR-PLAN §8: decided
+/// before any command lands). Computed by DIFFING the document before and
+/// after, never by trusting a command's word for what it changed: undo,
+/// redo and a group of commands all answer the same way.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Changes {
+    /// Layers whose JSON differs (edited, added or removed), by id.
+    pub layers: Vec<String>,
+    /// Resources whose JSON differs, by id.
+    pub resources: Vec<String>,
+    /// The layer ORDER changed (a move, an add, a delete).
+    pub order: bool,
+    /// `compositionSettings` changed.
+    pub settings: bool,
+    /// Something outside layers, resources and settings (the name, the
+    /// legacy fields) changed.
+    pub project: bool,
+}
+
+impl Changes {
+    fn union(&mut self, other: &Changes) {
+        for id in &other.layers {
+            if !self.layers.contains(id) {
+                self.layers.push(id.clone());
+            }
+        }
+        for id in &other.resources {
+            if !self.resources.contains(id) {
+                self.resources.push(id.clone());
+            }
+        }
+        self.order |= other.order;
+        self.settings |= other.settings;
+        self.project |= other.project;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layers.is_empty()
+            && self.resources.is_empty()
+            && !self.order
+            && !self.settings
+            && !self.project
+    }
+}
+
+/// How many version bumps the change log remembers before an old
+/// `changes_since` answers "everything".
+const CHANGE_LOG_DEPTH: usize = 256;
+
 pub struct Document {
     meta: ProjectMetadata,
     version: u64,
     /// Canonical-JSON snapshots taken BEFORE each applied command.
     undo: Vec<String>,
     redo: Vec<String>,
+    /// (version reached, what that bump touched), newest last.
+    log: Vec<(u64, Changes)>,
+    /// Per-layer revision: bumped whenever a version touches the layer.
+    layer_revisions: std::collections::HashMap<String, u64>,
 }
 
 impl Document {
@@ -279,7 +334,132 @@ impl Document {
             version: 0,
             undo: Vec::new(),
             redo: Vec::new(),
+            log: Vec::new(),
+            layer_revisions: std::collections::HashMap::new(),
         })
+    }
+
+    /// Everything that changed after `version` — the union of every bump
+    /// since. A `version` older than the log remembers, or from another
+    /// document, answers "everything": every layer and resource named,
+    /// order, settings and project all set — the honest answer when the
+    /// narrow one cannot be known.
+    pub fn changes_since(&self, version: u64) -> Changes {
+        if version >= self.version {
+            return Changes::default();
+        }
+        let floor = self
+            .log
+            .first()
+            .map(|(v, _)| *v)
+            .unwrap_or(self.version + 1);
+        if version + 1 < floor {
+            return self.everything();
+        }
+        let mut union = Changes::default();
+        for (v, changes) in &self.log {
+            if *v > version {
+                union.union(changes);
+            }
+        }
+        union
+    }
+
+    /// The revision a layer is at: 0 until something touches it.
+    pub fn layer_revision(&self, layer_id: &str) -> u64 {
+        self.layer_revisions.get(layer_id).copied().unwrap_or(0)
+    }
+
+    fn everything(&self) -> Changes {
+        Changes {
+            layers: self
+                .meta
+                .layers
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .map(|l| l.id.clone())
+                .collect(),
+            resources: self
+                .meta
+                .resources
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .map(|r| r.id.clone())
+                .collect(),
+            order: true,
+            settings: true,
+            project: true,
+        }
+    }
+
+    /// Diffs two documents entity by entity.
+    fn diff(before: &ProjectMetadata, after: &ProjectMetadata) -> Changes {
+        use std::collections::BTreeMap;
+        let layers_of = |m: &ProjectMetadata| -> BTreeMap<String, String> {
+            m.layers
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .map(|l| (l.id.clone(), serde_json::to_string(l).unwrap_or_default()))
+                .collect()
+        };
+        let resources_of = |m: &ProjectMetadata| -> BTreeMap<String, String> {
+            m.resources
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .map(|r| (r.id.clone(), serde_json::to_string(r).unwrap_or_default()))
+                .collect()
+        };
+        let (lb, la) = (layers_of(before), layers_of(after));
+        let (rb, ra) = (resources_of(before), resources_of(after));
+        let mut changes = Changes::default();
+        for id in lb.keys().chain(la.keys()) {
+            if lb.get(id) != la.get(id) && !changes.layers.contains(id) {
+                changes.layers.push(id.clone());
+            }
+        }
+        for id in rb.keys().chain(ra.keys()) {
+            if rb.get(id) != ra.get(id) && !changes.resources.contains(id) {
+                changes.resources.push(id.clone());
+            }
+        }
+        let order = |m: &ProjectMetadata| -> Vec<String> {
+            m.layers
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .map(|l| l.id.clone())
+                .collect()
+        };
+        changes.order = order(before) != order(after);
+        changes.settings = serde_json::to_string(&before.composition_settings).ok()
+            != serde_json::to_string(&after.composition_settings).ok();
+        // Everything else: compare the documents with layers, resources
+        // and settings blanked.
+        let rest = |m: &ProjectMetadata| -> String {
+            let mut copy = m.clone();
+            copy.layers = None;
+            copy.resources = None;
+            copy.composition_settings = Default::default();
+            copy.to_json().unwrap_or_default()
+        };
+        changes.project = rest(before) != rest(after);
+        changes
+    }
+
+    /// Records what a bump from `before` to the current document touched.
+    fn note(&mut self, before: &ProjectMetadata) {
+        let changes = Self::diff(before, &self.meta);
+        for id in &changes.layers {
+            *self.layer_revisions.entry(id.clone()).or_insert(0) += 1;
+        }
+        self.log.push((self.version, changes));
+        if self.log.len() > CHANGE_LOG_DEPTH {
+            self.log.remove(0);
+        }
     }
 
     pub fn version(&self) -> u64 {
@@ -310,10 +490,11 @@ impl Document {
         let snapshot = self.to_json()?;
         let mut edited = self.meta.clone();
         Self::run(&mut edited, command)?;
-        self.meta = edited;
+        let before = std::mem::replace(&mut self.meta, edited);
         self.undo.push(snapshot);
         self.redo.clear();
         self.version += 1;
+        self.note(&before);
         Ok(())
     }
 
@@ -329,10 +510,11 @@ impl Document {
         for command in commands {
             Self::run(&mut edited, command)?;
         }
-        self.meta = edited;
+        let before = std::mem::replace(&mut self.meta, edited);
         self.undo.push(snapshot);
         self.redo.clear();
         self.version += 1;
+        self.note(&before);
         Ok(())
     }
 
@@ -343,8 +525,9 @@ impl Document {
         if let Ok(current) = self.to_json() {
             if let Ok(meta) = ProjectMetadata::from_json(&snapshot) {
                 self.redo.push(current);
-                self.meta = meta;
+                let before = std::mem::replace(&mut self.meta, meta);
                 self.version += 1;
+                self.note(&before);
                 return true;
             }
         }
@@ -358,8 +541,9 @@ impl Document {
         if let Ok(current) = self.to_json() {
             if let Ok(meta) = ProjectMetadata::from_json(&snapshot) {
                 self.undo.push(current);
-                self.meta = meta;
+                let before = std::mem::replace(&mut self.meta, meta);
                 self.version += 1;
+                self.note(&before);
                 return true;
             }
         }
@@ -1493,5 +1677,87 @@ mod tests {
             .apply(&command(serde_json::json!(
                 {"kind": "deleteLayer", "layerID": slide})))
             .is_err());
+    }
+
+    /// The change log names what a bump touched — one layer for a rename,
+    /// the order and the new layer for an add, settings for a patch — and
+    /// undo answers the same way. A version the log no longer remembers
+    /// reads as "everything".
+    #[test]
+    fn changes_name_exactly_what_a_bump_touched() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .unwrap();
+        let mut doc = Document::open(&raw).unwrap();
+        let first = doc.meta().layers.as_deref().unwrap()[0].id.clone();
+        assert!(doc.changes_since(0).is_empty(), "nothing yet");
+
+        doc.apply(&Command::RenameLayer {
+            layer_id: first.clone(),
+            name: "Renamed".into(),
+        })
+        .unwrap();
+        let c = doc.changes_since(0);
+        assert_eq!(c.layers, vec![first.clone()]);
+        assert!(
+            c.resources.is_empty() && !c.order && !c.settings && !c.project,
+            "{c:?}"
+        );
+        assert_eq!(doc.layer_revision(&first), 1);
+
+        doc.apply(&Command::PatchSettings {
+            patch: serde_json::json!({"fps": 24}),
+        })
+        .unwrap();
+        let c = doc.changes_since(1);
+        assert!(c.layers.is_empty() && c.settings && !c.order, "{c:?}");
+        let both = doc.changes_since(0);
+        assert_eq!(both.layers, vec![first.clone()]);
+        assert!(both.settings);
+
+        doc.apply(&Command::AddLayer {
+            layer: serde_json::from_value(serde_json::json!({
+                "id": "NEW", "name": "New", "sortIndex": 99, "kind": "caption",
+                "isEnabled": true, "startTime": 0, "duration": 1, "captionText": "x", "keyframes": []
+            }))
+            .unwrap(),
+        })
+        .unwrap();
+        let c = doc.changes_since(2);
+        assert_eq!(c.layers, vec!["NEW".to_string()]);
+        assert!(c.order, "an add changes the order");
+
+        assert!(doc.undo());
+        let c = doc.changes_since(3);
+        assert_eq!(
+            c.layers,
+            vec!["NEW".to_string()],
+            "undo names the layer it removed"
+        );
+        assert!(c.order);
+        assert_eq!(
+            doc.layer_revision("NEW"),
+            2,
+            "touched twice: added, removed"
+        );
+        assert!(doc.changes_since(doc.version()).is_empty());
+
+        // Beyond the log's memory: everything.
+        for i in 0..300 {
+            doc.apply(&Command::RenameLayer {
+                layer_id: first.clone(),
+                name: format!("n{i}"),
+            })
+            .unwrap();
+        }
+        let all = doc.changes_since(1);
+        assert!(all.order && all.settings && all.project);
+        assert!(
+            all.layers.len() > 1,
+            "every layer named: {}",
+            all.layers.len()
+        );
     }
 }

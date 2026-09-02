@@ -10,4 +10,4 @@ pub mod author;
 pub mod document;
 mod theme;
 
-pub use document::{command_schema, Command, Document};
+pub use document::{command_schema, Changes, Command, Document};
