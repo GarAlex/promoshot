@@ -21,7 +21,40 @@ A seamless scrolling multi-colour gradient loop with a ring breathing in the mid
 
 ## What the agent made
 
-*Not run yet.*
+Score **100%** (8 of 8 rubric checks).
+
+| the agent's work | |
+|---|---|
+| turns | 27 |
+| wall time | 3 min 02 s (API 3 min 06 s) |
+| cost | $1.54 |
+| tokens in | 1.3M (1.2M cache read, 59k cache write) |
+| tokens out | 13k (6k thinking) |
+| claude-opus-5 | 1.3M in, 13k out, $1.54 |
+| claude-haiku-4-5 | 1k in, 18 out, $0.00 |
+
+<img src="04-gradient-drift/result.gif" width="480" alt="the result, looping">
+
+Six moments:
+
+<img src="04-gradient-drift/contact-result.png" width="800" alt="six moments of the result">
+
+[video](04-gradient-drift/result.mp4) · [the project it wrote](04-gradient-drift/result-metadata.json)
+
+| check | | detail |
+|---|---|---|
+| canvas | ✓ | [1920, 1080] vs [1920, 1080] |
+| duration | ✓ | 12.0s vs 12.0s |
+| kind:background | ✓ | 1 vs 1 |
+| kind:image | ✓ | 1 vs 1 |
+| kind:caption | ✓ | 3 vs 3 |
+| feature:sprite | ✓ | True |
+| feature:gradient | ✓ | True |
+| phrases | ✓ | 3 of 3 lines recognisable |
+
+## The hand-built reference, same moments
+
+<img src="04-gradient-drift/contact-reference.png" width="800" alt="six moments of the reference">
 
 ---
 

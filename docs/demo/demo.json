@@ -341,7 +341,87 @@
     "path": "docs/demo/04-gradient-drift/resources/sprite_ring.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 8,
+   "total": 8,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1920, 1080] vs [1920, 1080]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 12.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "feature:sprite",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "3 of 3 lines recognisable"
+    }
+   ],
+   "summary": "turns=27 cost=$1.54 secs=182",
+   "run": {
+    "turns": 27,
+    "wall_s": 182,
+    "api_s": 186,
+    "cost_usd": 1.54,
+    "tokens": {
+     "input": 38,
+     "cache_read": 1248247,
+     "cache_write": 58728,
+     "output": 13027,
+     "thinking": 5870
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 1307013,
+      "output": 13027,
+      "cost_usd": 1.54
+     },
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1093,
+      "output": 18,
+      "cost_usd": 0.0
+     }
+    ]
+   },
+   "contact": "docs/demo/04-gradient-drift/contact-result.png",
+   "reference_contact": "docs/demo/04-gradient-drift/contact-reference.png",
+   "video": "docs/demo/04-gradient-drift/result.mp4",
+   "metadata": "docs/demo/04-gradient-drift/result-metadata.json",
+   "gif": "docs/demo/04-gradient-drift/result.gif",
+   "thumb": "docs/demo/04-gradient-drift/thumb.png"
+  },
   "page": "docs/demo/demo04.md"
  },
  {
@@ -377,7 +457,108 @@
     "path": "docs/demo/05-carousel/resources/ui_verse_2.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 5,
+   "total": 5,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "15.0s vs 15.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 5"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 5 lines recognisable"
+    }
+   ],
+   "summary": "turns=26 cost=$1.10 secs=149",
+   "run": {
+    "turns": 26,
+    "wall_s": 148,
+    "api_s": 144,
+    "cost_usd": 1.1,
+    "tokens": {
+     "input": 32,
+     "cache_read": 816331,
+     "cache_write": 38264,
+     "output": 12489,
+     "thinking": 4817
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1135,
+      "output": 17,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 854627,
+      "output": 12489,
+      "cost_usd": 1.1
+     }
+    ],
+    "mcp": {
+     "calls": 9,
+     "ms": 2723,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2456,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 4,
+       "ms": 133,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 117,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/05-carousel/contact-result.png",
+   "reference_contact": "docs/demo/05-carousel/contact-reference.png",
+   "video": "docs/demo/05-carousel/result.mp4",
+   "metadata": "docs/demo/05-carousel/result-metadata.json",
+   "gif": "docs/demo/05-carousel/result.gif",
+   "thumb": "docs/demo/05-carousel/thumb.png"
+  },
   "page": "docs/demo/demo05.md"
  },
  {

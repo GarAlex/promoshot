@@ -1,0 +1,208 @@
+{
+  "id": "gradient-drift",
+  "name": "Gradient Drift",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas",          "colorHex": "1E2A6E" },
+      { "name": "text",            "colorHex": "FFFFFF" },
+      { "name": "text-bg",         "colorHex": "0B1020" },
+      { "name": "edge",            "colorHex": "2A3A72" },
+      { "name": "caption-outline", "colorHex": "141A38" },
+      { "name": "caption-shadow",  "colorHex": "080C1C" },
+      { "name": "media-shadow",    "colorHex": "080C1C" },
+      { "name": "highlight",       "colorHex": "3ECF8E" },
+      { "name": "accent1",         "colorHex": "1E2A6E" },
+      { "name": "accent2",         "colorHex": "5B2E86" },
+      { "name": "accent3",         "colorHex": "8E3A72" },
+      { "name": "accent4",         "colorHex": "A85A4E" },
+      { "name": "accent5",         "colorHex": "1F6E78" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [0.8, 0.5],
+      "repeat": "repeat",
+      "stops": [
+        { "colorHex": "@accent1", "at": 0 },
+        { "colorHex": "@accent2", "at": 0.2 },
+        { "colorHex": "@accent3", "at": 0.4 },
+        { "colorHex": "@accent4", "at": 0.6 },
+        { "colorHex": "@accent5", "at": 0.8 },
+        { "colorHex": "@accent1", "at": 1 }
+      ]
+    },
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 64,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 20,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 5,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.5,
+    "subtitleShadowRadius": 14,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200
+  },
+
+  "resources": [
+    {
+      "id": "ring",
+      "kind": "image",
+      "filename": "sprite_ring.png",
+      "displayName": "Ring",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 528,
+      "pixelHeight": 44,
+      "sampling": "nearest",
+      "sprite": { "columns": 12, "rows": 1, "frameCount": 12, "fps": 12 }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Drifting gradient",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "keyframes": [
+        {
+          "id": "g0",
+          "time": 0,
+          "transitionDuration": 0,
+          "gradient": {
+            "kind": "linear",
+            "start": [0, 0],
+            "end": [0.8, 0.5],
+            "repeat": "repeat",
+            "stops": [
+              { "colorHex": "@accent1", "at": 0 },
+              { "colorHex": "@accent2", "at": 0.2 },
+              { "colorHex": "@accent3", "at": 0.4 },
+              { "colorHex": "@accent4", "at": 0.6 },
+              { "colorHex": "@accent5", "at": 0.8 },
+              { "colorHex": "@accent1", "at": 1 }
+            ]
+          }
+        },
+        {
+          "id": "g1",
+          "time": 12,
+          "transitionDuration": 12,
+          "easing": "linear",
+          "gradient": {
+            "kind": "linear",
+            "start": [0.8, 0.5],
+            "end": [1.6, 1.0],
+            "repeat": "repeat",
+            "stops": [
+              { "colorHex": "@accent1", "at": 0 },
+              { "colorHex": "@accent2", "at": 0.2 },
+              { "colorHex": "@accent3", "at": 0.4 },
+              { "colorHex": "@accent4", "at": 0.6 },
+              { "colorHex": "@accent5", "at": 0.8 },
+              { "colorHex": "@accent1", "at": 1 }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "ringLayer",
+      "name": "Breathing ring",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "ring",
+      "keyframes": [
+        { "id": "r0", "time": 0,  "transitionDuration": 0,
+          "placement": { "height": 264, "anchor": "center", "offset": [0, -60] } },
+        { "id": "r1", "time": 2,  "transitionDuration": 2, "easing": "easeInOut",
+          "placement": { "height": 330, "anchor": "center", "offset": [0, -60] } },
+        { "id": "r2", "time": 4,  "transitionDuration": 2, "easing": "easeInOut",
+          "placement": { "height": 264, "anchor": "center", "offset": [0, -60] } },
+        { "id": "r3", "time": 6,  "transitionDuration": 2, "easing": "easeInOut",
+          "placement": { "height": 330, "anchor": "center", "offset": [0, -60] } },
+        { "id": "r4", "time": 8,  "transitionDuration": 2, "easing": "easeInOut",
+          "placement": { "height": 264, "anchor": "center", "offset": [0, -60] } },
+        { "id": "r5", "time": 10, "transitionDuration": 2, "easing": "easeInOut",
+          "placement": { "height": 330, "anchor": "center", "offset": [0, -60] } },
+        { "id": "r6", "time": 12, "transitionDuration": 2, "easing": "easeInOut",
+          "placement": { "height": 264, "anchor": "center", "offset": [0, -60] } }
+      ]
+    },
+
+    {
+      "id": "cap1",
+      "name": "Caption 1",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.8,
+      "duration": 3.0,
+      "fadeOut": 0.6,
+      "captionText": "colour that moves",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -140] },
+        "reveal": { "by": "word", "mode": "fade", "seconds": 1.0, "easing": "easeOut" }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "cap2",
+      "name": "Caption 2",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 4.4,
+      "duration": 3.0,
+      "fadeOut": 0.6,
+      "captionText": "repeat · mirror · clamp",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -140] },
+        "reveal": { "by": "word", "mode": "fade", "seconds": 1.0, "easing": "easeOut" }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "cap3",
+      "name": "Caption 3",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 8.0,
+      "duration": 3.2,
+      "fadeOut": 0.6,
+      "captionText": "a gradient is a keyframe too",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -140] },
+        "reveal": { "by": "word", "mode": "fade", "seconds": 1.2, "easing": "easeOut" }
+      },
+      "keyframes": []
+    }
+  ]
+}

@@ -27,7 +27,47 @@ Cards entering from the right, resting under a caption, leaving left with a tilt
 
 ## What the agent made
 
-*Not run yet.*
+Score **100%** (5 of 5 rubric checks).
+
+| the agent's work | |
+|---|---|
+| turns | 26 |
+| wall time | 2 min 28 s (API 2 min 24 s) |
+| cost | $1.10 |
+| tokens in | 855k (816k cache read, 38k cache write) |
+| tokens out | 12k (5k thinking) |
+| claude-haiku-4-5 | 1k in, 17 out, $0.00 |
+| claude-opus-5 | 855k in, 12k out, $1.10 |
+
+| MCP tool | calls | time |
+|---|---|---|
+| promo_render_video | 1 | 2 s |
+| promo_media_probe | 4 | 0 s |
+| promo_render_frames | 1 | 0 s |
+| promo_inspect | 1 | 0 s |
+| promo_validate | 1 | 0 s |
+| promo_schema | 1 | 0 s |
+| **all** | 9 | 3 s |
+
+<img src="05-carousel/result.gif" width="480" alt="the result, looping">
+
+Six moments:
+
+<img src="05-carousel/contact-result.png" width="800" alt="six moments of the result">
+
+[video](05-carousel/result.mp4) · [the project it wrote](05-carousel/result-metadata.json)
+
+| check | | detail |
+|---|---|---|
+| duration | ✓ | 15.0s vs 15.0s |
+| kind:background | ✓ | 1 vs 1 |
+| kind:image | ✓ | 4 vs 4 |
+| kind:caption | ✓ | 4 vs 5 |
+| phrases | ✓ | 4 of 5 lines recognisable |
+
+## The hand-built reference, same moments
+
+<img src="05-carousel/contact-reference.png" width="800" alt="six moments of the reference">
 
 ---
 
