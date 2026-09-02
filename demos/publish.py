@@ -191,7 +191,7 @@ def main():
         pg = [f"# {rubric['template']}", "",
               f"{blurb}", "",
               f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration']:.0f} s.* "
-              ("A **creative run**: a goal, the material and the tools, nothing about how. " if creative else "")
+              + ("A **creative run**: a goal, the material and the tools, nothing about how. " if creative else "")
               + "Part of [the demos](../../demo.md): a fresh agent, the media and the prompt below, "
               "the public skill and the headless MCP, nothing else.", "",
               "## Resources given to the agent", ""]
