@@ -614,6 +614,26 @@ impl Document {
         Ok(())
     }
 
+    /// Replaces the whole document as ONE undo step — the step an edit
+    /// takes when it was not spoken as commands: a file adopted from disk
+    /// after an assistant wrote it, a legacy path that wrote the Swift
+    /// model directly while both writers exist. Validated by the format's
+    /// own parser; the change log names what differs, so a reader follows
+    /// it like any other step. Identical content is not a step.
+    pub fn replace(&mut self, json: &str) -> Result<bool, String> {
+        let meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
+        if meta == self.meta {
+            return Ok(false);
+        }
+        let snapshot = self.to_json()?;
+        let before = std::mem::replace(&mut self.meta, meta);
+        self.undo.push(snapshot);
+        self.redo.clear();
+        self.version += 1;
+        self.note(&before);
+        Ok(true)
+    }
+
     pub fn undo(&mut self) -> bool {
         let Some(snapshot) = self.undo.pop() else {
             return false;
@@ -2145,5 +2165,32 @@ mod tests {
         assert!(doc.undo());
         assert!(doc.undo());
         assert_eq!(doc.to_json().unwrap(), start);
+    }
+    /// A whole-document replacement is one undo step that the log names
+    /// by diff; the same content again is not a step.
+    #[test]
+    fn replacing_the_document_is_one_named_step() {
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "L", "name": "l", "sortIndex": 0, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "R", "keyframes": []}
+            ]),
+            serde_json::json!({"id": "R", "kind": "video", "filename": "v.mp4", "displayName": "v", "addedAt": 0, "duration": 4, "imageCuts": []}),
+        );
+        let start = doc.to_json().unwrap();
+        assert!(!doc.replace(&start).unwrap(), "same content, no step");
+        assert_eq!(doc.version(), 0);
+        let mut edited: serde_json::Value = serde_json::from_str(&start).unwrap();
+        edited["layers"][0]["name"] = serde_json::json!("renamed");
+        assert!(doc.replace(&edited.to_string()).unwrap());
+        assert_eq!(doc.version(), 1);
+        let changes = doc.changes_since(0);
+        assert_eq!(changes.layers, vec!["L".to_string()]);
+        assert!(changes.resources.is_empty() && !changes.settings);
+        assert!(doc.undo());
+        assert_eq!(doc.to_json().unwrap(), start);
+        assert!(
+            doc.replace("{not json").is_err(),
+            "the format's parser gates it"
+        );
     }
 }
