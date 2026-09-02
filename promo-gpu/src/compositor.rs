@@ -3352,6 +3352,52 @@ mod tests {
         );
     }
 
+    /// A scene that GROWS a quad between frames — a click ring appearing
+    /// above a layer — draws the new quad: the buffer reallocates and the
+    /// cached bind groups must follow it.
+    #[test]
+    fn a_quad_added_between_frames_is_drawn() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut comp = Compositor::new(&ctx).expect("compositor");
+        let out = OwnedIoSurface::new_bgra(64, 64).expect("output surface");
+        let white = split_texture(&ctx, 64);
+        let plate = SceneQuad {
+            texture: Some(0),
+            rect: [0.0, 0.0, 64.0, 64.0],
+            ..Default::default()
+        };
+        let ring = SceneQuad {
+            texture: None,
+            rect: [24.0, 24.0, 16.0, 16.0],
+            corner_radius: 8.0,
+            border_width: 3.0,
+            border_rgba: [1.0, 0.4, 0.0, 1.0],
+            solid_rgba: [0.0, 0.0, 0.0, 0.0],
+            ..Default::default()
+        };
+        let mut scene = full_scene(plate, [0.0, 0.0, 0.0, 1.0]);
+        comp.compose_to_iosurface(&ctx, &scene, std::slice::from_ref(&white), out.raw())
+            .expect("compose");
+        assert_eq!(
+            px64(&out.read_pixels().expect("readback"), 32, 25)[0],
+            255,
+            "white, no ring yet"
+        );
+        scene.quads.push(ring);
+        comp.compose_to_iosurface(&ctx, &scene, std::slice::from_ref(&white), out.raw())
+            .expect("compose");
+        let px = out.read_pixels().expect("readback");
+        let orange = (24..40).any(|y| {
+            let p = px64(&px, 32, y);
+            p[2] > 150 && p[0] < 100
+        });
+        assert!(
+            orange,
+            "the ring appears on the second frame: {:?}",
+            (24..40).map(|y| px64(&px, 32, y)).collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn sharpen_pushes_a_step_apart() {
         let ctx = GpuContext::new().expect("gpu");

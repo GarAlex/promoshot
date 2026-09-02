@@ -381,6 +381,15 @@ and a softness: the plate becomes transparent before the layer's grade,
 border and mask, in the compositor, so a green-screen clip composes
 over anything on every host alike.
 
+## Follow the pointer
+
+A video the Mac recorder made carries `pointer`, where the pointer went
+and where it clicked, in the recording's own time and coordinates. A
+layer showing it may say `follow`: its viewport becomes a window
+`1/zoom` of the source that follows the smoothed pointer, and each click
+draws a ring that grows and fades. A rule, not keyframes: re-trim the
+recording and it stays true, on every host alike.
+
 ## Image effects
 
 A layer may carry `effects`: a `blur` (round, or directional along a
@@ -388,6 +397,9 @@ A layer may carry `effects`: a `blur` (round, or directional along a
 corners, film `grain` and an unsharp `sharpen`, each on the layer's own
 pixels in the compositor. Blur, glow and vignette are keyframe tracks
 too, so a focus pull or a glow that pulses ramps like the grade does.
+Five transitions ride the same passes — `blurDissolve`, `zoom`, `flash`,
+`glitch` and `dip` — beside the fade, wipe, slide, push and scale that
+were there, at a layer's edges and at a resource swap alike.
 
 ## Looks from a `.cube`
 

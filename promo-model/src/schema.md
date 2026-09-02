@@ -792,6 +792,19 @@ plane) become transparent, feathered over `softness` beyond it, before
 the layer's grade, border and mask. A palette name (`"@green"`) works.
 A project with a keyed layer carries `minReaderVersion: 22`.
 
+Follow the pointer (rung 26). A video resource the Mac recorder made
+carries `"pointer": { "samples": [[t, x, y], …], "clicks": [[t, x, y], …] }`
+— source seconds and unit coordinates of the recorded picture, samples
+kept only when the pointer moved. A layer showing it may carry
+`"follow": { "zoom": 2, "smoothing": 0.35, "clicks": true,
+"clickColorHex": "@accent" }`: every frame its viewport becomes a window
+`1/zoom` of the source centred on the exponentially smoothed pointer
+(time constant `smoothing` seconds), clamped inside the picture, and
+each click draws a ring that grows and fades over half a second. A rule,
+not keyframes — re-trim the recording and it stays true; it wins over
+keyframed viewports while present. A project using either carries
+`minReaderVersion: 26`.
+
 Image effects (rung 24). A layer may carry `"effects": { "blur": 12,
 "blurAngle": 45, "glow": 0.6, "glowRadius": 24, "glowThreshold": 0.6,
 "vignette": 0.5, "vignetteSoftness": 0.5, "grain": 0.2, "sharpen": 0.5 }`,

@@ -531,6 +531,46 @@ pub struct ChromaKey {
     pub softness: Option<f64>,
 }
 
+/// Where the pointer was while a screen recording was made (rung 26):
+/// what the Mac recorder writes beside the file, and what a layer's
+/// `follow` rule reads. Times are SOURCE seconds; positions are unit
+/// coordinates of the recorded picture (0…1 across and down). Samples
+/// are kept only when the pointer moved; clicks are their own list.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PointerTrack {
+    /// `[t, x, y]` per sample, ascending by t.
+    #[serde(default)]
+    pub samples: Vec<[f64; 3]>,
+    /// `[t, x, y]` per click.
+    #[serde(default)]
+    pub clicks: Vec<[f64; 3]>,
+}
+
+/// Follow the pointer (rung 26): the layer's viewport is derived every
+/// frame from the recording's pointer track — a window `1/zoom` of the
+/// source, its centre an exponentially smoothed pointer position — and
+/// each click draws a ring that grows and fades. A RULE, like placement:
+/// nothing is baked, and re-trimming the recording keeps it true. Wins
+/// over keyframed viewports while present.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Follow {
+    /// How far in: the window is `1/zoom` of the source; default 2.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub zoom: Option<f64>,
+    /// The smoothing time constant in seconds; default 0.35. Larger
+    /// follows more lazily.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub smoothing: Option<f64>,
+    /// Draw a ring at each click; default true.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub clicks: Option<bool>,
+    /// The ring's colour; default `@accent`, else white.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub click_color_hex: Option<String>,
+}
+
 /// Per-layer image effects (rung 24), on this layer's own pixels and
 /// nobody else's: a blur (Gaussian, or directional when `blurAngle` is
 /// given), a glow (the bright parts, blurred and added back), a vignette
@@ -1951,6 +1991,9 @@ pub struct ProjectLayer {
     /// win per field when present, like the grade.
     #[serde(default, skip_serializing_if = "is_none")]
     pub effects: Option<LayerEffects>,
+    /// Follow the pointer of the recording this layer shows (rung 26).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub follow: Option<Follow>,
     /// The drawing whose ink is this layer's WINDOW: rasterized and
     /// stretched over the layer's rect, the layer only shows where the
     /// drawing has ink. Absent means the whole rect, as always. A static
@@ -2479,6 +2522,10 @@ pub struct ProjectResource {
     pub video_natural_width: Option<f64>,
     #[serde(skip_serializing_if = "is_none")]
     pub video_natural_height: Option<f64>,
+    /// The pointer's path while this was recorded (rung 26), for a layer's
+    /// `follow` rule. Written by the recorder; absent for everything else.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub pointer: Option<PointerTrack>,
     /// Pixel size of an IMAGE resource, stamped at import. Placement intents
     /// resolve width/anchoring against it (videos use `videoNatural*`, a
     /// sprite divides by its grid). Optional — a hand-written project may
@@ -2556,6 +2603,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     video_natural_height: Option<f64>,
     #[serde(default)]
+    pointer: Option<PointerTrack>,
+    #[serde(default)]
     frame: Option<ResourceFrame>,
     #[serde(default)]
     looped: Option<bool>,
@@ -2608,6 +2657,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             pixel_width: w.pixel_width,
             pixel_height: w.pixel_height,
             video_natural_height: w.video_natural_height,
+            pointer: w.pointer,
             frame: w.frame,
             looped: w.looped,
             extra: w.extra,
@@ -2748,6 +2798,7 @@ impl ProjectResource {
             pixel_width: None,
             pixel_height: None,
             video_natural_height: None,
+            pointer: None,
             frame: None,
             looped: None,
             extra: Default::default(),
@@ -2787,6 +2838,15 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 26 is a pointer track on a resource or a follow rule on a layer.
+        // Dropped by an older reader's save, the recording forgets where
+        // the pointer went and the zoom stops following it.
+        if layers.iter().any(|l| l.follow.is_some())
+            || resources.iter().any(|r| r.pointer.is_some())
+        {
+            return 26;
+        }
 
         // 25 is a transition of one of the newer kinds — blur dissolve,
         // zoom, flash, glitch, dip. An older reader plays it as a fade and
@@ -3604,6 +3664,19 @@ mod placement_model_tests {
             easing: None,
         });
         assert_eq!(edged.minimum_reader_version(), 25);
+        // 26: a follow rule, or a pointer track.
+        let mut following = meta(&layer(""));
+        following.layers.as_mut().unwrap()[0].follow = Some(Follow::default());
+        assert_eq!(following.minimum_reader_version(), 26);
+        let mut tracked = meta(&layer(""));
+        tracked.resources.get_or_insert_with(Vec::new).push(
+            serde_json::from_value(serde_json::json!({
+                "id": "REC", "kind": "video", "filename": "rec.mp4", "displayName": "rec", "addedAt": 0,
+                "pointer": {"samples": [[0.0, 0.5, 0.5]], "clicks": []}
+            }))
+            .unwrap(),
+        );
+        assert_eq!(tracked.minimum_reader_version(), 26);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

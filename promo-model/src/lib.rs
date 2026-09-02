@@ -444,6 +444,12 @@ mod schema_doc_tests {
                 tolerance: Some(0.3),
                 softness: Some(0.1),
             }),
+            follow: Some(Follow {
+                zoom: Some(2.0),
+                smoothing: Some(0.35),
+                clicks: Some(true),
+                click_color_hex: Some("@accent".into()),
+            }),
             effects: Some(LayerEffects {
                 blur: Some(6.0),
                 blur_angle: Some(30.0),
@@ -571,6 +577,10 @@ mod schema_doc_tests {
             }]),
             video_natural_width: Some(1920.0),
             video_natural_height: Some(1080.0),
+            pointer: Some(PointerTrack {
+                samples: vec![[0.0, 0.5, 0.5], [1.0, 0.6, 0.4]],
+                clicks: vec![[0.8, 0.6, 0.4]],
+            }),
             pixel_width: Some(1170.0),
             pixel_height: Some(2532.0),
             frame: Some(full_frame()),

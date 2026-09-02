@@ -163,6 +163,9 @@ pub struct PreviewEngine {
     /// same answer every frame, so the geometry is cached beside the raster
     /// it describes rather than recomputed 60 times a second.
     reveal_cache: HashMap<String, Option<promo_text::RevealLayout>>,
+    /// Quads a layer adds ABOVE its own — click rings — drained into the
+    /// scene right after the layer's quad.
+    overlays: Vec<SceneQuad>,
     key_of: HashMap<(String, i64, i32), u64>,
     id_of: HashMap<u64, (String, i64, i32)>,
     next_id: u64,
@@ -253,6 +256,7 @@ impl PreviewEngine {
             governor: MemoryGovernor::new(budget_bytes),
             cache: HashMap::new(),
             reveal_cache: HashMap::new(),
+            overlays: Vec::new(),
             key_of: HashMap::new(),
             id_of: HashMap::new(),
             next_id: 1,
@@ -1049,7 +1053,16 @@ impl PreviewEngine {
         // what it SHOWS, so drawn height stays canvasHeight × zoom and
         // width follows the window's aspect — the fixed frame the
         // feature promises.
-        if let Some(vp) = tl::layer_viewport(layer, time) {
+        // The follow rule, when the layer has one and the recording a
+        // track, is the viewport; a keyframed window otherwise.
+        // The track's clock is the recording's own; a still has none, so
+        // a followed image runs on the layer's clock.
+        let follow_time = match resource {
+            Some(r) if r.kind == promo_model::ProjectResourceKind::Video => source_time,
+            _ => tl::layer_local_time(layer, time),
+        };
+        let following = resource.and_then(|r| tl::follow::follow_viewport(layer, r, follow_time));
+        if let Some(vp) = following.or_else(|| tl::layer_viewport(layer, time)) {
             let uv = tl::compose_uv(
                 [
                     uv_rect[0] as f64,
@@ -1142,6 +1155,44 @@ impl PreviewEngine {
         }
         Self::apply_effects(&mut quad, layer, time);
         quad.blend = Self::blend_for(layer);
+
+        // Click rings for a followed recording: a circle at each live
+        // click, growing and fading over half a second, in canvas px from
+        // the click's place inside the window this quad shows.
+        if let Some(vp) = following {
+            let rgba = layer
+                .follow
+                .as_ref()
+                .and_then(|f| f.click_color_hex.clone())
+                .map(|hex| rgba_from_hex(settings.resolve_color(&hex)))
+                .unwrap_or_else(|| {
+                    let accent = settings.resolve_color("@accent");
+                    if accent.eq_ignore_ascii_case("@accent") {
+                        [1.0, 1.0, 1.0, 1.0]
+                    } else {
+                        rgba_from_hex(accent)
+                    }
+                });
+            let clicks = resource
+                .map(|r| tl::follow::live_clicks(layer, r, follow_time))
+                .unwrap_or_default();
+            for (ux, uy, age) in clicks {
+                let life = (age / tl::follow::RING_SECONDS).clamp(0.0, 1.0);
+                let cx = quad.rect[0] + (ux - vp[0]) / vp[2].max(1e-6) * quad.rect[2];
+                let cy = quad.rect[1] + (uy - vp[1]) / vp[3].max(1e-6) * quad.rect[3];
+                let size = (18.0 + 42.0 * life) * canvas.height() / 900.0;
+                self.overlays.push(SceneQuad {
+                    texture: None,
+                    rect: [cx - size / 2.0, cy - size / 2.0, size, size],
+                    corner_radius: size / 2.0,
+                    border_width: (3.0 * canvas.height() / 900.0).max(1.0),
+                    border_rgba: [rgba[0], rgba[1], rgba[2], (1.0 - life) as f32],
+                    solid_rgba: [0.0, 0.0, 0.0, 0.0],
+                    opacity: quad.opacity,
+                    ..Default::default()
+                });
+            }
+        }
 
         // The drop shadow, as its own soft-edged solid quad under this one.
         // Media only; `media_shadow_suppressed` holds the rest of the rule.
@@ -1672,6 +1723,7 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(Scene, Vec<u64>), GpuError> {
+        self.overlays.clear();
         // The PREVIOUS render's transient frames die here, not at its end: a
         // deferred-fence compose may still have the GPU sampling them after
         // render returns, and wgpu keeps submitted resources alive only once
@@ -1774,6 +1826,9 @@ impl PreviewEngine {
         // `quads` by position, and a shadow inserted early would shift
         // every index after it.
         let mut shadow_inserts: Vec<(usize, SceneQuad)> = Vec::new();
+        // Click rings ride ABOVE their layer; inserted after the positional
+        // patch, like shadows, so `used` stays one frame per quad until then.
+        let mut overlay_inserts: Vec<(usize, SceneQuad)> = Vec::new();
         // Masked media quads, patched after the walk: (quad index, mask
         // resource, inverted, placement). Rasterized LAST, so a mask's cache
         // admission can never evict a frame the walk has already borrowed.
@@ -2162,6 +2217,9 @@ impl PreviewEngine {
             let pre_transition = quad.rect;
             apply_transition(&mut quad, layer, time, canvas);
             quads.push(quad);
+            for ring in self.overlays.drain(..) {
+                overlay_inserts.push((quads.len() - 1, ring));
+            }
             if let Some(lut) = lut_id {
                 lut_requests.push((quads.len() - 1, lut));
             }
@@ -2251,6 +2309,11 @@ impl PreviewEngine {
         // are VALUES into `used` by this point (not positions), and the two
         // loops above addressed quads by index. Reverse order keeps each
         // recorded index valid while earlier ones are still to be inserted.
+        // Rings first, each just above its quad; then shadows, each just
+        // below — both in reverse, both against the indices recorded above.
+        for (index, ring) in overlay_inserts.into_iter().rev() {
+            quads.insert(index + 1, ring);
+        }
         for (index, sq) in shadow_inserts.into_iter().rev() {
             quads.insert(index, sq);
         }

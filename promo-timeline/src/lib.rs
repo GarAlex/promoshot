@@ -8,6 +8,7 @@
 
 pub mod attachment;
 pub mod audio;
+pub mod follow;
 pub mod frame;
 pub mod gradient;
 pub mod interpolation;

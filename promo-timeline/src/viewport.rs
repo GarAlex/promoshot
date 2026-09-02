@@ -72,6 +72,11 @@ pub fn out_of_bounds(v: [f64; 4]) -> Option<[f64; 4]> {
         .then_some(fixed)
 }
 
+/// The clamp, for the follow rule.
+pub fn clamped_window(v: [f64; 4]) -> [f64; 4] {
+    clamped(v)
+}
+
 fn clamped(v: [f64; 4]) -> [f64; 4] {
     let w = v[2].clamp(MIN_SIZE, 1.0);
     let h = v[3].clamp(MIN_SIZE, 1.0);

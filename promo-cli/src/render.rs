@@ -1610,6 +1610,78 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Follow the pointer (rung 26): a synthetic track on the plate — the
+    /// pointer on the white left half, then jumping to the black right
+    /// half — and a layer that follows it at zoom 2: the window is where
+    /// the pointer settled, and a click draws its ring for half a second.
+    #[test]
+    fn a_layer_follows_the_pointer_and_rings_its_clicks() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-follow-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let (w, h) = (64u32, 48u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 4;
+                let v = if x < 32 { 255 } else { 0 };
+                rgba[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+            }
+        }
+        write_png(&dir.join("Resources/plate.png"), &rgba, w, h).unwrap();
+        // A canvas big enough for a ring to have a size: rings scale with it.
+        let json = r#"{"id":"P","name":"Follow","createdAt":0,"state":"recorded","minReaderVersion":26,
+            "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+            "compositionSettings":{"canvasWidth":640,"canvasHeight":480,"backgroundColorHex":"1020C0"},
+            "resources":[{"id":"I","kind":"image","filename":"plate.png","displayName":"plate","addedAt":0,
+              "pixelWidth":64,"pixelHeight":48,"imageCuts":[],"disabledAudioTrackIndices":[],
+              "pointer":{"samples":[[0,0.25,0.5],[1.5,0.75,0.5]],"clicks":[[1.0,0.25,0.5]]}}],
+            "layers":[{"id":"L","name":"plate","sortIndex":0,"kind":"image","isEnabled":true,
+              "startTime":0,"duration":4,"resourceID":"I",
+              "follow":{"zoom":2,"smoothing":0.2,"clickColorHex":"FF6A00"},"keyframes":[]}]}"#;
+        std::fs::write(dir.join("metadata.json"), json).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 640, 480).expect("renderer");
+        // Rows are strided by the renderer's own width, whatever it settled on.
+        let stride = renderer.width as usize;
+        let px = move |frame: &[u8], x: usize, y: usize| -> [u8; 3] {
+            let i = (y * stride + x) * 4;
+            [frame[i + 2], frame[i + 1], frame[i]]
+        };
+        let early = renderer.frame_bgra(0.5).expect("frame");
+        assert!(
+            px(&early, 320, 240)[1] > 200,
+            "on the white half at first: {:?} (stride {stride})",
+            px(&early, 320, 240)
+        );
+        let late = renderer.frame_bgra(3.5).expect("frame");
+        assert!(
+            px(&late, 320, 240)[1] < 20,
+            "settled on the black half: {:?}",
+            px(&late, 320, 240)
+        );
+        // The ring: an antialiased orange stroke over white — red stays full
+        // and blue drops well below it — somewhere around the click's place,
+        // and nowhere before the click or half a second after it.
+        let orange = |frame: &[u8]| {
+            (160..480).any(|x| {
+                (80..400).any(|y| {
+                    let p = px(frame, x, y);
+                    p[0] > 200 && p[0] as i32 > p[2] as i32 + 60
+                })
+            })
+        };
+        let ringed = renderer.frame_bgra(1.1).expect("frame");
+        assert!(orange(&ringed), "a click ring at 1.1 s (stride {stride})");
+        assert!(!orange(&early), "no ring before the click");
+        let gone = renderer.frame_bgra(2.0).expect("frame");
+        assert!(!orange(&gone), "the ring is gone half a second later");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The five newer transition kinds (rung 25), mid-way through a
     /// layer's own entry, each against a plain fade at the same instant:
     /// the blur dissolve softens the plate's edge, the zoom moves it, the

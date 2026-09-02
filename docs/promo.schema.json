@@ -782,6 +782,37 @@
       ],
       "type": "string"
     },
+    "Follow": {
+      "properties": {
+        "clickColorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clicks": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "smoothing": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "zoom": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "FrameMaterial": {
       "enum": [
         "spaceBlack",
@@ -1288,6 +1319,37 @@
       ],
       "type": "array"
     },
+    "PointerTrack": {
+      "properties": {
+        "clicks": {
+          "default": [],
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "samples": {
+          "default": [],
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "ProjectExport": {
       "additionalProperties": true,
       "properties": {
@@ -1478,6 +1540,16 @@
           "type": [
             "number",
             "null"
+          ]
+        },
+        "follow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Follow"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "id": {
@@ -2058,6 +2130,16 @@
           "type": [
             "number",
             "null"
+          ]
+        },
+        "pointer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PointerTrack"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "sampling": {

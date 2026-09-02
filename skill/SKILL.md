@@ -142,6 +142,20 @@ new projects.
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
   "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
   and tint, on every host alike. Stamp `minReaderVersion: 23`.
+- **Follow the pointer.** A recording made in the Mac app carries
+  `"pointer": { "samples": [[t, x, y], …], "clicks": [[t, x, y], …] }`
+  (source seconds, unit coordinates). Put `"follow": { "zoom": 2,
+  "smoothing": 0.35 }` on the layer that shows it and the viewport
+  follows the pointer — a smooth auto-zoom with click rings — with no
+  keyframes to place. `"clicks": false` drops the rings;
+  `"clickColorHex"` colours them. Stamp `minReaderVersion: 26`.
+- **Ten transition kinds.** `transitionIn`/`transitionOut` on a layer, or
+  `transition` on a swap keyframe: fade, wipe, slide, push, scale, and —
+  stamp `minReaderVersion: 25` — `blurDissolve` (a fade that sharpens
+  as it lands), `zoom` (in from larger and soft; at a swap the old one is
+  pushed out through the zoom), `flash` (through white), `glitch` (torn
+  bands and split channels for the duration), `dip` (through black).
+  `{ "kind": "blurDissolve", "duration": 0.6, "easing": "easeOut" }`.
 - **Image effects on a layer.** `"effects": { "blur": 12, "glow": 0.5,
   "vignette": 0.4, "grain": 0.15, "sharpen": 0.5 }` on any layer, each
   optional; `"blurAngle": 45` makes the blur a directional smear, and
