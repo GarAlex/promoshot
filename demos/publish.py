@@ -197,7 +197,7 @@ def main():
                 pg += ["| the agent's work | |", "|---|---|",
                        f"| turns | {st.get('turns')} |",
                        f"| wall time | {fmt_secs(st.get('wall_s', 0))} (API {fmt_secs(st.get('api_s', 0))}) |",
-                       f"| cost | ${st.get('cost_usd', 0):.2f} |",
+                       f"| cost at API list price | ${st.get('cost_usd', 0):.2f} — on a Claude subscription this is plan usage, not a bill |",
                        f"| tokens in | {fmt_tokens(tk.get('input', 0) + tk.get('cache_read', 0) + tk.get('cache_write', 0))} "
                        f"({fmt_tokens(tk.get('cache_read', 0))} cache read, {fmt_tokens(tk.get('cache_write', 0))} cache write) |",
                        f"| tokens out | {fmt_tokens(tk.get('output', 0))} ({fmt_tokens(tk.get('thinking', 0))} thinking) |"]
@@ -261,6 +261,13 @@ The suite is in [demos/](demos/README.md) — adding a test is adding a
 folder — and `docs/demo/demo.json` carries the same material for the
 website. Footage credit: Big Buck Bunny (Blender Foundation, CC BY 3.0)
 where a screen recording stands in.
+
+The agent's work is given as turns, wall time, tokens and a cost. The
+cost is the API's list price for those tokens; on a Claude subscription
+the same run counts against the plan's usage window and bills nothing.
+Most of the tokens are cache reads — the session's context re-read on
+each turn at a tenth of the input price — which is why a run of a
+million-odd tokens costs a couple of dollars at list.
 
 | | demo | what the brief asks for | result · the agent's work |
 |---|---|---|---|

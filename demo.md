@@ -15,6 +15,13 @@ folder — and `docs/demo/demo.json` carries the same material for the
 website. Footage credit: Big Buck Bunny (Blender Foundation, CC BY 3.0)
 where a screen recording stands in.
 
+The agent's work is given as turns, wall time, tokens and a cost. The
+cost is the API's list price for those tokens; on a Claude subscription
+the same run counts against the plan's usage window and bills nothing.
+Most of the tokens are cache reads — the session's context re-read on
+each turn at a tenth of the input price — which is why a run of a
+million-odd tokens costs a couple of dollars at list.
+
 | | demo | what the brief asks for | result · the agent's work |
 |---|---|---|---|
 | <a href="docs/demo/demo01.md"><img src="docs/demo/01-app-store-hero/thumb.png" width="160"></a> | [01 App Store Hero](docs/demo/demo01.md) | Five screenshots on one slowly drifting framed window, swapped in turn under a headline each — a Mac App Store preview. | **100%** · 40 turns · 4 min 12 s · $2.07 · 1.8M in / 19k out |
