@@ -219,6 +219,19 @@ pub enum Command {
     /// dangling `paletteResourceID` is refused the same way.
     #[serde(rename_all = "camelCase")]
     PatchSettings { patch: serde_json::Value },
+    /// A command addressed INSIDE a composition resource: the same
+    /// command, run on the composition's layers as if they were the
+    /// document's — with the project's resources and settings, the
+    /// composition's canvas — then written back into the resource. One
+    /// document, one history; the change log names the resource. Refused
+    /// if the edit would make the composition contain itself or nest too
+    /// deep.
+    #[serde(rename_all = "camelCase")]
+    InComposition {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+        command: Box<Command>,
+    },
 }
 
 /// RFC 7386: objects merge key by key, `null` deletes, anything else
@@ -666,7 +679,51 @@ impl Document {
         false
     }
 
+    /// Runs `command` on the composition's layers as a document of their
+    /// own — the project's resources and settings, the composition's
+    /// canvas — and writes the layers back. Attachments inside resolve
+    /// here too, and the nesting rules are checked on the result.
+    fn run_in_composition(
+        meta: &mut ProjectMetadata,
+        resource_id: &str,
+        command: &Command,
+    ) -> Result<(), String> {
+        let resources = meta.resources.get_or_insert_with(Vec::new);
+        let index = resources
+            .iter()
+            .position(|r| r.id == resource_id)
+            .ok_or_else(|| format!("no resource with id {resource_id}"))?;
+        let composition = resources[index]
+            .composition
+            .clone()
+            .ok_or_else(|| format!("resource {resource_id} is not a composition"))?;
+        let mut inner = meta.clone();
+        inner.layers = Some(composition.layers.clone());
+        inner.composition_settings.canvas_width = composition.canvas_width;
+        inner.composition_settings.canvas_height = composition.canvas_height;
+        Self::run(&mut inner, command)?;
+        promo_timeline::resolve_attachments(&mut inner);
+        let mut updated = composition;
+        updated.layers = inner.layers.unwrap_or_default();
+        meta.resources.as_mut().expect("resources")[index].composition = Some(updated);
+        let problems = promo_model::nesting::problems(meta);
+        if let Some(problem) = problems
+            .iter()
+            .find(|p| p.contains("contains itself") || p.contains("nests deeper than"))
+        {
+            return Err(problem.clone());
+        }
+        Ok(())
+    }
+
     fn run(meta: &mut ProjectMetadata, command: &Command) -> Result<(), String> {
+        if let Command::InComposition {
+            resource_id,
+            command,
+        } = command
+        {
+            return Self::run_in_composition(meta, resource_id, command);
+        }
         let layers = meta.layers.get_or_insert_with(Vec::new);
         fn find<'a>(
             layers: &'a mut [promo_model::ProjectLayer],
@@ -1001,6 +1058,9 @@ impl Document {
                     }
                 }
                 *find(meta.layers.get_or_insert_with(Vec::new), layer_id)? = patched;
+            }
+            Command::InComposition { .. } => {
+                unreachable!("dispatched to run_in_composition before the layer borrow")
             }
             Command::PatchResource { resource_id, patch } => {
                 checked_patch(
@@ -2192,5 +2252,101 @@ mod tests {
             doc.replace("{not json").is_err(),
             "the format's parser gates it"
         );
+    }
+    /// A command addressed inside a composition edits the composition's
+    /// layers with every rule the document has — rename, retime, delete's
+    /// renumbering — and the change log names the resource. An edit that
+    /// would make the composition contain itself is refused.
+    #[test]
+    fn commands_inside_a_composition_edit_its_layers_and_name_the_resource() {
+        let json = serde_json::json!({
+            "id": "P", "name": "p", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 1920, "canvasHeight": 1080},
+            "resources": [
+                {"id": "cap", "kind": "caption", "filename": "", "displayName": "w", "addedAt": 0, "captionText": "hi", "imageCuts": []},
+                {"id": "C", "kind": "composition", "filename": "", "displayName": "Card", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 1280, "pixelHeight": 720, "imageCuts": [],
+                 "composition": {"canvasWidth": 1280, "canvasHeight": 720, "layers": [
+                    {"id": "A", "name": "a", "sortIndex": 0, "kind": "caption", "isEnabled": true, "startTime": 0, "duration": 2, "resourceID": "cap", "keyframes": []},
+                    {"id": "B", "name": "b", "sortIndex": 1, "kind": "caption", "isEnabled": true, "startTime": 0, "duration": 2, "resourceID": "cap",
+                     "timing": {"start": {"from": "previousEnd", "offset": 0.5}}, "keyframes": []},
+                    {"id": "D", "name": "d", "sortIndex": 2, "kind": "caption", "isEnabled": true, "startTime": 1, "duration": 1, "resourceID": "cap", "keyframes": []}
+                 ]}}
+            ],
+            "layers": [
+                {"id": "P1", "name": "card", "sortIndex": 0, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "C", "keyframes": []}
+            ]
+        });
+        let mut doc = Document::open(&json.to_string()).unwrap();
+        let inside = |command: serde_json::Value| Command::InComposition {
+            resource_id: "C".into(),
+            command: Box::new(serde_json::from_value(command).unwrap()),
+        };
+        let nested = |doc: &Document| -> Vec<promo_model::ProjectLayer> {
+            doc.meta().resources.as_deref().unwrap()[1]
+                .composition
+                .as_ref()
+                .unwrap()
+                .layers
+                .clone()
+        };
+
+        doc.apply(&inside(
+            serde_json::json!({"kind": "renameLayer", "layerID": "A", "name": "renamed"}),
+        ))
+        .unwrap();
+        assert_eq!(nested(&doc)[0].name, "renamed");
+        let changes = doc.changes_since(0);
+        assert_eq!(
+            changes.resources,
+            vec!["C".to_string()],
+            "the resource is what changed"
+        );
+        assert!(changes.layers.is_empty(), "no top-level layer was touched");
+
+        // A retime inside: the anchored follower moves with it.
+        doc.apply(&inside(serde_json::json!({"kind": "setLayerTiming", "layerID": "A", "startTime": 1.0, "duration": 3.0})))
+            .unwrap();
+        let layers = nested(&doc);
+        assert!(
+            (layers[1].start_time - 4.5).abs() < 1e-9,
+            "B follows A's new end: {}",
+            layers[1].start_time
+        );
+
+        // Delete renumbers the survivors inside.
+        doc.apply(&inside(
+            serde_json::json!({"kind": "deleteLayer", "layerID": "A"}),
+        ))
+        .unwrap();
+        let layers = nested(&doc);
+        assert_eq!(layers.len(), 2);
+        assert_eq!(
+            layers.iter().map(|l| l.sort_index).collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+
+        // One history: ⌘Z walks the nested edits back through the resource.
+        assert!(doc.undo());
+        assert_eq!(nested(&doc).len(), 3);
+
+        // The composition may not be made to contain itself.
+        let err = doc
+            .apply(&inside(serde_json::json!({"kind": "updateLayer", "layerID": "D", "patch": {"resourceID": "C"}})))
+            .unwrap_err();
+        assert!(err.contains("contains itself"), "{err}");
+        assert!(doc
+            .apply(&Command::InComposition {
+                resource_id: "cap".into(),
+                command: Box::new(
+                    serde_json::from_value(
+                        serde_json::json!({"kind": "renameLayer", "layerID": "A", "name": "x"})
+                    )
+                    .unwrap()
+                ),
+            })
+            .unwrap_err()
+            .contains("not a composition"));
     }
 }
