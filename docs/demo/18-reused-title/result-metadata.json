@@ -1,0 +1,307 @@
+{
+  "id": "reused-title",
+  "name": "One Card, Three Places",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 19,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B1020" },
+      { "name": "text", "colorHex": "F4F6FF" },
+      { "name": "text-bg", "colorHex": "0B1020" },
+      { "name": "edge", "colorHex": "2A3A57" },
+      { "name": "caption-outline", "colorHex": "090D18" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "5B8CFF" },
+      { "name": "accent1", "colorHex": "16224A" },
+      { "name": "accent2", "colorHex": "0A0F22" },
+      { "name": "muted", "colorHex": "9FB0D8" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "videoCornerRadius": 0,
+    "videoBorderWidth": 0,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0,
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 96,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 16,
+    "subtitleLeftMargin": 180,
+    "subtitleRightMargin": 180,
+    "subtitleVerticalMargin": 460
+  },
+  "resources": [
+    {
+      "id": "shot",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen UI",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 2,
+        "cornerRadius": 16,
+        "shadowColorHex": "@media-shadow",
+        "shadowOpacity": 0.45,
+        "shadowRadius": 34,
+        "shadowOffset": [0, 16]
+      }
+    },
+    {
+      "id": "card",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Title card",
+      "addedAt": 0,
+      "duration": 3.0,
+      "pixelWidth": 1920,
+      "pixelHeight": 1080,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1920,
+        "canvasHeight": 1080,
+        "backgroundColorHex": "@canvas",
+        "layers": [
+          {
+            "id": "card-bg",
+            "name": "Card ground",
+            "sortIndex": 0,
+            "kind": "background",
+            "isEnabled": true,
+            "startTime": 0,
+            "duration": 3.0,
+            "keyframes": [
+              {
+                "id": "card-bg-k0",
+                "time": 0,
+                "transitionDuration": 0,
+                "gradient": {
+                  "kind": "linear",
+                  "start": [0.1, 0],
+                  "end": [0.9, 1],
+                  "repeat": "clamp",
+                  "stops": [
+                    { "colorHex": "@accent1", "at": 0 },
+                    { "colorHex": "@accent2", "at": 1 }
+                  ]
+                }
+              },
+              {
+                "id": "card-bg-k1",
+                "time": 3.0,
+                "transitionDuration": 3.0,
+                "easing": "easeInOut",
+                "gradient": {
+                  "kind": "linear",
+                  "start": [0.1, 0],
+                  "end": [0.9, 1],
+                  "repeat": "clamp",
+                  "stops": [
+                    { "colorHex": "@accent2", "at": 0 },
+                    { "colorHex": "@accent1", "at": 1 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "card-title",
+            "name": "Card title",
+            "sortIndex": 1,
+            "kind": "caption",
+            "isEnabled": true,
+            "startTime": 0.15,
+            "duration": 2.85,
+            "captionText": "One title card.",
+            "captionStyle": {
+              "fontSize": 104,
+              "placement": { "anchor": "center", "offset": [0, -46] },
+              "reveal": { "by": "word", "mode": "rise", "rise": 0.4, "secondsPer": 0.16, "easing": "easeOut" }
+            },
+            "keyframes": [
+              { "id": "card-title-k0", "time": 0, "opacity": 0, "transitionDuration": 0 },
+              { "id": "card-title-k1", "time": 0.25, "opacity": 1, "transitionDuration": 0.25 }
+            ]
+          },
+          {
+            "id": "card-sub",
+            "name": "Card subtitle",
+            "sortIndex": 2,
+            "kind": "caption",
+            "isEnabled": true,
+            "startTime": 0.85,
+            "duration": 2.15,
+            "captionText": "Placed three times.",
+            "captionStyle": {
+              "fontSize": 52,
+              "isBold": false,
+              "textColorHex": "@muted",
+              "placement": { "anchor": "center", "offset": [0, 66] }
+            },
+            "fadeIn": 0.4,
+            "keyframes": [
+              {
+                "id": "card-sub-k0",
+                "time": 0,
+                "transitionDuration": 0,
+                "placement": { "anchor": "center", "offset": [0, 84] }
+              },
+              {
+                "id": "card-sub-k1",
+                "time": 0.55,
+                "transitionDuration": 0.55,
+                "easing": "easeOut",
+                "placement": { "anchor": "center", "offset": [0, 66] }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "markers": [],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": []
+    },
+    {
+      "id": "shot1",
+      "name": "Screenshot A",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 2.7,
+      "duration": 2.6,
+      "resourceID": "shot",
+      "fadeIn": 0.3,
+      "fadeOut": 0.3,
+      "keyframes": [
+        {
+          "id": "s1k0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "height": 700, "anchor": "center", "offset": [0, 0] }
+        },
+        {
+          "id": "s1k1",
+          "time": 2.6,
+          "transitionDuration": 2.6,
+          "easing": "easeInOut",
+          "placement": { "height": 752, "anchor": "center", "offset": [0, 0] }
+        }
+      ]
+    },
+    {
+      "id": "shot2",
+      "name": "Screenshot B",
+      "sortIndex": 2,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 7.1,
+      "duration": 2.6,
+      "resourceID": "shot",
+      "fadeIn": 0.3,
+      "fadeOut": 0.3,
+      "keyframes": [
+        {
+          "id": "s2k0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "height": 764, "anchor": "center", "offset": [0, 14] }
+        },
+        {
+          "id": "s2k1",
+          "time": 2.6,
+          "transitionDuration": 2.6,
+          "easing": "easeInOut",
+          "placement": { "height": 712, "anchor": "center", "offset": [0, -10] }
+        }
+      ]
+    },
+    {
+      "id": "card-intro",
+      "name": "Card — intro",
+      "sortIndex": 3,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 3.0,
+      "resourceID": "card",
+      "fadeIn": 0.4,
+      "transitionOut": { "kind": "fade", "duration": 0.3, "easing": "easeInOut" },
+      "keyframes": [
+        {
+          "id": "cik0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "mode": "fill", "anchor": "center" }
+        }
+      ]
+    },
+    {
+      "id": "card-mid",
+      "name": "Card — mid",
+      "sortIndex": 4,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 5.0,
+      "duration": 2.4,
+      "resourceID": "card",
+      "transitionIn": { "kind": "fade", "duration": 0.3, "easing": "easeInOut" },
+      "transitionOut": { "kind": "fade", "duration": 0.3, "easing": "easeInOut" },
+      "keyframes": [
+        {
+          "id": "cmk0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "mode": "fill", "anchor": "center" }
+        }
+      ]
+    },
+    {
+      "id": "card-outro",
+      "name": "Card — outro",
+      "sortIndex": 5,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 9.4,
+      "duration": 2.6,
+      "resourceID": "card",
+      "transitionIn": { "kind": "fade", "duration": 0.3, "easing": "easeInOut" },
+      "fadeOut": 0.5,
+      "keyframes": [
+        {
+          "id": "cok0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "mode": "fill", "anchor": "center" }
+        }
+      ]
+    }
+  ]
+}

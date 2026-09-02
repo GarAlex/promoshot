@@ -1930,7 +1930,130 @@
     "path": "docs/demo/15-grade-room/resources/ui_lumen_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 86,
+   "passed": 6,
+   "total": 7,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": false,
+     "detail": "[1920, 1080] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "15.0s vs 15.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "3 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:grade",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=33 cost=$1.75 secs=195",
+   "run": {
+    "turns": 33,
+    "wall_s": 194,
+    "api_s": 188,
+    "cost_usd": 1.75,
+    "tokens": {
+     "input": 42,
+     "cache_read": 1452744,
+     "cache_write": 63283,
+     "output": 15467,
+     "thinking": 5120
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1110,
+      "output": 18,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1516069,
+      "output": 15467,
+      "cost_usd": 1.75
+     }
+    ],
+    "mcp": {
+     "calls": 12,
+     "ms": 4781,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2777,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 1930,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 54,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 12,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 2,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/15-grade-room/contact-result.png",
+   "reference_contact": "docs/demo/15-grade-room/contact-reference.png",
+   "video": "docs/demo/15-grade-room/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/15-grade-room.mp4",
+   "video_hd_bytes": 743683,
+   "metadata": "docs/demo/15-grade-room/result-metadata.json",
+   "gif": "docs/demo/15-grade-room/result.gif",
+   "thumb": "docs/demo/15-grade-room/thumb.png"
+  },
   "page": "docs/demo/demo15.md"
  },
  {
@@ -1966,7 +2089,125 @@
     "path": "docs/demo/16-light-leak/resources/vignette_soft.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 12.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:blendModes",
+     "ok": true,
+     "detail": "['add', 'multiply', 'screen'] vs ['add', 'multiply', 'screen']"
+    },
+    {
+     "check": "feature:motionBlur",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=35 cost=$1.60 secs=176",
+   "run": {
+    "turns": 35,
+    "wall_s": 175,
+    "api_s": 166,
+    "cost_usd": 1.6,
+    "tokens": {
+     "input": 36,
+     "cache_read": 1251147,
+     "cache_write": 65523,
+     "output": 12718,
+     "thinking": 4674
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1107,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1316706,
+      "output": 12718,
+      "cost_usd": 1.6
+     }
+    ],
+    "mcp": {
+     "calls": 12,
+     "ms": 7535,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 7174,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 238,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 4,
+       "ms": 96,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 23,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 4,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/16-light-leak/contact-result.png",
+   "reference_contact": "docs/demo/16-light-leak/contact-reference.png",
+   "video": "docs/demo/16-light-leak/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/16-light-leak.mp4",
+   "video_hd_bytes": 1527827,
+   "metadata": "docs/demo/16-light-leak/result-metadata.json",
+   "gif": "docs/demo/16-light-leak/result.gif",
+   "thumb": "docs/demo/16-light-leak/thumb.png"
+  },
   "page": "docs/demo/demo16.md"
  },
  {
@@ -2002,7 +2243,135 @@
     "path": "docs/demo/17-chain-reaction/resources/ui_verse_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.1s vs 13.2s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:timingAnchors",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "3 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=42 cost=$2.00 secs=215",
+   "run": {
+    "turns": 42,
+    "wall_s": 214,
+    "api_s": 211,
+    "cost_usd": 2.0,
+    "tokens": {
+     "input": 48,
+     "cache_read": 1769342,
+     "cache_write": 68439,
+     "output": 17005,
+     "thinking": 7231
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1104,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1837829,
+      "output": 17005,
+      "cost_usd": 1.99
+     }
+    ],
+    "mcp": {
+     "calls": 19,
+     "ms": 2205,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1636,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 224,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 3,
+       "ms": 183,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 4,
+       "ms": 123,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 22,
+       "errors": 1
+      },
+      "promo_inspect": {
+       "calls": 2,
+       "ms": 16,
+       "errors": 0
+      },
+      "promo_explain": {
+       "calls": 1,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/17-chain-reaction/contact-result.png",
+   "reference_contact": "docs/demo/17-chain-reaction/contact-reference.png",
+   "video": "docs/demo/17-chain-reaction/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/17-chain-reaction.mp4",
+   "video_hd_bytes": 1112248,
+   "metadata": "docs/demo/17-chain-reaction/result-metadata.json",
+   "gif": "docs/demo/17-chain-reaction/result.gif",
+   "thumb": "docs/demo/17-chain-reaction/thumb.png"
+  },
   "page": "docs/demo/demo17.md"
  },
  {
@@ -2023,7 +2392,125 @@
     "path": "docs/demo/18-reused-title/resources/ui_lumen_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 13.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "2 vs 1"
+    },
+    {
+     "check": "feature:composition",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=32 cost=$1.60 secs=185",
+   "run": {
+    "turns": 32,
+    "wall_s": 184,
+    "api_s": 180,
+    "cost_usd": 1.6,
+    "tokens": {
+     "input": 38,
+     "cache_read": 1283726,
+     "cache_write": 60443,
+     "output": 14008,
+     "thinking": 5546
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1070,
+      "output": 19,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1344207,
+      "output": 14008,
+      "cost_usd": 1.6
+     }
+    ],
+    "mcp": {
+     "calls": 11,
+     "ms": 2691,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2347,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 283,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 34,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 19,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/18-reused-title/contact-result.png",
+   "reference_contact": "docs/demo/18-reused-title/contact-reference.png",
+   "video": "docs/demo/18-reused-title/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/18-reused-title.mp4",
+   "video_hd_bytes": 737457,
+   "metadata": "docs/demo/18-reused-title/result-metadata.json",
+   "gif": "docs/demo/18-reused-title/result.gif",
+   "thumb": "docs/demo/18-reused-title/thumb.png"
+  },
   "page": "docs/demo/demo18.md"
  },
  {

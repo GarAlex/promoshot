@@ -1,0 +1,209 @@
+{
+  "id": "grade-room",
+  "name": "Grade Room",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 15,
+  "videoDuration": 15,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas",          "colorHex": "12141A" },
+      { "name": "canvas-warm",     "colorHex": "1C1611" },
+      { "name": "canvas-cool",     "colorHex": "0E141F" },
+      { "name": "text",            "colorHex": "F5F2EC" },
+      { "name": "text-bg",         "colorHex": "12141A" },
+      { "name": "edge",            "colorHex": "2E323C" },
+      { "name": "caption-outline", "colorHex": "0A0B0E" },
+      { "name": "caption-shadow",  "colorHex": "000000" },
+      { "name": "media-shadow",    "colorHex": "000000" },
+      { "name": "highlight",       "colorHex": "E8B380" },
+      { "name": "gel-warm",        "colorHex": "E8B380" },
+      { "name": "gel-cool",        "colorHex": "5A8FD8" }
+    ],
+    "backgroundColorHex": "@canvas",
+
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.5,
+    "videoShadowRadius": 34,
+    "videoShadowOffset": [0, 16],
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 52,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 22,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 4,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.55,
+    "subtitleShadowRadius": 12,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200
+  },
+
+  "resources": [
+    {
+      "id": "shot",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen UI",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 2,
+        "cornerRadius": 12
+      }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 15,
+      "keyframes": [
+        { "id": "bg0", "time": 0,    "colorHex": "@canvas",      "transitionDuration": 0 },
+        { "id": "bg1", "time": 8.4,  "colorHex": "@canvas-warm",  "transitionDuration": 1.4, "easing": "easeInOut" },
+        { "id": "bg2", "time": 12.2, "colorHex": "@canvas-cool",  "transitionDuration": 1.4, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "look-original",
+      "name": "Original",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 15,
+      "resourceID": "shot",
+      "fadeIn": 0.5,
+      "keyframes": [
+        { "id": "o0", "time": 0,  "transitionDuration": 0,
+          "placement": { "height": 764, "anchor": "center", "offset": [0, -70] } },
+        { "id": "o1", "time": 15, "transitionDuration": 15, "easing": "easeInOut",
+          "placement": { "height": 800, "anchor": "center", "offset": [0, -70] } }
+      ]
+    },
+
+    {
+      "id": "look-grey",
+      "name": "Mono then Sepia",
+      "sortIndex": 2,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 15,
+      "resourceID": "shot",
+      "adjustments": { "saturation": 0, "tintHex": "@gel-warm" },
+      "keyframes": [
+        { "id": "g0", "time": 0,  "transitionDuration": 0,
+          "placement": { "height": 764, "anchor": "center", "offset": [0, -70] } },
+        { "id": "g1", "time": 15, "transitionDuration": 15, "easing": "easeInOut",
+          "placement": { "height": 800, "anchor": "center", "offset": [0, -70] } },
+
+        { "id": "gop0", "time": 3.2, "opacity": 0, "transitionDuration": 0 },
+        { "id": "gop1", "time": 4.6, "opacity": 1, "transitionDuration": 1.4, "easing": "easeInOut" },
+
+        { "id": "gt0", "time": 7.0, "tintAmount": 0.0,  "transitionDuration": 0 },
+        { "id": "gt1", "time": 8.4, "tintAmount": 0.45, "transitionDuration": 1.4, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "look-duotone",
+      "name": "Duotone",
+      "sortIndex": 3,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 15,
+      "resourceID": "shot",
+      "adjustments": { "saturation": 0, "tintHex": "@gel-cool", "tintAmount": 0.6 },
+      "keyframes": [
+        { "id": "d0", "time": 0,  "transitionDuration": 0,
+          "placement": { "height": 764, "anchor": "center", "offset": [0, -70] } },
+        { "id": "d1", "time": 15, "transitionDuration": 15, "easing": "easeInOut",
+          "placement": { "height": 800, "anchor": "center", "offset": [0, -70] } },
+
+        { "id": "dop0", "time": 10.8, "opacity": 0, "transitionDuration": 0 },
+        { "id": "dop1", "time": 12.2, "opacity": 1, "transitionDuration": 1.4, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "cap1",
+      "name": "Caption 1",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.4,
+      "duration": 3.0,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "Straight out of the recorder",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -72] } },
+      "keyframes": []
+    },
+    {
+      "id": "cap2",
+      "name": "Caption 2",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 4.4,
+      "duration": 3.0,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "Mono — saturation to zero",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -72] } },
+      "keyframes": []
+    },
+    {
+      "id": "cap3",
+      "name": "Caption 3",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 8.2,
+      "duration": 2.8,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "Sepia — a warm gel over the grey",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -72] } },
+      "keyframes": []
+    },
+    {
+      "id": "cap4",
+      "name": "Caption 4",
+      "sortIndex": 7,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 12.0,
+      "duration": 2.8,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "Duotone — same move, cooler gel",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -72] } },
+      "keyframes": []
+    }
+  ]
+}
