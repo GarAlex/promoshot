@@ -782,3 +782,11 @@ whose chroma sits within `tolerance` of the colour's (0…1 in the Cb/Cr
 plane) become transparent, feathered over `softness` beyond it, before
 the layer's grade, border and mask. A palette name (`"@green"`) works.
 A project with a keyed layer carries `minReaderVersion: 22`.
+
+Colour look-up tables (rung 23). A resource of `"kind": "lut"` is a
+`.cube` file in `Resources/` (`"filename": "look.cube"`); a layer's
+`adjustments` name it — `{ "lutResourceID": "<uuid>", "lutAmount": 0.8 }`
+— and the compositor applies it after saturation, contrast, brightness
+and tint, mixed in by `lutAmount` (0…1, default 1). Any `LUT_3D_SIZE`
+works; `DOMAIN_MIN`/`MAX` are honoured. A project with a lut resource
+carries `minReaderVersion: 23`.

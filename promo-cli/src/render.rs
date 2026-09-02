@@ -355,6 +355,24 @@ impl Renderer {
         let mut frames = HashMap::new();
         let mut cuts = HashMap::new();
         let mut videos = HashMap::new();
+        // Colour look-up tables: every `.cube` resource becomes a strip the
+        // engine asks for by resource id (under a synthetic layer) — the
+        // same still path an image takes.
+        for resource in project
+            .resources()
+            .iter()
+            .filter(|r| r.kind == promo_model::ProjectResourceKind::Lut)
+        {
+            let Some(path) = project.resource_path(resource) else {
+                continue;
+            };
+            let text =
+                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let lut = promo_media::lut::parse_cube(&text)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+            let (pixels, width, height) = lut.strip_bgra8();
+            frames.insert(resource.id.clone(), (pixels, width, height, 0));
+        }
         for layer in promo_model::nesting::all_layers(&project.meta) {
             if project.unsupported(layer).is_some() {
                 continue;
@@ -1436,6 +1454,85 @@ mod tests {
         assert!(
             centre[0] > 180 && centre[1] < 70,
             "the red subject survives the key: {centre:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// B3.4 (LUT): an inverting cube on the plate turns red into cyan and
+    /// green into magenta; the unlutted twin keeps its colours; amount 0
+    /// is the twin.
+    #[test]
+    fn a_lut_grades_the_layer_through_the_cube() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-lut-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let (w, h) = (64u32, 48u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 4;
+                let red = (20..44).contains(&x) && (12..36).contains(&y);
+                rgba[i..i + 4].copy_from_slice(if red {
+                    &[255, 0, 0, 255]
+                } else {
+                    &[0, 255, 0, 255]
+                });
+            }
+        }
+        write_png(&dir.join("Resources/plate.png"), &rgba, w, h).unwrap();
+        // Size-2 inverting cube: every corner maps to its opposite.
+        std::fs::write(
+            dir.join("Resources/invert.cube"),
+            "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n",
+        )
+        .unwrap();
+        let doc = |amount: Option<f64>| {
+            let adjustments = match amount {
+                Some(a) => format!(r#","adjustments":{{"lutResourceID":"K","lutAmount":{a}}}"#),
+                None => String::new(),
+            };
+            format!(
+                r#"{{"id":"P","name":"Lut","createdAt":0,"state":"recorded","minReaderVersion":23,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":64,"canvasHeight":48,"backgroundColorHex":"101014"}},
+                "resources":[{{"id":"I","kind":"image","filename":"plate.png","displayName":"plate","addedAt":0,
+                  "pixelWidth":64,"pixelHeight":48,"imageCuts":[],"disabledAudioTrackIndices":[]}},
+                  {{"id":"K","kind":"lut","filename":"invert.cube","displayName":"invert","addedAt":0,
+                  "imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                "layers":[{{"id":"L","name":"plate","sortIndex":0,"kind":"image","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"I"{adjustments},"keyframes":[]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 64, 48).expect("renderer");
+            renderer.frame_bgra(1.0).expect("frame")
+        };
+        let px = |frame: &[u8], x: usize, y: usize| -> [u8; 3] {
+            let i = (y * 64 + x) * 4;
+            [frame[i + 2], frame[i + 1], frame[i]]
+        };
+        let graded = render(&doc(Some(1.0)));
+        let plain = render(&doc(None));
+        let zero = render(&doc(Some(0.0)));
+        assert_eq!(
+            px(&plain, 32, 24),
+            px(&zero, 32, 24),
+            "amount 0 is the plain picture"
+        );
+        let subject = px(&graded, 32, 24);
+        assert!(
+            subject[0] < 30 && subject[1] > 225 && subject[2] > 225,
+            "red inverts to cyan: {subject:?}"
+        );
+        let plate = px(&graded, 4, 4);
+        assert!(
+            plate[0] > 225 && plate[1] < 30 && plate[2] > 225,
+            "green inverts to magenta: {plate:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

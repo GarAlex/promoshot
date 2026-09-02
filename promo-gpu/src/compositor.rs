@@ -96,6 +96,11 @@ pub struct SceneQuad {
     pub key_rgba: [f32; 4],
     /// x = tolerance, y = softness — chroma distance in the Cb/Cr plane.
     pub key_params: [f32; 4],
+    /// Index into the textures passed to `compose` of a LUT strip (N² wide,
+    /// N tall), or `None`.
+    pub lut: Option<usize>,
+    /// x = 1 on / 0 off, y = amount, z = the cube's size N.
+    pub lut_params: [f32; 4],
 }
 
 impl Default for SceneQuad {
@@ -126,6 +131,8 @@ impl Default for SceneQuad {
             edge_soften: 0.0,
             key_rgba: [0.0, 0.0, 0.0, 0.0],
             key_params: [0.3, 0.1, 0.0, 0.0],
+            lut: None,
+            lut_params: [0.0, 1.0, 2.0, 0.0],
         }
     }
 }
@@ -238,6 +245,8 @@ struct Quad {
     key: vec4<f32>,
     // x = tolerance, y = softness (chroma distance in the Cb/Cr plane).
     key_params: vec4<f32>,
+    // LUT: x = 1 on / 0 off, y = amount (0…1), z = size N of the cube.
+    lut_params: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -245,6 +254,8 @@ struct Quad {
 @group(1) @binding(1) var quad_tex: texture_2d<f32>;
 @group(1) @binding(2) var quad_samp: sampler;
 @group(1) @binding(3) var quad_mask: texture_2d<f32>;
+// A colour look-up table as N slices of N×N side by side (N² wide, N tall).
+@group(1) @binding(4) var quad_lut: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -437,6 +448,26 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         color = vec4<f32>(rgb * color.a, color.a);
     }
 
+    // A LUT, after the adjustments: two slices around the blue coordinate,
+    // each sampled bilinearly in red and green, mixed — trilinear with a
+    // plain 2D sampler. Straight colour in, straight colour out.
+    if quad.lut_params.x > 0.5 && color.a > 0.0 {
+        let n = max(quad.lut_params.z, 2.0);
+        let straight = clamp(color.rgb / color.a, vec3<f32>(0.0), vec3<f32>(1.0));
+        let scaled = straight * (n - 1.0);
+        let b0 = floor(scaled.b);
+        let b1 = min(b0 + 1.0, n - 1.0);
+        let t = scaled.b - b0;
+        let u0 = (scaled.r + 0.5 + b0 * n) / (n * n);
+        let u1 = (scaled.r + 0.5 + b1 * n) / (n * n);
+        let v = (scaled.g + 0.5) / n;
+        let looked = mix(
+            textureSampleLevel(quad_lut, quad_samp, vec2<f32>(u0, v), 0.0).rgb,
+            textureSampleLevel(quad_lut, quad_samp, vec2<f32>(u1, v), 0.0).rgb,
+            t);
+        let graded = mix(straight, looked, clamp(quad.lut_params.y, 0.0, 1.0));
+        color = vec4<f32>(graded * color.a, color.a);
+    }
     // Inside border: ring between the outer edge and the inset rounded rect.
     let bw = quad.rot_radius_border.w;
     if bw > 0.0 {
@@ -520,6 +551,7 @@ struct QuadRaw {
     extra: [f32; 4],
     key: [f32; 4],
     key_params: [f32; 4],
+    lut_params: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -702,6 +734,16 @@ impl Compositor {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -936,10 +978,15 @@ impl Compositor {
         texture: Option<&InputTexture>,
         nearest: bool,
         mask: Option<&InputTexture>,
+        lut: Option<&InputTexture>,
     ) -> (u64, u64) {
         let texture = texture.unwrap_or(&self.dummy);
         let mask = mask.unwrap_or(&self.dummy);
-        let id = ((texture.id << 1) | u64::from(nearest), mask.id);
+        let lut = lut.unwrap_or(&self.dummy);
+        let id = (
+            (texture.id << 1) | u64::from(nearest),
+            mask.id ^ (lut.id << 32),
+        );
         if !self.binds.contains_key(&id) {
             let sampler = if nearest {
                 &self.nearest_sampler
@@ -969,6 +1016,10 @@ impl Compositor {
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: wgpu::BindingResource::TextureView(&mask.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&lut.view),
                     },
                 ],
             });
@@ -1317,6 +1368,7 @@ impl Compositor {
                 ],
                 key: q.key_rgba,
                 key_params: q.key_params,
+                lut_params: q.lut_params,
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1333,7 +1385,13 @@ impl Compositor {
                 })?),
                 None => None,
             };
-            binds.push(self.bind_group_for(ctx, texture, q.nearest, mask));
+            let lut = match q.lut {
+                Some(index) => Some(*textures.get(index).ok_or_else(|| {
+                    GpuError::Import(format!("lut texture index {index} out of range"))
+                })?),
+                None => None,
+            };
+            binds.push(self.bind_group_for(ctx, texture, q.nearest, mask, lut));
         }
         ctx.queue.write_buffer(&self.quad_buf, 0, &staging);
 
@@ -1507,10 +1565,11 @@ impl Compositor {
             extra: [0.0; 4],
             key: [0.0, 0.0, 0.0, 0.0],
             key_params: [0.3, 0.1, 0.0, 0.0],
+            lut_params: [0.0, 1.0, 2.0, 0.0],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
-        let bind_id = self.bind_group_for(ctx, Some(&source), true, None);
+        let bind_id = self.bind_group_for(ctx, Some(&source), true, None, None);
 
         let mut encoder = ctx
             .device

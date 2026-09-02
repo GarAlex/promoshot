@@ -978,7 +978,8 @@ impl PreviewEngine {
         resources: &[promo_model::ProjectResource],
         used: &[u64],
         prepared: Option<u64>,
-    ) -> Option<(SceneQuad, Option<SceneQuad>, u64)> {
+    ) -> Option<(SceneQuad, Option<SceneQuad>, u64, Option<u64>)> {
+        let mut lut_frame: Option<u64> = None;
         let frame_id = match prepared {
             Some(id) => id,
             None => self.frame(&layer.id, showing, source_time, tier, used)?,
@@ -1082,6 +1083,22 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        if let Some((rid, amount)) = layer.adjustments.as_ref().and_then(|a| {
+            a.lut_resource_id
+                .as_ref()
+                .map(|id| (id.clone(), a.lut_amount.unwrap_or(1.0)))
+        }) {
+            // The strip arrives through the provider like a still: keyed by a
+            // synthetic layer so it never collides with the layer's own frame.
+            let mut pinned = used.to_vec();
+            pinned.push(frame_id);
+            if let Some(id) = self.frame(&format!("lut\u{1f}{}", layer.id), &rid, -1.0, 0, &pinned)
+            {
+                let size = self.cached_frame(id).frame.height as f32;
+                quad.lut_params = [1.0, amount.clamp(0.0, 1.0) as f32, size.max(2.0), 0.0];
+                lut_frame = Some(id);
+            }
+        }
         if let Some(key) = layer.chroma_key.as_ref() {
             let rgba = rgba_from_hex(settings.resolve_color(&key.color_hex));
             quad.key_rgba = [rgba[0], rgba[1], rgba[2], 1.0];
@@ -1131,7 +1148,7 @@ impl PreviewEngine {
                 })
             }
         };
-        Some((quad, shadow, frame_id))
+        Some((quad, shadow, frame_id, lut_frame))
     }
 
     /// Where each reveal unit sits for the caption this layer shows, laid
@@ -2040,7 +2057,7 @@ impl PreviewEngine {
                 if let Some(previous) = swap.previous.as_deref() {
                     // The outgoing material's shadow is discarded: one
                     // shadow per layer, and the incoming quad carries it.
-                    if let Some((mut quad, _shadow, id)) = self.media_quad(
+                    if let Some((mut quad, _shadow, id, lut_id)) = self.media_quad(
                         layer,
                         previous,
                         &settings,
@@ -2057,6 +2074,12 @@ impl PreviewEngine {
                         apply_transition(&mut quad, layer, time, canvas);
                         quads.push(quad);
                         used.push(id);
+                        if let Some(lut) = lut_id {
+                            if let Some(last) = quads.last_mut() {
+                                last.lut = Some(used.len());
+                            }
+                            used.push(lut);
+                        }
                         // The window frames the OUTGOING material too: a
                         // swap happens inside the porthole, not around it.
                         if let Some(rid) = layer.mask_resource_id.as_deref() {
@@ -2070,7 +2093,7 @@ impl PreviewEngine {
                     }
                 }
             }
-            let Some((mut quad, shadow, frame_id)) = self.media_quad(
+            let Some((mut quad, shadow, frame_id, lut_id)) = self.media_quad(
                 layer,
                 &showing,
                 &settings,
@@ -2086,6 +2109,10 @@ impl PreviewEngine {
                 continue;
             };
             used.push(frame_id);
+            if let Some(lut) = lut_id {
+                quad.lut = Some(used.len());
+                used.push(lut);
+            }
             if let Some(swap) = swap.as_ref() {
                 // The incoming material arrives over it.
                 apply_effect(&mut quad, swap.effect, canvas);

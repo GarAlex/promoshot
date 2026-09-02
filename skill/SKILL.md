@@ -130,6 +130,11 @@ new projects.
   to STABLE UUIDs (the same spelling in the same project always mints
   the same one), so re-run `promo_inspect` after a person's turn and
   re-anchor; its `updated:` line is the turn signal.
+- **A look from a `.cube`.** Copy the file into `Resources/`, declare
+  `{ "kind": "lut", "filename": "look.cube", ... }`, and name it from a
+  layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
+  "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
+  and tint, on every host alike. Stamp `minReaderVersion: 23`.
 - **Chroma key on a layer.** `"chromaKey": { "colorHex": "00FF00",
   "tolerance": 0.3, "softness": 0.1 }` on a video or image layer makes
   the plate transparent before the grade, border and mask — footage on

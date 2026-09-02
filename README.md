@@ -374,3 +374,10 @@ A video or image layer may carry `chromaKey` — a colour, a tolerance
 and a softness: the plate becomes transparent before the layer's grade,
 border and mask, in the compositor, so a green-screen clip composes
 over anything on every host alike.
+
+## Looks from a `.cube`
+
+A resource of kind `lut` is a `.cube` file in `Resources/`; a layer's
+`adjustments.lutResourceID` (with `lutAmount`) applies it in the
+compositor after the layer's own grade — a trilinear lookup on every
+host alike.

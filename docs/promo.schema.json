@@ -866,6 +866,19 @@
             "null"
           ]
         },
+        "lutAmount": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lutResourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "saturation": {
           "format": "double",
           "type": [
@@ -2041,7 +2054,8 @@
         "path",
         "background",
         "palette",
-        "composition"
+        "composition",
+        "lut"
       ],
       "type": "string"
     },

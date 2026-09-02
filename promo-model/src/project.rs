@@ -118,6 +118,9 @@ strict_enum!(
         // shown by a video-kind layer — see `Composition`. The same strict
         // rule as every kind before it.
         (Composition, "composition"),
+        // A colour look-up table (rung 23): a `.cube` file a layer's
+        // adjustments name by id. Strict, as every kind before it.
+        (Lut, "lut"),
     ]
 );
 // An audio effect's kind (rung 21). Tolerant, falling back to `None`: an
@@ -527,6 +530,12 @@ pub struct LayerAdjustments {
     pub tint_hex: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub tint_amount: Option<f64>,
+    /// A LUT resource (`kind: "lut"`, a `.cube` file) applied after the
+    /// adjustments above, mixed in by `lutAmount` (0…1, default 1).
+    #[serde(default, skip_serializing_if = "is_none", rename = "lutResourceID")]
+    pub lut_resource_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub lut_amount: Option<f64>,
 }
 
 /// A per-layer camera shutter.
@@ -2685,6 +2694,12 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 23 is a LUT resource — a kind, so an older reader refuses the
+        // file rather than failing mid-decode.
+        if resources.iter().any(|r| r.kind == ProjectResourceKind::Lut) {
+            return 23;
+        }
 
         // 22 is a chroma key on a layer. Dropped by an older reader's save,
         // the green plate comes back.

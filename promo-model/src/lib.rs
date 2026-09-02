@@ -432,6 +432,8 @@ mod schema_doc_tests {
                 brightness: Some(0.06),
                 tint_hex: Some("E8B380".into()),
                 tint_amount: Some(0.4),
+                lut_resource_id: Some("look".into()),
+                lut_amount: Some(0.8),
             }),
             blend_mode: Some(BlendMode::Screen),
             chroma_key: Some(ChromaKey {
@@ -665,6 +667,7 @@ mod schema_doc_tests {
     /// Enum wire values an author has to spell exactly. Extend alongside the
     /// enums; every entry must appear in schema.md verbatim.
     const VALUES: &[&str] = &[
+        "lut",
         "normalize",
         "compressor",
         "eq",

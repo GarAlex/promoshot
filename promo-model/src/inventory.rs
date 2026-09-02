@@ -62,6 +62,7 @@ fn kind_for_extension(name: &str) -> Option<ProjectResourceKind> {
             Some(ProjectResourceKind::Image)
         }
         "mp3" | "m4a" | "wav" | "aac" | "caf" | "aiff" => Some(ProjectResourceKind::Audio),
+        "cube" => Some(ProjectResourceKind::Lut),
         _ => None,
     }
 }
