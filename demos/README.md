@@ -14,7 +14,7 @@ demos/
     prompt.md        the prompt, with the file list and caption lines
     rubric.json      canvas, duration, layer kinds, features, phrases, media
     reference.json   the hand-built project's metadata.json
-    runs/<stamp>/    a run (git-ignored): ws/, agent.json, score.*, contact-*.png, agent.mp4
+    runs/<stamp>/    a run (git-ignored): ws/, agent.json, mcp.log, score.*, contact-*.png, agent.mp4
   _media/            files over 1 MB, shared by name
   features.py        what a project IS, structurally — shared by all three below
   score.py           rubric vs a project → percentage and per-check detail
@@ -52,6 +52,14 @@ python3 -c "import json,sys; sys.path.insert(0,'demos'); from features import ru
 
 A whole template library imports with `import_templates.py <library>`;
 prompts for it live in `prompts.json` keyed by the template's number.
+
+## What a run records
+
+`agent.json` is Claude Code's own answer for the session: turns, wall and
+API time, cost, tokens by model. `mcp.log` is the server's side of the
+wire — one line per tool call with its milliseconds — which is the time a
+render, a probe or a validate actually took, as opposed to the time the
+agent spent thinking about it. The published page shows both.
 
 ## What the score means
 
