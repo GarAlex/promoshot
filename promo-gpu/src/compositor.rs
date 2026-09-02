@@ -1823,9 +1823,6 @@ impl Compositor {
     /// texture identity; the params buffer is shared and offset per pass).
     fn fx_bind(&mut self, ctx: &GpuContext, source: &InputTexture) -> u64 {
         let fx = self.fx.as_mut().expect("fx resources made before use");
-        if fx.binds.len() > 64 {
-            fx.binds.clear();
-        }
         if !fx.binds.contains_key(&source.id) {
             let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("fx"),
@@ -1872,6 +1869,15 @@ impl Compositor {
             return Ok(out);
         }
         self.ensure_fx(ctx);
+        // Trim the source bind cache BETWEEN frames only: a video's frames
+        // arrive as new textures, so the map grows by one per frame, and
+        // clearing it mid-frame would drop an entry a pass planned above
+        // still needs (that was a panic at the 49th frame of a gif).
+        if let Some(fx) = self.fx.as_mut() {
+            if fx.binds.len() > 64 {
+                fx.binds.clear();
+            }
+        }
         for target in &mut self.fx_targets {
             target.used = false;
         }
@@ -3235,6 +3241,48 @@ mod tests {
             "the square itself stays white"
         );
         assert_eq!(px64(&lit, 4, 4)[0], 0, "far black stays black");
+    }
+
+    /// A video's frames are new textures every frame; a blurred layer over
+    /// a hundred of them must not exhaust the pass cache mid-frame.
+    #[test]
+    fn a_blurred_video_of_many_frames_renders_every_frame() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut comp = Compositor::new(&ctx).expect("compositor");
+        let out = OwnedIoSurface::new_bgra(64, 64).expect("output surface");
+        for frame in 0..100u8 {
+            let mut bytes = vec![0u8; 64 * 64 * 4];
+            for y in 0..64 {
+                for x in 0..64 {
+                    let i = (y * 64 + x) * 4;
+                    let v = if x < 32 {
+                        255u8.saturating_sub(frame)
+                    } else {
+                        0
+                    };
+                    bytes[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+                }
+            }
+            let tex = Compositor::upload_texture(&ctx, &bytes, 64, 64).expect("texture");
+            let scene = full_scene(
+                SceneQuad {
+                    texture: Some(0),
+                    rect: [0.0, 0.0, 64.0, 64.0],
+                    blur: 6.0,
+                    glow: [0.5, 8.0, 0.5],
+                    ..Default::default()
+                },
+                [0.0, 0.0, 0.0, 1.0],
+            );
+            comp.compose_to_iosurface(&ctx, &scene, std::slice::from_ref(&tex), out.raw())
+                .expect("compose");
+        }
+        let px = out.read_pixels().expect("readback");
+        assert!(
+            px64(&px, 3, 32)[0] > 100,
+            "the last frame drew: {:?}",
+            px64(&px, 3, 32)
+        );
     }
 
     #[test]
