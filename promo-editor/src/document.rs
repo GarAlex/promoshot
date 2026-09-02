@@ -219,6 +219,76 @@ pub enum Command {
 
 /// RFC 7386: objects merge key by key, `null` deletes, anything else
 /// replaces.
+/// The Mac editor's `replaceResource` rule, ported: when a video or audio
+/// resource's PLAYBACK length changes (a trim, a held frame, a speed), the
+/// layers that were playing the whole of it follow the new length, and a
+/// layer already shortened by hand is only clamped if it now overruns.
+/// A layer on a cut plays the cut, not the resource; a looped layer, or
+/// one with a beyond-end policy, is stretched on purpose and keeps its
+/// duration. Then the background keeps covering the content. Without
+/// this, an agent's `updateResource` left layers playing past a trim the
+/// app would have followed.
+fn retime_layers_for_resource(
+    meta: &mut ProjectMetadata,
+    previous: &promo_model::ProjectResource,
+    updated: &promo_model::ProjectResource,
+) {
+    use promo_model::{ProjectLayerKind, ProjectResourceKind};
+    let (old_len, new_len, kind) = match (previous.kind, updated.kind) {
+        (ProjectResourceKind::Video, ProjectResourceKind::Video) => (
+            promo_timeline::effective_video_playback_duration(previous),
+            promo_timeline::effective_video_playback_duration(updated),
+            ProjectLayerKind::Video,
+        ),
+        (ProjectResourceKind::Audio, ProjectResourceKind::Audio) => (
+            promo_timeline::effective_trimmed_media_duration(previous),
+            promo_timeline::effective_trimmed_media_duration(updated),
+            ProjectLayerKind::Audio,
+        ),
+        _ => return,
+    };
+    if old_len <= 0.0 || (new_len - old_len).abs() <= 0.000_1 {
+        return;
+    }
+    let layers = meta.layers.get_or_insert_with(Vec::new);
+    for layer in layers.iter_mut() {
+        if layer.resource_id.as_deref() != Some(updated.id.as_str()) || layer.kind != kind {
+            continue;
+        }
+        if layer.media_cut_id.is_some() {
+            continue;
+        }
+        if layer.beyond_end.is_some() || updated.is_looped() {
+            continue;
+        }
+        let current = layer.duration.unwrap_or(old_len);
+        if current >= old_len - 0.05 || current > new_len {
+            layer.duration = Some(new_len.max(0.1));
+        }
+    }
+    extend_background_over_content(meta);
+}
+
+/// The Mac editor's `extendBackgroundOverContent`: every background layer
+/// lasts at least as long as the content above it.
+fn extend_background_over_content(meta: &mut ProjectMetadata) {
+    let Some(layers) = meta.layers.as_mut() else {
+        return;
+    };
+    let content_end = layers
+        .iter()
+        .filter(|l| l.kind != promo_model::ProjectLayerKind::Background)
+        .fold(0.1f64, |end, l| {
+            end.max(l.start_time + l.duration.unwrap_or(0.0))
+        });
+    for layer in layers
+        .iter_mut()
+        .filter(|l| l.kind == promo_model::ProjectLayerKind::Background)
+    {
+        layer.duration = Some(layer.duration.unwrap_or(0.0).max(content_end));
+    }
+}
+
 fn merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
     match patch {
         serde_json::Value::Object(entries) => {
@@ -490,6 +560,10 @@ impl Document {
         let snapshot = self.to_json()?;
         let mut edited = self.meta.clone();
         Self::run(&mut edited, command)?;
+        // Anchored layers follow what moved — the Mac reconciles after
+        // every edit through the same resolver; a document the core owns
+        // must not wait for the app to do it.
+        promo_timeline::resolve_attachments(&mut edited);
         let before = std::mem::replace(&mut self.meta, edited);
         self.undo.push(snapshot);
         self.redo.clear();
@@ -510,6 +584,7 @@ impl Document {
         for command in commands {
             Self::run(&mut edited, command)?;
         }
+        promo_timeline::resolve_attachments(&mut edited);
         let before = std::mem::replace(&mut self.meta, edited);
         self.undo.push(snapshot);
         self.redo.clear();
@@ -706,10 +781,11 @@ impl Document {
             }
             Command::UpdateResource { resource } => {
                 let resources = meta.resources.get_or_insert_with(Vec::new);
-                match resources.iter_mut().find(|r| r.id == resource.id) {
-                    Some(existing) => *existing = (**resource).clone(),
+                let previous = match resources.iter_mut().find(|r| r.id == resource.id) {
+                    Some(existing) => std::mem::replace(existing, (**resource).clone()),
                     None => return Err(format!("no resource with id {}", resource.id)),
-                }
+                };
+                retime_layers_for_resource(meta, &previous, resource);
                 // Editing the SELECTED theme refreshes its materialized
                 // copy at once — the Mac does this on every save, and a
                 // copy that goes stale until the next open is a colour
@@ -1832,5 +1908,169 @@ mod tests {
         assert_eq!(after, before, "no element moved");
         let ranks: Vec<i64> = layers.iter().map(|l| l.sort_index).collect();
         assert_eq!(ranks, vec![1, 2, 0], "the last layer now sorts first");
+    }
+
+    fn retime_doc(layers: serde_json::Value, resource: serde_json::Value) -> Document {
+        Document::open(
+            &serde_json::json!({
+                "id": "P", "name": "t", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                "compositionSettings": {"canvasWidth": 320, "canvasHeight": 180, "backgroundColorHex": "000000"},
+                "resources": [resource], "layers": layers
+            })
+            .to_string(),
+        )
+        .unwrap()
+    }
+
+    fn duration_of(doc: &Document, id: &str) -> f64 {
+        doc.meta()
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == id)
+            .unwrap()
+            .duration
+            .unwrap()
+    }
+
+    /// The Mac's `replaceResource` rule, on its own test vectors: a held
+    /// frame lengthens the layer that played the whole clip (and the
+    /// background under it); a layer shortened by hand keeps its length;
+    /// a looped layer and a beyond-end layer keep their stretch; a plain
+    /// layer follows a trim.
+    #[test]
+    fn updating_a_resource_retimes_the_layers_that_played_all_of_it() {
+        let video = |extra: serde_json::Value| {
+            let mut r = serde_json::json!({"id": "R", "kind": "video", "filename": "v.mp4", "displayName": "v",
+                "addedAt": 0, "duration": 10, "imageCuts": [], "disabledAudioTrackIndices": []});
+            for (k, v) in extra.as_object().unwrap() {
+                r[k] = v.clone();
+            }
+            r
+        };
+        // A 3 s held frame at 4 s: 10 → 13, and the background follows.
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background", "isEnabled": true, "startTime": 0, "duration": 10, "keyframes": []},
+                {"id": "V", "name": "v", "sortIndex": 1, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 10, "resourceID": "R", "keyframes": []}
+            ]),
+            video(serde_json::json!({})),
+        );
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(serde_json::from_value(video(serde_json::json!({
+                "trimKeyframes": [{"id": "K", "time": 4, "isIncluded": true, "extendedPauseDuration": 3}]
+            }))).unwrap()),
+        })
+        .unwrap();
+        assert!((duration_of(&doc, "V") - 13.0).abs() < 1e-9);
+        assert!(
+            (duration_of(&doc, "BG") - 13.0).abs() < 1e-9,
+            "the background covers the content"
+        );
+
+        // Shortened by hand to 5: stays 5.
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "V", "name": "v", "sortIndex": 0, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 5, "resourceID": "R", "keyframes": []}
+            ]),
+            video(serde_json::json!({})),
+        );
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(serde_json::from_value(video(serde_json::json!({
+                "trimKeyframes": [{"id": "K", "time": 7, "isIncluded": true, "extendedPauseDuration": 3}]
+            }))).unwrap()),
+        })
+        .unwrap();
+        assert!((duration_of(&doc, "V") - 5.0).abs() < 1e-9);
+
+        // Looped and beyond-end layers keep their stretch; a plain one follows the trim.
+        let clip = |extra: serde_json::Value| {
+            let mut r = video(serde_json::json!({"trimStart": 0, "trimEnd": 4}));
+            for (k, v) in extra.as_object().unwrap() {
+                r[k] = v.clone();
+            }
+            r
+        };
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "L", "name": "l", "sortIndex": 0, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 30, "resourceID": "R", "keyframes": []},
+                {"id": "H", "name": "h", "sortIndex": 1, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 25, "resourceID": "R", "beyondEnd": "hold", "keyframes": []}
+            ]),
+            clip(serde_json::json!({"looped": true})),
+        );
+        doc.apply(&Command::UpdateResource {
+            resource: Box::new(
+                serde_json::from_value(clip(serde_json::json!({"looped": true, "trimEnd": 3})))
+                    .unwrap(),
+            ),
+        })
+        .unwrap();
+        assert!(
+            (duration_of(&doc, "L") - 30.0).abs() < 1e-9,
+            "a looped layer is not governed by the trim"
+        );
+        assert!(
+            (duration_of(&doc, "H") - 25.0).abs() < 1e-9,
+            "beyondEnd lifts the content cap"
+        );
+
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "L", "name": "l", "sortIndex": 0, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "R", "keyframes": []}
+            ]),
+            clip(serde_json::json!({})),
+        );
+        doc.apply(&Command::PatchResource {
+            resource_id: "R".into(),
+            patch: serde_json::json!({"trimEnd": 3}),
+        })
+        .unwrap();
+        assert!(
+            (duration_of(&doc, "L") - 3.0).abs() < 1e-9,
+            "an untouched full-length layer keeps tracking the trim"
+        );
+    }
+
+    /// Anchored layers follow what moved, after every step — the Mac
+    /// reconciles after each edit through the same resolver.
+    #[test]
+    fn attached_layers_follow_a_timing_edit() {
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "A", "name": "a", "sortIndex": 0, "kind": "caption", "isEnabled": true, "startTime": 1, "duration": 3, "captionText": "a", "keyframes": []},
+                {"id": "B", "name": "b", "sortIndex": 1, "kind": "caption", "isEnabled": true, "startTime": 0, "duration": 2, "captionText": "b",
+                 "timing": {"start": {"from": "previousEnd", "offset": 0.5}}, "keyframes": []}
+            ]),
+            serde_json::json!({"id": "R", "kind": "image", "filename": "i.png", "displayName": "i", "addedAt": 0, "imageCuts": []}),
+        );
+        let start_of = |doc: &Document, id: &str| {
+            doc.meta()
+                .layers
+                .as_deref()
+                .unwrap()
+                .iter()
+                .find(|l| l.id == id)
+                .unwrap()
+                .start_time
+        };
+        // Opening resolves nothing (the file is the file); the first edit does.
+        assert!(start_of(&doc, "B").abs() < 1e-9);
+        doc.apply(&Command::SetLayerTiming {
+            layer_id: "A".into(),
+            start_time: 2.0,
+            duration: Some(3.0),
+        })
+        .unwrap();
+        assert!(
+            (start_of(&doc, "B") - 5.5).abs() < 1e-9,
+            "B sits half a second after A's new end: {}",
+            start_of(&doc, "B")
+        );
+        assert!(
+            doc.changes_since(0).layers.contains(&"B".to_string()),
+            "the follower is a touched layer too"
+        );
     }
 }
