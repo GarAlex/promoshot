@@ -335,6 +335,10 @@ fn tool_descriptors() -> Value {
                     "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
                         "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
                          missing proxies first; off never reads one. A full-size render never does." },
+                    "codec": { "type": "string", "enum": ["h264", "prores422", "prores4444"], "description":
+                        "h264 in an mp4 (default); ProRes 422 HQ or 4444 want a .mov out path." },
+                    "alpha": { "type": "boolean", "description":
+                        "Render over nothing and keep the frames' alpha — ProRes 4444 in a .mov." },
                     "out": { "type": "string", "description":
                         "Output file (default: <project>/Exports/export.mp4)" }
                 },
@@ -775,6 +779,12 @@ where
             let mut argv = vec!["video".to_string(), project, "--out".into(), out];
             if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
                 argv.extend(["--proxy".into(), policy.to_string()]);
+            }
+            if let Some(codec) = args.get("codec").and_then(Value::as_str) {
+                argv.extend(["--codec".into(), codec.to_string()]);
+            }
+            if args.get("alpha").and_then(Value::as_bool) == Some(true) {
+                argv.push("--alpha".into());
             }
             if let Some(fps) = args.get("fps").and_then(Value::as_f64) {
                 argv.extend(["--fps".into(), fps.to_string()]);

@@ -592,6 +592,11 @@ impl Renderer {
     }
 
     /// Renders one frame as BGRA rows — what a raw-video pipe wants.
+    /// Render over nothing — for PNGs and ProRes 4444 exports with alpha.
+    pub fn set_transparent_plate(&mut self, on: bool) {
+        self.engine.set_transparent_plate(on);
+    }
+
     pub fn frame_bgra(&mut self, time: f64) -> Result<Vec<u8>, String> {
         if let Ok(mut state) = self._state.lock() {
             state.retain_only_active(time, &self.registry);
@@ -674,6 +679,11 @@ pub enum ExportOutcome {
 pub struct ExportSettings {
     pub width: u32,
     pub height: u32,
+    /// H.264 (mp4) by default; ProRes 422 HQ or 4444 (mov).
+    pub codec: promo_media::VideoCodec,
+    /// Keep alpha: the project renders over nothing and the frames'
+    /// alpha goes into a ProRes 4444.
+    pub alpha: bool,
     /// Seconds on the composition timeline.
     pub start: f64,
     pub end: f64,
@@ -705,10 +715,12 @@ pub fn export_video(
         end,
         fps,
         ref overlay,
+        ..
     } = *settings;
     let count = (((end - start) * fps).round() as usize).max(1);
 
     let mut renderer = Renderer::with_proxy(project, width, height, proxy)?;
+    renderer.set_transparent_plate(settings.alpha);
     if let Some((bgra, overlay_width, overlay_height)) = overlay {
         renderer.set_overlay(Some((bgra, *overlay_width, *overlay_height)))?;
     }
@@ -725,6 +737,12 @@ pub fn export_video(
     let spec = promo_media::EncodeSpec {
         chapters,
         chapters_end: (settings.end - settings.start).max(0.0),
+        codec: if settings.alpha {
+            promo_media::VideoCodec::ProRes4444
+        } else {
+            settings.codec
+        },
+        alpha: settings.alpha,
         width,
         height,
         fps,
@@ -738,7 +756,19 @@ pub fn export_video(
 
     for i in 0..count {
         let time = start + i as f64 / fps;
-        let bgra = renderer.frame_bgra(time)?;
+        let mut bgra = renderer.frame_bgra(time)?;
+        if settings.alpha {
+            // The compositor's output is premultiplied; the container wants
+            // straight alpha.
+            for px in bgra.chunks_exact_mut(4) {
+                let a = px[3] as u32;
+                if a > 0 && a < 255 {
+                    px[0] = ((px[0] as u32 * 255 + a / 2) / a).min(255) as u8;
+                    px[1] = ((px[1] as u32 * 255 + a / 2) / a).min(255) as u8;
+                    px[2] = ((px[2] as u32 * 255 + a / 2) / a).min(255) as u8;
+                }
+            }
+        }
         encoder.write_frame(&bgra).map_err(|e| e.to_string())?;
         if !progress(i + 1, count) {
             // Dropping the encoder kills its ffmpeg (promo-media's Drop),
@@ -1545,6 +1575,87 @@ mod tests {
         assert!(
             plate[0] > 225 && plate[1] < 30 && plate[2] > 225,
             "green inverts to magenta: {plate:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// B3.5: an alpha export renders over nothing — the container says
+    /// yuva, an empty corner decodes fully transparent, and the drawn
+    /// subject keeps its colour and coverage.
+    #[test]
+    fn an_alpha_export_keeps_transparency_and_the_subject() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        if std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-alpha-cli-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // A red disc drawing in the middle, nothing else; the settings
+        // colour must not paint under an alpha export.
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Alpha","createdAt":0,"state":"recorded","minReaderVersion":18,
+            "trimStart":0,"trimEnd":1,"videoDuration":1,"subtitles":[],
+            "compositionSettings":{"canvasWidth":64,"canvasHeight":48,"backgroundColorHex":"1020C0"},
+            "resources":[{"id":"D","kind":"drawing","filename":"","displayName":"disc","addedAt":0,"imageCuts":[],
+              "disabledAudioTrackIndices":[],"drawing":{"shapes":[{"id":"S","kind":"oval","points":[[16,8],[48,40]],
+              "strokeColorHex":"FF0000","strokeWidth":1,"fillColorHex":"FF0000","arrowStart":false,"arrowEnd":false}]}}],
+            "layers":[{"id":"L","name":"disc","sortIndex":0,"kind":"drawing","isEnabled":true,
+              "startTime":0,"duration":1,"resourceID":"D","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let out = dir.join("alpha.mov");
+        let settings = ExportSettings {
+            width: 64,
+            height: 48,
+            codec: promo_media::VideoCodec::ProRes4444,
+            alpha: true,
+            start: 0.0,
+            end: 0.5,
+            fps: 30.0,
+            overlay: None,
+        };
+        export_video(
+            &project,
+            &out,
+            &settings,
+            &mut |_, _| true,
+            ProxyPolicy::Off,
+        )
+        .expect("export");
+        use promo_media::VideoDecoder;
+        let mut decoder = promo_media::ffmpeg::FfmpegDecoder::open(&out).expect("decoder");
+        assert!(decoder.info().has_alpha, "{:?}", decoder.info());
+        let Some(promo_gpu::GpuSurface::CpuPixels { data, width, .. }) =
+            decoder.frame_at(0.2).expect("frame")
+        else {
+            panic!("cpu pixels expected");
+        };
+        let px = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * width as usize + x) * 4;
+            [data[i], data[i + 1], data[i + 2], data[i + 3]]
+        };
+        let corner = px(2, 2);
+        assert!(
+            corner[3] < 8,
+            "the empty corner is transparent, not the settings colour: {corner:?}"
+        );
+        let centre = px(32, 24);
+        assert!(
+            centre[3] > 240 && centre[2] > 200 && centre[1] < 60,
+            "the disc is opaque red: {centre:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -173,6 +173,8 @@ pub struct PreviewEngine {
     /// scrubbing/playing and drops it back to 0 for the paused refine
     /// (cache entries are keyed per tier, so both coexist).
     preferred_tier: i32,
+    /// Render the project over nothing (an alpha export).
+    transparent_plate: bool,
     /// Export mode: the clock is monotonic, so per-time frames (video,
     /// animated-tilt bakes) are never requested twice — caching them only
     /// evicts the static content that IS reused. They go into `scratch`
@@ -257,6 +259,7 @@ impl PreviewEngine {
             hits: 0,
             misses: 0,
             preferred_tier: 0,
+            transparent_plate: false,
             export_mode: false,
             scratch: HashMap::new(),
             raster_scale: 1.0,
@@ -411,6 +414,13 @@ impl PreviewEngine {
     }
 
     /// Sets the proxy tier used for subsequent video-frame requests.
+    /// Render the project over nothing: no settings colour, no gradient,
+    /// so an alpha export keeps what the layers drew and nothing else. A
+    /// background LAYER still paints.
+    pub fn set_transparent_plate(&mut self, on: bool) {
+        self.transparent_plate = on;
+    }
+
     pub fn set_preferred_tier(&mut self, tier: i32) {
         self.preferred_tier = tier.max(0);
     }
@@ -1617,7 +1627,10 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(Scene, Vec<u64>), GpuError> {
-        let doc = SceneDoc::project(&self.meta);
+        let mut doc = SceneDoc::project(&self.meta);
+        if self.transparent_plate {
+            doc.plate = Plate::Transparent;
+        }
         self.build_scene_for(&doc, time, output_width, output_height)
     }
 
@@ -1682,7 +1695,7 @@ impl PreviewEngine {
         // comp over footage shows the footage through. A nested background
         // LAYER still paints as in any document.
         let background = match (&doc.plate, bg_layer) {
-            (Plate::Composition(None), None) => [0.0, 0.0, 0.0, 0.0],
+            (Plate::Composition(None), None) | (Plate::Transparent, None) => [0.0, 0.0, 0.0, 0.0],
             (Plate::Composition(Some(hex)), None) => rgba_from_hex(settings.resolve_color(hex)),
             _ => {
                 let bg_hex = bg_layer
@@ -1696,7 +1709,7 @@ impl PreviewEngine {
             .and_then(|layer| tl::layer_background_gradient(layer, time, &bg_settings))
             .or_else(|| match doc.plate {
                 Plate::Project => bg_settings.background_gradient.clone(),
-                Plate::Composition(_) => None,
+                Plate::Composition(_) | Plate::Transparent => None,
             })
             // Absent geometry resolved at READ — the timeline already
             // resolved keyframed gradients against the plate; this covers
@@ -2242,6 +2255,9 @@ struct SceneDoc {
 enum Plate {
     Project,
     Composition(Option<String>),
+    /// The project rendered over nothing — an alpha export: no settings
+    /// colour, no gradient; a background LAYER still paints.
+    Transparent,
 }
 
 impl SceneDoc {

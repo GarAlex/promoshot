@@ -381,3 +381,11 @@ A resource of kind `lut` is a `.cube` file in `Resources/`; a layer's
 `adjustments.lutResourceID` (with `lutAmount`) applies it in the
 compositor after the layer's own grade — a trilinear lookup on every
 host alike.
+
+## ProRes and alpha
+
+`promo video … --codec prores422|prores4444 --out x.mov` writes ProRes;
+`--alpha` renders the project over nothing and keeps the frames' alpha
+in a ProRes 4444 (`--alpha` on `still`/`frames` gives transparent PNGs).
+Sources that carry alpha (ProRes 4444, WebM with alpha, PNG sequences)
+decode premultiplied and compose with their transparency.

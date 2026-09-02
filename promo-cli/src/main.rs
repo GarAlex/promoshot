@@ -123,6 +123,8 @@ struct Options {
     to: Option<f64>,
     size: Option<(u32, u32)>,
     proxy: render::ProxyPolicy,
+    codec: promo_media::VideoCodec,
+    alpha: bool,
 }
 
 impl Options {
@@ -146,6 +148,13 @@ impl Options {
                 "--time" => opts.time = Some(parse_f64(&value()?, flag)?),
                 "--fps" => opts.fps = Some(parse_f64(&value()?, flag)?),
                 "--proxy" => opts.proxy = render::ProxyPolicy::parse(&value()?)?,
+                "--codec" => opts.codec = promo_media::VideoCodec::parse(&value()?)?,
+                "--alpha" => {
+                    opts.alpha = true;
+
+                    i += 1;
+                    continue;
+                }
                 "--from" => opts.from = Some(parse_f64(&value()?, flag)?),
                 "--to" => opts.to = Some(parse_f64(&value()?, flag)?),
                 "--size" => {
@@ -395,6 +404,7 @@ fn still(project: &Project, opts: &Options) -> Result<String, String> {
     let (w, h) = opts.size(project);
     let time = opts.time.unwrap_or(0.0);
     let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
+    renderer.set_transparent_plate(opts.alpha);
     let rgba = renderer.frame_rgba(time)?;
     render::write_png(out, &rgba, w, h)?;
     if opts.json {
@@ -415,6 +425,7 @@ fn frames(project: &Project, opts: &Options) -> Result<String, String> {
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
 
     let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
+    renderer.set_transparent_plate(opts.alpha);
     for i in 0..count {
         let time = start + i as f64 / fps;
         let rgba = renderer.frame_rgba(time)?;
@@ -456,6 +467,8 @@ fn video(project: &Project, opts: &Options) -> Result<String, String> {
     let settings = render::ExportSettings {
         width: w,
         height: h,
+        codec: opts.codec,
+        alpha: opts.alpha,
         start,
         end,
         fps,
@@ -508,6 +521,7 @@ fn gif(project: &Project, opts: &Options) -> Result<String, String> {
         .map_err(|e| e.to_string())?;
     let delay = image::Delay::from_numer_denom_ms((1000.0 / fps).round() as u32, 1);
     let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
+    renderer.set_transparent_plate(opts.alpha);
     for i in 0..count {
         let time = start + i as f64 / fps;
         let rgba = renderer.frame_rgba(time)?;

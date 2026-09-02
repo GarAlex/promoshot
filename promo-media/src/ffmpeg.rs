@@ -177,6 +177,18 @@ impl FfmpegDecoder {
         let reader = self.reader.as_mut().expect("reader");
         self.current_pts = Some(reader.start_s + reader.frames_read as f64 / fps);
         reader.frames_read += 1;
+        if self.info.has_alpha {
+            // Straight alpha from ffmpeg's bgra; the compositor wants
+            // premultiplied. Once per frame, on the CPU, like a PNG's.
+            for px in self.buffer[..need].chunks_exact_mut(4) {
+                let a = px[3] as u32;
+                if a < 255 {
+                    px[0] = ((px[0] as u32 * a + 127) / 255) as u8;
+                    px[1] = ((px[1] as u32 * a + 127) / 255) as u8;
+                    px[2] = ((px[2] as u32 * a + 127) / 255) as u8;
+                }
+            }
+        }
         Ok(true)
     }
 
@@ -260,7 +272,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,r_frame_rate,duration:format=duration",
+            "stream=width,height,r_frame_rate,duration,pix_fmt:format=duration",
             "-of",
             "default=noprint_wrappers=1",
         ])
@@ -288,6 +300,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
         match key.trim() {
             "width" => info.width = value.trim().parse().unwrap_or(0),
             "height" => info.height = value.trim().parse().unwrap_or(0),
+            "pix_fmt" => info.has_alpha = crate::pix_fmt_has_alpha(value),
             "r_frame_rate" => info.nominal_fps = parse_rational(value.trim()),
             // The stream's duration is missing in some containers; ffprobe
             // then prints the format's, and the first one we see wins.
@@ -631,14 +644,42 @@ impl FfmpegEncoder {
                 command.args(["-map", "1:a"]);
             }
         }
-        command.args([
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-crf",
-            &format!("{}", spec.quality),
-        ]);
+        match spec.codec {
+            crate::VideoCodec::H264 => {
+                command.args([
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    &format!("{}", spec.quality),
+                ]);
+            }
+            crate::VideoCodec::ProRes422 => {
+                command.args([
+                    "-c:v",
+                    "prores_ks",
+                    "-profile:v",
+                    "3",
+                    "-pix_fmt",
+                    "yuv422p10le",
+                ]);
+            }
+            crate::VideoCodec::ProRes4444 => {
+                command.args([
+                    "-c:v",
+                    "prores_ks",
+                    "-profile:v",
+                    "4",
+                    "-pix_fmt",
+                    if spec.alpha {
+                        "yuva444p10le"
+                    } else {
+                        "yuv444p10le"
+                    },
+                ]);
+            }
+        }
         if audio_temp.is_some() {
             // AAC for compatibility; -shortest so a soundtrack longer than
             // the render cannot extend the file past its last frame.
@@ -794,6 +835,8 @@ mod tests {
         let spec = crate::EncodeSpec {
             chapters: Vec::new(),
             chapters_end: 0.0,
+            codec: crate::VideoCodec::H264,
+            alpha: false,
             width: 64,
             height: 64,
             fps: 30.0,
@@ -1212,6 +1255,8 @@ mod tests {
         let spec = EncodeSpec {
             chapters: Vec::new(),
             chapters_end: 0.0,
+            codec: crate::VideoCodec::H264,
+            alpha: false,
             width: 64,
             height: 48,
             fps: 30.0,
@@ -1250,6 +1295,8 @@ mod tests {
         let spec = EncodeSpec {
             chapters: vec![(0.0, "Open".into()), (1.0, "Pricing = plans".into())],
             chapters_end: 2.0,
+            codec: crate::VideoCodec::H264,
+            alpha: false,
             width: 64,
             height: 48,
             fps: 30.0,
@@ -1288,5 +1335,89 @@ mod tests {
         assert_eq!(starts.len(), 2, "{text}");
         assert!((starts[1] - 1.0).abs() < 0.01, "{text}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+    /// ProRes 4444 with alpha: a half-transparent frame goes in, the file
+    /// says yuva, and the frame comes back with its alpha — premultiplied
+    /// by the decoder, as the compositor wants.
+    #[test]
+    fn prores_4444_carries_alpha_through_and_back() {
+        use crate::{VideoDecoder, VideoEncoder};
+        if Command::new("ffmpeg")
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-alpha-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("alpha.mov");
+        let spec = EncodeSpec {
+            chapters: Vec::new(),
+            chapters_end: 0.0,
+            codec: crate::VideoCodec::ProRes4444,
+            alpha: true,
+            width: 64,
+            height: 48,
+            fps: 30.0,
+            quality: 20,
+            audio: None,
+        };
+        // Straight BGRA in: opaque red on the left, half-transparent red
+        // on the right (what an unpremultiplied export frame looks like).
+        let mut frame = vec![0u8; 64 * 48 * 4];
+        for y in 0..48 {
+            for x in 0..64 {
+                let i = (y * 64 + x) * 4;
+                frame[i + 2] = 200;
+                frame[i + 3] = if x < 32 { 255 } else { 128 };
+            }
+        }
+        let mut encoder: Box<dyn VideoEncoder> =
+            Box::new(FfmpegEncoder::open(&out, &spec).expect("encoder"));
+        for _ in 0..15 {
+            encoder.write_frame(&frame).expect("frame");
+        }
+        encoder.finish().expect("finish");
+        let mut decoder = FfmpegDecoder::open(&out).expect("decoder");
+        assert!(decoder.info().has_alpha, "{:?}", decoder.info());
+        let Some(crate::GpuSurface::CpuPixels { data, width, .. }) =
+            decoder.frame_at(0.2).expect("frame")
+        else {
+            panic!("cpu pixels expected");
+        };
+        let px = |x: usize| -> [u8; 4] {
+            let i = (10 * width as usize + x) * 4;
+            [data[i], data[i + 1], data[i + 2], data[i + 3]]
+        };
+        let left = px(8);
+        let right = px(56);
+        assert!(
+            left[3] > 250 && left[2] > 180,
+            "opaque red survives: {left:?}"
+        );
+        assert!(
+            (110..=146).contains(&right[3]),
+            "half alpha survives: {right:?}"
+        );
+        assert!(
+            right[2] < 130 && right[2] > 80,
+            "and comes back premultiplied: {right:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pix_fmt_alpha_names() {
+        for f in ["yuva444p10le", "rgba", "bgra", "gbrap", "ya8", "argb"] {
+            assert!(crate::pix_fmt_has_alpha(f), "{f}");
+        }
+        for f in ["yuv420p", "yuv422p10le", "rgb24", "gbrp", "gray"] {
+            assert!(!crate::pix_fmt_has_alpha(f), "{f}");
+        }
     }
 }

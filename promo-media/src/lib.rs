@@ -44,6 +44,10 @@ pub struct BackendCapabilities {
 pub struct VideoInfo {
     pub width: u32,
     pub height: u32,
+    /// The source carries alpha (ProRes 4444, WebM with alpha, PNG
+    /// sequences…): frames come out premultiplied and are composited as
+    /// such.
+    pub has_alpha: bool,
     pub duration_s: f64,
     pub nominal_fps: f64,
     /// Display rotation in degrees. **Every backend must honour this** — a
@@ -260,11 +264,54 @@ pub fn atempo_chain(speed: f64) -> Option<String> {
 }
 
 /// What to write.
+/// The export's video codec. H.264 in an mp4 is the default; ProRes
+/// (`prores_ks`) 422 HQ and 4444 want a `.mov`, and 4444 is the one that
+/// carries alpha.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VideoCodec {
+    #[default]
+    H264,
+    ProRes422,
+    ProRes4444,
+}
+
+impl VideoCodec {
+    pub fn parse(text: &str) -> Result<Self, String> {
+        match text {
+            "h264" => Ok(VideoCodec::H264),
+            "prores422" => Ok(VideoCodec::ProRes422),
+            "prores4444" => Ok(VideoCodec::ProRes4444),
+            other => Err(format!(
+                "--codec: expected h264, prores422 or prores4444, got `{other}`"
+            )),
+        }
+    }
+}
+
+/// Does an ffprobe `pix_fmt` name carry alpha?
+pub fn pix_fmt_has_alpha(pix_fmt: &str) -> bool {
+    let f = pix_fmt.trim();
+    f.starts_with("yuva")
+        || f.starts_with("gbrap")
+        || f.starts_with("ya")
+        || matches!(
+            f,
+            "rgba" | "bgra" | "argb" | "abgr" | "rgba64le" | "rgba64be" | "bgra64le" | "bgra64be"
+        )
+        || f.starts_with("rgba")
+        || f.starts_with("bgra")
+}
+
 #[derive(Debug, Clone)]
 pub struct EncodeSpec {
     pub width: u32,
     pub height: u32,
     pub fps: f64,
+    /// H.264 (mp4) by default; ProRes 422 HQ / 4444 (mov).
+    pub codec: VideoCodec,
+    /// Keep the frames' alpha in the file — ProRes 4444 only; the frames
+    /// arrive premultiplied and are unpremultiplied on the way out.
+    pub alpha: bool,
     /// Chapter starts (seconds, title) the container carries — a player's
     /// chapter menu. Each runs to the next, the last to the end.
     pub chapters: Vec<(f64, String)>,

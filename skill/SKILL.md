@@ -130,6 +130,12 @@ new projects.
   to STABLE UUIDs (the same spelling in the same project always mints
   the same one), so re-run `promo_inspect` after a person's turn and
   re-anchor; its `updated:` line is the turn signal.
+- **ProRes and alpha out.** `promo_render_video` takes `codec:
+  "prores422" | "prores4444"` (give it a `.mov` out path) and `alpha:
+  true` — the project renders over nothing and the frames' alpha lands
+  in a ProRes 4444, the honest hand-off to another editor. Alpha IN
+  works too: a ProRes 4444, WebM-with-alpha or PNG-sequence source
+  composes with its transparency.
 - **A look from a `.cube`.** Copy the file into `Resources/`, declare
   `{ "kind": "lut", "filename": "look.cube", ... }`, and name it from a
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
