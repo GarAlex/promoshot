@@ -14,6 +14,80 @@
       ],
       "type": "string"
     },
+    "AudioEffect": {
+      "properties": {
+        "attackMs": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "frequencyHz": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gainDb": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/AudioEffectKind",
+          "default": "none"
+        },
+        "ratio": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "releaseMs": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "targetLufs": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "thresholdDb": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "widthOctaves": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AudioEffectKind": {
+      "enum": [
+        "none",
+        "normalize",
+        "compressor",
+        "eq"
+      ],
+      "type": "string"
+    },
     "BackgroundFill": {
       "enum": [
         "stretch",
@@ -1678,6 +1752,15 @@
         "addedAt": {
           "format": "double",
           "type": "number"
+        },
+        "audioEffects": {
+          "items": {
+            "$ref": "#/$defs/AudioEffect"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "audioGain": {
           "format": "float",

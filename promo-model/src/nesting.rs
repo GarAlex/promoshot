@@ -287,4 +287,30 @@ mod tests {
         .unwrap();
         assert!(plain.minimum_reader_version() < 20);
     }
+    /// Audio effects round-trip, an unknown kind reads as none, and a
+    /// resource with any effect gates the project at 21.
+    #[test]
+    fn audio_effects_round_trip_and_gate_at_twenty_one() {
+        let meta = doc(
+            serde_json::json!([{"id": "V", "kind": "video", "filename": "v.mp4", "displayName": "v", "addedAt": 0,
+                "duration": 4, "imageCuts": [],
+                "audioEffects": [{"kind": "normalize", "targetLufs": -14}, {"kind": "reverb"}, {"kind": "eq", "frequencyHz": 200, "gainDb": -3}]}]),
+            serde_json::json!([]),
+        );
+        let effects = meta.resources.as_deref().unwrap()[0]
+            .audio_effects
+            .as_deref()
+            .unwrap();
+        assert_eq!(effects.len(), 3);
+        assert_eq!(effects[0].kind, crate::AudioEffectKind::Normalize);
+        assert_eq!(effects[0].target_lufs, Some(-14.0));
+        assert_eq!(
+            effects[1].kind,
+            crate::AudioEffectKind::None,
+            "unknown effects are skipped"
+        );
+        assert_eq!(meta.minimum_reader_version(), 21);
+        let again = ProjectMetadata::from_json(&meta.to_json().unwrap()).unwrap();
+        assert_eq!(again.resources, meta.resources);
+    }
 }

@@ -537,6 +537,17 @@ mod schema_doc_tests {
             audio_gain: None,
             volume: Some(0.9),
             disabled_audio_track_indices: vec![],
+            audio_effects: Some(vec![AudioEffect {
+                kind: AudioEffectKind::Compressor,
+                target_lufs: Some(-16.0),
+                threshold_db: Some(-18.0),
+                ratio: Some(3.0),
+                attack_ms: Some(20.0),
+                release_ms: Some(250.0),
+                frequency_hz: Some(1000.0),
+                width_octaves: Some(1.0),
+                gain_db: Some(3.0),
+            }]),
             video_natural_width: Some(1920.0),
             video_natural_height: Some(1080.0),
             pixel_width: Some(1170.0),
@@ -649,6 +660,9 @@ mod schema_doc_tests {
     /// Enum wire values an author has to spell exactly. Extend alongside the
     /// enums; every entry must appear in schema.md verbatim.
     const VALUES: &[&str] = &[
+        "normalize",
+        "compressor",
+        "eq",
         "chapter",
         "composition",
         // Layer and resource kinds.

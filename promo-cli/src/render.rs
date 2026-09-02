@@ -815,6 +815,14 @@ pub fn build_soundtrack(
         };
         let Some(path) = path else { continue };
 
+        // The resource's effect chain (rung 21), applied after the tempo.
+        let effects: Option<String> = match &input.source {
+            AudioSource::Resource(id) => project
+                .resource(id)
+                .and_then(|res| res.audio_effects.as_deref())
+                .and_then(promo_media::effects_chain),
+            AudioSource::VoiceClip(_) => None,
+        };
         let speed = if input.speed.is_finite() {
             input.speed.clamp(0.1, 10.0)
         } else {
@@ -831,7 +839,14 @@ pub fn build_soundtrack(
         // which most screen recordings do not. The stretched stream has its
         // own clock; source seconds divide by `speed` to index it.
         let decoded = reader
-            .read_tracks(&path, SAMPLE_RATE, CHANNELS, speed, &selection)
+            .read_tracks_with(
+                &path,
+                SAMPLE_RATE,
+                CHANNELS,
+                speed,
+                &selection,
+                effects.as_deref(),
+            )
             .map_err(|e| format!("{}: {e}", path.display()))?;
         let Some(audio) = decoded else { continue };
         let asset_seconds = audio.duration_s() * speed;

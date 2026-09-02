@@ -764,3 +764,14 @@ is `marker` (a note the editors show) or `chapter` (also written into an
 exported mp4's chapter list, so a player's chapter menu has it); an
 unknown kind reads as `marker`. No render effect. A project with markers
 carries `minReaderVersion: 20` — an older reader drops the list on save.
+
+Audio effects (rung 21). A video or audio resource may carry
+`"audioEffects": [ ... ]`, applied in order before the mix — the same
+chain for a headless render and the apps' exports, which both take the
+core's mix (the apps' live preview plays the resource dry):
+`{ "kind": "normalize", "targetLufs": -16 }` (loudness),
+`{ "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 20,
+"releaseMs": 250 }`, `{ "kind": "eq", "frequencyHz": 1000,
+"widthOctaves": 1, "gainDb": 3 }` (one band per entry). An unknown kind
+reads as `none` and is skipped. A project with any effect carries
+`minReaderVersion: 21`.

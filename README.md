@@ -359,3 +359,11 @@ take the same `proxy` argument; `promo_proxy` builds them.
 A project may carry `markers` — named moments on the output timeline.
 `kind: "chapter"` markers are written into an exported mp4's chapter
 list (a player's chapter menu); `inspect` lists them all.
+
+## Audio effects
+
+A video or audio resource may carry `audioEffects` — `normalize`
+(loudness to a target LUFS), `compressor` and one-band `eq` entries,
+applied in order before the mix in every render the core makes. The
+apps' exports take the same mix; their live preview plays the resource
+dry.

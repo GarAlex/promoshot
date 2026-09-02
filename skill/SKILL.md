@@ -130,6 +130,11 @@ new projects.
   to STABLE UUIDs (the same spelling in the same project always mints
   the same one), so re-run `promo_inspect` after a person's turn and
   re-anchor; its `updated:` line is the turn signal.
+- **Audio effects on a resource.** `"audioEffects": [{ "kind": "normalize",
+  "targetLufs": -16 }, { "kind": "compressor" }, { "kind": "eq",
+  "frequencyHz": 1000, "gainDb": 3 }]` on a video or audio resource runs
+  before the mix, in order, in every render the core makes (the apps'
+  live preview plays the resource dry). Stamp `minReaderVersion: 21`.
 - **Markers and chapters.** `"markers": [{ "id": "<uuid>", "time": 12.5,
   "name": "Pricing", "kind": "chapter" }]` on the project names moments;
   `chapter` markers are written into an exported mp4's chapter list,

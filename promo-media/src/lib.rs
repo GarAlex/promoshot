@@ -169,11 +169,71 @@ pub trait AudioReader: Send + Sync {
         channels: u16,
         speed: f64,
     ) -> Result<Option<AudioBuffer>, MediaError>;
+
+    /// `read_tracks`, with an extra filter chain (see [`effects_chain`])
+    /// applied after the tempo chain. A reader that cannot filter refuses
+    /// a chain rather than quietly playing the resource dry.
+    fn read_tracks_with(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        speed: f64,
+        tracks: &TrackSelection,
+        extra_filter: Option<&str>,
+    ) -> Result<Option<AudioBuffer>, MediaError> {
+        match extra_filter {
+            None => self.read_tracks(path, sample_rate, channels, speed, tracks),
+            Some(chain) => Err(MediaError::Backend(format!(
+                "this audio reader cannot apply effects ({chain})"
+            ))),
+        }
+    }
 }
 
 /// `atempo` handles 0.5–2.0 in one pass, so anything outside that is chained:
 /// 3.0 becomes 2.0 then 1.5. Returns None for a rate near enough to 1 that
 /// the filter would only cost a resample.
+/// The ffmpeg filter chain for a resource's audio effects, in order —
+/// `None` when nothing applies. Numbers are formatted plainly so the chain
+/// is the same string on every host.
+pub fn effects_chain(effects: &[promo_model::AudioEffect]) -> Option<String> {
+    use promo_model::AudioEffectKind;
+    let mut stages: Vec<String> = Vec::new();
+    for effect in effects {
+        match effect.kind {
+            AudioEffectKind::None => {}
+            AudioEffectKind::Normalize => {
+                let target = effect.target_lufs.unwrap_or(-16.0).clamp(-70.0, -5.0);
+                stages.push(format!("loudnorm=I={target}:TP=-1.5:LRA=11"));
+            }
+            AudioEffectKind::Compressor => {
+                let threshold = effect.threshold_db.unwrap_or(-18.0).clamp(-60.0, 0.0);
+                let ratio = effect.ratio.unwrap_or(3.0).clamp(1.0, 20.0);
+                let attack = effect.attack_ms.unwrap_or(20.0).clamp(0.01, 2000.0);
+                let release = effect.release_ms.unwrap_or(250.0).clamp(0.01, 9000.0);
+                stages.push(format!(
+                    "acompressor=threshold={threshold}dB:ratio={ratio}:attack={attack}:release={release}"
+                ));
+            }
+            AudioEffectKind::Eq => {
+                let Some(frequency) = effect.frequency_hz else {
+                    continue;
+                };
+                let frequency = frequency.clamp(20.0, 20_000.0);
+                let width = effect.width_octaves.unwrap_or(1.0).clamp(0.05, 10.0);
+                let gain = effect.gain_db.unwrap_or(0.0).clamp(-30.0, 30.0);
+                stages.push(format!("equalizer=f={frequency}:t=o:w={width}:g={gain}"));
+            }
+        }
+    }
+    if stages.is_empty() {
+        None
+    } else {
+        Some(stages.join(","))
+    }
+}
+
 pub fn atempo_chain(speed: f64) -> Option<String> {
     if !(speed.is_finite()) || (speed - 1.0).abs() < 1e-6 || speed <= 0.0 {
         return None;
@@ -328,6 +388,48 @@ mod tests {
             err.to_string().contains("clip.mp4"),
             "the message must name the file: {err}"
         );
+    }
+}
+
+#[cfg(test)]
+mod effects_tests {
+    use super::*;
+    use promo_model::{AudioEffect, AudioEffectKind};
+
+    fn effect(kind: AudioEffectKind) -> AudioEffect {
+        AudioEffect {
+            kind,
+            target_lufs: None,
+            threshold_db: None,
+            ratio: None,
+            attack_ms: None,
+            release_ms: None,
+            frequency_hz: None,
+            width_octaves: None,
+            gain_db: None,
+        }
+    }
+
+    /// The chain is the effects in order, defaults filled, unknowns
+    /// skipped, and nothing at all when nothing applies.
+    #[test]
+    fn effects_chain_spells_each_stage_in_order() {
+        assert_eq!(effects_chain(&[]), None);
+        assert_eq!(effects_chain(&[effect(AudioEffectKind::None)]), None);
+        let mut eq = effect(AudioEffectKind::Eq);
+        eq.frequency_hz = Some(1000.0);
+        eq.gain_db = Some(3.0);
+        let mut comp = effect(AudioEffectKind::Compressor);
+        comp.ratio = Some(4.0);
+        assert_eq!(
+            effects_chain(&[effect(AudioEffectKind::Normalize), comp, eq]).as_deref(),
+            Some(
+                "loudnorm=I=-16:TP=-1.5:LRA=11,\
+                 acompressor=threshold=-18dB:ratio=4:attack=20:release=250,\
+                 equalizer=f=1000:t=o:w=1:g=3"
+            )
+        );
+        assert_eq!(effects_chain(&[effect(AudioEffectKind::Eq)]), None);
     }
 }
 

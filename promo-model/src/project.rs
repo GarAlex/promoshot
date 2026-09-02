@@ -120,6 +120,55 @@ strict_enum!(
         (Composition, "composition"),
     ]
 );
+// An audio effect's kind (rung 21). Tolerant, falling back to `None`: an
+// effect a newer build adds is skipped here rather than misapplied.
+tolerant_enum!(
+    AudioEffectKind,
+    None,
+    [
+        (None, "none"),
+        (Normalize, "normalize"),
+        (Compressor, "compressor"),
+        (Eq, "eq")
+    ]
+);
+
+// The macro owns the enum's derive list; the default is spelled here.
+#[allow(clippy::derivable_impls)]
+impl Default for AudioEffectKind {
+    fn default() -> Self {
+        AudioEffectKind::None
+    }
+}
+
+/// One effect in a resource's audio chain, applied in order before the
+/// mix: `normalize` (loudness, `targetLufs`, default -16), `compressor`
+/// (`thresholdDb` -18, `ratio` 3, `attackMs` 20, `releaseMs` 250), `eq`
+/// (one band: `frequencyHz`, `widthOctaves` 1, `gainDb`). Headless and
+/// the apps' exports agree by construction — both take the core's mix.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioEffect {
+    #[serde(default)]
+    pub kind: AudioEffectKind,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub target_lufs: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub threshold_db: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub attack_ms: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub release_ms: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub frequency_hz: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub width_octaves: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub gain_db: Option<f64>,
+}
+
 // A marker's role. Tolerant: a kind a newer build adds reads as a plain
 // marker here — a name at a time is never wrong.
 tolerant_enum!(
@@ -2302,6 +2351,9 @@ pub struct ProjectResource {
     #[serde(skip_serializing_if = "is_none")]
     pub volume: Option<f32>,
     pub disabled_audio_track_indices: Vec<i64>,
+    /// The resource's audio effect chain (rung 21), applied before the mix.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub audio_effects: Option<Vec<AudioEffect>>,
     #[serde(skip_serializing_if = "is_none")]
     pub video_natural_width: Option<f64>,
     #[serde(skip_serializing_if = "is_none")]
@@ -2373,6 +2425,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     disabled_audio_track_indices: Option<Vec<i64>>,
     #[serde(default)]
+    audio_effects: Option<Vec<AudioEffect>>,
+    #[serde(default)]
     video_natural_width: Option<f64>,
     #[serde(default)]
     pixel_width: Option<f64>,
@@ -2428,6 +2482,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             audio_gain: w.audio_gain,
             volume,
             disabled_audio_track_indices: indices,
+            audio_effects: w.audio_effects,
             video_natural_width: w.video_natural_width,
             pixel_width: w.pixel_width,
             pixel_height: w.pixel_height,
@@ -2567,6 +2622,7 @@ impl ProjectResource {
             audio_gain: None,
             volume: None,
             disabled_audio_track_indices: Vec::new(),
+            audio_effects: None,
             video_natural_width: None,
             pixel_width: None,
             pixel_height: None,
@@ -2610,6 +2666,15 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 21 is a resource's audio effect chain. Dropped by an older
+        // reader's save, the mix silently loses its loudness and tone.
+        if resources
+            .iter()
+            .any(|r| r.audio_effects.as_ref().is_some_and(|e| !e.is_empty()))
+        {
+            return 21;
+        }
 
         // 20 is markers and chapters. Dropped by an older reader's save, the
         // chapter list is simply gone.

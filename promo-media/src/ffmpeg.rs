@@ -421,6 +421,18 @@ impl AudioReader for FfmpegAudioReader {
         speed: f64,
         tracks: &crate::TrackSelection,
     ) -> Result<Option<AudioBuffer>, MediaError> {
+        self.read_tracks_with(path, sample_rate, channels, speed, tracks, None)
+    }
+
+    fn read_tracks_with(
+        &self,
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        speed: f64,
+        tracks: &crate::TrackSelection,
+        extra_filter: Option<&str>,
+    ) -> Result<Option<AudioBuffer>, MediaError> {
         let count = audio_stream_count(path);
         if count == 0 {
             return Ok(None);
@@ -429,28 +441,34 @@ impl AudioReader for FfmpegAudioReader {
         if kept.is_empty() {
             return Ok(None);
         }
-        // Only a single-track asset can take the plain path: with no -map,
-        // ffmpeg picks ONE "best" audio stream, so a multi-track recording
-        // read that way is its first track, not the sum the apps play.
-        if count == 1 {
+        // The chain: tempo first (it changes the clock), then the effects.
+        let tempo = crate::atempo_chain(speed);
+        let chain: Vec<String> = tempo
+            .iter()
+            .cloned()
+            .chain(extra_filter.map(str::to_string))
+            .collect();
+        let chain = if chain.is_empty() {
+            None
+        } else {
+            Some(chain.join(","))
+        };
+        if count == 1 && extra_filter.is_none() {
             return self.read_at_speed(path, sample_rate, channels, speed);
         }
         let mut command = Command::new("ffmpeg");
         command.args(["-v", "error", "-nostdin", "-i"]).arg(path);
-        let tempo = crate::atempo_chain(speed);
         if kept.len() == 1 {
             command.args(["-map", &format!("0:a:{}", kept[0])]);
-            if let Some(filter) = tempo {
-                command.args(["-filter:a", &filter]);
+            if let Some(filter) = &chain {
+                command.args(["-filter:a", filter]);
             }
         } else {
-            // Sum the kept tracks at unity (normalize=0), as the apps'
-            // composition mixer does when each is its own track.
             let inputs: String = kept.iter().map(|i| format!("[0:a:{i}]")).collect();
             let mut graph = format!("{inputs}amix=inputs={}:normalize=0", kept.len());
-            if let Some(filter) = tempo {
+            if let Some(filter) = &chain {
                 graph.push(',');
-                graph.push_str(&filter);
+                graph.push_str(filter);
             }
             graph.push_str("[out]");
             command.args(["-filter_complex", &graph, "-map", "[out]"]);
