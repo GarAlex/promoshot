@@ -121,7 +121,9 @@ Claude Code / Cursor / any `mcp.json`:
 
 `--workspace` is where new projects go; `--root` fences which projects the
 server will touch — pointing both at one folder is the tidy setup. Both
-optional.
+optional. `--log <file>` appends one line per tool call — when,
+which tool, how many milliseconds, how it went — for a session's own
+accounting; the demo pages are built from it.
 
 Client one-liners:
 
