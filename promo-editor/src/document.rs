@@ -580,6 +580,21 @@ impl Document {
     /// gesture that mints two things (a resource and its layer) deserves.
     /// Atomic: a failure anywhere applies nothing, records nothing.
     pub fn apply_group(&mut self, commands: &[Command]) -> Result<(), String> {
+        self.apply_group_merging(commands, false)
+    }
+
+    /// `apply_group`, and when `merge_with_last` the step JOINS the
+    /// previous undo step instead of starting one: a drag that writes
+    /// thirty times is one Ctrl+Z, as the apps' gesture-coalescing rule
+    /// has it — the caller decides the window and the kind, the document
+    /// only keeps a single boundary. With nothing to join it is a plain
+    /// step. The change log still sees every apply, so a reader that
+    /// follows the log is not affected by how undo groups them.
+    pub fn apply_group_merging(
+        &mut self,
+        commands: &[Command],
+        merge_with_last: bool,
+    ) -> Result<(), String> {
         if commands.is_empty() {
             return Ok(());
         }
@@ -590,7 +605,9 @@ impl Document {
         }
         promo_timeline::resolve_attachments(&mut edited);
         let before = std::mem::replace(&mut self.meta, edited);
-        self.undo.push(snapshot);
+        if !merge_with_last || self.undo.is_empty() {
+            self.undo.push(snapshot);
+        }
         self.redo.clear();
         self.version += 1;
         self.note(&before);
@@ -2076,5 +2093,57 @@ mod tests {
             doc.changes_since(0).layers.contains(&"B".to_string()),
             "the follower is a touched layer too"
         );
+    }
+    /// A merged step joins the previous undo step: a drag of many writes
+    /// is one Ctrl+Z, and the redo line still clears. The first step
+    /// of a document cannot join anything and stands alone.
+    #[test]
+    fn a_merged_step_joins_the_previous_undo_step() {
+        let mut doc = retime_doc(
+            serde_json::json!([
+                {"id": "L", "name": "l", "sortIndex": 0, "kind": "video", "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "R", "keyframes": []}
+            ]),
+            serde_json::json!({"id": "R", "kind": "video", "filename": "v.mp4", "displayName": "v", "addedAt": 0, "duration": 4, "imageCuts": []}),
+        );
+        let start = doc.to_json().unwrap();
+        let retime = |start_time: f64| Command::SetLayerTiming {
+            layer_id: "L".into(),
+            start_time,
+            duration: Some(1.0),
+        };
+        // Nothing to join: the first merged step is a plain one.
+        doc.apply_group_merging(&[retime(1.0)], true).unwrap();
+        assert!(doc.can_undo());
+        // A drag: the boundary stays where the drag began.
+        doc.apply_group_merging(&[retime(2.0)], true).unwrap();
+        doc.apply_group_merging(&[retime(3.0)], true).unwrap();
+        assert_eq!(doc.version(), 3, "every apply is a version");
+        assert!(doc.undo());
+        assert_eq!(
+            doc.to_json().unwrap(),
+            start,
+            "one Ctrl+Z undid the whole drag"
+        );
+        assert!(!doc.can_undo());
+        assert!(doc.redo());
+        let start_of = doc
+            .meta()
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "L")
+            .unwrap()
+            .start_time;
+        assert!(
+            (start_of - 3.0).abs() < 1e-9,
+            "redo lands at the drag's end"
+        );
+        // A new step after redo, unmerged, then merged: two boundaries.
+        doc.apply_group_merging(&[retime(4.0)], false).unwrap();
+        doc.apply_group_merging(&[retime(5.0)], true).unwrap();
+        assert!(doc.undo());
+        assert!(doc.undo());
+        assert_eq!(doc.to_json().unwrap(), start);
     }
 }
