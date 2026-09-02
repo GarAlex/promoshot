@@ -30,7 +30,8 @@ demos/
 cargo build --release -p promoshot-mcp -p promo-cli
 demos/run.sh demos/23-soft-focus            # one; add a model name to override
 demos/run_all.sh --skip-done                # the set, skipping demos already scored
-python3 demos/publish.py                    # demo.md and docs/demo/
+python3 demos/publish.py                    # demo.md, docs/demo/, docs/demo-media/
+demos/publish_media.sh                      # the videos, to the demo-media branch
 ```
 
 The runner needs Claude Code signed in (the binary it uses is the one the
