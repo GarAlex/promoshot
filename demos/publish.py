@@ -290,6 +290,8 @@ for the same brief at the same six moments, and a structural score:
 length, the mix of layers, the features the prompt asked for, the words
 that reach the screen.
 
+Five of those jobs play on the web at [promoshot.app/demo](https://promoshot.app/demo).
+
 The suite is in [demos/](demos/README.md) — adding a test is adding a
 folder — and `docs/demo/demo.json` carries the same material for the
 website. Footage credit: Big Buck Bunny (Blender Foundation, CC BY 3.0)
