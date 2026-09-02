@@ -7,6 +7,9 @@ HERE="${0:A:h}"; CORE="${HERE:h}"
 SRC="$CORE/docs/demo-media"
 [ -d "$SRC" ] || { echo "nothing in docs/demo-media"; exit 0 }
 WT="$(mktemp -d)/demo-media"
+# A fresh orphan every time: drop any local branch of that name first, so
+# the checkout below cannot fall through onto main's tree.
+git -C "$CORE" branch -D demo-media > /dev/null 2>&1 || true
 git -C "$CORE" worktree add --detach "$WT" > /dev/null 2>&1
 ( cd "$WT" && git checkout -q --orphan demo-media && git rm -rfq . > /dev/null 2>&1 || true
   cp "$SRC"/*.mp4 . && printf '# demo-media\n\nThe demo videos, 1280 wide. Regenerated whole by demos/publish_media.sh; see demo.md on main.\n' > README.md
