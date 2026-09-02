@@ -589,7 +589,123 @@
     "path": "docs/demo/06-gif-board/resources/sheet_wave.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 80,
+   "passed": 4,
+   "total": 5,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "13.0s vs 13.5s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": false,
+     "detail": "0 vs 12"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=72 cost=$7.01 secs=1090",
+   "run": {
+    "turns": 72,
+    "wall_s": 1089,
+    "api_s": 1074,
+    "cost_usd": 7.01,
+    "tokens": {
+     "input": 118,
+     "cache_read": 6879711,
+     "cache_write": 155263,
+     "output": 80781,
+     "thinking": 52632
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1119,
+      "output": 18,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 7035092,
+      "output": 80781,
+      "cost_usd": 7.01
+     }
+    ],
+    "mcp": {
+     "calls": 17,
+     "ms": 7992,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 3824,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 3631,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 4,
+       "ms": 410,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 3,
+       "ms": 94,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 24,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/06-gif-board/contact-result.png",
+   "reference_contact": "docs/demo/06-gif-board/contact-reference.png",
+   "video": "docs/demo/06-gif-board/result.mp4",
+   "metadata": "docs/demo/06-gif-board/result-metadata.json",
+   "gif": "docs/demo/06-gif-board/result.gif",
+   "thumb": "docs/demo/06-gif-board/thumb.png"
+  },
   "page": "docs/demo/demo06.md"
  },
  {

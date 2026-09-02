@@ -1,0 +1,1169 @@
+{
+  "id": "gif-board",
+  "name": "GIF Board",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 19,
+  "trimStart": 0,
+  "trimEnd": 13.0,
+  "videoDuration": 13.0,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      {
+        "name": "canvas",
+        "colorHex": "0B1020"
+      },
+      {
+        "name": "text",
+        "colorHex": "F4F7FF"
+      },
+      {
+        "name": "text-bg",
+        "colorHex": "121A2E"
+      },
+      {
+        "name": "edge",
+        "colorHex": "31456E"
+      },
+      {
+        "name": "caption-outline",
+        "colorHex": "070B16"
+      },
+      {
+        "name": "caption-shadow",
+        "colorHex": "000000"
+      },
+      {
+        "name": "media-shadow",
+        "colorHex": "000000"
+      },
+      {
+        "name": "highlight",
+        "colorHex": "5B8CFF"
+      },
+      {
+        "name": "accent1",
+        "colorHex": "16224A"
+      },
+      {
+        "name": "accent2",
+        "colorHex": "060A16"
+      }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        0,
+        1
+      ],
+      "repeat": "clamp",
+      "stops": [
+        {
+          "colorHex": "@accent1",
+          "at": 0
+        },
+        {
+          "colorHex": "@accent2",
+          "at": 1
+        }
+      ]
+    },
+    "videoBorderWidth": 0,
+    "videoCornerRadius": 0,
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 68,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 14,
+    "subtitleLeftMargin": 180,
+    "subtitleRightMargin": 180,
+    "subtitleVerticalMargin": 128,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.45,
+    "subtitleShadowRadius": 14
+  },
+  "resources": [
+    {
+      "id": "swoop",
+      "kind": "path",
+      "filename": "",
+      "displayName": "Swoop",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "path": {
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          100,
+          0
+        ],
+        "controls": [
+          [
+            50,
+            -55
+          ]
+        ]
+      }
+    },
+    {
+      "id": "tile0",
+      "kind": "image",
+      "filename": "sheet_confetti.png",
+      "displayName": "Confetti 0",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1820,
+      "pixelHeight": 1040,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 7,
+        "rows": 4,
+        "frameCount": 28,
+        "fps": 12
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile1",
+      "kind": "image",
+      "filename": "sheet_wave.png",
+      "displayName": "Wave 1",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1920,
+      "pixelHeight": 800,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 5,
+        "frameCount": 30,
+        "fps": 15
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile2",
+      "kind": "image",
+      "filename": "sheet_pulse.png",
+      "displayName": "Pulse 2",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1320,
+      "pixelHeight": 880,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 4,
+        "frameCount": 24,
+        "fps": 10
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile3",
+      "kind": "image",
+      "filename": "sheet_confetti.png",
+      "displayName": "Confetti 3",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1820,
+      "pixelHeight": 1040,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 7,
+        "rows": 4,
+        "frameCount": 28,
+        "fps": 13
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile4",
+      "kind": "image",
+      "filename": "sheet_wave.png",
+      "displayName": "Wave 4",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1920,
+      "pixelHeight": 800,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 5,
+        "frameCount": 30,
+        "fps": 14
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile5",
+      "kind": "image",
+      "filename": "sheet_pulse.png",
+      "displayName": "Pulse 5",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1320,
+      "pixelHeight": 880,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 4,
+        "frameCount": 24,
+        "fps": 12
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile6",
+      "kind": "image",
+      "filename": "sheet_wave.png",
+      "displayName": "Wave 6",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1920,
+      "pixelHeight": 800,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 5,
+        "frameCount": 30,
+        "fps": 16
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile7",
+      "kind": "image",
+      "filename": "sheet_pulse.png",
+      "displayName": "Pulse 7",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1320,
+      "pixelHeight": 880,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 4,
+        "frameCount": 24,
+        "fps": 11
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile8",
+      "kind": "image",
+      "filename": "sheet_confetti.png",
+      "displayName": "Confetti 8",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1820,
+      "pixelHeight": 1040,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 7,
+        "rows": 4,
+        "frameCount": 28,
+        "fps": 11
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile9",
+      "kind": "image",
+      "filename": "sheet_wave.png",
+      "displayName": "Wave 9",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1920,
+      "pixelHeight": 800,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 5,
+        "frameCount": 30,
+        "fps": 13
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile10",
+      "kind": "image",
+      "filename": "sheet_pulse.png",
+      "displayName": "Pulse 10",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1320,
+      "pixelHeight": 880,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 4,
+        "frameCount": 24,
+        "fps": 13
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "tile11",
+      "kind": "image",
+      "filename": "sheet_confetti.png",
+      "displayName": "Confetti 11",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1820,
+      "pixelHeight": 1040,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 7,
+        "rows": 4,
+        "frameCount": 28,
+        "fps": 14
+      },
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 1.2,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "id": "board",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "The board",
+      "addedAt": 0,
+      "duration": 13.0,
+      "trimStart": 0,
+      "trimEnd": 13.0,
+      "pixelWidth": 4960,
+      "pixelHeight": 1200,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 4960,
+        "canvasHeight": 1200,
+        "layers": [
+          {
+            "id": "cell0",
+            "name": "Confetti 0",
+            "sortIndex": 0,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.0,
+            "duration": 13.0,
+            "resourceID": "tile0",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p0_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 240,
+                "verticalShift": 155,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p0_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 240,
+                "verticalShift": 110,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "r0_0",
+                "time": 6.7,
+                "rotation": 0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "r0_1",
+                "time": 9.8,
+                "rotation": 360,
+                "transitionDuration": 2.9,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell1",
+            "name": "Wave 1",
+            "sortIndex": 1,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.1,
+            "duration": 12.9,
+            "resourceID": "tile1",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p1_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 870,
+                "verticalShift": 155,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p1_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 870,
+                "verticalShift": 110,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "p1_2",
+                "time": 8.05,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 930,
+                "verticalShift": 40,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop"
+                }
+              },
+              {
+                "id": "p1_3",
+                "time": 9.7,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 870,
+                "verticalShift": 110,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop",
+                  "flipped": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "cell2",
+            "name": "Pulse 2",
+            "sortIndex": 2,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.2,
+            "duration": 12.8,
+            "resourceID": "tile2",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p2_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 1880,
+                "verticalShift": 155,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p2_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 1880,
+                "verticalShift": 110,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "o2_0",
+                "time": 6.5,
+                "opacity": 1.0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "o2_1",
+                "time": 7.95,
+                "opacity": 0.12,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              },
+              {
+                "id": "o2_2",
+                "time": 9.6,
+                "opacity": 1.0,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell3",
+            "name": "Confetti 3",
+            "sortIndex": 3,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.3,
+            "duration": 12.7,
+            "resourceID": "tile3",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p3_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 2700,
+                "verticalShift": 155,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p3_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 2700,
+                "verticalShift": 110,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "p3_2",
+                "time": 7.85,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 2640,
+                "verticalShift": 40,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop"
+                }
+              },
+              {
+                "id": "p3_3",
+                "time": 9.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 2700,
+                "verticalShift": 110,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop",
+                  "flipped": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "cell4",
+            "name": "Wave 4",
+            "sortIndex": 4,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.4,
+            "duration": 12.6,
+            "resourceID": "tile4",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p4_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 3330,
+                "verticalShift": 155,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p4_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 3330,
+                "verticalShift": 110,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "o4_0",
+                "time": 6.3,
+                "opacity": 1.0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "o4_1",
+                "time": 7.75,
+                "opacity": 0.12,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              },
+              {
+                "id": "o4_2",
+                "time": 9.4,
+                "opacity": 1.0,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell5",
+            "name": "Pulse 5",
+            "sortIndex": 5,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.5,
+            "duration": 12.5,
+            "resourceID": "tile5",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p5_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 4340,
+                "verticalShift": 155,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p5_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 4340,
+                "verticalShift": 110,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "r5_0",
+                "time": 6.2,
+                "rotation": 0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "r5_1",
+                "time": 9.3,
+                "rotation": -360,
+                "transitionDuration": 2.9,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell6",
+            "name": "Wave 6",
+            "sortIndex": 6,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.6,
+            "duration": 12.4,
+            "resourceID": "tile6",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p6_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 50,
+                "verticalShift": 755,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p6_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 50,
+                "verticalShift": 710,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "p6_2",
+                "time": 7.55,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 110,
+                "verticalShift": 640,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop"
+                }
+              },
+              {
+                "id": "p6_3",
+                "time": 9.2,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 50,
+                "verticalShift": 710,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop",
+                  "flipped": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "cell7",
+            "name": "Pulse 7",
+            "sortIndex": 7,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.7,
+            "duration": 12.3,
+            "resourceID": "tile7",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p7_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 1060,
+                "verticalShift": 755,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p7_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 1060,
+                "verticalShift": 710,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "r7_0",
+                "time": 6.0,
+                "rotation": 0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "r7_1",
+                "time": 9.1,
+                "rotation": 360,
+                "transitionDuration": 2.9,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell8",
+            "name": "Confetti 8",
+            "sortIndex": 8,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.8,
+            "duration": 12.2,
+            "resourceID": "tile8",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p8_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 1880,
+                "verticalShift": 755,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p8_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 1880,
+                "verticalShift": 710,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "o8_0",
+                "time": 5.9,
+                "opacity": 1.0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "o8_1",
+                "time": 7.35,
+                "opacity": 0.12,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              },
+              {
+                "id": "o8_2",
+                "time": 9.0,
+                "opacity": 1.0,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell9",
+            "name": "Wave 9",
+            "sortIndex": 9,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 0.9,
+            "duration": 12.1,
+            "resourceID": "tile9",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p9_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 2510,
+                "verticalShift": 755,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p9_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 2510,
+                "verticalShift": 710,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "o9_0",
+                "time": 5.8,
+                "opacity": 1.0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "o9_1",
+                "time": 7.25,
+                "opacity": 0.12,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              },
+              {
+                "id": "o9_2",
+                "time": 8.9,
+                "opacity": 1.0,
+                "transitionDuration": 1.2,
+                "easing": "easeInOut"
+              }
+            ]
+          },
+          {
+            "id": "cell10",
+            "name": "Pulse 10",
+            "sortIndex": 10,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 1.0,
+            "duration": 12.0,
+            "resourceID": "tile10",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p10_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 3520,
+                "verticalShift": 755,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p10_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 3520,
+                "verticalShift": 710,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "p10_2",
+                "time": 7.15,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 3460,
+                "verticalShift": 640,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop"
+                }
+              },
+              {
+                "id": "p10_3",
+                "time": 8.8,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 3520,
+                "verticalShift": 710,
+                "transitionDuration": 1.35,
+                "easing": "easeInOut",
+                "motionPath": {
+                  "pathResourceID": "swoop",
+                  "flipped": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "cell11",
+            "name": "Confetti 11",
+            "sortIndex": 11,
+            "kind": "image",
+            "isEnabled": true,
+            "startTime": 1.1,
+            "duration": 11.9,
+            "resourceID": "tile11",
+            "fadeIn": 0.45,
+            "keyframes": [
+              {
+                "id": "p11_0",
+                "time": 0,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 4340,
+                "verticalShift": 755,
+                "transitionDuration": 0
+              },
+              {
+                "id": "p11_1",
+                "time": 0.5,
+                "zoom": 0.31666666666666665,
+                "horizontalShift": 4340,
+                "verticalShift": 710,
+                "transitionDuration": 0.5,
+                "easing": "easeOut"
+              },
+              {
+                "id": "r11_0",
+                "time": 5.6,
+                "rotation": 0,
+                "transitionDuration": 0
+              },
+              {
+                "id": "r11_1",
+                "time": 8.7,
+                "rotation": -360,
+                "transitionDuration": 2.9,
+                "easing": "easeInOut"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "keyframes": []
+    },
+    {
+      "id": "boardLayer",
+      "name": "Board",
+      "sortIndex": 1,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13.0,
+      "resourceID": "board",
+      "keyframes": [
+        {
+          "id": "b0",
+          "time": 0,
+          "zoom": 0.4212962962962963,
+          "horizontalShift": 20,
+          "verticalShift": 462,
+          "transitionDuration": 0
+        }
+      ]
+    },
+    {
+      "id": "cap0",
+      "name": "Title 1",
+      "sortIndex": 10,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.3,
+      "duration": 2.8,
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "captionText": "A GIF is a grid of frames.",
+      "captionStyle": {
+        "fontSize": 68,
+        "alignment": "center",
+        "placement": {
+          "anchor": "top",
+          "offset": [
+            0,
+            128
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "fade",
+          "seconds": 0.8
+        }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap1",
+      "name": "Title 2",
+      "sortIndex": 11,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 3.3,
+      "duration": 3.1,
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "captionText": "Import bakes it into a sheet…",
+      "captionStyle": {
+        "fontSize": 68,
+        "alignment": "center",
+        "placement": {
+          "anchor": "top",
+          "offset": [
+            0,
+            128
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "fade",
+          "seconds": 0.8
+        }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap2",
+      "name": "Title 3",
+      "sortIndex": 12,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.6,
+      "duration": 3.3,
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "captionText": "…and then it is just an image:\nit flies, spins and fades.",
+      "captionStyle": {
+        "fontSize": 62,
+        "alignment": "center",
+        "placement": {
+          "anchor": "top",
+          "offset": [
+            0,
+            128
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "fade",
+          "seconds": 0.8
+        }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "cap3",
+      "name": "Title 4",
+      "sortIndex": 13,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 10.1,
+      "duration": 2.9,
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "captionText": "Twelve loops, one draw call each.",
+      "captionStyle": {
+        "fontSize": 68,
+        "alignment": "center",
+        "placement": {
+          "anchor": "top",
+          "offset": [
+            0,
+            128
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "fade",
+          "seconds": 0.8
+        }
+      },
+      "keyframes": []
+    }
+  ]
+}
