@@ -640,6 +640,14 @@ impl Document {
                 if layers.len() == before {
                     return Err(format!("no layer with id {layer_id}"));
                 }
+                // The survivors close the gap — the Mac editor renumbers
+                // after a delete, and `MoveLayer` already renumbers, so a
+                // document never carries a hole in its z-order.
+                let mut order: Vec<usize> = (0..layers.len()).collect();
+                order.sort_by_key(|&i| layers[i].sort_index);
+                for (rank, i) in order.into_iter().enumerate() {
+                    layers[i].sort_index = rank as i64;
+                }
             }
             Command::UpsertKeyframe { layer_id, keyframe } => {
                 if !keyframe.time.is_finite() || keyframe.time < 0.0 {
@@ -1758,6 +1766,41 @@ mod tests {
             all.layers.len() > 1,
             "every layer named: {}",
             all.layers.len()
+        );
+    }
+
+    /// Deleting a layer closes the gap in the z-order, as the Mac editor
+    /// does after a delete and as `MoveLayer` already does — so a
+    /// document never carries a hole, and the app's delete and the core's
+    /// agree byte for byte.
+    #[test]
+    fn deleting_a_layer_renumbers_the_survivors() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/projects/project-4.json"
+        ))
+        .unwrap();
+        let mut doc = Document::open(&raw).unwrap();
+        let layers = doc.meta().layers.as_deref().unwrap();
+        assert!(layers.len() >= 3);
+        let mut by_sort: Vec<&promo_model::ProjectLayer> = layers.iter().collect();
+        by_sort.sort_by_key(|l| l.sort_index);
+        let middle = by_sort[1].id.clone();
+        doc.apply(&Command::DeleteLayer { layer_id: middle })
+            .unwrap();
+        let mut after: Vec<i64> = doc
+            .meta()
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .map(|l| l.sort_index)
+            .collect();
+        after.sort();
+        assert_eq!(
+            after,
+            (0..after.len() as i64).collect::<Vec<_>>(),
+            "no hole: {after:?}"
         );
     }
 }
