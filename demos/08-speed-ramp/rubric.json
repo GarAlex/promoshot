@@ -1,0 +1,47 @@
+{
+ "template": "08 Speed Ramp",
+ "canvas": [
+  1920,
+  1080
+ ],
+ "duration": 0,
+ "kinds": {
+  "background": 1,
+  "video": 3,
+  "caption": 4
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": false,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": true,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "0.5\u00d7 \u2014 the drift",
+  "2\u00d7 \u2014 the rush",
+  "0.75\u00d7 \u2014 the hold",
+  "One recording.\nThree cuts, three rates."
+ ],
+ "media": [
+  "bbb_test.mp4"
+ ]
+}

@@ -1,0 +1,50 @@
+{
+ "template": "17 Chain Reaction",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 13.2,
+ "kinds": {
+  "background": 1,
+  "image": 4,
+  "caption": 4
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": false,
+  "reveal": true,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": true,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "Record it",
+  "Frame it",
+  "Say it",
+  "Ship it"
+ ],
+ "media": [
+  "ui_lumen_1.png",
+  "ui_lumen_5.png",
+  "ui_pulse_1.png",
+  "ui_verse_1.png"
+ ]
+}

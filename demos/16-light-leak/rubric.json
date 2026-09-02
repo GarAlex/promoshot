@@ -1,0 +1,51 @@
+{
+ "template": "16 Light Leak",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 12,
+ "kinds": {
+  "background": 1,
+  "image": 4,
+  "caption": 1
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": false,
+  "reveal": true,
+  "blendModes": [
+   "add",
+   "multiply",
+   "screen"
+  ],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": true,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "Light, laid over"
+ ],
+ "media": [
+  "glow_dot.png",
+  "leak_warm.png",
+  "ui_lumen_1.png",
+  "vignette_soft.png"
+ ]
+}

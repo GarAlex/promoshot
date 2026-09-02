@@ -1,0 +1,43 @@
+{
+ "template": "12 Word for Word",
+ "canvas": [
+  1080,
+  1920
+ ],
+ "duration": 12,
+ "kinds": {
+  "background": 1,
+  "caption": 1
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": true,
+  "reveal": true,
+  "blendModes": [],
+  "swaps": 2,
+  "transitions": true,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": true,
+  "grade": false,
+  "placement": false
+ },
+ "phrases": [
+  "Ship the story, not the spec.",
+  "Every word lands on time.",
+  "Say it once. Ship it everywhere."
+ ],
+ "media": []
+}

@@ -1,0 +1,820 @@
+{
+ "id": "B2E84B1E-2C23-5F8D-8C1B-06F971BF5C64",
+ "name": "06 GIF Board",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 8,
+ "minReaderVersion": 8,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 52,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 14,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 910,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0A0E1A"
+   },
+   {
+    "name": "accent",
+    "colorHex": "FF8A5B"
+   },
+   {
+    "name": "accent2",
+    "colorHex": "5BE0C8"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas"
+ },
+ "resources": [
+  {
+   "id": "B8527CC4-D0CC-5EB1-8AD3-60B1E2B10EA3",
+   "kind": "image",
+   "filename": "sheet_pulse.png",
+   "displayName": "Pulse",
+   "addedAt": 0,
+   "pixelWidth": 1320,
+   "pixelHeight": 880,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 6,
+    "rows": 4,
+    "frameCount": 24,
+    "fps": 18
+   },
+   "sampling": "nearest"
+  },
+  {
+   "id": "AE975228-689F-5C96-B965-8EEA50A8F10B",
+   "kind": "image",
+   "filename": "sheet_wave.png",
+   "displayName": "Wave",
+   "addedAt": 0,
+   "pixelWidth": 1920,
+   "pixelHeight": 800,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 6,
+    "rows": 5,
+    "frameCount": 30,
+    "fps": 20
+   },
+   "sampling": "nearest"
+  },
+  {
+   "id": "1CDAB4E6-BBF5-58C0-BFBB-0651AAED5C4A",
+   "kind": "image",
+   "filename": "sheet_confetti.png",
+   "displayName": "Confetti",
+   "addedAt": 0,
+   "pixelWidth": 1820,
+   "pixelHeight": 1040,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 7,
+    "rows": 4,
+    "frameCount": 28,
+    "fps": 16
+   },
+   "sampling": "nearest"
+  }
+ ],
+ "layers": [
+  {
+   "id": "BAB7F386-97CF-5BD2-8D28-7C409C2C6D2B",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "FA983793-0CD5-553B-A48B-CB63BA83B66E",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    }
+   ],
+   "duration": 13.5
+  },
+  {
+   "id": "FA689D29-DBC2-5BD4-B672-EE235D8536BB",
+   "name": "Tile 1",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "keyframes": [
+    {
+     "id": "5CE9B55A-C224-576B-9653-BA79435AC3E2",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       -660,
+       -220
+      ]
+     }
+    },
+    {
+     "id": "71A67D0D-9483-5C6F-A6C6-162AD8BD9279",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       -660,
+       -265
+      ]
+     }
+    },
+    {
+     "id": "02A72566-6D20-59D1-96F0-EF5695AAC01F",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "651CB208-3B00-51C8-AB7E-839719A28092",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 12.7,
+   "resourceID": "B8527CC4-D0CC-5EB1-8AD3-60B1E2B10EA3",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "9F66CE58-A23B-59BB-B700-EC95AEE84111",
+   "name": "Tile 2",
+   "sortIndex": 2,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0.84,
+   "keyframes": [
+    {
+     "id": "33B100C5-6898-5FF5-AC99-B9078B6229A1",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       -220,
+       -220
+      ]
+     }
+    },
+    {
+     "id": "653C462A-DD89-52A7-AFCA-DF9EB4F92BF1",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       -220,
+       -265
+      ]
+     }
+    },
+    {
+     "id": "E8879E4E-F2DE-56D9-AC38-A85A4CF7E370",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "9E49BB12-6D1B-524A-BEDD-8337A4D34337",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 12.36,
+   "resourceID": "AE975228-689F-5C96-B965-8EEA50A8F10B",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "AC73AD6C-0F4A-56F2-B84A-F78E66A812F4",
+   "name": "Tile 3",
+   "sortIndex": 3,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 1.18,
+   "keyframes": [
+    {
+     "id": "A6188918-E71C-5E7F-A249-71B7444216E0",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       220,
+       -220
+      ]
+     }
+    },
+    {
+     "id": "DAA066F6-DADE-5AD7-81F0-043F98306BEA",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       220,
+       -265
+      ]
+     }
+    },
+    {
+     "id": "10A09629-2BE2-532F-ADC2-EE53CE91FAA0",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "5F0A0952-D08E-5EE8-8BEC-5325F5282EFB",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 12.02,
+   "resourceID": "1CDAB4E6-BBF5-58C0-BFBB-0651AAED5C4A",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "B103CA13-5BDE-534B-B420-17720E19BD05",
+   "name": "Tile 4",
+   "sortIndex": 4,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 1.52,
+   "keyframes": [
+    {
+     "id": "BA55B51C-E93C-586D-9659-A58D7F567FCE",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       660,
+       -220
+      ]
+     }
+    },
+    {
+     "id": "AAACAD67-B52F-5162-9274-79EDD40B65D3",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       660,
+       -265
+      ]
+     }
+    },
+    {
+     "id": "A403D2DA-6EA9-58AC-8E4D-64428AF37012",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "4262DC9E-556B-5E89-8B8E-731FDDF90ADE",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 11.68,
+   "resourceID": "B8527CC4-D0CC-5EB1-8AD3-60B1E2B10EA3",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "167475C5-2943-538E-8359-74BC06F48B98",
+   "name": "Tile 5",
+   "sortIndex": 5,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 1.86,
+   "keyframes": [
+    {
+     "id": "F8822D3E-6288-5CBF-8E5C-7B1C5582F7D5",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       -660,
+       15
+      ]
+     }
+    },
+    {
+     "id": "CC3AE19A-2F0D-5DBE-99A1-3498028CEBCC",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       -660,
+       -30
+      ]
+     }
+    },
+    {
+     "id": "950EAB94-97FC-5181-B35A-C1673A5774EC",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "33BD6725-1B0C-5F04-B310-BFBF8D9FA206",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 11.34,
+   "resourceID": "AE975228-689F-5C96-B965-8EEA50A8F10B",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "90E0F2CA-246C-5B53-BAAB-656E95408CF0",
+   "name": "Tile 6",
+   "sortIndex": 6,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 2.2,
+   "keyframes": [
+    {
+     "id": "B2A50F0C-8661-56AB-9D1E-148A3F4ED31D",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       -220,
+       15
+      ]
+     }
+    },
+    {
+     "id": "3B69A101-1A38-56DC-A5BC-495208A34A29",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       -220,
+       -30
+      ]
+     }
+    },
+    {
+     "id": "F2CC2EBF-E87B-5C6E-BF9A-045C99E3375F",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "989317D7-0F35-55D9-BEB2-213E6CE03D55",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 11.0,
+   "resourceID": "1CDAB4E6-BBF5-58C0-BFBB-0651AAED5C4A",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "19C2DCA6-92AE-54A2-9E0B-6BBAC0A2BBA9",
+   "name": "Tile 7",
+   "sortIndex": 7,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 2.54,
+   "keyframes": [
+    {
+     "id": "FE5F59C1-0620-5523-89F6-E7F43C9C01A5",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       220,
+       15
+      ]
+     }
+    },
+    {
+     "id": "F2FA1CB7-0F2B-5613-BD74-64C3AB11778F",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       220,
+       -30
+      ]
+     }
+    },
+    {
+     "id": "BD234E02-2F37-55DC-8838-0256F71BAD32",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "57A94EE6-3B71-5C49-A344-C2E72E828045",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 10.66,
+   "resourceID": "B8527CC4-D0CC-5EB1-8AD3-60B1E2B10EA3",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "13E3F565-8CA9-5332-AFE1-269AAC5D31B8",
+   "name": "Tile 8",
+   "sortIndex": 8,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 2.88,
+   "keyframes": [
+    {
+     "id": "834348FA-A522-54FF-A348-9B0A072130E9",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       660,
+       15
+      ]
+     }
+    },
+    {
+     "id": "2B0DACDB-0E95-5B34-A6A9-FF1F2146F09F",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       660,
+       -30
+      ]
+     }
+    },
+    {
+     "id": "2C680810-2576-54ED-95DD-85D8D9662753",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "89D6E211-6C04-5D13-852C-734C761E92E3",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 10.32,
+   "resourceID": "AE975228-689F-5C96-B965-8EEA50A8F10B",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "43053908-8E2F-5453-AE70-958B2E5939B6",
+   "name": "Tile 9",
+   "sortIndex": 9,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 3.22,
+   "keyframes": [
+    {
+     "id": "249924C7-D913-50E8-9BB0-27626B7BE101",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       -660,
+       250
+      ]
+     }
+    },
+    {
+     "id": "E2AB00E1-99D9-51CA-BE8F-BADBB346CFA0",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       -660,
+       205
+      ]
+     }
+    },
+    {
+     "id": "79151658-4150-51F2-A23B-194DA6E2A345",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "C9ED789E-A0E7-5B52-AC9B-E02BDBAA603C",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 9.98,
+   "resourceID": "1CDAB4E6-BBF5-58C0-BFBB-0651AAED5C4A",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "B968DB27-F097-5C8E-B5C2-52320B4E93BE",
+   "name": "Tile 10",
+   "sortIndex": 10,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 3.56,
+   "keyframes": [
+    {
+     "id": "A0BE5EEF-16C9-508F-8755-C3082A388500",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       -220,
+       250
+      ]
+     }
+    },
+    {
+     "id": "2AF512B7-ABC7-5932-936F-2B3D3373D06B",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       -220,
+       205
+      ]
+     }
+    },
+    {
+     "id": "2A0DC3A0-ED9C-5361-9CDF-DC0F5D556E2F",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "C6151F76-B984-5997-B1F5-2182C5D9EF02",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 9.64,
+   "resourceID": "B8527CC4-D0CC-5EB1-8AD3-60B1E2B10EA3",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "7A8BB508-7A07-510B-954B-0324EC6A7300",
+   "name": "Tile 11",
+   "sortIndex": 11,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 3.9,
+   "keyframes": [
+    {
+     "id": "863E8AA8-0E1F-5779-B35C-E759CC12216C",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       220,
+       250
+      ]
+     }
+    },
+    {
+     "id": "ED18C4D7-F510-5BD6-8972-421FFFF84FD5",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       220,
+       205
+      ]
+     }
+    },
+    {
+     "id": "CA50EDD3-7774-5283-8956-F02EF704E0EF",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "CFE579AE-83C4-5031-8EDA-BDC2A0B02DDC",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 9.3,
+   "resourceID": "AE975228-689F-5C96-B965-8EEA50A8F10B",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "7B131E33-E0BC-5925-A562-245A111A23BD",
+   "name": "Tile 12",
+   "sortIndex": 12,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 4.24,
+   "keyframes": [
+    {
+     "id": "26BDED99-8319-5A3C-8D37-5839F51BC5FC",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 110,
+      "anchor": "center",
+      "offset": [
+       660,
+       250
+      ]
+     }
+    },
+    {
+     "id": "8849F649-CB51-5388-8EF0-30D592615F23",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "easing": "easeOut",
+     "placement": {
+      "height": 155,
+      "anchor": "center",
+      "offset": [
+       660,
+       205
+      ]
+     }
+    },
+    {
+     "id": "BAF3B1E9-D1EC-556C-A0F5-77E64E5B8A8F",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": -8
+    },
+    {
+     "id": "A8995841-6D4D-534D-90D0-B4D39AA6FD0C",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "rotation": 0,
+     "easing": "easeOut"
+    }
+   ],
+   "duration": 8.96,
+   "resourceID": "1CDAB4E6-BBF5-58C0-BFBB-0651AAED5C4A",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "FC183DF0-41AE-5B01-9566-1904B641F505",
+   "name": "Caption \u00b7 A GIF is a grid of fra",
+   "sortIndex": 13,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.6,
+   "keyframes": [],
+   "duration": 2.8,
+   "captionText": "A GIF is a grid of frames.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "D0B4660E-0FFC-51C0-8EBE-2FDA8958411D",
+   "name": "Caption \u00b7 Import bakes it into a",
+   "sortIndex": 14,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 3.8,
+   "keyframes": [],
+   "duration": 2.8,
+   "captionText": "Import bakes it into a sheet\u2026",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "A77F2B40-4D98-5D5F-BDFB-D5CFA0018AC3",
+   "name": "Caption \u00b7 \u2026and then it is just a",
+   "sortIndex": 15,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.0,
+   "keyframes": [],
+   "duration": 3.0,
+   "captionText": "\u2026and then it is just an image:\nit flies, spins and fades.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "1B5C71C9-51AE-5A8B-A520-55C6E8D087A9",
+   "name": "Caption \u00b7 Twelve loops, one draw",
+   "sortIndex": 16,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 10.4,
+   "keyframes": [],
+   "duration": 2.6,
+   "captionText": "Twelve loops, one draw call each.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  }
+ ]
+}

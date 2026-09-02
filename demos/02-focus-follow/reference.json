@@ -1,0 +1,231 @@
+{
+ "id": "C51AFBC3-96CC-5F8B-8B35-326C0FD313AF",
+ "name": "02 Focus Follow",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 8,
+ "minReaderVersion": 8,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 50,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 14,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 968,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0B1020"
+   },
+   {
+    "name": "edge",
+    "colorHex": "2B3A55"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas",
+  "videoCornerRadius": 18,
+  "videoBorderWidth": 2,
+  "videoBorderColorHex": "@edge"
+ },
+ "resources": [
+  {
+   "id": "B6B3CEB6-F5B9-54B6-876F-0C4E9823DC78",
+   "kind": "video",
+   "filename": "rec_lumen_2560.mp4",
+   "displayName": "Recording",
+   "addedAt": 0,
+   "duration": 15.0,
+   "trimStart": 0,
+   "trimEnd": 15.0,
+   "videoNaturalWidth": 2560,
+   "videoNaturalHeight": 1600,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "volume": 0.0
+  }
+ ],
+ "layers": [
+  {
+   "id": "01399EBC-B298-533D-A13A-5767F04907A8",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "B65A86BD-7D59-5284-AB68-247873907E75",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    }
+   ],
+   "duration": 16
+  },
+  {
+   "id": "F727ABB3-E19F-55E9-A0EF-DA1EEDB74E2B",
+   "name": "Recording",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "7BA0222C-101D-5594-8E4C-194A441693B9",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 840,
+      "anchor": "center",
+      "offset": [
+       0,
+       -40
+      ]
+     }
+    },
+    {
+     "id": "32E464BB-2455-5E43-9ED5-7A2CB849CA9A",
+     "time": 0.0,
+     "transitionDuration": 0,
+     "viewport": [
+      0,
+      0,
+      1,
+      1
+     ]
+    },
+    {
+     "id": "807E2334-06A3-539F-81C1-715DDC9DB59E",
+     "time": 3.4,
+     "transitionDuration": 1.3,
+     "viewport": [
+      0.2,
+      0.17,
+      0.34,
+      0.34
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "206FB555-358F-5757-A2F5-48CF3B7C5E3C",
+     "time": 7.4,
+     "transitionDuration": 1.3,
+     "viewport": [
+      0.66,
+      0.21,
+      0.34,
+      0.34
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "397F656E-0947-5282-B6BF-060A3001D707",
+     "time": 11.4,
+     "transitionDuration": 1.3,
+     "viewport": [
+      0.07,
+      0.63,
+      0.34,
+      0.34
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "C3605ACC-48A4-5DE2-9222-F5BD12A4CD2A",
+     "time": 14.6,
+     "transitionDuration": 1.4,
+     "viewport": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 16,
+   "resourceID": "B6B3CEB6-F5B9-54B6-876F-0C4E9823DC78",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6
+  },
+  {
+   "id": "277ACCAE-BEDF-5014-BE40-B5B664226BE7",
+   "name": "Caption \u00b7 The window stays put.",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "keyframes": [],
+   "duration": 2.4,
+   "captionText": "The window stays put.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "8B323BFA-0083-500D-B832-D02EB993C41D",
+   "name": "Caption \u00b7 Follow the number\u2026",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 3.6,
+   "keyframes": [],
+   "duration": 2.6,
+   "captionText": "Follow the number\u2026",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "D494B2FB-6D5B-5630-8A12-03B6B87EC62E",
+   "name": "Caption \u00b7 \u2026then the account\u2026",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.6,
+   "keyframes": [],
+   "duration": 2.6,
+   "captionText": "\u2026then the account\u2026",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "FDCEA9F7-D6C9-594E-9DB3-503F80E4E7F9",
+   "name": "Caption \u00b7 \u2026then the switch.",
+   "sortIndex": 5,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 11.6,
+   "keyframes": [],
+   "duration": 2.4,
+   "captionText": "\u2026then the switch.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "3A003C18-73A6-5A40-B890-D5D5F05E51EA",
+   "name": "Caption \u00b7 One layer. No cuts.",
+   "sortIndex": 6,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 14.8,
+   "keyframes": [],
+   "duration": 1.2,
+   "captionText": "One layer. No cuts.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  }
+ ]
+}

@@ -1,0 +1,324 @@
+{
+ "id": "2EBA6359-5D6D-673D-9518-EA6A8D4387E4",
+ "name": "23 Soft Focus",
+ "formatVersion": 2,
+ "minReaderVersion": 24,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 12.0,
+ "videoDuration": 12.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 54,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF9B54"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4FD1C5"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundGradient": {
+   "kind": "linear",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    1,
+    1
+   ],
+   "stops": [
+    {
+     "colorHex": "0B1220",
+     "at": 0
+    },
+    {
+     "colorHex": "1A2A55",
+     "at": 1
+    }
+   ]
+  }
+ },
+ "resources": [
+  {
+   "id": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Lumen",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "44E30454-A65C-3221-0122-41E597F248AC",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 soft-focus",
+   "addedAt": 0,
+   "captionText": "Focus, pulled in the compositor.",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 64,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      78
+     ]
+    },
+    "shadowColorHex": "000000",
+    "shadowOpacity": 0.5,
+    "shadowRadius": 12
+   }
+  },
+  {
+   "id": "1941E809-BA4C-EF4B-3D96-C42A8AC424BE",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 soft-sub",
+   "addedAt": 0,
+   "captionText": "Blur, glow, vignette, grain and sharpen \u2014 on the layer, on every host.",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 34,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -64
+     ]
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "AC35951C-7FF9-1CE6-2D67-15801DCCF439",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 12.0,
+   "keyframes": []
+  },
+  {
+   "id": "A4E6FC61-6CCA-F782-5578-E939200E8DE4",
+   "name": "Shot \u00b7 backdrop",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 12.0,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "effects": {
+    "blur": 22,
+    "vignette": 0.55,
+    "vignetteSoftness": 0.6,
+    "grain": 0.12
+   },
+   "adjustments": {
+    "saturation": 0.7,
+    "brightness": -0.12
+   },
+   "keyframes": [
+    {
+     "id": "FE9EE98A-DC3A-31C0-B174-491CFF8E2210",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "mode": "fill",
+      "anchor": "center"
+     },
+     "opacity": 0.0
+    },
+    {
+     "id": "8CFCD6B3-6BDF-CF4E-9BE7-87C3AE186D21",
+     "time": 0.8,
+     "transitionDuration": 0.8,
+     "placement": {
+      "mode": "fill",
+      "anchor": "center"
+     },
+     "opacity": 1.0
+    },
+    {
+     "id": "94EC88A1-4B80-D7D9-8788-D29F98601182",
+     "time": 12.0,
+     "transitionDuration": 0,
+     "placement": {
+      "mode": "fill",
+      "anchor": "center",
+      "offset": [
+       0,
+       0
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "16BD43F5-9986-F439-CB7A-D32F9AF1910A",
+   "name": "Shot \u00b7 hero",
+   "sortIndex": 2,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0.6,
+   "duration": 11.4,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "effects": {
+    "sharpen": 0.45,
+    "blurAngle": 0
+   },
+   "keyframes": [
+    {
+     "id": "1FDFA40E-7361-8AEE-5D5F-92F3F7C7D208",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 540,
+      "anchor": "center",
+      "offset": [
+       0,
+       30
+      ]
+     },
+     "opacity": 0.0,
+     "blur": 30
+    },
+    {
+     "id": "DD6BA4F3-7A23-2536-46F6-D8FF017862CA",
+     "time": 0.7,
+     "transitionDuration": 0.7,
+     "placement": {
+      "height": 580,
+      "anchor": "center",
+      "offset": [
+       0,
+       30
+      ]
+     },
+     "opacity": 1.0,
+     "blur": 0,
+     "easing": "easeOut"
+    },
+    {
+     "id": "359D9880-643C-F84E-8098-68EA8865AD9F",
+     "time": 10.6,
+     "transitionDuration": 9.9,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       30
+      ]
+     },
+     "blur": 0,
+     "easing": "easeInOut"
+    },
+    {
+     "id": "4FF9F145-66A8-0BE2-16B2-93F42B25A4D0",
+     "time": 11.4,
+     "transitionDuration": 0.8,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       260,
+       30
+      ]
+     },
+     "opacity": 0.0,
+     "blur": 28,
+     "easing": "easeIn"
+    }
+   ]
+  },
+  {
+   "id": "01491462-A9DD-793E-52CC-8EE74F0A1FA0",
+   "name": "Headline",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.0,
+   "duration": 9.8,
+   "resourceID": "44E30454-A65C-3221-0122-41E597F248AC",
+   "fadeOut": 0.4,
+   "effects": {
+    "glowRadius": 36,
+    "glowThreshold": 0.35
+   },
+   "keyframes": [
+    {
+     "id": "4F9EEC3B-6499-C82D-7DC3-B7CBDEACA73A",
+     "time": 0,
+     "transitionDuration": 0,
+     "blur": 18,
+     "glow": 0.0,
+     "opacity": 0.0
+    },
+    {
+     "id": "5D843285-4AEE-B0FD-2654-2CCC2A043D9D",
+     "time": 0.5,
+     "transitionDuration": 0.5,
+     "blur": 0,
+     "glow": 0.9,
+     "opacity": 1.0,
+     "easing": "easeOut"
+    },
+    {
+     "id": "5DB08946-D7A9-C8DE-CCDC-44835E2ACF14",
+     "time": 1.6,
+     "transitionDuration": 1.1,
+     "glow": 0.0,
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "F9C1DF8B-DCBF-72AD-3092-831C3CDB8E53",
+   "name": "Subline",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 2.4,
+   "duration": 8.4,
+   "resourceID": "1941E809-BA4C-EF4B-3D96-C42A8AC424BE",
+   "fadeIn": 0.5,
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ]
+}

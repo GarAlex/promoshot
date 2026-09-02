@@ -1,0 +1,161 @@
+{
+ "name": "Word for Word",
+ "trimEnd": 12,
+ "videoDuration": 12,
+ "compositionSettings": {
+  "canvasWidth": 1080,
+  "canvasHeight": 1920,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundGradient": {
+   "kind": "linear",
+   "start": [
+    0.5,
+    0.0
+   ],
+   "end": [
+    0.5,
+    1.0
+   ],
+   "repeat": "clamp",
+   "stops": [
+    {
+     "colorHex": "@edge",
+     "at": 0.0
+    },
+    {
+     "colorHex": "@canvas",
+     "at": 0.62
+    }
+   ]
+  },
+  "subtitleFontSize": 92,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 90,
+  "subtitleRightMargin": 90,
+  "subtitleVerticalMargin": 840
+ },
+ "resources": [
+  {
+   "id": "9424D8B3-3BBE-4F4B-A5B5-1F85C9D8B35D",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Ship the story, not the ",
+   "addedAt": 0,
+   "captionText": "Ship the story, not the spec.",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.6
+    }
+   }
+  },
+  {
+   "id": "FFAEC33E-2FCE-49F2-A7D0-9FA8E7006E09",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Every word lands on time",
+   "addedAt": 0,
+   "captionText": "Every word lands on time.",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "7A89C34D-E929-462A-A42E-EFA689CE002A",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Say it once. Ship it eve",
+   "addedAt": 0,
+   "captionText": "Say it once. Ship it everywhere.",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "highlight",
+     "highlightColorHex": "@accent",
+     "secondsPer": 0.34
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "06BA22E4-41FA-4AE5-B0F1-9D6D7D657ED3",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 12,
+   "keyframes": []
+  },
+  {
+   "id": "4C7BFD75-D544-4303-87C5-CCDF91447760",
+   "name": "Words",
+   "sortIndex": 1,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.4,
+   "duration": 11.2,
+   "resourceID": "9424D8B3-3BBE-4F4B-A5B5-1F85C9D8B35D",
+   "motionBlur": {
+    "shutter": 0.6
+   },
+   "fadeOut": 0.5,
+   "keyframes": [
+    {
+     "id": "F3059963-1937-4351-91D5-F04CA024A6C3",
+     "time": 3.8,
+     "transitionDuration": 0,
+     "resourceID": "FFAEC33E-2FCE-49F2-A7D0-9FA8E7006E09",
+     "transition": {
+      "kind": "push",
+      "from": "left",
+      "duration": 0.5
+     }
+    },
+    {
+     "id": "B14DCB9C-767E-46CB-9DDC-868CFC1FBDB6",
+     "time": 7.4,
+     "transitionDuration": 0,
+     "resourceID": "7A89C34D-E929-462A-A42E-EFA689CE002A",
+     "transition": {
+      "kind": "push",
+      "from": "left",
+      "duration": 0.5
+     }
+    }
+   ]
+  }
+ ],
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "subtitles": [],
+ "formatVersion": 10,
+ "minReaderVersion": 10,
+ "id": "D7B8207F-ACAA-41B3-A07F-BCA737E52D70"
+}

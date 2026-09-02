@@ -1,0 +1,390 @@
+{
+ "resources": [
+  {
+   "id": "63705474-7915-5B2B-92F9-B0742A493AE5",
+   "pixelWidth": 1216,
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "addedAt": 0,
+   "displayName": "Shot 1",
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "33A0ADBA-59D7-5D1C-801A-9F2F9FEB92BC",
+   "pixelWidth": 1216,
+   "kind": "image",
+   "filename": "ui_lumen_2.png",
+   "addedAt": 0,
+   "displayName": "Shot 2",
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "9931C842-1B36-5847-8B87-7AC128458988",
+   "pixelWidth": 1216,
+   "kind": "image",
+   "filename": "ui_verse_1.png",
+   "addedAt": 0,
+   "displayName": "Shot 3",
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "0D77FD35-BA9F-5B29-8D03-916947D8B4CC",
+   "pixelWidth": 1216,
+   "kind": "image",
+   "filename": "ui_pulse_1.png",
+   "addedAt": 0,
+   "displayName": "Shot 4",
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "8F87467F-2F5F-531E-A1E1-362999014719",
+   "pixelWidth": 1216,
+   "kind": "image",
+   "filename": "ui_lumen_5.png",
+   "addedAt": 0,
+   "displayName": "Shot 5",
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   },
+   "id": "8F982CD4-BE44-431D-9138-A2ABAB748FB1",
+   "captionText": "Every number, one screen.",
+   "kind": "caption",
+   "filename": "",
+   "addedAt": 808980790.090443,
+   "displayName": "Caption \u00b7 Every number, one scre",
+   "duration": 2.35,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   },
+   "id": "6030FF23-7A8A-47B6-90EB-37508217B4B8",
+   "captionText": "Revenue that explains itself.",
+   "kind": "caption",
+   "filename": "",
+   "addedAt": 808980790.09046,
+   "displayName": "Caption \u00b7 Revenue that explains ",
+   "duration": 2.35,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   },
+   "id": "BABBE508-0A9C-4AA3-9AAE-A206B60EA074",
+   "captionText": "Write without the noise.",
+   "kind": "caption",
+   "filename": "",
+   "addedAt": 808980790.090469,
+   "displayName": "Caption \u00b7 Write without the nois",
+   "duration": 2.35,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   },
+   "id": "F8B607FF-F891-4568-AA47-036BA6AE1B7C",
+   "captionText": "Move, measured.",
+   "kind": "caption",
+   "filename": "",
+   "addedAt": 808980790.090479,
+   "displayName": "Caption \u00b7 Move, measured.",
+   "duration": 2.35,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   },
+   "id": "F578F208-7188-4743-9996-7780D57BBE2A",
+   "captionText": "Ship the story.",
+   "kind": "caption",
+   "filename": "",
+   "addedAt": 808980790.090491,
+   "displayName": "Caption \u00b7 Ship the story.",
+   "duration": 2.35,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  }
+ ],
+ "exports": [],
+ "layers": [
+  {
+   "id": "A2FCD042-DD83-5FE9-A04D-6A308E6D53E9",
+   "name": "Background",
+   "kind": "background",
+   "duration": 15,
+   "sortIndex": 0,
+   "startTime": 0,
+   "isEnabled": true,
+   "keyframes": [
+    {
+     "transitionDuration": 0,
+     "id": "97C77256-CA7B-56E2-8254-C1E1515608D9",
+     "time": 0,
+     "colorHex": "@canvas"
+    }
+   ]
+  },
+  {
+   "resourceID": "63705474-7915-5B2B-92F9-B0742A493AE5",
+   "id": "008CDE11-DB98-503D-AA50-D3736000EB2A",
+   "name": "Screens",
+   "kind": "image",
+   "duration": 15,
+   "sortIndex": 1,
+   "startTime": 0,
+   "isEnabled": true,
+   "keyframes": [
+    {
+     "transitionDuration": 0,
+     "id": "5BA623FF-DBEC-533E-8488-FA3014B8D6DB",
+     "placement": {
+      "anchor": "top",
+      "height": 620,
+      "offset": [
+       0,
+       228
+      ]
+     },
+     "time": 0
+    },
+    {
+     "transitionDuration": 15,
+     "id": "C8C01877-A1B6-5C17-AB95-4122D06238AA",
+     "placement": {
+      "anchor": "top",
+      "offset": [
+       0,
+       228
+      ],
+      "height": 657
+     },
+     "easing": "linear",
+     "time": 15
+    },
+    {
+     "transitionDuration": 0,
+     "id": "2DFD51C1-CDC2-5F37-B46F-288D788D99A6",
+     "resourceID": "33A0ADBA-59D7-5D1C-801A-9F2F9FEB92BC",
+     "time": 3
+    },
+    {
+     "transitionDuration": 0,
+     "id": "0B4B79B5-B272-5C45-8D32-C6E1A4A96E2D",
+     "resourceID": "9931C842-1B36-5847-8B87-7AC128458988",
+     "time": 6
+    },
+    {
+     "transitionDuration": 0,
+     "id": "06D0CB00-01CB-5771-9CAA-3E48CA91D496",
+     "resourceID": "0D77FD35-BA9F-5B29-8D03-916947D8B4CC",
+     "time": 9
+    },
+    {
+     "transitionDuration": 0,
+     "id": "6B746B25-046C-53EB-9C03-C5DE113180C5",
+     "resourceID": "8F87467F-2F5F-531E-A1E1-362999014719",
+     "time": 12
+    }
+   ],
+   "fadeIn": 0.5
+  },
+  {
+   "resourceID": "8F982CD4-BE44-431D-9138-A2ABAB748FB1",
+   "captionText": "Every number, one screen.",
+   "id": "418F0031-1058-572B-9ACD-5A7F7A96898C",
+   "name": "Caption \u00b7 Every number, one scre",
+   "kind": "caption",
+   "duration": 2.35,
+   "sortIndex": 2,
+   "startTime": 0.35,
+   "isEnabled": true,
+   "keyframes": [],
+   "fadeOut": 0.35
+  },
+  {
+   "resourceID": "6030FF23-7A8A-47B6-90EB-37508217B4B8",
+   "captionText": "Revenue that explains itself.",
+   "id": "7070C83D-92BD-5705-8E84-178A0571B68D",
+   "name": "Caption \u00b7 Revenue that explains ",
+   "kind": "caption",
+   "duration": 2.35,
+   "sortIndex": 3,
+   "startTime": 3.35,
+   "isEnabled": true,
+   "keyframes": [],
+   "fadeOut": 0.35
+  },
+  {
+   "name": "Caption \u00b7 Write without the nois",
+   "id": "0101CF63-7A1D-5F54-AE46-3B52B39D4926",
+   "captionText": "Write without the noise.",
+   "kind": "caption",
+   "duration": 2.35,
+   "resourceID": "BABBE508-0A9C-4AA3-9AAE-A206B60EA074",
+   "isEnabled": true,
+   "keyframes": [],
+   "startTime": 6.35,
+   "sortIndex": 4,
+   "fadeOut": 0.35
+  },
+  {
+   "name": "Caption \u00b7 Move, measured.",
+   "id": "419FFFCA-C1BA-574A-8969-431177A0DDF8",
+   "captionText": "Move, measured.",
+   "kind": "caption",
+   "duration": 2.35,
+   "resourceID": "F8B607FF-F891-4568-AA47-036BA6AE1B7C",
+   "isEnabled": true,
+   "keyframes": [],
+   "startTime": 9.35,
+   "sortIndex": 5,
+   "fadeOut": 0.35
+  },
+  {
+   "name": "Caption \u00b7 Ship the story.",
+   "id": "DD608566-1504-54AD-A578-62A2391E869F",
+   "captionText": "Ship the story.",
+   "kind": "caption",
+   "duration": 2.35,
+   "resourceID": "F578F208-7188-4743-9996-7780D57BBE2A",
+   "isEnabled": true,
+   "keyframes": [],
+   "startTime": 12.35,
+   "sortIndex": 6,
+   "fadeOut": 0.35
+  }
+ ],
+ "state": "recorded",
+ "trimKeyframes": [],
+ "updatedAt": 808988760.689324,
+ "compositionSettings": {
+  "gifExportFPS": 10,
+  "subtitleShadowColorHex": "000000",
+  "backgroundKeyframes": [
+   {
+    "transitionDuration": 0.5,
+    "id": "5E0C7697-B4F8-4CB9-8D54-48DC670E03EE",
+    "time": 0,
+    "colorHex": "@canvas"
+   }
+  ],
+  "subtitleFontSize": 72,
+  "videoBorderWidth": 1,
+  "subtitleLeftMargin": 120,
+  "backgroundColorHex": "@canvas",
+  "videoKeyframes": [
+   {
+    "verticalShift": 0,
+    "id": "76C8866E-67E5-4727-A3E3-3FA1C275F9BE",
+    "transitionDuration": 0.5,
+    "horizontalShift": 0,
+    "time": 0,
+    "zoom": 1
+   }
+  ],
+  "subtitleAlignment": "center",
+  "subtitleStrokeColorHex": "000000",
+  "subtitleFontFamily": "system",
+  "subtitleShadowRadius": 20,
+  "fps": 30,
+  "subtitleBackgroundCornerRadius": 20,
+  "subtitleShadowOffset": [
+   0,
+   0
+  ],
+  "videoBorderColorHex": "@edge",
+  "subtitleItalic": false,
+  "subtitleColorHex": "@text",
+  "subtitleVerticalMargin": 96,
+  "subtitleBackgroundPadding": 30,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "subtitleShadowOpacity": 0.5,
+  "canvasWidth": 1440,
+  "gifExportScalePercent": 33,
+  "imageExportScalePercent": 100,
+  "subtitleStrokeWidth": 10,
+  "subtitleBold": true,
+  "videoCornerRadius": 14,
+  "subtitleRightMargin": 120,
+  "subtitleBackgroundOpacity": 0.5,
+  "canvasHeight": 900,
+  "subtitleBackgroundColorHex": "000000"
+ },
+ "id": "FC3A28A2-B040-5AD8-95A4-7E0A1052A91B",
+ "minReaderVersion": 9,
+ "name": "01 App Store Hero",
+ "createdAt": 0,
+ "formatVersion": 9,
+ "trimEnd": 15,
+ "subtitles": [],
+ "trimStart": 0,
+ "videoDuration": 15
+}

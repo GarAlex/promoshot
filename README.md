@@ -1,5 +1,9 @@
 # promoshot
 
+**See it work:** [demo.md](demo.md) — twenty-three prompts, each given to a
+fresh agent with only the skill and the MCP, its result beside the
+hand-built reference. The suite is in [demos/](demos/README.md).
+
 <p align="center">
   <img src="docs/rendered-on-linux.png" width="720"
        alt="A frame rendered by the engine on Linux: a bordered video card over a themed background, with a stroked, shadowed caption reading 'Rendered on Linux'.">

@@ -1,0 +1,50 @@
+{
+ "template": "20 Look Book",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 12.0,
+ "kinds": {
+  "background": 1,
+  "image": 3,
+  "caption": 4
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": true,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": false,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": true,
+  "placement": true
+ },
+ "phrases": [
+  "One shot. Three looks from .cube files.",
+  "Warm",
+  "Cool",
+  "Mono"
+ ],
+ "media": [
+  "look_cool.cube",
+  "look_mono.cube",
+  "look_warm.cube",
+  "ui_lumen_1.png"
+ ]
+}

@@ -1,0 +1,240 @@
+{
+ "id": "EE147888-71DF-5442-8D07-F0962E9BB999",
+ "name": "09 Kinetic Type",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 9,
+ "minReaderVersion": 9,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 120,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 14,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 470,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0A0A12"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF4D6D"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4D9DFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   },
+   {
+    "name": "accent",
+    "colorHex": "FF4D6D"
+   }
+  ],
+  "backgroundColorHex": "@canvas"
+ },
+ "resources": [],
+ "layers": [
+  {
+   "id": "010CF28E-FECB-5CC2-9E3A-38EF777AA9EA",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "9F819375-05AE-5996-A9AA-C696D0ADF5E7",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.0,
+       0.0
+      ],
+      "end": [
+       0.8,
+       1.0
+      ],
+      "repeat": "mirror",
+      "stops": [
+       {
+        "colorHex": "@canvas",
+        "at": 0.0
+       },
+       {
+        "colorHex": "@cool",
+        "at": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "id": "840F5C0F-C737-57E4-8AA0-952C94EBFFE6",
+     "time": 5,
+     "transitionDuration": 4,
+     "easing": "easeInOut",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.4,
+       0.0
+      ],
+      "end": [
+       1.2000000000000002,
+       1.0
+      ],
+      "repeat": "mirror",
+      "stops": [
+       {
+        "colorHex": "@canvas",
+        "at": 0.0
+       },
+       {
+        "colorHex": "@hot",
+        "at": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "id": "3F9EA7A0-97AE-56EC-9B58-4D2709C8176F",
+     "time": 11,
+     "transitionDuration": 4,
+     "easing": "easeInOut",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.8,
+       0.0
+      ],
+      "end": [
+       1.6,
+       1.0
+      ],
+      "repeat": "mirror",
+      "stops": [
+       {
+        "colorHex": "@canvas",
+        "at": 0.0
+       },
+       {
+        "colorHex": "@cool",
+        "at": 1.0
+       }
+      ]
+     }
+    }
+   ],
+   "duration": 12
+  },
+  {
+   "id": "8054F5A1-2DF3-5A85-8134-24D891E23F9E",
+   "name": "Caption \u00b7 type",
+   "sortIndex": 1,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "keyframes": [],
+   "duration": 2.2,
+   "captionText": "type",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 120,
+    "verticalMargin": 470,
+    "textColorHex": "@text",
+    "reveal": {
+     "by": "character",
+     "mode": "wipe"
+    }
+   },
+   "fadeOut": 0.35
+  },
+  {
+   "id": "C5D10E20-F1F8-5071-9197-469B7132F4ED",
+   "name": "Caption \u00b7 that knows",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 2.5,
+   "keyframes": [],
+   "duration": 2.2,
+   "captionText": "that knows",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 130,
+    "verticalMargin": 430,
+    "textColorHex": "@text",
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.6
+    }
+   },
+   "fadeOut": 0.35
+  },
+  {
+   "id": "486643C5-9900-5B81-A757-685EFEBF0215",
+   "name": "Caption \u00b7 where it is going",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.7,
+   "keyframes": [],
+   "duration": 2.6,
+   "captionText": "where it is going",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 140,
+    "verticalMargin": 400,
+    "textColorHex": "@text",
+    "reveal": {
+     "by": "word",
+     "mode": "scale"
+    }
+   },
+   "fadeOut": 0.35
+  },
+  {
+   "id": "5534CD47-D797-59BA-8A67-DB86564B3426",
+   "name": "Caption \u00b7 three tracks.",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.7,
+   "keyframes": [],
+   "duration": 3.2,
+   "captionText": "three tracks.\none caption.",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 92,
+    "verticalMargin": 380,
+    "textColorHex": "@text",
+    "reveal": {
+     "by": "word",
+     "mode": "highlight",
+     "highlightColorHex": "@accent",
+     "secondsPer": 0.4
+    }
+   },
+   "fadeOut": 0.35
+  }
+ ]
+}

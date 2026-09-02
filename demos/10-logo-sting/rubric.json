@@ -1,0 +1,47 @@
+{
+ "template": "10 Logo Sting",
+ "canvas": [
+  1920,
+  1080
+ ],
+ "duration": 0,
+ "kinds": {
+  "background": 1,
+  "image": 9,
+  "caption": 3
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": true,
+  "sprite": true,
+  "gradient": true,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": true,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "LUMEN",
+  "see the whole picture",
+  "lumen.app"
+ ],
+ "media": [
+  "sprite_rocket.png",
+  "sprite_spark.png"
+ ]
+}

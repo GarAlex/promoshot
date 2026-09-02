@@ -1,0 +1,326 @@
+{
+ "id": "4F73B396-CFC1-3D4F-5387-B8505A7D07DE",
+ "name": "18 Reused Title",
+ "formatVersion": 2,
+ "minReaderVersion": 19,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 13.0,
+ "videoDuration": 13.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 54,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF9B54"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4FD1C5"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "B1EEEA64-4019-3757-AAE1-C11FC5E69306",
+   "kind": "drawing",
+   "filename": "card-plate.json",
+   "displayName": "card-plate",
+   "addedAt": 0,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "drawing": {
+    "shapes": [
+     {
+      "id": "7E33E28F-C988-8B02-D34C-133D0B0A6F5D",
+      "kind": "oval",
+      "points": [
+       [
+        120,
+        260
+       ],
+       [
+        1320,
+        640
+       ]
+      ],
+      "strokeColorHex": "5B8CFF",
+      "strokeWidth": 1,
+      "fillColorHex": "5B8CFF",
+      "fillOpacity": 0.22,
+      "arrowStart": false,
+      "arrowEnd": false
+     },
+     {
+      "id": "18445172-332B-7045-E29C-7CCB244E63C5",
+      "kind": "oval",
+      "points": [
+       [
+        150,
+        300
+       ],
+       [
+        230,
+        380
+       ]
+      ],
+      "strokeColorHex": "FF9B54",
+      "strokeWidth": 1,
+      "fillColorHex": "FF9B54",
+      "fillOpacity": 1.0,
+      "arrowStart": false,
+      "arrowEnd": false
+     }
+    ]
+   }
+  },
+  {
+   "id": "DE1FFE26-BEE3-309B-9F10-814835360173",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 card-title",
+   "addedAt": 0,
+   "captionText": "One title card.\nPlaced three times.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "center"
+    },
+    "fontSize": 72,
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   }
+  },
+  {
+   "id": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Title card",
+   "addedAt": 0,
+   "duration": 3.5,
+   "pixelWidth": 1440,
+   "pixelHeight": 900,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "composition": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "layers": [
+     {
+      "id": "799006B9-502B-B0CD-709A-886064F836E4",
+      "name": "Plate",
+      "sortIndex": 0,
+      "kind": "drawing",
+      "isEnabled": true,
+      "startTime": 0.0,
+      "duration": 3.5,
+      "resourceID": "B1EEEA64-4019-3757-AAE1-C11FC5E69306",
+      "keyframes": [
+       {
+        "id": "E2B39C55-9F8C-B8B4-1893-BF1B1D2A09D2",
+        "time": 0.0,
+        "transitionDuration": 0,
+        "opacity": 0.0
+       },
+       {
+        "id": "08F1D9DA-E0D4-9D06-DAB4-465D45623D49",
+        "time": 0.35,
+        "transitionDuration": 0.35,
+        "opacity": 1.0
+       },
+       {
+        "id": "40DA99FE-5003-7864-46D1-F1F2CD758809",
+        "time": 3.1,
+        "transitionDuration": 0,
+        "opacity": 1.0
+       },
+       {
+        "id": "7FBD64CE-139E-4BB7-5156-ABAA203F9086",
+        "time": 3.5,
+        "transitionDuration": 0.4,
+        "opacity": 0.0
+       }
+      ]
+     },
+     {
+      "id": "C6D77B56-6883-DD8C-51A2-0271BDB7BAF1",
+      "name": "Title",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.25,
+      "duration": 3.0,
+      "resourceID": "DE1FFE26-BEE3-309B-9F10-814835360173",
+      "fadeIn": 0.3,
+      "fadeOut": 0.3,
+      "keyframes": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Lumen",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  }
+ ],
+ "layers": [
+  {
+   "id": "AC35951C-7FF9-1CE6-2D67-15801DCCF439",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0.0,
+   "duration": 13.0,
+   "keyframes": [
+    {
+     "id": "FF7BD5BC-7C5B-6A80-58C1-437CC38FDCC3",
+     "time": 0.0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    },
+    {
+     "id": "E530E59D-AE7E-1546-338F-FBB3AE569E46",
+     "time": 4.5,
+     "transitionDuration": 1.0,
+     "colorHex": "0B1220"
+    }
+   ]
+  },
+  {
+   "id": "336391EC-6179-5E44-9E90-5B089D218FCE",
+   "name": "Card \u00b7 full",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "duration": 3.5,
+   "resourceID": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "keyframes": []
+  },
+  {
+   "id": "6D8A6FD0-5D52-DF70-D6AB-7B5615321B57",
+   "name": "Screenshot",
+   "sortIndex": 2,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 4.5,
+   "duration": 4.5,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "fadeIn": 0.4,
+   "fadeOut": 0.4,
+   "keyframes": [
+    {
+     "id": "4E0EE7E8-9B07-B3D9-E60D-F92C048C279E",
+     "time": 0.0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 620,
+      "anchor": "bottom",
+      "offset": [
+       0,
+       -40
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "3EAD48FA-50D2-6973-8B10-3E4E4331E37F",
+   "name": "Card \u00b7 badge",
+   "sortIndex": 3,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 4.8,
+   "duration": 3.5,
+   "resourceID": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "keyframes": [
+    {
+     "id": "45D7F96B-C572-FB58-FB44-378FC52EDD38",
+     "time": 0.0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 300,
+      "anchor": "topLeft",
+      "offset": [
+       40,
+       40
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "E6483836-454A-84D8-7E4D-0420F08AD95A",
+   "name": "Card \u00b7 flown",
+   "sortIndex": 4,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 9.0,
+   "duration": 3.5,
+   "resourceID": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "transitionIn": {
+    "kind": "slide",
+    "from": "right",
+    "duration": 0.5
+   },
+   "keyframes": [
+    {
+     "id": "A59A6C0F-35EC-0481-FCEB-0D996DC14120",
+     "time": 0.0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 640,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "1E531D4B-1693-DBB7-1915-80FC6087DE37",
+     "time": 3.5,
+     "transitionDuration": 3.5,
+     "placement": {
+      "height": 700,
+      "anchor": "center"
+     },
+     "easing": "easeInOut"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,175 @@
+{
+ "name": "Before & After",
+ "trimEnd": 9,
+ "videoDuration": 9,
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "videoCornerRadius": 26,
+  "videoBorderWidth": 3,
+  "videoBorderColorHex": "@edge",
+  "subtitleFontSize": 54,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "subtitleVerticalMargin": 56
+ },
+ "resources": [
+  {
+   "id": "A6A1EAAF-486A-443B-8204-D29F268BA5A7",
+   "kind": "image",
+   "filename": "ui_verse_2.png",
+   "displayName": "verse_2",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "64450A91-801A-47AD-9FE5-845E17768967",
+   "kind": "image",
+   "filename": "ui_pulse_2.png",
+   "displayName": "pulse_2",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "C5BF49BD-61FC-43E8-9C16-7811BEB1D703",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Before",
+   "addedAt": 0,
+   "captionText": "Before",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   }
+  },
+  {
+   "id": "CE8A7A08-7E4C-4685-9A78-65272BE1ED9E",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 After \u2014 one tap",
+   "addedAt": 0,
+   "captionText": "After \u2014 one tap",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.5
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "C6149F7F-157F-4115-A806-0FAC4FD8BB3F",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9,
+   "keyframes": [
+    {
+     "id": "72768732-6F4C-4E31-A4DC-295BB2B2FB78",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    }
+   ]
+  },
+  {
+   "id": "72AF2977-0589-48F0-8D1F-4E242B814C7E",
+   "name": "Shot",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9,
+   "resourceID": "A6A1EAAF-486A-443B-8204-D29F268BA5A7",
+   "fadeIn": 0.5,
+   "fadeOut": 0.6,
+   "keyframes": [
+    {
+     "id": "A019C96C-9999-4374-8D7A-9A7BE37863B0",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 620,
+      "anchor": "center",
+      "offset": [
+       0,
+       -40
+      ]
+     }
+    },
+    {
+     "id": "1FDCC857-3199-4B3D-A9FE-D06E52639E3A",
+     "time": 4.2,
+     "transitionDuration": 0,
+     "resourceID": "64450A91-801A-47AD-9FE5-845E17768967",
+     "transition": {
+      "kind": "fade",
+      "duration": 1.2
+     }
+    }
+   ]
+  },
+  {
+   "id": "0B3E209D-EEAD-4B43-851B-B142CAF09081",
+   "name": "Label",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "duration": 8.0,
+   "resourceID": "C5BF49BD-61FC-43E8-9C16-7811BEB1D703",
+   "fadeOut": 0.4,
+   "keyframes": [
+    {
+     "id": "2295FB80-1ED1-444A-9340-8F013470ED1E",
+     "time": 3.7,
+     "transitionDuration": 0,
+     "resourceID": "CE8A7A08-7E4C-4685-9A78-65272BE1ED9E",
+     "transition": {
+      "kind": "wipe",
+      "from": "left",
+      "duration": 0.6
+     }
+    }
+   ]
+  }
+ ],
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "subtitles": [],
+ "formatVersion": 10,
+ "minReaderVersion": 10,
+ "id": "7E2B19C4-55BD-41CC-ABB3-DD31C3585F85"
+}

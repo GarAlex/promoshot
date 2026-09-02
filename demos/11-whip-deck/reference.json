@@ -1,0 +1,225 @@
+{
+ "name": "Whip Deck",
+ "trimEnd": 10,
+ "videoDuration": 10,
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "videoCornerRadius": 26,
+  "videoBorderWidth": 3,
+  "videoBorderColorHex": "@edge",
+  "subtitleFontSize": 58,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0,
+  "subtitleStrokeColorHex": "@canvas",
+  "subtitleStrokeWidth": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "subtitleVerticalMargin": 58
+ },
+ "resources": [
+  {
+   "id": "9052B44F-BBA7-4DD4-A05B-B7410E391817",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "lumen_1",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "F9C9EFA6-AADF-4CEE-BD47-AC9B82B73614",
+   "kind": "image",
+   "filename": "ui_lumen_2.png",
+   "displayName": "lumen_2",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "CDD59EB6-17A1-4A12-B7DE-FA9AFB3C358E",
+   "kind": "image",
+   "filename": "ui_pulse_1.png",
+   "displayName": "pulse_1",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "01C8BE44-B8D4-4A58-B274-A66B273D9109",
+   "kind": "image",
+   "filename": "ui_verse_1.png",
+   "displayName": "verse_1",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "835758B4-9D42-4B18-A1A4-93082C4A5AC4",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 One deck. Every screen.",
+   "addedAt": 0,
+   "captionText": "One deck. Every screen.",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "rise": 0.6
+    }
+   }
+  },
+  {
+   "id": "9A291D62-A766-483A-8F82-5CC0F2A14511",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 See it move.",
+   "addedAt": 0,
+   "captionText": "See it move.",
+   "captionStyle": {
+    "reveal": {
+     "by": "character",
+     "mode": "wipe"
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "540FFDA9-30B5-4529-A73B-88BF3D056AA2",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 10,
+   "keyframes": [
+    {
+     "id": "90879CBA-8AE4-417E-B37D-B8028F81F6A0",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    }
+   ]
+  },
+  {
+   "id": "F0DEBEEC-8645-457A-A762-C1C2D87A20A6",
+   "name": "Deck",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 10,
+   "resourceID": "9052B44F-BBA7-4DD4-A05B-B7410E391817",
+   "fadeIn": 0.4,
+   "fadeOut": 0.6,
+   "keyframes": [
+    {
+     "id": "35D0135A-FDD7-44C1-8CAE-187D5463B25D",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 620,
+      "anchor": "center",
+      "offset": [
+       0,
+       -40
+      ]
+     },
+     "shutter": 0.25
+    },
+    {
+     "id": "65BB808F-4A1E-476B-8836-FA87B5B711D8",
+     "time": 9.4,
+     "transitionDuration": 9.4,
+     "easing": "easeIn",
+     "shutter": 1.0
+    },
+    {
+     "id": "191B633F-F390-4EA8-A452-A99ADFB5EEB4",
+     "time": 2.5,
+     "transitionDuration": 0,
+     "resourceID": "F9C9EFA6-AADF-4CEE-BD47-AC9B82B73614",
+     "transition": {
+      "kind": "push",
+      "from": "right",
+      "duration": 0.45
+     }
+    },
+    {
+     "id": "13C975EB-8C63-4825-9441-52822BA4B5BC",
+     "time": 5.0,
+     "transitionDuration": 0,
+     "resourceID": "CDD59EB6-17A1-4A12-B7DE-FA9AFB3C358E",
+     "transition": {
+      "kind": "push",
+      "from": "left",
+      "duration": 0.45
+     }
+    },
+    {
+     "id": "CF4D67F4-247E-4E39-B577-BC153F35740C",
+     "time": 7.5,
+     "transitionDuration": 0,
+     "resourceID": "01C8BE44-B8D4-4A58-B274-A66B273D9109",
+     "transition": {
+      "kind": "push",
+      "from": "right",
+      "duration": 0.45
+     }
+    }
+   ]
+  },
+  {
+   "id": "A461558D-4595-43E3-AE9C-3A2F4ADF09EF",
+   "name": "Title",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.4,
+   "duration": 2.4,
+   "resourceID": "835758B4-9D42-4B18-A1A4-93082C4A5AC4",
+   "fadeOut": 0.35,
+   "keyframes": []
+  },
+  {
+   "id": "78875AFF-D975-4A0D-A4BA-87A6AB60984B",
+   "name": "Closing",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 8.1,
+   "duration": 1.9,
+   "resourceID": "9A291D62-A766-483A-8F82-5CC0F2A14511",
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ],
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "subtitles": [],
+ "formatVersion": 10,
+ "minReaderVersion": 10,
+ "id": "F83D2F48-3DE0-44FD-B848-7E1F372D99D1"
+}

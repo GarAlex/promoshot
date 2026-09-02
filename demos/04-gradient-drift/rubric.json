@@ -1,0 +1,46 @@
+{
+ "template": "04 Gradient Drift",
+ "canvas": [
+  1920,
+  1080
+ ],
+ "duration": 0,
+ "kinds": {
+  "background": 1,
+  "image": 1,
+  "caption": 3
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": true,
+  "gradient": true,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "colour that moves",
+  "repeat \u00b7 mirror \u00b7 clamp",
+  "a gradient is a keyframe too"
+ ],
+ "media": [
+  "sprite_ring.png"
+ ]
+}

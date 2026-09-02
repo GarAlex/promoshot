@@ -1,0 +1,280 @@
+{
+ "id": "E8186F31-815F-5CC7-9CE1-C91846E7E0C3",
+ "name": "08 Speed Ramp",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 8,
+ "minReaderVersion": 8,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 58,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.55,
+  "subtitleBackgroundPadding": 16,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 880,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "03060C"
+   },
+   {
+    "name": "canvas-2",
+    "colorHex": "0A1E2C"
+   },
+   {
+    "name": "cool",
+    "colorHex": "1B3A6B"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas",
+  "videoCornerRadius": 18,
+  "videoBorderWidth": 2,
+  "videoBorderColorHex": "@cool",
+  "subtitleBackgroundColorHex": "@canvas",
+  "subtitleBackgroundCornerRadius": 12
+ },
+ "resources": [
+  {
+   "id": "120A5CE2-A3F1-529F-9EE1-52267A06197A",
+   "kind": "video",
+   "filename": "bbb_test.mp4",
+   "displayName": "Big Buck Bunny",
+   "addedAt": 0,
+   "duration": 10.0,
+   "trimStart": 0,
+   "trimEnd": 10.01,
+   "videoNaturalWidth": 1920,
+   "videoNaturalHeight": 1080,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "volume": 0.0,
+   "mediaCuts": [
+    {
+     "id": "B0DF9DD1-736C-51C2-81CE-938B9F71B7B2",
+     "name": "Drift",
+     "trimStart": 0.4,
+     "trimEnd": 4.0,
+     "speed": 0.5
+    },
+    {
+     "id": "E8938286-54F5-524A-9449-91E90E4F49A9",
+     "name": "Rush",
+     "trimStart": 4.0,
+     "trimEnd": 7.4,
+     "speed": 2.0
+    },
+    {
+     "id": "9CE94A70-4B8E-5CC7-B910-376E0452AC12",
+     "name": "Hold",
+     "trimStart": 7.4,
+     "trimEnd": 9.9,
+     "speed": 0.75
+    }
+   ]
+  }
+ ],
+ "layers": [
+  {
+   "id": "C1778274-36CB-5C4A-8B4C-B65983561386",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "F1DB181E-B5B4-5E6E-949D-60327B47E475",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    },
+    {
+     "id": "0E76D3C0-8128-52BE-8A9E-AE073CC59FB6",
+     "time": 7.0,
+     "transitionDuration": 7.0,
+     "easing": "easeInOut",
+     "colorHex": "@canvas-2"
+    },
+    {
+     "id": "73DFB7B5-14B2-5186-B56B-84E9EDE1B587",
+     "time": 14.0,
+     "transitionDuration": 7.0,
+     "easing": "easeInOut",
+     "colorHex": "@canvas"
+    }
+   ],
+   "duration": 14
+  },
+  {
+   "id": "E8219B0F-AD4E-5B95-959F-E2F1AF332D9C",
+   "name": "Cut 1 \u00b7 0.5\u00d7",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0.0,
+   "keyframes": [
+    {
+     "id": "83DEB39F-F33B-54A5-AA52-CF4DD893538C",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 1080,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "F2C595AD-5754-5F7F-BC14-15E19983B4B9",
+     "time": 7.2,
+     "transitionDuration": 7.2,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 1170,
+      "anchor": "center"
+     }
+    }
+   ],
+   "duration": 7.2,
+   "resourceID": "120A5CE2-A3F1-529F-9EE1-52267A06197A",
+   "mediaCutID": "B0DF9DD1-736C-51C2-81CE-938B9F71B7B2",
+   "beyondEnd": "hold",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "F52F62A7-6F67-573F-9CC2-FA69394CD5A5",
+   "name": "Caption \u00b7 0.5\u00d7 \u2014 the drift",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "keyframes": [],
+   "duration": 6.0,
+   "captionText": "0.5\u00d7 \u2014 the drift",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "5D83C23F-2146-52D7-8CF8-27531F877C65",
+   "name": "Cut 2 \u00b7 2\u00d7",
+   "sortIndex": 3,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 6.8,
+   "keyframes": [
+    {
+     "id": "E32C567C-A916-5547-9738-029AB9E1493A",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 1080,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "5B533A96-B88D-5BF7-8B4B-13FE1BB704BE",
+     "time": 1.7,
+     "transitionDuration": 1.7,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 1170,
+      "anchor": "center"
+     }
+    }
+   ],
+   "duration": 1.7,
+   "resourceID": "120A5CE2-A3F1-529F-9EE1-52267A06197A",
+   "mediaCutID": "E8938286-54F5-524A-9449-91E90E4F49A9",
+   "beyondEnd": "hold",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "9F143276-AB06-5465-A757-4C590829671C",
+   "name": "Caption \u00b7 2\u00d7 \u2014 the rush",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.3,
+   "keyframes": [],
+   "duration": 1.2,
+   "captionText": "2\u00d7 \u2014 the rush",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "A649A697-C8ED-594C-8EBB-394BDB726120",
+   "name": "Cut 3 \u00b7 0.75\u00d7",
+   "sortIndex": 5,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 8.1,
+   "keyframes": [
+    {
+     "id": "6CB0D417-FD03-5168-B787-52CEF8DAE5B0",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 1080,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "2C65DEEB-7C9D-5069-8FF7-FD27DBA7EA72",
+     "time": 3.333,
+     "transitionDuration": 3.333,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 1170,
+      "anchor": "center"
+     }
+    }
+   ],
+   "duration": 3.333,
+   "resourceID": "120A5CE2-A3F1-529F-9EE1-52267A06197A",
+   "mediaCutID": "9CE94A70-4B8E-5CC7-B910-376E0452AC12",
+   "beyondEnd": "hold",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "36A45F8E-5581-5D58-A331-B8246E8072A1",
+   "name": "Caption \u00b7 0.75\u00d7 \u2014 the hold",
+   "sortIndex": 6,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 8.6,
+   "keyframes": [],
+   "duration": 2.133,
+   "captionText": "0.75\u00d7 \u2014 the hold",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "9FA402D6-ED7D-52A0-920E-EA530DB9E9B3",
+   "name": "Caption \u00b7 One recording.",
+   "sortIndex": 7,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 11.033,
+   "keyframes": [],
+   "duration": 2.2,
+   "captionText": "One recording.\nThree cuts, three rates.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  }
+ ]
+}

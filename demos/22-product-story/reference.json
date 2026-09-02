@@ -1,0 +1,528 @@
+{
+ "id": "2C7E3BC1-1A95-FBE6-F211-4640FEE3EE7F",
+ "name": "22 Product Story",
+ "formatVersion": 2,
+ "minReaderVersion": 23,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 24.0,
+ "videoDuration": 24.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 54,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF9B54"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4FD1C5"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   },
+   {
+    "name": "green",
+    "colorHex": "00FF00"
+   }
+  ],
+  "backgroundGradient": {
+   "kind": "linear",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    1,
+    1
+   ],
+   "stops": [
+    {
+     "colorHex": "0B1220",
+     "at": 0
+    },
+    {
+     "colorHex": "1A2A55",
+     "at": 1
+    }
+   ]
+  }
+ },
+ "resources": [
+  {
+   "id": "B1EEEA64-4019-3757-AAE1-C11FC5E69306",
+   "kind": "drawing",
+   "filename": "card-plate.json",
+   "displayName": "card-plate",
+   "addedAt": 0,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "drawing": {
+    "shapes": [
+     {
+      "id": "7E33E28F-C988-8B02-D34C-133D0B0A6F5D",
+      "kind": "oval",
+      "points": [
+       [
+        120,
+        260
+       ],
+       [
+        1320,
+        640
+       ]
+      ],
+      "strokeColorHex": "5B8CFF",
+      "strokeWidth": 1,
+      "fillColorHex": "5B8CFF",
+      "fillOpacity": 0.22,
+      "arrowStart": false,
+      "arrowEnd": false
+     },
+     {
+      "id": "18445172-332B-7045-E29C-7CCB244E63C5",
+      "kind": "oval",
+      "points": [
+       [
+        150,
+        300
+       ],
+       [
+        230,
+        380
+       ]
+      ],
+      "strokeColorHex": "FF9B54",
+      "strokeWidth": 1,
+      "fillColorHex": "FF9B54",
+      "fillOpacity": 1.0,
+      "arrowStart": false,
+      "arrowEnd": false
+     }
+    ]
+   }
+  },
+  {
+   "id": "DE1FFE26-BEE3-309B-9F10-814835360173",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 card-title",
+   "addedAt": 0,
+   "captionText": "One title card.\nPlaced three times.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "center"
+    },
+    "fontSize": 72,
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   }
+  },
+  {
+   "id": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Title card",
+   "addedAt": 0,
+   "duration": 3.5,
+   "pixelWidth": 1440,
+   "pixelHeight": 900,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "composition": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "layers": [
+     {
+      "id": "799006B9-502B-B0CD-709A-886064F836E4",
+      "name": "Plate",
+      "sortIndex": 0,
+      "kind": "drawing",
+      "isEnabled": true,
+      "startTime": 0.0,
+      "duration": 3.5,
+      "resourceID": "B1EEEA64-4019-3757-AAE1-C11FC5E69306",
+      "keyframes": [
+       {
+        "id": "E2B39C55-9F8C-B8B4-1893-BF1B1D2A09D2",
+        "time": 0.0,
+        "transitionDuration": 0,
+        "opacity": 0.0
+       },
+       {
+        "id": "08F1D9DA-E0D4-9D06-DAB4-465D45623D49",
+        "time": 0.35,
+        "transitionDuration": 0.35,
+        "opacity": 1.0
+       },
+       {
+        "id": "40DA99FE-5003-7864-46D1-F1F2CD758809",
+        "time": 3.1,
+        "transitionDuration": 0,
+        "opacity": 1.0
+       },
+       {
+        "id": "7FBD64CE-139E-4BB7-5156-ABAA203F9086",
+        "time": 3.5,
+        "transitionDuration": 0.4,
+        "opacity": 0.0
+       }
+      ]
+     },
+     {
+      "id": "C6D77B56-6883-DD8C-51A2-0271BDB7BAF1",
+      "name": "Title",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.25,
+      "duration": 3.0,
+      "resourceID": "DE1FFE26-BEE3-309B-9F10-814835360173",
+      "fadeIn": 0.3,
+      "fadeOut": 0.3,
+      "keyframes": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "A2119421-B131-F9F0-0252-A28ACAB2BC67",
+   "kind": "lut",
+   "filename": "look_warm.cube",
+   "displayName": "Look \u00b7 Warm",
+   "addedAt": 0,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Lumen",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "9F9B6C2C-4A46-6B4B-3952-E168D3701D5D",
+   "kind": "video",
+   "filename": "green_lumen.mp4",
+   "displayName": "Green plate",
+   "addedAt": 0,
+   "duration": 6.0,
+   "videoNaturalWidth": 1280,
+   "videoNaturalHeight": 800,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "looped": true
+  },
+  {
+   "id": "84448869-5E91-5EF8-86D2-E5416C406A0B",
+   "kind": "audio",
+   "filename": "narration-84448869-5E91-5EF8-86D2-E5416C406A0B.mp3",
+   "displayName": "VO 5",
+   "addedAt": 0,
+   "speech": {
+    "text": "Everything else already renders.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "b3e5cd08496629f20e89868eec9b24218fb6bff15391e785f9f582e73d90704a"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 4.368,
+   "audioEffects": [
+    {
+     "kind": "normalize",
+     "targetLufs": -16
+    },
+    {
+     "kind": "compressor",
+     "thresholdDb": -20,
+     "ratio": 3
+    }
+   ]
+  },
+  {
+   "id": "BC4F07C0-B327-0804-E823-7C006E145963",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 story-key",
+   "addedAt": 0,
+   "captionText": "Footage on green, keyed here.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   }
+  },
+  {
+   "id": "40CBF95A-6BCB-E92D-8EA8-E2F4BE4DC0DD",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 story-look",
+   "addedAt": 0,
+   "captionText": "A look from a .cube, on top of the grade.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   }
+  },
+  {
+   "id": "324CB637-AB27-6890-7AA1-93608B8F4A4E",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 story-end",
+   "addedAt": 0,
+   "captionText": "One document. Every host renders it the same.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "AC35951C-7FF9-1CE6-2D67-15801DCCF439",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 24.0,
+   "keyframes": []
+  },
+  {
+   "id": "FF2E56A3-7EB6-7132-5F89-4B5F835F2329",
+   "name": "Card \u00b7 open",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "duration": 3.5,
+   "resourceID": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "keyframes": []
+  },
+  {
+   "id": "AAF6CB89-D978-8320-5576-C73A57E45F50",
+   "name": "Keyed clip",
+   "sortIndex": 2,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 4.0,
+   "duration": 6.0,
+   "resourceID": "9F9B6C2C-4A46-6B4B-3952-E168D3701D5D",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5,
+   "chromaKey": {
+    "colorHex": "@green",
+    "tolerance": 0.28,
+    "softness": 0.06
+   },
+   "keyframes": [
+    {
+     "id": "B991C41E-9D31-E81D-14BA-3E6BEC790466",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 600,
+      "anchor": "center"
+     }
+    }
+   ]
+  },
+  {
+   "id": "CEF3D8B6-CFF1-5C1A-12A3-57A99D4B90FC",
+   "name": "Caption \u00b7 key",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.6,
+   "duration": 4.8,
+   "resourceID": "BC4F07C0-B327-0804-E823-7C006E145963",
+   "fadeIn": 0.3,
+   "fadeOut": 0.3,
+   "keyframes": []
+  },
+  {
+   "id": "C1CC17AF-0540-2082-F06A-3DC2A7E11ABC",
+   "name": "Shot \u00b7 warm",
+   "sortIndex": 4,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 10.0,
+   "duration": 6.0,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5,
+   "adjustments": {
+    "lutResourceID": "A2119421-B131-F9F0-0252-A28ACAB2BC67",
+    "lutAmount": 0.9
+   },
+   "keyframes": [
+    {
+     "id": "C1706ED0-C0B2-22E2-D347-CF61719F542C",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 620,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "B3B7A678-D0FB-ECDE-1ED0-0C6D8E95D509",
+     "time": 6.0,
+     "transitionDuration": 6.0,
+     "placement": {
+      "height": 680,
+      "anchor": "center"
+     },
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "3062170E-E09B-38A4-6EEC-7A0DB6E367AE",
+   "name": "Caption \u00b7 look",
+   "sortIndex": 5,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 10.6,
+   "duration": 4.8,
+   "resourceID": "40CBF95A-6BCB-E92D-8EA8-E2F4BE4DC0DD",
+   "fadeIn": 0.3,
+   "fadeOut": 0.3,
+   "keyframes": []
+  },
+  {
+   "id": "374BD2C0-3F5F-F99A-5EFC-E946671C98BE",
+   "name": "Voice",
+   "sortIndex": 6,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 10.2,
+   "duration": 4.368,
+   "resourceID": "84448869-5E91-5EF8-86D2-E5416C406A0B",
+   "audioFocus": true,
+   "keyframes": []
+  },
+  {
+   "id": "AE9837E0-B1FA-9D0C-1B0F-146D8410153D",
+   "name": "Card \u00b7 badge",
+   "sortIndex": 7,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 16.0,
+   "duration": 3.5,
+   "resourceID": "A6420B3D-88FB-B33D-FA06-78BB4908A942",
+   "keyframes": [
+    {
+     "id": "FE9EE98A-DC3A-31C0-B174-491CFF8E2210",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 300,
+      "anchor": "topLeft",
+      "offset": [
+       40,
+       40
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ABB38C58-0EF4-B06D-1480-C2A0C3FB9C8A",
+   "name": "Caption \u00b7 end",
+   "sortIndex": 8,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 16.4,
+   "duration": 7.0,
+   "resourceID": "324CB637-AB27-6890-7AA1-93608B8F4A4E",
+   "fadeIn": 0.3,
+   "fadeOut": 0.5,
+   "keyframes": []
+  }
+ ],
+ "markers": [
+  {
+   "id": "82B38F48-95B0-488C-BD1D-360E51DAEC6C",
+   "time": 0.0,
+   "name": "Title",
+   "kind": "chapter"
+  },
+  {
+   "id": "E130B85B-C5C5-4346-5E1C-DAAE8D8467AA",
+   "time": 4.0,
+   "name": "Keyed footage",
+   "kind": "chapter"
+  },
+  {
+   "id": "46166666-2794-9669-F414-8FA38B6073F0",
+   "time": 10.0,
+   "name": "The look",
+   "kind": "chapter"
+  },
+  {
+   "id": "D5AA811B-0E68-E3BA-48CF-32C03299694E",
+   "time": 16.0,
+   "name": "Close",
+   "kind": "chapter"
+  }
+ ]
+}

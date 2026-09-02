@@ -1,0 +1,414 @@
+{
+ "id": "5AE51120-C72B-5627-87A2-21C2C1E29F1F",
+ "name": "07 Narrated Tour",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 9,
+ "minReaderVersion": 9,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 48,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 26,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 745,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0C1220"
+   },
+   {
+    "name": "edge",
+    "colorHex": "31425F"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas",
+  "videoCornerRadius": 16,
+  "videoBorderWidth": 2,
+  "videoBorderColorHex": "@edge",
+  "subtitleStrokeColorHex": "0A0A0A",
+  "subtitleStrokeWidth": 5,
+  "subtitleShadowColorHex": "000000",
+  "subtitleShadowOpacity": 0.5,
+  "subtitleShadowRadius": 9
+ },
+ "resources": [
+  {
+   "id": "56A6AAF1-94E7-52D4-93F3-1D461C6AEA10",
+   "kind": "video",
+   "filename": "bbb_test.mp4",
+   "displayName": "Meadow",
+   "addedAt": 0,
+   "duration": 10.0,
+   "trimStart": 0,
+   "trimEnd": 10.0,
+   "videoNaturalWidth": 1920,
+   "videoNaturalHeight": 1080,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "volume": 0.35,
+   "looped": true
+  },
+  {
+   "id": "C25E68F4-0D9A-5C73-8BA6-09C055F3AC80",
+   "kind": "audio",
+   "filename": "narration-C25E68F4-0D9A-5C73-8BA6-09C055F3AC80.mp3",
+   "displayName": "VO 1",
+   "addedAt": 0,
+   "speech": {
+    "text": "Some footage tells the story on its own.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "8c380f5800cf2f40ff41774b88eb02bcb078892c5352df8ce039d7482c12f26a"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 2.712
+  },
+  {
+   "id": "221A257A-EC80-51CB-ADBE-28460E4BB2F7",
+   "kind": "audio",
+   "filename": "narration-221A257A-EC80-51CB-ADBE-28460E4BB2F7.mp3",
+   "displayName": "VO 2",
+   "addedAt": 0,
+   "speech": {
+    "text": "The camera never moved \u2014 the viewport did.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "70bda1b65cb22e84e58b1da54ccc4e8a2e53b4ed0c5bef11d6daefe46f4b45f4"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 3.12
+  },
+  {
+   "id": "DCBBA85B-A19E-56E7-B523-0D2E36B32E8A",
+   "kind": "audio",
+   "filename": "narration-DCBBA85B-A19E-56E7-B523-0D2E36B32E8A.mp3",
+   "displayName": "VO 3",
+   "addedAt": 0,
+   "speech": {
+    "text": "Narration is written here, not recorded.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "d6fbcaed2d2b73a8cfa791c2ab3f12a34dbdb0be4e1deb7994db96bfbf93e4bc"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 3.264
+  },
+  {
+   "id": "23D69E5E-1F13-5E5E-B92F-A11338B86C31",
+   "kind": "audio",
+   "filename": "narration-23D69E5E-1F13-5E5E-B92F-A11338B86C31.mp3",
+   "displayName": "VO 4",
+   "addedAt": 0,
+   "speech": {
+    "text": "Add a voice key and it speaks.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "200914a30f173d5cea4f37a608e81694d3200dbd1475a13b558a9f2501ffa864"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 3.312
+  },
+  {
+   "id": "84448869-5E91-5EF8-86D2-E5416C406A0B",
+   "kind": "audio",
+   "filename": "narration-84448869-5E91-5EF8-86D2-E5416C406A0B.mp3",
+   "displayName": "VO 5",
+   "addedAt": 0,
+   "speech": {
+    "text": "Everything else already renders.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "b3e5cd08496629f20e89868eec9b24218fb6bff15391e785f9f582e73d90704a"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 4.368
+  }
+ ],
+ "layers": [
+  {
+   "id": "A5D66AD1-25D6-5139-95AB-080622D0533D",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "9CE2263F-0D82-5438-8E8A-3BC9E07BF412",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas"
+    }
+   ],
+   "duration": 21.5
+  },
+  {
+   "id": "22112058-6484-5475-8D43-E514F9EDA8C2",
+   "name": "Meadow",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "74932363-560F-55A9-A2C0-87872F775665",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 780,
+      "anchor": "center",
+      "offset": [
+       0,
+       -40
+      ]
+     }
+    },
+    {
+     "id": "B6137ED2-4AF6-5113-B730-D542D30C37E3",
+     "time": 0.3,
+     "transitionDuration": 0,
+     "viewport": [
+      0,
+      0,
+      1,
+      1
+     ]
+    },
+    {
+     "id": "51E629B9-75EB-5EE1-9791-F36BC379E610",
+     "time": 3.562,
+     "transitionDuration": 1.4,
+     "viewport": [
+      0.3,
+      0.24,
+      0.44,
+      0.44
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "48717712-4523-595A-8798-4AC6301C49F2",
+     "time": 7.232,
+     "transitionDuration": 1.4,
+     "viewport": [
+      0.08,
+      0.42,
+      0.44,
+      0.44
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "E509BD88-A443-50DC-BD02-6DF08E2ABAA0",
+     "time": 11.046,
+     "transitionDuration": 1.4,
+     "viewport": [
+      0.52,
+      0.3,
+      0.44,
+      0.44
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "EB7EACC6-7390-593C-A80C-19678379A7C5",
+     "time": 14.908,
+     "transitionDuration": 1.4,
+     "viewport": [
+      0.26,
+      0.1,
+      0.44,
+      0.44
+     ],
+     "easing": "easeInOut"
+    },
+    {
+     "id": "D1476EFF-BB1C-5EEC-B2AB-B66973F98E23",
+     "time": 20.1,
+     "transitionDuration": 1.6,
+     "viewport": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 21.5,
+   "resourceID": "56A6AAF1-94E7-52D4-93F3-1D461C6AEA10",
+   "fadeIn": 0.6,
+   "fadeOut": 0.8
+  },
+  {
+   "id": "3B913B30-8CB4-50C9-92E5-5DD7418E758B",
+   "name": "VO \u00b7 Some footage tells",
+   "sortIndex": 2,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 0.8,
+   "keyframes": [],
+   "duration": 2.712,
+   "resourceID": "C25E68F4-0D9A-5C73-8BA6-09C055F3AC80",
+   "audioFocus": true
+  },
+  {
+   "id": "D83EC20E-2370-5536-BEF1-682AC8065F28",
+   "name": "Caption \u00b7 Some footage tells the",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.8,
+   "keyframes": [],
+   "duration": 3.162,
+   "captionText": "Some footage tells the story on its own.",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "C719EF1C-AD73-5689-B130-21DE7D177520",
+   "name": "VO \u00b7 The camera never m",
+   "sortIndex": 4,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 4.062,
+   "keyframes": [],
+   "duration": 3.12,
+   "resourceID": "221A257A-EC80-51CB-ADBE-28460E4BB2F7",
+   "audioFocus": true
+  },
+  {
+   "id": "BA860524-85B6-524E-8D53-58FC6EF0ECA1",
+   "name": "Caption \u00b7 The camera never moved",
+   "sortIndex": 5,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.062,
+   "keyframes": [],
+   "duration": 3.57,
+   "captionText": "The camera never moved \u2014 the viewport did.",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "238447E5-E22D-5178-8170-C70323DEA8BE",
+   "name": "VO \u00b7 Narration is writt",
+   "sortIndex": 6,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 7.732,
+   "keyframes": [],
+   "duration": 3.264,
+   "resourceID": "DCBBA85B-A19E-56E7-B523-0D2E36B32E8A",
+   "audioFocus": true
+  },
+  {
+   "id": "498C09B0-AB2F-5C08-8773-ACEC0C57CBC3",
+   "name": "Caption \u00b7 Narration is written h",
+   "sortIndex": 7,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.732,
+   "keyframes": [],
+   "duration": 3.714,
+   "captionText": "Narration is written here, not recorded.",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "6AA830B0-5E68-516D-8CED-825E81700EBA",
+   "name": "VO \u00b7 Add a voice key an",
+   "sortIndex": 8,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 11.546,
+   "keyframes": [],
+   "duration": 3.312,
+   "resourceID": "23D69E5E-1F13-5E5E-B92F-A11338B86C31",
+   "audioFocus": true
+  },
+  {
+   "id": "1DE2448A-40D7-5112-B1B7-5D37A28B30F5",
+   "name": "Caption \u00b7 Add a voice key and it",
+   "sortIndex": 9,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 11.546,
+   "keyframes": [],
+   "duration": 3.762,
+   "captionText": "Add a voice key and it speaks.",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "C9007ABE-63C4-5E39-B686-669FB5079C95",
+   "name": "VO \u00b7 Everything else al",
+   "sortIndex": 10,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 15.408,
+   "keyframes": [],
+   "duration": 4.368,
+   "resourceID": "84448869-5E91-5EF8-86D2-E5416C406A0B",
+   "audioFocus": true
+  },
+  {
+   "id": "70BC2BCE-C44A-5A46-9F2A-F0D77056A78B",
+   "name": "Caption \u00b7 Everything else alread",
+   "sortIndex": 11,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 15.408,
+   "keyframes": [],
+   "duration": 4.818,
+   "captionText": "Everything else already renders.",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  }
+ ]
+}

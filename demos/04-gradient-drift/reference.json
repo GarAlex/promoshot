@@ -1,0 +1,370 @@
+{
+ "id": "50311AF4-6EA5-55F9-85EA-284CC3A7A324",
+ "name": "04 Gradient Drift",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 9,
+ "minReaderVersion": 9,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 64,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 14,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 880,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "120B26"
+   },
+   {
+    "name": "accent1",
+    "colorHex": "2B1055"
+   },
+   {
+    "name": "accent2",
+    "colorHex": "7B2FF7"
+   },
+   {
+    "name": "accent3",
+    "colorHex": "F72585"
+   },
+   {
+    "name": "accent4",
+    "colorHex": "FF9E00"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas"
+ },
+ "resources": [
+  {
+   "id": "3EA1943F-4779-5EC0-B1E9-97055FDFBE7F",
+   "kind": "image",
+   "filename": "sprite_ring.png",
+   "displayName": "Ring",
+   "addedAt": 0,
+   "pixelWidth": 528,
+   "pixelHeight": 44,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 12,
+    "rows": 1,
+    "fps": 18
+   },
+   "sampling": "nearest"
+  }
+ ],
+ "layers": [
+  {
+   "id": "F4B7E4C8-F6E3-5802-8282-2630CC335FCB",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "B2361EB6-7E9E-5AD3-85C7-63E38C417DEA",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.1,
+       0
+      ],
+      "end": [
+       0.6,
+       1
+      ],
+      "repeat": "repeat",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.28
+       },
+       {
+        "colorHex": "@accent3",
+        "at": 0.55
+       },
+       {
+        "colorHex": "@accent4",
+        "at": 0.78
+       },
+       {
+        "colorHex": "@accent1",
+        "at": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "260A1996-7F6C-59C4-B92A-FEF45E22FBE2",
+     "time": 4.0,
+     "transitionDuration": 4.0,
+     "easing": "linear",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       -0.4,
+       0
+      ],
+      "end": [
+       0.1,
+       1
+      ],
+      "repeat": "repeat",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.28
+       },
+       {
+        "colorHex": "@accent3",
+        "at": 0.55
+       },
+       {
+        "colorHex": "@accent4",
+        "at": 0.78
+       },
+       {
+        "colorHex": "@accent1",
+        "at": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "9C204267-039E-533C-9695-6DB828278C6F",
+     "time": 8.0,
+     "transitionDuration": 4.0,
+     "easing": "linear",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       -0.9,
+       0
+      ],
+      "end": [
+       -0.4,
+       1
+      ],
+      "repeat": "repeat",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.28
+       },
+       {
+        "colorHex": "@accent3",
+        "at": 0.55
+       },
+       {
+        "colorHex": "@accent4",
+        "at": 0.78
+       },
+       {
+        "colorHex": "@accent1",
+        "at": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "1F25F841-F1B2-52D7-90A3-399E7F95D842",
+     "time": 12.0,
+     "transitionDuration": 4.0,
+     "easing": "linear",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       -1.4,
+       0
+      ],
+      "end": [
+       -0.9,
+       1
+      ],
+      "repeat": "repeat",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.28
+       },
+       {
+        "colorHex": "@accent3",
+        "at": 0.55
+       },
+       {
+        "colorHex": "@accent4",
+        "at": 0.78
+       },
+       {
+        "colorHex": "@accent1",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ],
+   "duration": 12
+  },
+  {
+   "id": "AF6E80B6-F838-5EF7-8B07-5DDA1E1F8B81",
+   "name": "Ring",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "BAD3C05F-95BD-583D-97D4-4D28E5383671",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 220,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     }
+    },
+    {
+     "id": "CC9F0B8B-0D5B-5F58-BA42-9A9255E8C54C",
+     "time": 6,
+     "transitionDuration": 6,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 300,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     }
+    },
+    {
+     "id": "3687961B-9CF4-5CEB-A07D-2FA635BE4735",
+     "time": 12,
+     "transitionDuration": 6,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 220,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     }
+    },
+    {
+     "id": "4776C734-7D62-5004-8A15-93BD11AEBE0A",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": 0
+    },
+    {
+     "id": "A445F014-402F-5D20-9BDB-A7B90A0FC0A8",
+     "time": 12,
+     "transitionDuration": 12,
+     "rotation": 180,
+     "easing": "linear"
+    }
+   ],
+   "duration": 12,
+   "resourceID": "3EA1943F-4779-5EC0-B1E9-97055FDFBE7F",
+   "fadeIn": 0.8,
+   "fadeOut": 0.8
+  },
+  {
+   "id": "BBDFEF3E-0A1F-5104-AB0A-25BEA615DA90",
+   "name": "Caption \u00b7 colour that moves",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.8,
+   "keyframes": [],
+   "duration": 3.0,
+   "captionText": "colour that moves",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "F8CD6B46-1CB3-576A-959B-0D41AAAF86C9",
+   "name": "Caption \u00b7 repeat \u00b7 mirror \u00b7 clam",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.4,
+   "keyframes": [],
+   "duration": 3.0,
+   "captionText": "repeat \u00b7 mirror \u00b7 clamp",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "7E6D46F4-63B0-5B71-851F-D4B5578DB5FB",
+   "name": "Caption \u00b7 a gradient is a keyfra",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 8.0,
+   "keyframes": [],
+   "duration": 3.2,
+   "captionText": "a gradient is a keyframe too",
+   "fadeOut": 0.35,
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  }
+ ]
+}

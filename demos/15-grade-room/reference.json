@@ -1,0 +1,291 @@
+{
+ "id": "B0332523-9BB5-E93D-DBAE-A65599390262",
+ "name": "15 Grade Room",
+ "formatVersion": 2,
+ "minReaderVersion": 14,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 15,
+ "videoDuration": 15,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 54,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF9B54"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4FD1C5"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "31F65645-FFC8-223B-3167-25A6D9678241",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Shot",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "782EC5DF-5FAD-187C-0F45-CF2A5717A8F6",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Full",
+   "addedAt": 0,
+   "captionText": "Straight out of the recorder",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "8A21FD48-7C6E-0AE1-7A4A-615F80C72A86",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Mono",
+   "addedAt": 0,
+   "captionText": "Mono \u2014 saturation to zero",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "89E8E0C8-C8F7-1448-278B-4E3140A52D99",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Sepia",
+   "addedAt": 0,
+   "captionText": "Sepia \u2014 a warm gel over the grey",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  },
+  {
+   "id": "BCE0EBCE-51EB-1687-4445-0A5C1A7B32D5",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Duo",
+   "addedAt": 0,
+   "captionText": "Duotone \u2014 same move, cooler gel",
+   "captionStyle": {
+    "reveal": {
+     "by": "word",
+     "mode": "fade"
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "AC35951C-7FF9-1CE6-2D67-15801DCCF439",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 15,
+   "keyframes": [
+    {
+     "id": "5D761BCF-321E-FAF0-8152-1768364D9B84",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "colorHex": "@canvas"
+    }
+   ]
+  },
+  {
+   "id": "75C443F1-7DDC-0185-646B-C2AEC1686F83",
+   "name": "Shot",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 15,
+   "resourceID": "31F65645-FFC8-223B-3167-25A6D9678241",
+   "fadeIn": 0.6,
+   "fadeOut": 0.8,
+   "adjustments": {
+    "tintHex": "@hot"
+   },
+   "keyframes": [
+    {
+     "id": "8FD10F67-707E-C689-C257-581E09AA2012",
+     "time": 0.0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "height": 620,
+      "anchor": "center",
+      "offset": [
+       0,
+       -58
+      ]
+     },
+     "saturation": 1.0,
+     "contrast": 1.0,
+     "brightness": 0.0,
+     "tintAmount": 0.0
+    },
+    {
+     "id": "B3677E6A-7373-3EDD-1D4A-2717BAAC0948",
+     "time": 3.4,
+     "transitionDuration": 1.2,
+     "saturation": 1.0,
+     "tintAmount": 0.0
+    },
+    {
+     "id": "2E61F93E-CC03-3CB7-FCF8-76A01CF0951F",
+     "time": 5.6,
+     "transitionDuration": 1.6,
+     "saturation": 0.0,
+     "contrast": 1.08,
+     "tintAmount": 0.0
+    },
+    {
+     "id": "6853F8F1-5A0C-9972-35D1-E0E4183B7126",
+     "time": 9.0,
+     "transitionDuration": 1.6,
+     "saturation": 0.0,
+     "tintAmount": 0.45
+    },
+    {
+     "id": "2BB7EA3D-12E0-710C-21FE-CC46E58CC91A",
+     "time": 12.6,
+     "transitionDuration": 1.8,
+     "saturation": 0.0,
+     "tintAmount": 0.0,
+     "contrast": 1.0,
+     "brightness": 0.04
+    }
+   ]
+  },
+  {
+   "id": "D4854B4D-203B-C961-D99F-4A99FAC687B7",
+   "name": "Label 1",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.7,
+   "duration": 3.2,
+   "resourceID": "782EC5DF-5FAD-187C-0F45-CF2A5717A8F6",
+   "fadeIn": 0.35,
+   "fadeOut": 0.45,
+   "keyframes": [
+    {
+     "id": "09DE7BEB-3508-6C4B-4236-7240473F377C",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "zoom": 46,
+     "horizontalShift": 96,
+     "verticalShift": 792
+    }
+   ]
+  },
+  {
+   "id": "B22AE8C2-DC23-B9F8-D2FD-2885213EC5EA",
+   "name": "Label 2",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.2,
+   "duration": 2.8,
+   "resourceID": "8A21FD48-7C6E-0AE1-7A4A-615F80C72A86",
+   "fadeIn": 0.35,
+   "fadeOut": 0.45,
+   "keyframes": [
+    {
+     "id": "7F4327A3-DE5B-472B-AB17-A430A0DC8810",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "zoom": 46,
+     "horizontalShift": 96,
+     "verticalShift": 792
+    }
+   ]
+  },
+  {
+   "id": "99E48F94-4139-E455-2474-B0F6E839E725",
+   "name": "Label 3",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.6,
+   "duration": 3.0,
+   "resourceID": "89E8E0C8-C8F7-1448-278B-4E3140A52D99",
+   "fadeIn": 0.35,
+   "fadeOut": 0.45,
+   "keyframes": [
+    {
+     "id": "FD50D0E3-9F4C-4DAE-A82B-766F9E53B2E9",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "zoom": 46,
+     "horizontalShift": 96,
+     "verticalShift": 792
+    }
+   ]
+  },
+  {
+   "id": "CB611CE7-4C11-7C9F-09ED-FC4AACB87900",
+   "name": "Label 4",
+   "sortIndex": 5,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 11.2,
+   "duration": 3.2,
+   "resourceID": "BCE0EBCE-51EB-1687-4445-0A5C1A7B32D5",
+   "fadeIn": 0.35,
+   "fadeOut": 0.45,
+   "keyframes": [
+    {
+     "id": "7FC5D278-D925-4278-B780-32B38A0C686F",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "zoom": 46,
+     "horizontalShift": 96,
+     "verticalShift": 792
+    }
+   ]
+  }
+ ]
+}

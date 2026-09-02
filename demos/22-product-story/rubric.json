@@ -1,0 +1,51 @@
+{
+ "template": "22 Product Story",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 24.0,
+ "kinds": {
+  "background": 1,
+  "video": 3,
+  "caption": 3,
+  "image": 1,
+  "audio": 1
+ },
+ "features": {
+  "chromaKey": true,
+  "lut": true,
+  "chapters": 4,
+  "markers": 4,
+  "audioEffects": true,
+  "composition": true,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": true,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": true,
+  "motionBlur": false,
+  "grade": true,
+  "placement": true
+ },
+ "phrases": [
+  "One title card.\nPlaced three times.",
+  "Footage on green, keyed here.",
+  "A look from a .cube, on top of the grade.",
+  "One document. Every host renders it the same."
+ ],
+ "media": [
+  "green_lumen.mp4",
+  "look_warm.cube",
+  "ui_lumen_1.png"
+ ]
+}

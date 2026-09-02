@@ -1,0 +1,49 @@
+{
+ "template": "06 GIF Board",
+ "canvas": [
+  1920,
+  1080
+ ],
+ "duration": 0,
+ "kinds": {
+  "background": 1,
+  "image": 12,
+  "caption": 4
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": true,
+  "gradient": false,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "A GIF is a grid of frames.",
+  "Import bakes it into a sheet\u2026",
+  "\u2026and then it is just an image:\nit flies, spins and fades.",
+  "Twelve loops, one draw call each."
+ ],
+ "media": [
+  "sheet_confetti.png",
+  "sheet_pulse.png",
+  "sheet_wave.png"
+ ]
+}

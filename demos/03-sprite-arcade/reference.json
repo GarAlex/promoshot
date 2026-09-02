@@ -1,0 +1,711 @@
+{
+ "id": "D64CEFAB-85B9-5DBC-80E3-3F2F8489CB9C",
+ "name": "03 Sprite Arcade",
+ "createdAt": 0,
+ "state": "recorded",
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "formatVersion": 10,
+ "minReaderVersion": 10,
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 52,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 14,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleVerticalMargin": 880,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0B0F22"
+   },
+   {
+    "name": "accent1",
+    "colorHex": "131A3E"
+   },
+   {
+    "name": "accent2",
+    "colorHex": "2B1B54"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "backgroundColorHex": "@canvas"
+ },
+ "resources": [
+  {
+   "id": "7DE9EBE3-4499-5E94-B326-510DA0156E2F",
+   "kind": "image",
+   "filename": "sprite_rocket.png",
+   "displayName": "Rocket",
+   "addedAt": 0,
+   "pixelWidth": 288,
+   "pixelHeight": 48,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 6,
+    "rows": 1,
+    "fps": 14
+   },
+   "sampling": "nearest"
+  },
+  {
+   "id": "8D995460-0053-5290-8592-209E32AD0454",
+   "kind": "image",
+   "filename": "sprite_coin.png",
+   "displayName": "Coin",
+   "addedAt": 0,
+   "pixelWidth": 320,
+   "pixelHeight": 40,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 8,
+    "rows": 1,
+    "fps": 16
+   },
+   "sampling": "nearest"
+  },
+  {
+   "id": "7353F538-B0D6-5E90-A298-CB14BF5649A0",
+   "kind": "image",
+   "filename": "sprite_bird.png",
+   "displayName": "Bird",
+   "addedAt": 0,
+   "pixelWidth": 288,
+   "pixelHeight": 48,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 6,
+    "rows": 1,
+    "fps": 12
+   },
+   "sampling": "nearest"
+  },
+  {
+   "id": "0787B217-C490-5EF5-9E97-25169A89E02B",
+   "kind": "image",
+   "filename": "sprite_spark.png",
+   "displayName": "Spark",
+   "addedAt": 0,
+   "pixelWidth": 448,
+   "pixelHeight": 56,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "sprite": {
+    "columns": 8,
+    "rows": 1,
+    "fps": 18
+   },
+   "sampling": "nearest"
+  },
+  {
+   "id": "DB2B6E46-95D6-5D32-A961-9620370B5F71",
+   "kind": "path",
+   "filename": "",
+   "displayName": "Arc",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "path": {
+    "start": [
+     0,
+     0
+    ],
+    "end": [
+     200,
+     0
+    ],
+    "controls": [
+     [
+      70,
+      -30
+     ],
+     [
+      130,
+      -30
+     ]
+    ]
+   }
+  },
+  {
+   "id": "6CD4767F-3E23-5A20-9897-83B119182019",
+   "kind": "path",
+   "filename": "",
+   "displayName": "Dip",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "path": {
+    "start": [
+     0,
+     0
+    ],
+    "end": [
+     200,
+     0
+    ],
+    "controls": [
+     [
+      80,
+      34
+     ]
+    ]
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "72B10515-469D-504B-9757-91D0CE4BFAC3",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "keyframes": [
+    {
+     "id": "54447B18-9381-57E4-ADF8-F14E034BFA37",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0,
+       0.15
+      ],
+      "end": [
+       0,
+       0.85
+      ],
+      "repeat": "mirror",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.5
+       },
+       {
+        "colorHex": "@canvas",
+        "at": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "7FEE895F-8AE9-5096-8E9C-381071E9BBD9",
+     "time": 6.5,
+     "transitionDuration": 6.5,
+     "easing": "linear",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0,
+       -0.55
+      ],
+      "end": [
+       0,
+       0.15
+      ],
+      "repeat": "mirror",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.5
+       },
+       {
+        "colorHex": "@canvas",
+        "at": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "F22E266A-95A1-543A-8B06-3670CF970479",
+     "time": 13.0,
+     "transitionDuration": 6.5,
+     "easing": "linear",
+     "colorHex": "@canvas",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0,
+       -1.25
+      ],
+      "end": [
+       0,
+       -0.55
+      ],
+      "repeat": "mirror",
+      "stops": [
+       {
+        "colorHex": "@accent1",
+        "at": 0
+       },
+       {
+        "colorHex": "@accent2",
+        "at": 0.5
+       },
+       {
+        "colorHex": "@canvas",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ],
+   "duration": 13.5
+  },
+  {
+   "id": "6C8FD303-35CB-5D7B-8984-0610B81BB8E8",
+   "name": "Rocket 1",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0.6,
+   "keyframes": [
+    {
+     "id": "06B241D6-E99F-5682-9BBE-B2F326528E33",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 288,
+      "anchor": "left",
+      "offset": [
+       90,
+       -150
+      ]
+     }
+    },
+    {
+     "id": "54516B86-3C43-5BAC-A1B7-D2BC165D7860",
+     "time": 6.4,
+     "transitionDuration": 6.4,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 288,
+      "anchor": "right",
+      "offset": [
+       -90,
+       -40
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "DB2B6E46-95D6-5D32-A961-9620370B5F71"
+     }
+    },
+    {
+     "id": "3D283F56-AA96-5A4A-A872-242B71A1B1C5",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": 0
+    },
+    {
+     "id": "859847F2-61EC-5B93-95FA-C79F60765788",
+     "time": 6.4,
+     "transitionDuration": 6.4,
+     "rotation": 420,
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 6.4,
+   "resourceID": "7DE9EBE3-4499-5E94-B326-510DA0156E2F",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5,
+   "motionBlur": {
+    "shutter": 0.8
+   }
+  },
+  {
+   "id": "58CCF689-68BC-5BCE-B563-6F180D992F84",
+   "name": "Bird 1",
+   "sortIndex": 2,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 2.2,
+   "keyframes": [
+    {
+     "id": "A771F9D1-DF96-53DC-A40C-B784F2F0ABFC",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 202,
+      "anchor": "right",
+      "offset": [
+       -120,
+       -200
+      ]
+     }
+    },
+    {
+     "id": "EC7DBB68-FBB4-55DF-9D70-00E49135AC0F",
+     "time": 6.8,
+     "transitionDuration": 6.8,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 202,
+      "anchor": "left",
+      "offset": [
+       120,
+       30
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "DB2B6E46-95D6-5D32-A961-9620370B5F71"
+     }
+    },
+    {
+     "id": "C4BAFD25-9F23-57AF-9049-38DF2E02A423",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": 0
+    },
+    {
+     "id": "CAB88A3E-40EA-5D3E-8004-358D6B639ED5",
+     "time": 6.8,
+     "transitionDuration": 6.8,
+     "rotation": -300,
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 6.8,
+   "resourceID": "7353F538-B0D6-5E90-A298-CB14BF5649A0",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "A23E98AC-DE82-5B77-986E-1EF0967A2762",
+   "name": "Coin 1",
+   "sortIndex": 3,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 3.4,
+   "keyframes": [
+    {
+     "id": "B63613BF-A60B-5EE2-988C-ADA270EBDE02",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 160,
+      "anchor": "bottomLeft",
+      "offset": [
+       120,
+       -140
+      ]
+     }
+    },
+    {
+     "id": "FA2DF474-EB91-5D0B-95A5-DE3E6CBE5D97",
+     "time": 5.2,
+     "transitionDuration": 5.2,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 160,
+      "anchor": "topRight",
+      "offset": [
+       -120,
+       200
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "6CD4767F-3E23-5A20-9897-83B119182019"
+     }
+    }
+   ],
+   "duration": 5.2,
+   "resourceID": "8D995460-0053-5290-8592-209E32AD0454",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "759B7C7A-3E99-5381-AF94-C2A4F7B56CF0",
+   "name": "Spark 1",
+   "sortIndex": 4,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 4.6,
+   "keyframes": [
+    {
+     "id": "0D384167-E2C2-5C5A-8B02-927EE1D6F36A",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 190,
+      "anchor": "center",
+      "offset": [
+       -260,
+       -120
+      ]
+     }
+    },
+    {
+     "id": "20687675-A674-5B6C-8F31-D47A022A2AB8",
+     "time": 2.0,
+     "transitionDuration": 2.0,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 190,
+      "anchor": "center",
+      "offset": [
+       260,
+       60
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "6CD4767F-3E23-5A20-9897-83B119182019"
+     }
+    },
+    {
+     "id": "807931A8-8FAA-59EB-9EF6-4D59E47529AB",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": 0
+    },
+    {
+     "id": "EE794C53-8FEC-5F4E-9025-288622E58EBF",
+     "time": 2.0,
+     "transitionDuration": 2.0,
+     "rotation": 540,
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 2.0,
+   "resourceID": "0787B217-C490-5EF5-9E97-25169A89E02B",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "8B486221-789F-5F25-87FE-E0768BF57FB4",
+   "name": "Coin 2",
+   "sortIndex": 5,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 5.0,
+   "keyframes": [
+    {
+     "id": "DF23A74C-3E68-5C5C-A627-9AF07EC677B5",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 128,
+      "anchor": "bottomRight",
+      "offset": [
+       -150,
+       -110
+      ]
+     }
+    },
+    {
+     "id": "F916D216-E79C-5EF4-B393-3F35B5AFDBFC",
+     "time": 5.4,
+     "transitionDuration": 5.4,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 128,
+      "anchor": "top",
+      "offset": [
+       80,
+       190
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "6CD4767F-3E23-5A20-9897-83B119182019"
+     }
+    }
+   ],
+   "duration": 5.4,
+   "resourceID": "8D995460-0053-5290-8592-209E32AD0454",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "ED4BA463-8F07-5E6F-8666-986198BCC559",
+   "name": "Rocket 2",
+   "sortIndex": 6,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 7.4,
+   "keyframes": [
+    {
+     "id": "723F9BAC-0AA7-56B9-842F-769A16EE1B84",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 317,
+      "anchor": "bottomLeft",
+      "offset": [
+       140,
+       -90
+      ]
+     }
+    },
+    {
+     "id": "7D17FF09-8A67-57A0-B19B-5FFD6336D8A0",
+     "time": 5.4,
+     "transitionDuration": 5.4,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 317,
+      "anchor": "topRight",
+      "offset": [
+       -140,
+       150
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "DB2B6E46-95D6-5D32-A961-9620370B5F71"
+     }
+    },
+    {
+     "id": "D20FBE10-7E4B-58F7-8E27-8F927CA84B6C",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": 0
+    },
+    {
+     "id": "E4D517E7-DCDF-53F2-981E-A4230E28EB3A",
+     "time": 5.4,
+     "transitionDuration": 5.4,
+     "rotation": 300,
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 5.4,
+   "resourceID": "7DE9EBE3-4499-5E94-B326-510DA0156E2F",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5,
+   "motionBlur": {
+    "shutter": 0.8
+   }
+  },
+  {
+   "id": "443B6E56-D2DA-5D0A-B9BC-9F94B54D3879",
+   "name": "Bird 2",
+   "sortIndex": 7,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 8.2,
+   "keyframes": [
+    {
+     "id": "36D4C206-10C5-5167-B8B0-E560BBBC595F",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 173,
+      "anchor": "topRight",
+      "offset": [
+       -110,
+       150
+      ]
+     }
+    },
+    {
+     "id": "9604396A-B1A6-5F0C-982E-FD767EE67B6E",
+     "time": 4.6,
+     "transitionDuration": 4.6,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 173,
+      "anchor": "bottomLeft",
+      "offset": [
+       110,
+       -140
+      ]
+     },
+     "motionPath": {
+      "pathResourceID": "DB2B6E46-95D6-5D32-A961-9620370B5F71"
+     }
+    },
+    {
+     "id": "21204D9B-28F8-5577-A653-9F672223FD41",
+     "time": 0,
+     "transitionDuration": 0,
+     "rotation": 0
+    },
+    {
+     "id": "4E89C65E-656E-5D18-8B64-3EC4F07810F9",
+     "time": 4.6,
+     "transitionDuration": 4.6,
+     "rotation": -240,
+     "easing": "easeInOut"
+    }
+   ],
+   "duration": 4.6,
+   "resourceID": "7353F538-B0D6-5E90-A298-CB14BF5649A0",
+   "fadeIn": 0.5,
+   "fadeOut": 0.5
+  },
+  {
+   "id": "E868A336-3E1B-5868-9393-DE6CACDAC414",
+   "name": "Caption \u00b7 Sprites are just image",
+   "sortIndex": 8,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.5,
+   "keyframes": [],
+   "duration": 2.6,
+   "captionText": "Sprites are just images.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "716C63A9-AFD2-533D-B9E2-097BF58D2412",
+   "name": "Caption \u00b7 They move, spin and fa",
+   "sortIndex": 9,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 3.5,
+   "keyframes": [],
+   "duration": 2.8,
+   "captionText": "They move, spin and fade\nlike anything else.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "9900653B-260C-580D-A427-C3A0E1A72D5D",
+   "name": "Caption \u00b7 The sheet animates whi",
+   "sortIndex": 10,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 6.9,
+   "keyframes": [],
+   "duration": 2.8,
+   "captionText": "The sheet animates while\nthe layer flies.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  },
+  {
+   "id": "C59C03B7-C982-5FFE-85FB-2C45F8E11408",
+   "name": "Caption \u00b7 One image. Two clocks.",
+   "sortIndex": 11,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 10.3,
+   "keyframes": [],
+   "duration": 2.6,
+   "captionText": "One image. Two clocks.",
+   "fadeIn": 0.35,
+   "fadeOut": 0.35
+  }
+ ]
+}

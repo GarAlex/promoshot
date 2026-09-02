@@ -1,0 +1,469 @@
+{
+ "id": "EAB730B3-2E43-A7BC-1A30-FF81B6F04CBE",
+ "name": "21 Chapters & Levels",
+ "formatVersion": 2,
+ "minReaderVersion": 21,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 20.0,
+ "videoDuration": 20.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 54,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF9B54"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4FD1C5"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   },
+   {
+    "name": "green",
+    "colorHex": "00FF00"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "56A6AAF1-94E7-52D4-93F3-1D461C6AEA10",
+   "kind": "video",
+   "filename": "bbb_test.mp4",
+   "displayName": "Meadow",
+   "addedAt": 0,
+   "duration": 10.0,
+   "trimStart": 0,
+   "trimEnd": 10.0,
+   "videoNaturalWidth": 1920,
+   "videoNaturalHeight": 1080,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "volume": 0.35,
+   "looped": true
+  },
+  {
+   "id": "C25E68F4-0D9A-5C73-8BA6-09C055F3AC80",
+   "kind": "audio",
+   "filename": "narration-C25E68F4-0D9A-5C73-8BA6-09C055F3AC80.mp3",
+   "displayName": "VO 1",
+   "addedAt": 0,
+   "speech": {
+    "text": "Some footage tells the story on its own.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "8c380f5800cf2f40ff41774b88eb02bcb078892c5352df8ce039d7482c12f26a"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 2.712,
+   "audioEffects": [
+    {
+     "kind": "normalize",
+     "targetLufs": -16
+    },
+    {
+     "kind": "compressor",
+     "thresholdDb": -20,
+     "ratio": 3
+    }
+   ]
+  },
+  {
+   "id": "221A257A-EC80-51CB-ADBE-28460E4BB2F7",
+   "kind": "audio",
+   "filename": "narration-221A257A-EC80-51CB-ADBE-28460E4BB2F7.mp3",
+   "displayName": "VO 2",
+   "addedAt": 0,
+   "speech": {
+    "text": "The camera never moved \u2014 the viewport did.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "70bda1b65cb22e84e58b1da54ccc4e8a2e53b4ed0c5bef11d6daefe46f4b45f4"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 3.12,
+   "audioEffects": [
+    {
+     "kind": "normalize",
+     "targetLufs": -16
+    },
+    {
+     "kind": "compressor",
+     "thresholdDb": -20,
+     "ratio": 3
+    }
+   ]
+  },
+  {
+   "id": "DCBBA85B-A19E-56E7-B523-0D2E36B32E8A",
+   "kind": "audio",
+   "filename": "narration-DCBBA85B-A19E-56E7-B523-0D2E36B32E8A.mp3",
+   "displayName": "VO 3",
+   "addedAt": 0,
+   "speech": {
+    "text": "Narration is written here, not recorded.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "d6fbcaed2d2b73a8cfa791c2ab3f12a34dbdb0be4e1deb7994db96bfbf93e4bc"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 3.264,
+   "audioEffects": [
+    {
+     "kind": "normalize",
+     "targetLufs": -16
+    },
+    {
+     "kind": "compressor",
+     "thresholdDb": -20,
+     "ratio": 3
+    }
+   ]
+  },
+  {
+   "id": "23D69E5E-1F13-5E5E-B92F-A11338B86C31",
+   "kind": "audio",
+   "filename": "narration-23D69E5E-1F13-5E5E-B92F-A11338B86C31.mp3",
+   "displayName": "VO 4",
+   "addedAt": 0,
+   "speech": {
+    "text": "Add a voice key and it speaks.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "200914a30f173d5cea4f37a608e81694d3200dbd1475a13b558a9f2501ffa864"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 3.312,
+   "audioEffects": [
+    {
+     "kind": "normalize",
+     "targetLufs": -16
+    },
+    {
+     "kind": "compressor",
+     "thresholdDb": -20,
+     "ratio": 3
+    }
+   ]
+  },
+  {
+   "id": "84448869-5E91-5EF8-86D2-E5416C406A0B",
+   "kind": "audio",
+   "filename": "narration-84448869-5E91-5EF8-86D2-E5416C406A0B.mp3",
+   "displayName": "VO 5",
+   "addedAt": 0,
+   "speech": {
+    "text": "Everything else already renders.",
+    "provider": "openai",
+    "voiceID": "alloy",
+    "renderedHash": "b3e5cd08496629f20e89868eec9b24218fb6bff15391e785f9f582e73d90704a"
+   },
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 4.368,
+   "audioEffects": [
+    {
+     "kind": "normalize",
+     "targetLufs": -16
+    },
+    {
+     "kind": "compressor",
+     "thresholdDb": -20,
+     "ratio": 3
+    }
+   ]
+  }
+ ],
+ "layers": [
+  {
+   "id": "AC35951C-7FF9-1CE6-2D67-15801DCCF439",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 20.0,
+   "keyframes": []
+  },
+  {
+   "id": "9D9F472B-57E4-7E4C-A6FC-168237A50A6D",
+   "name": "Meadow",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 20.0,
+   "resourceID": "56A6AAF1-94E7-52D4-93F3-1D461C6AEA10",
+   "fadeIn": 0.4,
+   "fadeOut": 0.6,
+   "keyframes": [
+    {
+     "id": "2BECD878-E0B9-7C13-7834-87B040D7C098",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "mode": "fill"
+     }
+    }
+   ]
+  },
+  {
+   "id": "CB9BD03C-C2CF-A4A3-8CAB-3C51D5A60955",
+   "name": "VO \u00b7 Some footage tells",
+   "sortIndex": 2,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 0.8,
+   "duration": 2.712,
+   "resourceID": "C25E68F4-0D9A-5C73-8BA6-09C055F3AC80",
+   "audioFocus": true,
+   "keyframes": []
+  },
+  {
+   "id": "6510ECC9-58F2-FDFC-4885-9C4557DB2361",
+   "name": "Caption \u00b7 Some footage tells the",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.8,
+   "duration": 3.162,
+   "captionText": "Some footage tells the story on its own.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   },
+   "fadeIn": 0.25,
+   "fadeOut": 0.25,
+   "keyframes": []
+  },
+  {
+   "id": "34F4CFE0-E9F9-3224-757F-ADAE229930BF",
+   "name": "VO \u00b7 The camera never m",
+   "sortIndex": 4,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 4.062,
+   "duration": 3.12,
+   "resourceID": "221A257A-EC80-51CB-ADBE-28460E4BB2F7",
+   "audioFocus": true,
+   "keyframes": []
+  },
+  {
+   "id": "0E838844-620C-470A-57AB-3214916EBF03",
+   "name": "Caption \u00b7 The camera never moved",
+   "sortIndex": 5,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.062,
+   "duration": 3.57,
+   "captionText": "The camera never moved \u2014 the viewport did.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   },
+   "fadeIn": 0.25,
+   "fadeOut": 0.25,
+   "keyframes": []
+  },
+  {
+   "id": "2F9B8F1C-B9C9-F250-969C-22AC3EC6A0A2",
+   "name": "VO \u00b7 Narration is writt",
+   "sortIndex": 6,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 7.732,
+   "duration": 3.264,
+   "resourceID": "DCBBA85B-A19E-56E7-B523-0D2E36B32E8A",
+   "audioFocus": true,
+   "keyframes": []
+  },
+  {
+   "id": "4B79F83B-9A7C-8CBA-17AE-F0D00F814CD6",
+   "name": "Caption \u00b7 Narration is written h",
+   "sortIndex": 7,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.732,
+   "duration": 3.714,
+   "captionText": "Narration is written here, not recorded.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   },
+   "fadeIn": 0.25,
+   "fadeOut": 0.25,
+   "keyframes": []
+  },
+  {
+   "id": "B180A0E9-CAD4-21A2-52EE-19960DA895AE",
+   "name": "VO \u00b7 Add a voice key an",
+   "sortIndex": 8,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 11.546,
+   "duration": 3.312,
+   "resourceID": "23D69E5E-1F13-5E5E-B92F-A11338B86C31",
+   "audioFocus": true,
+   "keyframes": []
+  },
+  {
+   "id": "7042E3C0-FD11-673C-3818-DB0E37791B2E",
+   "name": "Caption \u00b7 Add a voice key and it",
+   "sortIndex": 9,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 11.546,
+   "duration": 3.762,
+   "captionText": "Add a voice key and it speaks.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   },
+   "fadeIn": 0.25,
+   "fadeOut": 0.25,
+   "keyframes": []
+  },
+  {
+   "id": "0E4AC332-9DF4-2B6F-E900-13E24E52C9DE",
+   "name": "VO \u00b7 Everything else al",
+   "sortIndex": 10,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 15.408,
+   "duration": 4.368,
+   "resourceID": "84448869-5E91-5EF8-86D2-E5416C406A0B",
+   "audioFocus": true,
+   "keyframes": []
+  },
+  {
+   "id": "6AEDD19A-3058-D469-4FC9-EB74AE021DFC",
+   "name": "Caption \u00b7 Everything else alread",
+   "sortIndex": 11,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 15.408,
+   "duration": 4.818,
+   "captionText": "Everything else already renders.",
+   "captionStyle": {
+    "alignment": "center",
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -56
+     ]
+    },
+    "strokeColorHex": "0A0A0A",
+    "strokeWidth": 4
+   },
+   "fadeIn": 0.25,
+   "fadeOut": 0.25,
+   "keyframes": []
+  }
+ ],
+ "markers": [
+  {
+   "id": "51D329A0-76C9-3B76-5C90-79364C03D1B1",
+   "time": 0.0,
+   "name": "Open",
+   "kind": "chapter"
+  },
+  {
+   "id": "EFE850B2-613B-CE24-381D-6CDE8504242D",
+   "time": 0.8,
+   "name": "Some footage tells the story",
+   "kind": "chapter"
+  },
+  {
+   "id": "54DF7EC1-8BFF-DC77-C5D0-4C4AE69D1E54",
+   "time": 4.06,
+   "name": "The camera never moved \u2014 the",
+   "kind": "chapter"
+  },
+  {
+   "id": "B83DF04C-CE4B-B32C-E081-AF4D7EA113BE",
+   "time": 7.73,
+   "name": "Narration is written here, n",
+   "kind": "chapter"
+  },
+  {
+   "id": "1EEF7A81-E277-F20E-F68A-3691237FF192",
+   "time": 11.55,
+   "name": "Add a voice key and it speak",
+   "kind": "chapter"
+  },
+  {
+   "id": "6F70DE91-5FCF-C638-A0A3-FB79CEFA632E",
+   "time": 15.41,
+   "name": "Everything else already rend",
+   "kind": "chapter"
+  },
+  {
+   "id": "5A4E5D0A-A95D-AF00-57B7-98D31A81A03F",
+   "time": 19.0,
+   "name": "End card",
+   "kind": "marker"
+  }
+ ]
+}

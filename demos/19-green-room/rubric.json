@@ -1,0 +1,45 @@
+{
+ "template": "19 Green Room",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 12.0,
+ "kinds": {
+  "background": 1,
+  "drawing": 1,
+  "video": 1,
+  "caption": 1
+ },
+ "features": {
+  "chromaKey": true,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": true,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "Keyed in the compositor.\nThe plate is gone on every host."
+ ],
+ "media": [
+  "green_lumen.mp4"
+ ]
+}

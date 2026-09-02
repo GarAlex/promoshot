@@ -1,0 +1,49 @@
+{
+ "template": "21 Chapters & Levels",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 20.0,
+ "kinds": {
+  "background": 1,
+  "video": 1,
+  "audio": 5,
+  "caption": 5
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 6,
+  "markers": 7,
+  "audioEffects": true,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": false,
+  "reveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": true,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "Some footage tells the story on its own.",
+  "The camera never moved \u2014 the viewport did.",
+  "Narration is written here, not recorded.",
+  "Add a voice key and it speaks.",
+  "Everything else already renders."
+ ],
+ "media": [
+  "bbb_test.mp4"
+ ]
+}

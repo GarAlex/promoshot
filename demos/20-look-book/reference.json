@@ -1,0 +1,327 @@
+{
+ "id": "5913AF20-AD57-F123-32BF-AC615661B1CE",
+ "name": "20 Look Book",
+ "formatVersion": 2,
+ "minReaderVersion": 23,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 12.0,
+ "videoDuration": 12.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 54,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "hot",
+    "colorHex": "FF9B54"
+   },
+   {
+    "name": "cool",
+    "colorHex": "4FD1C5"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   },
+   {
+    "name": "green",
+    "colorHex": "00FF00"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Lumen",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "A2119421-B131-F9F0-0252-A28ACAB2BC67",
+   "kind": "lut",
+   "filename": "look_warm.cube",
+   "displayName": "Look \u00b7 Warm",
+   "addedAt": 0,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "B3E29F9F-5455-638A-C710-BA0857B93A9F",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 warm",
+   "addedAt": 0,
+   "captionText": "Warm",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      -470,
+      -60
+     ]
+    }
+   }
+  },
+  {
+   "id": "E58B3232-FFF9-A54C-2F12-3B5A0629951B",
+   "kind": "lut",
+   "filename": "look_cool.cube",
+   "displayName": "Look \u00b7 Cool",
+   "addedAt": 0,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "41131430-27B2-E460-4ABC-DDB57D7E9AEE",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 cool",
+   "addedAt": 0,
+   "captionText": "Cool",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -60
+     ]
+    }
+   }
+  },
+  {
+   "id": "EC538E70-3462-0FA5-5D6A-0CE1ADB71C3A",
+   "kind": "lut",
+   "filename": "look_mono.cube",
+   "displayName": "Look \u00b7 Mono",
+   "addedAt": 0,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "FAE1498A-25CF-B84D-BE04-982EA0A56CFF",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 mono",
+   "addedAt": 0,
+   "captionText": "Mono",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      470,
+      -60
+     ]
+    }
+   }
+  },
+  {
+   "id": "9969F276-39E6-E7FC-D7F4-898A0A4A648B",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 lookbook",
+   "addedAt": 0,
+   "captionText": "One shot. Three looks from .cube files.",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 56,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      70
+     ]
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "AC35951C-7FF9-1CE6-2D67-15801DCCF439",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 12,
+   "keyframes": []
+  },
+  {
+   "id": "ED742CAE-2ACC-B415-EF60-E35BA6197A4A",
+   "name": "Shot \u00b7 Warm",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0.3,
+   "duration": 11.7,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "fadeIn": 0.4,
+   "adjustments": {
+    "lutResourceID": "A2119421-B131-F9F0-0252-A28ACAB2BC67",
+    "lutAmount": 1.0
+   },
+   "keyframes": [
+    {
+     "id": "57194EFA-9ED5-918B-21D0-34BD5D8C9B90",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "width": 440,
+      "anchor": "left",
+      "offset": [
+       20,
+       -30
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "E3E1A4EC-1C18-58AD-D6E2-917C1CBBD756",
+   "name": "Label \u00b7 Warm",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.0,
+   "duration": 10.5,
+   "resourceID": "B3E29F9F-5455-638A-C710-BA0857B93A9F",
+   "fadeIn": 0.3,
+   "fadeOut": 0.3,
+   "keyframes": []
+  },
+  {
+   "id": "B08E1A1E-AB34-45EB-ADD0-1E525706E342",
+   "name": "Shot \u00b7 Cool",
+   "sortIndex": 3,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0.8999999999999999,
+   "duration": 11.1,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "fadeIn": 0.4,
+   "adjustments": {
+    "lutResourceID": "E58B3232-FFF9-A54C-2F12-3B5A0629951B",
+    "lutAmount": 1.0
+   },
+   "keyframes": [
+    {
+     "id": "5396579F-68C7-8431-9424-0526BAD01CEC",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "width": 440,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "5C72ED1E-F65E-1978-A1A8-62FC69B365CD",
+   "name": "Label \u00b7 Cool",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.6,
+   "duration": 10.5,
+   "resourceID": "41131430-27B2-E460-4ABC-DDB57D7E9AEE",
+   "fadeIn": 0.3,
+   "fadeOut": 0.3,
+   "keyframes": []
+  },
+  {
+   "id": "51546EF0-E911-13DA-9562-7BCE9D4BF66B",
+   "name": "Shot \u00b7 Mono",
+   "sortIndex": 5,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 1.5,
+   "duration": 10.5,
+   "resourceID": "4AE10D68-929A-78F4-6CAB-0B452CEB5167",
+   "fadeIn": 0.4,
+   "adjustments": {
+    "lutResourceID": "EC538E70-3462-0FA5-5D6A-0CE1ADB71C3A",
+    "lutAmount": 1.0
+   },
+   "keyframes": [
+    {
+     "id": "CF5859E8-BAF7-5FF4-3CF2-0AAB2992EFF3",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "width": 440,
+      "anchor": "right",
+      "offset": [
+       -20,
+       -30
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "261A0304-202F-A5FB-B7B1-90990B9DFE28",
+   "name": "Label \u00b7 Mono",
+   "sortIndex": 6,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 2.1999999999999997,
+   "duration": 10.5,
+   "resourceID": "FAE1498A-25CF-B84D-BE04-982EA0A56CFF",
+   "fadeIn": 0.3,
+   "fadeOut": 0.3,
+   "keyframes": []
+  },
+  {
+   "id": "714CAB62-C0DD-1788-EB6A-CA196EE75FCC",
+   "name": "Title",
+   "sortIndex": 7,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.2,
+   "duration": 11.4,
+   "resourceID": "9969F276-39E6-E7FC-D7F4-898A0A4A648B",
+   "fadeIn": 0.4,
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ]
+}
