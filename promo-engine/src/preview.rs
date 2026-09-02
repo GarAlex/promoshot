@@ -977,8 +977,12 @@ impl PreviewEngine {
         is_drawing: bool,
         resources: &[promo_model::ProjectResource],
         used: &[u64],
+        prepared: Option<u64>,
     ) -> Option<(SceneQuad, Option<SceneQuad>, u64)> {
-        let frame_id = self.frame(&layer.id, showing, source_time, tier, used)?;
+        let frame_id = match prepared {
+            Some(id) => id,
+            None => self.frame(&layer.id, showing, source_time, tier, used)?,
+        };
         let frame = self.cached_frame(frame_id);
         let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
         let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
@@ -1586,6 +1590,22 @@ impl PreviewEngine {
         output_width: u32,
         output_height: u32,
     ) -> Result<(Scene, Vec<u64>), GpuError> {
+        let doc = SceneDoc::project(&self.meta);
+        self.build_scene_for(&doc, time, output_width, output_height)
+    }
+
+    /// The scene for one document level: the project itself, or a nested
+    /// composition — the same builder, so every kind of layer, every
+    /// effect and every transition works inside a composition exactly as
+    /// it does at the top. Only the top level clears the previous render's
+    /// transient frames; a nested build is part of its parent's.
+    fn build_scene_for(
+        &mut self,
+        doc: &SceneDoc,
+        time: f64,
+        output_width: u32,
+        output_height: u32,
+    ) -> Result<(Scene, Vec<u64>), GpuError> {
         // The PREVIOUS render's transient frames die here, not at its end: a
         // deferred-fence compose may still have the GPU sampling them after
         // render returns, and wgpu keeps submitted resources alive only once
@@ -1593,15 +1613,17 @@ impl PreviewEngine {
         // A motion-blur walk is the exception: its sub-builds are one
         // render, and the frames its earlier composes reference must live
         // until the walk resolves.
-        self.builds += 1;
-        if !self.retain_scratch {
-            self.scratch.clear();
-            self.scratch_key.clear();
+        if doc.depth == 0 {
+            self.builds += 1;
+            if !self.retain_scratch {
+                self.scratch.clear();
+                self.scratch_key.clear();
+            }
         }
         let settings = self.meta.composition_settings.clone();
-        let canvas = Size::new(settings.canvas_width, settings.canvas_height);
+        let canvas = doc.canvas;
 
-        let mut layers: Vec<ProjectLayer> = self.meta.layers.clone().unwrap_or_default();
+        let mut layers: Vec<ProjectLayer> = doc.layers.clone();
         layers.sort_by_key(|l| l.sort_index);
 
         // Background color: the first visible background layer's keyframed
@@ -1629,20 +1651,26 @@ impl PreviewEngine {
                 bg_settings.background_gradient = style.gradient.clone();
             }
         }
-        let bg_hex = bg_layer
-            .map(|l| tl::layer_background_color_hex(l, time, &bg_settings))
-            .unwrap_or_else(|| bg_settings.background_color_hex.clone());
-        // `@name` becomes a colour here and nowhere else, so every field
-        // in the document gains the palette at once.
-        let background = rgba_from_hex(settings.resolve_color(&bg_hex));
+        // A composition's plate is its own colour, or nothing at all: a title
+        // comp over footage shows the footage through. A nested background
+        // LAYER still paints as in any document.
+        let background = match (&doc.plate, bg_layer) {
+            (Plate::Composition(None), None) => [0.0, 0.0, 0.0, 0.0],
+            (Plate::Composition(Some(hex)), None) => rgba_from_hex(settings.resolve_color(hex)),
+            _ => {
+                let bg_hex = bg_layer
+                    .map(|l| tl::layer_background_color_hex(l, time, &bg_settings))
+                    .unwrap_or_else(|| bg_settings.background_color_hex.clone());
+                rgba_from_hex(settings.resolve_color(&bg_hex))
+            }
+        };
 
-        // The gradient comes from the same background layer, on the same
-        // hold-then-ramp timing as its colour — resolved here and converted
-        // from unit canvas coordinates to the canvas pixels the shader works
-        // in, so the model never has to know the output size.
         let background_gradient = bg_layer
             .and_then(|layer| tl::layer_background_gradient(layer, time, &bg_settings))
-            .or_else(|| bg_settings.background_gradient.clone())
+            .or_else(|| match doc.plate {
+                Plate::Project => bg_settings.background_gradient.clone(),
+                Plate::Composition(_) => None,
+            })
             // Absent geometry resolved at READ — the timeline already
             // resolved keyframed gradients against the plate; this covers
             // the plate/settings fallbacks themselves.
@@ -1975,6 +2003,26 @@ impl PreviewEngine {
                 .unwrap_or_default()
                 .to_string();
             let swap = tl::transition::active_swap_sampled(layer, centre, time, &resources);
+            // A composition draws itself: rendered by recursion into a
+            // texture that then stands where a host frame would.
+            let composed = match resources.iter().find(|r| {
+                r.id == showing && r.kind == promo_model::ProjectResourceKind::Composition
+            }) {
+                Some(resource) => {
+                    match self.composition_frame(
+                        layer,
+                        resource,
+                        source_time,
+                        tier,
+                        doc.depth,
+                        &used,
+                    ) {
+                        Some(id) => Some(id),
+                        None => continue,
+                    }
+                }
+                None => None,
+            };
             if let Some(swap) = swap.as_ref() {
                 // The outgoing material, whole, underneath — a dissolve or a
                 // wipe needs both on screen at once, which is exactly what a
@@ -1993,6 +2041,7 @@ impl PreviewEngine {
                         is_drawing,
                         &resources,
                         &used,
+                        None,
                     ) {
                         apply_effect(&mut quad, swap.departing, canvas);
                         apply_transition(&mut quad, layer, time, canvas);
@@ -2022,6 +2071,7 @@ impl PreviewEngine {
                 is_drawing,
                 &resources,
                 &used,
+                composed,
             ) else {
                 continue;
             };
@@ -2128,6 +2178,158 @@ impl PreviewEngine {
             },
             used,
         ))
+    }
+}
+
+/// One document level for the scene builder: the project, or a nested
+/// composition. Layers are cloned in (the builder sorts and walks them);
+/// resources are always the project's, whichever level is being built.
+struct SceneDoc {
+    layers: Vec<ProjectLayer>,
+    canvas: Size,
+    plate: Plate,
+    depth: u32,
+}
+
+/// What lies under a level's layers: the project's settings and background
+/// machinery, or a composition's own colour (none = transparent).
+enum Plate {
+    Project,
+    Composition(Option<String>),
+}
+
+impl SceneDoc {
+    fn project(meta: &ProjectMetadata) -> Self {
+        SceneDoc {
+            layers: meta.layers.clone().unwrap_or_default(),
+            canvas: Size::new(
+                meta.composition_settings.canvas_width,
+                meta.composition_settings.canvas_height,
+            ),
+            plate: Plate::Project,
+            depth: 0,
+        }
+    }
+
+    fn composition(composition: &promo_model::Composition, depth: u32) -> Self {
+        SceneDoc {
+            layers: composition.layers.clone(),
+            canvas: Size::new(composition.canvas_width, composition.canvas_height),
+            plate: Plate::Composition(composition.background_color_hex.clone()),
+            depth,
+        }
+    }
+}
+
+impl PreviewEngine {
+    /// A composition's picture at `source_time` on its own clock — the
+    /// nested layers built with the same scene builder and composed into
+    /// a texture of the composition's canvas (halved past tier 0), which
+    /// then enters the cache as a frame would: `media_quad` reads its
+    /// size, placement rules see the resource's pixel size, transitions
+    /// and blur apply to it as to any clip. Keyed by layer, resource,
+    /// quantized time and tier, transient in export mode like any frame.
+    /// Nothing past the depth cap — a file that slipped past validation
+    /// cannot recurse the GPU.
+    fn composition_frame(
+        &mut self,
+        layer: &ProjectLayer,
+        resource: &promo_model::ProjectResource,
+        source_time: f64,
+        tier: i32,
+        depth: u32,
+        pinned: &[u64],
+    ) -> Option<u64> {
+        let composition = resource.composition.as_ref()?;
+        if depth as usize >= promo_model::nesting::MAX_DEPTH {
+            return None;
+        }
+        let transient = self.export_mode;
+        let key = (
+            format!("comp\u{1f}{}\u{1f}{}", layer.id, resource.id),
+            quantize(source_time),
+            tier,
+        );
+        if transient {
+            if let Some(&id) = self.scratch_key.get(&key) {
+                self.hits += 1;
+                return Some(id);
+            }
+        } else if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some(id);
+        }
+
+        let scale = if tier > 0 { 0.5 } else { 1.0 };
+        let width = ((composition.canvas_width * scale).round() as u32).max(1);
+        let height = ((composition.canvas_height * scale).round() as u32).max(1);
+        let doc = SceneDoc::composition(composition, depth + 1);
+        let (scene, nested_used) = self
+            .build_scene_for(&doc, source_time, width, height)
+            .ok()?;
+
+        let texture = self
+            .ctx
+            .device
+            .create_texture(&promo_gpu::wgpu::TextureDescriptor {
+                label: Some("composition"),
+                size: promo_gpu::wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: promo_gpu::wgpu::TextureDimension::D2,
+                format: promo_gpu::wgpu::TextureFormat::Bgra8Unorm,
+                usage: promo_gpu::wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | promo_gpu::wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+        {
+            // Field-disjoint lookup, as in `render_with_overlay`.
+            let textures: Vec<&InputTexture> = nested_used
+                .iter()
+                .map(|id| {
+                    let frame = self
+                        .cache
+                        .get(id)
+                        .or_else(|| self.scratch.get(id))
+                        .expect("a nested scene refers to a frame the engine no longer holds");
+                    &frame.frame.texture
+                })
+                .collect();
+            self.compositor
+                .compose_to_texture_borrowed(self.ctx, &scene, &textures, &texture)
+                .ok()?;
+        }
+        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, width, height);
+        let bytes = frame.byte_size();
+
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        let entry = CachedFrame {
+            frame,
+            flags: 0,
+            caption_origin: None,
+        };
+        if transient {
+            self.scratch.insert(id, entry);
+            self.scratch_key.insert(key, id);
+            return Some(id);
+        }
+        for victim in self.governor.admit(id, bytes, pinned) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(id, entry);
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some(id)
     }
 }
 

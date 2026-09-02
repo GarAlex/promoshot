@@ -267,7 +267,7 @@ impl Renderer {
         let mut frames = HashMap::new();
         let mut cuts = HashMap::new();
         let mut videos = HashMap::new();
-        for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
+        for layer in promo_model::nesting::all_layers(&project.meta) {
             if project.unsupported(layer).is_some() {
                 continue;
             }
@@ -353,7 +353,7 @@ impl Renderer {
         // picture here too. Until this the field was parsed and ignored,
         // and a sideways photo rendered upright headless and turned in the
         // app.
-        for layer in project.meta.layers.as_deref().unwrap_or(&[]) {
+        for layer in promo_model::nesting::all_layers(&project.meta) {
             let Some(orientation) = layer.image_orientation else {
                 continue;
             };
@@ -1177,6 +1177,114 @@ mod tests {
             pixels[at],
             pixels[at + 2]
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The nesting oracle: a composition placed as a clip must render
+    /// pixel-identical to the same layers flattened into the parent with
+    /// their times offset — the recursion adds a texture round trip and
+    /// nothing else. An independent oracle: both documents go through the
+    /// CLI's own renderer, not a twin of it.
+    #[test]
+    fn a_nested_composition_renders_as_its_layers_flattened() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-nest-oracle-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shape = r#"{"id":"S","kind":"oval","points":[[20,10],[140,80]],"strokeColorHex":"FFFFFF",
+            "strokeWidth":2,"fillColorHex":"5B8CFF","arrowStart":false,"arrowEnd":false}"#;
+        let drawing = format!(
+            r#"{{"id":"D","kind":"drawing","filename":"","displayName":"Blob","addedAt":0,"imageCuts":[],
+            "disabledAudioTrackIndices":[],"drawing":{{"shapes":[{}]}}}}"#,
+            shape
+        );
+        // The composition's layers: a plate and the drawing, on the
+        // composition's own clock (0…3). The flattened twin carries the same
+        // two layers offset by the card's start and NO plate of its own: one
+        // background layer paints per document level, and outside the card's
+        // window both documents show the settings colour.
+        let inner = |offset: f64| {
+            format!(
+                r#"{{"id":"IB","name":"plate","sortIndex":0,"kind":"background","isEnabled":true,
+                  "startTime":{o},"duration":3,"keyframes":[
+                    {{"id":"IK","time":0,"colorHex":"203040","transitionDuration":0}}]}},
+                  {{"id":"ID","name":"blob","sortIndex":1,"kind":"drawing","isEnabled":true,
+                  "startTime":{o1},"duration":2,"resourceID":"D","keyframes":[]}}"#,
+                o = offset,
+                o1 = offset + 0.5
+            )
+        };
+        let nested = format!(
+            r#"{{"id":"P","name":"Nested","createdAt":0,"state":"recorded","minReaderVersion":19,
+            "trimStart":0,"trimEnd":5,"videoDuration":5,"subtitles":[],
+            "compositionSettings":{{"canvasWidth":160,"canvasHeight":90,"backgroundColorHex":"101014"}},
+            "resources":[{drawing},
+              {{"id":"C","kind":"composition","filename":"","displayName":"Card","addedAt":0,
+               "duration":3,"pixelWidth":160,"pixelHeight":90,"imageCuts":[],
+               "composition":{{"canvasWidth":160,"canvasHeight":90,"layers":[{inner}]}}}}],
+            "layers":[
+              {{"id":"BG","name":"bg","sortIndex":0,"kind":"background","isEnabled":true,
+               "startTime":0,"duration":5,"keyframes":[]}},
+              {{"id":"L","name":"card","sortIndex":1,"kind":"video","isEnabled":true,
+               "startTime":1,"duration":3,"resourceID":"C","keyframes":[]}}]}}"#,
+            drawing = drawing,
+            inner = inner(0.0)
+        );
+        let flattened = format!(
+            r#"{{"id":"P","name":"Flat","createdAt":0,"state":"recorded","minReaderVersion":18,
+            "trimStart":0,"trimEnd":5,"videoDuration":5,"subtitles":[],
+            "compositionSettings":{{"canvasWidth":160,"canvasHeight":90,"backgroundColorHex":"101014"}},
+            "resources":[{drawing}],
+            "layers":[{inner}]}}"#,
+            drawing = drawing,
+            inner = inner(1.0)
+                .replace(
+                    r#""sortIndex":0,"kind":"background""#,
+                    r#""sortIndex":1,"kind":"background""#
+                )
+                .replace(
+                    r#""sortIndex":1,"kind":"drawing""#,
+                    r#""sortIndex":2,"kind":"drawing""#
+                )
+        );
+        let render = |json: &str, at: f64| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 160, 90).expect("renderer");
+            renderer.frame_bgra(at).expect("frame")
+        };
+        for at in [0.5, 1.2, 2.0, 3.5] {
+            let a = render(&nested, at);
+            let b = render(&flattened, at);
+            assert_eq!(a.len(), b.len());
+            let worst = a
+                .iter()
+                .zip(&b)
+                .map(|(x, y)| (*x as i32 - *y as i32).abs())
+                .max()
+                .unwrap();
+            let differing = a.iter().zip(&b).filter(|(x, y)| x != y).count();
+            assert!(
+                worst <= 3,
+                "t={at}: nested and flattened differ by up to {worst} ({differing} bytes); \
+                 first px nested={:?} flat={:?}, centre nested={:?} flat={:?}",
+                &a[0..4],
+                &b[0..4],
+                &a[(45 * 160 + 80) * 4..(45 * 160 + 80) * 4 + 4],
+                &b[(45 * 160 + 80) * 4..(45 * 160 + 80) * 4 + 4]
+            );
+            if at == 2.0 {
+                // The picture is not trivially empty: the blob (visible from
+                // 0.5 on the card's clock, 1.5 on the parent's) is there.
+                let blue = a.chunks(4).filter(|px| px[0] > 200 && px[2] < 140).count();
+                assert!(
+                    blue > 500,
+                    "t={at}: the nested blob is drawn ({blue} blue pixels)"
+                );
+            }
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

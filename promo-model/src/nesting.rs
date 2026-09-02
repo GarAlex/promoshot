@@ -27,6 +27,20 @@ pub fn composition_of<'a>(
         .find(|r| r.id == id && r.kind == ProjectResourceKind::Composition)
 }
 
+/// Every layer a renderer will be asked about: the project's, then each
+/// composition's, nested ones included — the walk a host makes when it
+/// prepares sources per layer, so a request for a nested layer's frame
+/// finds what it needs.
+pub fn all_layers(meta: &ProjectMetadata) -> Vec<&ProjectLayer> {
+    let mut out: Vec<&ProjectLayer> = meta.layers.as_deref().unwrap_or(&[]).iter().collect();
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        if let Some(composition) = resource.composition.as_ref() {
+            out.extend(composition.layers.iter());
+        }
+    }
+    out
+}
+
 /// Every problem that makes the nesting unrenderable or meaningless, in
 /// words. Empty means the recursion is finite and every nested layer names
 /// a resource the project has.
