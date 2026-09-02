@@ -1,0 +1,783 @@
+{
+  "id": "sprite-arcade",
+  "name": "Sprite Arcade",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 13,
+  "videoDuration": 13,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      {
+        "name": "canvas",
+        "colorHex": "06080F"
+      },
+      {
+        "name": "text",
+        "colorHex": "F2F5FF"
+      },
+      {
+        "name": "text-bg",
+        "colorHex": "0B1020"
+      },
+      {
+        "name": "edge",
+        "colorHex": "23304F"
+      },
+      {
+        "name": "caption-outline",
+        "colorHex": "05070E"
+      },
+      {
+        "name": "caption-shadow",
+        "colorHex": "000000"
+      },
+      {
+        "name": "media-shadow",
+        "colorHex": "000000"
+      },
+      {
+        "name": "highlight",
+        "colorHex": "FFD166"
+      },
+      {
+        "name": "accent",
+        "colorHex": "6FA8FF"
+      }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [
+        0.5,
+        0.44
+      ],
+      "end": [
+        1.0,
+        1.0
+      ],
+      "repeat": "clamp",
+      "stops": [
+        {
+          "colorHex": "1A2444",
+          "at": 0
+        },
+        {
+          "colorHex": "06080F",
+          "at": 1
+        }
+      ]
+    },
+    "subtitleFontFamily": "rounded",
+    "subtitleFontSize": 66,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 22,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200,
+    "subtitleVerticalMargin": 880,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.55,
+    "subtitleShadowRadius": 14
+  },
+  "resources": [
+    {
+      "id": "r_bird",
+      "kind": "image",
+      "filename": "sprite_bird.png",
+      "displayName": "Bird",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 288,
+      "pixelHeight": 48,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 1,
+        "frameCount": 6,
+        "fps": 12
+      }
+    },
+    {
+      "id": "r_coin",
+      "kind": "image",
+      "filename": "sprite_coin.png",
+      "displayName": "Coin",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 320,
+      "pixelHeight": 40,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 8,
+        "rows": 1,
+        "frameCount": 8,
+        "fps": 14
+      }
+    },
+    {
+      "id": "r_rocket",
+      "kind": "image",
+      "filename": "sprite_rocket.png",
+      "displayName": "Rocket",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 288,
+      "pixelHeight": 48,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 6,
+        "rows": 1,
+        "frameCount": 6,
+        "fps": 16
+      }
+    },
+    {
+      "id": "r_spark",
+      "kind": "image",
+      "filename": "sprite_spark.png",
+      "displayName": "Spark",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 448,
+      "pixelHeight": 56,
+      "sampling": "nearest",
+      "sprite": {
+        "columns": 8,
+        "rows": 1,
+        "frameCount": 8,
+        "fps": 12
+      }
+    },
+    {
+      "id": "p_arch",
+      "kind": "path",
+      "filename": "",
+      "displayName": "Arch",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "path": {
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          200,
+          0
+        ],
+        "controls": [
+          [
+            100,
+            -30
+          ]
+        ]
+      }
+    },
+    {
+      "id": "p_dip",
+      "kind": "path",
+      "filename": "",
+      "displayName": "Dip",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "path": {
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          200,
+          0
+        ],
+        "controls": [
+          [
+            100,
+            26
+          ]
+        ]
+      }
+    },
+    {
+      "id": "p_ess",
+      "kind": "path",
+      "filename": "",
+      "displayName": "S-curve",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "path": {
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          200,
+          0
+        ],
+        "controls": [
+          [
+            68,
+            18
+          ],
+          [
+            132,
+            -22
+          ]
+        ]
+      }
+    },
+    {
+      "id": "p_high",
+      "kind": "path",
+      "filename": "",
+      "displayName": "High arch",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "path": {
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          200,
+          0
+        ],
+        "controls": [
+          [
+            100,
+            -30
+          ]
+        ]
+      }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13,
+      "keyframes": [
+        {
+          "id": "g0",
+          "time": 0,
+          "transitionDuration": 0,
+          "gradient": {
+            "kind": "radial",
+            "start": [
+              0.5,
+              0.44
+            ],
+            "end": [
+              1.0,
+              1.0
+            ],
+            "repeat": "clamp",
+            "stops": [
+              {
+                "colorHex": "1A2444",
+                "at": 0
+              },
+              {
+                "colorHex": "06080F",
+                "at": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "g1",
+          "time": 6.5,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "gradient": {
+            "kind": "radial",
+            "start": [
+              0.5,
+              0.44
+            ],
+            "end": [
+              1.0,
+              1.0
+            ],
+            "repeat": "clamp",
+            "stops": [
+              {
+                "colorHex": "2C1E48",
+                "at": 0
+              },
+              {
+                "colorHex": "06080F",
+                "at": 1
+              }
+            ]
+          },
+          "transitionDuration": 0
+        },
+        {
+          "id": "g2",
+          "time": 13,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "gradient": {
+            "kind": "radial",
+            "start": [
+              0.5,
+              0.44
+            ],
+            "end": [
+              1.0,
+              1.0
+            ],
+            "repeat": "clamp",
+            "stops": [
+              {
+                "colorHex": "16324A",
+                "at": 0
+              },
+              {
+                "colorHex": "06080F",
+                "at": 1
+              }
+            ]
+          },
+          "transitionDuration": 0
+        }
+      ]
+    },
+    {
+      "id": "l_bird",
+      "name": "Bird",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0.5,
+      "duration": 3.6,
+      "resourceID": "r_bird",
+      "keyframes": [
+        {
+          "id": "b_p0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": {
+            "height": 190,
+            "anchor": "center",
+            "offset": [
+              -1180,
+              -40
+            ]
+          }
+        },
+        {
+          "id": "b_p1",
+          "time": 3.6,
+          "transitionPercent": 100,
+          "easing": "linear",
+          "placement": {
+            "height": 190,
+            "anchor": "center",
+            "offset": [
+              1180,
+              -40
+            ]
+          },
+          "motionPath": {
+            "pathResourceID": "p_arch"
+          },
+          "transitionDuration": 0
+        },
+        {
+          "id": "b_r0",
+          "time": 0,
+          "rotation": -9,
+          "transitionDuration": 0
+        },
+        {
+          "id": "b_r1",
+          "time": 1.8,
+          "rotation": 7,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "transitionDuration": 0
+        },
+        {
+          "id": "b_r2",
+          "time": 3.6,
+          "rotation": -9,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "transitionDuration": 0
+        }
+      ]
+    },
+    {
+      "id": "l_coin",
+      "name": "Coin",
+      "sortIndex": 2,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 3.7,
+      "duration": 3.3,
+      "resourceID": "r_coin",
+      "keyframes": [
+        {
+          "id": "c_p0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": {
+            "height": 140,
+            "anchor": "center",
+            "offset": [
+              -1160,
+              -110
+            ]
+          }
+        },
+        {
+          "id": "c_p1",
+          "time": 3.3,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "placement": {
+            "height": 190,
+            "anchor": "center",
+            "offset": [
+              1160,
+              -110
+            ]
+          },
+          "motionPath": {
+            "pathResourceID": "p_dip"
+          },
+          "transitionDuration": 0
+        },
+        {
+          "id": "c_r0",
+          "time": 0,
+          "rotation": 0,
+          "transitionDuration": 0
+        },
+        {
+          "id": "c_r1",
+          "time": 3.3,
+          "rotation": 540,
+          "transitionPercent": 100,
+          "easing": "linear",
+          "transitionDuration": 0
+        }
+      ]
+    },
+    {
+      "id": "l_rocket",
+      "name": "Rocket",
+      "sortIndex": 3,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 6.8,
+      "duration": 3.3,
+      "resourceID": "r_rocket",
+      "motionBlur": {
+        "shutter": 0.5
+      },
+      "keyframes": [
+        {
+          "id": "k_p0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": {
+            "height": 150,
+            "anchor": "center",
+            "offset": [
+              -1200,
+              -10
+            ]
+          }
+        },
+        {
+          "id": "k_p1",
+          "time": 3.3,
+          "transitionPercent": 100,
+          "easing": "easeIn",
+          "placement": {
+            "height": 260,
+            "anchor": "center",
+            "offset": [
+              1200,
+              -110
+            ]
+          },
+          "motionPath": {
+            "pathResourceID": "p_ess"
+          },
+          "transitionDuration": 0
+        },
+        {
+          "id": "k_r0",
+          "time": 0,
+          "rotation": 108,
+          "transitionDuration": 0
+        },
+        {
+          "id": "k_r1",
+          "time": 3.3,
+          "rotation": 72,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "transitionDuration": 0
+        }
+      ]
+    },
+    {
+      "id": "l_spark",
+      "name": "Spark",
+      "sortIndex": 4,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 9.6,
+      "duration": 3.3,
+      "resourceID": "r_spark",
+      "effects": {
+        "glow": 0.7,
+        "glowRadius": 30,
+        "glowThreshold": 0.45
+      },
+      "keyframes": [
+        {
+          "id": "s_p0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": {
+            "height": 160,
+            "anchor": "center",
+            "offset": [
+              -1200,
+              30
+            ]
+          }
+        },
+        {
+          "id": "s_p1",
+          "time": 3.3,
+          "transitionPercent": 100,
+          "easing": "linear",
+          "placement": {
+            "height": 300,
+            "anchor": "center",
+            "offset": [
+              1200,
+              -30
+            ]
+          },
+          "motionPath": {
+            "pathResourceID": "p_high"
+          },
+          "transitionDuration": 0
+        },
+        {
+          "id": "s_r0",
+          "time": 0,
+          "rotation": 0,
+          "transitionDuration": 0
+        },
+        {
+          "id": "s_r1",
+          "time": 3.3,
+          "rotation": 180,
+          "transitionPercent": 100,
+          "easing": "linear",
+          "transitionDuration": 0
+        },
+        {
+          "id": "s_o0",
+          "time": 0,
+          "opacity": 0.15,
+          "transitionDuration": 0
+        },
+        {
+          "id": "s_o1",
+          "time": 0.7,
+          "opacity": 1,
+          "transitionPercent": 100,
+          "easing": "easeOut",
+          "transitionDuration": 0
+        },
+        {
+          "id": "s_o2",
+          "time": 2.4,
+          "opacity": 1,
+          "transitionDuration": 0
+        },
+        {
+          "id": "s_o3",
+          "time": 3.3,
+          "opacity": 0.1,
+          "transitionPercent": 100,
+          "easing": "easeIn",
+          "transitionDuration": 0
+        }
+      ],
+      "blendMode": "add"
+    },
+    {
+      "id": "l_title",
+      "name": "Title",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13,
+      "captionText": "Sprite Arcade",
+      "captionStyle": {
+        "placement": {
+          "anchor": "top",
+          "offset": [
+            0,
+            84
+          ]
+        },
+        "fontSize": 52,
+        "fontFamily": "rounded",
+        "isBold": true,
+        "textColorHex": "@accent",
+        "backgroundOpacity": 0.0,
+        "shadowOpacity": 0.6,
+        "shadowRadius": 16
+      },
+      "fadeIn": 0.7,
+      "fadeOut": 0.6,
+      "keyframes": []
+    },
+    {
+      "id": "l_cap1",
+      "name": "Line 1",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.6,
+      "duration": 2.9,
+      "captionText": "Sprites are just images.",
+      "captionStyle": {
+        "placement": {
+          "anchor": "bottom",
+          "offset": [
+            0,
+            -120
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "rise",
+          "unitSeconds": 0.3,
+          "secondsPer": 0.1,
+          "rise": 0.5
+        }
+      },
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "keyframes": []
+    },
+    {
+      "id": "l_cap2",
+      "name": "Line 2",
+      "sortIndex": 7,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 3.8,
+      "duration": 2.9,
+      "captionText": "They move, spin and fade\nlike anything else.",
+      "captionStyle": {
+        "placement": {
+          "anchor": "bottom",
+          "offset": [
+            0,
+            -110
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "rise",
+          "unitSeconds": 0.3,
+          "secondsPer": 0.09,
+          "rise": 0.5
+        }
+      },
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "keyframes": []
+    },
+    {
+      "id": "l_cap3",
+      "name": "Line 3",
+      "sortIndex": 8,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.9,
+      "duration": 2.6,
+      "captionText": "The sheet animates while\nthe layer flies.",
+      "captionStyle": {
+        "placement": {
+          "anchor": "bottom",
+          "offset": [
+            0,
+            -110
+          ]
+        },
+        "reveal": {
+          "by": "word",
+          "mode": "rise",
+          "unitSeconds": 0.3,
+          "secondsPer": 0.09,
+          "rise": 0.5
+        }
+      },
+      "fadeIn": 0.35,
+      "fadeOut": 0.35,
+      "keyframes": []
+    },
+    {
+      "id": "l_cap4",
+      "name": "Line 4",
+      "sortIndex": 9,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 9.8,
+      "duration": 3.0,
+      "captionText": "One image. Two clocks.",
+      "captionStyle": {
+        "placement": {
+          "anchor": "bottom",
+          "offset": [
+            0,
+            -120
+          ]
+        },
+        "fontSize": 74,
+        "reveal": {
+          "by": "word",
+          "mode": "scale",
+          "unitSeconds": 0.34,
+          "secondsPer": 0.16
+        }
+      },
+      "fadeIn": 0.35,
+      "fadeOut": 0.5,
+      "keyframes": []
+    }
+  ]
+}

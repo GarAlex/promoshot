@@ -3,6 +3,7 @@
   "id": "01",
   "slug": "01-app-store-hero",
   "title": "App Store Hero",
+  "blurb": "Five screenshots on one slowly drifting framed window, swapped in turn under a headline each \u2014 a Mac App Store preview.",
   "canvas": [
    1440,
    900
@@ -36,17 +37,99 @@
     "path": "docs/demo/01-app-store-hero/resources/ui_verse_1.png"
    }
   ],
-  "result": null
+  "result": {
+   "score": 100,
+   "passed": 8,
+   "total": 8,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "15.0s vs 15.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "5 vs 5"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:swaps",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "5 of 5 lines recognisable"
+    }
+   ],
+   "summary": "turns=40 cost=$2.07 secs=252",
+   "run": {
+    "turns": 40,
+    "wall_s": 252,
+    "api_s": 248,
+    "cost_usd": 2.07,
+    "tokens": {
+     "input": 46,
+     "cache_read": 1732985,
+     "cache_write": 72153,
+     "output": 19092,
+     "thinking": 9363
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1161,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1805184,
+      "output": 19092,
+      "cost_usd": 2.07
+     }
+    ]
+   },
+   "contact": "docs/demo/01-app-store-hero/contact-result.png",
+   "reference_contact": "docs/demo/01-app-store-hero/contact-reference.png",
+   "video": "docs/demo/01-app-store-hero/result.mp4",
+   "metadata": "docs/demo/01-app-store-hero/result-metadata.json",
+   "gif": "docs/demo/01-app-store-hero/result.gif",
+   "thumb": "docs/demo/01-app-store-hero/thumb.png"
+  },
+  "page": "docs/demo/demo01.md"
  },
  {
   "id": "02",
   "slug": "02-focus-follow",
   "title": "Focus Follow",
+  "blurb": "A framed recording that never moves while the view inside dives to three details, each captioned.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 16,
   "prompt": "This is a screen recording of a finance app. Make a 16-second clip where a framed window of the recording stays exactly where it is while the view inside it zooms in on the chart tooltip, then the account row, then the alert switch \u2014 each move a smooth push into that spot, each with a caption naming what we are looking at.\n\nFiles in `resources/`: rec_lumen_2560.mp4.\n\nText to use, in order:\n- The window stays put.\n- Follow the number\u2026\n- \u2026then the account\u2026\n- \u2026then the switch.\n- One layer. No cuts.",
   "resources": [
    {
@@ -56,17 +139,89 @@
     "poster": "docs/demo/02-focus-follow/resources/rec_lumen_2560.poster.png"
    }
   ],
-  "result": null
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "16.0s vs 16.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "5 vs 5"
+    },
+    {
+     "check": "feature:viewport",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "5 of 5 lines recognisable"
+    }
+   ],
+   "summary": "turns=34 cost=$2.12 secs=284",
+   "run": {
+    "turns": 34,
+    "wall_s": 283,
+    "api_s": 269,
+    "cost_usd": 2.12,
+    "tokens": {
+     "input": 54,
+     "cache_read": 1840218,
+     "cache_write": 69423,
+     "output": 20073,
+     "thinking": 10848
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1125,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1909695,
+      "output": 20073,
+      "cost_usd": 2.12
+     }
+    ]
+   },
+   "contact": "docs/demo/02-focus-follow/contact-result.png",
+   "reference_contact": "docs/demo/02-focus-follow/contact-reference.png",
+   "video": "docs/demo/02-focus-follow/result.mp4",
+   "metadata": "docs/demo/02-focus-follow/result-metadata.json",
+   "gif": "docs/demo/02-focus-follow/result.gif",
+   "thumb": "docs/demo/02-focus-follow/thumb.png"
+  },
+  "page": "docs/demo/demo02.md"
  },
  {
   "id": "03",
   "slug": "03-sprite-arcade",
   "title": "Sprite Arcade",
+  "blurb": "Sprite sheets animating while they fly curved paths across the canvas, staggered.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 13.5,
   "prompt": "These images are sprite sheets: looping animations laid out in cells. Make a playful 13-second clip on a dark background where each sprite plays its animation while flying along a curved path from the left edge to the right edge, staggered so they are not all in the air at once, with a title.\n\nFiles in `resources/`: sprite_bird.png, sprite_coin.png, sprite_rocket.png, sprite_spark.png.\n\nText to use, in order:\n- Sprites are just images.\n- They move, spin and fade\nlike anything else.\n- The sheet animates while\nthe layer flies.\n- One image. Two clocks.",
   "resources": [
    {
@@ -90,17 +245,94 @@
     "path": "docs/demo/03-sprite-arcade/resources/sprite_spark.png"
    }
   ],
-  "result": null
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "13.0s vs 13.5s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "4 vs 7"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "5 vs 4"
+    },
+    {
+     "check": "feature:motionPath",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:sprite",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=46 cost=$2.53 secs=350",
+   "run": {
+    "turns": 46,
+    "wall_s": 349,
+    "api_s": 329,
+    "cost_usd": 2.53,
+    "tokens": {
+     "input": 56,
+     "cache_read": 2228788,
+     "cache_write": 79715,
+     "output": 24730,
+     "thinking": 10115
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1138,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2308559,
+      "output": 24730,
+      "cost_usd": 2.53
+     }
+    ]
+   },
+   "contact": "docs/demo/03-sprite-arcade/contact-result.png",
+   "reference_contact": "docs/demo/03-sprite-arcade/contact-reference.png",
+   "video": "docs/demo/03-sprite-arcade/result.mp4",
+   "metadata": "docs/demo/03-sprite-arcade/result-metadata.json",
+   "gif": "docs/demo/03-sprite-arcade/result.gif",
+   "thumb": "docs/demo/03-sprite-arcade/thumb.png"
+  },
+  "page": "docs/demo/demo03.md"
  },
  {
   "id": "04",
   "slug": "04-gradient-drift",
   "title": "Gradient Drift",
+  "blurb": "A seamless scrolling multi-colour gradient loop with a ring breathing in the middle.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 12,
   "prompt": "Make a 12-second looping background piece: a smooth gradient of several colours, ending on the colour it started with, that scrolls seamlessly in one direction so it can loop; the ring image breathes gently in the middle; one short caption fades in by word.\n\nFiles in `resources/`: sprite_ring.png.\n\nText to use, in order:\n- colour that moves\n- repeat \u00b7 mirror \u00b7 clamp\n- a gradient is a keyframe too",
   "resources": [
    {
@@ -109,17 +341,19 @@
     "path": "docs/demo/04-gradient-drift/resources/sprite_ring.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo04.md"
  },
  {
   "id": "05",
   "slug": "05-carousel",
   "title": "Carousel",
+  "blurb": "Cards entering from the right, resting under a caption, leaving left with a tilt.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 15,
   "prompt": "Make a 15-second carousel of these cards. Each card enters from the right, rests in the centre while a caption names it, then leaves to the left, tilting slightly as it moves. No two cards on screen at the same time except during the hand-off.\n\nFiles in `resources/`: ui_lumen_2.png, ui_lumen_4.png, ui_pulse_2.png, ui_verse_2.png.\n\nText to use, in order:\n- Dashboards\n- Long-form writing\n- Daily movement\n- Funnels that add up\n- One layer per card.\nFour ramps each.",
   "resources": [
    {
@@ -143,17 +377,19 @@
     "path": "docs/demo/05-carousel/resources/ui_verse_2.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo05.md"
  },
  {
   "id": "06",
   "slug": "06-gif-board",
   "title": "GIF Board",
+  "blurb": "Animated GIFs on a grid, all playing at once, centred by cell.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 13.5,
   "prompt": "Arrange these animated GIFs on a grid, all playing at once, for 13 seconds, with a title above the grid. Cells of different shapes should line up on their centres.\n\nFiles in `resources/`: sheet_confetti.png, sheet_pulse.png, sheet_wave.png.\n\nText to use, in order:\n- A GIF is a grid of frames.\n- Import bakes it into a sheet\u2026\n- \u2026and then it is just an image:\nit flies, spins and fades.\n- Twelve loops, one draw call each.",
   "resources": [
    {
@@ -172,17 +408,19 @@
     "path": "docs/demo/06-gif-board/resources/sheet_wave.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo06.md"
  },
  {
   "id": "07",
   "slug": "07-narrated-tour",
   "title": "Narrated Tour",
+  "blurb": "A framed recording toured by the viewport, paced by synthesized narration, captions on the footage.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 21.5,
   "prompt": "Make a 21-second narrated product tour from this screen recording. Framed window, a little smaller than the canvas. Synthesize the narration from the lines below and pace the piece by how long each line takes to speak; as each line plays, the view inside the window moves to the feature it mentions. Put the captions on the footage with an outline and shadow, no plate.\n\nFiles in `resources/`: bbb_test.mp4.\n\nText to use, in order:\n- Some footage tells the story on its own.\n- The camera never moved \u2014 the viewport did.\n- Narration is written here, not recorded.\n- Add a voice key and it speaks.\n- Everything else already renders.",
   "resources": [
    {
@@ -192,17 +430,19 @@
     "poster": "docs/demo/07-narrated-tour/resources/bbb_test.poster.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo07.md"
  },
  {
   "id": "08",
   "slug": "08-speed-ramp",
   "title": "Speed Ramp",
+  "blurb": "One clip at half, double and three-quarter speed, cross-dissolved, each section as long as it plays.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 14,
   "prompt": "Make a 14-second speed-ramped edit of this clip that fills the canvas: a half-speed section first, then a double-speed section, then one at three-quarter speed, cross-dissolving between them, each section lasting as long as that piece takes at that speed, with a caption naming the speed.\n\nFiles in `resources/`: bbb_test.mp4.\n\nText to use, in order:\n- 0.5\u00d7 \u2014 the drift\n- 2\u00d7 \u2014 the rush\n- 0.75\u00d7 \u2014 the hold\n- One recording.\nThree cuts, three rates.",
   "resources": [
    {
@@ -212,30 +452,34 @@
     "poster": "docs/demo/08-speed-ramp/resources/bbb_test.poster.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo08.md"
  },
  {
   "id": "09",
   "slug": "09-kinetic-type",
   "title": "Kinetic Type",
+  "blurb": "Lines arriving as a typewriter, a word rise, a pop and a karaoke highlight, over moving gradients.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 12,
   "prompt": "Make a 12-second kinetic typography piece from the lines below, on a slowly moving gradient background. Give each line a different way of arriving: a typewriter, a word-by-word rise, a pop, and a karaoke highlight that walks along the last line.\n\nText to use, in order:\n- type\n- that knows\n- where it is going\n- three tracks.\none caption.",
   "resources": [],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo09.md"
  },
  {
   "id": "10",
   "slug": "10-logo-sting",
   "title": "Logo Sting",
+  "blurb": "A bloom, a rocket on a curved path with motion blur, sparkles, and a wordmark that lands and holds.",
   "canvas": [
    1920,
    1080
   ],
-  "duration": 0,
+  "duration": 10,
   "prompt": "Make a 10-second logo sting. A radial bloom opens on a dark background, the rocket climbs a curved path with motion blur, a burst of sparkles goes off around it, then the wordmark lands and holds to the end. Reveal the title letter by letter and type the URL underneath.\n\nFiles in `resources/`: sprite_rocket.png, sprite_spark.png.\n\nText to use, in order:\n- LUMEN\n- see the whole picture\n- lumen.app",
   "resources": [
    {
@@ -249,12 +493,14 @@
     "path": "docs/demo/10-logo-sting/resources/sprite_spark.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo10.md"
  },
  {
   "id": "11",
   "slug": "11-whip-deck",
   "title": "Whip Deck",
+  "blurb": "Four screenshots with whip-pan pushes, each faster and blurrier than the last.",
   "canvas": [
    1440,
    900
@@ -283,12 +529,14 @@
     "path": "docs/demo/11-whip-deck/resources/ui_verse_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo11.md"
  },
  {
   "id": "12",
   "slug": "12-word-for-word",
   "title": "Word for Word",
+  "blurb": "A vertical piece: three statements replacing each other by push, each with its own reveal.",
   "canvas": [
    1080,
    1920
@@ -296,12 +544,14 @@
   "duration": 12,
   "prompt": "Make a vertical 1080 by 1920 caption piece, 12 seconds, from the three statements below. Each statement replaces the previous one with a push. Give the first a word-by-word rise, the second a word-by-word fade, and walk a karaoke highlight along the last.\n\nText to use, in order:\n- Ship the story, not the spec.\n- Every word lands on time.\n- Say it once. Ship it everywhere.",
   "resources": [],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo12.md"
  },
  {
   "id": "13",
   "slug": "13-before-after",
   "title": "Before & After",
+  "blurb": "A slow crossfade between two screens under a caption that wipes from Before to After.",
   "canvas": [
    1440,
    900
@@ -320,12 +570,14 @@
     "path": "docs/demo/13-before-after/resources/ui_verse_2.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo13.md"
  },
  {
   "id": "14",
   "slug": "14-spotlight",
   "title": "Spotlight",
+  "blurb": "The same shot flat beneath and in colour inside a roaming spotlight, inverted at the end.",
   "canvas": [
    1440,
    900
@@ -339,12 +591,14 @@
     "path": "docs/demo/14-spotlight/resources/ui_lumen_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo14.md"
  },
  {
   "id": "15",
   "slug": "15-grade-room",
   "title": "Grade Room",
+  "blurb": "One shot walked through four looks by ramping the grade, a caption naming each.",
   "canvas": [
    1440,
    900
@@ -358,12 +612,14 @@
     "path": "docs/demo/15-grade-room/resources/ui_lumen_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo15.md"
  },
  {
   "id": "16",
   "slug": "16-light-leak",
   "title": "Light Leak",
+  "blurb": "A warm leak on screen blend, a vignette plate multiplied, a hot core added, over a screenshot.",
   "canvas": [
    1440,
    900
@@ -392,12 +648,14 @@
     "path": "docs/demo/16-light-leak/resources/vignette_soft.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo16.md"
  },
  {
   "id": "17",
   "slug": "17-chain-reaction",
   "title": "Chain Reaction",
+  "blurb": "Clips chained half a second before the previous ends, labels pinned to each clip's own edges.",
   "canvas": [
    1440,
    900
@@ -426,12 +684,14 @@
     "path": "docs/demo/17-chain-reaction/resources/ui_verse_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo17.md"
  },
  {
   "id": "18",
   "slug": "18-reused-title",
   "title": "Reused Title",
+  "blurb": "One title card built once and placed three times around a screenshot.",
   "canvas": [
    1440,
    900
@@ -445,12 +705,14 @@
     "path": "docs/demo/18-reused-title/resources/ui_lumen_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo18.md"
  },
  {
   "id": "19",
   "slug": "19-green-room",
   "title": "Green Room",
+  "blurb": "A green-screen clip keyed and composed over a gradient with a halo, growing slowly.",
   "canvas": [
    1440,
    900
@@ -465,12 +727,14 @@
     "poster": "docs/demo/19-green-room/resources/green_lumen.poster.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo19.md"
  },
  {
   "id": "20",
   "slug": "20-look-book",
   "title": "Look Book",
+  "blurb": "One screenshot three times side by side, each through a different .cube look.",
   "canvas": [
    1440,
    900
@@ -499,12 +763,14 @@
     "path": "docs/demo/20-look-book/resources/ui_lumen_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo20.md"
  },
  {
   "id": "21",
   "slug": "21-chapters-levels",
   "title": "Chapters & Levels",
+  "blurb": "The narrated tour with the voice levelled and chapter markers a player shows.",
   "canvas": [
    1440,
    900
@@ -519,12 +785,14 @@
     "poster": "docs/demo/21-chapters-levels/resources/bbb_test.poster.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo21.md"
  },
  {
   "id": "22",
   "slug": "22-product-story",
   "title": "Product Story",
+  "blurb": "A reused title card, a keyed clip, a warm-graded shot, a levelled voice line, four chapters.",
   "canvas": [
    1440,
    900
@@ -549,12 +817,14 @@
     "path": "docs/demo/22-product-story/resources/ui_lumen_1.png"
    }
   ],
-  "result": null
+  "result": null,
+  "page": "docs/demo/demo22.md"
  },
  {
   "id": "23",
   "slug": "23-soft-focus",
   "title": "Soft Focus",
+  "blurb": "A blurred, vignetted, grainy backdrop; a sharp hero that arrives out of blur and smears out; a headline that glows once.",
   "canvas": [
    1440,
    900
@@ -605,11 +875,40 @@
     }
    ],
    "summary": "turns=65 cost=$3.90 secs=566",
+   "run": {
+    "turns": 65,
+    "wall_s": 565,
+    "api_s": 538,
+    "cost_usd": 3.9,
+    "tokens": {
+     "input": 86,
+     "cache_read": 3759450,
+     "cache_write": 96250,
+     "output": 42200,
+     "thinking": 21170
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1120,
+      "output": 17,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 3855786,
+      "output": 42200,
+      "cost_usd": 3.9
+     }
+    ]
+   },
    "contact": "docs/demo/23-soft-focus/contact-result.png",
    "reference_contact": "docs/demo/23-soft-focus/contact-reference.png",
    "video": "docs/demo/23-soft-focus/result.mp4",
    "metadata": "docs/demo/23-soft-focus/result-metadata.json",
-   "gif": "docs/demo/23-soft-focus/result.gif"
-  }
+   "gif": "docs/demo/23-soft-focus/result.gif",
+   "thumb": "docs/demo/23-soft-focus/thumb.png"
+  },
+  "page": "docs/demo/demo23.md"
  }
 ]

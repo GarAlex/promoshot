@@ -19,7 +19,10 @@ def latest_run(demo):
     if not os.path.isdir(runs):
         return None
     for r in sorted(os.listdir(runs), reverse=True):
-        if os.path.exists(os.path.join(runs, r, 'score.json')):
+        # Complete only once the agent has answered: a run in flight can
+        # already have a scored out.promo.
+        agent = os.path.join(runs, r, 'agent.json')
+        if os.path.exists(os.path.join(runs, r, 'score.json')) and os.path.exists(agent) and os.path.getsize(agent) > 0:
             return os.path.join(runs, r)
     return None
 
@@ -35,6 +38,53 @@ def gif(project, out):
     if os.path.exists(out):
         os.remove(out)
     return False
+
+def run_stats(run):
+    """What the run cost: turns, wall and API time, tokens by model, and
+    the MCP's own timing when the server logged it."""
+    stats = {}
+    try:
+        j = json.load(open(os.path.join(run, 'agent.json')))
+    except Exception:
+        return stats
+    stats['turns'] = j.get('num_turns')
+    stats['wall_s'] = round((j.get('duration_ms') or 0) / 1000)
+    stats['api_s'] = round((j.get('duration_api_ms') or 0) / 1000)
+    stats['cost_usd'] = round(j.get('total_cost_usd') or 0, 2)
+    u = j.get('usage') or {}
+    stats['tokens'] = {
+        "input": u.get('input_tokens', 0), "cache_read": u.get('cache_read_input_tokens', 0),
+        "cache_write": u.get('cache_creation_input_tokens', 0), "output": u.get('output_tokens', 0),
+        "thinking": (u.get('output_tokens_details') or {}).get('thinking_tokens', 0),
+    }
+    stats['models'] = []
+    for model, m in (j.get('modelUsage') or {}).items():
+        stats['models'].append({"model": m.get('canonicalModel', model),
+                                "input": m.get('inputTokens', 0) + m.get('cacheReadInputTokens', 0) + m.get('cacheCreationInputTokens', 0),
+                                "output": m.get('outputTokens', 0), "cost_usd": round(m.get('costUSD', 0), 2)})
+    log = os.path.join(run, 'mcp.log')
+    if os.path.exists(log):
+        calls = []
+        for line in open(log):
+            parts = line.rstrip('\n').split('\t')
+            if len(parts) >= 4:
+                try:
+                    calls.append((parts[1], int(parts[2]), parts[3]))
+                except ValueError:
+                    pass
+        by_tool = {}
+        for tool, ms, ok in calls:
+            t = by_tool.setdefault(tool, {"calls": 0, "ms": 0, "errors": 0})
+            t["calls"] += 1; t["ms"] += ms; t["errors"] += (ok != 'ok')
+        stats['mcp'] = {"calls": len(calls), "ms": sum(c[1] for c in calls),
+                        "tools": dict(sorted(by_tool.items(), key=lambda kv: -kv[1]['ms']))}
+    return stats
+
+def fmt_tokens(n):
+    return f"{n/1_000_000:.1f}M" if n >= 1_000_000 else f"{n/1000:.0f}k" if n >= 1000 else str(n)
+
+def fmt_secs(s):
+    return f"{s // 60} min {s % 60:02d} s" if s >= 60 else f"{s} s"
 
 def thumb(video, out):
     subprocess.run([FFMPEG, '-v', 'error', '-y', '-ss', '3', '-i', video, '-frames:v', '1',
@@ -83,7 +133,8 @@ def main():
             summary_path = os.path.join(run, 'summary.txt')
             summary = open(summary_path).read().strip() if os.path.exists(summary_path) else ''
             result = {"score": score['score'], "passed": score['passed'], "total": score['total'],
-                      "checks": score['checks'], "summary": summary.split(' result=')[0]}
+                      "checks": score['checks'], "summary": summary.split(' result=')[0],
+                      "run": run_stats(run)}
             for f, key in (('contact-agent.png', 'contact'), ('contact-reference.png', 'reference_contact')):
                 src = os.path.join(run, f)
                 if os.path.exists(src):
@@ -137,10 +188,29 @@ def main():
                 pg.append(f"`{r['file']}`" + (f" ([file]({rel(r['path'])}))" if 'path' in r else ""))
         pg += ["", "## The prompt", "", "> " + user_prompt.replace("\n", "\n> "), ""]
         if result:
-            pg.append(f"## What the agent made", "")
-            pg.append(f"Score **{result['score']}%** ({result['passed']} of {result['total']} rubric checks)"
-                      + (f" — {result['summary']}" if result['summary'] else "") + ".")
+            pg += ["## What the agent made", ""]
+            pg.append(f"Score **{result['score']}%** ({result['passed']} of {result['total']} rubric checks).")
             pg.append("")
+            st = result.get('run') or {}
+            if st:
+                tk = st.get('tokens', {})
+                pg += ["| the agent's work | |", "|---|---|",
+                       f"| turns | {st.get('turns')} |",
+                       f"| wall time | {fmt_secs(st.get('wall_s', 0))} (API {fmt_secs(st.get('api_s', 0))}) |",
+                       f"| cost | ${st.get('cost_usd', 0):.2f} |",
+                       f"| tokens in | {fmt_tokens(tk.get('input', 0) + tk.get('cache_read', 0) + tk.get('cache_write', 0))} "
+                       f"({fmt_tokens(tk.get('cache_read', 0))} cache read, {fmt_tokens(tk.get('cache_write', 0))} cache write) |",
+                       f"| tokens out | {fmt_tokens(tk.get('output', 0))} ({fmt_tokens(tk.get('thinking', 0))} thinking) |"]
+                for m in st.get('models', []):
+                    pg.append(f"| {m['model']} | {fmt_tokens(m['input'])} in, {fmt_tokens(m['output'])} out, ${m['cost_usd']:.2f} |")
+                pg.append("")
+                mcp = st.get('mcp')
+                if mcp:
+                    pg += [f"| MCP tool | calls | time |", "|---|---|---|"]
+                    for tool, t in mcp['tools'].items():
+                        pg.append(f"| {tool} | {t['calls']}{' (' + str(t['errors']) + ' refused)' if t['errors'] else ''} | {fmt_secs(round(t['ms'] / 1000))} |")
+                    pg.append(f"| **all** | {mcp['calls']} | {fmt_secs(round(mcp['ms'] / 1000))} |")
+                    pg.append("")
             if 'gif' in result:
                 pg += [f'<img src="{rel(result["gif"])}" width="480" alt="the result, looping">', ""]
             if 'contact' in result:
@@ -164,8 +234,12 @@ def main():
 
         # --- the index row ---
         if result:
-            status = f"**{result['score']}%**" + (f" · {result['summary'].replace('turns=', '').replace(' cost=', ' turns, ').replace(' secs=', ', ')}" if result['summary'] else "")
-            status = status.replace(', ' + result['summary'].split('secs=')[-1], f", {int(result['summary'].split('secs=')[-1]) // 60} min") if 'secs=' in result['summary'] else status
+            st = result.get('run') or {}
+            tk = st.get('tokens', {})
+            total_in = tk.get('input', 0) + tk.get('cache_read', 0) + tk.get('cache_write', 0)
+            status = f"**{result['score']}%** · {st.get('turns', '?')} turns · {fmt_secs(st.get('wall_s', 0))} · ${st.get('cost_usd', 0):.2f} · {fmt_tokens(total_in)} in / {fmt_tokens(tk.get('output', 0))} out"
+            if st.get('mcp'):
+                status += f" · MCP {fmt_secs(round(st['mcp']['ms'] / 1000))} in {st['mcp']['calls']} calls"
             pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
         else:
             status, pic = "not run yet", ""
@@ -188,7 +262,7 @@ folder — and `docs/demo/demo.json` carries the same material for the
 website. Footage credit: Big Buck Bunny (Blender Foundation, CC BY 3.0)
 where a screen recording stands in.
 
-| | demo | what the brief asks for | result |
+| | demo | what the brief asks for | result · the agent's work |
 |---|---|---|---|
 """
     open(os.path.join(CORE, 'demo.md'), 'w').write(head + "\n".join(rows) + "\n")

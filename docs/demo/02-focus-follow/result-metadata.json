@@ -1,0 +1,221 @@
+{
+  "id": "focus-follow-lumen",
+  "name": "Focus Follow",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 16,
+  "videoDuration": 16,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+
+    "palette": [
+      { "name": "canvas",          "colorHex": "0A0F1C" },
+      { "name": "text",            "colorHex": "F2F5FF" },
+      { "name": "text-bg",         "colorHex": "0A0F1C" },
+      { "name": "edge",            "colorHex": "2E4165" },
+      { "name": "caption-outline", "colorHex": "070B14" },
+      { "name": "caption-shadow",  "colorHex": "000000" },
+      { "name": "media-shadow",    "colorHex": "000000" },
+      { "name": "highlight",       "colorHex": "5B8CFF" },
+      { "name": "accent",          "colorHex": "5B8CFF" }
+    ],
+
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0.5, 0],
+      "end": [0.5, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "111C33", "at": 0 },
+        { "colorHex": "0A0F1C", "at": 0.55 },
+        { "colorHex": "070B14", "at": 1 }
+      ]
+    },
+
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.55,
+    "videoShadowRadius": 44,
+    "videoShadowOffset": [0, 18],
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 46,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 14,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.5,
+    "subtitleShadowRadius": 12,
+    "subtitleLeftMargin": 260,
+    "subtitleRightMargin": 260,
+    "subtitleVerticalMargin": 940
+  },
+
+  "resources": [
+    {
+      "id": "rec",
+      "kind": "video",
+      "filename": "rec_lumen_2560.mp4",
+      "displayName": "Lumen Analytics recording",
+      "addedAt": 0,
+      "duration": 15.0,
+      "trimStart": 0,
+      "trimEnd": 15.0,
+      "speed": 0.9375,
+      "videoNaturalWidth": 2560,
+      "videoNaturalHeight": 1600,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 3,
+        "cornerRadius": 12
+      }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 16,
+      "keyframes": []
+    },
+
+    {
+      "id": "screen",
+      "name": "Recording window",
+      "sortIndex": 1,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 16,
+      "resourceID": "rec",
+      "beyondEnd": "hold",
+      "fadeIn": 0.5,
+      "fadeOut": 0.5,
+      "keyframes": [
+        { "id": "p0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 800, "anchor": "center", "offset": [0, -52] } },
+
+        { "id": "v0", "time": 0,    "viewport": [0, 0, 1, 1],
+          "transitionDuration": 0 },
+
+        { "id": "v1", "time": 4.6,  "viewport": [0.185, 0.228, 0.42, 0.42],
+          "transitionDuration": 1.6, "easing": "easeInOut" },
+
+        { "id": "v2", "time": 8.0,  "viewport": [0.570, 0.270, 0.42, 0.42],
+          "transitionDuration": 1.6, "easing": "easeInOut" },
+
+        { "id": "v3", "time": 11.6, "viewport": [0.126, 0.630, 0.37, 0.37],
+          "transitionDuration": 1.6, "easing": "easeInOut" },
+
+        { "id": "v4", "time": 15.4, "viewport": [0, 0, 1, 1],
+          "transitionDuration": 1.6, "easing": "easeInOut" }
+      ]
+    },
+
+    {
+      "id": "cap1",
+      "name": "Caption 1",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.5,
+      "duration": 2.9,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "The window stays put.",
+      "captionStyle": {
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "cap2",
+      "name": "Caption 2",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 3.9,
+      "duration": 2.8,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "Follow the number…",
+      "captionStyle": {
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "cap3",
+      "name": "Caption 3",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 7.2,
+      "duration": 2.7,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "…then the account…",
+      "captionStyle": {
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "cap4",
+      "name": "Caption 4",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 10.6,
+      "duration": 2.8,
+      "fadeIn": 0.4,
+      "fadeOut": 0.4,
+      "captionText": "…then the switch.",
+      "captionStyle": {
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "keyframes": []
+    },
+
+    {
+      "id": "cap5",
+      "name": "Caption 5",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 13.9,
+      "duration": 2.1,
+      "fadeIn": 0.4,
+      "fadeOut": 0.5,
+      "captionText": "One layer. No cuts.",
+      "captionStyle": {
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "keyframes": []
+    }
+  ]
+}

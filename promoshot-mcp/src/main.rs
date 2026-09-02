@@ -25,6 +25,9 @@
 //!   --root <dir>        fence: refuse projects outside this tree
 //!   --promo <path>      the CLI binary (else next to this executable,
 //!                       else PATH)
+//!   --log <file>        append one line per tool call: time, tool,
+//!                       milliseconds, ok/error — what a session cost
+//!                       on this side of the wire
 // The tool descriptors are one large `json!` literal; the macro recurses
 // per nesting level, and the default limit is below what 19 tools need.
 #![recursion_limit = "256"]
@@ -91,6 +94,7 @@ struct Config {
     workspace: PathBuf,
     root: Option<PathBuf>,
     promo: Option<PathBuf>,
+    log: Option<PathBuf>,
 }
 
 impl Config {
@@ -98,6 +102,7 @@ impl Config {
         let mut workspace = None;
         let mut root = None;
         let mut promo = None;
+        let mut log = None;
         let mut args = args.peekable();
         while let Some(flag) = args.next() {
             let mut value = |name: &str| {
@@ -108,6 +113,7 @@ impl Config {
                 "--workspace" => workspace = Some(PathBuf::from(value("--workspace")?)),
                 "--root" => root = Some(PathBuf::from(value("--root")?)),
                 "--promo" => promo = Some(PathBuf::from(value("--promo")?)),
+                "--log" => log = Some(PathBuf::from(value("--log")?)),
                 other => return Err(format!("unknown flag `{other}`")),
             }
         }
@@ -115,6 +121,7 @@ impl Config {
             workspace: workspace.unwrap_or_else(default_workspace),
             root,
             promo,
+            log,
         })
     }
 }
@@ -688,7 +695,31 @@ where
         .unwrap_or("");
     let empty = json!({});
     let args = request.pointer("/params/arguments").unwrap_or(&empty);
-    match dispatch_tool(name, args, config, run) {
+    let started = std::time::Instant::now();
+    let outcome = dispatch_tool(name, args, config, run);
+    if let Some(path) = &config.log {
+        // One line per call, appended: when, which tool, how long, how it
+        // went. The timing a caller's own log cannot see — the render, the
+        // probe, the validate — measured on this side of the wire.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let line = format!(
+            "{now}\t{name}\t{}\t{}\n",
+            started.elapsed().as_millis(),
+            if outcome.is_ok() { "ok" } else { "error" }
+        );
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            use std::io::Write;
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+    match outcome {
         Ok(text) => {
             // The authoring pair and validate answer with a glance attached
             // — and a failed glance never fails the call it rides on.
@@ -874,6 +905,7 @@ mod tests {
         Config {
             workspace: std::env::temp_dir().join("promoshot-mcp-test-ws"),
             root: None,
+            log: None,
             promo: None,
         }
     }
@@ -1326,6 +1358,7 @@ mod tests {
     #[test]
     fn a_missing_promo_cli_explains_how_to_get_one() {
         let broken = Config {
+            log: None,
             promo: Some(PathBuf::from("/nonexistent/promo-cli-binary")),
             ..config()
         };

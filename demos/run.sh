@@ -23,7 +23,7 @@ for f in $(python3 -c "import json;print(' '.join(json.load(open('$DEMO/rubric.j
 done
 cp "$CORE/skill/SKILL.md" "$WS/.claude/skills/promoshot/SKILL.md"
 cat > "$WS/.mcp.json" <<JSON
-{"mcpServers": {"promoshot": {"command": "$MCP", "args": ["--workspace", "$WS", "--root", "$WS"]}}}
+{"mcpServers": {"promoshot": {"command": "$MCP", "args": ["--workspace", "$WS", "--root", "$WS", "--log", "$RUN/mcp.log"]}}}
 JSON
 PROMPT="$(cat "$DEMO/prompt.md")"
 echo "== $(basename "$DEMO") → runs/$TS"
