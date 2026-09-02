@@ -1128,7 +1128,11 @@ impl Document {
                         .partial_cmp(&b.time)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
-                meta.markers = if sorted.is_empty() { None } else { Some(sorted) };
+                meta.markers = if sorted.is_empty() {
+                    None
+                } else {
+                    Some(sorted)
+                };
             }
             Command::MoveLayer { layer_id, index } => {
                 // The z-order is `sortIndex`, not array position: the move
@@ -2421,7 +2425,11 @@ mod tests {
             let markers: Vec<promo_model::Marker> = serde_json::from_value(bad).unwrap();
             assert!(doc.apply(&Command::SetMarkers { markers }).is_err());
         }
-        assert_eq!(doc.meta().markers.as_deref().unwrap().len(), 2, "a refusal changes nothing");
+        assert_eq!(
+            doc.meta().markers.as_deref().unwrap().len(),
+            2,
+            "a refusal changes nothing"
+        );
         // Empty clears the field rather than writing [].
         doc.apply(&Command::SetMarkers { markers: vec![] }).unwrap();
         assert!(doc.meta().markers.is_none());
