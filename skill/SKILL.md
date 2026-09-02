@@ -130,6 +130,10 @@ new projects.
   to STABLE UUIDs (the same spelling in the same project always mints
   the same one), so re-run `promo_inspect` after a person's turn and
   re-anchor; its `updated:` line is the turn signal.
+- **Markers and chapters.** `"markers": [{ "id": "<uuid>", "time": 12.5,
+  "name": "Pricing", "kind": "chapter" }]` on the project names moments;
+  `chapter` markers are written into an exported mp4's chapter list,
+  `marker` ones are notes the editors show. Stamp `minReaderVersion: 20`.
 - **Long sources: build proxies once.** `promo_proxy {project}` makes a
   tier-1 proxy (960 px long edge, every frame a keyframe) for each video
   resource, in a cache outside the package. Stills, frames and small

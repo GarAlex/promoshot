@@ -204,6 +204,9 @@ pub struct EncodeSpec {
     pub width: u32,
     pub height: u32,
     pub fps: f64,
+    /// Chapter starts (seconds, title) the container carries — a player's
+    /// chapter menu. Each runs to the next, the last to the end.
+    pub chapters: Vec<(f64, String)>,
     /// Lower is better quality; backends map it to their own scale.
     pub quality: u32,
     /// Optional mixed soundtrack, muxed alongside the video.

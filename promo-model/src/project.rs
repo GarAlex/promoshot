@@ -120,6 +120,37 @@ strict_enum!(
         (Composition, "composition"),
     ]
 );
+// A marker's role. Tolerant: a kind a newer build adds reads as a plain
+// marker here — a name at a time is never wrong.
+tolerant_enum!(
+    MarkerKind,
+    Marker,
+    [(Marker, "marker"), (Chapter, "chapter")]
+);
+
+// The macro owns the enum's derive list; the default is spelled here.
+#[allow(clippy::derivable_impls)]
+impl Default for MarkerKind {
+    fn default() -> Self {
+        MarkerKind::Marker
+    }
+}
+
+/// A marker on the output timeline (rung 20): a named moment, or a
+/// chapter start the exporter writes into the container. No render effect.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Marker {
+    pub id: String,
+    pub time: f64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub kind: MarkerKind,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub color_hex: Option<String>,
+}
+
 tolerant_enum!(
     ProjectExportKind,
     Images,
@@ -2480,6 +2511,9 @@ pub struct ProjectMetadata {
     pub resources: Option<Vec<ProjectResource>>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub exports: Option<Vec<ProjectExport>>,
+    /// Markers and chapters on the output timeline (rung 20).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub markers: Option<Vec<Marker>>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub updated_at: Option<f64>,
     pub state: String,
@@ -2576,6 +2610,12 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 20 is markers and chapters. Dropped by an older reader's save, the
+        // chapter list is simply gone.
+        if self.markers.as_ref().is_some_and(|m| !m.is_empty()) {
+            return 20;
+        }
 
         // 19 is a COMPOSITION resource — a document inside the document.
         // Kinds decode strictly, so an older binary refuses the file.

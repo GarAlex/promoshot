@@ -353,3 +353,9 @@ package (`$PROMO_PROXY_DIR`, else the platform cache directory under
 output's long edge fits it, `on` builds missing proxies first, `off`
 reads the source — and a full-size render always does. The MCP tools
 take the same `proxy` argument; `promo_proxy` builds them.
+
+## Markers and chapters
+
+A project may carry `markers` — named moments on the output timeline.
+`kind: "chapter"` markers are written into an exported mp4's chapter
+list (a player's chapter menu); `inspect` lists them all.

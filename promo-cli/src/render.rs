@@ -695,7 +695,17 @@ pub fn export_video(
         renderer.set_overlay(Some((bgra, *overlay_width, *overlay_height)))?;
     }
     let audio = build_soundtrack(project, end - start)?;
+    let chapters: Vec<(f64, String)> = project
+        .meta
+        .markers
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .filter(|m| m.kind == promo_model::MarkerKind::Chapter)
+        .map(|m| (m.time, m.name.clone()))
+        .collect();
     let spec = promo_media::EncodeSpec {
+        chapters,
         width,
         height,
         fps,

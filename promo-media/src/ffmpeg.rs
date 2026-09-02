@@ -578,6 +578,13 @@ impl FfmpegEncoder {
             _ => None,
         };
 
+        // Chapters ride an ffmetadata file as one more input, mapped in as
+        // the container's metadata; the end of each is the next's start.
+        let chapters_temp = if spec.chapters.is_empty() {
+            None
+        } else {
+            Some(write_chapters(&spec.chapters)?)
+        };
         let mut command = Command::new("ffmpeg");
         command.args([
             "-hide_banner",
@@ -597,6 +604,14 @@ impl FfmpegEncoder {
         ]);
         if let Some(wav) = &audio_temp {
             command.arg("-i").arg(wav);
+        }
+        if let Some(chapters) = &chapters_temp {
+            let index = if audio_temp.is_some() { "2" } else { "1" };
+            command.arg("-i").arg(chapters);
+            command.args(["-map_metadata", index, "-map", "0:v"]);
+            if audio_temp.is_some() {
+                command.args(["-map", "1:a"]);
+            }
         }
         command.args([
             "-c:v",
@@ -627,6 +642,42 @@ impl FfmpegEncoder {
 }
 
 /// Writes interleaved f32 PCM as a WAV (format 3, IEEE float).
+/// An ffmetadata file with one [CHAPTER] per entry, in milliseconds; each
+/// chapter ends where the next begins, the last a day later (the container
+/// clamps it to the stream's end).
+fn write_chapters(chapters: &[(f64, String)]) -> Result<PathBuf, MediaError> {
+    let dir = std::env::temp_dir().join("promo-media");
+    std::fs::create_dir_all(&dir).map_err(|e| MediaError::Backend(format!("temp dir: {e}")))?;
+    let path = dir.join(format!(
+        "chapters-{}-{}.txt",
+        std::process::id(),
+        chapters.len()
+    ));
+    let mut sorted: Vec<&(f64, String)> = chapters.iter().collect();
+    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut text = String::from(";FFMETADATA1\n");
+    for (i, (start, title)) in sorted.iter().enumerate() {
+        let end = sorted
+            .get(i + 1)
+            .map(|next| next.0)
+            .unwrap_or(start + 86_400.0);
+        let title = title
+            .replace('\\', "\\\\")
+            .replace('=', "\\=")
+            .replace(';', "\\;")
+            .replace('#', "\\#")
+            .replace('\n', " ");
+        text.push_str(&format!(
+            "[CHAPTER]\nTIMEBASE=1/1000\nSTART={}\nEND={}\ntitle={}\n",
+            (start.max(0.0) * 1000.0).round() as i64,
+            (end.max(*start) * 1000.0).round() as i64,
+            title
+        ));
+    }
+    std::fs::write(&path, text).map_err(|e| MediaError::Backend(format!("chapters: {e}")))?;
+    Ok(path)
+}
+
 fn write_wav(audio: &AudioBuffer) -> Result<PathBuf, MediaError> {
     let dir = std::env::temp_dir().join("promo-media");
     std::fs::create_dir_all(&dir).map_err(|e| MediaError::Backend(format!("temp dir: {e}")))?;
@@ -719,6 +770,7 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("temp dir");
         let out = dir.join(format!("abandoned-{}.mp4", std::process::id()));
         let spec = crate::EncodeSpec {
+            chapters: Vec::new(),
             width: 64,
             height: 64,
             fps: 30.0,
@@ -1135,6 +1187,7 @@ mod tests {
         let out = std::env::temp_dir().join("promo-media-tests/encoded.mp4");
         let _ = std::fs::remove_file(&out);
         let spec = EncodeSpec {
+            chapters: Vec::new(),
             width: 64,
             height: 48,
             fps: 30.0,
@@ -1151,5 +1204,64 @@ mod tests {
 
         let decoder = FfmpegDecoder::open(&out).expect("read back");
         assert_eq!((decoder.info().width, decoder.info().height), (64, 48));
+    }
+    /// Chapters given to the encoder come back out of the container.
+    #[test]
+    fn chapters_land_in_the_container() {
+        use crate::VideoEncoder;
+        if Command::new("ffmpeg")
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-chapters-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("chapters.mp4");
+        let spec = EncodeSpec {
+            chapters: vec![(0.0, "Open".into()), (1.0, "Pricing = plans".into())],
+            width: 64,
+            height: 48,
+            fps: 30.0,
+            quality: 30,
+            audio: None,
+        };
+        let mut encoder: Box<dyn VideoEncoder> =
+            Box::new(FfmpegEncoder::open(&out, &spec).expect("encoder"));
+        let frame = vec![0u8; 64 * 48 * 4];
+        for _ in 0..60 {
+            encoder.write_frame(&frame).expect("frame");
+        }
+        encoder.finish().expect("finish");
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-show_chapters",
+                "-of",
+                "default=noprint_wrappers=0",
+            ])
+            .arg(&out)
+            .output()
+            .expect("ffprobe");
+        let text = String::from_utf8_lossy(&probe.stdout).to_string();
+        let titles: Vec<&str> = text
+            .lines()
+            .filter_map(|l| l.strip_prefix("TAG:title="))
+            .collect();
+        assert_eq!(titles, vec!["Open", "Pricing = plans"], "{text}");
+        let starts: Vec<f64> = text
+            .lines()
+            .filter_map(|l| l.strip_prefix("start_time="))
+            .map(|v| v.parse::<f64>().unwrap())
+            .collect();
+        assert_eq!(starts.len(), 2, "{text}");
+        assert!((starts[1] - 1.0).abs() < 0.01, "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

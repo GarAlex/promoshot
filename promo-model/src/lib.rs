@@ -620,6 +620,13 @@ mod schema_doc_tests {
             resources: Some(vec![full_resource()]),
             // Export history the app appends; never authored.
             exports: None,
+            markers: Some(vec![Marker {
+                id: "M1".into(),
+                time: 2.5,
+                name: "Chapter one".into(),
+                kind: MarkerKind::Chapter,
+                color_hex: Some("@accent".into()),
+            }]),
             updated_at: None,
             state: "recorded".into(),
             // Writer bookkeeping; the doc teaches minReaderVersion only.
@@ -642,6 +649,7 @@ mod schema_doc_tests {
     /// Enum wire values an author has to spell exactly. Extend alongside the
     /// enums; every entry must appear in schema.md verbatim.
     const VALUES: &[&str] = &[
+        "chapter",
         "composition",
         // Layer and resource kinds.
         "background",

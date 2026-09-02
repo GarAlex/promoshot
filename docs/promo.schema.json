@@ -872,6 +872,43 @@
       ],
       "type": "object"
     },
+    "Marker": {
+      "properties": {
+        "colorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/MarkerKind",
+          "default": "marker"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "time": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "time"
+      ],
+      "type": "object"
+    },
+    "MarkerKind": {
+      "enum": [
+        "marker",
+        "chapter"
+      ],
+      "type": "string"
+    },
     "MediaCut": {
       "additionalProperties": true,
       "properties": {
@@ -2511,6 +2548,15 @@
     "layers": {
       "items": {
         "$ref": "#/$defs/ProjectLayer"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "markers": {
+      "items": {
+        "$ref": "#/$defs/Marker"
       },
       "type": [
         "array",

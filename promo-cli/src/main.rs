@@ -311,6 +311,9 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
                 .collect::<Vec<_>>(),
             "resources": project.resources().len(),
             "renderable": renderable,
+            "markers": project.meta.markers.as_deref().unwrap_or(&[]).iter().map(|m| serde_json::json!({
+                "id": m.id, "time": m.time, "name": m.name, "kind": m.kind,
+            })).collect::<Vec<_>>(),
             "skipped": skipped
                 .iter()
                 .map(|(name, why)| serde_json::json!({
@@ -359,6 +362,16 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
                 c["layers"],
                 c["placedBy"].as_array().map(|p| p.len()).unwrap_or(0)
             ));
+        }
+    }
+    if let Some(markers) = project.meta.markers.as_deref().filter(|m| !m.is_empty()) {
+        out.push_str(&format!("markers:   {}\n", markers.len()));
+        for m in markers {
+            let kind = serde_json::to_value(m.kind)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default();
+            out.push_str(&format!("  {:.2}s  {kind}  \"{}\"\n", m.time, m.name));
         }
     }
     out.push_str(&format!("\nrenderable: {renderable} of {}", layers.len()));

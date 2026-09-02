@@ -756,3 +756,11 @@ the plate under the nested layers, transparent when absent; typography
 and the palette are the parent's. A project with a composition carries
 `minReaderVersion: 19` — kinds decode strictly, so an older binary must
 refuse the file rather than fail halfway through a decode.
+
+Markers and chapters (rung 20). A project may carry `"markers": [ { "id":
+"<uuid>", "time": 12.5, "name": "Pricing", "kind": "chapter",
+"colorHex": "@accent" } ]` — named moments on the output timeline. `kind`
+is `marker` (a note the editors show) or `chapter` (also written into an
+exported mp4's chapter list, so a player's chapter menu has it); an
+unknown kind reads as `marker`. No render effect. A project with markers
+carries `minReaderVersion: 20` — an older reader drops the list on save.

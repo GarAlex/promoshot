@@ -246,4 +246,45 @@ mod tests {
             "{found:?}"
         );
     }
+    /// Markers round-trip, an unknown kind reads as a marker, and a project
+    /// with any marker gates at 20.
+    #[test]
+    fn markers_round_trip_and_gate_at_twenty() {
+        let json = serde_json::json!({
+            "id": "P", "name": "p", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 1920, "canvasHeight": 1080},
+            "markers": [
+                {"id": "M1", "time": 2.5, "name": "Pricing", "kind": "chapter", "colorHex": "@accent"},
+                {"id": "M2", "time": 4.0, "name": "note"},
+                {"id": "M3", "time": 6.0, "name": "future", "kind": "bookmark"}
+            ]
+        });
+        let meta = ProjectMetadata::from_json(&json.to_string()).unwrap();
+        let markers = meta.markers.as_deref().unwrap();
+        assert_eq!(markers.len(), 3);
+        assert_eq!(markers[0].kind, crate::MarkerKind::Chapter);
+        assert_eq!(markers[1].kind, crate::MarkerKind::Marker);
+        assert_eq!(
+            markers[2].kind,
+            crate::MarkerKind::Marker,
+            "unknown kinds read as markers"
+        );
+        assert_eq!(meta.minimum_reader_version(), 20);
+        let again = ProjectMetadata::from_json(&meta.to_json().unwrap()).unwrap();
+        assert_eq!(
+            again.markers.as_deref().unwrap()[0].color_hex.as_deref(),
+            Some("@accent")
+        );
+        let plain: ProjectMetadata = ProjectMetadata::from_json(
+            &serde_json::json!({
+                "id": "P", "name": "p", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                "compositionSettings": {"canvasWidth": 1920, "canvasHeight": 1080}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert!(plain.minimum_reader_version() < 20);
+    }
 }
