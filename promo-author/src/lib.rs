@@ -1694,7 +1694,10 @@ mod tests {
         let meta = read(&dir);
         let layers = meta.layers.as_ref().unwrap();
         assert!(layers.iter().all(|l| l.id != "words"), "deleted");
-        assert_eq!(layers[1].id, "second", "reordered under the card");
+        // The z-order is sortIndex; a move renumbers in place and leaves
+        // the array where it was (the app's reorder does the same).
+        let at_rank_1 = layers.iter().find(|l| l.sort_index == 1).unwrap();
+        assert_eq!(at_rank_1.id, "second", "reordered under the card");
         let card = layers.iter().find(|l| l.id == "card").unwrap();
         let wire = serde_json::to_value(card).unwrap();
         assert_eq!(wire["transitionIn"]["kind"], "wipe", "the wipe landed");

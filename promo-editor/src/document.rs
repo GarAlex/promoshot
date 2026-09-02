@@ -926,16 +926,21 @@ impl Document {
                 );
             }
             Command::MoveLayer { layer_id, index } => {
-                layers.sort_by_key(|l| l.sort_index);
-                let from = layers
+                // The z-order is `sortIndex`, not array position: the move
+                // rewrites sort indices IN PLACE and leaves every element
+                // where it sits — what the apps' reorder does, so a file the
+                // app and an agent both edit does not churn its array order.
+                let moving = layers
                     .iter()
                     .position(|l| l.id == *layer_id)
                     .ok_or_else(|| format!("no layer with id {layer_id}"))?;
-                let layer = layers.remove(from);
-                let to = (*index).min(layers.len());
-                layers.insert(to, layer);
-                for (i, layer) in layers.iter_mut().enumerate() {
-                    layer.sort_index = i as i64;
+                let mut order: Vec<usize> = (0..layers.len()).collect();
+                order.sort_by_key(|&i| layers[i].sort_index);
+                order.retain(|&i| i != moving);
+                let to = (*index).min(order.len());
+                order.insert(to, moving);
+                for (rank, i) in order.into_iter().enumerate() {
+                    layers[i].sort_index = rank as i64;
                 }
             }
         }
@@ -1802,5 +1807,30 @@ mod tests {
             (0..after.len() as i64).collect::<Vec<_>>(),
             "no hole: {after:?}"
         );
+    }
+
+    /// A move rewrites sortIndex in place: the array keeps its positions
+    /// (the apps' reorder never moves elements either), so the app's file
+    /// and the core's agree byte for byte after the same reorder.
+    #[test]
+    fn move_keeps_array_positions_and_renumbers_ranks() {
+        let mut doc = doc();
+        let before: Vec<String> = doc
+            .meta()
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .map(|l| l.id.clone())
+            .collect();
+        let last = layer_id(&doc, 2);
+        doc.apply(&command(serde_json::json!(
+            {"kind": "moveLayer", "layerID": last, "index": 0})))
+            .unwrap();
+        let layers = doc.meta().layers.as_deref().unwrap();
+        let after: Vec<String> = layers.iter().map(|l| l.id.clone()).collect();
+        assert_eq!(after, before, "no element moved");
+        let ranks: Vec<i64> = layers.iter().map(|l| l.sort_index).collect();
+        assert_eq!(ranks, vec![1, 2, 0], "the last layer now sorts first");
     }
 }
