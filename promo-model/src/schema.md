@@ -775,3 +775,10 @@ core's mix (the apps' live preview plays the resource dry):
 "widthOctaves": 1, "gainDb": 3 }` (one band per entry). An unknown kind
 reads as `none` and is skipped. A project with any effect carries
 `minReaderVersion: 21`.
+
+Chroma key (rung 22). A video or image layer may carry `"chromaKey":
+{ "colorHex": "00FF00", "tolerance": 0.3, "softness": 0.1 }`: pixels
+whose chroma sits within `tolerance` of the colour's (0…1 in the Cb/Cr
+plane) become transparent, feathered over `softness` beyond it, before
+the layer's grade, border and mask. A palette name (`"@green"`) works.
+A project with a keyed layer carries `minReaderVersion: 22`.

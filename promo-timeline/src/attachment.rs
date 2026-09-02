@@ -893,6 +893,7 @@ mod tests {
             motion_blur: None,
             adjustments: None,
             blend_mode: None,
+            chroma_key: None,
             mask_resource_id: None,
             mask_inverted: None,
             start_time: start,

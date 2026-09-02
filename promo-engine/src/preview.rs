@@ -1082,6 +1082,16 @@ impl PreviewEngine {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
         }
+        if let Some(key) = layer.chroma_key.as_ref() {
+            let rgba = rgba_from_hex(settings.resolve_color(&key.color_hex));
+            quad.key_rgba = [rgba[0], rgba[1], rgba[2], 1.0];
+            quad.key_params = [
+                key.tolerance.unwrap_or(0.3).clamp(0.0, 1.0) as f32,
+                key.softness.unwrap_or(0.1).clamp(0.0, 1.0) as f32,
+                0.0,
+                0.0,
+            ];
+        }
         quad.blend = Self::blend_for(layer);
 
         // The drop shadow, as its own soft-edged solid quad under this one.

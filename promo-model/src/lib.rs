@@ -434,6 +434,11 @@ mod schema_doc_tests {
                 tint_amount: Some(0.4),
             }),
             blend_mode: Some(BlendMode::Screen),
+            chroma_key: Some(ChromaKey {
+                color_hex: "00FF00".into(),
+                tolerance: Some(0.3),
+                softness: Some(0.1),
+            }),
             mask_resource_id: Some("M".into()),
             mask_inverted: Some(true),
             resource_id: Some("R".into()),

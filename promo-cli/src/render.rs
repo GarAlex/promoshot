@@ -1368,6 +1368,78 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// B3.4: a chroma key cuts the plate and keeps the subject — the plate's
+    /// pixels show the background, the subject's stay their colour, the
+    /// unkeyed twin shows the plate.
+    #[test]
+    fn a_chroma_key_cuts_the_plate_and_keeps_the_subject() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-key-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        // A green plate with a red square in the middle.
+        let (w, h) = (64u32, 48u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 4;
+                let red = (20..44).contains(&x) && (12..36).contains(&y);
+                rgba[i..i + 4].copy_from_slice(if red {
+                    &[220, 30, 30, 255]
+                } else {
+                    &[0, 255, 0, 255]
+                });
+            }
+        }
+        write_png(&dir.join("Resources/plate.png"), &rgba, w, h).unwrap();
+        let doc = |keyed: bool| {
+            format!(
+                r#"{{"id":"P","name":"Key","createdAt":0,"state":"recorded","minReaderVersion":22,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":64,"canvasHeight":48,"backgroundColorHex":"1020C0"}},
+                "resources":[{{"id":"I","kind":"image","filename":"plate.png","displayName":"plate","addedAt":0,
+                  "pixelWidth":64,"pixelHeight":48,"imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                "layers":[{{"id":"L","name":"plate","sortIndex":0,"kind":"image","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"I"{key},"keyframes":[]}}]}}"#,
+                key = if keyed {
+                    r#","chromaKey":{"colorHex":"00FF00","tolerance":0.25,"softness":0.05}"#
+                } else {
+                    ""
+                }
+            )
+        };
+        let render = |json: &str| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 64, 48).expect("renderer");
+            renderer.frame_bgra(1.0).expect("frame")
+        };
+        let px = |frame: &[u8], x: usize, y: usize| -> [u8; 3] {
+            let i = (y * 64 + x) * 4;
+            [frame[i + 2], frame[i + 1], frame[i]] // r, g, b
+        };
+        let keyed = render(&doc(true));
+        let plain = render(&doc(false));
+        let corner_keyed = px(&keyed, 4, 4);
+        let corner_plain = px(&plain, 4, 4);
+        assert!(
+            corner_plain[1] > 200 && corner_plain[0] < 40,
+            "unkeyed shows the plate: {corner_plain:?}"
+        );
+        assert!(
+            corner_keyed[2] > 150 && corner_keyed[1] < 60,
+            "keyed shows the background through the plate: {corner_keyed:?}"
+        );
+        let centre = px(&keyed, 32, 24);
+        assert!(
+            centre[0] > 180 && centre[1] < 70,
+            "the red subject survives the key: {centre:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The nesting oracle: a composition placed as a clip must render
     /// pixel-identical to the same layers flattened into the parent with
     /// their times offset — the recursion adds a texture round trip and

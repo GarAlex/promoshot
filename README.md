@@ -367,3 +367,10 @@ A video or audio resource may carry `audioEffects` — `normalize`
 applied in order before the mix in every render the core makes. The
 apps' exports take the same mix; their live preview plays the resource
 dry.
+
+## Chroma key
+
+A video or image layer may carry `chromaKey` — a colour, a tolerance
+and a softness: the plate becomes transparent before the layer's grade,
+border and mask, in the compositor, so a green-screen clip composes
+over anything on every host alike.

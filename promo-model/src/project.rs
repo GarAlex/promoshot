@@ -490,6 +490,22 @@ impl TextReveal {
     }
 }
 
+/// A chroma key on a media layer (rung 22): pixels whose chroma sits
+/// within `tolerance` of `colorHex`'s become transparent, feathered over
+/// `softness` beyond it. Applied to the layer's own pixels before its
+/// grade, border and mask, so a keyed clip composes like any other.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChromaKey {
+    pub color_hex: String,
+    /// Chroma distance (0…1 in the Cb/Cr plane) fully keyed; default 0.3.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub tolerance: Option<f64>,
+    /// Feather beyond the tolerance; default 0.1.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub softness: Option<f64>,
+}
+
 /// A per-layer colour grade, applied to the layer's own pixels only —
 /// the screenshot goes black-and-white while everything around it keeps
 /// its colour. NOT an adjustment layer: nothing beneath is touched.
@@ -1830,6 +1846,9 @@ pub struct ProjectLayer {
     /// animate the layer's opacity or its grade instead.
     #[serde(default, skip_serializing_if = "is_none")]
     pub blend_mode: Option<BlendMode>,
+    /// A chroma key on this layer's pixels (rung 22).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub chroma_key: Option<ChromaKey>,
     /// The drawing whose ink is this layer's WINDOW: rasterized and
     /// stretched over the layer's rect, the layer only shows where the
     /// drawing has ink. Absent means the whole rect, as always. A static
@@ -2666,6 +2685,12 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 22 is a chroma key on a layer. Dropped by an older reader's save,
+        // the green plate comes back.
+        if layers.iter().any(|l| l.chroma_key.is_some()) {
+            return 22;
+        }
 
         // 21 is a resource's audio effect chain. Dropped by an older
         // reader's save, the mix silently loses its loudness and tone.

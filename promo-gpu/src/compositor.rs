@@ -92,6 +92,10 @@ pub struct SceneQuad {
     /// half the penumbra (rounded rects are closed under offsetting, so the
     /// falloff bands match the true rect's outside distance exactly).
     pub edge_soften: f64,
+    /// Chroma key: rgb = the key colour (straight), a = 1 keyed / 0 none.
+    pub key_rgba: [f32; 4],
+    /// x = tolerance, y = softness — chroma distance in the Cb/Cr plane.
+    pub key_params: [f32; 4],
 }
 
 impl Default for SceneQuad {
@@ -120,6 +124,8 @@ impl Default for SceneQuad {
             tile_repeats: [0.0, 0.0],
             tile_anchor: [0.0, 0.0],
             edge_soften: 0.0,
+            key_rgba: [0.0, 0.0, 0.0, 0.0],
+            key_params: [0.3, 0.1, 0.0, 0.0],
         }
     }
 }
@@ -228,6 +234,10 @@ struct Quad {
     // yz = tile repeats per axis (0 = untiled); the grid starts at
     // mask_box.zw (unit quad coordinates) — a tiled background plate.
     extra: vec4<f32>,
+    // Chroma key: rgb = the key colour (straight), w = 1 keyed / 0 none.
+    key: vec4<f32>,
+    // x = tolerance, y = softness (chroma distance in the Cb/Cr plane).
+    key_params: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -398,6 +408,20 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // the alpha back in. Saturation, then contrast, then brightness, then
     // tint: saturation-then-tint is what makes a duotone (grey first, gel
     // after) come out as one.
+    // Chroma key, on THIS quad's pixels alone, before the grade: distance
+    // in the Cb/Cr plane from the key colour, feathered over the softness.
+    if quad.key.w > 0.5 && color.a > 0.0 {
+        let straight = color.rgb / color.a;
+        let cb = -0.1687 * straight.r - 0.3313 * straight.g + 0.5 * straight.b;
+        let cr = 0.5 * straight.r - 0.4187 * straight.g - 0.0813 * straight.b;
+        let kcb = -0.1687 * quad.key.r - 0.3313 * quad.key.g + 0.5 * quad.key.b;
+        let kcr = 0.5 * quad.key.r - 0.4187 * quad.key.g - 0.0813 * quad.key.b;
+        let d = distance(vec2<f32>(cb, cr), vec2<f32>(kcb, kcr));
+        let tol = quad.key_params.x;
+        let soft = max(quad.key_params.y, 0.0001);
+        let keep = smoothstep(tol, tol + soft, d);
+        color = vec4<f32>(straight * color.a * keep, color.a * keep);
+    }
     let adj = quad.adjust;
     if adj.x != 1.0 || adj.y != 1.0 || adj.z != 0.0 || adj.w != 0.0 {
         var rgb = color.rgb;
@@ -494,6 +518,8 @@ struct QuadRaw {
     mask_xform: [f32; 4],
     mask_box: [f32; 4],
     extra: [f32; 4],
+    key: [f32; 4],
+    key_params: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -1289,6 +1315,8 @@ impl Compositor {
                     q.tile_repeats[1],
                     0.0,
                 ],
+                key: q.key_rgba,
+                key_params: q.key_params,
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -1477,6 +1505,8 @@ impl Compositor {
             mask_xform: [0.0, 0.0, 1.0, 0.0],
             mask_box: [0.0; 4],
             extra: [0.0; 4],
+            key: [0.0, 0.0, 0.0, 0.0],
+            key_params: [0.3, 0.1, 0.0, 0.0],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));

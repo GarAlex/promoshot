@@ -238,6 +238,31 @@
       ],
       "type": "string"
     },
+    "ChromaKey": {
+      "properties": {
+        "colorHex": {
+          "type": "string"
+        },
+        "softness": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tolerance": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "colorHex"
+      ],
+      "type": "object"
+    },
     "Composition": {
       "properties": {
         "backgroundColorHex": {
@@ -1317,6 +1342,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/SubtitleVoiceClip"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chromaKey": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChromaKey"
             },
             {
               "type": "null"
