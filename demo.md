@@ -51,3 +51,21 @@ million-odd tokens costs a couple of dollars at list.
 | <a href="docs/demo/demo22.md"><img src="docs/demo/22-product-story/thumb.png" width="160"></a> | [22 Product Story](docs/demo/demo22.md) | A reused title card, a keyed clip, a warm-graded shot, a levelled voice line, four chapters. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/22-product-story.mp4) · **100%** · 54 turns · 5 min 21 s · $2.76 · 2.9M in / 24k out · MCP 11 s in 18 calls |
 | <a href="docs/demo/demo23.md"><img src="docs/demo/23-soft-focus/thumb.png" width="160"></a> | [23 Soft Focus](docs/demo/demo23.md) | A blurred, vignetted, grainy backdrop; a sharp hero that arrives out of blur and smears out; a headline that glows once. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/23-soft-focus.mp4) · **100%** · 65 turns · 9 min 25 s · $3.90 · 3.9M in / 42k out |
 | <a href="docs/demo/demo24.md"><img src="docs/demo/24-cuts/thumb.png" width="160"></a> | [24 Cuts](docs/demo/demo24.md) | Five screenshots on one layer, swapped through a blur dissolve, a zoom, a flash, a glitch and a dip, each named by a caption that swaps the same way. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/24-cuts.mp4) · **88%** · 33 turns · 2 min 55 s · $1.60 · 1.2M in / 14k out · MCP 6 s in 12 calls |
+
+
+## Creative runs — a goal, the material, the tools
+
+The prompts above name the technique, and the score asks whether the
+agent got there. These give only a goal, the material and the tools —
+nothing about how — and ask what the agent makes of it. The score here is
+the floor (valid, rendered, the asked length, the given material used, a
+few features reached for, words on screen); the piece and the agent's own
+notes on its page are the answer.
+
+| | run | the brief | result · the agent's work |
+|---|---|---|---|
+| <a href="docs/demo/democ1.md"><img src="docs/demo/c1-launch-video/thumb.png" width="160"></a> | [C1 Launch video](docs/demo/democ1.md) | Lumen is an analytics app for small teams. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c1-launch-video.mp4) · **100%** · 44 turns · 6 min 46 s · $2.55 · 2.0M in / 30k out · MCP 9 s in 13 calls |
+| <a href="docs/demo/democ2.md"><img src="docs/demo/c2-social-teaser/thumb.png" width="160"></a> | [C2 Social teaser](docs/demo/democ2.md) | This is a screen recording and one screenshot from the same app. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c2-social-teaser.mp4) · **100%** · 49 turns · 10 min 35 s · $3.70 · 3.2M in / 45k out · MCP 25 s in 15 calls |
+| <a href="docs/demo/democ3.md"><img src="docs/demo/c3-mood-piece/thumb.png" width="160"></a> | [C3 Mood piece](docs/demo/democ3.md) | One screenshot and three colour looks in. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c3-mood-piece.mp4) · **100%** · 42 turns · 6 min 22 s · $2.17 · 1.7M in / 27k out · MCP 3 s in 11 calls |
+| <a href="docs/demo/democ4.md"><img src="docs/demo/c4-manifesto/thumb.png" width="160"></a> | [C4 Manifesto](docs/demo/democ4.md) | No media. | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c4-manifesto.mp4) · **83%** · 28 turns · 3 min 55 s · $1.66 · 1.3M in / 17k out · MCP 21 s in 8 calls |
+|  | [C5 Story with a voice](docs/demo/democ5.md) | Screenshots, a green-screen clip and a warm look. | not run yet |

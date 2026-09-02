@@ -4,6 +4,7 @@
   "slug": "01-app-store-hero",
   "title": "App Store Hero",
   "blurb": "Five screenshots on one slowly drifting framed window, swapped in turn under a headline each \u2014 a Mac App Store preview.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -111,6 +112,9 @@
      }
     ]
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/Exports/preview-1440x900.mp4` \u2014 1440\u00d7900, 15.0s, 30fps, 450 frames.\n\n**How it's built** (`out.promo/metadata.json`, validated clean, 7 of 7 layers renderable):\n\n- **Studio ground** \u2014 a radial gradient (`@studio-hi` \u2192 `@studio-mid` \u2192 `@canvas`) whose centre drifts from `[0.40, 0.28]` to `[0.61, 0.39]` linearly across the full 15s. One continuous move, no accel, so it reads as a slow pool of light rather than an effect.\n- **One window layer** showing all five shots via `resourceID` swap keyframes at 3/6/9/12s, each with an 0.8s `easeInOut` fade \u2014 no second layer, no flash. Sized by rule (`placement`, height 676\u2192692, offset `[-12,48]`\u2192`[12,52]`), so it also creeps very slightly bigger and rightward over the 15s. Flat `border` frame in `@edge` plus a soft drop shadow.\n- **Five headlines**, `anchor: top, offset [0,44]`, arriving word by word via `subtitleReveal: { by: \"word\", mode: \"rise\", secondsPer: 0.16 }`. Each caption lives strictly inside its own 3s slot (0.9s after the swap, out 0.25s before the next), so no headline ever crosses a dissolve or another headline.\n- Eight-role palette, so re-skinning is one block.\n\n**One judgment call I made:** the screenshot order isn't the file order. The text order is exactly as you gave it, but pairing it against the files as listed put \"Write without the noise.\" over a Retention chart and \"Ship the story.\" over a writing app. I swapped those two shots so the first four headlines describe what's actually on screen \u2014 Overview \u2192 Revenue \u2192 Verse (the writer) \u2192 Pulse \u2192 Retention. That leaves \"Ship the story.\" on the Retention chart, which is the only pairing with no strong image for it; it reads as the closing line about the data's story. Swap `img3`/`img5` in the resources array if you'd rather have the literal file ord",
    "contact": "docs/demo/01-app-store-hero/contact-result.png",
    "reference_contact": "docs/demo/01-app-store-hero/contact-reference.png",
    "video": "docs/demo/01-app-store-hero/result.mp4",
@@ -127,6 +131,7 @@
   "slug": "02-focus-follow",
   "title": "Focus Follow",
   "blurb": "A framed recording that never moves while the view inside dives to three details, each captioned.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -205,6 +210,9 @@
      }
     ]
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/Exports/focus-follow.mp4` \u2014 1920\u00d71080, 960 frames @ 60fps, exactly 16.00s.\n\n**How it's built** \u2014 one video layer, no cuts:\n\n- The window is a fixed `placement` rule (`height: 800`, centered, offset `[0,-52]`) with a bordered frame and a drop shadow. It never moves. All the motion is a `viewport` track on the same layer, so the frame holds while what it shows pushes in.\n- The 15.0s source is stretched to 16.0s with `speed: 0.9375` on the resource, so the clip lands on the requested length without a freeze or a trim.\n\n**The four moves**, each a 1.6s `easeInOut` ramp with a dwell in between:\n\n| output | viewport | what it lands on |\n|---|---|---|\n| 0\u20133.0 | `[0,0,1,1]` | whole dashboard |\n| 3.0\u21924.6 | `[0.185,0.228,0.42,0.42]` | the \"Week 24 \u00b7 $4,180\" chart tooltip |\n| 6.4\u21928.0 | `[0.570,0.270,0.42,0.42]` | the accounts panel, acme.co row highlighted |\n| 10.0\u219211.6 | `[0.126,0.630,0.37,0.37]` | the Revenue drop alert switch |\n| 13.8\u219215.4 | `[0,0,1,1]` | back out |\n\n`w == h` on every window keeps the layer's 16:10 shape, so the frame's silhouette is identical in every frame.\n\n**Captions** sit below the window on the ground, each with a life strictly clear of its neighbours (0.5\u20133.4, 3.9\u20136.7, 7.2\u20139.9, 10.6\u201313.4, 13.9\u201316.0) so none cross-fades with another. All five strings used verbatim, in order.\n\nTwo things I adjusted after looking at the contact sheet: the switch viewport was originally at the same 0.42 depth as the others, which crammed \"Signup surge\" against the right edge and left dead space below \u2014 tightening to 0.37 and re-centering fixed both. The source's alerts card sits low enough in the frame that the viewport clamps against the bottom edge, so that shot is framed slightly high by design rather than dead-centered.\n\nValidation reports clean, and insp",
    "contact": "docs/demo/02-focus-follow/contact-result.png",
    "reference_contact": "docs/demo/02-focus-follow/contact-reference.png",
    "video": "docs/demo/02-focus-follow/result.mp4",
@@ -221,6 +229,7 @@
   "slug": "03-sprite-arcade",
   "title": "Sprite Arcade",
   "blurb": "Sprite sheets animating while they fly curved paths across the canvas, staggered.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -318,6 +327,9 @@
      }
     ]
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/Exports/export.mp4` \u2014 1920\u00d71080, 13.0s, 780 frames @ 60fps.\n\n**What's in it**\n\nFour sprite sheets read as sprites (`sprite` on the image resource, `sampling: \"nearest\"` so cells don't bleed into each other): bird 6\u00d748\u00b2, coin 8\u00d740\u00b2, rocket 6\u00d748\u00b2, spark 8\u00d756\u00b2, all single-row.\n\nEach flies edge to edge on its own curved path (`path` resources bent by `motionPath` between two `placement` keyframes), staggered with ~0.2s of overlap so only one is really in the air at a time:\n\n| | in air | path | extra |\n|---|---|---|---|\n| Bird | 0.5\u20134.1s | gentle arch | rocks \u00b19\u00b0 |\n| Coin | 3.7\u20137.0s | dip | spins 540\u00b0, grows |\n| Rocket | 6.8\u201310.1s | S-curve | nose-right, accelerates (`easeIn`), `motionBlur` shutter 0.5 |\n| Spark | 9.6\u201312.9s | high arch | fades up and out, `add` blend + glow |\n\nTitle \"Sprite Arcade\" stands the whole 13s at the top; the four supplied lines run in order along the bottom (0.6 / 3.8 / 6.9 / 9.8s), each word-revealed, none overlapping. Background is a slow radial gradient drifting blue \u2192 violet \u2192 blue.\n\n**Two things I had to correct after looking at frames.** Path `controls` are fitted onto the chord between keyframes \u2014 with a 2400px chord my first bulges threw every sprite clean off canvas, so they came down to roughly \u00b130 in path units. And `screen` blend rendered the pale, part-transparent spark as muddy olive; `add` is what makes it read as light on black.\n\nContact sheet: `out.promo/Exports/frames/` (12 full-size PNGs, one per second). Validate is clean \u2014 \"nothing the renderer would quietly correct\".",
    "contact": "docs/demo/03-sprite-arcade/contact-result.png",
    "reference_contact": "docs/demo/03-sprite-arcade/contact-reference.png",
    "video": "docs/demo/03-sprite-arcade/result.mp4",
@@ -334,6 +346,7 @@
   "slug": "04-gradient-drift",
   "title": "Gradient Drift",
   "blurb": "A seamless scrolling multi-colour gradient loop with a ring breathing in the middle.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -416,6 +429,9 @@
      }
     ]
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/Exports/export.mp4` \u2014 1920\u00d71080, 12.00s, 360 frames @ 30fps (1.7 MB).\n\n**How the loop is built**\n\n- **Scrolling gradient.** A `background` layer with two `gradient` keyframes. The gradient is `kind: \"linear\"`, `repeat: \"repeat\"`, with six stops \u2014 indigo \u2192 violet \u2192 plum \u2192 copper \u2192 teal \u2192 **indigo again** at `at: 1`, so the colour ring closes on itself. The axis runs `[0,0] \u2192 [0.8,0.5]` at t=0 and `[0.8,0.5] \u2192 [1.6,1.0]` at t=12: both endpoints shift by exactly one axis length, so the pattern translates one full period, in one diagonal direction, and returns to itself. `easing: \"linear\"` keeps the drift at constant speed \u2014 an eased ramp would visibly slow at the seam.\n- **Breathing ring.** `sprite_ring.png` is a 528\u00d744 sheet, so it's declared as a 12\u00d71 sprite at 12 fps with `sampling: \"nearest\"` (smooth sampling bleeds across cell edges). 12 fps \u00d7 12 s = exactly 12 cycles. The breath is placement keyframes alternating 264 \u2194 330 px on a 4s `easeInOut` cycle, three breaths, back to 264 at t=12.\n- **Captions.** Three in sequence, none overlapping (0.8\u20133.8, 4.4\u20137.4, 8.0\u201311.2), each with `reveal: { by: \"word\", mode: \"fade\" }` so words arrive one at a time. Plate-less with a stroke and shadow, since the ground behind them changes brightness as it drifts.\n\nEverything with a period divides 12s exactly, and both ends of the timeline are caption-free \u2014 I verified this by rendering t=0 against t=11.967: identical but for one frame of drift.\n\n`promo_validate` reports \"nothing the renderer would quietly correct\"; `promo_inspect` shows 5 of 5 layers renderable, no undefined palette names. Also on disk: a 12-frame contact sheet in `Exports/frames/` and `Exports/seam-last.png`.",
    "contact": "docs/demo/04-gradient-drift/contact-result.png",
    "reference_contact": "docs/demo/04-gradient-drift/contact-reference.png",
    "video": "docs/demo/04-gradient-drift/result.mp4",
@@ -432,6 +448,7 @@
   "slug": "05-carousel",
   "title": "Carousel",
   "blurb": "Cards entering from the right, resting under a caption, leaving left with a tilt.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -555,6 +572,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` is here, validated clean, and rendered.\n\n**Structure** \u2014 1920\u00d71080, 15.00s, 9 layers, 4 resources, all renderable.\n\n| Card | Media | Layer life | Caption |\n|---|---|---|---|\n| 1 | ui_lumen_2.png | 0.00\u20134.35s | \"Dashboards\" 1.05\u20133.30s |\n| 2 | ui_verse_2.png | 3.55\u20137.90s | \"Long-form writing\" 4.60\u20136.85s |\n| 3 | ui_pulse_2.png | 7.10\u201311.45s | \"Daily movement\" 8.15\u201310.40s |\n| 4 | ui_lumen_4.png | 10.65\u201315.00s | \"Funnels that add up\" 11.70\u201313.95s |\n\n**One layer per card**, each with exactly **four ramps** (five keyframes):\n\n1. **Enter** \u2014 off-canvas right at `offset [1560, 0]`, `rotation 7\u00b0` \u2192 centre, level, over 0.8s `easeOut`.\n2. **Settle** \u2014 a 0.45s `easeOut` scale from 640 to 660px tall, so the arrival lands rather than stops dead.\n3. **Rest** \u2014 a 2.3s linear drift to 686px while the caption names it.\n4. **Exit** \u2014 0.8s `easeIn` to `offset [-1560, 0]` at `rotation -9\u00b0`, tilting as it goes.\n\nEach card's exit ramp (local 3.55\u20134.35s) is exactly the next card's entry ramp, so the 0.8s hand-off is the only moment two cards share the screen \u2014 the 7.5s validator preview catches one of them. Captions live strictly inside their card's rest window, 1.3s apart, so none ever cross-fades with another.\n\nSizing is all `placement` rules (`minReaderVersion: 18`) rather than zoom/shift arithmetic, colours go through a three-entry palette, and each card carries a 2px/18px-radius border frame.\n\n**Outputs**\n- `out.promo/Exports/export.mp4` \u2014 1920\u00d71080, 450 frames @ 30fps\n- `out.promo/Exports/frames/` \u2014 14-frame contact sheet at 1s intervals (I checked these as individual images; the `ffmpeg` tile command to combine them into one sheet needed approval, so I skipped it)\n- `out.promo/Exports/preview.png` \u2014 validator thumbnail",
    "contact": "docs/demo/05-carousel/contact-result.png",
    "reference_contact": "docs/demo/05-carousel/contact-reference.png",
    "video": "docs/demo/05-carousel/result.mp4",
@@ -571,6 +591,7 @@
   "slug": "06-gif-board",
   "title": "GIF Board",
   "blurb": "Animated GIFs on a grid, all playing at once, centred by cell.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -704,6 +725,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` validates clean, inspects as 6 outer layers + 12 sprite layers, and the 13s video is rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1920\u00d71080, 30fps, 13.00s.\n\n**What's in it**\n\nI first had to work out each sheet's grid (nothing declares it). Detected by seam/edge analysis:\n\n| sheet | grid | cell | frames |\n|---|---|---|---|\n| confetti | 7\u00d74 | 260\u00d7260 | 28 |\n| pulse | 6\u00d74 | 220\u00d7220 | 24 |\n| wave | 6\u00d75 | 320\u00d7160 (2:1) | 30 |\n\nTwelve tiles \u2014 four per sheet, each its own resource with a different sprite fps (10\u201316) so no two loops beat together. All twelve play continuously for the whole 13s. Title above the board, four captions in order with word-by-word fades and clean gaps between them (no two headlines ever cross-fade).\n\nThe wave cells are 2:1 and the others 1:1, so **centre alignment** is what holds the board together: every tile is positioned by its centre on a 6\u00d72 lattice, wide tiles growing sideways from the same centre line as the square ones.\n\nThe third caption is literal \u2014 at 6.7\u20139.8s four tiles spin a full turn, four fly out along a curved motion path and back, four fade down to 12% and return.\n\n**One thing worth knowing about the renderer**\n\nSprite layers won't draw below **0.3 \u00d7 canvas height** \u2014 zoom 0.1 and 0.2 both render at 0.3\u00b7H, and a `placement` rule's `height`/`width` is converted to a zoom and hits the same clamp. The anchor still resolves against the size you asked for, so tiles land in the right places at the wrong size, and `promo_validate` says \"ok\". That makes a 12-tile board impossible in a single 1080-tall composition (4 wave tiles alone would be 2592px wide).\n\nSo the board is a **nested composition** \u2014 its own 4960\u00d71200 canvas where the floor is 360px and 380px tiles are comfortable \u2014 shown by one video layer scaled to 1880\u00d7",
    "contact": "docs/demo/06-gif-board/contact-result.png",
    "reference_contact": "docs/demo/06-gif-board/contact-reference.png",
    "video": "docs/demo/06-gif-board/result.mp4",
@@ -720,6 +744,7 @@
   "slug": "07-narrated-tour",
   "title": "Narrated Tour",
   "blurb": "A framed recording toured by the viewport, paced by synthesized narration, captions on the footage.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -864,6 +889,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo/Exports/export.mp4`, 1920\u00d71080, 21.0s exactly.\n\n**The piece.** A framed window (920px tall, centered, so ~85% of canvas) sits on a dark radial ground with a thin `@edge` border, rounded corners and a soft drop shadow. Inside it, the footage never moves \u2014 the *viewport* does, a `[x,y,w,h]` window over the source that eases (`easeInOut`) to a new region as each line begins: wide \u2192 gentle push \u2192 upper-right \u2192 lower-left \u2192 tight center \u2192 back to wide for the tail. The source is 10s, so the resource plays at `speed: 0.48` to fill 21s without a loop seam.\n\n**Pacing.** Five narration layers hold estimated spoken durations (3.0 / 3.2 / 2.8 / 2.5 / 2.2s) with 0.9s of air between them; a 1.4s lead-in and 2.3s tail make 21.0. Rather than hard-coding those numbers, each narration is chained with `timing: previousPeerEnd + 0.9` and `durationRule: fitContent`, and each caption is anchored to its own narration line (`previousStart \u2212 0.15` \u2192 `previousEnd + 0.25`). Every layer resolved to the intended second \u2014 `inspect` confirms 1.40, 5.30, 9.40, 13.10, 16.50.\n\n**Captions** are on the footage: `subtitleBackgroundOpacity: 0`, a 7px `@caption-outline` stroke inside 26px padding, and a 16px shadow, hung with `placement: {anchor: \"bottom\", offset: [0,-104]}` so they land inside the window, not below it.\n\n**One thing to flag:** there's no TTS key on this machine (`promo_speak --check`: openai/elevenlabs/google all NO KEY), so the voice track is unsynthesized \u2014 the export is silent. The narration is authored as `speech` specs on five audio resources (`provider: openai`, `voiceID: alloy`) rather than left out, so `promoshot-mcp key set openai` followed by `promo_speak` fills in the files, and because the timing is anchored rather than baked, the real take lengths re-time the ",
    "contact": "docs/demo/07-narrated-tour/contact-result.png",
    "reference_contact": "docs/demo/07-narrated-tour/contact-reference.png",
    "video": "docs/demo/07-narrated-tour/result.mp4",
@@ -880,6 +908,7 @@
   "slug": "08-speed-ramp",
   "title": "Speed Ramp",
   "blurb": "One clip at half, double and three-quarter speed, cross-dissolved, each section as long as it plays.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -999,6 +1028,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` validates, inspects clean, and rendered to exactly 14.00s at 1920\u00d71080/60fps.\n\n**Structure** \u2014 one video resource (`bbb_test.mp4`, copied into `Resources/`) with three `mediaCuts` carrying the speeds; three video layers, each `placement: {mode: \"fill\"}` so the 1920\u00d71080 source covers the canvas.\n\n| section | source range | speed | timeline |\n|---|---|---|---|\n| 0.5\u00d7 \u2014 the drift | 0.00\u20133.40s (3.40s) | 0.5\u00d7 | 0.00\u20136.80s |\n| 2\u00d7 \u2014 the rush | 3.40\u20139.80s (6.40s) | 2\u00d7 | 6.10\u20139.30s |\n| 0.75\u00d7 \u2014 the hold | 5.95\u201310.00s (4.05s) | 0.75\u00d7 | 8.60\u201314.00s |\n\nEach section's length is exactly its piece at that rate (3.40/0.5 = 6.80, 6.40/2 = 3.20, 4.05/0.75 = 5.40). The three sum to 15.40s; two 0.7s cross-dissolves overlap the layers by 1.40s, landing on 14.00s.\n\n**Choices I made** so the arithmetic worked out: the pieces aren't a strict partition of the 10s source. Covering it end-to-end while hitting 14s of output forces the half-speed section to eat almost everything (the 2\u00d7 section collapses to under a second \u2014 no time to read its caption). So the rush spans a wide 6.4s sweep of the clip and the hold revisits the last 4s at 0.75\u00d7, which also gives the two dissolves related material to blend.\n\n**Captions** sit at the bottom with a dark stroke and shadow and no plate, each living strictly inside its own section, clear of both dissolves \u2014 so no two ever cross-fade. The closer is centred at 12.10\u201314.00s, after the 0.75\u00d7 label has fully left.\n\n- Project: `out.promo/`\n- Contact sheet: `out.promo/Exports/frames/` (13 PNGs, 0.6s\u201313.6s)\n- Video: `out.promo/Exports/export.mp4`",
    "contact": "docs/demo/08-speed-ramp/contact-result.png",
    "reference_contact": "docs/demo/08-speed-ramp/contact-reference.png",
    "video": "docs/demo/08-speed-ramp/result.mp4",
@@ -1015,6 +1047,7 @@
   "slug": "09-kinetic-type",
   "title": "Kinetic Type",
   "blurb": "Lines arriving as a typewriter, a word rise, a pop and a karaoke highlight, over moving gradients.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -1122,6 +1155,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` is authored, validated, inspected, contact-sheeted and rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1920\u00d71080, 720 frames @ 60fps, 12.00s.\n\nOne thing to flag: `resources/` was empty, so there was no media to copy into `Resources/`. Nothing in the brief needed any \u2014 the gradient is native (`backgroundGradient` on the settings, animated by a `gradient` keyframe pair on the background layer), and the type is four caption layers. `Resources/` exists but is empty, and `promo_inspect` reports `renderable: 5 of 5` with no missing media.\n\n**The four arrivals**, each a `captionStyle.reveal` rule rather than hand-keyframed:\n\n| line | reveal | timing |\n|---|---|---|\n| `type` | `character` / `wipe`, 0.72s \u2014 typewriter, monospaced to sell it | 0.45s |\n| `that knows` | `word` / `rise`, 0.7 line-heights, `easeOut` | 1.85s |\n| `where it is going` | `line` / `scale` in 0.24s, plus a `fontSize` 122\u2192104 settle so it overshoots and lands | 3.40s |\n| `three tracks.` / `one caption.` | `word` / `highlight` in `@highlight` amber, 1.15s per word | 6.30s |\n\nThe first three stack into one sentence and hold together, clear at 5.75s, and the payoff line comes up at 6.30s after a deliberate half-second of empty gradient \u2014 the schema's \"two captions must never cross-fade\" rule. The karaoke walk spans 6.3\u219210.9s and holds on `caption.` to the end.\n\nThe background is a mirrored 4-stop linear gradient whose axis shifts by exactly one axis length over the 12s (`[-0.25,-0.35]\u2192[0.75,0.65]` becoming `[0.75,0.65]\u2192[1.75,1.65]`), so the drift is seamless rather than dragging two flat regions across frame. All colours go through the palette's eight roles, so re-skinning is one palette edit.\n\nTwo format notes from building it: `transitionDuration` is required on every keyframe even when `tra",
    "contact": "docs/demo/09-kinetic-type/contact-result.png",
    "reference_contact": "docs/demo/09-kinetic-type/contact-reference.png",
    "video": "docs/demo/09-kinetic-type/result.mp4",
@@ -1138,6 +1174,7 @@
   "slug": "10-logo-sting",
   "title": "Logo Sting",
   "blurb": "A bloom, a rocket on a curved path with motion blur, sparkles, and a wordmark that lands and holds.",
+  "kind": "conformance",
   "canvas": [
    1920,
    1080
@@ -1281,6 +1318,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` validates clean and renders.\n\n**`out.promo/` \u2014 1920\u00d71080, 60 fps, 10.0s**\n\n| time | beat |\n|---|---|\n| 0 \u2013 1.5s | radial bloom opens: background-layer `gradient` keyframes grow a radial from a pinpoint at (0.5, 0.42) to full-frame, eased out |\n| 0.75 \u2013 4.3s | rocket sprite (6 cells, `nearest` sampling) climbs a `motionPath` curve from lower-left to upper-centre, rotating 62\u00b0 \u2192 6\u00b0, with a keyframed `motionBlur.shutter` ramp 0.45 \u2192 0.95 \u2192 0.2 |\n| 3.3 \u2013 4.55s | sparkle burst: a nested **composition** holding 6 staggered spark sprites, placed on `screen` blend with a glow and scaled up as it plays; the background gradient flashes brighter for ~0.2s under it |\n| 4.15 \u2013 10s | **LUMEN** lands, `reveal: { by: \"character\", mode: \"scale\" }`, with a 204 \u2192 188pt settle |\n| 5.6 \u2013 10s | *see the whole picture* fades in word by word |\n| 6.65 \u2013 10s | `lumen.app` types on in monospace, `reveal: { by: \"character\", mode: \"wipe\" }` |\n\nPalette states all eight roles plus `bloom`/`flash`/`deep` for the gradient, so a re-skin is one block.\n\nOutputs: `out.promo/Exports/export.mp4` (10.0s, h264, 1920\u00d71080@60), contact sheet in `Exports/contact/`, spot stills in `Exports/sheet/`.\n\nTwo notes from the run:\n\n- The nested composition is there because of the sprite min-zoom clamp \u2014 sparks can't draw below 0.3 \u00d7 canvas height, so six 340\u2013420px sparks live in a 1920\u00d71080 sub-composition that gets placed at 700px, landing them at ~200px each on the main canvas.\n- `promo_schema` shows keyframes written with only `transitionPercent`, but the parser rejects that \u2014 `transitionDuration` is a required field regardless. Worth fixing in the schema text or making the field optional; it's a hard parse error, not a warning.\n- Cleanup I couldn't do: an earlier `promo_render_frames` call left 600 P",
    "contact": "docs/demo/10-logo-sting/contact-result.png",
    "reference_contact": "docs/demo/10-logo-sting/contact-reference.png",
    "video": "docs/demo/10-logo-sting/result.mp4",
@@ -1297,6 +1337,7 @@
   "slug": "11-whip-deck",
   "title": "Whip Deck",
   "blurb": "Four screenshots with whip-pan pushes, each faster and blurrier than the last.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -1440,6 +1481,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` validates clean and the video is rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1920\u00d71080, 12.00s, 720 frames @ 60fps.\n\n**How it's built** (one image layer, four resources, swap keyframes \u2014 no stacked layers):\n\n| | at | push duration | blur peak | shutter |\n|---|---|---|---|---|\n| lumen_1 \u2192 lumen_2 | 3.10s | 0.50s | 16px | 0.50 |\n| lumen_2 \u2192 pulse_1 | 6.30s | 0.34s | 30px | 0.75 |\n| pulse_1 \u2192 verse_1 | 9.30s | 0.20s | 52px | 1.00 |\n\nEach cut is a `push` from the right on a swap keyframe, so the outgoing screen is shoved out as the next one arrives. The escalation is carried by three tracks that ramp together and land back at zero: the push gets shorter, a directional (`blurAngle: 0`) Gaussian blur ramps in on `easeIn` and out on `easeOut` around each swap, and the layer's motion-blur shutter opens from 0.05 to a full 360\u00b0 by the last whip. Slides sit sharp at 0 blur in between.\n\nRest of the composition: 1216\u00d7760 shots placed near native (764px tall, drifting to 806 across the 12s so nothing sits dead), thin bordered card with a drop shadow over a linear gradient ground, palette with all eight roles named. Captions are word-revealed and never overlap a whip or each other \u2014 \"One deck. Every screen.\" 0.55\u20135.90s (fade reveal), \"See it move.\" 6.85\u201311.60s (rise reveal), both clear of the transitions.\n\nContact sheet at `Exports/s1.png`\u2013`s6.png` plus `Exports/frames/`; `Exports/preview.png` is the validator thumbnail.",
    "contact": "docs/demo/11-whip-deck/contact-result.png",
    "reference_contact": "docs/demo/11-whip-deck/contact-reference.png",
    "video": "docs/demo/11-whip-deck/result.mp4",
@@ -1456,6 +1500,7 @@
   "slug": "12-word-for-word",
   "title": "Word for Word",
   "blurb": "A vertical piece: three statements replacing each other by push, each with its own reveal.",
+  "kind": "conformance",
   "canvas": [
    1080,
    1920
@@ -1583,6 +1628,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is written, validated, inspected, and rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1080\u00d71920, 12s, 360 frames @ 30fps (935 KB).\n\n**How it's built.** One caption layer running the full 12s, with three caption *resources* swapped by keyframes at 4s and 8s. Each swap carries `transition: {kind: \"push\", from: \"right\", duration: 0.55}` \u2014 that's the format's real push: the outgoing statement is shoved off to the left as the new one enters from the right. (A push on a layer's own edge would have degraded to a slide, which is why all three statements live on one layer rather than three.)\n\nThe three word effects are `captionStyle.reveal` rules, one per resource:\n\n| | Text | Reveal |\n|---|---|---|\n| 0\u20134s | Ship the story, / not the spec. | `by: word, mode: rise`, 0.7 line-heights, 1.8s, easeOut |\n| 4\u20138s | Every word / lands on time. | `by: word, mode: fade`, 1.7s, easeOut |\n| 8\u201312s | Say it once. / Ship it everywhere. | `by: word, mode: highlight` in amber `@highlight`, 3.0s |\n\nEach reveal restarts at its own swap \u2014 I verified this on the contact sheet rather than assuming it, since a layer-local clock would have left statements 2 and 3 fully revealed before they ever appeared. At 4.5s statement 2 is genuinely mid-fade, and the karaoke walks *once* \u2192 *everywhere* across the last four seconds.\n\n**Choices I made.** 94pt bold system type, two hand-broken lines per statement so all three share a shape (margins at 60 give a 960px wrap so the longest line fits unwrapped). Full eight-role palette, so the whole piece re-skins from one block; the background is a slow linear gradient easing from near-black to a deeper blue over the 12s, which keeps the ground alive under static type. A 0.4s fadeOut closes the piece.\n\n**`Resources/` is empty** \u2014 the `resources/` folder",
    "contact": "docs/demo/12-word-for-word/contact-result.png",
    "reference_contact": "docs/demo/12-word-for-word/contact-reference.png",
    "video": "docs/demo/12-word-for-word/result.mp4",
@@ -1599,6 +1647,7 @@
   "slug": "13-before-after",
   "title": "Before & After",
   "blurb": "A slow crossfade between two screens under a caption that wipes from Before to After.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -1732,6 +1781,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo/Exports/export.mp4`, 1920\u00d71080, 12.00s at 60fps.\n\n**How it's built** (`out.promo/metadata.json`, validates clean: *\"nothing the renderer would quietly correct\"*):\n\n- **One image layer, one swap.** Both screenshots sit on a single `image` layer at native 760px height, centered and lifted 64px. A swap keyframe at **t=4.35** carries `transition: { kind: \"fade\", duration: 2.4, easing: \"easeInOut\" }` \u2014 a 2.4s dissolve from Pulse (dark, \"before\") to Verse (light, \"after\"), midpoint **t=5.55**. No second layer, so no background flash.\n- **Caption wipe on the same beat.** \"Before\" runs 0.9\u20136.0 and wipes out toward the right; \"After \u2014 one tap\" starts at 5.1 and wipes in from the left \u2014 both 0.9s, so their shared boundary sweeps 5.1\u21926.0, centered on **t=5.55**, the same instant as the crossfade midpoint. Matched wipes rather than a caption cross-dissolve, so the two headlines never blur over each other \u2014 the frames show a clean vertical edge handing one word to the next.\n- **Calm, and no motion blur.** Nothing moves: no pan, no zoom, no motion path \u2014 so there's nothing for a shutter to smear and no `motionBlur` on any layer. The only easing is on the two dissolves. The background quietly warms from `0E141F` to `17140F` across the same 2.4s window so the light Verse screen doesn't land against a cold ground.\n- Media copied into `out.promo/Resources/`; palette states all eight roles; captions carry a thin outline and soft shadow so they hold over both the dark and light screens.\n\nContact sheets are in `Exports/sheet-arc` (12 frames across the full 12s) and `Exports/sheet-wipe` (5 frames through the wipe itself).\n\nOne note: I read `ui_pulse_2.png` as the \"before\" and `ui_verse_2.png` as the \"after\", following the order you listed them \u2014 they're two different apps r",
    "contact": "docs/demo/13-before-after/contact-result.png",
    "reference_contact": "docs/demo/13-before-after/contact-reference.png",
    "video": "docs/demo/13-before-after/result.mp4",
@@ -1748,6 +1800,7 @@
   "slug": "14-spotlight",
   "title": "Spotlight",
   "blurb": "The same shot flat beneath and in colour inside a roaming spotlight, inverted at the end.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -1881,6 +1934,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` validates clean, inspects at 6/6 renderable layers, and both renders are on disk.\n\n**How it's built** \u2014 the whole effect is one screenshot resource (`shot`) shown by three image layers, all sharing `placement: { height: 760, anchor: \"center\", offset: [0,-60] }` so the 1216\u00d7760 source lands at native size on the 1920\u00d71080 canvas:\n\n- **`flat`** \u2014 the same picture with `adjustments: { saturation: 0, contrast: 0.9, brightness: -0.07 }`. Grey and slightly flattened, running the whole 13s.\n- **`spot`** \u2014 the full-colour copy (`saturation 1.16`, plus a soft `effects.glow`) windowed by `maskResourceID: \"softcircle\"`. That mask is a drawing resource of 14 concentric white ovals whose fill opacities climb 0.06 \u2192 1.0, so the accumulated ink is a genuine soft falloff rather than a hard circle.\n- **`punch`** \u2014 the identical layer with `maskInverted: true`, from 9.55s.\n\nThe roam, breathe and tilt are three *separate keyframe tracks* on the mask, deliberately on mismatched periods so they never sync up: position (`maskOffsetX`/`maskOffsetY`) hits 7 waypoints over 9.5s, `maskZoom`/`maskZoomY` breathe on a 2.3s beat, and `maskRotation` swings on a 3.1s beat. Every one uses `transitionPercent: 100` with `easeInOut`, so the motion is continuous and never stops at a keyframe. `maskZoomY` is held ~18% under `maskZoom`, making the spot a slight ellipse \u2014 otherwise the rotation would be invisible on a perfect circle.\n\nThe flip at ~9.55s is a 0.4s crossfade from `spot` to `punch` while `flat` fades to zero, so the hole reads as a real knockout down to the ground rather than a grey patch.\n\n**Output:**\n- `out.promo/Exports/export.mp4` \u2014 1920\u00d71080, 780 frames @ 60fps, 13.0s\n- `out.promo/Exports/frames/` \u2014 12-frame contact sheet at 1s intervals, full canvas size\n\nTwo notes on thi",
    "contact": "docs/demo/14-spotlight/contact-result.png",
    "reference_contact": "docs/demo/14-spotlight/contact-reference.png",
    "video": "docs/demo/14-spotlight/result.mp4",
@@ -1897,6 +1953,7 @@
   "slug": "15-grade-room",
   "title": "Grade Room",
   "blurb": "One shot walked through four looks by ramping the grade, a caption naming each.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2020,6 +2077,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` validates clean, and the 15s 1920\u00d71080 mp4 is at `out.promo/Exports/export.mp4`.\n\n**How the ramp works.** `tintHex` is a static per-layer field, so a single graded layer can't travel from a warm gel to a cool one. Three layers stacked on the same resource, all sharing identical placement keyframes, do it instead \u2014 each cross-fade is between two perfectly registered copies of the same frame, so it reads as a grade sliding rather than a dissolve:\n\n| Layer | `adjustments` | What its opacity/tint ramp buys |\n|---|---|---|\n| Original | none | the colour reference |\n| Mono then Sepia | `saturation: 0`, `tintHex: @gel-warm` | opacity 3.2\u21924.6s **is** the desaturation ramp; then `tintAmount` 0\u21920.45 keyframed 7.0\u21928.4s pulls the warm gel in |\n| Duotone | `saturation: 0`, `tintHex: @gel-cool`, `tintAmount: 0.6` | opacity 10.8\u219212.2s swaps warm gel for cool |\n\nEvery ramp is 1.4s on `easeInOut`. The background colour keyframes on the same clock (neutral \u2192 `1C1611` \u2192 `0E141F`) so the room shifts with the picture.\n\n**Timeline:** original to 3.2s \u00b7 mono 4.6\u20137.0 \u00b7 sepia 8.4\u201310.8 \u00b7 duotone from 12.2. Each caption lives strictly inside its look \u2014 0.4\u20133.4, 4.4\u20137.4, 8.2\u201311.0, 12.0\u201314.8 \u2014 with clear gaps, so no two ever cross-fade.\n\nAlso in there: a slow 764\u2192800px push across the full 15s (identical on all three layers, or the cross-fades would ghost), a 12-role palette so the two gels and three grounds are named, and plate-less captions with a stroke and shadow.\n\nTwo things I decided for you: I kept the shot near its native 1216\u00d7760 rather than filling the frame \u2014 this is a fine-text UI and upscaling softens exactly what it's there to show; and I nudged the cool gel to `5A8FD8` at 0.6 after the contact sheet showed a dark UI leaves a cool tint little headroom. The sepia nee",
    "contact": "docs/demo/15-grade-room/contact-result.png",
    "reference_contact": "docs/demo/15-grade-room/contact-reference.png",
    "video": "docs/demo/15-grade-room/result.mp4",
@@ -2036,6 +2096,7 @@
   "slug": "16-light-leak",
   "title": "Light Leak",
   "blurb": "A warm leak on screen blend, a vignette plate multiplied, a hot core added, over a screenshot.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2174,6 +2235,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 the piece is built, validated, and rendered.\n\n**`out.promo/`** \u2014 canvas 1216\u00d7760 (the screenshot's native size, so its type stays crisp), 12.0s @ 30fps, 4 resources copied into `Resources/`.\n\nLayer stack (low \u2192 high):\n1. **Ground** \u2014 near-black plate.\n2. **Screenshot** \u2014 full-bleed, a 760\u2192788px push over the whole 12s (easeInOut), with a keyframed warm gel (`tintAmount` 0 \u2192 0.22 \u2192 0.04) so the frame heats up as the leak crosses and cools after.\n3. **Light leak** \u2014 `leak_warm.png`, `blendMode: \"screen\"`, 1440px tall so it's a wash rather than a shape. Sweeps \u22121520 \u2192 +1540 px across the canvas with a \u221214\u00b0 \u2192 +10\u00b0 roll, opacity 0.4 \u2192 1.0 \u2192 0.35, and a keyframed shutter (0.15 \u2192 1.0 \u2192 0.15) so the motion blur arrives with the speed and leaves with it.\n4. **Vignette plate** \u2014 `vignette_soft.png`, `blendMode: \"multiply\"`, `mode: \"fill\"`, opening slightly (0.78 \u2192 0.62 \u2192 0.80) as the leak peaks so the rim breathes.\n5. **Hot core** \u2014 `glow_dot.png`, `blendMode: \"add\"` on top of the vignette, riding the same sweep, swelling 360 \u2192 520 \u2192 380px with its own shutter ramp.\n6. **Headline** \u2014 \"Light, laid over\", bottom-anchored, plate-less with a stroke and shadow so it holds over the chart, arriving word-by-word with a `rise` reveal (1.6s\u201310.0s).\n\nChecks: `promo_validate` \u2192 ok with one informational warning (the Screenshot layer carries both a constant and keyframed `tintAmount`; the keyframes win, which is what's wanted). `promo_inspect` \u2192 6 of 6 layers renderable, no missing media, no undefined colours.\n\nOutputs:\n- Contact sheet: `out.promo/Exports/frames/` (11 frames, 0.6s\u201311.4s) \u2014 leak enters left, blooms centre-screen around t\u22485, streaks off right, canvas cools by t\u224811.4.\n- Video: `out.promo/Exports/export.mp4` (1216\u00d7760, 360 frames @ 30fps).",
    "contact": "docs/demo/16-light-leak/contact-result.png",
    "reference_contact": "docs/demo/16-light-leak/contact-reference.png",
    "video": "docs/demo/16-light-leak/result.mp4",
@@ -2190,6 +2254,7 @@
   "slug": "17-chain-reaction",
   "title": "Chain Reaction",
   "blurb": "Clips chained half a second before the previous ends, labels pinned to each clip's own edges.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2338,6 +2403,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is built, validated, and rendered.\n\n**How the chain is expressed** \u2014 nothing is a hard-coded time; every clip after the first and every label is anchored with a `timing` rule, so the stored `startTime`/`duration` are just a cache the renderer overwrites on each read:\n\n- **Clips** (`image` layers, sortIndex 1/3/5/7): `start: { from: \"previousPeerEnd\", offset: -0.5 }` \u2014 the peer form walks past the caption between them to the previous *clip*, so each one begins half a second before the one before it ends. That 0.5s overlap is exactly the `transitionIn` fade length, so the dissolve has material on both sides and the background never flashes through.\n- **Labels** (`caption` layers, one sortIndex above their clip): `start: { from: \"previousStart\", offset: 0.8 }`, `end: { from: \"previousEnd\", offset: -0.5 }` \u2014 pinned to that clip's own start and end, landing clear of both dissolves so no two labels ever cross-fade (0.8s of clean gap between consecutive labels).\n\nI verified the propagation rather than assuming it: temporarily stretching clip 1 from 3.4s to 5.0s re-timed its label (0.80\u20134.50), moved clip 2 to 4.50, and pushed everything downstream, with the project growing to 13.70s. Reverted afterwards; `promo_explain` reports no timing problems and no warnings.\n\n**Filling the canvas**: canvas is 1216\u00d7760 \u2014 the sources' native size \u2014 so `placement: { mode: \"fill\" }` lands every shot edge to edge with no crop and no resampling. Each clip carries a slow eased `viewport` push (alternating in and out, 1.0 \u2194 0.94) so the reel has motion without softening the UI text.\n\n**Checks**: `promo_validate` \u2192 \"ok \u2014 nothing the renderer would quietly correct\". Contact sheet at 11 moments plus stills on a dissolve (3.15s) and both label extremes. The first pass had the plate-",
    "contact": "docs/demo/17-chain-reaction/contact-result.png",
    "reference_contact": "docs/demo/17-chain-reaction/contact-reference.png",
    "video": "docs/demo/17-chain-reaction/result.mp4",
@@ -2354,6 +2422,7 @@
   "slug": "18-reused-title",
   "title": "Reused Title",
   "blurb": "One title card built once and placed three times around a screenshot.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2477,6 +2546,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` is written, validates clean, and both renders are on disk.\n\n**How the card is reused.** The title card is a `composition` resource (`\"kind\": \"composition\"`, rung 19) holding its own gradient ground and the two caption layers. Three ordinary `video` layers point their `resourceID` at that one resource \u2014 no duplicated layers, no copied text. `promo_inspect` confirms it:\n\n```\ncompositions: 1\n  card  \"Title card\"  3.00s  3 layers  placed by 3\n```\n\nEdit the card once and all three placements change.\n\n**Timeline (12.0s, 1920\u00d71080 @ 30fps),** cards over screenshots, each junction overlapped 0.3s so nothing flashes the ground:\n\n| | | |\n|---|---|---|\n| 0.0\u20133.0 | card \u2014 intro | fades up from the ground |\n| 2.7\u20135.3 | screenshot A | slow push, 700 \u2192 752 px tall |\n| 5.0\u20137.4 | card \u2014 mid | the same card, cross-faded both sides |\n| 7.1\u20139.7 | screenshot B | pulls back, 764 \u2192 712, offset a touch |\n| 9.4\u201312.0 | card \u2014 outro | fades to black |\n\nThe card's internals: \"One title card.\" arrives word-by-word (`reveal` by word, `rise`), \"Placed three times.\" fades in and settles up 18px under it, over a gradient that drifts across the card's 3 seconds. Because the placements each run the composition's own clock from zero, that animation replays identically at all three \u2014 which is the point being demonstrated.\n\nThe screenshot carries a `border` frame (2px `@edge`, 16px radius) and a soft drop shadow from the resource's frame override, so the cards stay edge-to-edge while only the shot is framed. Colours go through an eight-role palette, so re-skinning is one array.\n\n**Output**\n- `out.promo/Exports/export.mp4` \u2014 1.5 MB, 360 frames\n- `out.promo/Exports/frames/` \u2014 11-frame contact sheet at 1fps\n\nOne thing I corrected mid-way: the second screenshot originally used a ramping `viewp",
    "contact": "docs/demo/18-reused-title/contact-result.png",
    "reference_contact": "docs/demo/18-reused-title/contact-reference.png",
    "video": "docs/demo/18-reused-title/result.mp4",
@@ -2493,6 +2565,7 @@
   "slug": "19-green-room",
   "title": "Green Room",
   "blurb": "A green-screen clip keyed and composed over a gradient with a halo, growing slowly.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2627,6 +2700,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` validates, inspects clean, and the mp4 is rendered.\n\n**What's in it** (1920\u00d71080, 30 fps, 12.0 s):\n\n- **Ground** \u2014 radial dark gradient, `14203A` at centre falling to `05070E` at the edges.\n- **Halo** \u2014 a nested 1400\u00d71400 composition holding a radial blue gradient that reaches black, placed behind the clip with `blendMode: \"screen\"` (so the black drops out) and `effects: { blur: 40 }`. It grows 1500 \u2192 1760 px over the full 12 s, eased.\n- **Keyed clip** \u2014 `green_lumen.mp4` with `chromaKey: { colorHex: \"00E63C\", tolerance: 0.34, softness: 0.12 }`. The source is 6 s, so the resource carries `speed: 0.5` to fill 12 s rather than looping with a visible jump. Placement grows 880 \u2192 990 px (~12%, \"slightly\") on the same easeInOut clock as the halo. Border, corner radius and media shadow are zeroed \u2014 a keyed silhouette isn't the rect, so any of those would draw the plate's outline back in.\n- **Captions** \u2014 \"Keyed in the compositor.\" (0.6\u20135.4 s) then \"The plate is gone on every host.\" (6.2\u201311.7 s), hung at `anchor: \"bottom\"`, stroked and shadowed, no plate, with a clear gap between them so they never cross-fade.\n\nColours run through an eight-role palette, so re-skinning is one edit.\n\nContact sheet checked at ~2.7 s and ~10.5 s: the green is fully gone with no fringing on the window edges, the glow spills around it, and the captions clear the window at its largest.\n\nOutput: `out.promo/Exports/export.mp4`. Want me to `promo_open` it in PromoShot?",
    "contact": "docs/demo/19-green-room/contact-result.png",
    "reference_contact": "docs/demo/19-green-room/contact-reference.png",
    "video": "docs/demo/19-green-room/result.mp4",
@@ -2643,6 +2719,7 @@
   "slug": "20-look-book",
   "title": "Look Book",
   "blurb": "One screenshot three times side by side, each through a different .cube look.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2786,6 +2863,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is built, validated, and rendered.\n\n**Project:** `out.promo/` \u2014 `metadata.json` + `Resources/` (the screenshot and all three `.cube` files copied in).\n\n**Composition** \u2014 1920\u00d71080, 12.00s, 30fps, 8 layers, `minReaderVersion: 23` (LUT resources):\n- One `image` resource (`ui_lumen_1.png`, 1216\u00d7760, thin bordered card frame + drop shadow) placed **three times side by side** via `placement` rules \u2014 560px wide, centered at x \u2212590 / 0 / +590 \u2014 so all three panels are literally the same shot.\n- Three `kind: \"lut\"` resources, one per panel, applied through each layer's `adjustments: { lutResourceID, lutAmount: 1.0 }`.\n- Title *\"One shot. Three looks from .cube files.\"* at the top, word-by-word fade reveal over 1.1s.\n- Labels **Warm / Cool / Mono** under their own panels, staggered in after each panel lands (0.8s / 1.15s / 1.5s panels, labels 0.35s behind), plus a very slow synchronized push from 560\u2192574px so the frame isn't static.\n- Radial dark ground with a palette naming all eight roles, so the whole thing re-skins from one entry.\n\n**Validation:** `ok \u2014 nothing the renderer would quietly correct`. **Inspect:** 8 of 8 layers renderable, 4 resources, no undefined colours, no missing media.\n\n**Contact sheet:** 360 PNGs in `Exports/frames/` \u2014 I checked t=1.4s (mid-entrance, mono panel still arriving) and t=6.0s (settled). I also sampled the neutral axis of each `.cube` directly to confirm the grades are real and doing different things: warm maps mid-grey to `0.560/0.510/0.430`, cool to `0.440/0.500/0.570`, mono to a flat `0.510/0.500/0.470`. Cool and mono read strongly on screen; **warm is the subtlest of the three**, because the source UI is a dark, desaturated blue-slate with little warm content for the LUT to act on \u2014 that's the file's honest output at full",
    "contact": "docs/demo/20-look-book/contact-result.png",
    "reference_contact": "docs/demo/20-look-book/contact-reference.png",
    "video": "docs/demo/20-look-book/result.mp4",
@@ -2802,6 +2882,7 @@
   "slug": "21-chapters-levels",
   "title": "Chapters & Levels",
   "blurb": "The narrated tour with the voice levelled and chapter markers a player shows.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -2956,6 +3037,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` is built, validated, inspected, and rendered.\n\n**Project** \u2014 `out.promo/` (metadata.json + `Resources/bbb_test.mp4`), 1920\u00d71080 @ 60fps, 24.0s, `minReaderVersion: 21`.\n\n**Five sections + end card.** Each section is its own video layer playing a named `mediaCut` of the recording at 0.5\u00d7 speed, with a 0.6s eased cross-dissolve into the next and a viewport move per section (push in \u2192 pull back \u2192 pan right \u2192 pan up \u2192 open out). The recording sits on a gradient ground at 900px tall with a border and drop shadow; each narration line also appears as a stroked caption at the bottom. The end card is the title over the empty ground.\n\n**Chapters (the new part).** Six entries in the top-level `markers` array:\n\n| time | kind | name |\n|---|---|---|\n| 0s | chapter | Footage that tells itself |\n| 4s | chapter | The viewport moved |\n| 8s | chapter | Narration, written |\n| 12s | chapter | Add a voice key |\n| 16s | chapter | Everything else renders |\n| 20s | marker | End card |\n\nThe export carries a metadata data stream alongside the video \u2014 that's the chapter track the player menu reads. I couldn't run `ffprobe -show_chapters` to print the list back (the command needed approval and was declined), so I'm reporting the stream, not a verified chapter dump.\n\n**Voice leveling.** Each of the five narration resources carries an `audioEffects` chain \u2014 `normalize` to \u221216 LUFS, then a gentle `compressor` (\u221218 dB threshold, 2.5:1, 15ms attack / 220ms release). The audio layers use `durationRule: fitContent`, so they'll take their real length once the takes exist.\n\n**One thing not delivered: the video has no voice on it.** No narration key is registered on this machine \u2014 `promo_speak` reports `openai \u2014 NO KEY`, `elevenlabs \u2014 NO KEY`, `google \u2014 NO KEY`, and the project as `5 narrati",
    "contact": "docs/demo/21-chapters-levels/contact-result.png",
    "reference_contact": "docs/demo/21-chapters-levels/contact-reference.png",
    "video": "docs/demo/21-chapters-levels/result.mp4",
@@ -2972,6 +3056,7 @@
   "slug": "22-product-story",
   "title": "Product Story",
   "blurb": "A reused title card, a keyed clip, a warm-graded shot, a levelled voice line, four chapters.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -3171,6 +3256,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` is built, validates clean, and rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1440\u00d7900, 24.0s, 30fps, with a chapter data track.\n\nHow it's put together:\n\n- **Title card as a nested composition** (`titlecard`, 4.8s) \u2014 the big line plus a word-by-word `rise` reveal and an eased fontSize drift. One resource, `placed by 3`: opening (0\u20134.2s), middle (9.6\u201313.0s), closing (19.2\u201324.0s). Editing the card once changes all three.\n- **Gradient ground** \u2014 a three-stop linear gradient keyframed across the full 24s, rotating its axis and drifting the last stop from indigo to warm, so the background lands where the LUT does.\n- **Green screen keyed** (3.8\u20139.8s) \u2014 `chromaKey` on pure `00FF00`, tolerance 0.32 / softness 0.12, composed straight over the gradient with a slow 610\u2192672px push. No fringe in the frames I checked.\n- **Screenshot with the warm look** (12.8\u201319.4s) \u2014 `look_warm.cube` as a `lut` resource, applied via the layer's `adjustments` at `lutAmount: 0.9` on top of a saturation/contrast grade, in a bordered frame with a drop shadow.\n- **Captions** on footage with stroke + shadow, each living strictly inside its clip and clear of both dissolves.\n- **Four chapter markers**: 0.0 Title card, 3.8 Keyed footage, 12.8 Warm look, 19.2 One document \u2014 they're in the mp4's chapter list.\n- Every cut is a 0.2\u20130.4s overlap dissolve, so the background never flashes through.\n\nTwo things to flag:\n\n1. **The narration is not synthesized, so the mp4 has no audio track.** No provider key exists on this machine (`promo_speak --check`: openai, elevenlabs and google all report NO KEY), and my attempts to fall back to local macOS `say` were blocked by the permission layer. The line is fully authored as a `speech` draft on the `vo` resource \u2014 text, provider `openai`/`alloy`, `normali",
    "contact": "docs/demo/22-product-story/contact-result.png",
    "reference_contact": "docs/demo/22-product-story/contact-reference.png",
    "video": "docs/demo/22-product-story/result.mp4",
@@ -3187,6 +3275,7 @@
   "slug": "23-soft-focus",
   "title": "Soft Focus",
   "blurb": "A blurred, vignetted, grainy backdrop; a sharp hero that arrives out of blur and smears out; a headline that glows once.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -3264,6 +3353,9 @@
      }
     ]
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` validates clean, inspects at 9/9 renderable layers, and the 12-second 1920\u00d71080 @ 60fps mp4 is at `out.promo/Exports/export.mp4` (62 MB).\n\n**The composition**\n\n| time | what happens |\n|---|---|\n| 0\u201312s | Backdrop: the same shot scaled past the canvas, `blur 34 \u00b7 vignette 0.78 \u00b7 grain 0.22`, desaturated and pushed slowly from 1250\u21921345 px tall |\n| 0.3\u20132.2s | Sharp copy arrives out of a heavy blur \u2014 a `blur 52` twin dissolving off it while both settle 706\u2192648 px |\n| 1.3\u20132.25s | Headline resolves: a `blur 20` copy of the same line cross-dissolving into the sharp one |\n| 1.95\u20133.05s | It glows once \u2014 a screen-blended twin, `glow 2.6 / radius 48`, tinted `@highlight`, in and out over a second |\n| 6.4\u201311.7s | Subline arrives word by word (`reveal: word/fade`) |\n| 8.65\u201310.5s | Sharp copy leaves as a sideways smear: `blur 120` at `blurAngle 0` plus a 0.7 shutter, sliding 1180 px right as it fades |\n\n**One thing worth flagging.** My first cut ramped `blur`/`glow`/`vignette` on keyframes, which the schema says these effects support. Every individual still rendered, but any *sequence* render \u2014 frames or video \u2014 panicked in the GPU compositor:\n\n```\npromo-gpu/src/compositor.rs:1996: panicked at 'fx bind cached above'\n```\n\nIt reproduced on both the frames and the video path, and moved as I changed which layers carried ramped effects, so it's the effects bind cache across frames rather than anything in the document \u2014 `promo_validate` said \"ok\" throughout. I rebuilt the piece so every `effects` block is constant per layer and the ramps happen as cross-dissolves between layers instead. That renders all 720 frames clean and gives the same look, but the animated-effects path looks worth a bug report.",
    "contact": "docs/demo/23-soft-focus/contact-result.png",
    "reference_contact": "docs/demo/23-soft-focus/contact-reference.png",
    "video": "docs/demo/23-soft-focus/result.mp4",
@@ -3280,6 +3372,7 @@
   "slug": "24-cuts",
   "title": "Cuts",
   "blurb": "Five screenshots on one layer, swapped through a blur dissolve, a zoom, a flash, a glitch and a dip, each named by a caption that swaps the same way.",
+  "kind": "conformance",
   "canvas": [
    1440,
    900
@@ -3428,6 +3521,9 @@
      }
     }
    },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/Exports/export.mp4` \u2014 1920\u00d71080, 60 fps, 15.0 s.\n\n**How it's built** (`out.promo/metadata.json`, `minReaderVersion: 25`)\n\nThree layers, all 0\u201315 s:\n\n- **Ground** \u2014 radial `backgroundGradient` from a dark navy at the centre-top out to near-black at the corners, stops named through the palette (`@accent1`/`@accent2`/`@canvas`).\n- **Screenshot** \u2014 *one* image layer at `placement: { height: 700, anchor: \"center\", offset: [0,-70] }`, each resource carrying a `border` frame (`@edge`, radius 16) plus a composition-wide media shadow. The five screenshots are `resourceID` swap keyframes on that single layer.\n- **Caption** \u2014 *one* caption layer, `anchor: \"bottom\", offset: [0,-96]`, stroked and shadowed, swapping through five caption resources on exactly the same clock and the same transition kinds.\n\n**The five transitions**, one per screenshot, each held 3 s:\n\n| t | screenshot | transition | caption |\n|---|---|---|---|\n| 0 | ui_lumen_1 | `blurDissolve` (transitionIn, 0.7 s) | Blur dissolve \u2014 a swap, rung 25 |\n| 3 | ui_lumen_2 | `zoom` (0.7 s) | Zoom \u2014 a swap, rung 25 |\n| 6 | ui_lumen_5 | `flash` (0.5 s) | Flash \u2014 a swap, rung 25 |\n| 9 | ui_pulse_1 | `glitch` (0.5 s) | Glitch \u2014 a swap, rung 25 |\n| 12 | ui_verse_1 | `dip` (0.8 s) | Dip to black \u2014 a swap, rung 25 |\n\nOne judgement call worth flagging: five screenshots at three seconds each over fifteen seconds gives four *swaps*, not five. To get all five named transitions and keep each caption honest about what brought its screenshot on screen, the blur dissolve is the opening `transitionIn` and the remaining four are the swaps. Every caption then names the transition that actually delivered it.\n\n`promo_validate` says \"ok \u2014 nothing the renderer would quietly correct\"; `promo_inspect` reports 3 of 3 layers renderable",
    "contact": "docs/demo/24-cuts/contact-result.png",
    "reference_contact": "docs/demo/24-cuts/contact-reference.png",
    "video": "docs/demo/24-cuts/result.mp4",
@@ -3438,5 +3534,727 @@
    "thumb": "docs/demo/24-cuts/thumb.png"
   },
   "page": "docs/demo/demo24.md"
+ },
+ {
+  "id": "c1",
+  "slug": "c1-launch-video",
+  "title": "Launch video",
+  "blurb": "Lumen is an analytics app for small teams.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   20,
+   30
+  ],
+  "prompt": "Lumen is an analytics app for small teams. Here are five screenshots of it and a short clip of a presenter on a green screen. Make a launch video, 20 to 30 seconds, landscape, that makes someone want to try it. Everything else is your call: pacing, words, motion, looks.\n\nFiles in `resources/`: ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png, ui_pulse_1.png, ui_verse_1.png, green_lumen.mp4.",
+  "resources": [
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/c1-launch-video/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/c1-launch-video/resources/ui_lumen_2.png"
+   },
+   {
+    "file": "ui_lumen_5.png",
+    "kind": "image",
+    "path": "docs/demo/c1-launch-video/resources/ui_lumen_5.png"
+   },
+   {
+    "file": "ui_pulse_1.png",
+    "kind": "image",
+    "path": "docs/demo/c1-launch-video/resources/ui_pulse_1.png"
+   },
+   {
+    "file": "ui_verse_1.png",
+    "kind": "image",
+    "path": "docs/demo/c1-launch-video/resources/ui_verse_1.png"
+   },
+   {
+    "file": "green_lumen.mp4",
+    "kind": "video",
+    "path": "demos/c1-launch-video/resources/green_lumen.mp4",
+    "poster": "docs/demo/c1-launch-video/resources/green_lumen.poster.png"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 8,
+   "total": 8,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "26.0s, asked 20\u201330s"
+    },
+    {
+     "check": "uses:ui_lumen_1.png",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "uses:green_lumen.mp4",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "6 features: chromaKey, viewport, gradient, transitions, mediaCuts, motionBlur"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "7 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "13 layers"
+    }
+   ],
+   "summary": "turns=44 cost=$2.55 secs=407",
+   "run": {
+    "turns": 44,
+    "wall_s": 406,
+    "api_s": 396,
+    "cost_usd": 2.55,
+    "tokens": {
+     "input": 48,
+     "cache_read": 1923674,
+     "cache_write": 84748,
+     "output": 29628,
+     "thinking": 16599
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1117,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2008470,
+      "output": 29628,
+      "cost_usd": 2.55
+     }
+    ],
+    "mcp": {
+     "calls": 13,
+     "ms": 9368,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 7842,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 1271,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 86,
+       "errors": 0
+      },
+      "promo_media_filmstrip": {
+       "calls": 1,
+       "ms": 85,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 66,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 18,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "chromaKey",
+    "viewport",
+    "gradient",
+    "transitions",
+    "mediaCuts",
+    "motionBlur"
+   ],
+   "captions": [
+    "One screen. Every number.",
+    "Revenue, churn, NPS \u2014 updated just now.",
+    "Watch revenue move, week by week.",
+    "See exactly who stays.",
+    "Lumen",
+    "Analytics for small teams",
+    "Try it today"
+   ],
+   "notes": "Done. `out.promo/Exports/export.mp4` \u2014 1920\u00d71080, 26.0s, 30 fps.\n\n**One thing you should know:** only three of the five screenshots are Lumen. `ui_pulse_1.png` is a fitness app called Pulse (activity rings, steps, sleep) and `ui_verse_1.png` is a writing app called Verse (drafts, prose, an editing suggestion). Different products, different chrome, different titlebars. I left them out \u2014 dropping a fitness dashboard into a Lumen launch video is the fastest way to make the whole thing look untrustworthy. If they were meant to be Lumen views, they need re-capturing.\n\nThe green-screen clip isn't a presenter either \u2014 it's the Lumen Overview window drifting on green. That turned out to be more useful than a presenter would have been: chroma-keyed, it's a free-floating hero window.\n\n**The cut (26s)**\n\n| Time | |\n|---|---|\n| 0.0\u20133.6 | Keyed window floats and pushes in on a gradient ground. *\"One screen. Every number.\"* |\n| 3.3\u20139.9 | Dissolves into the **Overview** shot, slow Ken Burns push. *\"Revenue, churn, NPS \u2014 updated just now.\"* |\n| 9.4\u201315.5 | **Revenue** slides up from below with motion blur, pulling back out of a zoom. *\"Watch revenue move, week by week.\"* |\n| 14.9\u201320.6 | **Retention** slides up, pushing in. *\"See exactly who stays.\"* |\n| 20.3\u201326.0 | Split close card: keyed window drifting at half speed on the left, **Lumen** / *Analytics for small teams* / *Try it today* on the right. |\n\nChoices worth calling out:\n\n- **The slide-up between shots mirrors the sidebar.** Overview \u2192 Revenue \u2192 Retention is top-to-bottom in Lumen's own nav, so pushing each new panel up from the bottom reads as moving down the list rather than as a generic wipe.\n- **The background follows each shot's accent** \u2014 blue, violet, cyan, back to blue \u2014 on an eased gradient ramp. The shots are near-bla",
+   "contact": "docs/demo/c1-launch-video/contact-result.png",
+   "video": "docs/demo/c1-launch-video/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c1-launch-video.mp4",
+   "video_hd_bytes": 1877246,
+   "metadata": "docs/demo/c1-launch-video/result-metadata.json",
+   "gif": "docs/demo/c1-launch-video/result.gif",
+   "thumb": "docs/demo/c1-launch-video/thumb.png"
+  },
+  "page": "docs/demo/democ1.md"
+ },
+ {
+  "id": "c2",
+  "slug": "c2-social-teaser",
+  "title": "Social teaser",
+  "blurb": "This is a screen recording and one screenshot from the same app.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   12,
+   18
+  ],
+  "prompt": "This is a screen recording and one screenshot from the same app. Make a 15-second vertical teaser for social media \u2014 the kind that stops a thumb. Loud is fine. Your choice of words, cuts and effects.\n\nFiles in `resources/`: bbb_test.mp4, ui_lumen_1.png.",
+  "resources": [
+   {
+    "file": "bbb_test.mp4",
+    "kind": "video",
+    "path": "demos/_media/bbb_test.mp4",
+    "poster": "docs/demo/c2-social-teaser/resources/bbb_test.poster.png"
+   },
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/c2-social-teaser/resources/ui_lumen_1.png"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "15.0s, asked 12\u201318s"
+    },
+    {
+     "check": "uses:bbb_test.mp4",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "7 features: effects, viewport, gradient, transitions, mediaCuts, motionBlur, grade"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "8 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "13 layers"
+    }
+   ],
+   "summary": "turns=49 cost=$3.70 secs=636",
+   "run": {
+    "turns": 49,
+    "wall_s": 635,
+    "api_s": 609,
+    "cost_usd": 3.7,
+    "tokens": {
+     "input": 66,
+     "cache_read": 3114599,
+     "cache_write": 101943,
+     "output": 44738,
+     "thinking": 27944
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1062,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 3216608,
+      "output": 44738,
+      "cost_usd": 3.7
+     }
+    ],
+    "mcp": {
+     "calls": 15,
+     "ms": 24944,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 12681,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 4,
+       "ms": 11075,
+       "errors": 0
+      },
+      "promo_media_filmstrip": {
+       "calls": 2,
+       "ms": 818,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 260,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 94,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 16,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "effects",
+    "viewport",
+    "gradient",
+    "transitions",
+    "mediaCuts",
+    "motionBlur",
+    "grade"
+   ],
+   "captions": [
+    "YOU'RE\nGUESSING.",
+    "AND IT\nSHOWS.",
+    "THIS IS\nLUMEN",
+    "REVENUE. LIVE.",
+    "EVERY WEEK, MAPPED.",
+    "KNOW WHAT'S WORKING.",
+    "LUMEN",
+    "SEE YOUR NUMBERS \u2192"
+   ],
+   "notes": "Done. The teaser is rendered.\n\n**`out.promo/Exports/lumen-teaser-15s-vertical.mp4`** \u2014 1080\u00d71920, 15.0s, 30fps, 450 frames.\n\n**What I made of the material:** the recording is nature b-roll (10s, static camera, no audio track); the screenshot is a dark-navy \"Lumen\" analytics dashboard. So the b-roll became the graded emotional hook and the screenshot became the product proof, cut together on a cool blue-steel palette pulled from the UI itself.\n\n**The cut:**\n\n| Time | Beat |\n|---|---|\n| 0.0 | Zoom-punch open on graded b-roll \u2014 **\"YOU'RE GUESSING.\"** (word-by-word scale-on) |\n| 2.3 | **Glitch cut** to a new crop \u2014 **\"AND IT SHOWS.\"** |\n| 4.2 | **White flash** + accent flare on the background \u2192 dashboard slams in, **\"THIS IS LUMEN\"** |\n| 6.3 | Hard cut, punch-in on the KPI row \u2014 **\"REVENUE. LIVE.\"** ($48,209 \u00b7 +12.4%) |\n| 8.4 | Hard cut to the revenue chart \u2014 **\"EVERY WEEK, MAPPED.\"** |\n| 10.4 | Hard cut to Top sources \u2014 **\"KNOW WHAT'S WORKING.\"** (Direct 41%) |\n| 12.3 | Flash to outro b-roll \u2014 **LUMEN** scales in, **SEE YOUR NUMBERS \u2192** |\n\nCraft notes: the three product beats are one image layer driven by `viewport` jumps, each with its own eased push so every cut re-accelerates; footage carries a duotone grade (`@highlight` gel, sat 0.1, contrast 1.3) plus vignette and grain; every layer that moves has a 180\u00b0 shutter. Captions are plate-less with a 9px outline and shadow so they hold over bright footage. Copy is tied to what's actually on screen \u2014 no claim the picture doesn't support.\n\nValidated clean (`ok \u2014 nothing the renderer would quietly correct`), inspect reports 13/13 renderable, 2 resources, no undefined colours. I checked framing at every beat with contact-sheet renders and corrected two things: the KPI crop was clipping the $48,209 headline number, and the chart",
+   "contact": "docs/demo/c2-social-teaser/contact-result.png",
+   "video": "docs/demo/c2-social-teaser/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c2-social-teaser.mp4",
+   "video_hd_bytes": 7284567,
+   "metadata": "docs/demo/c2-social-teaser/result-metadata.json",
+   "gif": "docs/demo/c2-social-teaser/result.gif",
+   "thumb": "docs/demo/c2-social-teaser/thumb.png"
+  },
+  "page": "docs/demo/democ2.md"
+ },
+ {
+  "id": "c3",
+  "slug": "c3-mood-piece",
+  "title": "Mood piece",
+  "blurb": "One screenshot and three colour looks in.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   10,
+   14
+  ],
+  "prompt": "One screenshot and three colour looks in .cube files. Make a 12-second piece about focus and calm \u2014 something a person would happily watch loop on a landing page. No brief beyond that.\n\nFiles in `resources/`: ui_lumen_1.png, look_warm.cube, look_cool.cube, look_mono.cube.",
+  "resources": [
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/c3-mood-piece/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "look_warm.cube",
+    "kind": "file",
+    "path": "docs/demo/c3-mood-piece/resources/look_warm.cube"
+   },
+   {
+    "file": "look_cool.cube",
+    "kind": "file",
+    "path": "docs/demo/c3-mood-piece/resources/look_cool.cube"
+   },
+   {
+    "file": "look_mono.cube",
+    "kind": "file",
+    "path": "docs/demo/c3-mood-piece/resources/look_mono.cube"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "12.0s, asked 10\u201314s"
+    },
+    {
+     "check": "uses:ui_lumen_1.png",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "3 features: lut, effects, grade"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "2 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "6 layers"
+    }
+   ],
+   "summary": "turns=42 cost=$2.17 secs=383",
+   "run": {
+    "turns": 42,
+    "wall_s": 382,
+    "api_s": 378,
+    "cost_usd": 2.17,
+    "tokens": {
+     "input": 48,
+     "cache_read": 1652301,
+     "cache_write": 67616,
+     "output": 26849,
+     "thinking": 16703
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1066,
+      "output": 14,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1719965,
+      "output": 26849,
+      "cost_usd": 2.17
+     }
+    ],
+    "mcp": {
+     "calls": 11,
+     "ms": 3165,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2771,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 229,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 78,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 1,
+       "ms": 66,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 13,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "lut",
+    "effects",
+    "grade"
+   ],
+   "captions": [
+    "Everything in one calm view",
+    "Nothing asking for your attention"
+   ],
+   "notes": "**`out.promo/Exports/export.mp4`** \u2014 1920\u00d71080, 12.00s, 30fps. Validates clean; 6 of 6 layers renderable.\n\n**The piece \u2014 \"Quiet Hours\"**\n\nOne idea: the dashboard breathes, and the three .cube looks are the phases of the breath.\n\n- **0\u20131s** the frame arrives 4px soft and settles into focus; vignette wide, ground near-black blue.\n- **~3s** the *mono* look washes in to 58% \u2014 colour quietly drains out under \"Everything in one calm view.\"\n- **~6s** the breath peaks: card grows 748\u2192778px, vignette opens 0.55\u21920.34, colour back to *cool*.\n- **~8s** the *warm* look takes over fully, grounds lifting brown while the chart blue holds, under \"Nothing asking for your attention.\" The background colour warms with it.\n- **11\u201312s** warm recedes, vignette closes, focus softens back to 4px.\n\n**It loops seamlessly.** t=12 is pixel-identical to t=0 \u2014 same look (pure cool), same 748px height, same blur, same vignette, both washes at zero. No flash, no jump on repeat.\n\n**The one technique worth knowing:** `lutAmount` isn't keyframable, so the three looks are three copies of the same image layer, each with its own LUT, all spanning the full 12s and sharing an *identical* placement/blur/vignette keyframe track. Only opacity differs between them. Because they're pixel-registered at every instant, cross-fading them dissolves colour rather than producing a double image \u2014 which is what you'd get from the more obvious approach of overlapping three shorter layers with their own camera moves.\n\nTwo smaller calls I made without asking: the warm layer carries a whisper of pre-LUT lift (`brightness` 0.035, `saturation` 1.06) because on a source this dark and blue the warm LUT alone barely separated from cool; and captions are 38pt unbold at 0.92 opacity rather than headline-sized, so the image stays the su",
+   "contact": "docs/demo/c3-mood-piece/contact-result.png",
+   "video": "docs/demo/c3-mood-piece/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c3-mood-piece.mp4",
+   "video_hd_bytes": 997910,
+   "metadata": "docs/demo/c3-mood-piece/result-metadata.json",
+   "gif": "docs/demo/c3-mood-piece/result.gif",
+   "thumb": "docs/demo/c3-mood-piece/thumb.png"
+  },
+  "page": "docs/demo/democ3.md"
+ },
+ {
+  "id": "c4",
+  "slug": "c4-manifesto",
+  "title": "Manifesto",
+  "blurb": "No media.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   9,
+   16
+  ],
+  "prompt": "No media. Three lines: 'Ship the demo, not the deck.' 'One document, every screen.' 'Say it once.' Make a striking 10-to-15-second typographic piece from them, any canvas you like.",
+  "resources": [],
+  "result": {
+   "score": 83,
+   "passed": 5,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "13.6s, asked 9\u201316s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": false,
+     "detail": "2 features: gradient, transitions"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "7 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "8 layers"
+    }
+   ],
+   "summary": "turns=28 cost=$1.66 secs=237",
+   "run": {
+    "turns": 28,
+    "wall_s": 235,
+    "api_s": 212,
+    "cost_usd": 1.66,
+    "tokens": {
+     "input": 36,
+     "cache_read": 1208512,
+     "cache_write": 63711,
+     "output": 16646,
+     "thinking": 8471
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1043,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1272259,
+      "output": 16646,
+      "cost_usd": 1.66
+     }
+    ],
+    "mcp": {
+     "calls": 8,
+     "ms": 21010,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 20140,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 852,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 10,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "gradient",
+    "transitions"
+   ],
+   "captions": [
+    "01",
+    "Ship the demo,\nnot the deck.",
+    "02",
+    "One document,\nevery screen.",
+    "03",
+    "Say it once.",
+    "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501"
+   ],
+   "notes": "Done \u2014 `out.promo/Exports/export.mp4`, 1920\u00d71080 @ 60fps, 13.6s.\n\n**The piece.** `resources/` was empty, so it's pure type on an animated ground \u2014 no media, nothing copied into `Resources/`.\n\n- **Ground** \u2014 a three-stop linear gradient on the background layer, keyframed across four states with `easeInOut`. It starts near-black and cool, and warms through the piece until an ember bleeds in from the right corner under the last line. The axis drifts slightly too, so the light never sits still.\n- **Type** \u2014 Futura bold, warm off-white, with a soft drop shadow. Each line gets its own reveal so the three read as three different kinds of statement:\n  - `01 Ship the demo, / not the deck.` \u2014 word-by-word **rise**\n  - `02 One document, / every screen.` \u2014 character **wipe**, a typewriter at 28ms\n  - `03 Say it once.` \u2014 word **scale**, slower, and set much larger (164\u2192178pt)\n- **Rhythm** \u2014 lines 1 and 2 leave on a `blurDissolve`, defocusing out rather than fading; line 3 holds to the end and gets an accent rule that wipes in beneath it. Every headline drifts a few points larger over its life, so nothing is ever static.\n- Small mono `01/02/03` kickers in the accent orange sit above each line, holding the manifesto structure.\n\nColours are a full eight-role palette (`@canvas`, `@text`, `@accent`, \u2026), so re-skinning it is one array.\n\nValidated clean (`ok \u2014 nothing the renderer would quietly correct`), inspected at 8/8 layers renderable, and checked against a contact sheet at `Exports/frames/` before the render \u2014 that's what caught the em-dash rule breaking into separate dashes (now heavy box-drawing glyphs, which tile into one continuous line).",
+   "contact": "docs/demo/c4-manifesto/contact-result.png",
+   "video": "docs/demo/c4-manifesto/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c4-manifesto.mp4",
+   "video_hd_bytes": 842198,
+   "metadata": "docs/demo/c4-manifesto/result-metadata.json",
+   "gif": "docs/demo/c4-manifesto/result.gif",
+   "thumb": "docs/demo/c4-manifesto/thumb.png"
+  },
+  "page": "docs/demo/democ4.md"
+ },
+ {
+  "id": "c5",
+  "slug": "c5-story-with-voice",
+  "title": "Story with a voice",
+  "blurb": "Screenshots, a green-screen clip and a warm look.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   24,
+   36
+  ],
+  "prompt": "Screenshots, a green-screen clip and a warm look. Write and synthesize a short narration of your own (three or four sentences about an analytics app called Lumen), and build a 25-to-35-second story around it with chapters a player can jump to. Level the voice so it sits well.\n\nFiles in `resources/`: ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png, green_lumen.mp4, look_warm.cube.",
+  "resources": [
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/c5-story-with-voice/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/c5-story-with-voice/resources/ui_lumen_2.png"
+   },
+   {
+    "file": "ui_lumen_5.png",
+    "kind": "image",
+    "path": "docs/demo/c5-story-with-voice/resources/ui_lumen_5.png"
+   },
+   {
+    "file": "green_lumen.mp4",
+    "kind": "video",
+    "path": "demos/c5-story-with-voice/resources/green_lumen.mp4",
+    "poster": "docs/demo/c5-story-with-voice/resources/green_lumen.poster.png"
+   },
+   {
+    "file": "look_warm.cube",
+    "kind": "file",
+    "path": "docs/demo/c5-story-with-voice/resources/look_warm.cube"
+   }
+  ],
+  "result": null,
+  "page": "docs/demo/democ5.md"
  }
 ]

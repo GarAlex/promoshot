@@ -182,7 +182,8 @@ def main():
                 result['thumb'] = f"docs/demo/{name}/thumb.png"
         blurb = BLURBS.get(name[:2], user_prompt.split('.')[0].strip() + '.')
         manifest.append({"id": name[:2], "slug": name, "title": rubric['template'][3:], "blurb": blurb,
-                         "canvas": rubric['canvas'], "duration": rubric['duration'],
+                         "kind": "creative" if creative else "conformance",
+                         "canvas": rubric.get('canvas'), "duration": rubric['duration'],
                          "prompt": user_prompt, "resources": resources, "result": result,
                          "page": f"docs/demo/demo{name[:2]}.md"})
 
@@ -190,7 +191,8 @@ def main():
         rel = lambda path: path[len('docs/demo/'):] if path.startswith('docs/demo/') else '../../' + path
         pg = [f"# {rubric['template']}", "",
               f"{blurb}", "",
-              f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration']:.0f} s.* "
+              (f"*Any canvas, {rubric['duration'][0]} to {rubric['duration'][1]} s.* " if creative
+               else f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration']:.0f} s.* ")
               + ("A **creative run**: a goal, the material and the tools, nothing about how. " if creative else "")
               + "Part of [the demos](../../demo.md): a fresh agent, the media and the prompt below, "
               "the public skill and the headless MCP, nothing else.", "",

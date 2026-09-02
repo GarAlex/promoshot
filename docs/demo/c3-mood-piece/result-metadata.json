@@ -1,0 +1,147 @@
+{
+  "$schema": "https://raw.githubusercontent.com/GarAlex/promoshot/main/docs/promo.schema.json",
+  "id": "lumen-quiet",
+  "name": "Quiet Hours",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "palette": [
+      { "name": "ground",     "colorHex": "090D15" },
+      { "name": "groundMono", "colorHex": "0D0D0F" },
+      { "name": "groundWarm", "colorHex": "151009" },
+      { "name": "ink",        "colorHex": "E8EEF8" },
+      { "name": "edge",       "colorHex": "222B3B" },
+      { "name": "shade",      "colorHex": "01030A" }
+    ],
+    "backgroundColorHex": "@ground",
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 38,
+    "subtitleBold": false,
+    "subtitleColorHex": "@ink",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 10,
+    "subtitleLeftMargin": 320,
+    "subtitleRightMargin": 320,
+    "subtitleVerticalMargin": 956
+  },
+
+  "resources": [
+    { "id": "shot", "kind": "image", "filename": "ui_lumen_1.png",
+      "displayName": "Lumen", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 1,
+                 "cornerRadius": 12, "shadowColorHex": "@shade",
+                 "shadowOpacity": 0.6, "shadowRadius": 38, "shadowOffset": [0, 16] } },
+
+    { "id": "lutCool", "kind": "lut", "filename": "look_cool.cube",
+      "displayName": "Cool", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+    { "id": "lutMono", "kind": "lut", "filename": "look_mono.cube",
+      "displayName": "Mono", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+    { "id": "lutWarm", "kind": "lut", "filename": "look_warm.cube",
+      "displayName": "Warm", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [] }
+  ],
+
+  "layers": [
+    { "id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 12,
+      "keyframes": [
+        { "id": "bg0", "time": 0,    "colorHex": "@ground",     "transitionDuration": 0 },
+        { "id": "bg1", "time": 2.9,  "colorHex": "@groundMono", "transitionDuration": 2.0, "easing": "easeInOut" },
+        { "id": "bg2", "time": 7.8,  "colorHex": "@groundWarm", "transitionDuration": 3.4, "easing": "easeInOut" },
+        { "id": "bg3", "time": 11.5, "colorHex": "@ground",     "transitionDuration": 2.6, "easing": "easeInOut" }
+      ] },
+
+    { "id": "cool", "name": "Look — Cool", "sortIndex": 1, "kind": "image",
+      "isEnabled": true, "startTime": 0, "duration": 12, "resourceID": "shot",
+      "adjustments": { "lutResourceID": "lutCool", "lutAmount": 0.9 },
+      "effects": { "grain": 0.04, "vignetteSoftness": 0.62 },
+      "keyframes": [
+        { "id": "c0", "time": 0,    "opacity": 1, "blur": 4, "vignette": 0.55,
+          "placement": { "height": 748, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 0 },
+        { "id": "c1", "time": 1.0,  "blur": 0, "transitionDuration": 1.0, "easing": "easeOut" },
+        { "id": "c2", "time": 6.0,  "vignette": 0.34,
+          "placement": { "height": 778, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 5.0, "easing": "easeInOut" },
+        { "id": "c3", "time": 11.9, "blur": 4, "transitionDuration": 0.9, "easing": "easeIn" },
+        { "id": "c4", "time": 12.0, "vignette": 0.55,
+          "placement": { "height": 748, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 5.0, "easing": "easeInOut" }
+      ] },
+
+    { "id": "mono", "name": "Look — Mono", "sortIndex": 2, "kind": "image",
+      "isEnabled": true, "startTime": 0, "duration": 12, "resourceID": "shot",
+      "adjustments": { "lutResourceID": "lutMono", "lutAmount": 1.0 },
+      "effects": { "grain": 0.04, "vignetteSoftness": 0.62 },
+      "keyframes": [
+        { "id": "m0", "time": 0,    "opacity": 0, "blur": 4, "vignette": 0.55,
+          "placement": { "height": 748, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 0 },
+        { "id": "m1", "time": 1.0,  "blur": 0, "transitionDuration": 1.0, "easing": "easeOut" },
+        { "id": "m2", "time": 2.9,  "opacity": 0.58, "transitionDuration": 1.9, "easing": "easeInOut" },
+        { "id": "m3", "time": 5.6,  "opacity": 0,   "transitionDuration": 2.0, "easing": "easeInOut" },
+        { "id": "m4", "time": 6.0,  "vignette": 0.34,
+          "placement": { "height": 778, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 5.0, "easing": "easeInOut" },
+        { "id": "m5", "time": 11.9, "blur": 4, "transitionDuration": 0.9, "easing": "easeIn" },
+        { "id": "m6", "time": 12.0, "vignette": 0.55,
+          "placement": { "height": 748, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 5.0, "easing": "easeInOut" }
+      ] },
+
+    { "id": "warm", "name": "Look — Warm", "sortIndex": 3, "kind": "image",
+      "isEnabled": true, "startTime": 0, "duration": 12, "resourceID": "shot",
+      "adjustments": { "saturation": 1.06, "brightness": 0.035,
+                       "lutResourceID": "lutWarm", "lutAmount": 1.0 },
+      "effects": { "grain": 0.04, "vignetteSoftness": 0.62 },
+      "keyframes": [
+        { "id": "w0", "time": 0,    "opacity": 0, "blur": 4, "vignette": 0.55,
+          "placement": { "height": 748, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 0 },
+        { "id": "w1", "time": 1.0,  "blur": 0, "transitionDuration": 1.0, "easing": "easeOut" },
+        { "id": "w2", "time": 6.0,  "vignette": 0.34,
+          "placement": { "height": 778, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 5.0, "easing": "easeInOut" },
+        { "id": "w3", "time": 7.8,  "opacity": 1.0, "transitionDuration": 2.6, "easing": "easeInOut" },
+        { "id": "w4", "time": 11.2, "opacity": 0,   "transitionDuration": 2.4, "easing": "easeInOut" },
+        { "id": "w5", "time": 11.9, "blur": 4, "transitionDuration": 0.9, "easing": "easeIn" },
+        { "id": "w6", "time": 12.0, "vignette": 0.55,
+          "placement": { "height": 748, "anchor": "center", "offset": [0, -28] },
+          "transitionDuration": 5.0, "easing": "easeInOut" }
+      ] },
+
+    { "id": "cap1", "name": "Line 1", "sortIndex": 4, "kind": "caption",
+      "isEnabled": true, "startTime": 1.5, "duration": 3.6,
+      "captionText": "Everything in one calm view",
+      "captionStyle": { "alignment": "center",
+                        "placement": { "anchor": "bottom", "offset": [0, -56] } },
+      "keyframes": [
+        { "id": "p0", "time": 0,   "opacity": 0,    "transitionDuration": 0 },
+        { "id": "p1", "time": 0.9, "opacity": 0.92, "transitionDuration": 0.9, "easing": "easeInOut" },
+        { "id": "p2", "time": 3.6, "opacity": 0,    "transitionDuration": 1.0, "easing": "easeInOut" }
+      ] },
+
+    { "id": "cap2", "name": "Line 2", "sortIndex": 5, "kind": "caption",
+      "isEnabled": true, "startTime": 6.2, "duration": 4.0,
+      "captionText": "Nothing asking for your attention",
+      "captionStyle": { "alignment": "center",
+                        "placement": { "anchor": "bottom", "offset": [0, -56] } },
+      "keyframes": [
+        { "id": "q0", "time": 0,   "opacity": 0,    "transitionDuration": 0 },
+        { "id": "q1", "time": 1.0, "opacity": 0.92, "transitionDuration": 1.0, "easing": "easeInOut" },
+        { "id": "q2", "time": 4.0, "opacity": 0,    "transitionDuration": 1.1, "easing": "easeInOut" }
+      ] }
+  ]
+}
