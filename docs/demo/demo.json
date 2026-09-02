@@ -3546,7 +3546,7 @@
    20,
    30
   ],
-  "prompt": "Lumen is an analytics app for small teams. Here are five screenshots of it and a short clip of a presenter on a green screen. Make a launch video, 20 to 30 seconds, landscape, that makes someone want to try it. Everything else is your call: pacing, words, motion, looks.\n\nFiles in `resources/`: ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png, ui_pulse_1.png, ui_verse_1.png, green_lumen.mp4.",
+  "prompt": "Lumen is an analytics app for small teams. Here are five screenshots \u2014 three of Lumen, and one each of two sibling apps from the same suite, Pulse and Verse, which you may use or leave out \u2014 and a short clip of the Lumen window drifting over a green screen. Make a launch video, 20 to 30 seconds, landscape, that makes someone want to try it. Everything else is your call: pacing, words, motion, looks.\n\nFiles in `resources/`: ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png, ui_pulse_1.png, ui_verse_1.png, green_lumen.mp4.",
   "resources": [
    {
     "file": "ui_lumen_1.png",
@@ -4254,7 +4254,166 @@
     "path": "docs/demo/c5-story-with-voice/resources/look_warm.cube"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "30.0s, asked 24\u201336s"
+    },
+    {
+     "check": "uses:green_lumen.mp4",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "11 features: chromaKey, lut, chapters, markers, audioEffects, effects, viewport, gradient, transitions, narration, grade"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "6 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "15 layers"
+    }
+   ],
+   "summary": "turns=71 cost=$3.90 secs=508",
+   "run": {
+    "turns": 71,
+    "wall_s": 507,
+    "api_s": 493,
+    "cost_usd": 3.9,
+    "tokens": {
+     "input": 92,
+     "cache_read": 4018711,
+     "cache_write": 95559,
+     "output": 37328,
+     "thinking": 17247
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1106,
+      "output": 16,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 4114362,
+      "output": 37328,
+      "cost_usd": 3.9
+     }
+    ],
+    "mcp": {
+     "calls": 20,
+     "ms": 13303,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 4,
+       "ms": 7110,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 5739,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 1,
+       "ms": 213,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 2,
+       "ms": 121,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 3,
+       "ms": 73,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 38,
+       "errors": 0
+      },
+      "promo_voices": {
+       "calls": 1,
+       "ms": 7,
+       "errors": 1
+      },
+      "promo_speak": {
+       "calls": 2,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "chromaKey",
+    "lut",
+    "chapters",
+    "markers",
+    "audioEffects",
+    "effects",
+    "viewport",
+    "gradient",
+    "transitions",
+    "narration",
+    "grade"
+   ],
+   "captions": [
+    "Lumen",
+    "See what your product is really doing",
+    "Every metric, live on one dashboard",
+    "Follow a trend into the detail",
+    "What moved, and why",
+    "Lumen \u2014 analytics that keep up"
+   ],
+   "notes": "Done. Here's what's in `out.promo/`.\n\n## The story \u2014 30.0 s, 1920\u00d71080 @ 30 fps, 4 jumpable chapters\n\n| Chapter (mp4 marker) | Time | What's on screen |\n|---|---|---|\n| Meet Lumen | 0.0 s | `green_lumen.mp4`, chroma-keyed, floating on the warm ground; \"Lumen\" rises in character by character |\n| One dashboard | 7.6 s | `ui_lumen_1.png` wipes in from the left, slow push 740\u2192806 px |\n| Follow the trend | 15.2 s | `ui_lumen_2.png` wipes in from the right; viewport ramps `[0,0,1,1]` \u2192 `[0.26,0.20,0.5,0.5]` \u2014 the frame holds still, the chart pushes in |\n| What moved, and why | 22.4 s | `ui_lumen_5.png` with a vignette, dims to 22 % under the closing line |\n\nChapters are real `markers` of `kind: \"chapter\"` \u2014 `promo_media_probe` on the export shows the `bin_data` stream, so a player's chapter menu picks them up.\n\n**Warm look**: `look_warm.cube` as a `lut` resource, at `lutAmount` 0.85 on the keyed clip and 0.55 on the screenshots (full strength swamped the UI's own colour), over a warm gradient ground that slowly brightens across the 30 s.\n\n**The green screen** took two passes. Tolerance 0.34 left a bright green fringe along the window's bottom edge; raising it to 0.46 killed the fringe but also ate the UI's own greens (`+12.4 %`, the traffic-light dot) and made the window translucent. The fix was to keep the conservative key and crop the fringe off with a `viewport` of `[0.008, 0.008, 0.984, 0.984]`.\n\nAlso moved three captions that were sitting on top of content \u2014 the title over the window chrome, the ch1 sub-line over the bottom rows, and the closing line over the last screenshot (that one now floats centred while the shot dims behind it).\n\n`promo_validate`: **ok \u2014 nothing the renderer would quietly correct.**\n\n## The narration is written but not synthesized\n\nFour sentences, ",
+   "contact": "docs/demo/c5-story-with-voice/contact-result.png",
+   "video": "docs/demo/c5-story-with-voice/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c5-story-with-voice.mp4",
+   "video_hd_bytes": 2216412,
+   "metadata": "docs/demo/c5-story-with-voice/result-metadata.json",
+   "gif": "docs/demo/c5-story-with-voice/result.gif",
+   "thumb": "docs/demo/c5-story-with-voice/thumb.png"
+  },
   "page": "docs/demo/democ5.md"
  }
 ]

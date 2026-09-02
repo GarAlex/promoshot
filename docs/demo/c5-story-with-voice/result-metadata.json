@@ -1,0 +1,280 @@
+{
+  "id": "lumen-story",
+  "name": "Lumen — Story",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 30,
+  "videoDuration": 30,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "17100A" },
+      { "name": "text", "colorHex": "FFF3E2" },
+      { "name": "text-bg", "colorHex": "2A1B0C" },
+      { "name": "edge", "colorHex": "8C5A2B" },
+      { "name": "caption-outline", "colorHex": "150D05" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "FFB347" },
+      { "name": "accent", "colorHex": "FF9B45" },
+      { "name": "green", "colorHex": "00FF00" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0.1, 0],
+      "end": [0.9, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "1B1108", "at": 0 },
+        { "colorHex": "3E2410", "at": 0.55 },
+        { "colorHex": "120D0A", "at": 1 }
+      ]
+    },
+    "videoCornerRadius": 0,
+    "videoBorderWidth": 0,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0,
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 62,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0,
+    "subtitleBackgroundPadding": 24,
+    "subtitleLeftMargin": 150,
+    "subtitleRightMargin": 150,
+    "subtitleVerticalMargin": 900,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 5,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.5,
+    "subtitleShadowRadius": 12,
+    "subtitleShadowOffset": [0, 6]
+  },
+
+  "markers": [
+    { "id": "ch1", "time": 0.0,  "name": "Meet Lumen",          "kind": "chapter", "colorHex": "@accent" },
+    { "id": "ch2", "time": 7.6,  "name": "One dashboard",       "kind": "chapter", "colorHex": "@accent" },
+    { "id": "ch3", "time": 15.2, "name": "Follow the trend",    "kind": "chapter", "colorHex": "@accent" },
+    { "id": "ch4", "time": 22.4, "name": "What moved, and why", "kind": "chapter", "colorHex": "@accent" }
+  ],
+
+  "resources": [
+    { "id": "warmlut", "kind": "lut", "filename": "look_warm.cube",
+      "displayName": "Warm look", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "green", "kind": "video", "filename": "green_lumen.mp4",
+      "displayName": "Presenter (green screen)", "addedAt": 0,
+      "duration": 6.0, "trimStart": 0, "trimEnd": 6.0, "speed": 0.85,
+      "videoNaturalWidth": 1280, "videoNaturalHeight": 800,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "shot1", "kind": "image", "filename": "ui_lumen_1.png",
+      "displayName": "Dashboard", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 3,
+                 "cornerRadius": 16, "shadowColorHex": "@media-shadow",
+                 "shadowOpacity": 0.55, "shadowRadius": 38, "shadowOffset": [0, 16] },
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "shot2", "kind": "image", "filename": "ui_lumen_2.png",
+      "displayName": "Trend detail", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 3,
+                 "cornerRadius": 16, "shadowColorHex": "@media-shadow",
+                 "shadowOpacity": 0.55, "shadowRadius": 38, "shadowOffset": [0, 16] },
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "shot5", "kind": "image", "filename": "ui_lumen_5.png",
+      "displayName": "Breakdown", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 3,
+                 "cornerRadius": 16, "shadowColorHex": "@media-shadow",
+                 "shadowOpacity": 0.55, "shadowRadius": 38, "shadowOffset": [0, 16] },
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "vo1", "kind": "audio", "filename": "",
+      "displayName": "VO 1 — Meet Lumen", "addedAt": 0, "duration": 4.9,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "speech": { "text": "Lumen turns the numbers your product makes into answers you can actually use.",
+                  "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "eq", "frequencyHz": 220, "widthOctaves": 1.0, "gainDb": -2.5 },
+        { "kind": "eq", "frequencyHz": 3200, "widthOctaves": 1.2, "gainDb": 2.5 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 15, "releaseMs": 220 },
+        { "kind": "normalize", "targetLufs": -16 }
+      ] },
+
+    { "id": "vo2", "kind": "audio", "filename": "",
+      "displayName": "VO 2 — One dashboard", "addedAt": 0, "duration": 5.6,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "speech": { "text": "Every metric that matters is live on one dashboard, so nobody waits on a query.",
+                  "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "eq", "frequencyHz": 220, "widthOctaves": 1.0, "gainDb": -2.5 },
+        { "kind": "eq", "frequencyHz": 3200, "widthOctaves": 1.2, "gainDb": 2.5 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 15, "releaseMs": 220 },
+        { "kind": "normalize", "targetLufs": -16 }
+      ] },
+
+    { "id": "vo3", "kind": "audio", "filename": "",
+      "displayName": "VO 3 — Follow the trend", "addedAt": 0, "duration": 5.3,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "speech": { "text": "Follow a trend into the detail, and Lumen shows you what moved, and why.",
+                  "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "eq", "frequencyHz": 220, "widthOctaves": 1.0, "gainDb": -2.5 },
+        { "kind": "eq", "frequencyHz": 3200, "widthOctaves": 1.2, "gainDb": 2.5 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 15, "releaseMs": 220 },
+        { "kind": "normalize", "targetLufs": -16 }
+      ] },
+
+    { "id": "vo4", "kind": "audio", "filename": "",
+      "displayName": "VO 4 — Close", "addedAt": 0, "duration": 3.7,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "speech": { "text": "Analytics that keep up with your team. That's Lumen.",
+                  "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "eq", "frequencyHz": 220, "widthOctaves": 1.0, "gainDb": -2.5 },
+        { "kind": "eq", "frequencyHz": 3200, "widthOctaves": 1.2, "gainDb": 2.5 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 15, "releaseMs": 220 },
+        { "kind": "normalize", "targetLufs": -16 }
+      ] }
+  ],
+
+  "layers": [
+    { "id": "L-bg", "name": "Warm ground", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 30,
+      "keyframes": [
+        { "id": "bg-k0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "linear", "start": [0.1, 0], "end": [0.9, 1], "repeat": "clamp",
+            "stops": [ { "colorHex": "1B1108", "at": 0 },
+                       { "colorHex": "3E2410", "at": 0.55 },
+                       { "colorHex": "120D0A", "at": 1 } ] } },
+        { "id": "bg-k1", "time": 30, "transitionDuration": 28, "easing": "easeInOut",
+          "gradient": { "kind": "linear", "start": [0.1, 0], "end": [0.9, 1], "repeat": "clamp",
+            "stops": [ { "colorHex": "241609", "at": 0 },
+                       { "colorHex": "5A3313", "at": 0.55 },
+                       { "colorHex": "150F0B", "at": 1 } ] } }
+      ] },
+
+    { "id": "L-green", "name": "Presenter (keyed)", "sortIndex": 1, "kind": "video",
+      "isEnabled": true, "startTime": 0.2, "duration": 7.0, "resourceID": "green",
+      "beyondEnd": "hold", "fadeIn": 0.5, "fadeOut": 0.8,
+      "chromaKey": { "colorHex": "@green", "tolerance": 0.34, "softness": 0.14 },
+      "adjustments": { "lutResourceID": "warmlut", "lutAmount": 0.85 },
+      "keyframes": [
+        { "id": "g-v0", "time": 0, "transitionDuration": 0,
+          "viewport": [0.008, 0.008, 0.984, 0.984] },
+        { "id": "g-k0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 760, "anchor": "center", "offset": [0, 100] } },
+        { "id": "g-k1", "time": 7.0, "transitionDuration": 6.6, "easing": "easeInOut",
+          "placement": { "height": 792, "anchor": "center", "offset": [0, 96] } }
+      ] },
+
+    { "id": "L-shot1", "name": "Dashboard", "sortIndex": 2, "kind": "image",
+      "isEnabled": true, "startTime": 7.0, "duration": 8.2, "resourceID": "shot1",
+      "transitionIn": { "kind": "wipe", "from": "left", "duration": 0.7, "easing": "easeOut" },
+      "fadeOut": 0.6,
+      "adjustments": { "lutResourceID": "warmlut", "lutAmount": 0.55 },
+      "keyframes": [
+        { "id": "s1-k0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 740, "anchor": "center", "offset": [0, 80] } },
+        { "id": "s1-k1", "time": 8.2, "transitionDuration": 8.2, "easing": "easeInOut",
+          "placement": { "height": 806, "anchor": "center", "offset": [0, 74] } }
+      ] },
+
+    { "id": "L-shot2", "name": "Trend detail", "sortIndex": 3, "kind": "image",
+      "isEnabled": true, "startTime": 14.6, "duration": 7.8, "resourceID": "shot2",
+      "transitionIn": { "kind": "wipe", "from": "right", "duration": 0.7, "easing": "easeOut" },
+      "fadeOut": 0.6,
+      "adjustments": { "lutResourceID": "warmlut", "lutAmount": 0.55 },
+      "keyframes": [
+        { "id": "s2-p0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 740, "anchor": "center", "offset": [0, 80] } },
+        { "id": "s2-v0", "time": 0.6, "transitionDuration": 0, "viewport": [0, 0, 1, 1] },
+        { "id": "s2-v1", "time": 7.0, "transitionDuration": 5.6, "easing": "easeInOut",
+          "viewport": [0.26, 0.20, 0.5, 0.5] }
+      ] },
+
+    { "id": "L-shot5", "name": "Breakdown", "sortIndex": 4, "kind": "image",
+      "isEnabled": true, "startTime": 21.8, "duration": 8.2, "resourceID": "shot5",
+      "transitionIn": { "kind": "wipe", "from": "left", "duration": 0.7, "easing": "easeOut" },
+      "fadeOut": 0.9,
+      "adjustments": { "lutResourceID": "warmlut", "lutAmount": 0.55 },
+      "effects": { "vignette": 0.35, "vignetteSoftness": 0.6 },
+      "keyframes": [
+        { "id": "s5-k0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 740, "anchor": "center", "offset": [0, 80] } },
+        { "id": "s5-k1", "time": 8.2, "transitionDuration": 8.2, "easing": "easeInOut",
+          "placement": { "height": 800, "anchor": "center", "offset": [0, 74] } },
+        { "id": "s5-o0", "time": 5.8, "opacity": 1, "transitionDuration": 0 },
+        { "id": "s5-o1", "time": 6.4, "opacity": 0.22, "transitionDuration": 0.6, "easing": "easeInOut" }
+      ] },
+
+    { "id": "L-cap-title", "name": "Title — Lumen", "sortIndex": 10, "kind": "caption",
+      "isEnabled": true, "startTime": 1.0, "duration": 3.2,
+      "captionText": "Lumen",
+      "captionStyle": { "fontSize": 118, "placement": { "anchor": "top", "offset": [0, 48] },
+                        "padding": 30, "strokeWidth": 7, "shadowOpacity": 0.6, "shadowRadius": 22,
+                        "reveal": { "by": "character", "mode": "rise", "seconds": 0.9, "easing": "easeOut" } },
+      "fadeIn": 0.4, "fadeOut": 0.5, "keyframes": [] },
+
+    { "id": "L-cap-1b", "name": "Sub — ch1", "sortIndex": 11, "kind": "caption",
+      "isEnabled": true, "startTime": 4.5, "duration": 2.4,
+      "captionText": "See what your product is really doing",
+      "captionStyle": { "fontSize": 54, "placement": { "anchor": "top", "offset": [0, 66] } },
+      "fadeIn": 0.35, "fadeOut": 0.45, "keyframes": [] },
+
+    { "id": "L-cap-2", "name": "Caption — ch2", "sortIndex": 12, "kind": "caption",
+      "isEnabled": true, "startTime": 8.2, "duration": 5.4,
+      "captionText": "Every metric, live on one dashboard",
+      "captionStyle": { "fontSize": 64, "placement": { "anchor": "top", "offset": [0, 78] } },
+      "fadeIn": 0.4, "fadeOut": 0.5, "keyframes": [] },
+
+    { "id": "L-cap-3", "name": "Caption — ch3", "sortIndex": 13, "kind": "caption",
+      "isEnabled": true, "startTime": 15.8, "duration": 5.2,
+      "captionText": "Follow a trend into the detail",
+      "captionStyle": { "fontSize": 64, "placement": { "anchor": "top", "offset": [0, 78] } },
+      "fadeIn": 0.4, "fadeOut": 0.5, "keyframes": [] },
+
+    { "id": "L-cap-4", "name": "Caption — ch4", "sortIndex": 14, "kind": "caption",
+      "isEnabled": true, "startTime": 22.8, "duration": 4.2,
+      "captionText": "What moved, and why",
+      "captionStyle": { "fontSize": 64, "placement": { "anchor": "top", "offset": [0, 78] } },
+      "fadeIn": 0.4, "fadeOut": 0.5, "keyframes": [] },
+
+    { "id": "L-cap-end", "name": "Close", "sortIndex": 15, "kind": "caption",
+      "isEnabled": true, "startTime": 27.6, "duration": 2.4,
+      "captionText": "Lumen — analytics that keep up",
+      "captionStyle": { "fontSize": 84, "placement": { "anchor": "center", "offset": [0, 0] },
+                        "padding": 30, "strokeWidth": 7, "shadowOpacity": 0.65, "shadowRadius": 18 },
+      "fadeIn": 0.45, "fadeOut": 0.5, "keyframes": [] },
+
+    { "id": "L-vo1", "name": "VO 1", "sortIndex": 20, "kind": "audio",
+      "isEnabled": true, "startTime": 1.4, "duration": 4.9, "resourceID": "vo1",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "L-vo2", "name": "VO 2", "sortIndex": 21, "kind": "audio",
+      "isEnabled": true, "startTime": 8.4, "duration": 5.6, "resourceID": "vo2",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "L-vo3", "name": "VO 3", "sortIndex": 22, "kind": "audio",
+      "isEnabled": true, "startTime": 16.0, "duration": 5.3, "resourceID": "vo3",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "L-vo4", "name": "VO 4", "sortIndex": 23, "kind": "audio",
+      "isEnabled": true, "startTime": 23.0, "duration": 3.7, "resourceID": "vo4",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] }
+  ]
+}
