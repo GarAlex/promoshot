@@ -1,0 +1,169 @@
+{
+  "id": "out-app-store-hero",
+  "name": "Mac App Store Preview",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 18,
+  "trimStart": 0,
+  "trimEnd": 15,
+  "videoDuration": 15,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "fps": 30,
+
+    "palette": [
+      { "name": "canvas",          "colorHex": "070910" },
+      { "name": "text",            "colorHex": "F4F7FC" },
+      { "name": "text-bg",         "colorHex": "0E121C" },
+      { "name": "edge",            "colorHex": "2B3550" },
+      { "name": "caption-outline", "colorHex": "05070C" },
+      { "name": "caption-shadow",  "colorHex": "000000" },
+      { "name": "media-shadow",    "colorHex": "000000" },
+      { "name": "highlight",       "colorHex": "7FA8FF" },
+      { "name": "studio-hi",       "colorHex": "1E2A46" },
+      { "name": "studio-mid",      "colorHex": "101524" }
+    ],
+
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.40, 0.28],
+      "end": [1.28, 1.18],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@studio-hi", "at": 0 },
+        { "colorHex": "@studio-mid", "at": 0.55 },
+        { "colorHex": "@canvas",    "at": 1 }
+      ]
+    },
+
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.6,
+    "videoShadowRadius": 44,
+    "videoShadowOffset": [0, 20],
+
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 46,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 14,
+    "subtitleLeftMargin": 150,
+    "subtitleRightMargin": 150,
+    "subtitleVerticalMargin": 44,
+    "subtitleReveal": {
+      "by": "word",
+      "mode": "rise",
+      "secondsPer": 0.16,
+      "rise": 0.45,
+      "easing": "easeOut"
+    }
+  },
+
+  "resources": [
+    { "id": "img1", "kind": "image", "filename": "ui_lumen_1.png",
+      "displayName": "Lumen — Overview", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 2, "cornerRadius": 12 } },
+
+    { "id": "img2", "kind": "image", "filename": "ui_lumen_2.png",
+      "displayName": "Lumen — Revenue", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 2, "cornerRadius": 12 } },
+
+    { "id": "img3", "kind": "image", "filename": "ui_verse_1.png",
+      "displayName": "Verse — The long walk", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 2, "cornerRadius": 12 } },
+
+    { "id": "img4", "kind": "image", "filename": "ui_pulse_1.png",
+      "displayName": "Pulse — Today", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 2, "cornerRadius": 12 } },
+
+    { "id": "img5", "kind": "image", "filename": "ui_lumen_5.png",
+      "displayName": "Lumen — Retention", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "frame": { "kind": "border", "borderColorHex": "@edge", "borderWidth": 2, "cornerRadius": 12 } }
+  ],
+
+  "layers": [
+    { "id": "bg", "name": "Studio", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 15,
+      "keyframes": [
+        { "id": "bg0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "radial", "start": [0.40, 0.28], "end": [1.28, 1.18], "repeat": "clamp",
+            "stops": [ { "colorHex": "@studio-hi", "at": 0 },
+                       { "colorHex": "@studio-mid", "at": 0.55 },
+                       { "colorHex": "@canvas",    "at": 1 } ] } },
+        { "id": "bg1", "time": 15, "transitionDuration": 15, "transitionPercent": 100,
+          "gradient": { "kind": "radial", "start": [0.61, 0.39], "end": [1.46, 1.32], "repeat": "clamp",
+            "stops": [ { "colorHex": "@studio-hi", "at": 0 },
+                       { "colorHex": "@studio-mid", "at": 0.55 },
+                       { "colorHex": "@canvas",    "at": 1 } ] } }
+      ] },
+
+    { "id": "window", "name": "Window", "sortIndex": 1, "kind": "image",
+      "isEnabled": true, "startTime": 0, "duration": 15, "resourceID": "img1",
+      "fadeIn": 0.6, "fadeOut": 0.5,
+      "keyframes": [
+        { "id": "p0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 676, "anchor": "center", "offset": [-12, 48] } },
+        { "id": "p1", "time": 15, "transitionDuration": 15, "transitionPercent": 100,
+          "placement": { "height": 692, "anchor": "center", "offset": [12, 52] } },
+
+        { "id": "s1", "time": 3,  "transitionDuration": 0, "resourceID": "img2",
+          "transition": { "kind": "fade", "duration": 0.8, "easing": "easeInOut" } },
+        { "id": "s2", "time": 6,  "transitionDuration": 0, "resourceID": "img3",
+          "transition": { "kind": "fade", "duration": 0.8, "easing": "easeInOut" } },
+        { "id": "s3", "time": 9,  "transitionDuration": 0, "resourceID": "img4",
+          "transition": { "kind": "fade", "duration": 0.8, "easing": "easeInOut" } },
+        { "id": "s4", "time": 12, "transitionDuration": 0, "resourceID": "img5",
+          "transition": { "kind": "fade", "duration": 0.8, "easing": "easeInOut" } }
+      ] },
+
+    { "id": "cap1", "name": "Headline 1", "sortIndex": 2, "kind": "caption",
+      "isEnabled": true, "startTime": 0.5, "duration": 2.25,
+      "fadeIn": 0.3, "fadeOut": 0.4,
+      "captionText": "Every number, one screen.",
+      "captionStyle": { "placement": { "anchor": "top", "offset": [0, 44] } },
+      "keyframes": [] },
+
+    { "id": "cap2", "name": "Headline 2", "sortIndex": 3, "kind": "caption",
+      "isEnabled": true, "startTime": 3.9, "duration": 1.85,
+      "fadeIn": 0.3, "fadeOut": 0.4,
+      "captionText": "Revenue that explains itself.",
+      "captionStyle": { "placement": { "anchor": "top", "offset": [0, 44] } },
+      "keyframes": [] },
+
+    { "id": "cap3", "name": "Headline 3", "sortIndex": 4, "kind": "caption",
+      "isEnabled": true, "startTime": 6.9, "duration": 1.85,
+      "fadeIn": 0.3, "fadeOut": 0.4,
+      "captionText": "Write without the noise.",
+      "captionStyle": { "placement": { "anchor": "top", "offset": [0, 44] } },
+      "keyframes": [] },
+
+    { "id": "cap4", "name": "Headline 4", "sortIndex": 5, "kind": "caption",
+      "isEnabled": true, "startTime": 9.9, "duration": 1.85,
+      "fadeIn": 0.3, "fadeOut": 0.4,
+      "captionText": "Move, measured.",
+      "captionStyle": { "placement": { "anchor": "top", "offset": [0, 44] } },
+      "keyframes": [] },
+
+    { "id": "cap5", "name": "Headline 5", "sortIndex": 6, "kind": "caption",
+      "isEnabled": true, "startTime": 12.9, "duration": 1.85,
+      "fadeIn": 0.3, "fadeOut": 0.4,
+      "captionText": "Ship the story.",
+      "captionStyle": { "placement": { "anchor": "top", "offset": [0, 44] } },
+      "keyframes": [] }
+  ]
+}

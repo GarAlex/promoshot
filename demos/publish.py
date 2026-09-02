@@ -36,9 +36,16 @@ def gif(project, out):
         os.remove(out)
     return False
 
+def thumb(video, out):
+    subprocess.run([FFMPEG, '-v', 'error', '-y', '-ss', '3', '-i', video, '-frames:v', '1',
+                    '-vf', 'scale=320:-2', out], check=False)
+    return os.path.exists(out)
+
+BLURBS = json.load(open(os.path.join(HERE, 'blurbs.json'))) if os.path.exists(os.path.join(HERE, 'blurbs.json')) else {}
+
 def main():
     os.makedirs(ASSETS, exist_ok=True)
-    manifest, sections = [], []
+    manifest, rows, pages = [], [], []
     for name in sorted(os.listdir(HERE)):
         demo = os.path.join(HERE, name)
         if not (os.path.isdir(demo) and name[:2].isdigit() and os.path.exists(os.path.join(demo, 'rubric.json'))):
@@ -99,68 +106,95 @@ def main():
                 result["metadata"] = f"docs/demo/{name}/result-metadata.json"
                 if gif(project, os.path.join(out, 'result.gif')):
                     result["gif"] = f"docs/demo/{name}/result.gif"
-        manifest.append({"id": name[:2], "slug": name, "title": rubric['template'][3:],
+        if result and 'video' in result:
+            t = os.path.join(out, 'thumb.png')
+            if thumb(os.path.join(CORE, result['video']), t):
+                result['thumb'] = f"docs/demo/{name}/thumb.png"
+        blurb = BLURBS.get(name[:2], user_prompt.split('.')[0] + '.')
+        manifest.append({"id": name[:2], "slug": name, "title": rubric['template'][3:], "blurb": blurb,
                          "canvas": rubric['canvas'], "duration": rubric['duration'],
-                         "prompt": user_prompt, "resources": resources, "result": result})
-        s = [f"## {rubric['template']}", "",
-             f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration']:.0f} s.*", "",
-             "**Resources given to the agent**", ""]
+                         "prompt": user_prompt, "resources": resources, "result": result,
+                         "page": f"docs/demo/demo{name[:2]}.md"})
+
+        # --- the demo's own page (links relative to docs/demo/) ---
+        rel = lambda path: path[len('docs/demo/'):] if path.startswith('docs/demo/') else '../../' + path
+        pg = [f"# {rubric['template']}", "",
+              f"{blurb}", "",
+              f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration']:.0f} s.* "
+              "Part of [the demos](../../demo.md): a fresh agent, the media and the prompt below, "
+              "the public skill and the headless MCP, nothing else.", "",
+              "## Resources given to the agent", ""]
         if not resources:
-            s.append("*None — the prompt carries the text.*")
+            pg.append("*None — the prompt carries the text.*")
         for r in resources:
             if r['kind'] == 'image' and 'path' in r:
-                s.append(f'<img src="{r["path"]}" width="220" alt="{r["file"]}"> ')
+                pg.append(f'<img src="{rel(r["path"])}" width="240" alt="{r["file"]}"> ')
             elif r['kind'] == 'video':
                 if 'poster' in r:
-                    s.append(f'<img src="{r["poster"]}" width="220" alt="{r["file"]}"> ')
-                s.append(f"`{r['file']}`" + (f" ([file]({r['path']}))" if 'path' in r else ""))
+                    pg.append(f'<img src="{rel(r["poster"])}" width="240" alt="{r["file"]}"> ')
+                pg.append(f"`{r['file']}`" + (f" ([file]({rel(r['path'])}))" if 'path' in r else ""))
             else:
-                s.append(f"`{r['file']}`" + (f" ([file]({r['path']}))" if 'path' in r else ""))
-        s += ["", "**The prompt**", "", "> " + user_prompt.replace("\n", "\n> "), ""]
+                pg.append(f"`{r['file']}`" + (f" ([file]({rel(r['path'])}))" if 'path' in r else ""))
+        pg += ["", "## The prompt", "", "> " + user_prompt.replace("\n", "\n> "), ""]
         if result:
-            s.append(f"**What the agent made** — score {result['score']}% ({result['passed']}/{result['total']} rubric checks)"
-                     + (f", {result['summary']}" if result['summary'] else ""))
-            s.append("")
+            pg.append(f"## What the agent made", "")
+            pg.append(f"Score **{result['score']}%** ({result['passed']} of {result['total']} rubric checks)"
+                      + (f" — {result['summary']}" if result['summary'] else "") + ".")
+            pg.append("")
             if 'gif' in result:
-                s += [f'<img src="{result["gif"]}" width="480" alt="result">', ""]
+                pg += [f'<img src="{rel(result["gif"])}" width="480" alt="the result, looping">', ""]
             if 'contact' in result:
-                s += [f'<img src="{result["contact"]}" width="720" alt="six moments of the result">', ""]
-            links = [f"[video]({result['video']})"] if 'video' in result else []
+                pg += ["Six moments:", "", f'<img src="{rel(result["contact"])}" width="800" alt="six moments of the result">', ""]
+            links = [f"[video]({rel(result['video'])})"] if 'video' in result else []
             if 'metadata' in result:
-                links.append(f"[the project it wrote]({result['metadata']})")
+                links.append(f"[the project it wrote]({rel(result['metadata'])})")
             if links:
-                s += [" · ".join(links), ""]
-            missed = [c for c in result['checks'] if not c['ok']]
-            if missed:
-                s += ["Missed: " + ", ".join(f"{c['check']} ({c['detail']})" for c in missed), ""]
+                pg += [" · ".join(links), ""]
+            pg += ["| check | | detail |", "|---|---|---|"]
+            for c in result['checks']:
+                pg.append(f"| {c['check']} | {'✓' if c['ok'] else '✗'} | {c['detail']} |")
+            pg.append("")
             if 'reference_contact' in result:
-                s += ["**The hand-built reference, same moments**", "",
-                      f'<img src="{result["reference_contact"]}" width="720" alt="six moments of the reference">', ""]
+                pg += ["## The hand-built reference, same moments", "",
+                       f'<img src="{rel(result["reference_contact"])}" width="800" alt="six moments of the reference">', ""]
         else:
-            s += ["*Not run yet.*", ""]
-        sections.append("\n".join(s))
+            pg += ["## What the agent made", "", "*Not run yet.*", ""]
+        pg += ["---", "", "[← all demos](../../demo.md) · [how the suite works](../../demos/README.md)", ""]
+        open(os.path.join(ASSETS, f"demo{name[:2]}.md"), 'w').write("\n".join(pg))
+
+        # --- the index row ---
+        if result:
+            status = f"**{result['score']}%**" + (f" · {result['summary'].replace('turns=', '').replace(' cost=', ' turns, ').replace(' secs=', ', ')}" if result['summary'] else "")
+            status = status.replace(', ' + result['summary'].split('secs=')[-1], f", {int(result['summary'].split('secs=')[-1]) // 60} min") if 'secs=' in result['summary'] else status
+            pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
+        else:
+            status, pic = "not run yet", ""
+        rows.append(f"| {pic} | [{rubric['template']}](docs/demo/demo{name[:2]}.md) | {blurb} | {status} |")
+
     head = """# Demos — prompt in, video out
 
-Every piece below was made by a **fresh agent**: a Claude Code session
-with nothing but the media shown, the prompt shown, the public
+Every piece here was made by a **fresh agent**: a Claude Code session with
+nothing but the media shown, the prompt shown, the public
 [PromoShot skill](skill/SKILL.md) and the headless PromoShot MCP server
 fenced to an empty folder. No repository, no memory, no example to copy.
-It wrote the project, validated it, rendered it — and the result is shown
-beside the piece a person built by hand for the same prompt, at the same
-six moments, with a structural score: canvas, length, the mix of layers,
-the features the prompt implied, the words that reach the screen.
+It wrote the project, validated it, rendered it. Each page shows the
+resources, the prompt, the result beside the piece a person built by hand
+for the same brief at the same six moments, and a structural score:
+length, the mix of layers, the features the prompt asked for, the words
+that reach the screen.
 
-The suite lives in [demos/](demos/): the media, the prompts, the rubrics,
-the runner and the scorer. Adding a demo is adding a folder; see
-[demos/README.md](demos/README.md). `docs/demo/demo.json` carries the
-same material for the website. Footage credit: Big Buck Bunny (Blender
-Foundation, CC BY 3.0) where a screen recording stands in.
+The suite is in [demos/](demos/README.md) — adding a test is adding a
+folder — and `docs/demo/demo.json` carries the same material for the
+website. Footage credit: Big Buck Bunny (Blender Foundation, CC BY 3.0)
+where a screen recording stands in.
 
+| | demo | what the brief asks for | result |
+|---|---|---|---|
 """
-    open(os.path.join(CORE, 'demo.md'), 'w').write(head + "\n\n".join(sections) + "\n")
+    open(os.path.join(CORE, 'demo.md'), 'w').write(head + "\n".join(rows) + "\n")
     json.dump(manifest, open(os.path.join(ASSETS, 'demo.json'), 'w'), indent=1)
     done = sum(1 for m in manifest if m['result'])
-    print(f"demo.md: {len(manifest)} demos, {done} with results; assets in docs/demo")
+    print(f"demo.md: {len(manifest)} demos, {done} with results; pages and assets in docs/demo")
 
 if __name__ == '__main__':
     main()
