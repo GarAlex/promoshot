@@ -1,0 +1,259 @@
+{
+  "id": "lookbook",
+  "name": "One Shot, Three Looks",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 23,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "0E1116" },
+      { "name": "text", "colorHex": "F4F6FA" },
+      { "name": "text-bg", "colorHex": "0E1116" },
+      { "name": "edge", "colorHex": "2A323F" },
+      { "name": "caption-outline", "colorHex": "070A0E" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "7AA2FF" },
+      { "name": "muted", "colorHex": "9AA6B8" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.34],
+      "end": [1.0, 1.05],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "1A2130", "at": 0 },
+        { "colorHex": "0B0E13", "at": 1 }
+      ]
+    },
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.45,
+    "videoShadowRadius": 34,
+    "videoShadowOffset": [0, 16],
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 14,
+    "subtitleLeftMargin": 90,
+    "subtitleRightMargin": 90,
+    "subtitleVerticalMargin": 900
+  },
+  "resources": [
+    {
+      "id": "shot",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen UI",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 3,
+        "cornerRadius": 10
+      }
+    },
+    {
+      "id": "lutWarm",
+      "kind": "lut",
+      "filename": "look_warm.cube",
+      "displayName": "Warm",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "lutCool",
+      "kind": "lut",
+      "filename": "look_cool.cube",
+      "displayName": "Cool",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "lutMono",
+      "kind": "lut",
+      "filename": "look_mono.cube",
+      "displayName": "Mono",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": []
+    },
+    {
+      "id": "panelWarm",
+      "name": "Warm panel",
+      "sortIndex": 1,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 0.8,
+      "duration": 11.2,
+      "resourceID": "shot",
+      "fadeIn": 0.45,
+      "adjustments": { "lutResourceID": "lutWarm", "lutAmount": 1.0 },
+      "keyframes": [
+        { "id": "w0", "time": 0, "transitionDuration": 0,
+          "placement": { "width": 536, "anchor": "center", "offset": [-590, 66] } },
+        { "id": "w1", "time": 0.7, "transitionDuration": 0.7, "easing": "easeOut",
+          "placement": { "width": 560, "anchor": "center", "offset": [-590, 40] } },
+        { "id": "w2", "time": 11.2, "transitionDuration": 10.5, "easing": "easeInOut",
+          "placement": { "width": 574, "anchor": "center", "offset": [-590, 40] } }
+      ]
+    },
+    {
+      "id": "panelCool",
+      "name": "Cool panel",
+      "sortIndex": 2,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 1.15,
+      "duration": 10.85,
+      "resourceID": "shot",
+      "fadeIn": 0.45,
+      "adjustments": { "lutResourceID": "lutCool", "lutAmount": 1.0 },
+      "keyframes": [
+        { "id": "c0", "time": 0, "transitionDuration": 0,
+          "placement": { "width": 536, "anchor": "center", "offset": [0, 66] } },
+        { "id": "c1", "time": 0.7, "transitionDuration": 0.7, "easing": "easeOut",
+          "placement": { "width": 560, "anchor": "center", "offset": [0, 40] } },
+        { "id": "c2", "time": 10.85, "transitionDuration": 10.15, "easing": "easeInOut",
+          "placement": { "width": 574, "anchor": "center", "offset": [0, 40] } }
+      ]
+    },
+    {
+      "id": "panelMono",
+      "name": "Mono panel",
+      "sortIndex": 3,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 1.5,
+      "duration": 10.5,
+      "resourceID": "shot",
+      "fadeIn": 0.45,
+      "adjustments": { "lutResourceID": "lutMono", "lutAmount": 1.0 },
+      "keyframes": [
+        { "id": "m0", "time": 0, "transitionDuration": 0,
+          "placement": { "width": 536, "anchor": "center", "offset": [590, 66] } },
+        { "id": "m1", "time": 0.7, "transitionDuration": 0.7, "easing": "easeOut",
+          "placement": { "width": 560, "anchor": "center", "offset": [590, 40] } },
+        { "id": "m2", "time": 10.5, "transitionDuration": 9.8, "easing": "easeInOut",
+          "placement": { "width": 574, "anchor": "center", "offset": [590, 40] } }
+      ]
+    },
+    {
+      "id": "title",
+      "name": "Title",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.25,
+      "duration": 11.75,
+      "captionText": "One shot. Three looks from .cube files.",
+      "captionStyle": {
+        "fontSize": 62,
+        "isBold": true,
+        "alignment": "center",
+        "textColorHex": "@text",
+        "backgroundOpacity": 0.0,
+        "placement": { "anchor": "top", "offset": [0, 96] },
+        "reveal": { "by": "word", "mode": "fade", "seconds": 1.1, "easing": "easeOut" }
+      },
+      "keyframes": [
+        { "id": "t0", "time": 0, "opacity": 0, "transitionDuration": 0 },
+        { "id": "t1", "time": 0.35, "opacity": 1, "transitionDuration": 0.35 }
+      ]
+    },
+    {
+      "id": "labelWarm",
+      "name": "Warm label",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.7,
+      "duration": 10.3,
+      "captionText": "Warm",
+      "captionStyle": {
+        "fontSize": 40,
+        "isBold": true,
+        "alignment": "center",
+        "textColorHex": "@muted",
+        "backgroundOpacity": 0.0,
+        "placement": { "anchor": "center", "offset": [-590, 292] }
+      },
+      "keyframes": [
+        { "id": "lw0", "time": 0, "opacity": 0, "transitionDuration": 0 },
+        { "id": "lw1", "time": 0.35, "opacity": 1, "transitionDuration": 0.35 }
+      ]
+    },
+    {
+      "id": "labelCool",
+      "name": "Cool label",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 2.05,
+      "duration": 9.95,
+      "captionText": "Cool",
+      "captionStyle": {
+        "fontSize": 40,
+        "isBold": true,
+        "alignment": "center",
+        "textColorHex": "@muted",
+        "backgroundOpacity": 0.0,
+        "placement": { "anchor": "center", "offset": [0, 292] }
+      },
+      "keyframes": [
+        { "id": "lc0", "time": 0, "opacity": 0, "transitionDuration": 0 },
+        { "id": "lc1", "time": 0.35, "opacity": 1, "transitionDuration": 0.35 }
+      ]
+    },
+    {
+      "id": "labelMono",
+      "name": "Mono label",
+      "sortIndex": 7,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 2.4,
+      "duration": 9.6,
+      "captionText": "Mono",
+      "captionStyle": {
+        "fontSize": 40,
+        "isBold": true,
+        "alignment": "center",
+        "textColorHex": "@muted",
+        "backgroundOpacity": 0.0,
+        "placement": { "anchor": "center", "offset": [590, 292] }
+      },
+      "keyframes": [
+        { "id": "lm0", "time": 0, "opacity": 0, "transitionDuration": 0 },
+        { "id": "lm1", "time": 0.35, "opacity": 1, "transitionDuration": 0.35 }
+      ]
+    }
+  ]
+}

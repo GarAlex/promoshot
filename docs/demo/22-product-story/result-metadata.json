@@ -1,0 +1,386 @@
+{
+  "id": "story",
+  "name": "Product Story",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 23,
+  "trimStart": 0,
+  "trimEnd": 24,
+  "videoDuration": 24,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B1020" },
+      { "name": "text", "colorHex": "F4F6FF" },
+      { "name": "text-bg", "colorHex": "121A33" },
+      { "name": "edge", "colorHex": "2E4272" },
+      { "name": "caption-outline", "colorHex": "07090F" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "FFB86B" },
+      { "name": "accent", "colorHex": "6E9BFF" },
+      { "name": "grad1", "colorHex": "080C1A" },
+      { "name": "grad2", "colorHex": "1B2C63" },
+      { "name": "grad3", "colorHex": "3B2A6B" },
+      { "name": "grad3warm", "colorHex": "6B3A4E" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0.08, 0],
+      "end": [0.92, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@grad1", "at": 0 },
+        { "colorHex": "@grad2", "at": 0.55 },
+        { "colorHex": "@grad3", "at": 1 }
+      ]
+    },
+    "videoCornerRadius": 0,
+    "videoBorderWidth": 0,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0,
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 46,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundOpacity": 0,
+    "subtitleBackgroundPadding": 20,
+    "subtitleLeftMargin": 140,
+    "subtitleRightMargin": 140,
+    "subtitleVerticalMargin": 770,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.5,
+    "subtitleShadowRadius": 12
+  },
+
+  "markers": [
+    { "id": "m1", "time": 0,    "name": "Title card",    "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m2", "time": 3.8,  "name": "Keyed footage", "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m3", "time": 12.8, "name": "Warm look",     "kind": "chapter", "colorHex": "@highlight" },
+    { "id": "m4", "time": 19.2, "name": "One document",  "kind": "chapter", "colorHex": "@highlight" }
+  ],
+
+  "resources": [
+    {
+      "id": "green",
+      "kind": "video",
+      "filename": "green_lumen.mp4",
+      "displayName": "Green screen clip",
+      "addedAt": 0,
+      "duration": 6.0,
+      "trimStart": 0,
+      "trimEnd": 6.0,
+      "videoNaturalWidth": 1280,
+      "videoNaturalHeight": 800,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "shot",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen screenshot",
+      "addedAt": 0,
+      "pixelWidth": 1216,
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "frame": {
+        "kind": "border",
+        "borderColorHex": "@edge",
+        "borderWidth": 8,
+        "cornerRadius": 18,
+        "shadowColorHex": "@media-shadow",
+        "shadowOpacity": 0.5,
+        "shadowRadius": 34,
+        "shadowOffset": [0, 18]
+      }
+    },
+    {
+      "id": "lut",
+      "kind": "lut",
+      "filename": "look_warm.cube",
+      "displayName": "Warm look",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "vo",
+      "kind": "audio",
+      "filename": "",
+      "displayName": "Narration",
+      "addedAt": 0,
+      "duration": 3.6,
+      "trimStart": 0,
+      "trimEnd": 3.6,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "speech": {
+        "text": "One document. Every host renders it the same.",
+        "provider": "openai",
+        "voiceID": "alloy"
+      },
+      "audioEffects": [
+        { "kind": "normalize", "targetLufs": -16 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 20, "releaseMs": 250 }
+      ]
+    },
+    {
+      "id": "titlecard",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Title card",
+      "addedAt": 0,
+      "duration": 4.8,
+      "pixelWidth": 1440,
+      "pixelHeight": 900,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1440,
+        "canvasHeight": 900,
+        "layers": [
+          {
+            "id": "tc_title",
+            "name": "Title",
+            "sortIndex": 1,
+            "kind": "caption",
+            "isEnabled": true,
+            "startTime": 0,
+            "duration": 4.8,
+            "captionText": "One title card.",
+            "captionStyle": {
+              "fontSize": 98,
+              "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, -66] },
+              "reveal": { "by": "word", "mode": "rise", "unitSeconds": 0.42, "seconds": 0.9, "easing": "easeOut" }
+            },
+            "fadeIn": 0.35,
+            "fadeOut": 0.4,
+            "keyframes": [
+              { "id": "tct0", "time": 0, "fontSize": 92, "transitionDuration": 0 },
+              { "id": "tct1", "time": 3.2, "fontSize": 98, "transitionDuration": 3.0, "easing": "easeOut" }
+            ]
+          },
+          {
+            "id": "tc_sub",
+            "name": "Subtitle",
+            "sortIndex": 2,
+            "kind": "caption",
+            "isEnabled": true,
+            "startTime": 0.75,
+            "duration": 4.05,
+            "captionText": "Placed three times.",
+            "captionStyle": {
+              "fontSize": 40,
+              "isBold": false,
+              "textColorHex": "@accent",
+              "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, 62] }
+            },
+            "fadeIn": 0.45,
+            "fadeOut": 0.4,
+            "keyframes": []
+          }
+        ]
+      }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Gradient ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 24,
+      "keyframes": [
+        {
+          "id": "bg0", "time": 0, "transitionDuration": 0,
+          "gradient": {
+            "kind": "linear", "start": [0.08, 0], "end": [0.92, 1], "repeat": "clamp",
+            "stops": [
+              { "colorHex": "@grad1", "at": 0 },
+              { "colorHex": "@grad2", "at": 0.55 },
+              { "colorHex": "@grad3", "at": 1 }
+            ]
+          }
+        },
+        {
+          "id": "bg1", "time": 24, "transitionDuration": 24, "transitionPercent": 100, "easing": "easeInOut",
+          "gradient": {
+            "kind": "linear", "start": [0.92, 0], "end": [0.08, 1], "repeat": "clamp",
+            "stops": [
+              { "colorHex": "@grad1", "at": 0 },
+              { "colorHex": "@grad2", "at": 0.55 },
+              { "colorHex": "@grad3warm", "at": 1 }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "card_open",
+      "name": "Title card - open",
+      "sortIndex": 1,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 4.2,
+      "resourceID": "titlecard",
+      "fadeIn": 0.5,
+      "fadeOut": 0.4,
+      "keyframes": [
+        { "id": "co0", "time": 0, "transitionDuration": 0,
+          "placement": { "mode": "fit", "anchor": "center" } }
+      ]
+    },
+
+    {
+      "id": "keyed",
+      "name": "Green screen, keyed",
+      "sortIndex": 2,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 3.8,
+      "duration": 6.0,
+      "resourceID": "green",
+      "fadeIn": 0.45,
+      "fadeOut": 0.4,
+      "chromaKey": { "colorHex": "00FF00", "tolerance": 0.32, "softness": 0.12 },
+      "keyframes": [
+        { "id": "kf0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 610, "anchor": "center", "offset": [0, -18] } },
+        { "id": "kf1", "time": 6.0, "transitionDuration": 6.0, "transitionPercent": 100, "easing": "easeInOut",
+          "placement": { "height": 672, "anchor": "center", "offset": [0, -18] } }
+      ]
+    },
+
+    {
+      "id": "card_mid",
+      "name": "Title card - middle",
+      "sortIndex": 3,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 9.6,
+      "duration": 3.4,
+      "resourceID": "titlecard",
+      "fadeIn": 0.5,
+      "fadeOut": 0.4,
+      "keyframes": [
+        { "id": "cm0", "time": 0, "transitionDuration": 0,
+          "placement": { "mode": "fit", "anchor": "center" } }
+      ]
+    },
+
+    {
+      "id": "graded",
+      "name": "Screenshot, warm look",
+      "sortIndex": 4,
+      "kind": "image",
+      "isEnabled": true,
+      "startTime": 12.8,
+      "duration": 6.6,
+      "resourceID": "shot",
+      "fadeIn": 0.45,
+      "fadeOut": 0.4,
+      "adjustments": { "saturation": 1.04, "contrast": 1.02, "lutResourceID": "lut", "lutAmount": 0.9 },
+      "keyframes": [
+        { "id": "gf0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -16] } },
+        { "id": "gf1", "time": 6.6, "transitionDuration": 6.6, "transitionPercent": 100, "easing": "easeInOut",
+          "placement": { "height": 656, "anchor": "center", "offset": [0, -16] } }
+      ]
+    },
+
+    {
+      "id": "card_close",
+      "name": "Title card - close",
+      "sortIndex": 5,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 19.2,
+      "duration": 4.8,
+      "resourceID": "titlecard",
+      "fadeIn": 0.5,
+      "fadeOut": 0.6,
+      "keyframes": [
+        { "id": "cc0", "time": 0, "transitionDuration": 0,
+          "placement": { "mode": "fit", "anchor": "center" } }
+      ]
+    },
+
+    {
+      "id": "cap_keyed",
+      "name": "Caption - keyed",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 4.6,
+      "duration": 4.5,
+      "captionText": "Footage on green, keyed here.",
+      "captionStyle": {
+        "fontSize": 48,
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -66] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 6,
+        "padding": 22,
+        "shadowOpacity": 0.55,
+        "shadowRadius": 14
+      },
+      "fadeIn": 0.35,
+      "fadeOut": 0.4,
+      "keyframes": []
+    },
+
+    {
+      "id": "cap_look",
+      "name": "Caption - look",
+      "sortIndex": 7,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 13.5,
+      "duration": 5.2,
+      "captionText": "A look from a .cube, on top of the grade.",
+      "captionStyle": {
+        "fontSize": 48,
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -66] },
+        "strokeColorHex": "@caption-outline",
+        "strokeWidth": 6,
+        "padding": 22,
+        "shadowOpacity": 0.55,
+        "shadowRadius": 14
+      },
+      "fadeIn": 0.35,
+      "fadeOut": 0.4,
+      "keyframes": []
+    },
+
+    {
+      "id": "narration",
+      "name": "Narration",
+      "sortIndex": 8,
+      "kind": "audio",
+      "isEnabled": true,
+      "startTime": 19.9,
+      "duration": 3.6,
+      "resourceID": "vo",
+      "durationRule": { "kind": "fitContent" },
+      "keyframes": []
+    }
+  ]
+}

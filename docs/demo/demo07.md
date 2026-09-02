@@ -24,7 +24,7 @@ A framed recording toured by the viewport, paced by synthesized narration, capti
 
 ## What the agent made
 
-Score **100%** (9 of 9 rubric checks).
+Score **100%** (8 of 8 rubric checks).
 
 | the agent's work | |
 |---|---|
@@ -60,7 +60,6 @@ Six moments:
 
 | check | | detail |
 |---|---|---|
-| canvas | ✓ | [1920, 1080] vs [1920, 1080] |
 | duration | ✓ | 21.0s vs 21.5s |
 | kind:background | ✓ | 1 vs 1 |
 | kind:video | ✓ | 1 vs 1 |

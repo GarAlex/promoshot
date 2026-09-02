@@ -1,0 +1,311 @@
+{
+  "id": "tour",
+  "name": "Narrated Tour",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 21,
+  "trimStart": 0,
+  "trimEnd": 24,
+  "videoDuration": 24,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B1020" },
+      { "name": "text", "colorHex": "F5F7FF" },
+      { "name": "text-bg", "colorHex": "0B1020" },
+      { "name": "edge", "colorHex": "2B3D5E" },
+      { "name": "caption-outline", "colorHex": "080B14" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "5B8CFF" },
+      { "name": "accent", "colorHex": "5B8CFF" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [0, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "121A31", "at": 0 },
+        { "colorHex": "070A14", "at": 1 }
+      ]
+    },
+    "videoCornerRadius": 18,
+    "videoBorderWidth": 2,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.45,
+    "videoShadowRadius": 36,
+    "videoShadowOffset": [0, 16],
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 52,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 18,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 6,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.6,
+    "subtitleShadowRadius": 12,
+    "subtitleLeftMargin": 180,
+    "subtitleRightMargin": 180,
+    "subtitleVerticalMargin": 940
+  },
+
+  "markers": [
+    { "id": "m1", "time": 0,    "name": "Footage that tells itself", "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m2", "time": 4,    "name": "The viewport moved",        "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m3", "time": 8,    "name": "Narration, written",        "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m4", "time": 12,   "name": "Add a voice key",           "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m5", "time": 16,   "name": "Everything else renders",   "kind": "chapter", "colorHex": "@accent" },
+    { "id": "m6", "time": 20,   "name": "End card",                  "kind": "marker",  "colorHex": "@edge" }
+  ],
+
+  "resources": [
+    {
+      "id": "clip",
+      "kind": "video",
+      "filename": "bbb_test.mp4",
+      "displayName": "Recording",
+      "addedAt": 0,
+      "duration": 10,
+      "trimStart": 0,
+      "trimEnd": 10,
+      "speed": 0.5,
+      "videoNaturalWidth": 1920,
+      "videoNaturalHeight": 1080,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "mediaCuts": [
+        { "id": "cut1", "name": "Section 1", "trimStart": 0.0, "trimEnd": 2.4 },
+        { "id": "cut2", "name": "Section 2", "trimStart": 1.9, "trimEnd": 4.3 },
+        { "id": "cut3", "name": "Section 3", "trimStart": 3.8, "trimEnd": 6.2 },
+        { "id": "cut4", "name": "Section 4", "trimStart": 5.7, "trimEnd": 8.1 },
+        { "id": "cut5", "name": "Section 5", "trimStart": 7.6, "trimEnd": 10.0 }
+      ]
+    },
+
+    {
+      "id": "vo1",
+      "kind": "audio",
+      "filename": "",
+      "displayName": "Line 1",
+      "addedAt": 0,
+      "duration": 2.9,
+      "trimStart": 0,
+      "trimEnd": 2.9,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "speech": { "text": "Some footage tells the story on its own.", "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "normalize", "targetLufs": -16 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 2.5, "attackMs": 15, "releaseMs": 220 }
+      ]
+    },
+    {
+      "id": "vo2",
+      "kind": "audio",
+      "filename": "",
+      "displayName": "Line 2",
+      "addedAt": 0,
+      "duration": 2.9,
+      "trimStart": 0,
+      "trimEnd": 2.9,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "speech": { "text": "The camera never moved — the viewport did.", "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "normalize", "targetLufs": -16 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 2.5, "attackMs": 15, "releaseMs": 220 }
+      ]
+    },
+    {
+      "id": "vo3",
+      "kind": "audio",
+      "filename": "",
+      "displayName": "Line 3",
+      "addedAt": 0,
+      "duration": 2.5,
+      "trimStart": 0,
+      "trimEnd": 2.5,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "speech": { "text": "Narration is written here, not recorded.", "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "normalize", "targetLufs": -16 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 2.5, "attackMs": 15, "releaseMs": 220 }
+      ]
+    },
+    {
+      "id": "vo4",
+      "kind": "audio",
+      "filename": "",
+      "displayName": "Line 4",
+      "addedAt": 0,
+      "duration": 2.4,
+      "trimStart": 0,
+      "trimEnd": 2.4,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "speech": { "text": "Add a voice key and it speaks.", "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "normalize", "targetLufs": -16 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 2.5, "attackMs": 15, "releaseMs": 220 }
+      ]
+    },
+    {
+      "id": "vo5",
+      "kind": "audio",
+      "filename": "",
+      "displayName": "Line 5",
+      "addedAt": 0,
+      "duration": 2.1,
+      "trimStart": 0,
+      "trimEnd": 2.1,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "speech": { "text": "Everything else already renders.", "provider": "openai", "voiceID": "alloy" },
+      "audioEffects": [
+        { "kind": "normalize", "targetLufs": -16 },
+        { "kind": "compressor", "thresholdDb": -18, "ratio": 2.5, "attackMs": 15, "releaseMs": 220 }
+      ]
+    }
+  ],
+
+  "layers": [
+    { "id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "keyframes": [] },
+
+    { "id": "sec1", "name": "Section 1", "sortIndex": 1, "kind": "video",
+      "isEnabled": true, "startTime": 0, "duration": 4.6,
+      "resourceID": "clip", "mediaCutID": "cut1", "fadeIn": 0.5, "beyondEnd": "hold",
+      "keyframes": [
+        { "id": "s1k0", "time": 0, "transitionDuration": 0,
+          "viewport": [0, 0, 1, 1],
+          "placement": { "height": 900, "anchor": "center", "offset": [0, -30] } },
+        { "id": "s1k1", "time": 4.6, "transitionDuration": 4.6, "transitionPercent": 100, "easing": "easeInOut",
+          "viewport": [0.06, 0.06, 0.88, 0.88] }
+      ] },
+
+    { "id": "sec2", "name": "Section 2", "sortIndex": 2, "kind": "video",
+      "isEnabled": true, "startTime": 4, "duration": 4.6,
+      "resourceID": "clip", "mediaCutID": "cut2", "beyondEnd": "hold",
+      "transitionIn": { "kind": "fade", "duration": 0.6, "easing": "easeInOut" },
+      "keyframes": [
+        { "id": "s2k0", "time": 0, "transitionDuration": 0,
+          "viewport": [0.35, 0.30, 0.42, 0.42],
+          "placement": { "height": 900, "anchor": "center", "offset": [0, -30] } },
+        { "id": "s2k1", "time": 4.6, "transitionDuration": 4.6, "transitionPercent": 100, "easing": "easeInOut",
+          "viewport": [0.10, 0.14, 0.72, 0.72] }
+      ] },
+
+    { "id": "sec3", "name": "Section 3", "sortIndex": 3, "kind": "video",
+      "isEnabled": true, "startTime": 8, "duration": 4.6,
+      "resourceID": "clip", "mediaCutID": "cut3", "beyondEnd": "hold",
+      "transitionIn": { "kind": "fade", "duration": 0.6, "easing": "easeInOut" },
+      "keyframes": [
+        { "id": "s3k0", "time": 0, "transitionDuration": 0,
+          "viewport": [0.05, 0.05, 0.60, 0.60],
+          "placement": { "height": 900, "anchor": "center", "offset": [0, -30] } },
+        { "id": "s3k1", "time": 4.6, "transitionDuration": 4.6, "transitionPercent": 100, "easing": "easeInOut",
+          "viewport": [0.38, 0.32, 0.60, 0.60] }
+      ] },
+
+    { "id": "sec4", "name": "Section 4", "sortIndex": 4, "kind": "video",
+      "isEnabled": true, "startTime": 12, "duration": 4.6,
+      "resourceID": "clip", "mediaCutID": "cut4", "beyondEnd": "hold",
+      "transitionIn": { "kind": "fade", "duration": 0.6, "easing": "easeInOut" },
+      "keyframes": [
+        { "id": "s4k0", "time": 0, "transitionDuration": 0,
+          "viewport": [0.20, 0.45, 0.55, 0.55],
+          "placement": { "height": 900, "anchor": "center", "offset": [0, -30] } },
+        { "id": "s4k1", "time": 4.6, "transitionDuration": 4.6, "transitionPercent": 100, "easing": "easeInOut",
+          "viewport": [0.24, 0.10, 0.55, 0.55] }
+      ] },
+
+    { "id": "sec5", "name": "Section 5", "sortIndex": 5, "kind": "video",
+      "isEnabled": true, "startTime": 16, "duration": 4.6,
+      "resourceID": "clip", "mediaCutID": "cut5", "beyondEnd": "hold",
+      "transitionIn": { "kind": "fade", "duration": 0.6, "easing": "easeInOut" },
+      "fadeOut": 0.6,
+      "keyframes": [
+        { "id": "s5k0", "time": 0, "transitionDuration": 0,
+          "viewport": [0.15, 0.15, 0.70, 0.70],
+          "placement": { "height": 900, "anchor": "center", "offset": [0, -30] } },
+        { "id": "s5k1", "time": 4.6, "transitionDuration": 4.6, "transitionPercent": 100, "easing": "easeInOut",
+          "viewport": [0, 0, 1, 1] }
+      ] },
+
+    { "id": "cap1", "name": "Caption 1", "sortIndex": 10, "kind": "caption",
+      "isEnabled": true, "startTime": 0.45, "duration": 3.3,
+      "captionText": "Some footage tells the story on its own.",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -70] } },
+      "fadeIn": 0.3, "fadeOut": 0.35, "keyframes": [] },
+
+    { "id": "cap2", "name": "Caption 2", "sortIndex": 11, "kind": "caption",
+      "isEnabled": true, "startTime": 4.45, "duration": 3.3,
+      "captionText": "The camera never moved — the viewport did.",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -70] } },
+      "fadeIn": 0.3, "fadeOut": 0.35, "keyframes": [] },
+
+    { "id": "cap3", "name": "Caption 3", "sortIndex": 12, "kind": "caption",
+      "isEnabled": true, "startTime": 8.45, "duration": 3.3,
+      "captionText": "Narration is written here, not recorded.",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -70] } },
+      "fadeIn": 0.3, "fadeOut": 0.35, "keyframes": [] },
+
+    { "id": "cap4", "name": "Caption 4", "sortIndex": 13, "kind": "caption",
+      "isEnabled": true, "startTime": 12.45, "duration": 3.3,
+      "captionText": "Add a voice key and it speaks.",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -70] } },
+      "fadeIn": 0.3, "fadeOut": 0.35, "keyframes": [] },
+
+    { "id": "cap5", "name": "Caption 5", "sortIndex": 14, "kind": "caption",
+      "isEnabled": true, "startTime": 16.45, "duration": 3.3,
+      "captionText": "Everything else already renders.",
+      "captionStyle": { "placement": { "anchor": "bottom", "offset": [0, -70] } },
+      "fadeIn": 0.3, "fadeOut": 0.35, "keyframes": [] },
+
+    { "id": "endTitle", "name": "End card title", "sortIndex": 20, "kind": "caption",
+      "isEnabled": true, "startTime": 20.3, "duration": 3.7,
+      "captionText": "PromoShot",
+      "captionStyle": { "fontSize": 108, "strokeWidth": 0, "shadowOpacity": 0.35,
+                        "placement": { "anchor": "center", "offset": [0, -40] } },
+      "fadeIn": 0.5, "fadeOut": 0.6, "keyframes": [] },
+
+    { "id": "endSub", "name": "End card line", "sortIndex": 21, "kind": "caption",
+      "isEnabled": true, "startTime": 20.3, "duration": 3.7,
+      "captionText": "Write the tour. Add a key. Render it.",
+      "captionStyle": { "fontSize": 44, "isBold": false, "textColorHex": "@accent",
+                        "strokeWidth": 0, "shadowOpacity": 0.35,
+                        "placement": { "anchor": "center", "offset": [0, 70] } },
+      "fadeIn": 0.5, "fadeOut": 0.6, "keyframes": [] },
+
+    { "id": "n1", "name": "Narration 1", "sortIndex": 30, "kind": "audio",
+      "isEnabled": true, "startTime": 0.5, "duration": 2.9, "resourceID": "vo1",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "n2", "name": "Narration 2", "sortIndex": 31, "kind": "audio",
+      "isEnabled": true, "startTime": 4.5, "duration": 2.9, "resourceID": "vo2",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "n3", "name": "Narration 3", "sortIndex": 32, "kind": "audio",
+      "isEnabled": true, "startTime": 8.5, "duration": 2.5, "resourceID": "vo3",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "n4", "name": "Narration 4", "sortIndex": 33, "kind": "audio",
+      "isEnabled": true, "startTime": 12.5, "duration": 2.4, "resourceID": "vo4",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] },
+
+    { "id": "n5", "name": "Narration 5", "sortIndex": 34, "kind": "audio",
+      "isEnabled": true, "startTime": 16.5, "duration": 2.1, "resourceID": "vo5",
+      "durationRule": { "kind": "fitContent" }, "keyframes": [] }
+  ]
+}

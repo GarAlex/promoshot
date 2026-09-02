@@ -24,7 +24,7 @@ One clip at half, double and three-quarter speed, cross-dissolved, each section 
 
 ## What the agent made
 
-Score **100%** (7 of 7 rubric checks).
+Score **100%** (6 of 6 rubric checks).
 
 | the agent's work | |
 |---|---|
@@ -57,7 +57,6 @@ Six moments:
 
 | check | | detail |
 |---|---|---|
-| canvas | ✓ | [1920, 1080] vs [1920, 1080] |
 | duration | ✓ | 14.0s vs 14.0s |
 | kind:background | ✓ | 1 vs 1 |
 | kind:video | ✓ | 3 vs 3 |

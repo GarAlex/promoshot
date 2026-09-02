@@ -22,7 +22,7 @@ One shot walked through four looks by ramping the grade, a caption naming each.
 
 ## What the agent made
 
-Score **86%** (6 of 7 rubric checks).
+Score **100%** (6 of 6 rubric checks).
 
 | the agent's work | |
 |---|---|
@@ -56,7 +56,6 @@ Six moments:
 
 | check | | detail |
 |---|---|---|
-| canvas | ✗ | [1920, 1080] vs [1440, 900] |
 | duration | ✓ | 15.0s vs 15.0s |
 | kind:background | ✓ | 1 vs 1 |
 | kind:image | ✓ | 3 vs 1 |

@@ -349,14 +349,9 @@
   ],
   "result": {
    "score": 100,
-   "passed": 8,
-   "total": 8,
+   "passed": 7,
+   "total": 7,
    "checks": [
-    {
-     "check": "canvas",
-     "ok": true,
-     "detail": "[1920, 1080] vs [1920, 1080]"
-    },
     {
      "check": "duration",
      "ok": true,
@@ -741,14 +736,9 @@
   ],
   "result": {
    "score": 100,
-   "passed": 9,
-   "total": 9,
+   "passed": 8,
+   "total": 8,
    "checks": [
-    {
-     "check": "canvas",
-     "ok": true,
-     "detail": "[1920, 1080] vs [1920, 1080]"
-    },
     {
      "check": "duration",
      "ok": true,
@@ -906,14 +896,9 @@
   ],
   "result": {
    "score": 100,
-   "passed": 7,
-   "total": 7,
+   "passed": 6,
+   "total": 6,
    "checks": [
-    {
-     "check": "canvas",
-     "ok": true,
-     "detail": "[1920, 1080] vs [1920, 1080]"
-    },
     {
      "check": "duration",
      "ok": true,
@@ -1172,15 +1157,10 @@
    }
   ],
   "result": {
-   "score": 89,
-   "passed": 8,
-   "total": 9,
+   "score": 88,
+   "passed": 7,
+   "total": 8,
    "checks": [
-    {
-     "check": "canvas",
-     "ok": true,
-     "detail": "[1920, 1080] vs [1920, 1080]"
-    },
     {
      "check": "duration",
      "ok": true,
@@ -1624,7 +1604,7 @@
    900
   ],
   "duration": 9,
-  "prompt": "Make a calm 12-second before-and-after: a slow crossfade from the old screen to the new one, with a caption that wipes from 'Before' to 'After' at the same moment. No motion blur.\n\nFiles in `resources/`: ui_pulse_2.png, ui_verse_2.png.\n\nText to use, in order:\n- Before\n- After \u2014 one tap",
+  "prompt": "Make a calm 9-second before-and-after: a slow crossfade from the old screen to the new one, with a caption that wipes from 'Before' to 'After' at the same moment. No motion blur.\n\nFiles in `resources/`: ui_pulse_2.png, ui_verse_2.png.\n\nText to use, in order:\n- Before\n- After \u2014 one tap",
   "resources": [
    {
     "file": "ui_pulse_2.png",
@@ -1931,15 +1911,10 @@
    }
   ],
   "result": {
-   "score": 86,
+   "score": 100,
    "passed": 6,
-   "total": 7,
+   "total": 6,
    "checks": [
-    {
-     "check": "canvas",
-     "ok": false,
-     "detail": "[1920, 1080] vs [1440, 900]"
-    },
     {
      "check": "duration",
      "ok": true,
@@ -2532,7 +2507,135 @@
     "poster": "docs/demo/19-green-room/resources/green_lumen.poster.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 88,
+   "passed": 7,
+   "total": 8,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 12.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:drawing",
+     "ok": false,
+     "detail": "0 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "2 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 1"
+    },
+    {
+     "check": "feature:chromaKey",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=37 cost=$1.94 secs=204",
+   "run": {
+    "turns": 37,
+    "wall_s": 204,
+    "api_s": 194,
+    "cost_usd": 1.94,
+    "tokens": {
+     "input": 52,
+     "cache_read": 1812650,
+     "cache_write": 67397,
+     "output": 14469,
+     "thinking": 5278
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1078,
+      "output": 20,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1880099,
+      "output": 14469,
+      "cost_usd": 1.94
+     }
+    ],
+    "mcp": {
+     "calls": 12,
+     "ms": 8725,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 4511,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 4045,
+       "errors": 0
+      },
+      "promo_media_filmstrip": {
+       "calls": 1,
+       "ms": 85,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 44,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 24,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 16,
+       "errors": 1
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/19-green-room/contact-result.png",
+   "reference_contact": "docs/demo/19-green-room/contact-reference.png",
+   "video": "docs/demo/19-green-room/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/19-green-room.mp4",
+   "video_hd_bytes": 911230,
+   "metadata": "docs/demo/19-green-room/result-metadata.json",
+   "gif": "docs/demo/19-green-room/result.gif",
+   "thumb": "docs/demo/19-green-room/thumb.png"
+  },
   "page": "docs/demo/demo19.md"
  },
  {
@@ -2568,7 +2671,130 @@
     "path": "docs/demo/20-look-book/resources/ui_lumen_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "12.0s vs 12.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:lut",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:grade",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "4 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=24 cost=$1.56 secs=183",
+   "run": {
+    "turns": 24,
+    "wall_s": 181,
+    "api_s": 175,
+    "cost_usd": 1.56,
+    "tokens": {
+     "input": 36,
+     "cache_read": 1203228,
+     "cache_write": 62632,
+     "output": 13383,
+     "thinking": 5134
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1107,
+      "output": 14,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1265896,
+      "output": 13383,
+      "cost_usd": 1.56
+     }
+    ],
+    "mcp": {
+     "calls": 8,
+     "ms": 5106,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 2970,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2087,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 33,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/20-look-book/contact-result.png",
+   "reference_contact": "docs/demo/20-look-book/contact-reference.png",
+   "video": "docs/demo/20-look-book/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/20-look-book.mp4",
+   "video_hd_bytes": 607608,
+   "metadata": "docs/demo/20-look-book/result-metadata.json",
+   "gif": "docs/demo/20-look-book/result.gif",
+   "thumb": "docs/demo/20-look-book/thumb.png"
+  },
   "page": "docs/demo/demo20.md"
  },
  {
@@ -2590,7 +2816,155 @@
     "poster": "docs/demo/21-chapters-levels/resources/bbb_test.poster.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 10,
+   "total": 10,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "24.0s vs 20.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "5 vs 1"
+    },
+    {
+     "check": "kind:audio",
+     "ok": true,
+     "detail": "5 vs 5"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "7 vs 5"
+    },
+    {
+     "check": "feature:chapters",
+     "ok": true,
+     "detail": "5 vs 6"
+    },
+    {
+     "check": "feature:markers",
+     "ok": true,
+     "detail": "6 vs 7"
+    },
+    {
+     "check": "feature:audioEffects",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:narration",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "5 of 5 lines recognisable"
+    }
+   ],
+   "summary": "turns=37 cost=$1.89 secs=244",
+   "run": {
+    "turns": 37,
+    "wall_s": 243,
+    "api_s": 223,
+    "cost_usd": 1.89,
+    "tokens": {
+     "input": 42,
+     "cache_read": 1510252,
+     "cache_write": 66521,
+     "output": 18666,
+     "thinking": 6731
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1125,
+      "output": 18,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1576815,
+      "output": 18666,
+      "cost_usd": 1.89
+     }
+    ],
+    "mcp": {
+     "calls": 13,
+     "ms": 17716,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 14262,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 2921,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 418,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 91,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 15,
+       "errors": 1
+      },
+      "promo_voices": {
+       "calls": 1,
+       "ms": 5,
+       "errors": 1
+      },
+      "promo_speak": {
+       "calls": 2,
+       "ms": 4,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/21-chapters-levels/contact-result.png",
+   "reference_contact": "docs/demo/21-chapters-levels/contact-reference.png",
+   "video": "docs/demo/21-chapters-levels/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/21-chapters-levels.mp4",
+   "video_hd_bytes": 8092939,
+   "metadata": "docs/demo/21-chapters-levels/result-metadata.json",
+   "gif": "docs/demo/21-chapters-levels/result.gif",
+   "thumb": "docs/demo/21-chapters-levels/thumb.png"
+  },
   "page": "docs/demo/demo21.md"
  },
  {
@@ -2622,7 +2996,190 @@
     "path": "docs/demo/22-product-story/resources/ui_lumen_1.png"
    }
   ],
-  "result": null,
+  "result": {
+   "score": 100,
+   "passed": 17,
+   "total": 17,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "24.0s vs 24.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:video",
+     "ok": true,
+     "detail": "4 vs 3"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 3"
+    },
+    {
+     "check": "kind:image",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:audio",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:chromaKey",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:lut",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:chapters",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:markers",
+     "ok": true,
+     "detail": "4 vs 4"
+    },
+    {
+     "check": "feature:audioEffects",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:composition",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:narration",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:grade",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "3 of 4 lines recognisable"
+    }
+   ],
+   "summary": "turns=54 cost=$2.76 secs=322",
+   "run": {
+    "turns": 54,
+    "wall_s": 321,
+    "api_s": 309,
+    "cost_usd": 2.76,
+    "tokens": {
+     "input": 72,
+     "cache_read": 2827384,
+     "cache_write": 75563,
+     "output": 23701,
+     "thinking": 9796
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1154,
+      "output": 16,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2903019,
+      "output": 23701,
+      "cost_usd": 2.76
+     }
+    ],
+    "mcp": {
+     "calls": 18,
+     "ms": 11456,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 5949,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 5187,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 2,
+       "ms": 114,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 3,
+       "ms": 95,
+       "errors": 0
+      },
+      "promo_media_filmstrip": {
+       "calls": 1,
+       "ms": 84,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 19,
+       "errors": 1
+      },
+      "promo_speak": {
+       "calls": 2,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "contact": "docs/demo/22-product-story/contact-result.png",
+   "reference_contact": "docs/demo/22-product-story/contact-reference.png",
+   "video": "docs/demo/22-product-story/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/22-product-story.mp4",
+   "video_hd_bytes": 1798957,
+   "metadata": "docs/demo/22-product-story/result-metadata.json",
+   "gif": "docs/demo/22-product-story/result.gif",
+   "thumb": "docs/demo/22-product-story/thumb.png"
+  },
   "page": "docs/demo/demo22.md"
  },
  {
@@ -2717,5 +3274,46 @@
    "thumb": "docs/demo/23-soft-focus/thumb.png"
   },
   "page": "docs/demo/demo23.md"
+ },
+ {
+  "id": "24",
+  "slug": "24-cuts",
+  "title": "Cuts",
+  "blurb": "Five screenshots on one layer, swapped through a blur dissolve, a zoom, a flash, a glitch and a dip, each named by a caption that swaps the same way.",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 14.6,
+  "prompt": "Make a 15-second piece from these five screenshots on one framed image in the middle of a dark gradient: swap from one screenshot to the next every three seconds, and use a different transition for each swap \u2014 a blur dissolve, then a zoom, then a flash, then a glitch, then a dip to black \u2014 with a caption under the image that names the transition and swaps the same way each time.\n\nFiles in `resources/`: ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png, ui_pulse_1.png, ui_verse_1.png.\n\nText to use, in order:\n- Blur dissolve \u2014 a swap, rung 25\n- Zoom \u2014 a swap, rung 25\n- Flash \u2014 a swap, rung 25\n- Glitch \u2014 a swap, rung 25\n- Dip to black \u2014 a swap, rung 25",
+  "resources": [
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/24-cuts/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/24-cuts/resources/ui_lumen_2.png"
+   },
+   {
+    "file": "ui_lumen_5.png",
+    "kind": "image",
+    "path": "docs/demo/24-cuts/resources/ui_lumen_5.png"
+   },
+   {
+    "file": "ui_pulse_1.png",
+    "kind": "image",
+    "path": "docs/demo/24-cuts/resources/ui_pulse_1.png"
+   },
+   {
+    "file": "ui_verse_1.png",
+    "kind": "image",
+    "path": "docs/demo/24-cuts/resources/ui_verse_1.png"
+   }
+  ],
+  "result": null,
+  "page": "docs/demo/demo24.md"
  }
 ]

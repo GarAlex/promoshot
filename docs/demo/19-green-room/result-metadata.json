@@ -1,0 +1,228 @@
+{
+  "id": "greenroom-01",
+  "name": "Green Room",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 24,
+  "trimStart": 0,
+  "trimEnd": 12,
+  "videoDuration": 12,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "0A1020" },
+      { "name": "text", "colorHex": "F2F6FF" },
+      { "name": "text-bg", "colorHex": "070B16" },
+      { "name": "edge", "colorHex": "22304C" },
+      { "name": "caption-outline", "colorHex": "05070E" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "6FA8FF" },
+      { "name": "deep", "colorHex": "05070E" },
+      { "name": "glow", "colorHex": "3D77DC" },
+      { "name": "glowMid", "colorHex": "17316C" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.46],
+      "end": [1.0, 0.46],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "14203A", "at": 0 },
+        { "colorHex": "0A1020", "at": 0.55 },
+        { "colorHex": "05070E", "at": 1 }
+      ]
+    },
+    "videoCornerRadius": 0,
+    "videoBorderWidth": 0,
+    "videoBorderColorHex": "@edge",
+    "videoShadowOpacity": 0,
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 58,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0,
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundPadding": 22,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleStrokeWidth": 6,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.55,
+    "subtitleShadowRadius": 14,
+    "subtitleLeftMargin": 180,
+    "subtitleRightMargin": 180,
+    "subtitleVerticalMargin": 940
+  },
+  "resources": [
+    {
+      "id": "clip",
+      "kind": "video",
+      "filename": "green_lumen.mp4",
+      "displayName": "Green Lumen",
+      "addedAt": 0,
+      "duration": 6.0,
+      "trimStart": 0,
+      "trimEnd": 6.0,
+      "speed": 0.5,
+      "videoNaturalWidth": 1280,
+      "videoNaturalHeight": 800,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "halo",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Halo",
+      "addedAt": 0,
+      "duration": 12,
+      "pixelWidth": 1400,
+      "pixelHeight": 1400,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1400,
+        "canvasHeight": 1400,
+        "backgroundColorHex": "000000",
+        "layers": [
+          {
+            "id": "haloFill",
+            "name": "Halo fill",
+            "sortIndex": 0,
+            "kind": "background",
+            "isEnabled": true,
+            "startTime": 0,
+            "duration": 12,
+            "keyframes": [
+              {
+                "id": "hk0",
+                "time": 0,
+                "transitionDuration": 0,
+                "gradient": {
+                  "kind": "radial",
+                  "start": [0.5, 0.5],
+                  "end": [1.0, 0.5],
+                  "repeat": "clamp",
+                  "stops": [
+                    { "colorHex": "@glow", "at": 0 },
+                    { "colorHex": "@glowMid", "at": 0.42 },
+                    { "colorHex": "000000", "at": 0.92 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "keyframes": []
+    },
+    {
+      "id": "haloLayer",
+      "name": "Halo",
+      "sortIndex": 1,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "halo",
+      "blendMode": "screen",
+      "fadeIn": 0.8,
+      "fadeOut": 0.8,
+      "effects": { "blur": 40 },
+      "keyframes": [
+        {
+          "id": "hl0",
+          "time": 0,
+          "transitionDuration": 0,
+          "opacity": 0.95,
+          "placement": { "height": 1500, "anchor": "center", "offset": [0, -30] }
+        },
+        {
+          "id": "hl1",
+          "time": 12,
+          "transitionDuration": 12,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "placement": { "height": 1760, "anchor": "center", "offset": [0, -30] }
+        }
+      ]
+    },
+    {
+      "id": "plate",
+      "name": "Keyed clip",
+      "sortIndex": 2,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 12,
+      "resourceID": "clip",
+      "fadeIn": 0.5,
+      "fadeOut": 0.6,
+      "chromaKey": { "colorHex": "00E63C", "tolerance": 0.34, "softness": 0.12 },
+      "keyframes": [
+        {
+          "id": "p0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "height": 880, "anchor": "center", "offset": [0, -46] }
+        },
+        {
+          "id": "p1",
+          "time": 12,
+          "transitionDuration": 12,
+          "transitionPercent": 100,
+          "easing": "easeInOut",
+          "placement": { "height": 990, "anchor": "center", "offset": [0, -46] }
+        }
+      ]
+    },
+    {
+      "id": "cap1",
+      "name": "Caption 1",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.6,
+      "duration": 4.8,
+      "captionText": "Keyed in the compositor.",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "fadeIn": 0.4,
+      "fadeOut": 0.45,
+      "keyframes": []
+    },
+    {
+      "id": "cap2",
+      "name": "Caption 2",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 6.2,
+      "duration": 5.5,
+      "captionText": "The plate is gone on every host.",
+      "captionStyle": {
+        "placement": { "anchor": "bottom", "offset": [0, -62] }
+      },
+      "fadeIn": 0.45,
+      "fadeOut": 0.55,
+      "keyframes": []
+    }
+  ]
+}

@@ -21,7 +21,7 @@ A seamless scrolling multi-colour gradient loop with a ring breathing in the mid
 
 ## What the agent made
 
-Score **100%** (8 of 8 rubric checks).
+Score **100%** (7 of 7 rubric checks).
 
 | the agent's work | |
 |---|---|
@@ -43,7 +43,6 @@ Six moments:
 
 | check | | detail |
 |---|---|---|
-| canvas | ✓ | [1920, 1080] vs [1920, 1080] |
 | duration | ✓ | 12.0s vs 12.0s |
 | kind:background | ✓ | 1 vs 1 |
 | kind:image | ✓ | 1 vs 1 |

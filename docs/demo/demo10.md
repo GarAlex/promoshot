@@ -22,7 +22,7 @@ A bloom, a rocket on a curved path with motion blur, sparkles, and a wordmark th
 
 ## What the agent made
 
-Score **89%** (8 of 9 rubric checks).
+Score **88%** (7 of 8 rubric checks).
 
 | the agent's work | |
 |---|---|
@@ -57,7 +57,6 @@ Six moments:
 
 | check | | detail |
 |---|---|---|
-| canvas | ✓ | [1920, 1080] vs [1920, 1080] |
 | duration | ✓ | 10.0s vs 10.0s |
 | kind:background | ✓ | 1 vs 1 |
 | kind:image | ✗ | 1 vs 9 |
