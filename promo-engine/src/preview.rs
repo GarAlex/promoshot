@@ -132,6 +132,9 @@ pub type FrameProviderFn = extern "C" fn(
     out_flags: *mut i32,
 ) -> i32;
 
+/// Material slots (by index) and the resource ids bound to them.
+type SlotPictures = Vec<(usize, String)>;
+
 /// A model the host provided: decoded, uploaded, and the colours its
 /// slots were last painted (so a binding re-paints only when it changes).
 struct LoadedModel {
@@ -2615,7 +2618,7 @@ impl PreviewEngine {
         // Bindings paint their slots: a colour through the palette, a
         // resource as the slot's picture — the host serves it under a
         // synthetic layer, keyed by the resource, exactly as a LUT strip is.
-        let (colours, pictures): (Vec<(usize, [f32; 4])>, Vec<(usize, String)>) = {
+        let (colours, pictures): (Vec<(usize, [f32; 4])>, SlotPictures) = {
             let loaded = self.models.get(&resource.id)?;
             let mut colours = Vec::new();
             let mut pictures = Vec::new();
