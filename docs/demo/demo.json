@@ -4451,6 +4451,179 @@
   "page": "docs/demo/demo29.md"
  },
  {
+  "id": "30",
+  "slug": "30-title-body",
+  "title": "Title Body",
+  "blurb": "The title as a body: real type the engine builds from a recipe, chrome on its face, standing on the bench with a vase under one sweeping light \u2014 no caption, no 2.5D.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; ONE layer of kind 'stage' named 'Bench', placed 420 px tall in the centre, whose keyframes carry the camera (drifting from a yaw of -12 to 12 with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3); its members are a TITLE that is a real 3D body \u2014 a model resource with no file and a recipe {\"text\": {\"text\": \"PROMO\", \"bold\": true, \"depth\": 0.3}}, its Face painted silver D2D6DC with a chrome finish (metallic 1, roughness 0.12) and its Side painted the palette's edge colour matte (metallic 0, roughness 0.6), offset 0.3 left and turning from a yaw of -12 to 12 \u2014 and vase.glb offset 1.55 right, painted the palette's accent with a matte finish (metallic 0, roughness 0.85), turning from -20 to 20. No caption layer: the title is the body.\n\nFiles in `resources/`: vase.glb.",
+  "resources": [
+   {
+    "file": "vase.glb",
+    "kind": "file",
+    "path": "demos/30-title-body/resources/vase.glb"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 12,
+   "total": 12,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:stage",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:finish",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:textBody",
+     "ok": true,
+     "detail": "True"
+    }
+   ],
+   "summary": "turns=57 cost=$3.30 secs=420",
+   "run": {
+    "turns": 57,
+    "wall_s": 419,
+    "api_s": 413,
+    "cost_usd": 3.3,
+    "tokens": {
+     "input": 112,
+     "cache_read": 3953299,
+     "cache_write": 68367,
+     "output": 25518,
+     "thinking": 13371
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1286,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 4021778,
+      "output": 25518,
+      "cost_usd": 3.3
+     }
+    ],
+    "mcp": {
+     "calls": 16,
+     "ms": 4074,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 4,
+       "ms": 1630,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1555,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 573,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 5,
+       "ms": 292,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 18,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 6,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` validates, inspects clean, and both the contact sheet and the mp4 are rendered.\n\n**What's in it** (`ws/out.promo/metadata.json`, `minReaderVersion: 34`)\n\n- 1440\u00d7900, 9 s, 30 fps. Background is a radial gradient, `3A3D42` at centre out to `121315`, over palette names `ground`/`shade`.\n- One `kind: \"stage\"` layer named **Bench**, `placement { height: 420, anchor: center }`. Its two keyframes carry the whole scene: `camera.yaw` \u221212 \u2192 12 and `light` yaw \u221270 \u2192 70 at `intensity: 1.3`, one 9 s ramp with `easing: \"easeInOut\"` (pitch 6, distance 5 are my picks).\n- Members, both model layers, no caption layer anywhere:\n  - **Title** \u2014 a model resource with `\"filename\": \"\"` and `recipe: {\"text\": {\"text\": \"PROMO\", \"bold\": true, \"depth\": 0.3}}`; `Face` = `@silver` (`D2D6DC`) metallic 1 / roughness 0.12, `Side` = `@edge` metallic 0 / roughness 0.6. `stageOffset [-0.3, 0]`, own `camera.yaw` \u221212 \u2192 12.\n  - **Vase** \u2014 `vase.glb` (copied into `Resources/`), its `Body` slot `@accent` (`C98A4B`) metallic 0 / roughness 0.85. `stageOffset [1.55, 0]`, `camera.yaw` \u221220 \u2192 20.\n\nOutputs: `Exports/export.mp4` (1440\u00d7900, 270 frames) and `Exports/contact/` (8 full-size stills, 0.3 s \u2192 8.7 s). I verified the slot bindings actually land by briefly painting `Face` red and re-rendering, then restored it.\n\n**One thing to flag:** at `height: 420` the bench is wider than the canvas \u2014 the stage box comes out roughly 2000 px across, so the P bleeds off the left edge and the vase's right edge off the right. That's a direct consequence of the specified numbers (420 tall + vase at 1.55 radii out), not something camera distance can fix; I kept 420 as asked. If you want the whole bench inside the frame it's one number: `height: 420` \u2192 about `260`, or `{\"mode\": \"fit\", \"anchor\": \"center\"}`, in bot",
+   "contact": "docs/demo/30-title-body/contact-result.png",
+   "reference_contact": "docs/demo/30-title-body/contact-reference.png",
+   "video": "docs/demo/30-title-body/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/30-title-body.mp4",
+   "video_hd_bytes": 252224,
+   "metadata": "docs/demo/30-title-body/result-metadata.json",
+   "gif": "docs/demo/30-title-body/result.gif",
+   "thumb": "docs/demo/30-title-body/thumb.png"
+  },
+  "page": "docs/demo/demo30.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",

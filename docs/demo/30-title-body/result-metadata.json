@@ -1,0 +1,170 @@
+{
+  "id": "titlebody",
+  "name": "Title Body",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 34,
+  "trimStart": 0,
+  "trimEnd": 9,
+  "videoDuration": 9,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "fps": 30,
+    "palette": [
+      { "name": "ground", "colorHex": "3A3D42" },
+      { "name": "shade", "colorHex": "121315" },
+      { "name": "silver", "colorHex": "D2D6DC" },
+      { "name": "edge", "colorHex": "3C424B" },
+      { "name": "accent", "colorHex": "C98A4B" }
+    ],
+    "backgroundColorHex": "@shade",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.45],
+      "end": [1.05, 1.05],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@ground", "at": 0 },
+        { "colorHex": "@shade", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "subtitleColorHex": "@silver"
+  },
+  "resources": [
+    {
+      "id": "titlebody-res",
+      "kind": "model",
+      "filename": "",
+      "displayName": "PROMO",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "recipe": { "text": { "text": "PROMO", "bold": true, "depth": 0.3 } },
+      "materials": {
+        "Face": { "colorHex": "@silver", "metallic": 1, "roughness": 0.12 },
+        "Side": { "colorHex": "@edge", "metallic": 0, "roughness": 0.6 }
+      }
+    },
+    {
+      "id": "vase-res",
+      "kind": "model",
+      "filename": "vase.glb",
+      "displayName": "Vase",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "boundsRadius": 0.7816009521484375,
+      "materials": {
+        "Body": { "colorHex": "@accent", "metallic": 0, "roughness": 0.85 }
+      }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 9,
+      "keyframes": []
+    },
+    {
+      "id": "bench",
+      "name": "Bench",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 9,
+      "fadeIn": 0.4,
+      "keyframes": [
+        {
+          "id": "s0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "height": 420, "anchor": "center" },
+          "camera": { "yaw": -12, "pitch": 6, "distance": 5.0 },
+          "light": { "yaw": -70, "pitch": 45, "intensity": 1.3 }
+        },
+        {
+          "id": "s1",
+          "time": 9,
+          "transitionDuration": 9,
+          "easing": "easeInOut",
+          "placement": { "height": 420, "anchor": "center" },
+          "camera": { "yaw": 12, "pitch": 6, "distance": 5.0 },
+          "light": { "yaw": 70, "pitch": 45, "intensity": 1.3 }
+        }
+      ],
+      "members": [
+        {
+          "id": "title",
+          "name": "Title",
+          "sortIndex": 0,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "titlebody-res",
+          "keyframes": [
+            {
+              "id": "t0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0,
+              "stageOffset": [-0.3, 0],
+              "camera": { "yaw": -12 }
+            },
+            {
+              "id": "t1",
+              "time": 9,
+              "transitionDuration": 9,
+              "easing": "easeInOut",
+              "depth": 0,
+              "stageOffset": [-0.3, 0],
+              "camera": { "yaw": 12 }
+            }
+          ]
+        },
+        {
+          "id": "vase",
+          "name": "Vase",
+          "sortIndex": 1,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "vase-res",
+          "keyframes": [
+            {
+              "id": "v0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0,
+              "stageOffset": [1.55, 0],
+              "camera": { "yaw": -20 }
+            },
+            {
+              "id": "v1",
+              "time": 9,
+              "transitionDuration": 9,
+              "easing": "easeInOut",
+              "depth": 0,
+              "stageOffset": [1.55, 0],
+              "camera": { "yaw": 20 }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
