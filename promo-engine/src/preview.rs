@@ -2721,6 +2721,7 @@ impl PreviewEngine {
     /// facing the camera — through the first member's camera and light
     /// into one depth buffer, on a square the canvas's height, cached per
     /// time under the stage's name.
+    #[allow(clippy::too_many_arguments)]
     fn stage_frame(
         &mut self,
         first: &ProjectLayer,
