@@ -1384,6 +1384,182 @@
       ],
       "type": "object"
     },
+    "ParticleRecipe": {
+      "properties": {
+        "anchor": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "burst": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "colors": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "direction": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "drag": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "emitFor": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "extent": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "gravity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "life": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "opacityOverLife": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "seed": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "shape": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sizeOverLife": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "spin": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "spread": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "turbulence": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "wind": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "PathDocument": {
       "properties": {
         "controls": {
@@ -2359,6 +2535,16 @@
             "null"
           ]
         },
+        "particles": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParticleRecipe"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "path": {
           "anyOf": [
             {
@@ -2498,7 +2684,8 @@
         "palette",
         "composition",
         "lut",
-        "model"
+        "model",
+        "particles"
       ],
       "type": "string"
     },

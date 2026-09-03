@@ -77,7 +77,8 @@ fn needs_file(resource: &ProjectResource) -> bool {
         ProjectResourceKind::Caption
         | ProjectResourceKind::Drawing
         | ProjectResourceKind::Path
-        | ProjectResourceKind::Composition => false,
+        | ProjectResourceKind::Composition
+        | ProjectResourceKind::Particles => false,
         _ => !resource.filename.is_empty(),
     }
 }

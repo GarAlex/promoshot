@@ -3136,4 +3136,37 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// A particle system (rung 36) draws through a drawing layer: a
+    /// confetti burst puts colour on a black canvas, the same instant
+    /// renders the same bytes twice, and a later instant differs.
+    #[test]
+    fn a_particle_burst_draws_and_is_deterministic() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-particles-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = r#"{"id":"P","name":"Confetti","createdAt":0,"state":"recorded","minReaderVersion":36,
+            "trimStart":0,"trimEnd":3,"videoDuration":3,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"},
+            "resources":[{"id":"C","kind":"particles","filename":"","displayName":"Confetti","addedAt":0,
+              "particles":{"burst":200,"rate":0,"anchor":[0.5,0.6],"speed":[0.6,1.0],"spread":60,
+                           "size":[0.03,0.05],"life":[2,3],"colors":["FF4040","40FF40","4080FF"],"shape":"square"}}],
+            "layers":[{"id":"L","name":"confetti","sortIndex":0,"kind":"drawing","isEnabled":true,
+              "startTime":0,"duration":3,"resourceID":"C","keyframes":[]}]}"#;
+        std::fs::write(dir.join("metadata.json"), doc).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let lit = |frame: &[u8]| frame.chunks(4).filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 60).count();
+        let a = renderer.frame_bgra(0.4).expect("frame");
+        let b = renderer.frame_bgra(0.4).expect("frame");
+        let c = renderer.frame_bgra(1.2).expect("frame");
+        assert!(lit(&a) > 200, "confetti lights the canvas: {} pixels", lit(&a));
+        assert_eq!(a, b, "the same instant is the same picture");
+        let differ = a.iter().zip(&c).filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12).count();
+        assert!(differ > 200, "a later instant differs: {differ}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

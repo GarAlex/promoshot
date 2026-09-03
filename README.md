@@ -408,6 +408,14 @@ be one layer of kind `stage` holding its `members`, the camera and light
 on its own keyframes (rung 33) — the same picture, with the stage's
 ownership written down.
 
+## Particles
+
+A resource of kind `particles` is a recipe, not a file — an emitter, a
+rate or a burst, life, speed, gravity, wind, drag, turbulence, size and
+colour over life, a shape — played by a drawing layer. Every particle is
+a closed-form function of its birth time and the seed, so any frame
+renders alone and identically on every host. Rung 36.
+
 ## Text with a side
 
 Legacy: the caption `depth` below is the flat compositor's 2.5D. A title

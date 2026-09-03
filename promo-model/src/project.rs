@@ -133,8 +133,152 @@ strict_enum!(
         // A glTF 2.0 binary (`.glb`) model (rung 29), with its material
         // slots bound to colours or resources — see `materials`.
         (Model, "model"),
+        // A particle system (rung 36): a recipe, not a file — see
+        // `ParticleRecipe`; a DRAWING layer plays it. Strict, as every
+        // kind before it.
+        (Particles, "particles"),
     ]
 );
+
+/// A particle system (rung 36): many small things over time from one
+/// rule, played by a DRAWING layer like any vector content. Every
+/// particle is a closed-form function of its birth time and the seed —
+/// gravity, wind, analytic drag, noise-driven turbulence — so any frame
+/// stands alone: scrubbing, caching and parity across hosts cost nothing.
+/// Lengths are in CANVAS HEIGHTS (resolution independent); the emitter's
+/// `anchor` and `extent` are unit canvas fractions, [0, 0] the top left.
+/// Every field is optional; the defaults are a gentle upward burst.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ParticleRecipe {
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub anchor: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub extent: Option<[f64; 2]>,
+    /// Particles per second. Default 40.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub rate: Option<f64>,
+    /// Extra particles all born at the layer's start. Default 0.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub burst: Option<u32>,
+    /// Seconds a particle lives, [min, max]. Default [1, 2].
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub life: Option<[f64; 2]>,
+    /// Launch speed in canvas heights per second, [min, max]. Default [0.3, 0.6].
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub speed: Option<[f64; 2]>,
+    /// Launch direction in degrees: 0 right, 90 up. Default 90.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub direction: Option<f64>,
+    /// Half-angle of the launch cone, degrees. Default 30.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub spread: Option<f64>,
+    /// Canvas heights per second², positive downward. Default 0.8.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub gravity: Option<f64>,
+    /// Canvas heights per second², positive rightward. Default 0.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub wind: Option<f64>,
+    /// Drag per second; 0 none. Default 0.4.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub drag: Option<f64>,
+    /// Turbulence amplitude in canvas heights. Default 0.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub turbulence: Option<f64>,
+    /// Size in canvas heights, [min, max]. Default [0.008, 0.016].
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub size: Option<[f64; 2]>,
+    /// `hold`, `shrink` or `grow`. Default `shrink`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub size_over_life: Option<String>,
+    /// `hold` or `fade`. Default `fade`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub opacity_over_life: Option<String>,
+    /// Colours each particle picks from; palette names work. Default `["@accent"]`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub colors: Option<Vec<String>>,
+    /// `dot`, `square` or `streak`. Default `dot`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shape: Option<String>,
+    /// Spin in degrees per second, [min, max]; squares turn by it. Default [-180, 180].
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub spin: Option<[f64; 2]>,
+    /// Emission stops this many seconds after the layer's start; absent,
+    /// it runs the layer's whole life.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub emit_for: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub seed: Option<u64>,
+}
+
+impl ParticleRecipe {
+    pub const SHAPES: [&'static str; 3] = ["dot", "square", "streak"];
+    pub const SIZE_CURVES: [&'static str; 3] = ["hold", "shrink", "grow"];
+    pub const OPACITY_CURVES: [&'static str; 2] = ["hold", "fade"];
+    pub fn anchor(&self) -> [f64; 2] {
+        self.anchor.unwrap_or([0.5, 0.5])
+    }
+    pub fn extent(&self) -> [f64; 2] {
+        self.extent.unwrap_or([0.0, 0.0])
+    }
+    pub fn rate(&self) -> f64 {
+        self.rate.unwrap_or(40.0)
+    }
+    pub fn burst(&self) -> u32 {
+        self.burst.unwrap_or(0)
+    }
+    pub fn life(&self) -> [f64; 2] {
+        self.life.unwrap_or([1.0, 2.0])
+    }
+    pub fn speed(&self) -> [f64; 2] {
+        self.speed.unwrap_or([0.3, 0.6])
+    }
+    pub fn direction(&self) -> f64 {
+        self.direction.unwrap_or(90.0)
+    }
+    pub fn spread(&self) -> f64 {
+        self.spread.unwrap_or(30.0)
+    }
+    pub fn gravity(&self) -> f64 {
+        self.gravity.unwrap_or(0.8)
+    }
+    pub fn wind(&self) -> f64 {
+        self.wind.unwrap_or(0.0)
+    }
+    pub fn drag(&self) -> f64 {
+        self.drag.unwrap_or(0.4)
+    }
+    pub fn turbulence(&self) -> f64 {
+        self.turbulence.unwrap_or(0.0)
+    }
+    pub fn size(&self) -> [f64; 2] {
+        self.size.unwrap_or([0.008, 0.016])
+    }
+    pub fn size_over_life(&self) -> &str {
+        self.size_over_life.as_deref().unwrap_or("shrink")
+    }
+    pub fn opacity_over_life(&self) -> &str {
+        self.opacity_over_life.as_deref().unwrap_or("fade")
+    }
+    pub fn colors(&self) -> Vec<String> {
+        match &self.colors {
+            Some(c) if !c.is_empty() => c.clone(),
+            _ => vec!["@accent".to_string()],
+        }
+    }
+    pub fn shape(&self) -> &str {
+        self.shape.as_deref().unwrap_or("dot")
+    }
+    pub fn spin(&self) -> [f64; 2] {
+        self.spin.unwrap_or([-180.0, 180.0])
+    }
+    pub fn emit_for(&self) -> Option<f64> {
+        self.emit_for
+    }
+    pub fn seed(&self) -> u64 {
+        self.seed.unwrap_or(7)
+    }
+}
 
 /// What a glTF material SLOT is painted with (rung 29): a colour — a
 /// palette name works, so `@accent` re-skins a body when the theme
@@ -2852,6 +2996,10 @@ pub struct ProjectResource {
     pub caption_voice_clip: Option<SubtitleVoiceClip>,
     #[serde(skip_serializing_if = "is_none")]
     pub drawing: Option<DrawingDocument>,
+    /// A particle system (rung 36) — a resource of kind `particles`
+    /// carries its recipe here, and a DRAWING layer plays it.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub particles: Option<ParticleRecipe>,
     /// Set on `path` resources, and only on them.
     #[serde(default, skip_serializing_if = "is_none")]
     pub path: Option<PathDocument>,
@@ -2974,6 +3122,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     drawing: Option<DrawingDocument>,
     #[serde(default)]
+    particles: Option<ParticleRecipe>,
+    #[serde(default)]
     path: Option<PathDocument>,
     #[serde(default)]
     sprite: Option<SpriteSheet>,
@@ -3066,6 +3216,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             caption_style: w.caption_style,
             caption_voice_clip: w.caption_voice_clip,
             drawing: w.drawing,
+            particles: w.particles,
             path: w.path,
             sprite: w.sprite,
             sampling: w.sampling,
@@ -3226,6 +3377,7 @@ impl ProjectResource {
             pointer: None,
             materials: None,
             recipe: None,
+            particles: None,
             clips: None,
             bounds_radius: None,
             frame: None,
@@ -3527,6 +3679,15 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 36 is a particle system — a resource KIND, so an older reader
+        // refuses the file rather than failing mid-decode.
+        if resources
+            .iter()
+            .any(|r| r.kind == ProjectResourceKind::Particles)
+        {
+            return 36;
+        }
 
         // 35 is a scene environment. Dropped by an older reader, every
         // metal in the project goes back to the synthetic sky — a
@@ -4545,6 +4706,20 @@ mod placement_model_tests {
         assert_eq!(lit.minimum_reader_version(), 35);
         let json = lit.to_json().expect("encode");
         assert!(json.contains(r#""environment":{"preset":"studio","intensity":1.2}"#), "{json}");
+
+        // 36: a particle system, a resource kind.
+        let sparks = meta(
+            r#""resources":[{"id":"P","kind":"particles","filename":"","displayName":"Sparks",
+                 "addedAt":0,"particles":{"rate":80,"burst":40,"colors":["@accent","FFFFFF"],
+                 "shape":"square"}}],"layers":[]"#,
+        );
+        assert_eq!(sparks.minimum_reader_version(), 36);
+        let recipe = sparks.resources.as_ref().unwrap()[0].particles.clone().unwrap();
+        assert_eq!(recipe.rate(), 80.0);
+        assert_eq!(recipe.burst(), 40);
+        assert_eq!(recipe.shape(), "square");
+        assert_eq!(recipe.life(), [1.0, 2.0], "defaults fill what the recipe leaves out");
+        assert!(sparks.to_json().unwrap().contains(r#""particles":{"rate":80.0,"burst":40,"colors":["@accent","FFFFFF"],"shape":"square"}"#));
         let back = ProjectMetadata::from_json(&json).expect("decode");
         assert_eq!(back.composition_settings.environment, lit.composition_settings.environment);
         let body = generated.resources.as_ref().unwrap()[0].recipe.clone().unwrap();

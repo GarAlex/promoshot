@@ -50,6 +50,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     recipe_warnings(meta, &mut out);
     legacy_2_5d_warnings(meta, &mut out);
     environment_warnings(meta, &mut out);
+    particle_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
@@ -756,6 +757,89 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                  must be above zero (1 is the default)",
                 resource.display_name,
                 body.size()
+            ));
+        }
+    }
+}
+
+/// A particle system (rung 36): a recipe that emits something, with the
+/// words the engine knows, played by a DRAWING layer.
+fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for resource in resources {
+        if resource.kind != promo_model::ProjectResourceKind::Particles {
+            if resource.particles.is_some() {
+                out.push(format!(
+                    "resource \"{}\" carries `particles` but is a {} resource; a particle \
+                     system is \"kind\": \"particles\"",
+                    resource.display_name,
+                    resource.kind.as_str()
+                ));
+            }
+            continue;
+        }
+        let Some(recipe) = resource.particles.as_ref() else {
+            out.push(format!(
+                "resource \"{}\" is a particles resource with no `particles` recipe; the \
+                 defaults would draw a burst upward — say what you mean",
+                resource.display_name
+            ));
+            continue;
+        };
+        if recipe.rate() <= 0.0 && recipe.burst() == 0 {
+            out.push(format!(
+                "resource \"{}\": rate 0 and no burst emit nothing",
+                resource.display_name
+            ));
+        }
+        let life = recipe.life();
+        if life[0] <= 0.0 || life[1] < life[0] {
+            out.push(format!(
+                "resource \"{}\": life {:?} must be [min, max] with min above zero",
+                resource.display_name, life
+            ));
+        }
+        if !promo_model::ParticleRecipe::SHAPES.contains(&recipe.shape()) {
+            out.push(format!(
+                "resource \"{}\": shape \"{}\" is not one — dot, square or streak",
+                resource.display_name,
+                recipe.shape()
+            ));
+        }
+        if !promo_model::ParticleRecipe::SIZE_CURVES.contains(&recipe.size_over_life()) {
+            out.push(format!(
+                "resource \"{}\": sizeOverLife \"{}\" is not one — hold, shrink or grow",
+                resource.display_name,
+                recipe.size_over_life()
+            ));
+        }
+        if !promo_model::ParticleRecipe::OPACITY_CURVES.contains(&recipe.opacity_over_life()) {
+            out.push(format!(
+                "resource \"{}\": opacityOverLife \"{}\" is not one — hold or fade",
+                resource.display_name,
+                recipe.opacity_over_life()
+            ));
+        }
+        if recipe.rate() * recipe.life()[1] + recipe.burst() as f64 > 4000.0 {
+            out.push(format!(
+                "resource \"{}\": rate × life keeps more than 4000 particles alive; the \
+                 engine draws the first 4000",
+                resource.display_name
+            ));
+        }
+    }
+    for layer in promo_model::nesting::all_layers(meta) {
+        let plays_particles = layer
+            .resource_id
+            .as_deref()
+            .and_then(|id| resources.iter().find(|r| r.id == id))
+            .is_some_and(|r| r.kind == promo_model::ProjectResourceKind::Particles);
+        if plays_particles && layer.kind != ProjectLayerKind::Drawing {
+            out.push(format!(
+                "layer \"{}\" plays a particles resource but is a {} layer; a DRAWING \
+                 layer plays particles",
+                layer.name,
+                layer.kind.as_str()
             ));
         }
     }
@@ -1624,6 +1708,33 @@ mod tests {
         let quiet = warnings(&fine);
         assert!(!quiet.iter().any(|w| w.contains("environment")), "{quiet:?}");
         assert_eq!(fine.minimum_reader_version(), 35);
+    }
+    /// A particle recipe is checked: a rate of zero with no burst, a bad
+    /// life, an unknown shape, and the wrong layer kind are each named; a
+    /// confetti burst on a drawing layer says nothing and lifts the rung.
+    #[test]
+    fn a_particle_system_is_checked() {
+        let odd = project(
+            r#"{"id":"L","name":"Sparks","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":4,"resourceID":"P","keyframes":[]}"#,
+            r#","resources":[{"id":"P","kind":"particles","filename":"","displayName":"Sparks","addedAt":0,
+                 "particles":{"rate":0,"life":[2,1],"shape":"star"}}]"#,
+        );
+        let found = warnings(&odd);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(has("\"Sparks\": rate 0 and no burst emit nothing"), "{found:?}");
+        assert!(has("\"Sparks\": life [2.0, 1.0]"), "{found:?}");
+        assert!(has("shape \"star\" is not one"), "{found:?}");
+        assert!(has("layer \"Sparks\" plays a particles resource but is a image layer"), "{found:?}");
+        let fine = project(
+            r#"{"id":"L","name":"Confetti","sortIndex":0,"kind":"drawing","isEnabled":true,
+                "startTime":1,"duration":3,"resourceID":"P","keyframes":[]}"#,
+            r#","resources":[{"id":"P","kind":"particles","filename":"","displayName":"Confetti","addedAt":0,
+                 "particles":{"burst":120,"rate":0,"shape":"square","colors":["@accent","FFFFFF"]}}]"#,
+        );
+        let quiet = warnings(&fine);
+        assert!(!quiet.iter().any(|w| w.contains("Confetti")), "{quiet:?}");
+        assert_eq!(fine.minimum_reader_version(), 36);
     }
 }
 

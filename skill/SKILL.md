@@ -173,6 +173,19 @@ new projects.
   `minReaderVersion: 29`, or `32` when a finish (or a colour in the
   object form) is written. `promo_inspect` lists the layer; a missing
   file is named like any other.
+- **Particles.** Confetti, sparks, snow: a resource `{ "kind":
+  "particles", "filename": "", "displayName": "Confetti", "addedAt": 0,
+  "particles": { "anchor": [0.5, 0.1], "extent": [0.6, 0], "burst": 200,
+  "rate": 0, "direction": 270, "spread": 40, "speed": [0.2, 0.5],
+  "gravity": 0.6, "drag": 0.6, "size": [0.01, 0.02], "shape": "square",
+  "colors": ["@accent", "FFFFFF"], "life": [2, 3] } }` played by a
+  DRAWING layer (`"kind": "drawing"`, `resourceID` the recipe) whose
+  start is the burst's instant. Lengths in canvas heights, anchor in unit
+  canvas fractions, direction 0 right / 90 up / 270 down; `rate` per
+  second for a stream (snow: rate 30, direction 270, spread 20, gravity
+  0.2, turbulence 0.02, shape dot, colors white), `burst` for one bang.
+  Deterministic — the same frame every time. Stamp `minReaderVersion:
+  36`.
 - **Environment.** Chrome and gloss need something to mirror: put
   `"environment": { "preset": "studio" }` (or `sunset`, `night`;
   `intensity`, `rotation` in degrees) in `compositionSettings` for any

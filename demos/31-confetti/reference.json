@@ -1,0 +1,186 @@
+{
+ "id": "670F9A90-6229-0D08-4BEF-A8872F32EA2E",
+ "name": "31 Confetti",
+ "formatVersion": 2,
+ "minReaderVersion": 36,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 6.0,
+ "videoDuration": 6.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 48,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "E7B1745C-83E2-D936-1EA8-BAF70A4B4DB8",
+   "kind": "particles",
+   "filename": "",
+   "displayName": "Confetti",
+   "addedAt": 0,
+   "particles": {
+    "anchor": [
+     0.5,
+     0.08
+    ],
+    "extent": [
+     0.7,
+     0
+    ],
+    "burst": 260,
+    "rate": 0,
+    "direction": 270,
+    "spread": 45,
+    "speed": [
+     0.15,
+     0.5
+    ],
+    "gravity": 0.55,
+    "drag": 0.7,
+    "size": [
+     0.01,
+     0.022
+    ],
+    "shape": "square",
+    "colors": [
+     "@accent",
+     "FFFFFF",
+     "FFD27A",
+     "FF6B6B"
+    ],
+    "life": [
+     2.5,
+     4.0
+    ],
+    "spin": [
+     -240,
+     240
+    ],
+    "seed": 3
+   }
+  },
+  {
+   "id": "6AF38C3F-ABB3-F363-BA7F-9B2C1AEE4F4C",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Title",
+   "addedAt": 0,
+   "captionText": "Now available",
+   "captionStyle": {
+    "alignment": "center",
+    "subtitleFontSize": 92,
+    "subtitleBold": true,
+    "placement": {
+     "anchor": "center",
+     "offset": [
+      0,
+      -20
+     ]
+    },
+    "reveal": {
+     "by": "word",
+     "mode": "tumble",
+     "seconds": 0.8
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "B1C6AC7C-C1A8-B575-417E-1486DA51B0C5",
+   "name": "Backdrop",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 6.0,
+   "keyframes": [
+    {
+     "id": "B1438575-27AA-5F73-5103-9535EEDBFC5C",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.5,
+       0.55
+      ],
+      "end": [
+       1,
+       1
+      ],
+      "stops": [
+       {
+        "colorHex": "2A2F3A",
+        "at": 0
+       },
+       {
+        "colorHex": "0B0D12",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "C6D77B56-6883-DD8C-51A2-0271BDB7BAF1",
+   "name": "Title",
+   "sortIndex": 1,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.4,
+   "duration": 5.6,
+   "resourceID": "6AF38C3F-ABB3-F363-BA7F-9B2C1AEE4F4C",
+   "fadeOut": 0.4,
+   "keyframes": []
+  },
+  {
+   "id": "1317D2C2-4FB9-35F2-0E5F-C082A20BFB1C",
+   "name": "Confetti",
+   "sortIndex": 2,
+   "kind": "drawing",
+   "isEnabled": true,
+   "startTime": 1.2,
+   "duration": 4.8,
+   "resourceID": "E7B1745C-83E2-D936-1EA8-BAF70A4B4DB8",
+   "keyframes": [
+    {
+     "id": "8858BFF3-3B57-436F-0F55-DF4A584DC85A",
+     "time": 0,
+     "transitionDuration": 0,
+     "zoom": 1.0,
+     "horizontalShift": 0,
+     "verticalShift": 0
+    }
+   ]
+  }
+ ]
+}

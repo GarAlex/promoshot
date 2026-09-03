@@ -868,6 +868,24 @@ says so. A project with a finish, or a colour in the object form,
 carries `minReaderVersion: 32`.
 `clips` (name and duration) and `boundsRadius` are written at import
 and re-derived on every open.
+Particles (rung 36). A resource of `"kind": "particles"` carries a
+recipe, no file, and a DRAWING layer plays it: `{ "kind": "particles",
+"filename": "", "displayName": "Confetti", "addedAt": 0, "particles": {
+"anchor": [0.5, 0.1], "extent": [0.6, 0], "burst": 200, "rate": 0,
+"direction": 270, "spread": 40, "speed": [0.2, 0.5], "gravity": 0.6,
+"drag": 0.6, "size": [0.01, 0.02], "shape": "square", "colors":
+["@accent", "FFFFFF", "@edge"], "life": [2, 3] } }`. Lengths are in
+canvas heights (resolution independent); `anchor`/`extent` are unit
+canvas fractions; `direction` 0 is right and 90 up; `rate` particles per
+second from the layer's start (`emitFor` stops it), `burst` all at once;
+`life`, `speed`, `size`, `spin` are `[min, max]` each particle draws
+from by the `seed`; `gravity` (down), `wind` (right) and `drag` shape the
+path, `turbulence` wobbles it; `sizeOverLife` hold|shrink|grow,
+`opacityOverLife` hold|fade; `shape` dot|square|streak. Every particle
+is a closed-form function of its birth time, so any frame renders alone
+and the same on every host. The layer's placement, shifts, opacity and
+transitions apply to the whole field. A project with particles carries
+`minReaderVersion: 36`.
 A model may also be GENERATED (rung 34): a `recipe` in place of a
 `filename` — `{ "kind": "model", "filename": "", "recipe": { "text": {
 "text": "Hello", "bold": true, "depth": 0.25, "size": 1 } } }` — and the

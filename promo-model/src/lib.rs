@@ -620,6 +620,7 @@ mod schema_doc_tests {
             }]),
             bounds_radius: Some(1.0),
             recipe: None,
+            particles: None,
             pointer: Some(PointerTrack {
                 samples: vec![[0.0, 0.5, 0.5], [1.0, 0.6, 0.4]],
                 clicks: vec![[0.8, 0.6, 0.4]],

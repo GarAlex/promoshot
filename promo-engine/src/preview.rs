@@ -1609,15 +1609,27 @@ impl PreviewEngine {
         pinned: &[u64],
     ) -> Option<(SceneQuad, u64)> {
         // Which document, for this instant: a drawing swaps like an image.
-        let doc = self
+        // A PARTICLES resource (rung 36) draws through the same path — its
+        // shapes are this instant's particles, the layer's clock its time.
+        let resource = self
             .meta
             .resources
             .as_ref()?
             .iter()
-            .find(|r| Some(r.id.as_str()) == showing)?
-            .drawing
-            .as_ref()?;
-        let shapes = vector_shapes(doc, settings);
+            .find(|r| Some(r.id.as_str()) == showing)?;
+        let shapes = if let Some(doc) = resource.drawing.as_ref() {
+            vector_shapes(doc, settings)
+        } else if let Some(recipe) = resource.particles.as_ref() {
+            crate::particles::particle_shapes(
+                recipe,
+                tl::layer_local_time(layer, time),
+                canvas.width(),
+                canvas.height(),
+                settings,
+            )
+        } else {
+            return None;
+        };
         if shapes.is_empty() {
             return None;
         }

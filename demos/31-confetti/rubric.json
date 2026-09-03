@@ -1,13 +1,14 @@
 {
- "template": "30 Title Body",
+ "template": "31 Confetti",
  "canvas": [
   1440,
   900
  ],
- "duration": 9.0,
+ "duration": 6.0,
  "kinds": {
   "background": 1,
-  "stage": 1
+  "caption": 1,
+  "drawing": 1
  },
  "features": {
   "chromaKey": false,
@@ -23,19 +24,19 @@
   "motionPath": false,
   "sprite": false,
   "gradient": true,
-  "reveal": false,
-  "stage": true,
-  "stageLayer": true,
-  "model": true,
-  "camera": true,
-  "materials": true,
-  "finish": true,
-  "textBody": true,
-  "environment": true,
-  "particles": false,
+  "reveal": true,
+  "stage": false,
+  "stageLayer": false,
+  "model": false,
+  "camera": false,
+  "materials": false,
+  "finish": false,
+  "textBody": false,
+  "environment": false,
+  "particles": true,
   "depth": false,
   "captionTilt": false,
-  "kineticReveal": false,
+  "kineticReveal": true,
   "blendModes": [],
   "swaps": 0,
   "transitions": false,
@@ -44,10 +45,10 @@
   "narration": false,
   "motionBlur": false,
   "grade": false,
-  "placement": true
+  "placement": false
  },
- "phrases": [],
- "media": [
-  "vase.glb"
- ]
+ "phrases": [
+  "Now available"
+ ],
+ "media": []
 }
