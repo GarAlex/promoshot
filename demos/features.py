@@ -40,6 +40,10 @@ def features(meta):
         "materials": any(r.get('materials') for r in res),
         "finish": any(isinstance(b, dict) and (b.get('metallic') is not None or b.get('roughness') is not None)
                       for r in res for b in (r.get('materials') or {}).values()),
+        "morph": any(isinstance(r.get('particles'), dict) and r['particles'].get('morph') for r in res),
+        "facedBox": any(isinstance(r.get('recipe'), dict) and any(
+                            isinstance(p.get('shape'), dict) and (p['shape'].get('box') or {}).get('faces')
+                            for p in r['recipe'].get('parts') or []) for r in res),
         "wornPicture": any(isinstance(b, dict) and b.get('mode') == 'surface' and b.get('resourceID')
                            for r in res for b in (r.get('materials') or {}).values()),
         "wornVideo": any(isinstance(b, dict) and b.get('mode') == 'surface'

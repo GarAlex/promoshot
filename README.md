@@ -429,6 +429,13 @@ colour over life, a shape — played by a drawing layer. Every particle is
 a closed-form function of its birth time and the seed, so any frame
 renders alone and identically on every host. Rung 36.
 
+Particles in a stage are a morph (rung 39): the recipe names two bodies,
+samples the first's surface, and as a drawing member's `progress`
+keyframe ramps from 0 to 1 the points fly out and gather on the second
+body — a cube bursts into points that settle into a word. A parts box
+with `faces: true` has six slots, one picture per side, which is what
+such a cube is made of.
+
 ## Text with a side
 
 Legacy: the caption `depth` below is the flat compositor's 2.5D. A title

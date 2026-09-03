@@ -49,6 +49,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     stage_layer_warnings(meta, &mut out);
     recipe_warnings(meta, &mut out);
     legacy_2_5d_warnings(meta, &mut out);
+    morph_warnings(meta, &mut out);
     environment_warnings(meta, &mut out);
     particle_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
@@ -846,11 +847,46 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
             continue;
         };
-        if recipe.rate() <= 0.0 && recipe.burst() == 0 {
+        if recipe.morph.is_none() && recipe.rate() <= 0.0 && recipe.burst() == 0 {
             out.push(format!(
                 "resource \"{}\": rate 0 and no burst emit nothing",
                 resource.display_name
             ));
+        }
+        if let Some(morph) = recipe.morph.as_ref() {
+            for (which, id) in [("from", &morph.from), ("to", &morph.to)] {
+                match resources.iter().find(|r| &r.id == id) {
+                    None => out.push(format!(
+                        "resource \"{}\": morph `{which}` names a resource the project does not \
+                         have ({id})",
+                        resource.display_name
+                    )),
+                    Some(r) if r.kind != promo_model::ProjectResourceKind::Model => out.push(format!(
+                        "resource \"{}\": morph `{which}` names \"{}\", a {} resource; a morph \
+                         flies between two BODIES (model resources)",
+                        resource.display_name,
+                        r.display_name,
+                        r.kind.as_str()
+                    )),
+                    Some(_) => {}
+                }
+            }
+            if morph.count.is_some_and(|c| c > promo_model::ParticleMorph::MAX_COUNT) {
+                out.push(format!(
+                    "resource \"{}\": morph count {} is above the most a morph draws ({}); it is \
+                     clamped",
+                    resource.display_name,
+                    morph.count.unwrap_or(0),
+                    promo_model::ParticleMorph::MAX_COUNT
+                ));
+            }
+            if morph.stagger.is_some_and(|s| !(0.0..=0.95).contains(&s)) {
+                out.push(format!(
+                    "resource \"{}\": morph stagger {} is outside 0…0.95; it is clamped",
+                    resource.display_name,
+                    morph.stagger.unwrap_or(0.0)
+                ));
+            }
         }
         let life = recipe.life();
         if life[0] <= 0.0 || life[1] < life[0] {
@@ -926,6 +962,60 @@ fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             env.intensity()
         ));
     }
+}
+
+/// A morph (rung 39) plays inside the stage its bodies are in, on a
+/// drawing member whose keyframes carry `progress`: a morph on the
+/// canvas draws nothing, and a `progress` anywhere else does nothing.
+fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    use promo_model::ProjectLayerKind as Kind;
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let is_morph = |id: Option<&str>| {
+        resources
+            .iter()
+            .find(|r| Some(r.id.as_str()) == id)
+            .is_some_and(|r| r.particles.as_ref().is_some_and(|p| p.morph.is_some()))
+    };
+    let top = meta.layers.as_deref().unwrap_or(&[]);
+    let mut members: Vec<&promo_model::ProjectLayer> = Vec::new();
+    for layer in top {
+        if layer.kind == Kind::Stage {
+            members.extend(layer.members.iter().flat_map(|m| m.iter()));
+        }
+    }
+    for layer in top {
+        if layer.kind == Kind::Stage || layer.stage.is_some() {
+            continue;
+        }
+        if is_morph(layer.resource_id.as_deref()) {
+            out.push(format!(
+                "layer \"{}\" plays a morph on the canvas; a morph is particles in a STAGE — \
+                 make it a member of the stage its two bodies are in",
+                layer.name
+            ));
+        }
+    }
+    for layer in promo_model::nesting::all_layers(meta) {
+        let keyed = layer.keyframes.iter().filter_map(|k| k.progress).collect::<Vec<_>>();
+        if keyed.is_empty() {
+            continue;
+        }
+        let plays_morph = layer.kind == Kind::Drawing && is_morph(layer.resource_id.as_deref());
+        if !plays_morph {
+            out.push(format!(
+                "layer \"{}\" keys `progress`, which only a stage member playing a morph \
+                 reads; here it does nothing",
+                layer.name
+            ));
+        }
+        if keyed.iter().any(|p| !p.is_finite() || !(0.0..=1.0).contains(p)) {
+            out.push(format!(
+                "layer \"{}\" keys a progress outside 0…1; it is clamped",
+                layer.name
+            ));
+        }
+    }
+    let _ = members;
 }
 
 /// The 2.5D tricks are LEGACY: a caption's `depth` (stacked copies under
@@ -1622,6 +1712,41 @@ mod tests {
         assert!(has("slot \"Screen\" shows a picture AND carries a finish"), "{warnings:?}");
         assert!(!has("slot \"Base\""), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 32);
+    }
+
+    /// A morph (rung 39): a good one says nothing; a morph on the canvas, a
+    /// morph naming a picture as a body, a progress on an ordinary layer
+    /// and a progress past 1 are each named.
+    #[test]
+    fn a_morph_is_checked() {
+        let meta = project(
+            r#"{"id":"L","name":"Loose","sortIndex":0,"kind":"drawing","isEnabled":true,
+                "startTime":0,"duration":4,"resourceID":"M","keyframes":[]},
+               {"id":"C","name":"Cap","sortIndex":1,"kind":"caption","isEnabled":true,
+                "startTime":0,"duration":4,"captionText":"Hi",
+                "keyframes":[{"id":"K","time":0,"progress":0.5,"transitionDuration":0}]},
+               {"id":"S","name":"Stage","sortIndex":2,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+                "keyframes":[],"members":[
+                  {"id":"A","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"CUBE","keyframes":[]},
+                  {"id":"P","name":"Points","sortIndex":1,"kind":"drawing","isEnabled":true,"startTime":0,"duration":4,"resourceID":"M",
+                   "keyframes":[{"id":"P0","time":0,"progress":0,"transitionDuration":0},{"id":"P1","time":4,"progress":1.4,"transitionDuration":4}]}]}"#,
+            r#","resources":[
+                {"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+                 "recipe":{"parts":[{"slot":"Cube","shape":{"box":{"size":[1,1,1],"faces":true}}}]}},
+                {"id":"S1","kind":"image","filename":"s.png","displayName":"Shot","addedAt":0},
+                {"id":"M","kind":"particles","filename":"","displayName":"Points","addedAt":0,
+                 "particles":{"morph":{"from":"CUBE","to":"S1","count":9000}}}]"#,
+        );
+        let found = warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(has("layer \"Loose\" plays a morph on the canvas"), "{found:?}");
+        assert!(has("layer \"Cap\" keys `progress`"), "{found:?}");
+        assert!(has("layer \"Points\" keys a progress outside 0…1"), "{found:?}");
+        assert!(!has("layer \"Points\" keys `progress`"), "{found:?}");
+        assert!(has("morph `to` names \"Shot\", a image resource"), "{found:?}");
+        assert!(has("morph count 9000 is above"), "{found:?}");
+        assert!(!has("rate 0 and no burst"), "a morph has no emitter: {found:?}");
+        assert_eq!(meta.minimum_reader_version(), 39);
     }
 
     /// A picture WORN by its slot (rung 38) takes a finish without

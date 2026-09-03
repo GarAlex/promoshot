@@ -372,6 +372,28 @@ fn slice_bytes<T: Copy>(v: &[T]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
 }
 
+const BLIT_SHADER: &str = r#"
+struct BlitOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+@vertex
+fn vs_blit(@builtin(vertex_index) i: u32) -> BlitOut {
+    var corners = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+    var out: BlitOut;
+    let p = corners[i];
+    out.pos = vec4<f32>(p, 0.0, 1.0);
+    out.uv = vec2<f32>(p.x * 0.5 + 0.5, 1.0 - (p.y * 0.5 + 0.5));
+    return out;
+}
+@group(0) @binding(0) var blit_src: texture_2d<f32>;
+@group(0) @binding(1) var blit_samp: sampler;
+@fragment
+fn fs_blit(in: BlitOut) -> @location(0) vec4<f32> {
+    return textureSample(blit_src, blit_samp, in.uv);
+}
+"#;
+
 const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const SAMPLES: u32 = 4;
@@ -432,6 +454,8 @@ struct GpuMaterial {
     /// a rebind (a picture on the slot) carries them along.
     normal_view: Option<wgpu::TextureView>,
     mr_view: Option<wgpu::TextureView>,
+    /// The bound picture's own mip chain, kept alive while it is bound.
+    bound_copy: Option<wgpu::Texture>,
 }
 
 impl GpuMaterial {
@@ -457,6 +481,11 @@ pub struct ModelPass {
     pipeline: wgpu::RenderPipeline,
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
+    /// Copies a picture level by level into a mip chain, so a bound
+    /// picture minifies smoothly on a small or distant slot.
+    blit_pipeline: wgpu::RenderPipeline,
+    blit_layout: wgpu::BindGroupLayout,
+    blit_sampler: wgpu::Sampler,
     /// The built-in environments (studio, sunset, night), generated once.
     envs: [wgpu::TextureView; 3],
     env_sampler: wgpu::Sampler,
@@ -621,6 +650,70 @@ impl ModelPass {
             multiview: None,
             cache: None,
         });
+        let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("model-blit"),
+            source: wgpu::ShaderSource::Wgsl(BLIT_SHADER.into()),
+        });
+        let blit_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model-blit"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let blit_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("model-blit"),
+            bind_group_layouts: &[&blit_layout],
+            push_constant_ranges: &[],
+        });
+        let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("model-blit"),
+            layout: Some(&blit_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &blit_shader,
+                entry_point: Some("vs_blit"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &blit_shader,
+                entry_point: Some("fs_blit"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: OUTPUT_FORMAT,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        let blit_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("model-blit"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            ..Default::default()
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("model-sampler"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -650,6 +743,9 @@ impl ModelPass {
             pipeline,
             frame_layout,
             material_layout,
+            blit_pipeline,
+            blit_layout,
+            blit_sampler,
             envs,
             env_sampler,
             placement_layout,
@@ -785,6 +881,7 @@ impl ModelPass {
                 worn: false,
                 uv: [1.0, 1.0, 0.0, 0.0],
                 aspect: aspects[index],
+                bound_copy: None,
                 normal_view,
                 mr_view,
             });
@@ -900,17 +997,27 @@ impl ModelPass {
 
     /// Paint one material slot with a picture — a `materials` binding to a
     /// resource: the slot's base colour texture becomes `view`, sampled
-    /// with the mesh's own uvs (sRGB, as every imported frame is).
+    /// with the mesh's own uvs (sRGB, as every imported frame is). With
+    /// its size in `pixels` the picture is copied into a mip chain first,
+    /// so it minifies smoothly on a small or distant slot instead of
+    /// shimmering; without, it is bound as it is.
     pub fn set_texture(
         &self,
         ctx: &GpuContext,
         model: &mut GpuModel,
         material: usize,
         view: &wgpu::TextureView,
+        pixels: Option<(u32, u32)>,
     ) {
         let Some(m) = model.materials.get_mut(material) else {
             return;
         };
+        m.bound_copy = match pixels {
+            Some((w, h)) if w.max(h) > 64 => Some(self.mipmapped(ctx, view, w, h)),
+            _ => None,
+        };
+        let chain_view = m.bound_copy.as_ref().map(|t| t.create_view(&Default::default()));
+        let view = chain_view.as_ref().unwrap_or(view);
         m.textured = if m.worn { 4.0 } else { 2.0 };
         let (has_normal, has_mr) = m.map_flags();
         ctx.queue.write_buffer(
@@ -958,6 +1065,79 @@ impl ModelPass {
                 },
             ],
         });
+    }
+
+    /// A copy of `view` (`width × height`) with every mip level filled,
+    /// each a box filter of the one above — what a bound picture samples
+    /// through, so the trilinear sampler has something to minify to.
+    fn mipmapped(&self, ctx: &GpuContext, view: &wgpu::TextureView, width: u32, height: u32) -> wgpu::Texture {
+        let (width, height) = (width.max(1), height.max(1));
+        let levels = 32 - width.max(height).leading_zeros();
+        let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("model-picture-mips"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: levels.max(1),
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OUTPUT_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("model-picture-mips"),
+        });
+        let level_view = |level: u32| {
+            texture.create_view(&wgpu::TextureViewDescriptor {
+                base_mip_level: level,
+                mip_level_count: Some(1),
+                ..Default::default()
+            })
+        };
+        let mut previous: Option<wgpu::TextureView> = None;
+        for level in 0..levels.max(1) {
+            let source = previous.as_ref().unwrap_or(view);
+            let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("model-blit"),
+                layout: &self.blit_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(source),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.blit_sampler),
+                    },
+                ],
+            });
+            let target = level_view(level);
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("model-blit"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &target,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                pass.set_pipeline(&self.blit_pipeline);
+                pass.set_bind_group(0, &bind, &[]);
+                pass.draw(0..3, 0..1);
+            }
+            previous = Some(target);
+        }
+        ctx.queue.submit(Some(encoder.finish()));
+        texture
     }
 
     /// How one slot wears its bound picture: `worn` lights it as the
@@ -1067,7 +1247,7 @@ impl ModelPass {
                         metal_rough: None,
                     }],
                 )?;
-                self.set_texture(ctx, &mut model, 0, texture);
+                self.set_texture(ctx, &mut model, 0, texture, None);
                 if let Some(m) = model.materials.get_mut(0) {
                     // The quad IS the picture's box: no letterbox, and the
                     // picture's own alpha decides what is drawn.
@@ -2047,6 +2227,89 @@ mod tests {
         (mean(28, 44), mean(52, 68))
     }
 
+    /// A bound picture minifies through a mip chain: a fine checkerboard
+    /// on a slot seen small reads as an even grey, not as the aliased
+    /// black-and-white it is when bound raw.
+    #[test]
+    fn a_bound_picture_minifies_through_its_mips() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let mut model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [1.0, 1.0, 1.0, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.6,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload");
+        let (w, h) = (512u32, 512u32);
+        let mut checks = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                let on = (x + y) % 2 == 0;
+                let v = if on { 255 } else { 0 };
+                checks.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let picture = upload_rgba(&ctx, w, h, &checks);
+        let picture_view = picture.create_view(&Default::default());
+        // Face on, far away: the face is a few dozen pixels wide, the
+        // checks a small fraction of a pixel.
+        let face = |model: &GpuModel| -> (u32, u32) {
+            let view = ModelView {
+                yaw: 0.0,
+                pitch: 0.0,
+                distance: 12.0,
+                ..ModelView::default()
+            };
+            let px = pass
+                .render_to_bytes(&ctx, model, &view, &[IDENTITY], 96, 96)
+                .expect("render");
+            let mut values = Vec::new();
+            for y in 44..52 {
+                for x in 44..52 {
+                    let i = (y * 96 + x) * 4;
+                    values.push(px[i] as u32);
+                }
+            }
+            let mean = values.iter().sum::<u32>() / values.len() as u32;
+            let spread = values.iter().map(|v| (*v as i32 - mean as i32).unsigned_abs()).max().unwrap_or(0);
+            (mean, spread)
+        };
+        pass.set_texture(&ctx, &mut model, 0, &picture_view, None);
+        let (raw_mean, raw_spread) = face(&model);
+        pass.set_texture(&ctx, &mut model, 0, &picture_view, Some((w, h)));
+        let (mip_mean, mip_spread) = face(&model);
+        assert!(
+            mip_spread < 24 && (90..=170).contains(&mip_mean),
+            "through the mips the checks average to grey: mean {mip_mean}, spread {mip_spread} \
+             (raw: mean {raw_mean}, spread {raw_spread})"
+        );
+        assert!(
+            mip_spread < raw_spread || raw_spread == 0,
+            "the raw binding is the aliased one: raw spread {raw_spread}, mips {mip_spread}"
+        );
+    }
+
     /// A picture WORN by a slot takes the light and a picture SHOWN as a
     /// screen does not: the same picture bound to a cube's face reads the
     /// same under a frontal and a grazing light as a screen, and darker
@@ -2108,7 +2371,7 @@ mod tests {
             }
             sum / count
         };
-        pass.set_texture(&ctx, &mut model, 0, &picture_view);
+        pass.set_texture(&ctx, &mut model, 0, &picture_view, None);
         let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
         assert!(
             (front as i32 - grazing as i32).abs() < 3,

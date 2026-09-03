@@ -291,7 +291,7 @@
      "camera": {
       "yaw": -38,
       "pitch": 12,
-      "distance": 4.6,
+      "distance": 4.7,
       "fov": 28
      },
      "light": {
@@ -301,9 +301,9 @@
      }
     },
     {
-     "id": "4DF381CE-AABB-9F89-2EEB-CAE6A02B668B",
-     "time": 8.7,
-     "transitionDuration": 8.7,
+     "id": "73ED20D7-3595-D6D3-BCB1-210D8DCF9B6A",
+     "time": 1.1,
+     "transitionDuration": 1.1,
      "placement": {
       "height": 600,
       "anchor": "center",
@@ -313,17 +313,117 @@
       ]
      },
      "camera": {
-      "yaw": 34,
-      "pitch": 6,
+      "yaw": -12,
+      "pitch": 10,
+      "distance": 4.3,
+      "fov": 28
+     },
+     "light": {
+      "yaw": -50,
+      "pitch": 55,
+      "intensity": 1.5
+     },
+     "easing": "easeOut"
+    },
+    {
+     "id": "85F05096-C104-24D9-21FA-120B106475C0",
+     "time": 3.3,
+     "transitionDuration": 2.2,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": -12,
+      "pitch": 10,
+      "distance": 4.3,
+      "fov": 28
+     },
+     "light": {
+      "yaw": -20,
+      "pitch": 50,
+      "intensity": 1.5
+     },
+     "easing": "linear"
+    },
+    {
+     "id": "8A8A6D34-1898-2F53-4432-A1023FEB606E",
+     "time": 4.2,
+     "transitionDuration": 0.9,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": 22,
+      "pitch": 7,
       "distance": 4.1,
       "fov": 28
      },
      "light": {
-      "yaw": 120,
-      "pitch": 24,
+      "yaw": 50,
+      "pitch": 38,
       "intensity": 1.5
      },
-     "easing": "easeInOut"
+     "easing": "easeOut"
+    },
+    {
+     "id": "BAC5383A-4EEE-087A-2715-540C4D9DFFF0",
+     "time": 6.4,
+     "transitionDuration": 2.2,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": 22,
+      "pitch": 7,
+      "distance": 4.1,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 70,
+      "pitch": 34,
+      "intensity": 1.5
+     },
+     "easing": "linear"
+    },
+    {
+     "id": "CC462ECE-0084-9827-8724-74B68CF5B340",
+     "time": 7.3,
+     "transitionDuration": 0.9,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": 36,
+      "pitch": 5,
+      "distance": 3.9,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 125,
+      "pitch": 24,
+      "intensity": 1.4
+     },
+     "easing": "easeOut"
     }
    ],
    "members": [
@@ -345,6 +445,7 @@
         -0.42,
         0.12
        ],
+       "depth": -0.35,
        "camera": {
         "yaw": 12
        }
@@ -357,6 +458,7 @@
         -0.42,
         0.12
        ],
+       "depth": -0.35,
        "camera": {
         "yaw": -6
        },
@@ -382,8 +484,9 @@
         0.66,
         -0.28
        ],
+       "depth": 0.15,
        "camera": {
-        "yaw": -70
+        "yaw": -90
        }
       },
       {
@@ -394,8 +497,9 @@
         0.66,
         -0.28
        ],
+       "depth": 0.15,
        "camera": {
-        "yaw": 70
+        "yaw": 90
        },
        "easing": "easeInOut"
       }

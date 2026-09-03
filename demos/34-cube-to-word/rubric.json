@@ -1,10 +1,10 @@
 {
- "template": "33 Worn",
+ "template": "34 Cube To Word",
  "canvas": [
   1440,
   900
  ],
- "duration": 9.0,
+ "duration": 10.0,
  "kinds": {
   "background": 1,
   "stage": 1,
@@ -31,13 +31,13 @@
   "camera": true,
   "materials": true,
   "finish": true,
-  "morph": false,
-  "facedBox": false,
+  "morph": true,
+  "facedBox": true,
   "wornPicture": true,
-  "wornVideo": true,
-  "textBody": false,
+  "wornVideo": false,
+  "textBody": true,
   "environment": true,
-  "particles": false,
+  "particles": true,
   "partsBody": true,
   "depth": false,
   "captionTilt": false,
@@ -53,10 +53,14 @@
   "placement": true
  },
  "phrases": [
-  "Every picture, lit."
+  "One format. Real 3D."
  ],
  "media": [
-  "label_lumen.png",
-  "rec_lumen_2560.mp4"
+  "face_1.png",
+  "face_2.png",
+  "face_3.png",
+  "face_4.png",
+  "face_5.png",
+  "face_6.png"
  ]
 }

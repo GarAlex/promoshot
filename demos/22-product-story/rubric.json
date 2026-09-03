@@ -33,6 +33,8 @@
   "camera": false,
   "materials": false,
   "finish": false,
+  "morph": false,
+  "facedBox": false,
   "wornPicture": false,
   "wornVideo": false,
   "textBody": false,

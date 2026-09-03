@@ -331,6 +331,12 @@
     },
     "BoxShape": {
       "properties": {
+        "faces": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "radius": {
           "format": "double",
           "type": [
@@ -1625,6 +1631,57 @@
         }
       ]
     },
+    "ParticleMorph": {
+      "properties": {
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "from": {
+          "type": "string"
+        },
+        "size": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "spread": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stagger": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "to": {
+          "type": "string"
+        },
+        "turbulence": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
     "ParticleRecipe": {
       "properties": {
         "anchor": {
@@ -1706,6 +1763,16 @@
           "type": [
             "array",
             "null"
+          ]
+        },
+        "morph": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParticleMorph"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "opacityOverLife": {
@@ -2464,6 +2531,13 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "progress": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
           ]
         },
         "resourceID": {

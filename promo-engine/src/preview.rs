@@ -141,6 +141,84 @@ type SlotPictures = Vec<(usize, String)>;
 /// slots were last painted (so a binding re-paints only when it changes).
 /// The scene's environment (rung 35) as the pass takes it: a known preset
 /// with its intensity and rotation, or none — the synthetic sky.
+/// A morph's cloud for one instant as a model the stage draws: every
+/// point a small quad facing the camera, its normal toward the viewer
+/// with a little lean so the key light glints unevenly, one mesh per
+/// colour, matte and double sided.
+fn cloud_model(
+    pass: &ModelPass,
+    ctx: &GpuContext,
+    points: &[crate::morph::Point],
+    colors: &[[f32; 4]],
+    basis: ([f32; 3], [f32; 3], [f32; 3]),
+) -> Option<GpuModel> {
+    if points.is_empty() {
+        return None;
+    }
+    let (right, up, forward) = basis;
+    let palette: Vec<[f32; 4]> = if colors.is_empty() {
+        vec![[1.0, 1.0, 1.0, 1.0]]
+    } else {
+        colors.to_vec()
+    };
+    let mut positions: Vec<Vec<[f32; 3]>> = vec![Vec::new(); palette.len()];
+    let mut normals: Vec<Vec<[f32; 3]>> = vec![Vec::new(); palette.len()];
+    let mut uvs: Vec<Vec<[f32; 2]>> = vec![Vec::new(); palette.len()];
+    let mut indices: Vec<Vec<u32>> = vec![Vec::new(); palette.len()];
+    for (i, p) in points.iter().enumerate() {
+        if p.size <= 1e-5 {
+            continue;
+        }
+        let c = p.color % palette.len();
+        let s = p.size;
+        let base = positions[c].len() as u32;
+        // A lean per point, fixed by its index, so the cloud glitters.
+        let lean = ((i as f32 * 12.9898).sin() * 43758.547).fract() - 0.5;
+        let n = [
+            -forward[0] + right[0] * lean * 0.6,
+            -forward[1] + right[1] * lean * 0.6,
+            -forward[2] + right[2] * lean * 0.6,
+        ];
+        for (sx, sy, uv) in [(-1.0, -1.0, [0.0, 1.0]), (1.0, -1.0, [1.0, 1.0]), (1.0, 1.0, [1.0, 0.0]), (-1.0, 1.0, [0.0, 0.0])] {
+            positions[c].push([
+                p.position[0] + (right[0] * sx + up[0] * sy) * s,
+                p.position[1] + (right[1] * sx + up[1] * sy) * s,
+                p.position[2] + (right[2] * sx + up[2] * sy) * s,
+            ]);
+            normals[c].push(n);
+            uvs[c].push(uv);
+        }
+        indices[c].extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+    if indices.iter().all(|i| i.is_empty()) {
+        return None;
+    }
+    let meshes: Vec<MeshInput<'_>> = (0..palette.len())
+        .filter(|&c| !indices[c].is_empty())
+        .map(|c| MeshInput {
+            positions: &positions[c],
+            normals: &normals[c],
+            uvs: &uvs[c],
+            indices: &indices[c],
+            material: c,
+            node: 0,
+        })
+        .collect();
+    let materials: Vec<MaterialInput<'_>> = palette
+        .iter()
+        .map(|rgba| MaterialInput {
+            base_color: *rgba,
+            metallic: 0.0,
+            roughness: 0.55,
+            double_sided: true,
+            texture: None,
+            normal: None,
+            metal_rough: None,
+        })
+        .collect();
+    pass.upload(ctx, &meshes, &materials).ok()
+}
+
 fn environment_view(settings: &promo_model::CompositionSettings) -> promo_gpu::model_pass::EnvironmentView {
     use promo_gpu::model_pass::{EnvPreset, EnvironmentView};
     settings
@@ -238,6 +316,9 @@ pub struct PreviewEngine {
     /// Recipe bodies built so far, by resource id, with the recipe they
     /// were built from — rebuilt when it changes.
     built_recipes: HashMap<String, String>,
+    /// Surface samples for morphs (rung 39), by body, count and seed —
+    /// taken once, cleared when a body's bytes change.
+    morph_samples: HashMap<String, Vec<crate::morph::Sample>>,
     /// Built on the first model; None until then, so a project with no
     /// models pays nothing.
     model_pass: Option<ModelPass>,
@@ -339,6 +420,7 @@ impl PreviewEngine {
             reveal_cache: HashMap::new(),
             models: HashMap::new(),
             built_recipes: HashMap::new(),
+            morph_samples: HashMap::new(),
             model_pass: None,
             overlays: Vec::new(),
             key_of: HashMap::new(),
@@ -2644,6 +2726,7 @@ impl PreviewEngine {
 
     pub fn provide_model(&mut self, resource_id: &str, bytes: &[u8]) -> Result<(), String> {
         let model = crate::model::Model::from_glb(bytes).map_err(|e| e.to_string())?;
+        self.morph_samples.clear();
         if self.model_pass.is_none() {
             self.model_pass = Some(ModelPass::new(self.ctx).map_err(|e| format!("{e:?}"))?);
         }
@@ -2846,9 +2929,37 @@ impl PreviewEngine {
                 Some(entry) => &entry.frame.texture,
                 None => continue,
             };
-            pass.set_texture(self.ctx, &mut loaded.gpu, index, texture.view());
+            let (frame_w, frame_h) = self
+                .cache
+                .get(&frame_id)
+                .or_else(|| self.scratch.get(&frame_id))
+                .map(|entry| (entry.frame.width, entry.frame.height))
+                .unwrap_or((0, 0));
+            pass.set_texture(
+                self.ctx,
+                &mut loaded.gpu,
+                index,
+                texture.view(),
+                (frame_w > 0 && frame_h > 0).then_some((frame_w, frame_h)),
+            );
             loaded.bound.insert(index, frame_id);
         }
+    }
+
+    /// A body's surface samples for a morph — `count` points by `seed`,
+    /// taken once and kept until the body's bytes change.
+    fn morph_samples_for(&mut self, id: &str, count: usize, seed: u64) -> Option<Vec<crate::morph::Sample>> {
+        let key = format!("{id}\u{1f}{count}\u{1f}{seed}");
+        if let Some(hit) = self.morph_samples.get(&key) {
+            return Some(hit.clone());
+        }
+        let loaded = self.models.get(id)?;
+        let samples = crate::morph::sample_surface(&loaded.model, &loaded.rest, count, seed);
+        if samples.is_empty() {
+            return None;
+        }
+        self.morph_samples.insert(key, samples.clone());
+        Some(samples)
     }
 
     /// A model member's node matrices at `time`: the clip it names posed,
@@ -2938,6 +3049,25 @@ impl PreviewEngine {
                 }
             }
         }
+        // A morph's cloud is as big as the bodies it flies between.
+        let morph_of = |id: Option<&str>| -> Option<(promo_model::ProjectResource, promo_model::ParticleMorph)> {
+            let res = resources.iter().find(|r| Some(r.id.as_str()) == id)?;
+            let morph = res.particles.as_ref()?.morph.clone()?;
+            Some((res.clone(), morph))
+        };
+        for member in &members {
+            if member.kind != ProjectLayerKind::Drawing {
+                continue;
+            }
+            let Some((_, morph)) = morph_of(tl::layer_resource_id(member, time, &resources)) else {
+                continue;
+            };
+            for id in [&morph.from, &morph.to] {
+                if let Some(loaded) = self.models.get(id) {
+                    radius = radius.max(loaded.model.bounds_radius);
+                }
+            }
+        }
         if radius <= 0.0 {
             radius = 1.0;
         }
@@ -2950,6 +3080,8 @@ impl PreviewEngine {
             across: [f32; 2],
             zoom: f32,
             frame: Option<u64>,
+            /// A morph member's progress for this instant (rung 39).
+            morph: Option<f32>,
         }
         let mut prepared: Vec<Prepared> = Vec::new();
         let mut reach = 0.0f32;
@@ -2970,6 +3102,19 @@ impl PreviewEngine {
                 })
                 .unwrap_or(0.0) as f32,
             ];
+            // A drawing member playing a MORPH is a cloud in the stage, not
+            // a billboard: no raster, a progress instead.
+            let morph = if member.kind == ProjectLayerKind::Drawing
+                && morph_of(tl::layer_resource_id(member, time, &resources)).is_some()
+            {
+                Some(
+                    tl::interpolation::layer_interpolated_scalar(member, local, |k| k.progress)
+                        .unwrap_or(0.0)
+                        .clamp(0.0, 1.0) as f32,
+                )
+            } else {
+                None
+            };
             let frame = match member.kind {
                 // A caption's raster, laid out as it would be on the canvas; its
                 // billboard is as tall in the stage as the caption is on the
@@ -2982,6 +3127,7 @@ impl PreviewEngine {
                 }
                 // A drawing's raster the same way — its shapes as they would be on
                 // the canvas, standing at its depth.
+                ProjectLayerKind::Drawing if morph.is_some() => None,
                 ProjectLayerKind::Drawing => {
                     let showing =
                         tl::layer_resource_id(member, time, &resources).map(str::to_string);
@@ -3018,6 +3164,7 @@ impl PreviewEngine {
                 across,
                 zoom,
                 frame,
+                morph,
             });
         }
 
@@ -3155,7 +3302,82 @@ impl PreviewEngine {
             model_matrices.push((item.index, matrices));
         }
 
+        // Particles in the stage (rung 39): every morph member's cloud for
+        // this instant — points sampled once per body, placed by the
+        // member's progress, offset like the member — as one model of
+        // camera-facing quads per cloud.
+        let mut cloud_points: Vec<(Vec<crate::morph::Point>, Vec<[f32; 4]>)> = Vec::new();
+        for item in &prepared {
+            let Some(progress) = item.morph else {
+                continue;
+            };
+            let member = &members[item.index];
+            let Some((res, morph)) = morph_of(tl::layer_resource_id(member, time, &resources)) else {
+                continue;
+            };
+            let Some(recipe) = res.particles.as_ref() else {
+                continue;
+            };
+            let (count, seed) = (morph.count() as usize, recipe.seed());
+            let Some(from) = self.morph_samples_for(&morph.from, count, seed) else {
+                continue;
+            };
+            let Some(to) = self.morph_samples_for(&morph.to, count, seed ^ 0x9E37_79B9) else {
+                continue;
+            };
+            let body_radius = [&morph.from, &morph.to]
+                .iter()
+                .filter_map(|id| self.models.get(*id).map(|m| m.model.bounds_radius))
+                .fold(0.0f32, f32::max)
+                .max(1e-3);
+            let colors: Vec<[f32; 4]> = recipe
+                .colors()
+                .iter()
+                .map(|hex| {
+                    let srgb = rgba_from_hex(settings.resolve_color(hex));
+                    let lin = |c: f32| {
+                        if c <= 0.04045 {
+                            c / 12.92
+                        } else {
+                            ((c + 0.055) / 1.055).powf(2.4)
+                        }
+                    };
+                    [lin(srgb[0]), lin(srgb[1]), lin(srgb[2]), srgb[3]]
+                })
+                .collect();
+            let mut points = crate::morph::morph_points(
+                &from,
+                &to,
+                progress as f64,
+                morph.spread() as f32 * body_radius,
+                morph.size() as f32 * body_radius,
+                morph.turbulence() as f32,
+                morph.stagger() as f32,
+                seed,
+                colors.len().max(1),
+            );
+            let offset = [
+                item.across[0] * radius,
+                item.across[1] * radius,
+                item.depth * radius,
+            ];
+            for p in &mut points {
+                p.position[0] += offset[0];
+                p.position[1] += offset[1];
+                p.position[2] += offset[2];
+            }
+            cloud_points.push((points, colors));
+        }
+
         let pass = self.model_pass.as_ref()?;
+        let basis = promo_gpu::model_pass::camera_basis(&view);
+        let mut clouds: Vec<GpuModel> = Vec::new();
+        for (points, colors) in &cloud_points {
+            if let Some(gpu) = cloud_model(pass, self.ctx, points, colors, basis) {
+                clouds.push(gpu);
+            }
+        }
+        let one_matrix = [promo_gpu::model_pass::IDENTITY];
         let mut items: Vec<StageItem<'_>> = Vec::new();
         for item in &prepared {
             let member = &members[item.index];
@@ -3213,6 +3435,12 @@ impl PreviewEngine {
                 _ => {}
             }
         }
+        for gpu in &clouds {
+            items.push(StageItem::Model {
+                model: gpu,
+                matrices: &one_matrix,
+            });
+        }
         if items.is_empty() {
             return None;
         }
@@ -3228,6 +3456,60 @@ impl PreviewEngine {
                 hi[1] = hi[1].max(q[1]);
             }
         };
+        // A morph frames BOTH its bodies for as long as its member lives —
+        // so the cut holds still from the first body through the flight to
+        // the second — and, while the points are out past them, where the
+        // points are, so none is cut off.
+        for (item, (points, _)) in prepared.iter().filter(|i| i.morph.is_some()).zip(&cloud_points) {
+            let member = &members[item.index];
+            let centre = [
+                item.across[0] * radius,
+                item.across[1] * radius,
+                item.depth * radius,
+            ];
+            let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
+            if let Some((_, morph)) = morph_of(tl::layer_resource_id(member, time, &resources)) {
+                for id in [&morph.from, &morph.to] {
+                    let Some(loaded) = self.models.get(id) else {
+                        continue;
+                    };
+                    for mesh in &loaded.model.meshes {
+                        let m = loaded
+                            .rest
+                            .get(mesh.node)
+                            .copied()
+                            .unwrap_or(promo_gpu::model_pass::IDENTITY);
+                        for p in &mesh.positions {
+                            let w = [
+                                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0] + centre[0],
+                                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1] + centre[1],
+                                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2] + centre[2],
+                            ];
+                            for k in 0..3 {
+                                min[k] = min[k].min(w[k]);
+                                max[k] = max[k].max(w[k]);
+                            }
+                        }
+                    }
+                }
+            }
+            for p in points {
+                for k in 0..3 {
+                    min[k] = min[k].min(p.position[k] - p.size);
+                    max[k] = max[k].max(p.position[k] + p.size);
+                }
+            }
+            if min[0] > max[0] {
+                continue;
+            }
+            for corner in 0..8 {
+                take([
+                    if corner & 1 == 0 { min[0] } else { max[0] },
+                    if corner & 2 == 0 { min[1] } else { max[1] },
+                    if corner & 4 == 0 { min[2] } else { max[2] },
+                ]);
+            }
+        }
         for item in &prepared {
             let member = &members[item.index];
             match member.kind {
@@ -3311,6 +3593,14 @@ impl PreviewEngine {
                 _ => {}
             }
         }
+        // The stage renders large enough that its cut, scaled to the
+        // placement, is never upsampled: a scene filling a quarter of the
+        // square gets a square four times the canvas height, to the cap.
+        let side = {
+            let covered = ((hi[0] - lo[0]).max(hi[1] - lo[1])).clamp(0.2, 1.0);
+            let wanted = (canvas_h * scale / covered as f64).round() as u32;
+            wanted.clamp(side, 2048)
+        };
         let texture = pass
             .render_scene(self.ctx, &items, &view, side, side)
             .ok()?;

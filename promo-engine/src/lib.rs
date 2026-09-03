@@ -8,6 +8,7 @@
 pub mod governor;
 pub mod mixer;
 pub mod model;
+pub mod morph;
 pub mod particles;
 pub mod preview;
 

@@ -898,6 +898,20 @@ is a closed-form function of its birth time, so any frame renders alone
 and the same on every host. The layer's placement, shifts, opacity and
 transitions apply to the whole field. A project with particles carries
 `minReaderVersion: 36`.
+Particles in a STAGE are a MORPH (rung 39): `"particles": { "colors":
+["@accent", "FFFFFF"], "seed": 3, "morph": { "from": "<cube uuid>", "to":
+"<word uuid>", "count": 3000, "spread": 1.2, "size": 0.02, "turbulence":
+0.15, "stagger": 0.35 } }` samples `count` points on the first body's
+surface and, as the member's `progress` keyframe ramps 0 → 1, flings
+them out (`spread` and `size` in the bodies' radii, `turbulence` a
+wobble, `stagger` how unevenly they leave and arrive) and gathers them
+on the second body's surface — a cube bursts into points that settle
+into a word. The recipe plays on a DRAWING member of the stage the two
+bodies are in, with `"progress"` on its keyframes; the bodies themselves
+are ordinary members (end the first as the points leave, start the
+second as they land). Every point is a closed-form function of the
+progress and the seed. A project with a morph, a member's progress, or a
+faced box carries `minReaderVersion: 39`.
 A body can be made of PARTS (rung 37) — the 3D counterpart of a
 drawing, written by hand the way an SVG is: `"recipe": { "parts": [
 { "slot": "Base", "shape": { "cylinder": { "radius": 0.6, "height":
@@ -905,7 +919,10 @@ drawing, written by hand the way an SVG is: `"recipe": { "parts": [
 "lathe": { "profile": [[0.08, 0], [0.06, 0.8], [0.2, 1.0]] } } }, {
 "slot": "Plate", "shape": { "box": { "size": [1.2, 0.05, 0.8],
 "radius": 0.02 } }, "position": [0, 1.0, 0] } ] }`. Shapes: `box`
-(`size` [w, h, d], `radius` rounds the edges), `sphere` (`radius`),
+(`size` [w, h, d], `radius` rounds the edges; `"faces": true` gives it
+six slots, `<slot>/front`, `/back`, `/left`, `/right`, `/top`,
+`/bottom`, so every side wears its own picture — rung 39), `sphere`
+(`radius`),
 `cylinder` (`radius`, `height`), `torus` (`radius`, `tube`), `lathe` (a
 `profile` of [radius, height] points turned about Y), `extrude` (a
 closed `path` of [x, y] points pulled `depth` along Z, centred);

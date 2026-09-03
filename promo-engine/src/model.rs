@@ -1154,6 +1154,7 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
             uvs: Vec::new(),
         };
         let mut idx: Vec<u16> = Vec::new();
+        let mut faced = false;
         let segments = |n: Option<u32>, default: usize| n.map(|n| n.max(3) as usize).unwrap_or(default);
         match &part.shape {
             PartShape::Box(b) => {
@@ -1163,6 +1164,7 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
                 }
                 let r = (b.radius.unwrap_or(0.0) as f32).clamp(0.0, (w.min(h) / 2.0).min(d / 2.0));
                 local.rounded_slab(w / 2.0, h / 2.0, d / 2.0, r, [0.0, 0.0, 0.0], &mut idx);
+                faced = b.faces == Some(true);
             }
             PartShape::Sphere(sp) => {
                 let r = sp.radius as f32;
@@ -1222,6 +1224,17 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
                 idx.extend(walls);
             }
         }
+        // A faced box is six slots — each face by the direction it looks,
+        // in the part's own axes — so every side can wear its own picture.
+        let groups: Vec<(String, Vec<u16>)> = if faced {
+            let half = match &part.shape {
+                PartShape::Box(b) => [b.size[0] as f32 / 2.0, b.size[1] as f32 / 2.0, b.size[2] as f32 / 2.0],
+                _ => [1.0, 1.0, 1.0],
+            };
+            split_by_face(&mut local, &idx, part.slot(), half)
+        } else {
+            vec![(part.slot().to_string(), idx)]
+        };
         // Place it: scale, then turn about X, Y, Z, then move; normals
         // turn with it.
         let scale = part.scale.unwrap_or(1.0).max(1e-6) as f32;
@@ -1255,15 +1268,16 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
             }
             g.push_vertex(p, n, [local.uvs[i * 2], local.uvs[i * 2 + 1]]);
         }
-        let slot = part.slot().to_string();
-        let entry = match by_slot.iter_mut().find(|(name, _)| *name == slot) {
-            Some(entry) => entry,
-            None => {
-                by_slot.push((slot, Vec::new()));
-                by_slot.last_mut().expect("just pushed")
-            }
-        };
-        entry.1.extend(idx.iter().map(|i| *i + base as u16));
+        for (slot, group) in groups {
+            let entry = match by_slot.iter_mut().find(|(name, _)| *name == slot) {
+                Some(entry) => entry,
+                None => {
+                    by_slot.push((slot, Vec::new()));
+                    by_slot.last_mut().expect("just pushed")
+                }
+            };
+            entry.1.extend(group.iter().map(|i| *i + base as u16));
+        }
     }
     let materials: Vec<GlbMaterial<'_>> = by_slot
         .iter()
@@ -1276,6 +1290,61 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
         })
         .collect();
     Ok(g.build(&materials, min, max))
+}
+
+/// A box's triangles by the face they belong to — the dominant axis of
+/// the triangle's normal, so a rounded edge goes with the face it leans
+/// toward — named `<slot>/front` (+Z), `/back`, `/right` (+X), `/left`,
+/// `/top` (+Y), `/bottom`. Every face's uvs are remapped so a picture
+/// on it stands upright as seen from OUTSIDE: the front reads as it is,
+/// the back is mirrored to read from behind, the sides turn with the
+/// box, the top has the front at its foot.
+fn split_by_face(local: &mut GlbGeometry, idx: &[u16], slot: &str, half: [f32; 3]) -> Vec<(String, Vec<u16>)> {
+    const NAMES: [&str; 6] = ["right", "left", "top", "bottom", "front", "back"];
+    let mut groups: Vec<Vec<u16>> = vec![Vec::new(); 6];
+    for t in idx.chunks_exact(3) {
+        let mut n = [0.0f32; 3];
+        for &i in t {
+            let i = i as usize * 3;
+            if i + 2 < local.normals.len() {
+                n[0] += local.normals[i];
+                n[1] += local.normals[i + 1];
+                n[2] += local.normals[i + 2];
+            }
+        }
+        let axis = (0..3)
+            .max_by(|&a, &b| n[a].abs().partial_cmp(&n[b].abs()).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(2);
+        let face = axis * 2 + if n[axis] >= 0.0 { 0 } else { 1 };
+        groups[face].extend_from_slice(t);
+    }
+    let half = [half[0].max(1e-6), half[1].max(1e-6), half[2].max(1e-6)];
+    for (face, group) in groups.iter().enumerate() {
+        for &i in group {
+            let v = i as usize;
+            let (x, y, z) = (
+                local.positions[v * 3] / half[0],
+                local.positions[v * 3 + 1] / half[1],
+                local.positions[v * 3 + 2] / half[2],
+            );
+            let (u, w) = match face {
+                0 => (-z, -y), // right: seen from +X, screen-right is -Z
+                1 => (z, -y),  // left
+                2 => (x, z),   // top: the front edge at the picture's foot
+                3 => (x, -z),  // bottom
+                4 => (x, -y),  // front
+                _ => (-x, -y), // back: mirrored, to read from behind
+            };
+            local.uvs[v * 2] = (u * 0.5 + 0.5).clamp(0.0, 1.0);
+            local.uvs[v * 2 + 1] = (w * 0.5 + 0.5).clamp(0.0, 1.0);
+        }
+    }
+    NAMES
+        .iter()
+        .zip(groups)
+        .filter(|(_, g)| !g.is_empty())
+        .map(|(name, g)| (format!("{slot}/{name}"), g))
+        .collect()
 }
 
 fn signed_area(c: &[[f32; 2]]) -> f32 {

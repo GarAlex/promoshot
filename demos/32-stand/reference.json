@@ -273,9 +273,9 @@
      }
     },
     {
-     "id": "057ACA79-4449-C421-0AC3-242513CC9160",
-     "time": 4.5,
-     "transitionDuration": 4.5,
+     "id": "709311B0-2495-6DB0-AB55-3BF7B2A2604F",
+     "time": 1.3,
+     "transitionDuration": 1.3,
      "placement": {
       "height": 560,
       "anchor": "center",
@@ -285,22 +285,97 @@
       ]
      },
      "camera": {
-      "yaw": 150,
-      "pitch": 12,
-      "distance": 4.4,
+      "yaw": 75,
+      "pitch": 16,
+      "distance": 4.5,
       "fov": 28
      },
      "light": {
-      "yaw": 0,
+      "yaw": -60,
       "pitch": 62,
-      "intensity": 1.6
+      "intensity": 1.5
      },
-     "easing": "easeIn"
+     "easing": "easeOut"
     },
     {
-     "id": "4DF381CE-AABB-9F89-2EEB-CAE6A02B668B",
-     "time": 8.7,
-     "transitionDuration": 4.2,
+     "id": "24AE6FD6-0903-B715-6859-AF1690081E47",
+     "time": 3.2,
+     "transitionDuration": 1.9,
+     "placement": {
+      "height": 560,
+      "anchor": "center",
+      "offset": [
+       0,
+       -20
+      ]
+     },
+     "camera": {
+      "yaw": 75,
+      "pitch": 16,
+      "distance": 4.5,
+      "fov": 28
+     },
+     "light": {
+      "yaw": -30,
+      "pitch": 58,
+      "intensity": 1.5
+     },
+     "easing": "linear"
+    },
+    {
+     "id": "B4D81A2C-E54C-8A9E-D917-A83F220F500C",
+     "time": 4.4,
+     "transitionDuration": 1.2,
+     "placement": {
+      "height": 560,
+      "anchor": "center",
+      "offset": [
+       0,
+       -20
+      ]
+     },
+     "camera": {
+      "yaw": 200,
+      "pitch": 10,
+      "distance": 4.2,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 40,
+      "pitch": 45,
+      "intensity": 1.6
+     },
+     "easing": "easeOut"
+    },
+    {
+     "id": "D56214B7-E116-7F9D-4556-2BF493673F53",
+     "time": 6.3,
+     "transitionDuration": 1.9,
+     "placement": {
+      "height": 560,
+      "anchor": "center",
+      "offset": [
+       0,
+       -20
+      ]
+     },
+     "camera": {
+      "yaw": 200,
+      "pitch": 10,
+      "distance": 4.2,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 70,
+      "pitch": 40,
+      "intensity": 1.6
+     },
+     "easing": "linear"
+    },
+    {
+     "id": "08987DD1-39DD-50D3-60AD-4A39689BDCA5",
+     "time": 7.4,
+     "transitionDuration": 1.1,
      "placement": {
       "height": 560,
       "anchor": "center",

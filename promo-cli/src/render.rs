@@ -2962,6 +2962,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A morph (rung 39) through the whole path: a faced cube bursts into
+    /// points that gather on a word. The frames at the start, mid-flight
+    /// and the end differ from one another, the cloud is drawn when no
+    /// body is, and the same instant renders the same twice.
+    #[test]
+    fn a_morph_flies_out_and_gathers_on_the_word() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-morph-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = r#"{"id":"P","name":"Morph","createdAt":0,"state":"recorded","minReaderVersion":39,
+            "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000",
+              "palette":[{"name":"accent","colorHex":"5B8CFF"}]},
+            "resources":[
+              {"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+               "recipe":{"parts":[{"slot":"Cube","shape":{"box":{"size":[1,1,1],"radius":0.03,"faces":true}}}]},
+               "materials":{"Cube/front":"FF8040","Cube/back":"40FF80","Cube/left":"8040FF","Cube/right":"FFFF40",
+                            "Cube/top":"40FFFF","Cube/bottom":"FF40FF"}},
+              {"id":"WORD","kind":"model","filename":"","displayName":"Word","addedAt":0,
+               "recipe":{"text":{"text":"GO","bold":true,"depth":0.3}},"materials":{"Face":"@accent"}},
+              {"id":"M","kind":"particles","filename":"","displayName":"Points","addedAt":0,
+               "particles":{"colors":["@accent","FFFFFF"],"seed":5,
+                            "morph":{"from":"CUBE","to":"WORD","count":1500,"size":0.03,"spread":1.2}}}],
+            "layers":[{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+              "keyframes":[{"id":"K","time":0,"camera":{"yaw":25,"pitch":15,"distance":4.0},"light":{"yaw":30,"pitch":40},
+                            "placement":{"height":300,"anchor":"center"},"transitionDuration":0}],
+              "members":[
+                {"id":"C","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":1,"resourceID":"CUBE","keyframes":[]},
+                {"id":"W","name":"Word","sortIndex":1,"kind":"model","isEnabled":true,"startTime":3,"duration":1,"resourceID":"WORD","keyframes":[]},
+                {"id":"P","name":"Points","sortIndex":2,"kind":"drawing","isEnabled":true,"startTime":0,"duration":4,"resourceID":"M",
+                 "keyframes":[{"id":"P0","time":0,"progress":0,"transitionDuration":0},
+                              {"id":"P1","time":4,"progress":1,"transitionDuration":4}]}]}]}"#;
+        std::fs::write(dir.join("metadata.json"), doc).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let mut frame = |t: f64| renderer.frame_bgra(t).expect("frame");
+        let (start, flight, end) = (frame(0.5), frame(2.0), frame(3.5));
+        let again = frame(2.0);
+        assert_eq!(flight, again, "the same instant is the same cloud");
+        let lit = |f: &[u8]| f.chunks_exact(4).filter(|px| px[0] > 8 || px[1] > 8 || px[2] > 8).count();
+        assert!(lit(&flight) > 300, "mid-flight the cloud is drawn with no body on stage: {} lit", lit(&flight));
+        let differ = |a: &[u8], b: &[u8]| a.iter().zip(b).filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12).count();
+        let n = start.len();
+        assert!(differ(&start, &flight) > n / 30, "start and flight differ: {} of {n}", differ(&start, &flight));
+        assert!(differ(&flight, &end) > n / 30, "flight and end differ: {} of {n}", differ(&flight, &end));
+        assert!(differ(&start, &end) > n / 30, "start and end differ: {} of {n}", differ(&start, &end));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A picture WORN by a slot (rung 38) takes the light through the
     /// whole path — project, engine, pass: the same label bound to a
     /// cube reads the same under a frontal and a grazing key light as a

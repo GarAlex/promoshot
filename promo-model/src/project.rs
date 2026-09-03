@@ -209,6 +209,55 @@ pub struct ParticleRecipe {
     pub emit_for: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub seed: Option<u64>,
+    /// Particles in a STAGE (rung 39): the recipe is a morph between two
+    /// bodies, and the flat emitter fields do not apply.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub morph: Option<ParticleMorph>,
+}
+
+/// Particles in a STAGE (rung 39): a cloud of `count` points sampled on
+/// one body's surface that flies apart and gathers on another's, driven
+/// by the member's `progress` keyframe — 0 the first body, 1 the second
+/// — so a cube bursts into points and the points settle into a word.
+/// `spread` is how far out they fly and `size` how big a point is, both
+/// in the bodies' radii; `turbulence` a wobble on the way; `stagger` 0…1
+/// how unevenly they leave and arrive. Colours and seed are the recipe's
+/// own. Played by a drawing member of the stage the bodies are in.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ParticleMorph {
+    pub from: String,
+    pub to: String,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub count: Option<u32>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub spread: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub size: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub turbulence: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub stagger: Option<f64>,
+}
+
+impl ParticleMorph {
+    /// The most points a morph draws; more is clamped.
+    pub const MAX_COUNT: u32 = 8000;
+    pub fn count(&self) -> u32 {
+        self.count.unwrap_or(2000).clamp(1, Self::MAX_COUNT)
+    }
+    pub fn spread(&self) -> f64 {
+        self.spread.unwrap_or(1.2).max(0.0)
+    }
+    pub fn size(&self) -> f64 {
+        self.size.unwrap_or(0.02).max(0.0005)
+    }
+    pub fn turbulence(&self) -> f64 {
+        self.turbulence.unwrap_or(0.15).max(0.0)
+    }
+    pub fn stagger(&self) -> f64 {
+        self.stagger.unwrap_or(0.35).clamp(0.0, 0.95)
+    }
 }
 
 impl ParticleRecipe {
@@ -510,6 +559,12 @@ pub struct BoxShape {
     pub size: [f64; 3],
     #[serde(default, skip_serializing_if = "is_none")]
     pub radius: Option<f64>,
+    /// Six slots instead of one (rung 39): `<slot>/front` (+Z), `/back`,
+    /// `/left` (−X), `/right`, `/top` (+Y), `/bottom`, named in the part's
+    /// own axes before it is turned — a cube that wears a different
+    /// picture on every face.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub faces: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -2111,6 +2166,11 @@ pub struct ProjectLayerKeyframe {
     /// `[0, 0]` when absent. Ramps like every keyframe value.
     #[serde(default, skip_serializing_if = "is_none")]
     pub stage_offset: Option<[f64; 2]>,
+    /// On a stage member playing a MORPH (rung 39): how far along it is,
+    /// 0 on the first body, 1 on the second. Ramps like every keyframe
+    /// value, easing included.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub progress: Option<f64>,
     /// 0–1, 1 when unkeyed. Added 2026-08-14 so a composition can express a
     /// fade; the compositor has always had per-quad opacity, only the
     /// keyframe was missing.
@@ -3848,6 +3908,23 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 39 is particles in a stage (a morph), a box with faces, or a
+        // member's progress — each dropped by an older reader for a
+        // different picture, so the rung refuses.
+        let morph = resources
+            .iter()
+            .any(|r| r.particles.as_ref().is_some_and(|p| p.morph.is_some()));
+        let faces = resources.iter().any(|r| {
+            matches!(&r.recipe, Some(BodyRecipe::Parts(parts))
+                if parts.iter().any(|p| matches!(&p.shape, PartShape::Box(b) if b.faces == Some(true))))
+        });
+        let progress = crate::nesting::all_layers(self)
+            .iter()
+            .any(|l| l.keyframes.iter().any(|k| k.progress.is_some()));
+        if morph || faces || progress {
+            return 39;
+        }
+
         // 38 is a picture WORN by its slot — a binding's mode, repeat or
         // offset. Dropped by an older reader, the picture goes back to an
         // unlit screen: a different picture, so the rung refuses.
@@ -4617,6 +4694,61 @@ mod placement_model_tests {
     /// and offset round-trip, the accessors default what is left out,
     /// an unknown mode reads as a screen, and any of the three lifts
     /// the rung.
+    /// A morph (rung 39): the recipe round-trips with its defaults
+    /// filled, a member's `progress` is a keyframe value, and a morph, a
+    /// progress or a faced box each lift the rung.
+    #[test]
+    fn a_morph_and_a_faced_box_are_stamped_thirty_nine() {
+        let doc = |resources: &str, layers: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Morph","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[{resources}],"layers":[{layers}]}}"#
+            ))
+            .expect("decodes")
+        };
+        let cube = r#"{"id":"C","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+            "recipe":{"parts":[{"slot":"Cube","shape":{"box":{"size":[1,1,1],"radius":0.03,"faces":true}}}]}}"#;
+        let word = r#"{"id":"W","kind":"model","filename":"","displayName":"Word","addedAt":0,
+            "recipe":{"text":{"text":"GO"}}}"#;
+        let points = r#"{"id":"M","kind":"particles","filename":"","displayName":"Points","addedAt":0,
+            "particles":{"colors":["@accent","FFFFFF"],"seed":3,
+                         "morph":{"from":"C","to":"W","count":1500,"spread":1.5}}}"#;
+        let faced = doc(cube, "");
+        assert_eq!(faced.minimum_reader_version(), 39, "a box with faces");
+        let json = faced.to_json().unwrap();
+        assert!(json.contains(r#""faces":true"#), "{json}");
+
+        let morph = doc(&format!("{cube},{word},{points}"), "");
+        assert_eq!(morph.minimum_reader_version(), 39);
+        let recipe = morph.resources.as_ref().unwrap()[2].particles.clone().unwrap();
+        let m = recipe.morph.as_ref().expect("a morph");
+        assert_eq!(m.from, "C");
+        assert_eq!(m.count(), 1500);
+        assert_eq!(m.spread(), 1.5);
+        assert_eq!(m.size(), 0.02, "defaults fill what the recipe leaves out");
+        assert_eq!(m.stagger(), 0.35);
+        let json = morph.to_json().unwrap();
+        assert!(json.contains(r#""morph":{"from":"C","to":"W","count":1500,"spread":1.5}"#), "{json}");
+        let back = ProjectMetadata::from_json(&json).unwrap();
+        assert_eq!(back.resources.as_ref().unwrap()[2].particles, Some(recipe));
+
+        let member = r#"{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+            "keyframes":[],"members":[{"id":"P","name":"Points","sortIndex":0,"kind":"drawing","isEnabled":true,
+            "startTime":0,"duration":4,"resourceID":"M",
+            "keyframes":[{"id":"K0","time":0,"progress":0,"transitionDuration":0},
+                         {"id":"K1","time":4,"progress":1,"transitionDuration":4}]}]}"#;
+        let keyed = doc("", member);
+        assert_eq!(keyed.minimum_reader_version(), 39, "a member's progress");
+        let stage = &keyed.layers.as_ref().unwrap()[0];
+        let points = &stage.members.as_ref().unwrap()[0];
+        assert_eq!(points.keyframes[1].progress, Some(1.0));
+        assert!(keyed.to_json().unwrap().contains(r#""progress":1.0"#));
+        let huge = ParticleMorph { count: Some(50_000), ..Default::default() };
+        assert_eq!(huge.count(), ParticleMorph::MAX_COUNT, "the count is capped");
+    }
+
     #[test]
     fn a_worn_picture_is_stamped_thirty_eight() {
         let doc = |binding: &str| {
