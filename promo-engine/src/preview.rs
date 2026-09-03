@@ -2607,7 +2607,8 @@ impl PreviewEngine {
             .or_else(|| layer.keyframes.iter().find(|k| k.clip.is_some()))
             .and_then(|k| k.clip.as_ref())
             .map(|c| c.name.clone());
-        let clip_time = scalar(|k| k.clip.as_ref().and_then(|c| c.time)).unwrap_or(local);
+        let keyed_time = scalar(|k| k.clip.as_ref().and_then(|c| c.time));
+        let clip_time = keyed_time.unwrap_or(local);
         // Lighting from the theme: ambient is the canvas colour, dimmed;
         // the key light white; the rim the accent, if the palette has one.
         let linear = |rgba: [f32; 4]| -> [f32; 3] {
@@ -2714,7 +2715,7 @@ impl PreviewEngine {
         };
         let matrices = match clip_name.as_deref() {
             Some(name) if loaded.model.clips.iter().any(|c| c.name == name) => {
-                loaded.model.pose(name, clip_time)
+                loaded.model.pose(name, clip_time, keyed_time.is_none())
             }
             _ => loaded.rest.clone(),
         };

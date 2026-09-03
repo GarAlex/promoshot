@@ -499,17 +499,21 @@ impl Model {
         })
     }
 
-    /// Every node's world matrix with `clip` sampled at `time` seconds
-    /// (looping over the clip's duration); the rest pose when the clip is
-    /// unknown. Channels the clip does not touch keep their rest value.
-    pub fn pose(&self, clip: &str, time: f64) -> Vec<Mat4> {
+    /// Every node's world matrix with `clip` sampled at `time` seconds;
+    /// the rest pose when the clip is unknown. `looping` wraps the time
+    /// over the clip's duration (a clip running on layer time); otherwise
+    /// it clamps, so a keyed `time` of the full duration is the end pose.
+    /// Channels the clip does not touch keep their rest value.
+    pub fn pose(&self, clip: &str, time: f64, looping: bool) -> Vec<Mat4> {
         let Some(clip) = self.clips.iter().find(|c| c.name == clip) else {
             return self.rest_matrices();
         };
-        let t = if clip.duration > 0.0 {
+        let t = if clip.duration <= 0.0 {
+            0.0
+        } else if looping {
             (time as f32).rem_euclid(clip.duration)
         } else {
-            0.0
+            (time as f32).clamp(0.0, clip.duration)
         };
         self.world_matrices(|node| {
             let n = &self.nodes[node];
@@ -878,7 +882,7 @@ impl GlbGeometry {
         }
         let mut animations = String::new();
         if let Some((name, seconds, degrees)) = turn {
-            let half = (degrees.to_radians() / 2.0) as f32;
+            let half = degrees.to_radians() / 2.0;
             let times = [0.0f32, seconds];
             let rotations = [[0.0f32, 0.0, 0.0, 1.0], [0.0, half.sin(), 0.0, half.cos()]];
             let vt = push(&f32s(&times), 0);
@@ -1019,7 +1023,7 @@ mod tests {
     fn a_clip_poses_the_node_over_time() {
         let model = Model::from_glb(&sample_turning_cube_glb()).expect("decodes");
         assert_eq!(model.clip_summary(), vec![("Turn".to_string(), 1.0)]);
-        let at = |t: f64| model.pose("Turn", t)[0];
+        let at = |t: f64| model.pose("Turn", t, false)[0];
         let x_axis = |m: Mat4| [m[0][0], m[0][1], m[0][2]];
         assert!((x_axis(at(0.0))[0] - 1.0).abs() < 1e-5, "rest: x stays x");
         let quarter = x_axis(at(1.0));
@@ -1032,9 +1036,14 @@ mod tests {
             (half[0] - half[2].abs()).abs() < 1e-3,
             "half-way is 45°: {half:?}"
         );
-        assert_eq!(at(1.25), at(0.25), "loops past the end");
+        assert_eq!(at(1.25), at(1.0), "a keyed time past the end clamps");
         assert_eq!(
-            model.pose("nope", 0.7),
+            model.pose("Turn", 1.25, true),
+            model.pose("Turn", 0.25, true),
+            "a running clip loops past the end"
+        );
+        assert_eq!(
+            model.pose("nope", 0.7, false),
             model.rest_matrices(),
             "an unknown clip is the rest pose"
         );
