@@ -46,6 +46,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     palette_warnings(meta, &mut out);
     tilt_keyframe_warnings(meta, &mut out);
     material_binding_warnings(meta, &mut out);
+    stage_layer_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
@@ -597,6 +598,72 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     model.display_name,
                     r.kind.as_str()
                 )),
+            }
+        }
+    }
+}
+
+/// A stage as one layer (rung 33) is drawn one depth deep: a member is
+/// never itself a stage and names no stage, a stage layer plays no
+/// resource of its own, an empty stage draws nothing, and `members` on any
+/// other kind is ignored. Each is named before it reads as a blank stage.
+fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    use promo_model::ProjectLayerKind as Kind;
+    for layer in promo_model::nesting::all_layers(meta) {
+        if layer.kind != Kind::Stage {
+            if layer.members.as_ref().is_some_and(|m| !m.is_empty()) {
+                out.push(format!(
+                    "layer \"{}\" carries `members` but is not a stage layer \
+                     (`\"kind\": \"stage\"`) — they are ignored",
+                    layer.name
+                ));
+            }
+            continue;
+        }
+        if layer.resource_id.is_some() {
+            out.push(format!(
+                "stage layer \"{}\" names a resource; a stage plays nothing of its own — \
+                 bind media on a member",
+                layer.name
+            ));
+        }
+        if layer.stage.is_some() {
+            out.push(format!(
+                "stage layer \"{}\" also names a stage; a stage layer is its own stage — \
+                 drop the field",
+                layer.name
+            ));
+        }
+        let members = layer.members.as_deref().unwrap_or(&[]);
+        if members.is_empty() {
+            out.push(format!(
+                "stage layer \"{}\" has no members; it draws nothing",
+                layer.name
+            ));
+        }
+        for member in members {
+            if member.kind == Kind::Stage {
+                out.push(format!(
+                    "member \"{}\" of stage \"{}\" is itself a stage; one depth is drawn — \
+                     flatten it into the stage",
+                    member.name, layer.name
+                ));
+            }
+            if member.stage.is_some() {
+                out.push(format!(
+                    "member \"{}\" of stage \"{}\" names a stage; a member belongs to the \
+                     stage that holds it — drop the field",
+                    member.name, layer.name
+                ));
+            }
+            if matches!(member.kind, Kind::Background | Kind::Audio) {
+                out.push(format!(
+                    "member \"{}\" of stage \"{}\" is a layer of kind {}; a stage holds \
+                     bodies and pictures — it is ignored",
+                    member.name,
+                    layer.name,
+                    member.kind.as_str()
+                ));
             }
         }
     }
@@ -1239,6 +1306,40 @@ mod tests {
         assert!(has("slot \"Screen\" shows a picture AND carries a finish"), "{warnings:?}");
         assert!(!has("slot \"Base\""), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 32);
+    }
+    /// A stage as one layer (rung 33) is checked one depth deep: a nested
+    /// stage, a member naming a stage, a resource on the stage layer, a
+    /// sound or plate member, an empty stage, and `members` on a plain
+    /// layer are each named.
+    #[test]
+    fn a_stage_layer_is_checked_one_depth_deep() {
+        let meta = project(
+            r#"{"id":"S","name":"bench","sortIndex":0,"kind":"stage","isEnabled":true,
+                "startTime":0,"duration":4,"resourceID":"X","keyframes":[],
+                "members":[
+                  {"id":"A","name":"Inner","sortIndex":0,"kind":"stage","isEnabled":true,
+                   "startTime":0,"duration":4,"keyframes":[],"members":[]},
+                  {"id":"B","name":"Named","sortIndex":1,"kind":"caption","isEnabled":true,
+                   "startTime":0,"duration":4,"stage":"other","captionText":"x","keyframes":[]},
+                  {"id":"C","name":"Sound","sortIndex":2,"kind":"audio","isEnabled":true,
+                   "startTime":0,"duration":4,"keyframes":[]}]},
+               {"id":"E","name":"Empty","sortIndex":1,"kind":"stage","isEnabled":true,
+                "startTime":0,"duration":4,"keyframes":[],"members":[]},
+               {"id":"P","name":"Plain","sortIndex":2,"kind":"caption","isEnabled":true,
+                "startTime":0,"duration":4,"captionText":"x","keyframes":[],
+                "members":[{"id":"Q","name":"Q","sortIndex":0,"kind":"caption","isEnabled":true,
+                            "startTime":0,"duration":4,"captionText":"y","keyframes":[]}]}"#,
+            "",
+        );
+        let warnings = warnings(&meta);
+        let has = |needle: &str| warnings.iter().any(|w| w.contains(needle));
+        assert!(has("stage layer \"bench\" names a resource"), "{warnings:?}");
+        assert!(has("member \"Inner\" of stage \"bench\" is itself a stage"), "{warnings:?}");
+        assert!(has("member \"Named\" of stage \"bench\" names a stage"), "{warnings:?}");
+        assert!(has("member \"Sound\" of stage \"bench\" is a layer of kind audio"), "{warnings:?}");
+        assert!(has("stage layer \"Empty\" has no members"), "{warnings:?}");
+        assert!(has("layer \"Plain\" carries `members` but is not a stage layer"), "{warnings:?}");
+        assert_eq!(meta.minimum_reader_version(), 33);
     }
 }
 

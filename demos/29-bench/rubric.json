@@ -1,14 +1,14 @@
 {
- "template": "14 Spotlight",
+ "template": "29 Bench",
  "canvas": [
   1440,
   900
  ],
- "duration": 13,
+ "duration": 9.0,
  "kinds": {
   "background": 1,
-  "image": 3,
-  "caption": 2
+  "stage": 1,
+  "caption": 1
  },
  "features": {
   "chromaKey": false,
@@ -18,20 +18,20 @@
   "audioEffects": false,
   "composition": false,
   "effects": false,
-  "mask": true,
-  "maskInverted": true,
+  "mask": false,
+  "maskInverted": false,
   "viewport": false,
   "motionPath": false,
   "sprite": false,
-  "gradient": false,
+  "gradient": true,
   "reveal": true,
-  "stage": false,
-  "stageLayer": false,
-  "model": false,
-  "camera": false,
-  "materials": false,
-  "finish": false,
-  "depth": false,
+  "stage": true,
+  "stageLayer": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
+  "finish": true,
+  "depth": true,
   "captionTilt": false,
   "kineticReveal": false,
   "blendModes": [],
@@ -41,14 +41,13 @@
   "mediaCuts": false,
   "narration": false,
   "motionBlur": false,
-  "grade": true,
+  "grade": false,
   "placement": true
  },
  "phrases": [
-  "Point at what matters",
-  "Or knock the same shape out"
+  "One stage. One layer."
  ],
  "media": [
-  "ui_lumen_1.png"
+  "vase.glb"
  ]
 }

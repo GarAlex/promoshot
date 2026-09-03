@@ -893,3 +893,18 @@ other members' 2D transforms are ignored inside it (`promo validate`
 says so). A caption at depth 0 between a phone at +1 and a laptop at -1
 is the reason stages exist. Reader version 30. Strict, as every kind before it: an older reader refuses the
 file. Reader version 29.
+
+A stage may also be written as ONE LAYER (rung 33): `{ "kind": "stage",
+"name": "bench", "keyframes": [ { "camera": …, "light": …, "placement":
+… } ], "members": [ … ] }`. The stage layer is what the parent sees — its
+placement, opacity, transitions and sort order are the stage's, and the
+`camera` and `light` on ITS keyframes are the stage's — and `members`
+are the bodies and pictures inside it: ordinary model, image, video,
+caption, drawing or composition layers, each keeping the project clock
+and carrying its own `depth`, `stageOffset` and turn (`camera` on a
+member is that member's own turn). One depth: a member is never itself
+a stage and names no `stage`; a stage layer plays no resource of its
+own. It draws exactly what the flat form draws — the renderers lower one
+to the other — with the stage's ownership written down instead of
+falling to whichever member sorts first. A project with a stage layer
+carries `minReaderVersion: 33`.

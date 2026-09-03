@@ -26,6 +26,7 @@
   "gradient": true,
   "reveal": true,
   "stage": false,
+  "stageLayer": false,
   "model": true,
   "camera": true,
   "materials": true,

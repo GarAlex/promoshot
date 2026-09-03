@@ -469,6 +469,7 @@ mod schema_doc_tests {
                 softness: Some(0.1),
             }),
             stage: Some("hero".into()),
+            members: None,
             follow: Some(Follow {
                 zoom: Some(2.0),
                 smoothing: Some(0.35),

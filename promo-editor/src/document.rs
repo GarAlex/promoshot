@@ -936,6 +936,14 @@ impl Document {
                         promo_model::ProjectLayerKind::Background => {
                             promo_model::ProjectResourceKind::Background
                         }
+                        // A stage layer (rung 33) plays nothing of its own;
+                        // media is bound on a member.
+                        promo_model::ProjectLayerKind::Stage => {
+                            return Err(format!(
+                                "layer {layer_id} is a stage; a stage plays no resource of its \
+                                 own — set the resource on one of its members"
+                            ));
+                        }
                         promo_model::ProjectLayerKind::Model => {
                             promo_model::ProjectResourceKind::Model
                         }

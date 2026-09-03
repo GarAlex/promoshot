@@ -911,7 +911,10 @@ pub fn build_soundtrack(
             None => true,
         }
     };
-    let (inputs, focus) = audio_inputs(&project.meta, &renderable);
+    // Stage members (rung 33) sound like any layer, so the mix walks the
+    // lowered form the engine draws.
+    let lowered = project.meta.lowered();
+    let (inputs, focus) = audio_inputs(&lowered, &renderable);
 
     // One placed slice of decoded PCM with its level curve.
     struct Placed {
@@ -2956,6 +2959,90 @@ mod tests {
             differ(&chrome, &matte),
             bare.len()
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A stage as one layer (rung 33) draws exactly what its flat form
+    /// draws: the same two cubes across a stage, once as members sharing a
+    /// stage name with the first carrying the camera and placement, once
+    /// as a stage layer holding both — pixel for pixel.
+    #[test]
+    fn a_stage_layer_renders_as_its_flat_form() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-stagelayer-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("red.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.9, 0.1, 0.1, 1.0]),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("Resources").join("blue.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.1, 0.1, 0.9, 1.0]),
+        )
+        .unwrap();
+        let head = r#"{"id":"P","name":"Across","createdAt":0,"state":"recorded",
+            "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"},
+            "resources":[
+              {"id":"R","kind":"model","filename":"red.glb","displayName":"Red","addedAt":0},
+              {"id":"B","kind":"model","filename":"blue.glb","displayName":"Blue","addedAt":0,"materials":{"Body":"10E040"}}],"#;
+        let flat = format!(
+            r#"{head}"minReaderVersion":31,"layers":[
+              {{"id":"L1","name":"red","sortIndex":0,"kind":"model","isEnabled":true,"stage":"s",
+                "startTime":0,"duration":2,"resourceID":"R",
+                "keyframes":[{{"id":"K1","time":0,"camera":{{"yaw":0,"pitch":0,"distance":3.0}},"stageOffset":[1.6,0],
+                  "placement":{{"width":300,"anchor":"center"}},"transitionDuration":0}}]}},
+              {{"id":"L2","name":"green","sortIndex":1,"kind":"model","isEnabled":true,"stage":"s",
+                "startTime":0,"duration":2,"resourceID":"B",
+                "keyframes":[{{"id":"K2","time":0,"stageOffset":[-1.6,0],"transitionDuration":0}}]}}]}}"#
+        );
+        let nested = format!(
+            r#"{head}"minReaderVersion":33,"layers":[
+              {{"id":"S","name":"bench","sortIndex":0,"kind":"stage","isEnabled":true,
+                "startTime":0,"duration":2,
+                "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":0,"distance":3.0}},
+                  "placement":{{"width":300,"anchor":"center"}},"transitionDuration":0}}],
+                "members":[
+                  {{"id":"L1","name":"red","sortIndex":0,"kind":"model","isEnabled":true,
+                    "startTime":0,"duration":2,"resourceID":"R",
+                    "keyframes":[{{"id":"K1","time":0,"stageOffset":[1.6,0],"transitionDuration":0}}]}},
+                  {{"id":"L2","name":"green","sortIndex":1,"kind":"model","isEnabled":true,
+                    "startTime":0,"duration":2,"resourceID":"B",
+                    "keyframes":[{{"id":"K2","time":0,"stageOffset":[-1.6,0],"transitionDuration":0}}]}}]}}]}}"#
+        );
+        let render = |json: &str| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            renderer.frame_bgra(0.5).expect("frame")
+        };
+        let a = render(&flat);
+        let b = render(&nested);
+        let strip = |frame: &[u8], x0: usize, x1: usize| -> (u64, u64) {
+            let (mut r, mut g, mut n) = (0u64, 0u64, 0u64);
+            for y in 120..200 {
+                for x in x0..x1 {
+                    let i = (y * 320 + x) * 4;
+                    r += frame[i + 2] as u64;
+                    g += frame[i + 1] as u64;
+                    n += 1;
+                }
+            }
+            (r / n, g / n)
+        };
+        let (r, _) = strip(&b, 220, 300);
+        let (_, g) = strip(&b, 20, 100);
+        assert!(r > 60 && g > 60, "the stage layer draws both cubes: r {r} g {g}");
+        let differing = a
+            .iter()
+            .zip(&b)
+            .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 2)
+            .count();
+        assert_eq!(differing, 0, "the stage layer is its flat form, pixel for pixel");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

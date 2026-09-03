@@ -1731,6 +1731,15 @@
             "null"
           ]
         },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/ProjectLayer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "motionBlur": {
           "anyOf": [
             {
@@ -2127,7 +2136,8 @@
         "caption",
         "drawing",
         "audio",
-        "model"
+        "model",
+        "stage"
       ],
       "type": "string"
     },

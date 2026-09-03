@@ -94,6 +94,11 @@ strict_enum!(
         // Strict, as every kind before it: an older reader refuses the
         // file rather than failing mid-decode.
         (Model, "model"),
+        // A stage as ONE layer (rung 33): its `members` are drawn through
+        // its camera into one depth buffer, and the parent sees a single
+        // layer — placement, opacity, transitions, sort order. Strict, so
+        // an older reader refuses the file.
+        (Stage, "stage"),
     ]
 );
 strict_enum!(
@@ -2259,6 +2264,19 @@ pub struct ProjectLayer {
     /// `camera` and `light` are the stage's.
     #[serde(default, skip_serializing_if = "is_none")]
     pub stage: Option<String>,
+    /// A STAGE LAYER's members (rung 33, `"kind": "stage"`): the bodies
+    /// and pictures drawn through this layer's one camera into one depth
+    /// buffer. The stage layer is what its parent sees — its placement,
+    /// opacity, transitions and sort order are the stage's, and the
+    /// `camera` and `light` on ITS keyframes are the stage's. Members keep
+    /// the project clock and carry their own `depth`, `stageOffset` and
+    /// turn (`camera` on a member is that member's own turn, as on any
+    /// member that is not first). One depth: a member is never itself a
+    /// stage and names no `stage`. A stage layer plays no resource of its
+    /// own. Absent on every other kind. Renderers walk the flat form —
+    /// see `ProjectMetadata::lowered`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub members: Option<Vec<ProjectLayer>>,
     /// The drawing whose ink is this layer's WINDOW: rasterized and
     /// stretched over the layer's rect, the layer only shows where the
     /// drawing has ink. Absent means the whole rect, as always. A static
@@ -2898,6 +2916,20 @@ struct ProjectResourceWire {
     extra: serde_json::Map<String, serde_json::Value>,
 }
 
+impl ProjectResource {
+    /// An image resource that exists only to carry a pixel size — what a
+    /// renderer hands a placement rule for a picture it drew itself and
+    /// that no stored resource describes (a stage layer's picture, rung
+    /// 33). Never written to a document.
+    pub fn stand_in_picture(id: &str, width: f64, height: f64) -> ProjectResource {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "kind": "image", "filename": "", "displayName": "stand-in",
+            "addedAt": 0, "pixelWidth": width, "pixelHeight": height
+        }))
+        .expect("a stand-in picture is a well-formed resource")
+    }
+}
+
 impl<'de> Deserialize<'de> for ProjectResource {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let w = ProjectResourceWire::deserialize(d)?;
@@ -3096,6 +3128,76 @@ impl ProjectResource {
     }
 }
 
+/// Stage layers (rung 33) expanded into the flat form the renderers walk.
+fn lower_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
+    if !layers.iter().any(|l| l.kind == ProjectLayerKind::Stage) {
+        return layers.to_vec();
+    }
+    let mut ordered: Vec<&ProjectLayer> = layers.iter().collect();
+    ordered.sort_by_key(|l| l.sort_index);
+    let mut out = Vec::with_capacity(layers.len());
+    let mut next = 0i64;
+    for layer in ordered {
+        if layer.kind != ProjectLayerKind::Stage {
+            let mut plain = layer.clone();
+            plain.sort_index = next;
+            next += 1;
+            out.push(plain);
+            continue;
+        }
+        // The stage layer becomes the stage's FIRST member: a model-kind
+        // layer with no resource, drawing nothing of its own, carrying the
+        // placement, opacity, transitions, camera and light. Its id names
+        // the stage, so two stage layers never share one.
+        let stage = layer.id.clone();
+        let mut owner = layer.clone();
+        owner.kind = ProjectLayerKind::Model;
+        owner.resource_id = None;
+        owner.members = None;
+        owner.stage = Some(stage.clone());
+        owner.sort_index = next;
+        next += 1;
+        out.push(owner);
+        let mut members = layer.members.clone().unwrap_or_default();
+        members.sort_by_key(|m| m.sort_index);
+        for mut member in members {
+            member.stage = Some(stage.clone());
+            member.members = None;
+            member.sort_index = next;
+            next += 1;
+            out.push(member);
+        }
+    }
+    out
+}
+
+impl ProjectMetadata {
+    /// The document with every STAGE LAYER (rung 33) expanded into the
+    /// flat form the renderers walk: the stage layer itself becomes the
+    /// stage's first member — a model-kind layer with no resource that
+    /// draws nothing of its own but carries the placement, opacity,
+    /// transitions, camera and light — and its members follow it, each
+    /// naming the stage by the layer's id. Sort indices are renumbered so
+    /// z-order is kept and members sit right behind their stage; the
+    /// members' own `camera` stays their own turn, as for any member that
+    /// is not first. Stage layers inside composition documents are lowered
+    /// the same way. A document with no stage layer comes back unchanged.
+    pub fn lowered(&self) -> ProjectMetadata {
+        let mut out = self.clone();
+        if let Some(layers) = out.layers.as_mut() {
+            *layers = lower_layers(layers);
+        }
+        if let Some(resources) = out.resources.as_mut() {
+            for resource in resources.iter_mut() {
+                if let Some(composition) = resource.composition.as_mut() {
+                    composition.layers = lower_layers(&composition.layers);
+                }
+            }
+        }
+        out
+    }
+}
+
 impl ProjectMetadata {
     /// The oldest reader that may open this project FOR WRITING.
     ///
@@ -3128,6 +3230,16 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 33 is a stage as one layer, a KIND — here or inside a
+        // composition — so an older reader refuses the file rather than
+        // failing mid-decode.
+        if crate::nesting::all_layers(self)
+            .iter()
+            .any(|l| l.kind == ProjectLayerKind::Stage)
+        {
+            return 33;
+        }
 
         // 32 is a slot binding written as an object with a colour or a
         // finish (`metallic`, `roughness`). A rung-29 reader decodes
@@ -4096,6 +4208,74 @@ mod placement_model_tests {
             model(r#"{"Body":{"colorHex":"@accent","roughness":0.2}}"#).minimum_reader_version(),
             32
         );
+
+        // 33: a stage as one layer, a kind.
+        let staged = meta(
+            r#""layers":[{"id":"S","name":"bench","sortIndex":0,"kind":"stage",
+                 "isEnabled":true,"startTime":0,"duration":4,"members":[],"keyframes":[]}]"#,
+        );
+        assert_eq!(staged.minimum_reader_version(), 33);
+    }
+
+    /// A stage layer lowers to the flat form the renderers walk: the
+    /// stage layer becomes a resource-less model-kind first member naming
+    /// the stage by its id, its members follow it naming the same stage,
+    /// z-order is kept with fresh sort indices — and the document itself
+    /// keeps the nested form on the wire. A flat document lowers to itself.
+    #[test]
+    fn a_stage_layer_lowers_to_the_flat_form() {
+        let doc = ProjectMetadata::from_json(
+            r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v",
+                 "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                 "videoDuration":0,"subtitles":[],
+                 "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+                 "resources":[{"id":"M","kind":"model","filename":"body.glb",
+                   "displayName":"Body","addedAt":0}],
+                 "layers":[
+                   {"id":"T","name":"Title","sortIndex":7,"kind":"caption","isEnabled":true,
+                    "startTime":0,"duration":4,"captionText":"Hi","keyframes":[]},
+                   {"id":"B","name":"Backdrop","sortIndex":0,"kind":"background","isEnabled":true,
+                    "startTime":0,"keyframes":[]},
+                   {"id":"S","name":"bench","sortIndex":3,"kind":"stage","isEnabled":true,
+                    "startTime":0,"duration":4,"fadeIn":0.5,
+                    "keyframes":[{"id":"K","time":0,"transitionDuration":0,
+                       "camera":{"yaw":-14,"pitch":12},"light":{"yaw":-70},
+                       "placement":{"height":520,"anchor":"center"}}],
+                    "members":[
+                      {"id":"R","name":"Right","sortIndex":9,"kind":"model","isEnabled":true,
+                       "startTime":0,"duration":4,"resourceID":"M",
+                       "keyframes":[{"id":"K2","time":0,"transitionDuration":0,"stageOffset":[1.5,0],
+                          "camera":{"yaw":20}}]},
+                      {"id":"L","name":"Left","sortIndex":2,"kind":"model","isEnabled":true,
+                       "startTime":0,"duration":4,"resourceID":"M",
+                       "keyframes":[{"id":"K1","time":0,"transitionDuration":0,"stageOffset":[-1.5,0]}]}]}]}"#,
+        )
+        .expect("fixture");
+        let flat = doc.lowered();
+        let layers = flat.layers.as_deref().unwrap();
+        let ids: Vec<&str> = layers.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids, ["B", "S", "L", "R", "T"], "z-order kept, members right behind their stage");
+        let sort: Vec<i64> = layers.iter().map(|l| l.sort_index).collect();
+        assert_eq!(sort, [0, 1, 2, 3, 4]);
+        let owner = &layers[1];
+        assert_eq!(owner.kind, ProjectLayerKind::Model);
+        assert_eq!(owner.resource_id, None);
+        assert_eq!(owner.stage.as_deref(), Some("S"));
+        assert!(owner.members.is_none());
+        assert_eq!(owner.fade_in, Some(0.5));
+        assert_eq!(owner.keyframes[0].camera.and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(owner.keyframes[0].light.and_then(|l| l.yaw), Some(-70.0));
+        for member in &layers[2..4] {
+            assert_eq!(member.stage.as_deref(), Some("S"));
+            assert!(member.members.is_none());
+        }
+        assert_eq!(layers[3].keyframes[0].camera.and_then(|c| c.yaw), Some(20.0), "a member keeps its own turn");
+        // The wire keeps the nested form; the flat form lowers to itself.
+        let json = doc.to_json().expect("encode");
+        assert!(json.contains(r#""kind":"stage""#) && json.contains(r#""members":["#), "{json}");
+        assert_eq!(flat.lowered(), flat);
+        assert_eq!(doc.minimum_reader_version(), 33);
+        assert_eq!(flat.minimum_reader_version(), 31, "the flat form is what rung 30/31 readers draw");
     }
 
     /// A binding's three wire forms decode to what they say and encode

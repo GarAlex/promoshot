@@ -173,7 +173,15 @@ new projects.
   `minReaderVersion: 29`, or `32` when a finish (or a colour in the
   object form) is written. `promo_inspect` lists the layer; a missing
   file is named like any other.
-- **Stages.** Layers naming the same `"stage": "hero"` draw through one
+- **Stages.** Prefer the ONE-LAYER form (rung 33): a layer of `"kind":
+  "stage"` whose keyframes carry the `"camera"`, `"light"` and
+  `"placement"`, and whose `"members"` are the model, image, video,
+  caption or drawing layers inside it, each with its own `"depth"`,
+  `"stageOffset"` and turn (`"camera"` on a member turns that member).
+  One depth: a member is never a stage and names no stage; the stage
+  layer has no `resourceID`. Stamp `minReaderVersion: 33`. The flat form
+  below draws the same picture and still reads.
+  Layers naming the same `"stage": "hero"` draw through one
   camera into one depth buffer: models at their keyframes' `"depth"`
   (in stage radii, + toward the viewer) and `"stageOffset": [right, up]`
   in the same radii (two devices side by side; rung 31), images and

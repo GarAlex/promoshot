@@ -32,8 +32,10 @@ def features(meta):
         "reveal": any((r.get('captionStyle') or {}).get('reveal') for r in res)
                   or any((l.get('captionStyle') or {}).get('reveal') for l in layers)
                   or bool(cs.get('subtitleReveal')),
-        "stage": any(l.get('stage') for l in layers),
-        "model": any(l.get('kind') == 'model' for l in layers),
+        "stage": any(l.get('stage') for l in layers) or any(l.get('kind') == 'stage' for l in layers),
+        "stageLayer": any(l.get('kind') == 'stage' for l in layers),
+        "model": any(l.get('kind') == 'model' for l in layers)
+                 or any(m.get('kind') == 'model' for l in layers for m in (l.get('members') or [])),
         "camera": any(k.get('camera') or k.get('light') for k in kf),
         "materials": any(r.get('materials') for r in res),
         "finish": any(isinstance(b, dict) and (b.get('metallic') is not None or b.get('roughness') is not None)

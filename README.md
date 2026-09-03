@@ -398,7 +398,10 @@ from the theme. Rung 29. Built-in device bodies
 with `Body` and `Screen` slots, so the device shot is a model too.
 Layers naming the same `stage` draw through one camera into one depth
 buffer, models at their `depth` and pictures as billboards, the first
-member's placement carrying the whole scene (rung 30).
+member's placement carrying the whole scene (rung 30). A stage can also
+be one layer of kind `stage` holding its `members`, the camera and light
+on its own keyframes (rung 33) — the same picture, with the stage's
+ownership written down.
 
 ## Text with a side
 

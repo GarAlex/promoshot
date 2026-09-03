@@ -32,10 +32,21 @@ pub fn composition_of<'a>(
 /// prepares sources per layer, so a request for a nested layer's frame
 /// finds what it needs.
 pub fn all_layers(meta: &ProjectMetadata) -> Vec<&ProjectLayer> {
-    let mut out: Vec<&ProjectLayer> = meta.layers.as_deref().unwrap_or(&[]).iter().collect();
+    // A stage layer's members (rung 33) are layers too — they play media
+    // the renderers must be given — so they follow their stage here.
+    fn with_members<'a>(layers: &'a [ProjectLayer], out: &mut Vec<&'a ProjectLayer>) {
+        for layer in layers {
+            out.push(layer);
+            if let Some(members) = layer.members.as_deref() {
+                out.extend(members.iter());
+            }
+        }
+    }
+    let mut out: Vec<&ProjectLayer> = Vec::new();
+    with_members(meta.layers.as_deref().unwrap_or(&[]), &mut out);
     for resource in meta.resources.as_deref().unwrap_or(&[]) {
         if let Some(composition) = resource.composition.as_ref() {
-            out.extend(composition.layers.iter());
+            with_members(&composition.layers, &mut out);
         }
     }
     out

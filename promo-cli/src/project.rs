@@ -190,6 +190,9 @@ impl Project {
             // Captions render in the core now (promo-text).
             ProjectLayerKind::Caption => None,
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
+            // A stage layer (rung 33) draws its members; each member answers
+            // for its own file when the walk reaches it.
+            ProjectLayerKind::Stage => None,
             // A model draws through the engine's model pass from its `.glb`;
             // the only question is whether the file is there.
             ProjectLayerKind::Model => {

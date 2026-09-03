@@ -282,6 +282,9 @@ impl PreviewEngine {
         user: *mut c_void,
         budget_bytes: usize,
     ) -> Result<Self, GpuError> {
+        // Stage layers (rung 33) are walked in their flat form; the
+        // document keeps the nested one.
+        let meta = meta.lowered();
         let ctx = GpuContext::shared().ok_or(GpuError::NoAdapter)?;
         let compositor = Compositor::new(ctx)?;
         Ok(PreviewEngine {
@@ -357,6 +360,7 @@ impl PreviewEngine {
     /// layers that actually changed — the engine holds the old and new
     /// metadata, so it can diff them precisely instead of guessing.
     pub fn set_project(&mut self, meta: ProjectMetadata) {
+        let meta = meta.lowered();
         let old = self.meta.layers.clone().unwrap_or_default();
         let new = meta.layers.clone().unwrap_or_default();
         let old_resources = self.meta.resources.clone().unwrap_or_default();
@@ -1118,11 +1122,21 @@ impl PreviewEngine {
 
         // A model's picture (or a stage's) has no stored pixel size — the
         // engine just drew it, cut to its box — so a placement rule reads
-        // the frame it is about to lay out, not a square guess.
+        // the frame it is about to lay out, not a square guess. A stage
+        // LAYER lowered to its owner (rung 33) has no resource to hang
+        // that size on, so it is given a stand-in of the drawn size here.
+        const STAGE_PICTURE: &str = "stage\u{1f}picture";
+        let stand_in: Option<ProjectLayer> = if layer.stage.is_some() && showing.is_empty() {
+            let mut owner = layer.clone();
+            owner.resource_id = Some(STAGE_PICTURE.to_string());
+            Some(owner)
+        } else {
+            None
+        };
         let sized: Vec<promo_model::ProjectResource>;
         let placement_resources: &[promo_model::ProjectResource] =
             if layer.kind == ProjectLayerKind::Model || layer.stage.is_some() {
-                sized = self
+                let mut with_size: Vec<promo_model::ProjectResource> = self
                     .meta
                     .resources
                     .as_deref()
@@ -1137,11 +1151,24 @@ impl PreviewEngine {
                         r
                     })
                     .collect();
+                if stand_in.is_some() {
+                    with_size.push(promo_model::ProjectResource::stand_in_picture(
+                        STAGE_PICTURE,
+                        fw,
+                        fh,
+                    ));
+                }
+                sized = with_size;
                 &sized
             } else {
                 self.meta.resources.as_deref().unwrap_or(&[])
             };
-        let tr = tl::layer_transform_along_paths(layer, time, settings, placement_resources);
+        let tr = tl::layer_transform_along_paths(
+            stand_in.as_ref().unwrap_or(layer),
+            time,
+            settings,
+            placement_resources,
+        );
         let rect = if is_drawing {
             tl::drawing_rect(
                 Size::new(fw, fh),

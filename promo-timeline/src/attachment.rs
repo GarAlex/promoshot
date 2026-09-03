@@ -897,6 +897,7 @@ mod tests {
             effects: None,
             follow: None,
             stage: None,
+            members: None,
             mask_resource_id: None,
             mask_inverted: None,
             start_time: start,
