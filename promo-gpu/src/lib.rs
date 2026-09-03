@@ -7,6 +7,7 @@
 //! without any pixel copy.
 
 pub mod compositor;
+pub mod model_pass;
 mod surface;
 pub use surface::{GpuSurface, ImportedFrame};
 /// Re-exported so dependents use exactly this wgpu, not a second copy.

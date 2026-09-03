@@ -7,6 +7,7 @@
 
 pub mod governor;
 pub mod mixer;
+pub mod model;
 pub mod preview;
 
 pub use governor::MemoryGovernor;
