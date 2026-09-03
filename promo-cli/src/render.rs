@@ -1753,9 +1753,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Across the stage (rung 31): the red cube offset right and the blue
-    /// one left at the same depth — the right third of the frame is red,
-    /// the left third blue, the middle the ground.
+    /// Across the stage (rung 31): the red cube offset right and the other
+    /// left at the same depth, the scene placed 300 wide — the right of the
+    /// frame is red, the left the other cube's bound green, the middle
+    /// the ground.
     #[test]
     fn a_stage_places_members_side_by_side() {
         if GpuContext::shared().is_none() {
@@ -1783,10 +1784,15 @@ mod tests {
             "layers":[
               {"id":"L1","name":"red","sortIndex":0,"kind":"model","isEnabled":true,"stage":"s",
                 "startTime":0,"duration":2,"resourceID":"R",
-                "keyframes":[{"id":"K1","time":0,"camera":{"yaw":0,"pitch":0,"distance":3.0},"stageOffset":[1.6,0],"transitionDuration":0}]},
-              {"id":"L2","name":"blue","sortIndex":1,"kind":"model","isEnabled":true,"stage":"s",
+                "keyframes":[{"id":"K1","time":0,"camera":{"yaw":0,"pitch":0,"distance":3.0},"stageOffset":[1.6,0],
+                  "placement":{"width":300,"anchor":"center"},"transitionDuration":0}]},
+              {"id":"L2","name":"green","sortIndex":1,"kind":"model","isEnabled":true,"stage":"s",
                 "startTime":0,"duration":2,"resourceID":"B",
-                "keyframes":[{"id":"K2","time":0,"stageOffset":[-1.6,0],"transitionDuration":0}]}]}"#;
+                "keyframes":[{"id":"K2","time":0,"stageOffset":[-1.6,0],"transitionDuration":0}]}]}"#
+            .replace(
+                r#""filename":"blue.glb","displayName":"Blue","addedAt":0}"#,
+                r#""filename":"blue.glb","displayName":"Blue","addedAt":0,"materials":{"Body":"10E040"}}"#,
+            );
         std::fs::write(dir.join("metadata.json"), doc).unwrap();
         let project = crate::project::Project::open(&dir).expect("project");
         let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
@@ -1806,7 +1812,22 @@ mod tests {
         let (r, b, _) = strip(220, 300);
         assert!(r > 60 && r > b * 2, "the right is red: r {r} b {b}");
         let (r, b, _) = strip(20, 100);
-        assert!(b > 60 && b > r * 2, "the left is blue: r {r} b {b}");
+        assert!(
+            b < 60 && r < 60,
+            "the left cube took its binding, not its file colour: r {r} b {b}"
+        );
+        let g = {
+            let mut g = 0u64;
+            let mut n = 0u64;
+            for y in 120..200 {
+                for x in 20..100 {
+                    g += frame[(y * 320 + x) * 4 + 1] as u64;
+                    n += 1;
+                }
+            }
+            g / n
+        };
+        assert!(g > 60, "the left is the bound green: g {g}");
         let (r, b, _) = strip(150, 170);
         assert!(r < 30 && b < 30, "the middle is the ground: r {r} b {b}");
         let _ = std::fs::remove_dir_all(&dir);

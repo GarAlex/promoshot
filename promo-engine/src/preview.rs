@@ -1105,12 +1105,32 @@ impl PreviewEngine {
             fh *= vp[3];
         }
 
-        let tr = tl::layer_transform_along_paths(
-            layer,
-            time,
-            settings,
-            self.meta.resources.as_deref().unwrap_or(&[]),
-        );
+        // A model's picture (or a stage's) has no stored pixel size — the
+        // engine just drew it, cut to its box — so a placement rule reads
+        // the frame it is about to lay out, not a square guess.
+        let sized: Vec<promo_model::ProjectResource>;
+        let placement_resources: &[promo_model::ProjectResource] =
+            if layer.kind == ProjectLayerKind::Model || layer.stage.is_some() {
+                sized = self
+                    .meta
+                    .resources
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .cloned()
+                    .map(|mut r| {
+                        if r.id == showing {
+                            r.pixel_width = Some(fw);
+                            r.pixel_height = Some(fh);
+                        }
+                        r
+                    })
+                    .collect();
+                &sized
+            } else {
+                self.meta.resources.as_deref().unwrap_or(&[])
+            };
+        let tr = tl::layer_transform_along_paths(layer, time, settings, placement_resources);
         let rect = if is_drawing {
             tl::drawing_rect(
                 Size::new(fw, fh),
@@ -2564,6 +2584,109 @@ impl PreviewEngine {
         self.models.contains_key(resource_id)
     }
 
+    /// A model resource's `materials` bindings, applied to its slots: a
+    /// colour through the palette, a resource as the slot's picture (a
+    /// still, or a video's frame at the layer's clock) — the host serves
+    /// it under a synthetic slot layer, keyed by the resource, exactly as
+    /// a LUT strip is. Re-paints and re-binds only on change.
+    fn apply_bindings_at(
+        &mut self,
+        resource: &promo_model::ProjectResource,
+        settings: &promo_model::CompositionSettings,
+        tier: i32,
+        pinned: &[u64],
+        video_time: Option<(&ProjectLayer, f64)>,
+    ) {
+        let linear = |rgba: [f32; 4]| -> [f32; 3] {
+            let f = |c: f32| {
+                if c <= 0.04045 {
+                    c / 12.92
+                } else {
+                    ((c + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            [f(rgba[0]), f(rgba[1]), f(rgba[2])]
+        };
+        let all_resources = self.meta.resources.clone().unwrap_or_default();
+        let (colours, pictures): (Vec<(usize, [f32; 4])>, SlotPictures) = {
+            let Some(loaded) = self.models.get(&resource.id) else {
+                return;
+            };
+            let mut colours = Vec::new();
+            let mut pictures = Vec::new();
+            for (slot, binding) in resource.materials.iter().flat_map(|m| m.iter()) {
+                let Some(index) = loaded.model.materials.iter().position(|m| &m.name == slot)
+                else {
+                    continue;
+                };
+                match binding {
+                    promo_model::MaterialBinding::Color(hex) => {
+                        let srgb = rgba_from_hex(settings.resolve_color(hex));
+                        let lin = linear(srgb);
+                        colours.push((index, [lin[0], lin[1], lin[2], srgb[3]]));
+                    }
+                    promo_model::MaterialBinding::Resource { resource_id } => {
+                        pictures.push((index, resource_id.clone()));
+                    }
+                }
+            }
+            (colours, pictures)
+        };
+        let mut bound_frames: Vec<(usize, u64)> = Vec::new();
+        for (index, bound_id) in pictures {
+            let source_time = match all_resources.iter().find(|r| r.id == bound_id) {
+                Some(res) if res.kind == promo_model::ProjectResourceKind::Video => {
+                    let Some((layer, time)) = video_time else {
+                        continue;
+                    };
+                    let local = tl::layer_local_time(layer, time);
+                    let view = tl::resource_for_cut(res, None);
+                    match tl::source_time_for_layer(&view, local, layer.beyond_end) {
+                        Some(t) => t,
+                        None => continue,
+                    }
+                }
+                _ => -1.0,
+            };
+            if let Some(id) = self.frame(
+                &format!("slot\u{1f}{bound_id}"),
+                &bound_id,
+                source_time,
+                tier,
+                pinned,
+            ) {
+                bound_frames.push((index, id));
+            }
+        }
+        let Some(pass) = self.model_pass.as_ref() else {
+            return;
+        };
+        let Some(loaded) = self.models.get_mut(&resource.id) else {
+            return;
+        };
+        for (index, rgba) in colours {
+            if loaded.painted.get(&index) != Some(&rgba) {
+                pass.recolor(self.ctx, &mut loaded.gpu, index, rgba);
+                loaded.painted.insert(index, rgba);
+            }
+        }
+        for (index, frame_id) in bound_frames {
+            if loaded.bound.get(&index) == Some(&frame_id) {
+                continue;
+            }
+            let texture = match self
+                .cache
+                .get(&frame_id)
+                .or_else(|| self.scratch.get(&frame_id))
+            {
+                Some(entry) => &entry.frame.texture,
+                None => continue,
+            };
+            pass.set_texture(self.ctx, &mut loaded.gpu, index, texture.view());
+            loaded.bound.insert(index, frame_id);
+        }
+    }
+
     /// A model member's node matrices at `time`: the clip it names posed,
     /// else rest — the same rule a model layer draws by.
     fn model_matrices(&self, layer: &ProjectLayer, loaded: &LoadedModel, time: f64) -> Vec<Mat4> {
@@ -2773,6 +2896,22 @@ impl PreviewEngine {
             rim_rgb: rim,
         };
 
+        // Each model member's slots painted and pictured as its own layer
+        // would be — on the member's clock for a bound video.
+        for item in &prepared {
+            let member = &members[item.index];
+            if member.kind != ProjectLayerKind::Model {
+                continue;
+            }
+            let Some(rid) = member.resource_id.as_deref() else {
+                continue;
+            };
+            let Some(res) = resources.iter().find(|r| r.id == rid).cloned() else {
+                continue;
+            };
+            self.apply_bindings_at(&res, settings, tier, pinned, Some((member, time)));
+        }
+
         // Matrices for the model members: their pose, shifted to their depth.
         let mut model_matrices: Vec<(usize, Vec<Mat4>)> = Vec::new();
         for item in &prepared {
@@ -2845,11 +2984,115 @@ impl PreviewEngine {
         if items.is_empty() {
             return None;
         }
+        // The members' box on the square, from every model corner and
+        // billboard corner through the camera — the stage is cut to it so
+        // the first member's placement measures the scene, not the sphere.
+        let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+        let mut take = |w: [f32; 3]| {
+            if let Some(q) = promo_gpu::model_pass::project_point(&view, 1.0, w) {
+                lo[0] = lo[0].min(q[0]);
+                lo[1] = lo[1].min(q[1]);
+                hi[0] = hi[0].max(q[0]);
+                hi[1] = hi[1].max(q[1]);
+            }
+        };
+        for item in &prepared {
+            let member = &members[item.index];
+            match member.kind {
+                ProjectLayerKind::Model => {
+                    let Some(rid) = member.resource_id.as_deref() else {
+                        continue;
+                    };
+                    let Some(loaded) = self.models.get(rid) else {
+                        continue;
+                    };
+                    let Some((_, matrices)) = model_matrices.iter().find(|(i, _)| *i == item.index)
+                    else {
+                        continue;
+                    };
+                    for mesh in &loaded.model.meshes {
+                        let m = matrices
+                            .get(mesh.node)
+                            .copied()
+                            .unwrap_or(promo_gpu::model_pass::IDENTITY);
+                        let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
+                        for p in &mesh.positions {
+                            for k in 0..3 {
+                                min[k] = min[k].min(p[k]);
+                                max[k] = max[k].max(p[k]);
+                            }
+                        }
+                        if min[0] > max[0] {
+                            continue;
+                        }
+                        for corner in 0..8 {
+                            let p = [
+                                if corner & 1 == 0 { min[0] } else { max[0] },
+                                if corner & 2 == 0 { min[1] } else { max[1] },
+                                if corner & 4 == 0 { min[2] } else { max[2] },
+                            ];
+                            take([
+                                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+                                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+                            ]);
+                        }
+                    }
+                }
+                ProjectLayerKind::Image | ProjectLayerKind::Video => {
+                    let Some(id) = item.frame else {
+                        continue;
+                    };
+                    let Some(entry) = self.cache.get(&id).or_else(|| self.scratch.get(&id)) else {
+                        continue;
+                    };
+                    let (w, h) = (
+                        entry.frame.width.max(1) as f32,
+                        entry.frame.height.max(1) as f32,
+                    );
+                    let height = radius * item.zoom;
+                    let (hw, hh) = (height * w / h / 2.0, height / 2.0);
+                    let (right, up, _) = promo_gpu::model_pass::camera_basis(&view);
+                    let c = [
+                        item.across[0] * radius,
+                        item.across[1] * radius,
+                        item.depth * radius,
+                    ];
+                    for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                        take([
+                            c[0] + right[0] * sx * hw + up[0] * sy * hh,
+                            c[1] + right[1] * sx * hw + up[1] * sy * hh,
+                            c[2] + right[2] * sx * hw + up[2] * sy * hh,
+                        ]);
+                    }
+                }
+                _ => {}
+            }
+        }
         let texture = pass
             .render_scene(self.ctx, &items, &view, side, side)
             .ok()?;
         drop(items);
-        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, side, side);
+        let (texture, frame_w, frame_h) = if lo[0] < hi[0] && lo[1] < hi[1] {
+            let px = |f: f32| (f * side as f32).round();
+            let x0 = (px(lo[0]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
+            let y0 = (px(lo[1]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
+            let x1 = (px(hi[0]) + 1.0).clamp(x0 as f32 + 2.0, side as f32) as u32;
+            let y1 = (px(hi[1]) + 1.0).clamp(y0 as f32 + 2.0, side as f32) as u32;
+            let (w, h) = (x1 - x0, y1 - y0);
+            if w >= side && h >= side {
+                (texture, side, side)
+            } else {
+                (
+                    promo_gpu::model_pass::crop_texture(self.ctx, &texture, x0, y0, w, h),
+                    w,
+                    h,
+                )
+            }
+        } else {
+            (texture, side, side)
+        };
+        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, frame_w, frame_h);
         let bytes = frame.byte_size();
 
         self.misses += 1;
@@ -2999,79 +3242,9 @@ impl PreviewEngine {
             [c[0] * 0.8 + 0.1, c[1] * 0.8 + 0.1, c[2] * 0.8 + 0.1]
         };
 
-        // Bindings paint their slots: a colour through the palette, a
-        // resource as the slot's picture — the host serves it under a
-        // synthetic layer, keyed by the resource, exactly as a LUT strip is.
-        let (colours, pictures): (Vec<(usize, [f32; 4])>, SlotPictures) = {
-            let loaded = self.models.get(&resource.id)?;
-            let mut colours = Vec::new();
-            let mut pictures = Vec::new();
-            for (slot, binding) in resource.materials.iter().flat_map(|m| m.iter()) {
-                let Some(index) = loaded.model.materials.iter().position(|m| &m.name == slot)
-                else {
-                    continue;
-                };
-                match binding {
-                    promo_model::MaterialBinding::Color(hex) => {
-                        let srgb = rgba_from_hex(settings.resolve_color(hex));
-                        let lin = linear(srgb);
-                        colours.push((index, [lin[0], lin[1], lin[2], srgb[3]]));
-                    }
-                    promo_model::MaterialBinding::Resource { resource_id } => {
-                        pictures.push((index, resource_id.clone()));
-                    }
-                }
-            }
-            (colours, pictures)
-        };
-        let mut bound_frames: Vec<(usize, u64)> = Vec::new();
-        for (index, bound_id) in pictures {
-            // A still asks at source time -1, as an image layer does; a
-            // video asks at the model layer's own clock mapped through the
-            // video's trims, as a video layer does.
-            let source_time = match all_resources.iter().find(|r| r.id == bound_id) {
-                Some(res) if res.kind == promo_model::ProjectResourceKind::Video => {
-                    let view = tl::resource_for_cut(res, None);
-                    match tl::source_time_for_layer(&view, local, layer.beyond_end) {
-                        Some(t) => t,
-                        None => continue,
-                    }
-                }
-                _ => -1.0,
-            };
-            if let Some(id) = self.frame(
-                &format!("slot\u{1f}{bound_id}"),
-                &bound_id,
-                source_time,
-                tier,
-                pinned,
-            ) {
-                bound_frames.push((index, id));
-            }
-        }
+        self.apply_bindings_at(resource, settings, tier, pinned, Some((layer, time)));
         let pass = self.model_pass.as_ref()?;
         let loaded = self.models.get_mut(&resource.id)?;
-        for (index, rgba) in colours {
-            if loaded.painted.get(&index) != Some(&rgba) {
-                pass.recolor(self.ctx, &mut loaded.gpu, index, rgba);
-                loaded.painted.insert(index, rgba);
-            }
-        }
-        for (index, frame_id) in bound_frames {
-            if loaded.bound.get(&index) == Some(&frame_id) {
-                continue;
-            }
-            let texture = match self
-                .cache
-                .get(&frame_id)
-                .or_else(|| self.scratch.get(&frame_id))
-            {
-                Some(entry) => &entry.frame.texture,
-                None => continue,
-            };
-            pass.set_texture(self.ctx, &mut loaded.gpu, index, texture.view());
-            loaded.bound.insert(index, frame_id);
-        }
         let view = ModelView {
             yaw: camera.yaw(),
             pitch: camera.pitch(),
