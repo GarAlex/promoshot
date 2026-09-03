@@ -30,6 +30,12 @@ def features(meta):
         "sprite": any(r.get('sprite') for r in res),
         "gradient": bool(cs.get('backgroundGradient')) or any(k.get('gradient') for k in kf),
         "reveal": any((r.get('captionStyle') or {}).get('reveal') for r in res) or bool(cs.get('subtitleReveal')),
+        "depth": any((l.get('captionStyle') or {}).get('depth') for l in layers)
+                 or any((r.get('captionStyle') or {}).get('depth') for r in res),
+        "captionTilt": any(l.get('kind') == 'caption' and any(k.get('tiltX') is not None or k.get('tiltY') is not None for k in l.get('keyframes') or []) for l in layers),
+        "kineticReveal": any(((l.get('captionStyle') or {}).get('reveal') or {}).get('mode') in ('flip', 'tumble', 'slide') for l in layers)
+                 or any(((r.get('captionStyle') or {}).get('reveal') or {}).get('mode') in ('flip', 'tumble', 'slide') for r in res)
+                 or (cs.get('subtitleReveal') or {}).get('mode') in ('flip', 'tumble', 'slide'),
         "blendModes": sorted({l['blendMode'] for l in layers if l.get('blendMode')}),
         "swaps": sum(1 for k in kf if k.get('resourceID')),
         "transitions": any(l.get('transitionIn') or l.get('transitionOut') for l in layers)

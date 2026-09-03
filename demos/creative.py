@@ -33,6 +33,9 @@ SETS = [
   "goal": "Screenshots, a green-screen clip and a warm look. Write and synthesize a short narration of your own (three or four sentences about an analytics app called Lumen), and build a 25-to-35-second story around it with chapters a player can jump to. Level the voice so it sits well.",
   "media": {"01-app-store-hero": ["ui_lumen_1.png", "ui_lumen_2.png", "ui_lumen_5.png"], "19-green-room": ["green_lumen.mp4"], "20-look-book": ["look_warm.cube"]},
   "duration": [24, 36], "must_use": ["green_lumen.mp4"]},
+ {"id": "c6", "slug": "title-card", "title": "Title card",
+  "goal": "No media. One title: 'LUMEN 2.0' with the line 'See everything.' under it. Make an 8-to-12-second title card, landscape, the kind a motion designer opens a keynote with — solid, dimensional type that moves like it means it. Palette, motion and finish are yours.",
+  "media": {}, "duration": [7, 13], "must_use": []},
 ]
 
 def main():
