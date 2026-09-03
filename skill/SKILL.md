@@ -335,6 +335,14 @@ shows. Prefer a canvas the source drops into at native size. A set of
 stills is a slideshow with hard cuts — every frame is then a finished
 screenshot, and the same project doubles as a promo reel.
 
+Pace a MOVING piece like a presentation, not a drift: one eased ramp
+across a whole clip reads slow. Move a stage camera in two or three
+quick eased-OUT moves of 0.8–1.3 s with holds of about 2 s between (a
+hold is a keyframe repeating the values, reached by a long linear ramp),
+let the key light fly AHEAD of the camera on every move and drift a
+little during the holds, reveal a caption in a second or less, and cut
+between beats rather than cross-fading.
+
 ## With the app attached
 
 The Mac app runs the same tool contract from Settings → Automation, plus
