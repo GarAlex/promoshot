@@ -252,9 +252,22 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
             spec.canvas_height.unwrap_or(1080.0),
         )
     };
-    let (_, _, band, material, bezel) = device_geometry(&spec.device);
-    let (tilt_x, tilt_y) = if spec.framing == "angled" {
-        (4.0, -12.0)
+    let (_, _, band, material, _) = device_geometry(&spec.device);
+    // The body every framable shot stands in: a device recipe the engine
+    // builds, so the authored document needs no file beside the shots.
+    let (device_kind, device_label) = match spec.device.as_str() {
+        "iPad" => ("tablet", "Tablet"),
+        "mac" => ("laptop", "Laptop"),
+        _ => ("phone", "Phone"),
+    };
+    let body_hex = match material {
+        "spaceBlack" => "1C1C1E",
+        "naturalTitanium" => "8E8B85",
+        "silver" => "C8C9CC",
+        _ => "@edge",
+    };
+    let (camera_yaw, camera_pitch) = if spec.framing == "angled" {
+        (-12.0, 4.0)
     } else {
         (0.0, 0.0)
     };
@@ -332,24 +345,32 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
             resource["pixelWidth"] = json!(w);
             resource["pixelHeight"] = json!(h);
         }
-        // The slab every framable shot wears — decided once, mirrored from
+        resources.push(resource);
+        // Every framable shot stands in a device BODY: a recipe resource of
+        // its own with the shot bound to the Screen slot, decided once from
         // the device the wizard chose. V1 frames every image; the Mac's
         // photograph-evidence gate is logged backlog above.
-        if app_store && !is_video {
-            resource["frame"] = json!({
-                "kind": "device",
-                "material": material,
-                "bezelFraction": bezel,
-                "tiltX": tilt_x,
-                "tiltY": tilt_y,
-                // The field's default is the theme role "@edge", which
-                // dangles until V1 grows theme binding — a device slab
-                // draws its bezel, not this border, so a literal keeps the
-                // document self-contained instead of black-by-accident.
-                "borderColorHex": "000000",
-            });
-        }
-        resources.push(resource);
+        let device_id = if app_store && !is_video {
+            let id = ids.take();
+            resources.push(json!({
+                "id": id,
+                "kind": "model",
+                "filename": "",
+                "displayName": format!(
+                    "{device_label} · {}",
+                    slide.display_name.clone().unwrap_or_else(|| slide.filename.clone())
+                ),
+                "addedAt": spec.created_at,
+                "imageCuts": [],
+                "disabledAudioTrackIndices": [],
+                "clips": [],
+                "recipe": {"device": {"kind": device_kind}},
+                "materials": {"Body": body_hex, "Screen": {"resourceID": resource_id}},
+            }));
+            Some(id)
+        } else {
+            None
+        };
 
         // Entry/exit transitions (classic + appStore; carousel states its
         // motion in keyframes and takes none). A plain dissolve collapses
@@ -398,9 +419,12 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
                 i == n - 1,
             )
         } else if app_store {
-            vec![app_store_keyframe(
-                &mut ids, slide, band, canvas_w, canvas_h,
-            )]
+            let mut keyframe = app_store_keyframe(&mut ids, slide, band, canvas_w, canvas_h);
+            if device_id.is_some() {
+                keyframe["camera"] =
+                    json!({"yaw": camera_yaw, "pitch": camera_pitch, "distance": 4.6});
+            }
+            vec![keyframe]
         } else {
             vec![json!({
                 "id": ids.take(),
@@ -414,11 +438,11 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
             "id": ids.take(),
             "name": slide.display_name.clone().unwrap_or_else(|| slide.filename.clone()),
             "sortIndex": sort,
-            "kind": if is_video { "video" } else { "image" },
+            "kind": if is_video { "video" } else if device_id.is_some() { "model" } else { "image" },
             "isEnabled": true,
             "startTime": starts[i],
             "duration": spans[i],
-            "resourceID": resource_id,
+            "resourceID": device_id.clone().unwrap_or_else(|| resource_id.clone()),
             "keyframes": keyframes,
         });
         if let Some(seconds) = fade_in {
@@ -662,18 +686,13 @@ mod tests {
     }
 
     /// The authored document must not merely parse: the validator that
-    /// names authoring mistakes has to find nothing to say — except the
-    /// legacy note on the App Store style's device FRAME, which stays until
-    /// that style places a device BODY (a recipe) instead.
+    /// names authoring mistakes has to find nothing to say.
     #[test]
     fn every_style_authors_a_clean_project() {
         for kind in ["classic", "carousel", "appStore"] {
             let doc = author(&spec(kind, "crossfade", 3)).expect(kind);
             let meta = promo_model::ProjectMetadata::from_json(&doc).expect(kind);
-            let warnings: Vec<String> = promo_timeline::validate::warnings(&meta)
-                .into_iter()
-                .filter(|w| !w.contains("legacy 2.5D"))
-                .collect();
+            let warnings = promo_timeline::validate::warnings(&meta);
             assert!(warnings.is_empty(), "{kind}: {warnings:?}");
         }
     }
@@ -756,13 +775,23 @@ mod tests {
             .collect();
         assert_eq!(captions.len(), 2);
         assert_eq!(captions[0]["captionText"], json!("Cap 0"));
-        // Shots wear the device slab; a portrait screenshot is bound by
-        // the height it is allowed.
+        // Shots stand in a device BODY — a recipe resource with the shot on
+        // its Screen slot, no frame on the picture — and a portrait
+        // screenshot is bound by the height it is allowed.
         let shot = resources
             .iter()
             .find(|r| r["kind"] == json!("image"))
             .unwrap();
-        assert_eq!(shot["frame"]["kind"], json!("device"));
+        assert!(shot.get("frame").is_none());
+        let body = resources
+            .iter()
+            .find(|r| r["kind"] == json!("model"))
+            .unwrap();
+        assert_eq!(body["recipe"]["device"]["kind"], json!("phone"));
+        assert_eq!(body["materials"]["Screen"]["resourceID"], shot["id"]);
+        assert_eq!(layers[1]["kind"], json!("model"));
+        assert_eq!(layers[1]["resourceID"], body["id"]);
+        assert!(layers[1]["keyframes"][0].get("camera").is_some());
         let placed = &layers[1]["keyframes"][0]["placement"];
         assert!(placed.get("height").is_some());
         assert!(placed.get("width").is_none());

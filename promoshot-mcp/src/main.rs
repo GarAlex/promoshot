@@ -808,19 +808,24 @@ where
             )?;
             let probe: Value = serde_json::from_str(&written).unwrap_or(Value::Null);
             let id = uuid::Uuid::new_v4().to_string().to_uppercase();
+            // The resource is a RECIPE: the engine builds the body at load,
+            // so the project needs no file — the glb at `wrote` is for hand
+            // use (a viewer, another tool).
             let resource = serde_json::json!({
-                "id": id, "kind": "model", "filename": filename,
+                "id": id, "kind": "model", "filename": "",
                 "displayName": match kind.as_str() { "phone" => "Phone", "tablet" => "Tablet", _ => "Laptop" },
                 "addedAt": 0,
+                "imageCuts": [], "disabledAudioTrackIndices": [],
                 "boundsRadius": probe.get("boundsRadius").cloned().unwrap_or(Value::Null),
                 "clips": [],
+                "recipe": { "device": { "kind": kind } },
                 "materials": { "Body": "@accent" }
             });
             Ok(serde_json::json!({
                 "wrote": out,
                 "slots": probe.get("slots").cloned().unwrap_or(Value::Null),
                 "resource": resource,
-                "note": "append `resource` to `resources` and point a model layer at its id; bind Screen to an image or video resource"
+                "note": "append `resource` to `resources` and point a model layer at its id; bind Screen to an image or video resource. It is a recipe — no file needs copying; stamp minReaderVersion 34 or above"
             })
             .to_string())
         }

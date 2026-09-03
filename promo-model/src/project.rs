@@ -235,6 +235,24 @@ impl MaterialBinding {
 #[serde(rename_all = "camelCase")]
 pub enum BodyRecipe {
     Text(TextBody),
+    /// A built-in device — the body `promo device` writes, built at load
+    /// instead: `{ "device": { "kind": "phone" } }`, with `Body` and
+    /// `Screen` slots.
+    Device(DeviceBody),
+}
+
+/// A built-in device body: `phone`, `tablet` or `laptop`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceBody {
+    pub kind: String,
+}
+
+impl DeviceBody {
+    pub const KINDS: [&'static str; 3] = ["phone", "tablet", "laptop"];
+    pub fn is_known(&self) -> bool {
+        Self::KINDS.contains(&self.kind.as_str())
+    }
 }
 
 /// Type as a body: `text` set in `fontFamily` (the caption font stack;
@@ -4526,13 +4544,27 @@ mod placement_model_tests {
         let back = ProjectMetadata::from_json(&json).expect("decode");
         assert_eq!(back.composition_settings.environment, lit.composition_settings.environment);
         let body = generated.resources.as_ref().unwrap()[0].recipe.clone().unwrap();
-        let BodyRecipe::Text(text) = body;
+        let BodyRecipe::Text(text) = body else {
+            panic!("a text recipe");
+        };
         assert_eq!(text.text, "Hello");
         assert_eq!(text.bold, Some(true));
         assert_eq!(text.depth(), 0.3);
         assert_eq!(text.size(), 1.0);
         let json = generated.to_json().expect("encode");
         assert!(json.contains(r#""recipe":{"text":{"text":"Hello","bold":true,"depth":0.3}}"#), "{json}");
+
+        // A device recipe: the body `promo device` writes, without the file.
+        let device = meta(
+            r#""resources":[{"id":"D","kind":"model","filename":"","displayName":"Phone",
+                 "addedAt":0,"recipe":{"device":{"kind":"phone"}}}],"layers":[]"#,
+        );
+        assert_eq!(device.minimum_reader_version(), 34);
+        let Some(BodyRecipe::Device(body)) = device.resources.as_ref().unwrap()[0].recipe.clone() else {
+            panic!("a device recipe");
+        };
+        assert!(body.is_known());
+        assert!(device.to_json().unwrap().contains(r#""recipe":{"device":{"kind":"phone"}}"#));
     }
 
     /// A stage layer lowers to the flat form the renderers walk: the

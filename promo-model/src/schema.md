@@ -871,7 +871,10 @@ and re-derived on every open.
 A model may also be GENERATED (rung 34): a `recipe` in place of a
 `filename` — `{ "kind": "model", "filename": "", "recipe": { "text": {
 "text": "Hello", "bold": true, "depth": 0.25, "size": 1 } } }` — and the
-engine builds the body at load. Text is the first recipe: real type
+engine builds the body at load. `{ "device": { "kind": "phone" } }`
+(tablet, laptop) is the built-in device body without its file — the
+same `Body` and `Screen` slots `promo device` writes. Text is the other:
+real type
 standing in the 3D world, 1 em tall × `size` world units, extruded
 `depth` em, centred on its box and facing +Z, with a "Face" slot (front
 and back) and a "Side" slot (the walls) that take colour and finish

@@ -2597,6 +2597,9 @@ impl PreviewEngine {
             }
             let built = match &recipe {
                 promo_model::BodyRecipe::Text(body) => crate::model::text_glb(body),
+                promo_model::BodyRecipe::Device(device) => crate::model::DeviceKind::parse(&device.kind)
+                    .map(crate::model::device_glb)
+                    .ok_or_else(|| format!("unknown device kind {}", device.kind)),
             };
             if let Ok(bytes) = built {
                 let _ = self.provide_model(&id, &bytes);

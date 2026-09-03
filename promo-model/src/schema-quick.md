@@ -61,10 +61,12 @@ the same grid media uses (anchor+offset only; margins then only set wrap
 width). A keyframe `fontSize` animates the size in points. Two captions
 must never cross-fade; give each a life clear of both dissolves.
 
-A device is a BODY: `promo device phone --out phone.glb` (tablet,
-laptop too; the app's + Body menu and `promo_device_model` write the
-same file) is a model with `Body` and `Screen` slots. A model RESOURCE
-names the file and binds the slots — `"materials": { "Body": "@edge",
+A device is a BODY, and the easiest body is a RECIPE — a model resource
+with no file: `"recipe": { "device": { "kind": "phone" } }` (tablet,
+laptop too; `promo_device_model` returns exactly this resource) is a
+model with `Body` and `Screen` slots the engine builds at load. Or from
+a file: `promo device phone --out phone.glb`. A model RESOURCE names the
+recipe or the file and binds the slots — `"materials": { "Body": "@edge",
 "Screen": { "resourceID": "<shot>" } }` puts the screenshot on the
 screen — and a model LAYER places it; `placement` sizes the whole body,
 its keyframes' `camera` turns it. The old `frame` on a picture resource

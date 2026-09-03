@@ -251,6 +251,18 @@
             "text"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "device": {
+              "$ref": "#/$defs/DeviceBody"
+            }
+          },
+          "required": [
+            "device"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -727,6 +739,17 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "DeviceBody": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
       "type": "object"
     },
     "DrawingDocument": {

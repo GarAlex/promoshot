@@ -715,7 +715,19 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 resource.display_name
             ));
         }
-        let promo_model::BodyRecipe::Text(body) = recipe;
+        let body = match recipe {
+            promo_model::BodyRecipe::Device(device) => {
+                if !device.is_known() {
+                    out.push(format!(
+                        "resource \"{}\": device recipe kind \"{}\" is not a body — phone, \
+                         tablet or laptop",
+                        resource.display_name, device.kind
+                    ));
+                }
+                continue;
+            }
+            promo_model::BodyRecipe::Text(body) => body,
+        };
         if body.text.trim().is_empty() {
             out.push(format!(
                 "resource \"{}\": the text body's text is empty; it has no glyphs to extrude",
@@ -1562,6 +1574,13 @@ mod tests {
         let quiet = warnings(&good);
         assert!(!quiet.iter().any(|w| w.contains("\"Title\"")), "{quiet:?}");
         assert_eq!(good.minimum_reader_version(), 34);
+        let odd = project(
+            "",
+            r#","resources":[{"id":"W","kind":"model","filename":"","displayName":"Watch","addedAt":0,
+                 "recipe":{"device":{"kind":"watch"}}}]"#,
+        );
+        let found = warnings(&odd);
+        assert!(found.iter().any(|w| w.contains("device recipe kind \"watch\" is not a body")), "{found:?}");
     }
     /// The 2.5D tricks are named as legacy with their replacement: a
     /// caption's depth and tilt, and a device frame on a resource.
