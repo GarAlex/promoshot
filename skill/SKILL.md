@@ -142,6 +142,12 @@ new projects.
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
   "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
   and tint, on every host alike. Stamp `minReaderVersion: 23`.
+- **Kinetic reveals.** Beside `wipe`, `fade`, `rise` and `scale`, a
+  reveal's `mode` can be `flip` (each unit turns in edge-on, in
+  perspective), `tumble` (rights itself from a lean while rising) or
+  `slide` (in from the right). Stamp `minReaderVersion: 28`. By word,
+  with `"seconds": 1.2`, is the kinetic-type look; by character is
+  busier and wants short text.
 - **Tilt on captions.** `tiltX` / `tiltY` (degrees) on a caption layer's
   keyframes lean it in perspective, on the device frames' own camera: a
   title swinging in from `"tiltY": 60` to `0` over half a second, a

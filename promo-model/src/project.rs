@@ -430,8 +430,24 @@ tolerant_enum!(
         (Scale, "scale"),
         // Karaoke: everything is visible and the current unit is tinted.
         (Highlight, "highlight"),
+        // Kinetic arrivals (rung 28): each unit turns, tumbles or slides
+        // into place on the reveal's own clock.
+        (Flip, "flip"),
+        (Tumble, "tumble"),
+        (Slide, "slide"),
     ]
 );
+
+impl RevealMode {
+    /// The modes an older reader (rung 27 and before) would turn into a
+    /// wipe on its next save.
+    pub fn is_rung_28(self) -> bool {
+        matches!(
+            self,
+            RevealMode::Flip | RevealMode::Tumble | RevealMode::Slide
+        )
+    }
+}
 
 /// Text arriving a piece at a time — a typewriter, a word-by-word caption,
 /// or a karaoke highlight walking the line.
@@ -496,7 +512,12 @@ impl TextReveal {
     pub fn animates(&self) -> bool {
         matches!(
             self.mode,
-            RevealMode::Fade | RevealMode::Rise | RevealMode::Scale
+            RevealMode::Fade
+                | RevealMode::Rise
+                | RevealMode::Scale
+                | RevealMode::Flip
+                | RevealMode::Tumble
+                | RevealMode::Slide
         )
     }
 
@@ -2877,6 +2898,22 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 28 is a kinetic reveal mode — flip, tumble, slide — on a caption
+        // style or the composition default. An older reader types it on
+        // and saves it as a wipe.
+        let kinetic =
+            |reveal: &Option<TextReveal>| reveal.as_ref().is_some_and(|r| r.mode.is_rung_28());
+        if kinetic(&self.composition_settings.subtitle_reveal)
+            || layers
+                .iter()
+                .any(|l| l.caption_style.as_ref().is_some_and(|s| kinetic(&s.reveal)))
+            || resources
+                .iter()
+                .any(|r| r.caption_style.as_ref().is_some_and(|s| kinetic(&s.reveal)))
+        {
+            return 28;
+        }
+
         // 27 is extruded type on a caption style. Dropped by an older
         // reader's save, the letters go flat.
         let extruded =
@@ -3529,6 +3566,10 @@ mod placement_model_tests {
 
     /// The stamp is what the FILE uses, not what the binary can do — one
     /// feature at a time, each claiming its own version and nothing more.
+    fn full_reveal_for_tests() -> TextReveal {
+        serde_json::from_str(r#"{"by":"word","mode":"wipe"}"#).unwrap()
+    }
+
     #[test]
     fn a_project_is_stamped_by_what_it_uses() {
         let meta = |body: &str| -> ProjectMetadata {
@@ -3732,6 +3773,23 @@ mod placement_model_tests {
             ..Default::default()
         });
         assert_eq!(extruded.minimum_reader_version(), 27);
+
+        // 28: a kinetic reveal mode, on a style or as the composition default.
+        let mut kinetic = meta(&layer(""));
+        kinetic.layers.as_mut().unwrap()[0].caption_style = Some(SubtitleStyle {
+            reveal: Some(TextReveal {
+                mode: RevealMode::Tumble,
+                ..full_reveal_for_tests()
+            }),
+            ..Default::default()
+        });
+        assert_eq!(kinetic.minimum_reader_version(), 28);
+        let mut defaulted = meta(&layer(""));
+        defaulted.composition_settings.subtitle_reveal = Some(TextReveal {
+            mode: RevealMode::Flip,
+            ..full_reveal_for_tests()
+        });
+        assert_eq!(defaulted.minimum_reader_version(), 28);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

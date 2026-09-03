@@ -707,7 +707,10 @@ Semantics worth knowing:
   `mode` is one walk across the units, differing in what a unit does
   as its turn comes: "wipe" types it on (the unit is simply there);
   "fade", "rise" and "scale" give each unit its own little arrival,
-  several in flight at once, so the caption assembles itself;
+  several in flight at once, so the caption assembles itself; "flip"
+  (each unit turns in about its own centre, in perspective), "tumble"
+  (rises while it rights itself from a lean) and "slide" (in from the
+  right) are the kinetic arrivals, rung 28;
   "highlight" shows the whole caption and tints the current unit —
   karaoke — and wants a `highlightColorHex`, or the tint is the text
   colour and invisible. `unitSeconds` is how long ONE unit's arrival

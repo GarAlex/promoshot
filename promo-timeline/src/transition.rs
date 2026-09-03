@@ -34,6 +34,12 @@ pub struct Effect {
     pub flash: f64,
     /// Torn bands and split channels, 0…1: the glitch.
     pub glitch: f64,
+    /// A lean in perspective, degrees about X then Y, about the quad's
+    /// own centre — a unit flipping in.
+    pub tilt: [f64; 2],
+    /// A turn in the plane, degrees clockwise, about the quad's own
+    /// centre — a unit tumbling in.
+    pub rotate: f64,
 }
 
 /// The softness the blurring kinds reach at their far end, canvas px at
@@ -50,6 +56,8 @@ impl Effect {
         blur: 0.0,
         flash: 0.0,
         glitch: 0.0,
+        tilt: [0.0, 0.0],
+        rotate: 0.0,
     };
 
     pub fn is_identity(&self) -> bool {

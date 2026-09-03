@@ -2365,7 +2365,10 @@
         "fade",
         "rise",
         "scale",
-        "highlight"
+        "highlight",
+        "flip",
+        "tumble",
+        "slide"
       ],
       "type": "string"
     },

@@ -299,6 +299,28 @@ fn arrival_effect(reveal: &TextReveal, arrival: f64, line_height: f64) -> Effect
             scale: 0.6 + 0.4 * arrival,
             ..Effect::IDENTITY
         },
+        // Turns in about its own centre from edge-on, in perspective.
+        RevealMode::Flip => Effect {
+            opacity: arrival,
+            tilt: [(1.0 - arrival) * 90.0, 0.0],
+            ..Effect::IDENTITY
+        },
+        // Rights itself from a lean while it rises into place.
+        RevealMode::Tumble => Effect {
+            opacity: arrival,
+            rotate: -(1.0 - arrival) * 25.0,
+            offset: [
+                0.0,
+                (1.0 - arrival) * reveal.rise.unwrap_or(0.5) * line_height,
+            ],
+            ..Effect::IDENTITY
+        },
+        // In from the right by a line.
+        RevealMode::Slide => Effect {
+            opacity: arrival,
+            offset: [(1.0 - arrival) * line_height, 0.0],
+            ..Effect::IDENTITY
+        },
         _ => Effect::IDENTITY,
     }
 }
@@ -306,6 +328,31 @@ fn arrival_effect(reveal: &TextReveal, arrival: f64, line_height: f64) -> Effect
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The kinetic modes move a unit on its own axes: a flip is a tilt
+    /// that reaches flat as the unit lands, a tumble a lean that rights
+    /// itself while rising, a slide a horizontal offset — and every one
+    /// of them is the identity at full arrival.
+    #[test]
+    fn kinetic_arrivals_move_on_their_own_axes() {
+        let reveal = |mode: &str| -> TextReveal {
+            serde_json::from_str(&format!(r#"{{"by":"word","mode":"{mode}"}}"#)).unwrap()
+        };
+        let flip = arrival_effect(&reveal("flip"), 0.5, 0.1);
+        assert_eq!(flip.tilt, [45.0, 0.0]);
+        assert_eq!(flip.rotate, 0.0);
+        let tumble = arrival_effect(&reveal("tumble"), 0.5, 0.1);
+        assert!(tumble.rotate < 0.0 && tumble.offset[1] > 0.0);
+        let slide = arrival_effect(&reveal("slide"), 0.25, 0.1);
+        assert!(slide.offset[0] > 0.0 && slide.offset[1] == 0.0);
+        for mode in ["flip", "tumble", "slide"] {
+            assert!(
+                arrival_effect(&reveal(mode), 1.0, 0.1).is_identity(),
+                "{mode} lands as the identity"
+            );
+            assert!(reveal(mode).animates(), "{mode} is a staggered walk");
+        }
+    }
 
     fn caption(duration: Option<f64>) -> ProjectLayer {
         let mut layer: ProjectLayer = serde_json::from_str(

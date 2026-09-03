@@ -1610,6 +1610,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Kinetic reveals (rung 28): flip, tumble and slide each render a
+    /// mid-walk frame that is neither empty nor finished — the arriving
+    /// units are on their way — and land on the same picture a wipe does.
+    #[test]
+    fn kinetic_reveals_arrive_mid_walk_and_land() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-kinetic-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = |mode: &str| {
+            format!(
+                r#"{{"id":"P","name":"Kinetic","createdAt":0,"state":"recorded","minReaderVersion":28,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":640,"canvasHeight":360,"backgroundColorHex":"000000",
+                  "subtitleFontSize":72,"subtitleBold":true,"subtitleColorHex":"FFFFFF",
+                  "subtitleBackgroundOpacity":0,"subtitleVerticalMargin":120}},
+                "resources":[],
+                "layers":[{{"id":"L","name":"words","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":2,"captionText":"ONE TWO THREE FOUR",
+                  "captionStyle":{{"alignment":"center","reveal":{{"by":"word","mode":"{mode}","seconds":1.6}}}},
+                  "keyframes":[]}}]}}"#
+            )
+        };
+        let lit = |json: &str, time: f64| -> usize {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 640, 360).expect("renderer");
+            let frame = renderer.frame_bgra(time).expect("frame");
+            frame.chunks(4).filter(|p| p[2] > 128).count()
+        };
+        let landed = lit(&doc("wipe"), 1.9);
+        assert!(
+            landed > 2000,
+            "the wipe lands with the words showing: {landed}"
+        );
+        for mode in ["flip", "tumble", "slide"] {
+            let mid = lit(&doc(mode), 0.8);
+            assert!(
+                mid > landed / 20 && mid < landed * 19 / 20,
+                "{mode} is on its way at mid-walk: {mid} of {landed}"
+            );
+            let end = lit(&doc(mode), 1.9);
+            assert!(
+                end > landed * 9 / 10 && end < landed * 11 / 10,
+                "{mode} lands on the wipe's picture: {end} vs {landed}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Caption tilt: `tiltY` keyframes on a caption layer lean it in
     /// perspective — the lit width of a wide white word narrows against
     /// its flat twin, and its near edge stays the taller one.

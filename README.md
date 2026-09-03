@@ -389,6 +389,8 @@ solid letters with a side — the classic extrusion, pure 2D, lit by
 choosing the offset. A reveal extrudes each arriving piece the same way.
 `tiltX` / `tiltY` keyframes on a caption lean it in perspective, on the
 same camera the device frames use, and the side leans with the face.
+A reveal's `flip`, `tumble` and `slide` modes bring each word in on its
+own axes — kinetic type from one rule, no keyframes.
 
 ## Follow the pointer
 

@@ -3063,6 +3063,18 @@ fn apply_effect_with(
     );
     quad.rect = rect;
     quad.uv_rect = uv;
+    // A unit turning in does so about ITS OWN centre, whatever pivot the
+    // whole caption's lean set; the camera distance stays the caption's.
+    if effect.tilt != [0.0, 0.0] {
+        quad.tilt = [quad.tilt[0] + effect.tilt[0], quad.tilt[1] + effect.tilt[1]];
+        quad.tilt_pivot = Some([
+            quad.rect[0] + quad.rect[2] / 2.0,
+            quad.rect[1] + quad.rect[3] / 2.0,
+        ]);
+    }
+    if effect.rotate != 0.0 {
+        quad.rotation_deg += effect.rotate;
+    }
 }
 
 fn caption_scene_quad(x: f64, y: f64, w: f64, h: f64) -> SceneQuad {
