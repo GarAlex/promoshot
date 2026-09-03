@@ -4786,7 +4786,7 @@
    900
   ],
   "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 560 px tall in the centre (offset 20 px up), whose keyframes carry the camera (swinging from a yaw of -30 to 30, pitch 14 to 10, with an ease in and out) and the key light (sweeping from a yaw of -60 to 60 at intensity 1.3). Its members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, positioned at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]), a Plate box (size [1.2,0.06,1.2], radius 0.03, positioned at y 0.81) and a Ring torus (radius 0.62, tube 0.02, at y 0.85) \u2014 painted dark 1E2430 on Base and Plate and chrome D2D6DC (metallic 1, roughness 0.2) on Stem and Ring, offset 0.45 down; and vase.glb painted F2E9DC with a gloss finish (metallic 0.05, roughness 0.15), offset 0.62 up so it stands on the plate, turning from a yaw of -20 to 20; and along the bottom a bold caption 'Made from parts.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- Made from parts.",
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 560 px tall in the centre (offset 20 px up), whose keyframes carry the camera making one full orbit (yaw -30 through 150 at the midpoint to 330, pitch 22 down to 6, distance 4.9 in to 4.0, eased in over the first half and out over the second) and the key light flying over the stand (yaw -140 through 0 to 140, pitch 70 down to 22, intensity 1.2 to 1.6). Its members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, positioned at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]), a Plate box (size [1.2,0.06,1.2], radius 0.03, positioned at y 0.81) and a Ring torus (radius 0.62, tube 0.02, at y 0.85) \u2014 painted dark 1E2430 on Base and Plate and chrome D2D6DC (metallic 1, roughness 0.2) on Stem and Ring, offset 0.45 down; and vase.glb painted F2E9DC with a gloss finish (metallic 0.05, roughness 0.15), offset 0.9 up so it stands on the plate, turning from a yaw of -20 to 20; and along the bottom a bold caption 'Made from parts.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- Made from parts.",
   "resources": [
    {
     "file": "vase.glb",
@@ -4962,6 +4962,220 @@
    "thumb": "docs/demo/32-stand/thumb.png"
   },
   "page": "docs/demo/demo32.md"
+ },
+ {
+  "id": "33",
+  "slug": "33-worn",
+  "title": "Worn",
+  "blurb": "Pictures worn by bodies \u2014 a video playing on a glossy panel and a label tiled round the glazed vase \u2014 lit and reflecting like the surfaces they sit on, under a key light that flies across.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 600 px tall in the centre (offset 30 px up), whose keyframes carry the camera (swinging from a yaw of -38 to 34, pitch 12 to 6, distance 4.6 to 4.1, with an ease in and out) and the key light flying over the scene (yaw -130 to 120, pitch 65 to 24, intensity 1.3 to 1.5). Its members: a PANEL that is a model resource with no file and a PARTS recipe \u2014 a Print box (size [1.6,1.0,0.05], radius 0.015) and a Frame box (size [1.68,1.08,0.04], radius 0.02, positioned at z -0.03) \u2014 whose Print slot WEARS the video rec_lumen_2560.mp4 as a surface (\"mode\": \"surface\", metallic 0, roughness 0.18) so the light shades it, with the Frame chrome D2D6DC (metallic 1, roughness 0.25), offset 0.42 left and 0.12 up; and a VASE that is a model resource with no file and a PARTS recipe of one lathe (slot Body, profile [[0.18,0.75],[0.14,0.62],[0.16,0.5],[0.26,0.35],[0.34,0.15],[0.36,-0.05],[0.33,-0.3],[0.26,-0.55],[0.2,-0.7],[0.22,-0.75],[0,-0.75]], 48 segments) whose Body slot WEARS label_lumen.png as a surface tiled three times round it (repeat [3,1]) over a glaze F2E9DC (metallic 0.05, roughness 0.15), offset 0.66 right and 0.28 down, turning from a yaw of -70 to 70; and along the bottom a bold caption 'Every picture, lit.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: label_lumen.png, rec_lumen_2560.mp4.\n\nText to use, in order:\n- Every picture, lit.",
+  "resources": [
+   {
+    "file": "label_lumen.png",
+    "kind": "image",
+    "path": "docs/demo/33-worn/resources/label_lumen.png"
+   },
+   {
+    "file": "rec_lumen_2560.mp4",
+    "kind": "video",
+    "path": "demos/33-worn/resources/rec_lumen_2560.mp4",
+    "poster": "docs/demo/33-worn/resources/rec_lumen_2560.poster.png"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 18,
+   "total": 18,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:stage",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:finish",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:wornPicture",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:wornVideo",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:environment",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:partsBody",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=32 cost=$1.68 secs=150",
+   "run": {
+    "turns": 32,
+    "wall_s": 149,
+    "api_s": 138,
+    "cost_usd": 1.68,
+    "tokens": {
+     "input": 62,
+     "cache_read": 1845105,
+     "cache_write": 50773,
+     "output": 9830,
+     "thinking": 2303
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1569,
+      "output": 21,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1895940,
+      "output": 9830,
+      "cost_usd": 1.68
+     }
+    ],
+    "mcp": {
+     "calls": 10,
+     "ms": 8244,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 4241,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 3406,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 518,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 68,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` is written, validates clean, and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9.00s, `minReaderVersion: 38`\n- **Ground** \u2014 radial gradient, `3A3E44` core \u2192 `121316` edge, plus `environment: studio` so the chrome and the glaze have something to mirror.\n- **Bench** (`kind: \"stage\"`) \u2014 placed 600 px tall, centred, offset 30 px up. Its two keyframes carry the whole scene on one easeInOut ramp: camera yaw \u221238 \u2192 34, pitch 12 \u2192 6, distance 4.6 \u2192 4.1; key light yaw \u2212130 \u2192 120, pitch 65 \u2192 24, intensity 1.3 \u2192 1.5.\n  - **Panel** \u2014 model resource, no file, `recipe.parts`: a `Print` box `[1.6, 1.0, 0.05]` r 0.015 and a `Frame` box `[1.68, 1.08, 0.04]` r 0.02 at z \u22120.03. `Print` wears the recording (`\"mode\": \"surface\"`, metallic 0, roughness 0.18) so the flying light shades it; `Frame` is chrome `@chrome` D2D6DC (metallic 1, roughness 0.25). `stageOffset [-0.42, 0.12]`.\n  - **Vase** \u2014 one 48-segment lathe on the given profile; its `Body` wears `label_lumen.png` as a surface with `repeat: [3, 1]` over the `@glaze` F2E9DC (metallic 0.05, roughness 0.15). `stageOffset [0.66, -0.28]`, turning yaw \u221270 \u2192 70 across the nine seconds.\n- **Caption** \u2014 bold \"Every picture, lit.\" hung on the bottom, in from 1.2s with `reveal: { by: \"word\", mode: \"fade\", secondsPer: 0.32 }`.\n\nValidation: *ok \u2014 nothing the renderer would quietly correct*; inspect reports 3 of 3 layers renderable, no missing media, no undefined colours.\n\nOutputs: `out.promo/Exports/export.mp4` (1440\u00d7900, 270 frames @ 30fps), contact frames in `out.promo/Exports/frames/` (frames 0\u20138 are the 0.2\u20138.8s sheet; the higher-numbered files are leftovers from a first sweep that used a `times` argument the tool doesn't take, which rendered the full range instead).",
+   "contact": "docs/demo/33-worn/contact-result.png",
+   "reference_contact": "docs/demo/33-worn/contact-reference.png",
+   "video": "docs/demo/33-worn/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/33-worn.mp4",
+   "video_hd_bytes": 918152,
+   "metadata": "docs/demo/33-worn/result-metadata.json",
+   "gif": "docs/demo/33-worn/result.gif",
+   "thumb": "docs/demo/33-worn/thumb.png"
+  },
+  "page": "docs/demo/demo33.md"
  },
  {
   "id": "c1",
