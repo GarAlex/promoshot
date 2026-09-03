@@ -343,7 +343,10 @@ quick eased-OUT moves of 0.8–1.3 s with holds of about 2 s between (a
 hold is a keyframe repeating the values, reached by a long linear ramp),
 let the key light fly AHEAD of the camera on every move and drift a
 little during the holds, reveal a caption in a second or less, and cut
-between beats rather than cross-fading.
+between beats rather than cross-fading. A body that TURNS is the
+exception: spin it in one continuous linear turn (a camera or a member
+yaw of 0 → 360 over the shot) under a light that stays put, so each
+side passes the light; do not chop a spin into moves.
 
 ## With the app attached
 

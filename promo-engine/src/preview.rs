@@ -285,6 +285,11 @@ struct CachedFrame {
     /// Captions only: canvas-space top-left, so a cache hit rebuilds the quad
     /// without laying the text out again.
     caption_origin: Option<(f64, f64)>,
+    /// Stages only: the bodies' box inside the frame (x, y, w, h in frame
+    /// pixels) when the frame also holds what spills past them — a
+    /// morph's cloud. The layout measures the box; the rest draws beyond
+    /// the placed rect.
+    content_box: Option<(u32, u32, u32, u32)>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -761,6 +766,7 @@ impl PreviewEngine {
             frame,
             flags,
             caption_origin: None,
+            content_box: None,
         };
         if transient {
             self.scratch.insert(id, entry);
@@ -1194,6 +1200,17 @@ impl PreviewEngine {
         };
         let frame = self.cached_frame(frame_id);
         let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
+        // A stage frame with a content box (a morph's spill around the
+        // bodies): the layout measures the box, and the whole frame is
+        // drawn scaled and placed around it afterwards.
+        let content = frame.content_box;
+        let (full_w, full_h) = (fw, fh);
+        if let Some((_, _, cw, ch)) = content {
+            if cw > 0 && ch > 0 {
+                fw = cw as f64;
+                fh = ch as f64;
+            }
+        }
         let pre_framed = frame.flags & FLAG_PRE_FRAMED != 0;
         let color_709 = frame.flags & FLAG_COLOR_709 != 0;
 
@@ -1317,6 +1334,18 @@ impl PreviewEngine {
             )
         };
 
+        let rect = match content {
+            Some((cx, cy, cw, ch)) if cw > 0 && ch > 0 => {
+                let s = rect.height() / ch as f64;
+                promo_model::geometry::Rect::new(
+                    rect.x() - cx as f64 * s,
+                    rect.y() - cy as f64 * s,
+                    full_w * s,
+                    full_h * s,
+                )
+            }
+            _ => rect,
+        };
         let mut quad = SceneQuad {
             texture: Some(0), // patched below
             rect: [rect.x(), rect.y(), rect.width(), rect.height()],
@@ -1678,6 +1707,7 @@ impl PreviewEngine {
                 // Canvas-space origin (density divided back out), so a cache
                 // hit rebuilds the quad without knowing how dense it is.
                 caption_origin: Some((raster.x / scale, raster.y / scale)),
+                content_box: None,
             },
         );
         self.key_of.insert(key.clone(), id);
@@ -1817,6 +1847,7 @@ impl PreviewEngine {
                 frame,
                 flags: 0,
                 caption_origin: None,
+                content_box: None,
             },
         );
         self.key_of.insert(key.clone(), id);
@@ -1916,6 +1947,7 @@ impl PreviewEngine {
                 frame,
                 flags: 0,
                 caption_origin: None,
+                content_box: None,
             },
         );
         self.key_of.insert(key.clone(), id);
@@ -3068,7 +3100,9 @@ impl PreviewEngine {
             };
             for id in [&morph.from, &morph.to] {
                 if let Some(loaded) = self.models.get(id) {
-                    radius = radius.max(loaded.model.bounds_radius);
+                    // The viewport reaches where the points fly, not just
+                    // where the bodies stand.
+                    radius = radius.max(loaded.model.bounds_radius * (1.0 + morph.spread() as f32 * 1.5));
                 }
             }
         }
@@ -3477,19 +3511,43 @@ impl PreviewEngine {
         // The members' box on the square, from every model corner and
         // billboard corner through the camera — the stage is cut to it so
         // the first member's placement measures the scene, not the sphere.
-        let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
-        let mut take = |w: [f32; 3]| {
-            if let Some(q) = promo_gpu::model_pass::project_point(&view, 1.0, w) {
-                lo[0] = lo[0].min(q[0]);
-                lo[1] = lo[1].min(q[1]);
-                hi[0] = hi[0].max(q[0]);
-                hi[1] = hi[1].max(q[1]);
+        // Two boxes on the square: everything drawn (the cut), and the
+        // bodies alone (what the placement measures).
+        struct Boxes {
+            lo: [f32; 2],
+            hi: [f32; 2],
+            blo: [f32; 2],
+            bhi: [f32; 2],
+        }
+        impl Boxes {
+            fn spill(&mut self, view: &ModelView, w: [f32; 3]) {
+                if let Some(q) = promo_gpu::model_pass::project_point(view, 1.0, w) {
+                    self.lo[0] = self.lo[0].min(q[0]);
+                    self.lo[1] = self.lo[1].min(q[1]);
+                    self.hi[0] = self.hi[0].max(q[0]);
+                    self.hi[1] = self.hi[1].max(q[1]);
+                }
             }
+            fn take(&mut self, view: &ModelView, w: [f32; 3]) {
+                self.spill(view, w);
+                if let Some(q) = promo_gpu::model_pass::project_point(view, 1.0, w) {
+                    self.blo[0] = self.blo[0].min(q[0]);
+                    self.blo[1] = self.blo[1].min(q[1]);
+                    self.bhi[0] = self.bhi[0].max(q[0]);
+                    self.bhi[1] = self.bhi[1].max(q[1]);
+                }
+            }
+        }
+        let mut boxes = Boxes {
+            lo: [f32::MAX; 2],
+            hi: [f32::MIN; 2],
+            blo: [f32::MAX; 2],
+            bhi: [f32::MIN; 2],
         };
         // A morph frames BOTH its bodies for as long as its member lives —
         // so the cut holds still from the first body through the flight to
-        // the second — and, while the points are out past them, where the
-        // points are, so none is cut off.
+        // the second — and what spills past them (the points in flight)
+        // is drawn too, beyond the placed rect, never cut off.
         for (item, (points, _)) in prepared.iter().filter(|i| i.morph.is_some()).zip(&cloud_points) {
             let member = &members[item.index];
             let centre = [
@@ -3523,21 +3581,30 @@ impl PreviewEngine {
                     }
                 }
             }
+            if min[0] <= max[0] {
+                for corner in 0..8 {
+                    boxes.take(&view, [
+                        if corner & 1 == 0 { min[0] } else { max[0] },
+                        if corner & 2 == 0 { min[1] } else { max[1] },
+                        if corner & 4 == 0 { min[2] } else { max[2] },
+                    ]);
+                }
+            }
+            let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
             for p in points {
                 for k in 0..3 {
                     min[k] = min[k].min(p.position[k] - p.size);
                     max[k] = max[k].max(p.position[k] + p.size);
                 }
             }
-            if min[0] > max[0] {
-                continue;
-            }
-            for corner in 0..8 {
-                take([
-                    if corner & 1 == 0 { min[0] } else { max[0] },
-                    if corner & 2 == 0 { min[1] } else { max[1] },
-                    if corner & 4 == 0 { min[2] } else { max[2] },
-                ]);
+            if min[0] <= max[0] {
+                for corner in 0..8 {
+                    boxes.spill(&view, [
+                        if corner & 1 == 0 { min[0] } else { max[0] },
+                        if corner & 2 == 0 { min[1] } else { max[1] },
+                        if corner & 4 == 0 { min[2] } else { max[2] },
+                    ]);
+                }
             }
         }
         for item in &prepared {
@@ -3575,7 +3642,7 @@ impl PreviewEngine {
                                 if corner & 2 == 0 { min[1] } else { max[1] },
                                 if corner & 4 == 0 { min[2] } else { max[2] },
                             ];
-                            take([
+                            boxes.take(&view, [
                                 m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
                                 m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
                                 m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
@@ -3613,7 +3680,7 @@ impl PreviewEngine {
                         item.depth * radius,
                     ];
                     for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-                        take([
+                        boxes.take(&view, [
                             c[0] + right[0] * sx * hw + up[0] * sy * hh,
                             c[1] + right[1] * sx * hw + up[1] * sy * hh,
                             c[2] + right[2] * sx * hw + up[2] * sy * hh,
@@ -3623,6 +3690,7 @@ impl PreviewEngine {
                 _ => {}
             }
         }
+        let Boxes { lo, hi, blo, bhi } = boxes;
         // The stage renders large enough that its cut, scaled to the
         // placement, is never upsampled: a scene filling a quarter of the
         // square gets a square four times the canvas height, to the cap.
@@ -3635,6 +3703,7 @@ impl PreviewEngine {
             .render_scene(self.ctx, &items, &view, side, side)
             .ok()?;
         drop(items);
+        let mut content_box: Option<(u32, u32, u32, u32)> = None;
         let (texture, frame_w, frame_h) = if lo[0] < hi[0] && lo[1] < hi[1] {
             let px = |f: f32| (f * side as f32).round();
             let x0 = (px(lo[0]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
@@ -3642,6 +3711,18 @@ impl PreviewEngine {
             let x1 = (px(hi[0]) + 1.0).clamp(x0 as f32 + 2.0, side as f32) as u32;
             let y1 = (px(hi[1]) + 1.0).clamp(y0 as f32 + 2.0, side as f32) as u32;
             let (w, h) = (x1 - x0, y1 - y0);
+            // When something spills past the bodies, the bodies' box inside
+            // the cut is what the placement measures.
+            let spilled = blo[0] < bhi[0]
+                && blo[1] < bhi[1]
+                && (blo[0] > lo[0] + 1e-4 || blo[1] > lo[1] + 1e-4 || bhi[0] < hi[0] - 1e-4 || bhi[1] < hi[1] - 1e-4);
+            if spilled {
+                let bx0 = (px(blo[0]) - 1.0).clamp(x0 as f32, x1 as f32 - 2.0) as u32;
+                let by0 = (px(blo[1]) - 1.0).clamp(y0 as f32, y1 as f32 - 2.0) as u32;
+                let bx1 = (px(bhi[0]) + 1.0).clamp(bx0 as f32 + 2.0, x1 as f32) as u32;
+                let by1 = (px(bhi[1]) + 1.0).clamp(by0 as f32 + 2.0, y1 as f32) as u32;
+                content_box = Some((bx0 - x0, by0 - y0, bx1 - bx0, by1 - by0));
+            }
             if w >= side && h >= side {
                 (texture, side, side)
             } else {
@@ -3664,6 +3745,7 @@ impl PreviewEngine {
             frame,
             flags: 0,
             caption_origin: None,
+            content_box,
         };
         if transient {
             self.scratch.insert(id, entry);
@@ -3900,6 +3982,7 @@ impl PreviewEngine {
             frame,
             flags: 0,
             caption_origin: None,
+            content_box: None,
         };
         if transient {
             self.scratch.insert(id, entry);
@@ -4001,6 +4084,7 @@ impl PreviewEngine {
             frame,
             flags: 0,
             caption_origin: None,
+            content_box: None,
         };
         if transient {
             self.scratch.insert(id, entry);
