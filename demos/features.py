@@ -29,7 +29,9 @@ def features(meta):
         "motionPath": any(k.get('motionPath') for k in kf) or any(r.get('kind') == 'path' for r in res),
         "sprite": any(r.get('sprite') for r in res),
         "gradient": bool(cs.get('backgroundGradient')) or any(k.get('gradient') for k in kf),
-        "reveal": any((r.get('captionStyle') or {}).get('reveal') for r in res) or bool(cs.get('subtitleReveal')),
+        "reveal": any((r.get('captionStyle') or {}).get('reveal') for r in res)
+                  or any((l.get('captionStyle') or {}).get('reveal') for l in layers)
+                  or bool(cs.get('subtitleReveal')),
         "depth": any((l.get('captionStyle') or {}).get('depth') for l in layers)
                  or any((r.get('captionStyle') or {}).get('depth') for r in res),
         "captionTilt": any(l.get('kind') == 'caption' and any(k.get('tiltX') is not None or k.get('tiltY') is not None for k in l.get('keyframes') or []) for l in layers),
