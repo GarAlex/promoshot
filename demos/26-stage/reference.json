@@ -85,7 +85,7 @@
    "displayName": "Phone",
    "addedAt": 0,
    "clips": [],
-   "boundsRadius": 0.8194,
+   "boundsRadius": 0.4097,
    "materials": {
     "Body": "@edge",
     "Screen": {
@@ -252,10 +252,10 @@
      "id": "8858BFF3-3B57-436F-0F55-DF4A584DC85A",
      "time": 0,
      "transitionDuration": 0,
-     "depth": 0.9,
+     "depth": 1.1,
      "stageOffset": [
-      0.95,
-      -0.15
+      0.98,
+      -0.22
      ]
     }
    ]
