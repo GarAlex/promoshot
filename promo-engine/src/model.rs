@@ -1094,9 +1094,7 @@ impl GlbGeometry {
         );
         self.band(&outline, ht, -ht, &place, &turn, into);
     }
-
     #[allow(clippy::too_many_arguments)]
-
     fn rounded_plate_flat(
         &mut self,
         hw: f32,
@@ -1168,9 +1166,7 @@ impl GlbGeometry {
         );
         self.band(&outline, ht, -ht, &place, &turn, into);
     }
-
     #[allow(clippy::too_many_arguments)]
-
     fn rounded_plate_leaning(
         &mut self,
         hw: f32,
@@ -1456,7 +1452,8 @@ mod tests {
     #[test]
     fn the_device_bodies_have_screens() {
         for kind in DeviceKind::ALL {
-            let model = Model::from_glb(&device_glb(kind)).expect(kind.name());
+            let model = Model::from_glb(&device_glb(kind))
+                .unwrap_or_else(|e| panic!("{}: {e}", kind.name()));
             let slots = model.slot_names();
             assert!(
                 slots.contains(&"Body") && slots.contains(&"Screen"),
