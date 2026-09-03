@@ -390,7 +390,10 @@ placement, opacity, transitions, masks, effects and the contact shadow
 all apply. Keyframes carry a `camera` (yaw, pitch, roll, distance in
 bounds radii, fov) and a `light`; `materials` on the resource bind a
 slot name to a colour — a palette name works, so `@accent` re-skins the
-body with the theme. Lighting defaults come from the theme. Rung 29. Built-in device bodies
+body with the theme — and, in the object form, to a finish: `metallic`
+and `roughness` (each 0…1) over the file's own, so one body is chrome in
+this project and matte in the next (rung 32). Lighting defaults come
+from the theme. Rung 29. Built-in device bodies
 (phone, tablet, laptop; `promo device`) ship as generated `.glb` files
 with `Body` and `Screen` slots, so the device shot is a model too.
 Layers naming the same `stage` draw through one camera into one depth

@@ -136,14 +136,87 @@ strict_enum!(
 /// changes — or a resource, whose picture (an image, a video's frames)
 /// is drawn onto that surface. A screenshot on a "Screen" slot is the
 /// reason models exist here.
+///
+/// On the wire a colour is a bare string and everything else an object
+/// (`SurfaceBinding`): `{ "resourceID": … }` for a picture, and — rung
+/// 32 — `{ "colorHex": …, "metallic": …, "roughness": … }` for a colour
+/// with a FINISH, the file's own factors overridden per project, so one
+/// body is chrome here and matte there without a second file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum MaterialBinding {
     Color(String),
-    Resource {
-        #[serde(rename = "resourceID")]
-        resource_id: String,
-    },
+    Surface(SurfaceBinding),
+}
+
+/// The object form of a `materials` binding. Every field is optional:
+/// a picture (`resourceID`), a colour (`colorHex`, palette names work),
+/// a finish (`metallic` 0 dielectric … 1 metal, `roughness` 0 mirror …
+/// 1 matte; each 0…1, each absent keeps the file's value). A finish on
+/// a slot that shows a picture is ignored — the picture is drawn unlit.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SurfaceBinding {
+    #[serde(default, rename = "resourceID", skip_serializing_if = "is_none")]
+    pub resource_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub color_hex: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub metallic: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub roughness: Option<f64>,
+}
+
+impl MaterialBinding {
+    /// A picture on the slot: `{ "resourceID": id }`.
+    pub fn resource(id: impl Into<String>) -> Self {
+        MaterialBinding::Surface(SurfaceBinding {
+            resource_id: Some(id.into()),
+            ..Default::default()
+        })
+    }
+
+    /// The resource whose picture the slot shows, if any.
+    pub fn resource_id(&self) -> Option<&str> {
+        match self {
+            MaterialBinding::Color(_) => None,
+            MaterialBinding::Surface(s) => s.resource_id.as_deref(),
+        }
+    }
+
+    /// The colour the slot is painted, if any — the bare string form or
+    /// the object's `colorHex`.
+    pub fn color_hex(&self) -> Option<&str> {
+        match self {
+            MaterialBinding::Color(hex) => Some(hex),
+            MaterialBinding::Surface(s) => s.color_hex.as_deref(),
+        }
+    }
+
+    pub fn metallic(&self) -> Option<f64> {
+        match self {
+            MaterialBinding::Color(_) => None,
+            MaterialBinding::Surface(s) => s.metallic,
+        }
+    }
+
+    pub fn roughness(&self) -> Option<f64> {
+        match self {
+            MaterialBinding::Color(_) => None,
+            MaterialBinding::Surface(s) => s.roughness,
+        }
+    }
+
+    /// Written in the object form a rung-29 reader cannot decode — it
+    /// knows only `resourceID` there — so a project carrying it is 32.
+    pub fn needs_rung_32(&self) -> bool {
+        match self {
+            MaterialBinding::Color(_) => false,
+            MaterialBinding::Surface(s) => {
+                s.color_hex.is_some() || s.metallic.is_some() || s.roughness.is_some()
+            }
+        }
+    }
 }
 
 /// A glTF animation the model carries, written at import (the host reads
@@ -3056,6 +3129,19 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 32 is a slot binding written as an object with a colour or a
+        // finish (`metallic`, `roughness`). A rung-29 reader decodes
+        // only `resourceID` in that object and fails on the file, so
+        // the rung refuses it up front.
+        if resources.iter().any(|r| {
+            r.materials
+                .iter()
+                .flat_map(|m| m.values())
+                .any(MaterialBinding::needs_rung_32)
+        }) {
+            return 32;
+        }
+
         // 31 is a stage member's offset across the stage. Dropped by an
         // older reader, the member falls back onto the camera axis — a
         // different picture, so the rung refuses.
@@ -3988,6 +4074,78 @@ mod placement_model_tests {
         // 31: a stage member placed across the stage.
         staged.layers.as_mut().unwrap()[0].keyframes[0].stage_offset = Some([1.0, 0.0]);
         assert_eq!(staged.minimum_reader_version(), 31);
+
+        // 32: a slot binding in the object form with a colour or a
+        // finish; a picture binding alone stays at 29.
+        let model = |materials: &str| {
+            meta(&format!(
+                r#""resources":[{{"id":"M","kind":"model","filename":"body.glb",
+                     "displayName":"Body","addedAt":0,"materials":{materials}}}],
+                     "layers":[]"#
+            ))
+        };
+        assert_eq!(
+            model(r#"{"Body":"@accent","Screen":{"resourceID":"S"}}"#).minimum_reader_version(),
+            29
+        );
+        assert_eq!(
+            model(r#"{"Body":{"metallic":1}}"#).minimum_reader_version(),
+            32
+        );
+        assert_eq!(
+            model(r#"{"Body":{"colorHex":"@accent","roughness":0.2}}"#).minimum_reader_version(),
+            32
+        );
+    }
+
+    /// A binding's three wire forms decode to what they say and encode
+    /// back without loss: the bare colour string stays a string, the
+    /// picture object keeps `resourceID`, and a finish keeps every key it
+    /// was given and no other.
+    #[test]
+    fn a_slot_binding_keeps_its_wire_form() {
+        let doc = ProjectMetadata::from_json(
+            r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v",
+                 "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                 "videoDuration":0,"subtitles":[],
+                 "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+                 "resources":[{"id":"M","kind":"model","filename":"body.glb",
+                   "displayName":"Body","addedAt":0,"materials":{
+                     "Body":"@accent",
+                     "Screen":{"resourceID":"S"},
+                     "Trim":{"colorHex":"C0C0C0","metallic":1,"roughness":0.15},
+                     "Base":{"roughness":0.9}}}],
+                 "layers":[]}"#,
+        )
+        .expect("fixture");
+        let materials = doc.resources.as_ref().unwrap()[0].materials.clone().unwrap();
+        let body = &materials["Body"];
+        assert_eq!(body.color_hex(), Some("@accent"));
+        assert_eq!(body.resource_id(), None);
+        assert!(!body.needs_rung_32());
+        let screen = &materials["Screen"];
+        assert_eq!(screen.resource_id(), Some("S"));
+        assert_eq!(screen.color_hex(), None);
+        assert!(!screen.needs_rung_32());
+        let trim = &materials["Trim"];
+        assert_eq!(trim.color_hex(), Some("C0C0C0"));
+        assert_eq!(trim.metallic(), Some(1.0));
+        assert_eq!(trim.roughness(), Some(0.15));
+        let base = &materials["Base"];
+        assert_eq!(base.color_hex(), None);
+        assert_eq!(base.metallic(), None);
+        assert_eq!(base.roughness(), Some(0.9));
+        assert!(base.needs_rung_32());
+
+        let json = doc.to_json().expect("encode");
+        assert!(json.contains(r#""Body":"@accent""#), "{json}");
+        assert!(json.contains(r#""Screen":{"resourceID":"S"}"#), "{json}");
+        assert!(
+            json.contains(r#""Trim":{"colorHex":"C0C0C0","metallic":1.0,"roughness":0.15}"#),
+            "{json}"
+        );
+        assert!(json.contains(r#""Base":{"roughness":0.9}"#), "{json}");
+        assert_eq!(doc.minimum_reader_version(), 32);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

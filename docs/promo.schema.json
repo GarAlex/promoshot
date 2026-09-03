@@ -1210,15 +1210,7 @@
           "type": "string"
         },
         {
-          "properties": {
-            "resourceID": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "resourceID"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/SurfaceBinding"
         }
       ]
     },
@@ -2865,6 +2857,37 @@
         "recorded"
       ],
       "type": "string"
+    },
+    "SurfaceBinding": {
+      "properties": {
+        "colorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metallic": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "resourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roughness": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "TextDepth": {
       "properties": {

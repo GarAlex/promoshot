@@ -544,7 +544,9 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 
 /// A model's `materials` may bind a slot to a resource: an image or a
 /// video is drawn on that surface; anything else — or a missing id — is a
-/// mistake worth naming before it reads as "the screen stayed dark".
+/// mistake worth naming before it reads as "the screen stayed dark". A
+/// finish outside 0…1, or one on a slot that shows a picture (a picture
+/// is drawn unlit, so the finish does nothing), is named the same way.
 fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for model in resources
@@ -552,10 +554,32 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         .filter(|r| r.kind == promo_model::ProjectResourceKind::Model)
     {
         for (slot, binding) in model.materials.iter().flat_map(|m| m.iter()) {
-            let promo_model::MaterialBinding::Resource { resource_id } = binding else {
+            let finish = [
+                ("metallic", binding.metallic(), "0 dielectric … 1 metal"),
+                ("roughness", binding.roughness(), "0 mirror … 1 matte"),
+            ];
+            for (name, value, scale) in finish {
+                if let Some(v) = value {
+                    if !v.is_finite() || !(0.0..=1.0).contains(&v) {
+                        out.push(format!(
+                            "model \"{}\": slot \"{slot}\" has {name} {v}; a finish is \
+                             0…1 ({scale}) — out of range it is clamped",
+                            model.display_name
+                        ));
+                    }
+                }
+            }
+            let Some(resource_id) = binding.resource_id() else {
                 continue;
             };
-            match resources.iter().find(|r| &r.id == resource_id) {
+            if binding.metallic().is_some() || binding.roughness().is_some() {
+                out.push(format!(
+                    "model \"{}\": slot \"{slot}\" shows a picture AND carries a finish; a \
+                     bound picture is drawn unlit, so its metallic/roughness are ignored",
+                    model.display_name
+                ));
+            }
+            match resources.iter().find(|r| r.id == resource_id) {
                 None => out.push(format!(
                     "model \"{}\": slot \"{slot}\" is bound to a resource the project \
                      does not have ({resource_id})",
@@ -1192,6 +1216,29 @@ mod tests {
                 .iter()
                 .any(|w| w.contains("collapses"))
         );
+    }
+    /// A finish (rung 32) outside 0…1 is named with its scale, and a
+    /// finish on a slot that shows a picture is named as ignored — the
+    /// picture is drawn unlit. A finish in range on a colour slot says
+    /// nothing.
+    #[test]
+    fn a_finish_out_of_range_or_on_a_picture_is_named() {
+        let meta = project(
+            "",
+            r#","resources":[
+                {"id":"S","kind":"image","filename":"s.png","displayName":"Shot","addedAt":0},
+                {"id":"M","kind":"model","filename":"b.glb","displayName":"Body","addedAt":0,
+                 "materials":{"Body":{"colorHex":"@accent","metallic":1.4},
+                              "Screen":{"resourceID":"S","roughness":0.3},
+                              "Base":{"roughness":0.2}}}]"#,
+        );
+        let warnings = warnings(&meta);
+        let has = |needle: &str| warnings.iter().any(|w| w.contains(needle));
+        assert!(has("slot \"Body\" has metallic 1.4"), "{warnings:?}");
+        assert!(has("0 dielectric … 1 metal"), "{warnings:?}");
+        assert!(has("slot \"Screen\" shows a picture AND carries a finish"), "{warnings:?}");
+        assert!(!has("slot \"Base\""), "{warnings:?}");
+        assert_eq!(meta.minimum_reader_version(), 32);
     }
 }
 

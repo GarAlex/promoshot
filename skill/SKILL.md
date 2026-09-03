@@ -160,11 +160,18 @@ new projects.
   seconds is a turntable. `"materials": { "Body": "@accent", "Screen": { "resourceID":
   "<image uuid>" } }` on the resource paints a slot by the name the file
   exports — a colour, or an image or video resource drawn on that
-  surface (a screen recording plays on the screen). A file with
+  surface (a screen recording plays on the screen). The object form
+  also takes a FINISH over the file's own: `"Body": { "colorHex":
+  "@accent", "metallic": 1, "roughness": 0.12 }` is chrome, `{
+  "metallic": 0, "roughness": 0.85 }` matte (each 0…1; what is left
+  out keeps the file's value), so one `.glb` serves every look — and
+  a finish on a slot showing a picture does nothing, the picture is
+  drawn unlit. A file with
   animations lists them under `clips` after import; `"clip":
   { "name": "Open" }` on a keyframe plays one on layer time, and a
   `time` scrubs it. Stamp
-  `minReaderVersion: 29`. `promo_inspect` lists the layer; a missing
+  `minReaderVersion: 29`, or `32` when a finish (or a colour in the
+  object form) is written. `promo_inspect` lists the layer; a missing
   file is named like any other.
 - **Stages.** Layers naming the same `"stage": "hero"` draw through one
   camera into one depth buffer: models at their keyframes' `"depth"`

@@ -1,14 +1,14 @@
 {
- "template": "02 Focus Follow",
+ "template": "28 Finishes",
  "canvas": [
-  1920,
-  1080
+  1440,
+  900
  ],
- "duration": 16,
+ "duration": 9.0,
  "kinds": {
   "background": 1,
-  "video": 1,
-  "caption": 5
+  "model": 3,
+  "caption": 1
  },
  "features": {
   "chromaKey": false,
@@ -20,17 +20,17 @@
   "effects": false,
   "mask": false,
   "maskInverted": false,
-  "viewport": true,
+  "viewport": false,
   "motionPath": false,
   "sprite": false,
-  "gradient": false,
-  "reveal": false,
-  "stage": false,
-  "model": false,
-  "camera": false,
-  "materials": false,
-  "finish": false,
-  "depth": false,
+  "gradient": true,
+  "reveal": true,
+  "stage": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
+  "finish": true,
+  "depth": true,
   "captionTilt": false,
   "kineticReveal": false,
   "blendModes": [],
@@ -44,13 +44,9 @@
   "placement": true
  },
  "phrases": [
-  "The window stays put.",
-  "Follow the number\u2026",
-  "\u2026then the account\u2026",
-  "\u2026then the switch.",
-  "One layer. No cuts."
+  "One body. Three finishes."
  ],
  "media": [
-  "rec_lumen_2560.mp4"
+  "vase.glb"
  ]
 }

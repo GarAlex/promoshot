@@ -607,9 +607,7 @@ mod schema_doc_tests {
                     ("Body".to_string(), MaterialBinding::Color("@accent".into())),
                     (
                         "Screen".to_string(),
-                        MaterialBinding::Resource {
-                            resource_id: "shot".into(),
-                        },
+                        MaterialBinding::resource("shot"),
                     ),
                 ]
                 .into_iter()

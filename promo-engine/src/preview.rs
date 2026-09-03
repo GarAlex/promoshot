@@ -139,10 +139,21 @@ type SlotPictures = Vec<(usize, String)>;
 
 /// A model the host provided: decoded, uploaded, and the colours its
 /// slots were last painted (so a binding re-paints only when it changes).
+/// What a `materials` binding paints on one slot: a colour, a finish,
+/// either or both — what the pass is told, and what is remembered so a
+/// slot is repainted only when the binding changes.
+#[derive(Clone, Copy, PartialEq, Default)]
+struct SlotPaint {
+    /// Straight RGBA, linear.
+    color: Option<[f32; 4]>,
+    metallic: Option<f32>,
+    roughness: Option<f32>,
+}
+
 struct LoadedModel {
     model: crate::model::Model,
     gpu: GpuModel,
-    painted: HashMap<usize, [f32; 4]>,
+    painted: HashMap<usize, SlotPaint>,
     /// The frame id each slot was last given a picture from, so a binding
     /// re-binds only when the picture changes.
     bound: HashMap<usize, u64>,
@@ -2608,29 +2619,34 @@ impl PreviewEngine {
             [f(rgba[0]), f(rgba[1]), f(rgba[2])]
         };
         let all_resources = self.meta.resources.clone().unwrap_or_default();
-        let (colours, pictures): (Vec<(usize, [f32; 4])>, SlotPictures) = {
+        let (paints, pictures): (Vec<(usize, SlotPaint)>, SlotPictures) = {
             let Some(loaded) = self.models.get(&resource.id) else {
                 return;
             };
-            let mut colours = Vec::new();
+            let mut paints = Vec::new();
             let mut pictures = Vec::new();
             for (slot, binding) in resource.materials.iter().flat_map(|m| m.iter()) {
                 let Some(index) = loaded.model.materials.iter().position(|m| &m.name == slot)
                 else {
                     continue;
                 };
-                match binding {
-                    promo_model::MaterialBinding::Color(hex) => {
+                let paint = SlotPaint {
+                    color: binding.color_hex().map(|hex| {
                         let srgb = rgba_from_hex(settings.resolve_color(hex));
                         let lin = linear(srgb);
-                        colours.push((index, [lin[0], lin[1], lin[2], srgb[3]]));
-                    }
-                    promo_model::MaterialBinding::Resource { resource_id } => {
-                        pictures.push((index, resource_id.clone()));
-                    }
+                        [lin[0], lin[1], lin[2], srgb[3]]
+                    }),
+                    metallic: binding.metallic().map(|v| v as f32),
+                    roughness: binding.roughness().map(|v| v as f32),
+                };
+                if paint != SlotPaint::default() {
+                    paints.push((index, paint));
+                }
+                if let Some(id) = binding.resource_id() {
+                    pictures.push((index, id.to_string()));
                 }
             }
-            (colours, pictures)
+            (paints, pictures)
         };
         let mut bound_frames: Vec<(usize, u64)> = Vec::new();
         for (index, bound_id) in pictures {
@@ -2664,10 +2680,17 @@ impl PreviewEngine {
         let Some(loaded) = self.models.get_mut(&resource.id) else {
             return;
         };
-        for (index, rgba) in colours {
-            if loaded.painted.get(&index) != Some(&rgba) {
-                pass.recolor(self.ctx, &mut loaded.gpu, index, rgba);
-                loaded.painted.insert(index, rgba);
+        for (index, paint) in paints {
+            if loaded.painted.get(&index) != Some(&paint) {
+                pass.paint(
+                    self.ctx,
+                    &mut loaded.gpu,
+                    index,
+                    paint.color,
+                    paint.metallic,
+                    paint.roughness,
+                );
+                loaded.painted.insert(index, paint);
             }
         }
         for (index, frame_id) in bound_frames {
@@ -3221,13 +3244,12 @@ impl PreviewEngine {
             .materials
             .iter()
             .flat_map(|m| m.values())
-            .any(|b| match b {
-                promo_model::MaterialBinding::Resource { resource_id } => {
-                    all_resources.iter().any(|r| {
-                        &r.id == resource_id && r.kind == promo_model::ProjectResourceKind::Video
-                    })
-                }
-                promo_model::MaterialBinding::Color(_) => false,
+            .any(|b| {
+                b.resource_id().is_some_and(|id| {
+                    all_resources
+                        .iter()
+                        .any(|r| r.id == id && r.kind == promo_model::ProjectResourceKind::Video)
+                })
             });
         let animated = video_bound
             || layer

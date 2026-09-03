@@ -298,6 +298,12 @@ struct GpuMaterial {
     base_color: [f32; 4],
     metallic: f32,
     roughness: f32,
+    /// The file's own colour and factors, what a slot falls back to for
+    /// whatever a binding leaves unsaid (a finish without a colour keeps
+    /// the file's colour; a colour without a finish keeps the file's).
+    file_base_color: [f32; 4],
+    file_metallic: f32,
+    file_roughness: f32,
     double_sided: bool,
     /// 0 none, 1 the file's own texture (lit), 2 a picture the project
     /// bound to the slot (shown as-is).
@@ -552,6 +558,9 @@ impl ModelPass {
                 base_color: m.base_color,
                 metallic: m.metallic,
                 roughness: m.roughness,
+                file_base_color: m.base_color,
+                file_metallic: m.metallic,
+                file_roughness: m.roughness,
                 double_sided: m.double_sided,
                 textured: if texture.is_some() { 1.0 } else { 0.0 },
                 aspect: aspects[index],
@@ -626,8 +635,27 @@ impl ModelPass {
     /// Paint one material slot a colour (a `materials` binding), keeping
     /// its texture and factors. Straight RGBA, linear.
     pub fn recolor(&self, ctx: &GpuContext, model: &mut GpuModel, material: usize, rgba: [f32; 4]) {
+        self.paint(ctx, model, material, Some(rgba), None, None);
+    }
+
+    /// Paint one material slot from a `materials` binding: a colour, a
+    /// finish (`metallic`, `roughness`, each 0…1), or both — whatever the
+    /// binding leaves out falls back to the file's own value, so a
+    /// binding removed later paints the file back. The slot's texture is
+    /// kept. Colour is straight RGBA, linear.
+    pub fn paint(
+        &self,
+        ctx: &GpuContext,
+        model: &mut GpuModel,
+        material: usize,
+        rgba: Option<[f32; 4]>,
+        metallic: Option<f32>,
+        roughness: Option<f32>,
+    ) {
         if let Some(m) = model.materials.get_mut(material) {
-            m.base_color = rgba;
+            m.base_color = rgba.unwrap_or(m.file_base_color);
+            m.metallic = metallic.unwrap_or(m.file_metallic).clamp(0.0, 1.0);
+            m.roughness = roughness.unwrap_or(m.file_roughness).clamp(0.0, 1.0);
             ctx.queue.write_buffer(
                 &m.uniform,
                 0,

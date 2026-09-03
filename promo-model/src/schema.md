@@ -851,6 +851,16 @@ drawn on that surface, stretched over the slot's own uv layout — a
 screenshot on a "Screen" slot, or a screen recording playing on it —
 a video binding runs on the layer's clock through the video's trims:
 `"materials": { "Body": "@accent", "Screen": { "resourceID": "<uuid>" } }`.
+A binding written as an object may also carry a FINISH (rung 32):
+`"Body": { "colorHex": "@accent", "metallic": 1, "roughness": 0.12 }`
+overrides the file's own factors — `metallic` 0 (dielectric) … 1
+(metal), `roughness` 0 (mirror) … 1 (matte) — and whatever the object
+leaves out keeps the file's value, so `{ "metallic": 1 }` alone makes
+the file's colour chrome; one body is chrome in this project and matte
+in the next without a second file. A finish on a slot that shows a
+picture does nothing (the picture is drawn unlit), and `promo_validate`
+says so. A project with a finish, or a colour in the object form,
+carries `minReaderVersion: 32`.
 `clips` (name and duration) and `boundsRadius` are written at import
 and re-derived on every open. A model layer's keyframes carry
 `"camera": { "yaw": -25, "pitch": 10, "roll": 0, "distance": 4.2,

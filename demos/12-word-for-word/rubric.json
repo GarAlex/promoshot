@@ -28,6 +28,7 @@
   "model": false,
   "camera": false,
   "materials": false,
+  "finish": false,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,

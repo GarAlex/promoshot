@@ -389,12 +389,7 @@ impl Renderer {
                     .iter()
                     .filter_map(|id| project.resource(id))
                     .flat_map(|model| model.materials.iter().flat_map(|m| m.values()))
-                    .filter_map(|binding| match binding {
-                        promo_model::MaterialBinding::Resource { resource_id } => {
-                            Some(resource_id.clone())
-                        }
-                        promo_model::MaterialBinding::Color(_) => None,
-                    })
+                    .filter_map(|binding| binding.resource_id().map(str::to_string))
                     .collect();
                 // A bound VIDEO decodes like a video layer would, under the
                 // synthetic slot layer the engine asks with.
@@ -2895,5 +2890,72 @@ mod tests {
             1,
             "the earlier clips' decoders were closed, not accumulated"
         );
+    }
+
+    /// A finish on a binding (rung 32) changes the shading: the same grey
+    /// cube reads differently as chrome than as the file's own half-metal
+    /// — and the object form with a colour alone renders exactly as the
+    /// bare colour string does.
+    #[test]
+    fn a_finish_on_a_binding_changes_the_shading() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-finish-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("grey.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.7, 0.7, 0.7, 1.0]),
+        )
+        .unwrap();
+        let doc = |materials: &str| {
+            format!(
+                r#"{{"id":"P","name":"Finish","createdAt":0,"state":"recorded","minReaderVersion":32,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"M","kind":"model","filename":"grey.glb","displayName":"Grey","addedAt":0,
+                    "materials":{materials}}}],
+                "layers":[{{"id":"L","name":"grey","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"M",
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":25,"pitch":20,"distance":3.0}},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(0.5).expect("frame");
+            // The middle of the frame: on the cube, whatever faces show.
+            (100..220)
+                .flat_map(|y| (100..220).map(move |x| (x, y)))
+                .flat_map(|(x, y)| frame[(y * 320 + x) * 4..(y * 320 + x) * 4 + 3].to_vec())
+                .collect()
+        };
+        let bare = render(&doc(r#"{"Body":"B0B0B0"}"#));
+        let object = render(&doc(r#"{"Body":{"colorHex":"B0B0B0"}}"#));
+        assert_eq!(bare, object, "the object form with a colour alone is the bare colour");
+        let chrome = render(&doc(r#"{"Body":{"colorHex":"B0B0B0","metallic":1,"roughness":0.1}}"#));
+        let matte = render(&doc(r#"{"Body":{"colorHex":"B0B0B0","metallic":0,"roughness":1}}"#));
+        let differ = |a: &[u8], b: &[u8]| -> usize {
+            a.iter()
+                .zip(b)
+                .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12)
+                .count()
+        };
+        assert!(
+            differ(&chrome, &bare) > bare.len() / 5,
+            "chrome shades differently from the file's finish: {} of {}",
+            differ(&chrome, &bare),
+            bare.len()
+        );
+        assert!(
+            differ(&chrome, &matte) > bare.len() / 5,
+            "chrome and matte differ: {} of {}",
+            differ(&chrome, &matte),
+            bare.len()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

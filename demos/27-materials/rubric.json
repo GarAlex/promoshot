@@ -29,6 +29,7 @@
   "model": true,
   "camera": true,
   "materials": true,
+  "finish": false,
   "depth": true,
   "captionTilt": false,
   "kineticReveal": false,
