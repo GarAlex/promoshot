@@ -190,7 +190,9 @@ new projects.
   default 1; `depth` in em, default 0.25; `fontFamily`, `bold`,
   `italic` as a caption's). Keep a body to one line; long text is a
   caption. Stamp `minReaderVersion: 34`. A caption's 2.5D `depth`/tilt is
-  the flat trick and legacy — reach for the body.
+  the flat trick and legacy — reach for the body. A DEVICE is a recipe
+  too: `"recipe": { "device": { "kind": "phone" } }` (tablet, laptop),
+  no file to copy — bind the screenshot to its `Screen` slot.
 - **Stages.** Prefer the ONE-LAYER form (rung 33): a layer of `"kind":
   "stage"` whose keyframes carry the `"camera"`, `"light"` and
   `"placement"`, and whose `"members"` are the model, image, video,
