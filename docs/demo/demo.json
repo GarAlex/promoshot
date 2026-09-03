@@ -4624,6 +4624,158 @@
   "page": "docs/demo/demo30.md"
  },
  {
+  "id": "31",
+  "slug": "31-confetti",
+  "title": "Confetti",
+  "blurb": "A launch title with a confetti burst: particles as a recipe played by a drawing layer, every frame computed alone, the burst timed to the last word.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 6.0,
+  "prompt": "Make a 6-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; a bold 92 px caption 'Now available' centred (offset 20 px up) that tumbles in word by word over 0.8 seconds from 0.4 seconds and fades out at the end; and a CONFETTI BURST \u2014 a particles resource (kind particles, no file) with a recipe: anchor [0.5, 0.08], extent [0.7, 0], burst 260, rate 0, direction 270, spread 45, speed [0.15, 0.5], gravity 0.55, drag 0.7, size [0.01, 0.022], shape square, colours the palette's accent, white, FFD27A and FF6B6B, life [2.5, 4] \u2014 played by a drawing layer that starts at 1.2 seconds, when the last word has landed.\n\nText to use, in order:\n- Now available",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 10,
+   "total": 10,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "6.0s vs 6.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:drawing",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:particles",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:kineticReveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=32 cost=$1.42 secs=142",
+   "run": {
+    "turns": 32,
+    "wall_s": 142,
+    "api_s": 135,
+    "cost_usd": 1.42,
+    "tokens": {
+     "input": 46,
+     "cache_read": 1340346,
+     "cache_write": 49450,
+     "output": 10238,
+     "thinking": 2926
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1226,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1389842,
+      "output": 10238,
+      "cost_usd": 1.42
+     }
+    ],
+    "mcp": {
+     "calls": 7,
+     "ms": 4806,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 2203,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2109,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 488,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 6,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/` validates clean and rendered.\n\n**Project** \u2014 `out.promo/metadata.json`, `minReaderVersion: 36`, 1440\u00d7900 @ 60 fps, 6.00 s. `Resources/` is empty because nothing in this piece needs a file: `resources/` had no media, and both the gradient and the confetti are generated.\n\n**Three layers**\n- `bg` \u2014 background over a radial gradient, `@grey-hi` `3E3E45` at centre `[0.5, 0.42]` out to `@grey-lo` `121214` past the corners.\n- `title` \u2014 caption \"Now available\", 92 px bold, `placement: { anchor: \"center\", offset: [0, -20] }`, starting at 0.4 s with `reveal: { by: \"word\", mode: \"tumble\", seconds: 0.8 }` so the last word lands at 1.2 s; `fadeOut: 0.6` takes it out at the end.\n- `burst` \u2014 drawing layer at 1.2 s playing the `particles` resource with exactly the recipe you gave (anchor `[0.5, 0.08]`, extent `[0.7, 0]`, burst 260, rate 0, direction 270, spread 45, speed `[0.15, 0.5]`, gravity 0.55, drag 0.7, size `[0.01, 0.022]`, square, `[\"@accent\", \"FFFFFF\", \"FFD27A\", \"FF6B6B\"]`, life `[2.5, 4]`). `accent` is `5B8CFF` in the palette, which also states all eight role names.\n\n**Checks** \u2014 `promo_validate`: \"ok \u2014 nothing the renderer would quietly correct\". `promo_inspect`: 3 of 3 layers renderable, no undefined colours, no unreferenced resources. The contact sheet confirms the beats: at 0.9 s \"Now\" has landed while \"available\" is still leaning mid-tumble, at 1.2 s both are set, at 1.5 s the confetti band has just released across the top, by 3.5 s it has drifted low, and at 5.98 s the caption is gone.\n\n**Output** \u2014 `out.promo/Exports/export.mp4` (1440\u00d7900, 360 frames @ 60 fps); the frame PNGs are in `out.promo/Exports/frames`.\n\nOne thing worth flagging rather than changing: with `direction: 270` (down) and the anchor at `y = 0.08`, this is confetti *falling from the ",
+   "contact": "docs/demo/31-confetti/contact-result.png",
+   "reference_contact": "docs/demo/31-confetti/contact-reference.png",
+   "video": "docs/demo/31-confetti/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/31-confetti.mp4",
+   "video_hd_bytes": 504195,
+   "metadata": "docs/demo/31-confetti/result-metadata.json",
+   "gif": "docs/demo/31-confetti/result.gif",
+   "thumb": "docs/demo/31-confetti/thumb.png"
+  },
+  "page": "docs/demo/demo31.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",

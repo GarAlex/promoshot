@@ -1,0 +1,121 @@
+{
+  "id": "confetti-now-available",
+  "name": "Now Available",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 36,
+  "trimStart": 0,
+  "trimEnd": 6,
+  "videoDuration": 6,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "1B1B1F" },
+      { "name": "text", "colorHex": "FFFFFF" },
+      { "name": "text-bg", "colorHex": "000000" },
+      { "name": "edge", "colorHex": "3A3A42" },
+      { "name": "caption-outline", "colorHex": "0A0A0C" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "FFD27A" },
+      { "name": "accent", "colorHex": "5B8CFF" },
+      { "name": "grey-hi", "colorHex": "3E3E45" },
+      { "name": "grey-lo", "colorHex": "121214" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.42],
+      "end": [1.05, 1.0],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@grey-hi", "at": 0 },
+        { "colorHex": "@grey-lo", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 92,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleAlignment": "center",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 18,
+    "subtitleLeftMargin": 120,
+    "subtitleRightMargin": 120,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.45,
+    "subtitleShadowRadius": 16,
+    "subtitleShadowOffset": [0, 6]
+  },
+  "resources": [
+    {
+      "id": "confetti",
+      "kind": "particles",
+      "filename": "",
+      "displayName": "Confetti",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "particles": {
+        "anchor": [0.5, 0.08],
+        "extent": [0.7, 0],
+        "burst": 260,
+        "rate": 0,
+        "direction": 270,
+        "spread": 45,
+        "speed": [0.15, 0.5],
+        "gravity": 0.55,
+        "drag": 0.7,
+        "size": [0.01, 0.022],
+        "shape": "square",
+        "colors": ["@accent", "FFFFFF", "FFD27A", "FF6B6B"],
+        "life": [2.5, 4]
+      }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 6,
+      "keyframes": []
+    },
+    {
+      "id": "title",
+      "name": "Now available",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.4,
+      "duration": 5.6,
+      "fadeOut": 0.6,
+      "captionText": "Now available",
+      "captionStyle": {
+        "fontSize": 92,
+        "isBold": true,
+        "alignment": "center",
+        "placement": { "anchor": "center", "offset": [0, -20] },
+        "reveal": { "by": "word", "mode": "tumble", "seconds": 0.8 }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "burst",
+      "name": "Confetti burst",
+      "sortIndex": 2,
+      "kind": "drawing",
+      "isEnabled": true,
+      "startTime": 1.2,
+      "duration": 4.8,
+      "resourceID": "confetti",
+      "keyframes": []
+    }
+  ]
+}
