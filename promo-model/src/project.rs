@@ -848,6 +848,44 @@ pub struct SubtitleStyle {
     /// needed.
     #[serde(default, skip_serializing_if = "is_none")]
     pub reveal: Option<TextReveal>,
+    /// Extruded type by stacking (rung 27): `count` copies of the caption
+    /// drawn under the face, each `offset` canvas px further along and
+    /// shaded darker, so the words read as solid letters with a side —
+    /// the classic long-shadow extrusion, pure 2D, lit by choosing the
+    /// offset from the light. Absent means flat.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub depth: Option<TextDepth>,
+}
+
+/// Extruded type by stacking: see [`SubtitleStyle::depth`].
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TextDepth {
+    /// Copies under the face; default 6.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub count: Option<u32>,
+    /// Canvas px per copy, `[dx, dy]`; default `[2, 2]` (down-right, lit
+    /// from the top-left).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub offset: Option<[f64; 2]>,
+    /// How dark the side is, 0…1 of the way to `colorHex`; default 0.6.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shade: Option<f64>,
+    /// The side's colour; default black. A palette name works.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub color_hex: Option<String>,
+}
+
+impl TextDepth {
+    pub fn count(&self) -> u32 {
+        self.count.unwrap_or(6).min(64)
+    }
+    pub fn offset(&self) -> [f64; 2] {
+        self.offset.unwrap_or([2.0, 2.0])
+    }
+    pub fn shade(&self) -> f64 {
+        self.shade.unwrap_or(0.6).clamp(0.0, 1.0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -2839,6 +2877,16 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 27 is extruded type on a caption style. Dropped by an older
+        // reader's save, the letters go flat.
+        let extruded =
+            |style: &Option<SubtitleStyle>| style.as_ref().is_some_and(|s| s.depth.is_some());
+        if layers.iter().any(|l| extruded(&l.caption_style))
+            || resources.iter().any(|r| extruded(&r.caption_style))
+        {
+            return 27;
+        }
+
         // 26 is a pointer track on a resource or a follow rule on a layer.
         // Dropped by an older reader's save, the recording forgets where
         // the pointer went and the zoom stops following it.
@@ -3677,6 +3725,13 @@ mod placement_model_tests {
             .unwrap(),
         );
         assert_eq!(tracked.minimum_reader_version(), 26);
+        // 27: extruded type on a caption style.
+        let mut extruded = meta(&layer(""));
+        extruded.layers.as_mut().unwrap()[0].caption_style = Some(SubtitleStyle {
+            depth: Some(TextDepth::default()),
+            ..Default::default()
+        });
+        assert_eq!(extruded.minimum_reader_version(), 27);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

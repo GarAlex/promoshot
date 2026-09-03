@@ -144,6 +144,14 @@ Semantics worth knowing:
   Within one track, two
   keyframes at the same time resolve by ARRAY ORDER — the later
   wins from that instant on, the same rule layer order plays for z.
+- `depth` (rung 27) makes extruded type by stacking: `"depth":
+  { "count": 6, "offset": [2, 2], "shade": 0.6, "colorHex": "000000" }`
+  draws `count` copies of the caption under its face, each `offset`
+  canvas px further along and shaded `shade` of the way to `colorHex`
+  (default black; a palette name works), so the words read as solid
+  letters with a side — pick the offset from where the light is. A
+  reveal extrudes each arriving piece the same way. A project using it
+  carries `minReaderVersion: 27`.
 - `strokeColorHex` / `strokeWidth` put an OUTLINE round the glyphs, and
   `shadowColorHex` / `shadowOpacity` / `shadowRadius` / `shadowOffset` a
   soft shadow under them. This is what lets a caption sit straight on

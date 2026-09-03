@@ -1610,6 +1610,62 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Extruded type (rung 27): a big white word on black gains a side —
+    /// grey pixels down-right of every stroke that the flat twin does not
+    /// have — and the face stays white.
+    #[test]
+    fn extruded_type_has_a_side() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-depth-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = |depth: &str| {
+            format!(
+                r#"{{"id":"P","name":"Depth","createdAt":0,"state":"recorded","minReaderVersion":27,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":640,"canvasHeight":360,"backgroundColorHex":"000000",
+                  "subtitleFontSize":160,"subtitleBold":true,"subtitleColorHex":"FFFFFF",
+                  "subtitleBackgroundOpacity":0,"subtitleVerticalMargin":80}},
+                "resources":[],
+                "layers":[{{"id":"L","name":"word","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":2,"captionText":"IIII",
+                  "captionStyle":{{"alignment":"center"{depth}}},"keyframes":[]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> (Vec<u8>, usize) {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 640, 360).expect("renderer");
+            let stride = renderer.width as usize;
+            (renderer.frame_bgra(1.0).expect("frame"), stride)
+        };
+        let count = |frame: &[u8], stride: usize, keep: &dyn Fn(u8, u8, u8) -> bool| -> usize {
+            (0..360)
+                .flat_map(|y| (0..640).map(move |x| (x, y)))
+                .filter(|&(x, y)| {
+                    let i = (y * stride + x) * 4;
+                    keep(frame[i + 2], frame[i + 1], frame[i])
+                })
+                .count()
+        };
+        let grey = |r: u8, g: u8, b: u8| r == g && g == b && r > 40 && r < 200;
+        let white = |r: u8, g: u8, _b: u8| r > 250 && g > 250;
+        let (flat, stride) = render(&doc(""));
+        let (deep, _) = render(&doc(r#","depth":{"count":6,"offset":[3,3],"shade":0.6}"#));
+        let (flat_greys, deep_greys) = (count(&flat, stride, &grey), count(&deep, stride, &grey));
+        assert!(
+            deep_greys > flat_greys + 400,
+            "the side is grey where the flat twin is black: {deep_greys} vs {flat_greys}"
+        );
+        assert!(
+            count(&deep, stride, &white) > 2000 && count(&flat, stride, &white) > 2000,
+            "the face stays white"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Follow the pointer (rung 26): a synthetic track on the plate — the
     /// pointer on the white left half, then jumping to the black right
     /// half — and a layer that follows it at zoom 2: the window is where

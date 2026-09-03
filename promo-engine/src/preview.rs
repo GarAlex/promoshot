@@ -1895,6 +1895,14 @@ impl PreviewEngine {
                     // per frame. Laid out whole, so revealing part of it
                     // cannot move the caption, and a word keeps the place the
                     // layout gave it however it arrives.
+                    let depth_rule = self
+                        .meta
+                        .caption_style_showing(layer, showing.as_deref())
+                        .and_then(|style| style.depth)
+                        .unwrap_or(promo_model::TextDepth {
+                            count: Some(0),
+                            ..Default::default()
+                        });
                     let rule = self
                         .meta
                         .caption_style_showing(layer, showing.as_deref())
@@ -1946,6 +1954,10 @@ impl PreviewEngine {
                                     canvas,
                                     time,
                                 );
+                                for copy in extrusion(&piece, &depth_rule, &settings, canvas) {
+                                    quads.push(copy);
+                                    used.push(piece_id);
+                                }
                                 quads.push(piece);
                                 used.push(piece_id);
                             }
@@ -1960,6 +1972,10 @@ impl PreviewEngine {
                         // No reveal on this caption (or it could not be
                         // measured): the whole quad, as always.
                         None => {
+                            for copy in extrusion(&quad, &depth_rule, &settings, canvas) {
+                                quads.push(copy);
+                                used.push(id);
+                            }
                             quads.push(quad);
                             used.push(id);
                         }
@@ -2946,6 +2962,44 @@ fn apply_transition(
         time,
         false,
     );
+}
+
+/// Extruded type by stacking: the copies drawn UNDER a caption quad —
+/// farthest first — each offset further along and gelled toward the side
+/// colour. The face itself is not among them. Pushed before the face so
+/// they sit beneath it; each carries the face's frame id, so the
+/// positional patch pairs every copy with the same raster.
+fn extrusion(
+    face: &SceneQuad,
+    depth: &promo_model::TextDepth,
+    settings: &promo_model::CompositionSettings,
+    canvas: Size,
+) -> Vec<SceneQuad> {
+    let count = depth.count();
+    if count == 0 {
+        return Vec::new();
+    }
+    let scale = canvas.height() / 900.0;
+    let [dx, dy] = depth.offset();
+    let side = depth
+        .color_hex
+        .as_deref()
+        .map(|hex| rgba_from_hex(settings.resolve_color(hex)))
+        .unwrap_or([0.0, 0.0, 0.0, 1.0]);
+    (1..=count)
+        .rev()
+        .map(|i| {
+            let mut copy = *face;
+            copy.rect[0] += dx * scale * i as f64;
+            copy.rect[1] += dy * scale * i as f64;
+            // The side: the face's own pixels, gelled toward the side
+            // colour by the shade — the glyph alpha is untouched, so the
+            // side has the letters' exact silhouette.
+            copy.tint_rgba = [side[0], side[1], side[2], 1.0];
+            copy.adjust[3] = depth.shade() as f32;
+            copy
+        })
+        .collect()
 }
 
 /// The whole effect, for one that came from somewhere other than the

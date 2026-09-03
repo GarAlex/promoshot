@@ -2493,6 +2493,16 @@
             "null"
           ]
         },
+        "depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextDepth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "fontFamily": {
           "anyOf": [
             {
@@ -2652,6 +2662,44 @@
         "recorded"
       ],
       "type": "string"
+    },
+    "TextDepth": {
+      "properties": {
+        "colorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "offset": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "shade": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "TextReveal": {
       "properties": {

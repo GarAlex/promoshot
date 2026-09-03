@@ -381,6 +381,13 @@ and a softness: the plate becomes transparent before the layer's grade,
 border and mask, in the compositor, so a green-screen clip composes
 over anything on every host alike.
 
+## Text with a side
+
+A caption style may carry `depth`: copies of the words stacked under the
+face, each a little further along and darker, so the type reads as
+solid letters with a side — the classic extrusion, pure 2D, lit by
+choosing the offset. A reveal extrudes each arriving piece the same way.
+
 ## Follow the pointer
 
 A video the Mac recorder made carries `pointer`, where the pointer went

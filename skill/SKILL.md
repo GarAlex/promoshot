@@ -142,6 +142,11 @@ new projects.
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
   "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
   and tint, on every host alike. Stamp `minReaderVersion: 23`.
+- **Extruded type.** `"captionStyle": { "depth": { "count": 6, "offset":
+  [2, 2], "shade": 0.6 } }` stacks darker copies under a caption so it
+  reads as solid letters with a side; `colorHex` colours the side (a
+  palette name works). Big bold words want it; body text does not.
+  Stamp `minReaderVersion: 27`.
 - **Follow the pointer.** A recording made in the Mac app carries
   `"pointer": { "samples": [[t, x, y], …], "clicks": [[t, x, y], …] }`
   (source seconds, unit coordinates). Put `"follow": { "zoom": 2,

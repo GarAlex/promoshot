@@ -307,6 +307,12 @@ mod schema_doc_tests {
             shadow_radius: Some(10.0),
             shadow_offset: Some([0.0, 4.0]),
             reveal: Some(full_reveal()),
+            depth: Some(TextDepth {
+                count: Some(6),
+                offset: Some([2.0, 2.0]),
+                shade: Some(0.6),
+                color_hex: Some("@edge".into()),
+            }),
         }
     }
 
