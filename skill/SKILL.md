@@ -148,8 +148,9 @@ new projects.
   `placement` sizes it like an image. Keyframes take `"camera": { "yaw":
   -25, "pitch": 10, "distance": 4.2, "fov": 30 }` and `"light": { "yaw":
   40, "pitch": 50 }`, which ramp — a yaw from -60 to 20 over three
-  seconds is a turntable. `"materials": { "Body": "@accent" }` on the
-  resource paints a slot by the name the file exports. Stamp
+  seconds is a turntable. `"materials": { "Body": "@accent", "Screen": { "resourceID":
+  "<image uuid>" } }` on the resource paints a slot by the name the file
+  exports — a colour, or an image resource drawn on that surface. Stamp
   `minReaderVersion: 29`. `promo_inspect` lists the layer; a missing
   file is named like any other.
 - **Kinetic reveals.** Beside `wipe`, `fade`, `rise` and `scale`, a

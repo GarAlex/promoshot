@@ -847,7 +847,9 @@ the ordinary machinery does the rest — placement, opacity, transitions,
 masks, effects, shadows. `materials` binds a material SLOT (by the name
 the file exports) to a colour (a palette name works, so `"@accent"`
 re-skins the body with the theme) or to a resource, whose picture is
-drawn on that surface — a screenshot on a "Screen" slot:
+drawn on that surface, stretched over the slot's own uv layout — a
+screenshot on a "Screen" slot (an image; video on a surface comes
+later):
 `"materials": { "Body": "@accent", "Screen": { "resourceID": "<uuid>" } }`.
 `clips` (name and duration) and `boundsRadius` are written at import
 and re-derived on every open. A model layer's keyframes carry

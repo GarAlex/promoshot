@@ -716,6 +716,14 @@ pub struct InputTexture {
     _texture: std::sync::Arc<wgpu::Texture>,
 }
 
+impl InputTexture {
+    /// The view, for a pass in this crate that samples an imported frame
+    /// (a picture on a model's material slot).
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+}
+
 fn next_texture_id() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(1);

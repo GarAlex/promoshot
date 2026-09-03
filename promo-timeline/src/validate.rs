@@ -45,6 +45,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     duration_rule_warnings(meta, &mut out);
     palette_warnings(meta, &mut out);
     tilt_keyframe_warnings(meta, &mut out);
+    material_binding_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -439,6 +440,43 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 /// the keyframed angle everywhere, so a headless render of an animated
 /// tilt holds one angle inside a moving box. Say so, before someone reads
 /// it in pixels.
+/// A model's `materials` may bind a slot to a resource: an IMAGE is drawn
+/// on that surface; a video is not yet (it renders as the slot's own
+/// material), and anything else — or a missing id — is a mistake worth
+/// naming before it reads as "the screen stayed dark".
+fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for model in resources
+        .iter()
+        .filter(|r| r.kind == promo_model::ProjectResourceKind::Model)
+    {
+        for (slot, binding) in model.materials.iter().flat_map(|m| m.iter()) {
+            let promo_model::MaterialBinding::Resource { resource_id } = binding else {
+                continue;
+            };
+            match resources.iter().find(|r| &r.id == resource_id) {
+                None => out.push(format!(
+                    "model \"{}\": slot \"{slot}\" is bound to a resource the project \
+                     does not have ({resource_id})",
+                    model.display_name
+                )),
+                Some(r) if r.kind == promo_model::ProjectResourceKind::Image => {}
+                Some(r) if r.kind == promo_model::ProjectResourceKind::Video => out.push(format!(
+                    "model \"{}\": slot \"{slot}\" is bound to a video — video on a \
+                     surface is not drawn yet; the slot keeps its own material",
+                    model.display_name
+                )),
+                Some(r) => out.push(format!(
+                    "model \"{}\": slot \"{slot}\" is bound to a {} resource; only an \
+                     image is drawn on a surface",
+                    model.display_name,
+                    r.kind.as_str()
+                )),
+            }
+        }
+    }
+}
+
 fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {

@@ -375,16 +375,28 @@ impl Renderer {
             frames.insert(resource.id.clone(), (pixels, width, height, 0));
         }
         for layer in promo_model::nesting::all_layers(&project.meta) {
-            // A model layer's file is a `.glb`, not a picture: the engine
-            // gets its bytes through `provide_models`, nothing to stage.
-            if layer.kind == promo_model::ProjectLayerKind::Model {
-                continue;
-            }
             if project.unsupported(layer).is_some() {
                 continue;
             }
             let mut candidates: Vec<String> = layer.resource_id.iter().cloned().collect();
             candidates.extend(layer.keyframes.iter().filter_map(|k| k.resource_id.clone()));
+            // A model layer's own file is a `.glb` (the engine gets its bytes
+            // through `provide_models`); what it stages are the STILLS its
+            // material slots are bound to, served by resource id like any
+            // other picture.
+            if layer.kind == promo_model::ProjectLayerKind::Model {
+                candidates = candidates
+                    .iter()
+                    .filter_map(|id| project.resource(id))
+                    .flat_map(|model| model.materials.iter().flat_map(|m| m.values()))
+                    .filter_map(|binding| match binding {
+                        promo_model::MaterialBinding::Resource { resource_id } => {
+                            Some(resource_id.clone())
+                        }
+                        promo_model::MaterialBinding::Color(_) => None,
+                    })
+                    .collect();
+            }
             candidates.dedup();
             // Only stills are preloaded; video opens while it is on screen.
             // Video keys on the BASE resource (swaps never target video).
@@ -1633,6 +1645,58 @@ mod tests {
         assert!(
             samples.iter().all(|&v| v >= 200),
             "within bounds: {samples:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A resource on a slot: the generated slab's Screen bound to a green
+    /// PNG shows green where the screen is, seen straight on; the same
+    /// project with the binding dropped shows the slab's own dark screen.
+    #[test]
+    fn a_model_slot_bound_to_an_image_shows_the_picture() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-slot-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("phone.glb"),
+            promo_engine::model::sample_slab_glb(),
+        )
+        .unwrap();
+        let green = image::RgbaImage::from_pixel(64, 64, image::Rgba([20, 220, 60, 255]));
+        green.save(dir.join("Resources").join("shot.png")).unwrap();
+        let doc = |materials: &str| {
+            format!(
+                r#"{{"id":"P","name":"Slot","createdAt":0,"state":"recorded","minReaderVersion":29,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"S","kind":"image","filename":"shot.png","displayName":"Shot","addedAt":0,"pixelWidth":64,"pixelHeight":64}},
+                  {{"id":"M","kind":"model","filename":"phone.glb","displayName":"Phone","addedAt":0{materials}}}],
+                "layers":[{{"id":"L","name":"phone","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"M",
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":0,"distance":3.0}},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let centre = |json: &str| -> (u8, u8, u8) {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(0.5).expect("frame");
+            let i = (160 * 320 + 160) * 4;
+            (frame[i + 2], frame[i + 1], frame[i])
+        };
+        let (r, g, b) = centre(&doc(r#","materials":{"Screen":{"resourceID":"S"}}"#));
+        assert!(
+            g > 120 && g > r + 60 && g > b + 60,
+            "the screen shows the green shot: {r},{g},{b}"
+        );
+        let (r, g, b) = centre(&doc(""));
+        assert!(
+            g < 80 && (g as i32 - r as i32).abs() < 30,
+            "unbound, the screen is its own dark material: {r},{g},{b}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

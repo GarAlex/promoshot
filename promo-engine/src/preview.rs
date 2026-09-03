@@ -138,6 +138,9 @@ struct LoadedModel {
     model: crate::model::Model,
     gpu: GpuModel,
     painted: HashMap<usize, [f32; 4]>,
+    /// The frame id each slot was last given a picture from, so a binding
+    /// re-binds only when the picture changes.
+    bound: HashMap<usize, u64>,
 }
 
 struct CachedFrame {
@@ -2509,6 +2512,7 @@ impl PreviewEngine {
                 model,
                 gpu,
                 painted: HashMap::new(),
+                bound: HashMap::new(),
             },
         );
         Ok(())
@@ -2608,35 +2612,66 @@ impl PreviewEngine {
             [c[0] * 0.8 + 0.1, c[1] * 0.8 + 0.1, c[2] * 0.8 + 0.1]
         };
 
-        // Colour bindings paint their slots (a resource binding is P2).
-        let bindings: Vec<(usize, [f32; 4])> = {
+        // Bindings paint their slots: a colour through the palette, a
+        // resource as the slot's picture — the host serves it under a
+        // synthetic layer, keyed by the resource, exactly as a LUT strip is.
+        let (colours, pictures): (Vec<(usize, [f32; 4])>, Vec<(usize, String)>) = {
             let loaded = self.models.get(&resource.id)?;
-            resource
-                .materials
-                .iter()
-                .flat_map(|m| m.iter())
-                .filter_map(|(slot, binding)| match binding {
+            let mut colours = Vec::new();
+            let mut pictures = Vec::new();
+            for (slot, binding) in resource.materials.iter().flat_map(|m| m.iter()) {
+                let Some(index) = loaded.model.materials.iter().position(|m| &m.name == slot)
+                else {
+                    continue;
+                };
+                match binding {
                     promo_model::MaterialBinding::Color(hex) => {
-                        let index = loaded
-                            .model
-                            .materials
-                            .iter()
-                            .position(|m| &m.name == slot)?;
                         let srgb = rgba_from_hex(settings.resolve_color(hex));
                         let lin = linear(srgb);
-                        Some((index, [lin[0], lin[1], lin[2], srgb[3]]))
+                        colours.push((index, [lin[0], lin[1], lin[2], srgb[3]]));
                     }
-                    promo_model::MaterialBinding::Resource { .. } => None,
-                })
-                .collect()
+                    promo_model::MaterialBinding::Resource { resource_id } => {
+                        pictures.push((index, resource_id.clone()));
+                    }
+                }
+            }
+            (colours, pictures)
         };
+        let mut bound_frames: Vec<(usize, u64)> = Vec::new();
+        for (index, bound_id) in pictures {
+            // A still: source time -1, as an image layer asks.
+            if let Some(id) = self.frame(
+                &format!("slot\u{1f}{bound_id}"),
+                &bound_id,
+                -1.0,
+                tier,
+                pinned,
+            ) {
+                bound_frames.push((index, id));
+            }
+        }
         let pass = self.model_pass.as_ref()?;
         let loaded = self.models.get_mut(&resource.id)?;
-        for (index, rgba) in bindings {
+        for (index, rgba) in colours {
             if loaded.painted.get(&index) != Some(&rgba) {
                 pass.recolor(self.ctx, &mut loaded.gpu, index, rgba);
                 loaded.painted.insert(index, rgba);
             }
+        }
+        for (index, frame_id) in bound_frames {
+            if loaded.bound.get(&index) == Some(&frame_id) {
+                continue;
+            }
+            let texture = match self
+                .cache
+                .get(&frame_id)
+                .or_else(|| self.scratch.get(&frame_id))
+            {
+                Some(entry) => &entry.frame.texture,
+                None => continue,
+            };
+            pass.set_texture(self.ctx, &mut loaded.gpu, index, texture.view());
+            loaded.bound.insert(index, frame_id);
         }
         let view = ModelView {
             yaw: camera.yaw(),

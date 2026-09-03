@@ -83,7 +83,8 @@ struct Frame {
 };
 struct Material {
     base_color: vec4<f32>,
-    // x = metallic, y = roughness, z = 1 textured, w = 1 double sided
+    // x = metallic, y = roughness, z = 1 file texture (lit) / 2 a picture
+    // bound by the project (unlit), w = 1 double sided
     factors: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -132,6 +133,15 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         n = -n;
     }
     var albedo = material.base_color;
+    if (material.factors.z > 1.5) {
+        // A picture BOUND to the slot by the project — a screenshot on a
+        // screen — reads as the screen would: the picture itself, unlit,
+        // over the slot's own colour where it is transparent.
+        let t = textureSample(base_tex, base_samp, in.uv);
+        let under = linear_to_srgb(clamp(material.base_color.rgb * frame.ambient_rgb.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
+        let shown = mix(under, t.rgb, t.a);
+        return vec4<f32>(shown * material.base_color.a, material.base_color.a);
+    }
     if (material.factors.z > 0.5) {
         let t = textureSample(base_tex, base_samp, in.uv);
         albedo = vec4<f32>(albedo.rgb * srgb_to_linear(t.rgb), albedo.a * t.a);
@@ -203,7 +213,9 @@ struct GpuMaterial {
     metallic: f32,
     roughness: f32,
     double_sided: bool,
-    textured: bool,
+    /// 0 none, 1 the file's own texture (lit), 2 a picture the project
+    /// bound to the slot (shown as-is).
+    textured: f32,
 }
 
 /// A model's buffers on the GPU, built once per resource and drawn many
@@ -400,7 +412,7 @@ impl ModelPass {
                 metallic: m.metallic,
                 roughness: m.roughness,
                 double_sided: m.double_sided,
-                textured: texture.is_some(),
+                textured: if texture.is_some() { 1.0 } else { 0.0 },
             });
         }
         let mut gpu_meshes = Vec::with_capacity(meshes.len());
@@ -463,12 +475,59 @@ impl ModelPass {
                     factors: [
                         m.metallic,
                         m.roughness,
-                        if m.textured { 1.0 } else { 0.0 },
+                        m.textured,
                         if m.double_sided { 1.0 } else { 0.0 },
                     ],
                 }),
             );
         }
+    }
+
+    /// Paint one material slot with a picture — a `materials` binding to a
+    /// resource: the slot's base colour texture becomes `view`, sampled
+    /// with the mesh's own uvs (sRGB, as every imported frame is).
+    pub fn set_texture(
+        &self,
+        ctx: &GpuContext,
+        model: &mut GpuModel,
+        material: usize,
+        view: &wgpu::TextureView,
+    ) {
+        let Some(m) = model.materials.get_mut(material) else {
+            return;
+        };
+        m.textured = 2.0;
+        ctx.queue.write_buffer(
+            &m.uniform,
+            0,
+            as_bytes(&MaterialRaw {
+                base_color: m.base_color,
+                factors: [
+                    m.metallic,
+                    m.roughness,
+                    2.0,
+                    if m.double_sided { 1.0 } else { 0.0 },
+                ],
+            }),
+        );
+        m.bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("model-material-bound"),
+            layout: &self.material_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: m.uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
     }
 
     /// Render the model at `width × height` and hand the texture over.
