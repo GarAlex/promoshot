@@ -3539,19 +3539,19 @@
   "id": "25",
   "slug": "25-turntable",
   "title": "Turntable",
-  "blurb": "A generated tablet model on a turntable, its body painted by the palette and a screenshot on its screen, beside extruded kinetic type.",
+  "blurb": "The built-in tablet body on a turntable, its body painted by the palette and a screenshot on its screen, beside extruded kinetic type.",
   "kind": "conformance",
   "canvas": [
    1440,
    900
   ],
   "duration": 7.0,
-  "prompt": "Make a 7-second piece on a 1440\u00d7900 canvas: a radial dark-blue gradient background; the slab.glb model placed on the left, 600 px tall, its Body material painted with the palette's accent and its Screen material showing ui_lumen_1.png, turning on a turntable from a yaw of -70 to 35 degrees over the whole piece with an ease in and out, lit from the upper left; on the right a bold two-line title 'Every theme,\\nevery angle.' in extruded type that slides in word by word, and under it a smaller line 'A .glb on a layer. The palette paints it; a shot fills its screen.' that fades in word by word two seconds later.\n\nFiles in `resources/`: slab.glb, ui_lumen_1.png.\n\nText to use, in order:\n- Every theme,\nevery angle.\n- A .glb on a layer. The palette paints it; a shot fills its screen.",
+  "prompt": "Make a 7-second piece on a 1440\u00d7900 canvas: a radial dark-blue gradient background; the tablet.glb model placed on the left, 600 px tall, its Body material painted with the palette's accent and its Screen material showing ui_lumen_1.png, turning on a turntable from a yaw of -70 to 35 degrees over the whole piece with an ease in and out, lit from the upper left; on the right a bold two-line title 'Every theme,\\nevery angle.' in extruded type that slides in word by word, and under it a smaller line 'A .glb on a layer. The palette paints it; a shot fills its screen.' that fades in word by word two seconds later.\n\nFiles in `resources/`: tablet.glb, ui_lumen_1.png.\n\nText to use, in order:\n- Every theme,\nevery angle.\n- A .glb on a layer. The palette paints it; a shot fills its screen.",
   "resources": [
    {
-    "file": "slab.glb",
+    "file": "tablet.glb",
     "kind": "file",
-    "path": "demos/25-turntable/resources/slab.glb"
+    "path": "demos/25-turntable/resources/tablet.glb"
    },
    {
     "file": "ui_lumen_1.png",
@@ -3630,70 +3630,65 @@
      "detail": "2 of 2 lines recognisable"
     }
    ],
-   "summary": "turns=37 cost=$2.94 secs=378",
+   "summary": "turns=40 cost=$2.38 secs=257",
    "run": {
-    "turns": 37,
-    "wall_s": 377,
-    "api_s": 374,
-    "cost_usd": 2.94,
+    "turns": 40,
+    "wall_s": 256,
+    "api_s": 252,
+    "cost_usd": 2.38,
     "tokens": {
-     "input": 72,
-     "cache_read": 2991270,
-     "cache_write": 84269,
-     "output": 24163,
-     "thinking": 16298
+     "input": 60,
+     "cache_read": 2316438,
+     "cache_write": 77684,
+     "output": 17572,
+     "thinking": 8990
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 1225,
-      "output": 22,
+      "input": 1223,
+      "output": 15,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 3075611,
-      "output": 24163,
-      "cost_usd": 2.94
+      "input": 2394182,
+      "output": 17572,
+      "cost_usd": 2.37
      }
     ],
     "mcp": {
-     "calls": 12,
-     "ms": 2255,
+     "calls": 14,
+     "ms": 2172,
      "tools": {
       "promo_render_video": {
        "calls": 1,
-       "ms": 1266,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 2,
-       "ms": 555,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 2,
-       "ms": 237,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 2,
-       "ms": 150,
+       "ms": 1283,
        "errors": 0
       },
       "promo_media_probe": {
-       "calls": 1,
-       "ms": 37,
+       "calls": 2,
+       "ms": 476,
        "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 305,
+       "errors": 0
+      },
+      "promo_media_turntable": {
+       "calls": 1,
+       "ms": 67,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 4,
+       "ms": 33,
+       "errors": 1
       },
       "promo_inspect": {
        "calls": 1,
-       "ms": 9,
-       "errors": 0
-      },
-      "promo_explain": {
-       "calls": 1,
-       "ms": 1,
+       "ms": 8,
        "errors": 0
       },
       "promo_schema": {
@@ -3711,12 +3706,12 @@
    },
    "used": null,
    "captions": null,
-   "notes": "`out.promo` is written, validated, and rendered.\n\n**Video:** `out.promo/Exports/export.mp4` \u2014 1440\u00d7900, 210 frames @ 30fps (7.00s exactly).\n**Contact sheet:** `out.promo/Exports/sheet/` (7 frames, t=0.4\u20266.4).\n\nWhat's in it:\n\n- **Ground** \u2014 radial `backgroundGradient` centred at [0.30, 0.42], `1D3D77 \u2192 0C1A3C \u2192 050A18`, all from a palette that states all eight roles plus `accent` (`5B8CFF`) and `deep`.\n- **Slab** \u2014 `kind: \"model\"` layer on `slab.glb`, `placement: {height: 600, anchor: center, offset: [-330, 20]}`. Resource `materials` binds `\"Body\": \"@accent\"` and `\"Screen\": {resourceID: ui}` (the file exports exactly those two slot names). Two camera keyframes: yaw \u221270 at t=0 \u2192 yaw 35 at t=7 with `transitionDuration: 7, easing: easeInOut`, constant pitch 8; `light: {yaw: -45, pitch: 48}` \u2014 the lit edge is the upper-left one in the frames. `fadeIn: 0.45`.\n- **Title** \u2014 72pt bold, `\\n`-broken two lines, `depth: {count: 6, offset: [2,2], shade: 0.95, colorHex: \"@deep\"}` for the extrusion (offset down-right, agreeing with the light), `reveal: {by: word, mode: slide, secondsPer: 0.22}`, starting at 0.30s.\n- **Subtitle** \u2014 30pt, `reveal: {by: word, mode: fade, secondsPer: 0.1}`, starting at 2.30s \u2014 two seconds after the title, as asked.\n\nOne judgment call worth knowing: `placement.height: 600` sizes the **layer box** to 600 px, which is what the format means by height, and `promo_explain` confirms it (zoom 0.667 \u00d7 900). Inside that box the model is framed by its bounding sphere, and since the slab is a 16:10 tablet (1.28 \u00d7 0.8 units) it reads about 320 px tall on screen. Making the *slab itself* 600 px tall needs a ~1130 px box and puts it at 960 px wide when it swings through face-on \u2014 I tried it, and it clips off the left edge and runs into the text column, since 960 + a 55",
+   "notes": "Done \u2014 `out.promo` validates clean and the mp4 is rendered.\n\n**`out.promo/`** (metadata.json + `Resources/tablet.glb`, `ui_lumen_1.png`), 1440\u00d7900, 7 s @ 30 fps, `minReaderVersion: 29`.\n\n- **Ground** \u2014 radial gradient centred behind the tablet (`glow 18356F` \u2192 `0A1531` \u2192 `canvas 060B1A`), with the eight palette roles plus `accent 3E7BFF` stated so the whole piece re-skins from one list.\n- **Tablet** \u2014 `kind: \"model\"` layer on the `.glb`; the resource binds `\"Body\": \"@accent\"` and `\"Screen\": { \"resourceID\": \"ui\" }`, so the palette paints the body and the shot fills the screen. Camera keyed yaw \u221270 \u2192 35 over the full 7 s, `easeInOut`, with a slight 8\u00b0 pitch; light at yaw \u221245 / pitch 55 (upper left). Placement is `height 1060` anchored centre at x\u2248360 \u2014 the rule resolves against the model's projected bounds (the bounding sphere), which lands the tablet itself at ~600 px tall, measured on the render.\n- **Title** \u2014 \"Every theme,\\nevery angle.\" at 74 pt bold, extruded via `depth` (10 copies, 2 px down-right to match the light, shaded toward the accent so the side reads solid), revealed `by: \"word\", mode: \"slide\"` from 0.35 s.\n- **Subline** \u2014 28 pt, wraps to two lines in the right column, revealed word-by-word with `mode: \"fade\"` from 2.35 s \u2014 two seconds after the title starts.\n\nChecked a 7-frame contact sheet at full canvas before exporting: the turntable sweep, the word reveals and the column gap all read correctly.\n\n**Output:** `out.promo/Exports/export.mp4` \u2014 1440\u00d7900, 210 frames @ 30 fps.",
    "contact": "docs/demo/25-turntable/contact-result.png",
    "reference_contact": "docs/demo/25-turntable/contact-reference.png",
    "video": "docs/demo/25-turntable/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/25-turntable.mp4",
-   "video_hd_bytes": 352901,
+   "video_hd_bytes": 526327,
    "metadata": "docs/demo/25-turntable/result-metadata.json",
    "gif": "docs/demo/25-turntable/result.gif",
    "thumb": "docs/demo/25-turntable/thumb.png"

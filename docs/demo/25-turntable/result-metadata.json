@@ -1,5 +1,5 @@
 {
-  "id": "turntable-slab",
+  "id": "turntable-25",
   "name": "Every theme, every angle",
   "createdAt": 0,
   "state": "recorded",
@@ -13,54 +13,53 @@
     "canvasHeight": 900,
     "fps": 30,
     "palette": [
-      { "name": "canvas", "colorHex": "0A1330" },
+      { "name": "canvas", "colorHex": "060B1A" },
       { "name": "text", "colorHex": "F2F6FF" },
-      { "name": "text-bg", "colorHex": "0A1330" },
-      { "name": "edge", "colorHex": "2B4478" },
-      { "name": "caption-outline", "colorHex": "050A18" },
-      { "name": "caption-shadow", "colorHex": "03060F" },
-      { "name": "media-shadow", "colorHex": "03060F" },
-      { "name": "highlight", "colorHex": "5B8CFF" },
-      { "name": "accent", "colorHex": "5B8CFF" },
-      { "name": "deep", "colorHex": "050A18" }
+      { "name": "text-bg", "colorHex": "0B1226" },
+      { "name": "edge", "colorHex": "24365C" },
+      { "name": "caption-outline", "colorHex": "05080F" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "6FA8FF" },
+      { "name": "accent", "colorHex": "3E7BFF" },
+      { "name": "glow", "colorHex": "18356F" }
     ],
     "backgroundColorHex": "@canvas",
     "backgroundGradient": {
       "kind": "radial",
-      "start": [0.3, 0.42],
-      "end": [1.15, 1.05],
+      "start": [0.34, 0.46],
+      "end": [1.05, 1.05],
       "repeat": "clamp",
       "stops": [
-        { "colorHex": "1D3D77", "at": 0 },
-        { "colorHex": "0C1A3C", "at": 0.55 },
-        { "colorHex": "050A18", "at": 1 }
+        { "colorHex": "@glow", "at": 0 },
+        { "colorHex": "0A1531", "at": 0.45 },
+        { "colorHex": "@canvas", "at": 1 }
       ]
     },
     "subtitleFontFamily": "system",
-    "subtitleFontSize": 30,
+    "subtitleFontSize": 74,
     "subtitleBold": true,
     "subtitleColorHex": "@text",
-    "subtitleBackgroundColorHex": "@text-bg",
     "subtitleBackgroundOpacity": 0.0,
-    "subtitleBackgroundPadding": 8,
-    "subtitleAlignment": "leading",
-    "subtitleLeftMargin": 830,
-    "subtitleRightMargin": 60,
-    "subtitleVerticalMargin": 380
+    "subtitleBackgroundPadding": 10,
+    "subtitleLeftMargin": 820,
+    "subtitleRightMargin": 70,
+    "subtitleVerticalMargin": 360
   },
   "resources": [
     {
-      "id": "slab",
+      "id": "tablet",
       "kind": "model",
-      "filename": "slab.glb",
-      "displayName": "Slab",
+      "filename": "tablet.glb",
+      "displayName": "Tablet",
       "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
+      "boundsRadius": 0.7633424401283264,
       "materials": {
         "Body": "@accent",
         "Screen": { "resourceID": "ui" }
-      }
+      },
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
     },
     {
       "id": "ui",
@@ -68,10 +67,10 @@
       "filename": "ui_lumen_1.png",
       "displayName": "Lumen UI",
       "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
       "pixelWidth": 1216,
-      "pixelHeight": 760
+      "pixelHeight": 760,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
     }
   ],
   "layers": [
@@ -86,30 +85,31 @@
       "keyframes": []
     },
     {
-      "id": "model",
-      "name": "Slab",
+      "id": "device",
+      "name": "Tablet",
       "sortIndex": 1,
       "kind": "model",
       "isEnabled": true,
       "startTime": 0,
       "duration": 7,
-      "resourceID": "slab",
-      "fadeIn": 0.45,
+      "resourceID": "tablet",
+      "fadeIn": 0.5,
       "keyframes": [
         {
           "id": "m0",
           "time": 0,
           "transitionDuration": 0,
-          "placement": { "height": 600, "anchor": "center", "offset": [-330, 20] },
-          "camera": { "yaw": -70, "pitch": 8, "roll": 0 },
-          "light": { "yaw": -45, "pitch": 48, "intensity": 1 }
+          "placement": { "height": 1060, "anchor": "center", "offset": [-360, 0] },
+          "camera": { "yaw": -70, "pitch": 8 },
+          "light": { "yaw": -45, "pitch": 55, "intensity": 1.1 }
         },
         {
           "id": "m1",
           "time": 7,
           "transitionDuration": 7,
+          "transitionPercent": 100,
           "easing": "easeInOut",
-          "camera": { "yaw": 35, "pitch": 8, "roll": 0 }
+          "camera": { "yaw": 35, "pitch": 8 }
         }
       ]
     },
@@ -119,48 +119,39 @@
       "sortIndex": 2,
       "kind": "caption",
       "isEnabled": true,
-      "startTime": 0.3,
-      "duration": 6.7,
+      "startTime": 0.35,
+      "duration": 6.65,
       "captionText": "Every theme,\nevery angle.",
       "captionStyle": {
-        "fontSize": 72,
+        "fontSize": 74,
         "isBold": true,
         "alignment": "leading",
-        "textColorHex": "@text",
-        "placement": { "anchor": "left", "offset": [830, -80] },
-        "depth": { "count": 6, "offset": [2, 2], "shade": 0.95, "colorHex": "@deep" },
-        "reveal": {
-          "by": "word",
-          "mode": "slide",
-          "secondsPer": 0.22,
-          "unitSeconds": 0.38,
-          "easing": "easeOut"
-        }
+        "leftMargin": 820,
+        "rightMargin": 70,
+        "placement": { "anchor": "left", "offset": [820, -95] },
+        "depth": { "count": 10, "offset": [2, 2], "shade": 0.82, "colorHex": "1D3F8F" },
+        "reveal": { "by": "word", "mode": "slide", "secondsPer": 0.26, "unitSeconds": 0.42, "easing": "easeOut" }
       },
       "keyframes": []
     },
     {
-      "id": "sub",
-      "name": "Subtitle",
+      "id": "subline",
+      "name": "Subline",
       "sortIndex": 3,
       "kind": "caption",
       "isEnabled": true,
-      "startTime": 2.3,
-      "duration": 4.7,
+      "startTime": 2.35,
+      "duration": 4.65,
       "captionText": "A .glb on a layer. The palette paints it; a shot fills its screen.",
       "captionStyle": {
-        "fontSize": 30,
+        "fontSize": 28,
         "isBold": false,
         "alignment": "leading",
-        "textColorHex": "@text",
-        "placement": { "anchor": "left", "offset": [830, 115] },
-        "reveal": {
-          "by": "word",
-          "mode": "fade",
-          "secondsPer": 0.1,
-          "unitSeconds": 0.3,
-          "easing": "easeOut"
-        }
+        "textColorHex": "C7D4F0",
+        "leftMargin": 820,
+        "rightMargin": 70,
+        "placement": { "anchor": "left", "offset": [820, 110] },
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.09, "unitSeconds": 0.34, "easing": "easeOut" }
       },
       "keyframes": []
     }
