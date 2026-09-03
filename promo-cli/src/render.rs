@@ -1684,6 +1684,44 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Placement measures the model, not its sphere: a cube placed 200
+    /// tall on a 320 canvas, seen face-on, spans about 200 rows of lit
+    /// pixels.
+    #[test]
+    fn a_model_placement_height_is_the_models_height() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-modelbox-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("cube.glb"),
+            promo_engine::model::sample_cube_glb(),
+        )
+        .unwrap();
+        let doc = r#"{"id":"P","name":"Box","createdAt":0,"state":"recorded","minReaderVersion":29,
+            "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"},
+            "resources":[{"id":"M","kind":"model","filename":"cube.glb","displayName":"Cube","addedAt":0}],
+            "layers":[{"id":"L","name":"cube","sortIndex":0,"kind":"model","isEnabled":true,
+              "startTime":0,"duration":2,"resourceID":"M",
+              "keyframes":[{"id":"K0","time":0,"camera":{"yaw":0,"pitch":0,"distance":6},
+                "placement":{"height":200,"anchor":"center"},"transitionDuration":0}]}]}"#;
+        std::fs::write(dir.join("metadata.json"), doc).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let frame = renderer.frame_bgra(0.5).expect("frame");
+        let lit_rows = (0..320)
+            .filter(|&y| (0..320).any(|x| frame[(y * 320 + x) * 4 + 2] > 40))
+            .count();
+        assert!(
+            (180..=222).contains(&lit_rows),
+            "the cube stands about 200 tall as placed: {lit_rows} rows"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A video on a slot: the slab's Screen bound to the practice clip
     /// shows a picture that differs from the slot's own dark material and
     /// changes between two moments — the recording plays on the screen.
@@ -1712,7 +1750,12 @@ mod tests {
             .arg("color=c=red:size=320x200:rate=10:duration=2")
             .args(["-f", "lavfi", "-i"])
             .arg("color=c=blue:size=320x200:rate=10:duration=2")
-            .args(["-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0", "-pix_fmt", "yuv420p"])
+            .args([
+                "-filter_complex",
+                "[0:v][1:v]concat=n=2:v=1:a=0",
+                "-pix_fmt",
+                "yuv420p",
+            ])
             .arg(&clip)
             .status()
             .map(|s| s.success())

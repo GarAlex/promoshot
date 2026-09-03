@@ -862,6 +862,7 @@ height, and `zoom` 1 on the layer is that frame at canvas height), `"light": { "
 (ramping between keyframes like any value); absent, the clip runs on
 the layer's own time and loops. Every field is optional and ramps like
 any keyframe value.
-`placement` resolves against the model's projected bounds at that
-camera. Strict, as every kind before it: an older reader refuses the
+`placement` and `zoom` measure the model's own box on screen at that
+camera (the picture the layer shows is cut to it), so "700 tall,
+centred" is the model 700 tall whatever its shape. Strict, as every kind before it: an older reader refuses the
 file. Reader version 29.

@@ -713,6 +713,7 @@ impl ModelPass {
                 | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
+        // (COPY_SRC above: the engine cuts the model's box out of it.)
         let msaa = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("model-msaa"),
             size,
@@ -931,6 +932,74 @@ fn norm(v: [f32; 3]) -> [f32; 3] {
 fn direction(yaw: f64, pitch: f64) -> [f32; 3] {
     let (y, p) = (deg(yaw), deg(pitch));
     [p.cos() * y.sin(), p.sin(), p.cos() * y.cos()]
+}
+
+/// Where a world-space point lands in the output, as a fraction of its
+/// width and height (0…1, y down) — the same camera the pass draws with,
+/// so a caller can find the model's box on the picture. `None` behind the
+/// camera.
+pub fn project_point(view: &ModelView, aspect: f32, p: [f32; 3]) -> Option<[f32; 2]> {
+    let frame = frame_uniforms(view, aspect);
+    let m = frame.view_proj;
+    let x = m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0];
+    let y = m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1];
+    let w = m[0][3] * p[0] + m[1][3] * p[1] + m[2][3] * p[2] + m[3][3];
+    if w <= 1e-6 {
+        return None;
+    }
+    Some([(x / w + 1.0) / 2.0, (1.0 - y / w) / 2.0])
+}
+
+/// A `width × height` cut of `source` from `(x, y)`, as its own texture
+/// in the pass's output format — the model's box out of the square it
+/// was drawn on.
+pub fn crop_texture(
+    ctx: &GpuContext,
+    source: &wgpu::Texture,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> wgpu::Texture {
+    let size = wgpu::Extent3d {
+        width: width.max(1),
+        height: height.max(1),
+        depth_or_array_layers: 1,
+    };
+    let out = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("model-crop"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: OUTPUT_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let mut encoder = ctx
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("model-crop"),
+        });
+    encoder.copy_texture_to_texture(
+        wgpu::ImageCopyTexture {
+            texture: source,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x, y, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::ImageCopyTexture {
+            texture: &out,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        size,
+    );
+    ctx.queue.submit(Some(encoder.finish()));
+    out
 }
 
 fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {

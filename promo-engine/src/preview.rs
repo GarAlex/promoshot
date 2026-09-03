@@ -2750,7 +2750,66 @@ impl PreviewEngine {
         let texture = pass
             .render_to_texture(self.ctx, &loaded.gpu, &view, &matrices, side, side)
             .ok()?;
-        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, side, side);
+        // The picture the layer shows is the model's BOX on that square —
+        // every mesh's corners through its node's matrix and the camera —
+        // so placement and zoom measure the model, not the sphere round
+        // it: "700 tall, centred" is the model 700 tall.
+        let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+        for mesh in &loaded.model.meshes {
+            let m = matrices
+                .get(mesh.node)
+                .copied()
+                .unwrap_or(promo_gpu::model_pass::IDENTITY);
+            let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
+            for p in &mesh.positions {
+                for k in 0..3 {
+                    min[k] = min[k].min(p[k]);
+                    max[k] = max[k].max(p[k]);
+                }
+            }
+            if min[0] > max[0] {
+                continue;
+            }
+            for corner in 0..8 {
+                let p = [
+                    if corner & 1 == 0 { min[0] } else { max[0] },
+                    if corner & 2 == 0 { min[1] } else { max[1] },
+                    if corner & 4 == 0 { min[2] } else { max[2] },
+                ];
+                let w = [
+                    m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                    m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+                    m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+                ];
+                if let Some(q) = promo_gpu::model_pass::project_point(&view, 1.0, w) {
+                    lo[0] = lo[0].min(q[0]);
+                    lo[1] = lo[1].min(q[1]);
+                    hi[0] = hi[0].max(q[0]);
+                    hi[1] = hi[1].max(q[1]);
+                }
+            }
+        }
+        let (texture, frame_w, frame_h) = if lo[0] < hi[0] && lo[1] < hi[1] {
+            // A pixel of margin each side keeps the anti-aliased edge.
+            let px = |f: f32| (f * side as f32).round();
+            let x0 = (px(lo[0]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
+            let y0 = (px(lo[1]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
+            let x1 = (px(hi[0]) + 1.0).clamp(x0 as f32 + 2.0, side as f32) as u32;
+            let y1 = (px(hi[1]) + 1.0).clamp(y0 as f32 + 2.0, side as f32) as u32;
+            let (w, h) = (x1 - x0, y1 - y0);
+            if w >= side && h >= side {
+                (texture, side, side)
+            } else {
+                (
+                    promo_gpu::model_pass::crop_texture(self.ctx, &texture, x0, y0, w, h),
+                    w,
+                    h,
+                )
+            }
+        } else {
+            (texture, side, side)
+        };
+        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, frame_w, frame_h);
         let bytes = frame.byte_size();
 
         self.misses += 1;
