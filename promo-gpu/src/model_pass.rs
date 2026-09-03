@@ -58,7 +58,7 @@ impl Default for ModelView {
             yaw: -25.0,
             pitch: 10.0,
             roll: 0.0,
-            distance: 3.2,
+            distance: 4.2,
             fov: 30.0,
             bounds_center: [0.0; 3],
             bounds_radius: 1.0,
@@ -484,7 +484,9 @@ impl ModelPass {
         Ok(crate::compositor::Compositor::adopt_owned_texture(texture))
     }
 
-    fn render_to_texture(
+    /// Render the model at `width × height` into a texture the caller
+    /// owns — what an engine wraps as a cached frame.
+    pub fn render_to_texture(
         &self,
         ctx: &GpuContext,
         model: &GpuModel,
@@ -817,8 +819,10 @@ fn mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
 mod tests {
     use super::*;
 
+    type CubeData = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>);
+
     /// A unit cube, four vertices a face with flat normals, one material.
-    fn cube() -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>) {
+    fn cube() -> CubeData {
         let h = 0.5f32;
         let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
             (

@@ -13,6 +13,7 @@
 
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
+use promo_gpu::model_pass::{GpuModel, MaterialInput, MeshInput, ModelPass, ModelView};
 use promo_gpu::{GpuSurface, ImportedFrame};
 // Only the Apple-typed render entries name this; the provider no longer does.
 use crate::vector::vector_shapes;
@@ -131,6 +132,14 @@ pub type FrameProviderFn = extern "C" fn(
     out_flags: *mut i32,
 ) -> i32;
 
+/// A model the host provided: decoded, uploaded, and the colours its
+/// slots were last painted (so a binding re-paints only when it changes).
+struct LoadedModel {
+    model: crate::model::Model,
+    gpu: GpuModel,
+    painted: HashMap<usize, [f32; 4]>,
+}
+
 struct CachedFrame {
     /// Owns the texture and whatever must outlive it (the IOSurface retain on
     /// Apple, nothing for an upload) — see `promo_gpu::ImportedFrame`.
@@ -163,6 +172,13 @@ pub struct PreviewEngine {
     /// same answer every frame, so the geometry is cached beside the raster
     /// it describes rather than recomputed 60 times a second.
     reveal_cache: HashMap<String, Option<promo_text::RevealLayout>>,
+    /// Models by resource id, decoded and on the GPU — handed in by the
+    /// host through `provide_model` (the file is the host's I/O, as every
+    /// pixel source is), drawn by the model pass per frame.
+    models: HashMap<String, LoadedModel>,
+    /// Built on the first model; None until then, so a project with no
+    /// models pays nothing.
+    model_pass: Option<ModelPass>,
     /// Quads a layer adds ABOVE its own — click rings — drained into the
     /// scene right after the layer's quad.
     overlays: Vec<SceneQuad>,
@@ -256,6 +272,8 @@ impl PreviewEngine {
             governor: MemoryGovernor::new(budget_bytes),
             cache: HashMap::new(),
             reveal_cache: HashMap::new(),
+            models: HashMap::new(),
+            model_pass: None,
             overlays: Vec::new(),
             key_of: HashMap::new(),
             id_of: HashMap::new(),
@@ -2079,7 +2097,9 @@ impl PreviewEngine {
                 continue;
             }
             let (_is_media, is_drawing) = match layer.kind {
-                ProjectLayerKind::Video | ProjectLayerKind::Image => (true, false),
+                ProjectLayerKind::Video | ProjectLayerKind::Image | ProjectLayerKind::Model => {
+                    (true, false)
+                }
                 ProjectLayerKind::Drawing => (false, true),
                 _ => continue,
             };
@@ -2165,8 +2185,21 @@ impl PreviewEngine {
             // A composition draws itself: rendered by recursion into a
             // texture that then stands where a host frame would.
             let composed = match resources.iter().find(|r| {
-                r.id == showing && r.kind == promo_model::ProjectResourceKind::Composition
+                r.id == showing
+                    && matches!(
+                        r.kind,
+                        promo_model::ProjectResourceKind::Composition
+                            | promo_model::ProjectResourceKind::Model
+                    )
             }) {
+                Some(resource) if resource.kind == promo_model::ProjectResourceKind::Model => {
+                    // A model draws itself through the model pass; the
+                    // picture then rides the media path like a still.
+                    match self.model_frame(layer, resource, &settings, centre, tier, &used) {
+                        Some(id) => Some(id),
+                        None => continue,
+                    }
+                }
                 Some(resource) => {
                     match self.composition_frame(
                         layer,
@@ -2417,6 +2450,240 @@ impl PreviewEngine {
     /// quantized time and tier, transient in export mode like any frame.
     /// Nothing past the depth cap — a file that slipped past validation
     /// cannot recurse the GPU.
+    /// Hand the engine a model's bytes (a `.glb`) for a resource. The host
+    /// reads the file — I/O is the host's, as with every pixel source —
+    /// and calls this once per resource; calling again replaces it. Decode
+    /// failures come back as text, and the layer then draws nothing.
+    pub fn provide_model(&mut self, resource_id: &str, bytes: &[u8]) -> Result<(), String> {
+        let model = crate::model::Model::from_glb(bytes).map_err(|e| e.to_string())?;
+        if self.model_pass.is_none() {
+            self.model_pass = Some(ModelPass::new(self.ctx).map_err(|e| format!("{e:?}"))?);
+        }
+        let pass = self.model_pass.as_ref().expect("built above");
+        let meshes: Vec<MeshInput<'_>> = model
+            .meshes
+            .iter()
+            .map(|m| MeshInput {
+                positions: &m.positions,
+                normals: &m.normals,
+                uvs: &m.uvs,
+                indices: &m.indices,
+                material: m.material,
+            })
+            .collect();
+        let materials: Vec<MaterialInput<'_>> = model
+            .materials
+            .iter()
+            .map(|m| MaterialInput {
+                base_color: m.base_color,
+                metallic: m.metallic,
+                roughness: m.roughness,
+                double_sided: m.double_sided,
+                texture: m
+                    .base_texture
+                    .as_ref()
+                    .map(|t| (t.width, t.height, t.rgba.as_slice())),
+            })
+            .collect();
+        let gpu = pass
+            .upload(self.ctx, &meshes, &materials)
+            .map_err(|e| format!("{e:?}"))?;
+        // Any frame drawn from the previous bytes is stale.
+        let stale: Vec<u64> = self
+            .id_of
+            .iter()
+            .filter(|(_, k)| {
+                k.0.ends_with(&format!("\u{1f}{resource_id}")) && k.0.starts_with("model")
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in stale {
+            if let Some(k) = self.id_of.remove(&id) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&id);
+        }
+        self.models.insert(
+            resource_id.to_string(),
+            LoadedModel {
+                model,
+                gpu,
+                painted: HashMap::new(),
+            },
+        );
+        Ok(())
+    }
+
+    /// Whether a model has been provided for a resource.
+    pub fn has_model(&self, resource_id: &str) -> bool {
+        self.models.contains_key(resource_id)
+    }
+
+    /// The model layer's picture at `time`: the model pass into a square
+    /// texture the height of the canvas (so `zoom` 1 fills the frame's
+    /// height with the model's bounding sphere), cached like a composition
+    /// frame — per time when a camera, light or clip is keyed, once
+    /// otherwise.
+    fn model_frame(
+        &mut self,
+        layer: &ProjectLayer,
+        resource: &promo_model::ProjectResource,
+        settings: &promo_model::CompositionSettings,
+        time: f64,
+        tier: i32,
+        pinned: &[u64],
+    ) -> Option<u64> {
+        if !self.models.contains_key(&resource.id) {
+            return None;
+        }
+        let animated = layer
+            .keyframes
+            .iter()
+            .any(|k| k.camera.is_some() || k.light.is_some() || k.clip.is_some());
+        let key_time = if animated { time } else { -1.0 };
+        let transient = self.export_mode && animated;
+        let key = (
+            format!("model\u{1f}{}\u{1f}{}", layer.id, resource.id),
+            quantize(key_time),
+            tier,
+        );
+        if transient {
+            if let Some(&id) = self.scratch_key.get(&key) {
+                self.hits += 1;
+                return Some(id);
+            }
+        } else if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some(id);
+        }
+
+        let canvas_h = settings.canvas_height.max(1.0);
+        let scale = if tier > 0 { 0.5 } else { 1.0 };
+        let side = ((canvas_h * scale).round() as u32).clamp(8, 2048);
+
+        // The camera and the light, each field on the keyframe clock with
+        // the model's own defaults where nothing is keyed.
+        let local = tl::layer_local_time(layer, time);
+        let scalar = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+            tl::interpolation::layer_interpolated_scalar(layer, local, select)
+        };
+        let camera = promo_model::Camera {
+            yaw: scalar(|k| k.camera.and_then(|c| c.yaw)),
+            pitch: scalar(|k| k.camera.and_then(|c| c.pitch)),
+            roll: scalar(|k| k.camera.and_then(|c| c.roll)),
+            distance: scalar(|k| k.camera.and_then(|c| c.distance)),
+            fov: scalar(|k| k.camera.and_then(|c| c.fov)),
+        };
+        let light = promo_model::Light {
+            yaw: scalar(|k| k.light.and_then(|l| l.yaw)),
+            pitch: scalar(|k| k.light.and_then(|l| l.pitch)),
+            intensity: scalar(|k| k.light.and_then(|l| l.intensity)),
+        };
+        // Lighting from the theme: ambient is the canvas colour, dimmed;
+        // the key light white; the rim the accent, if the palette has one.
+        let linear = |rgba: [f32; 4]| -> [f32; 3] {
+            let f = |c: f32| {
+                if c <= 0.04045 {
+                    c / 12.92
+                } else {
+                    ((c + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            [f(rgba[0]), f(rgba[1]), f(rgba[2])]
+        };
+        let background = linear(rgba_from_hex(
+            settings.resolve_color(&settings.background_color_hex),
+        ));
+        let ambient = [
+            background[0] * 0.45 + 0.08,
+            background[1] * 0.45 + 0.08,
+            background[2] * 0.45 + 0.08,
+        ];
+        let accent = settings.resolve_color("@accent");
+        let rim = if accent == "@accent" {
+            [0.25, 0.3, 0.4]
+        } else {
+            let c = linear(rgba_from_hex(accent));
+            [c[0] * 0.8 + 0.1, c[1] * 0.8 + 0.1, c[2] * 0.8 + 0.1]
+        };
+
+        // Colour bindings paint their slots (a resource binding is P2).
+        let bindings: Vec<(usize, [f32; 4])> = {
+            let loaded = self.models.get(&resource.id)?;
+            resource
+                .materials
+                .iter()
+                .flat_map(|m| m.iter())
+                .filter_map(|(slot, binding)| match binding {
+                    promo_model::MaterialBinding::Color(hex) => {
+                        let index = loaded
+                            .model
+                            .materials
+                            .iter()
+                            .position(|m| &m.name == slot)?;
+                        let srgb = rgba_from_hex(settings.resolve_color(hex));
+                        let lin = linear(srgb);
+                        Some((index, [lin[0], lin[1], lin[2], srgb[3]]))
+                    }
+                    promo_model::MaterialBinding::Resource { .. } => None,
+                })
+                .collect()
+        };
+        let pass = self.model_pass.as_ref()?;
+        let loaded = self.models.get_mut(&resource.id)?;
+        for (index, rgba) in bindings {
+            if loaded.painted.get(&index) != Some(&rgba) {
+                pass.recolor(self.ctx, &mut loaded.gpu, index, rgba);
+                loaded.painted.insert(index, rgba);
+            }
+        }
+        let view = ModelView {
+            yaw: camera.yaw(),
+            pitch: camera.pitch(),
+            roll: camera.roll(),
+            distance: camera.distance(),
+            fov: camera.fov(),
+            bounds_center: loaded.model.bounds_center,
+            bounds_radius: loaded.model.bounds_radius,
+            light_yaw: light.yaw(),
+            light_pitch: light.pitch(),
+            light_intensity: light.intensity(),
+            key_rgb: [1.0, 1.0, 1.0],
+            ambient_rgb: ambient,
+            rim_rgb: rim,
+        };
+        let texture = pass
+            .render_to_texture(self.ctx, &loaded.gpu, &view, side, side)
+            .ok()?;
+        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, side, side);
+        let bytes = frame.byte_size();
+
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        let entry = CachedFrame {
+            frame,
+            flags: 0,
+            caption_origin: None,
+        };
+        if transient {
+            self.scratch.insert(id, entry);
+            self.scratch_key.insert(key, id);
+            return Some(id);
+        }
+        for victim in self.governor.admit(id, bytes, pinned) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(id, entry);
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some(id)
+    }
+
     fn composition_frame(
         &mut self,
         layer: &ProjectLayer,

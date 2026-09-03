@@ -851,9 +851,10 @@ drawn on that surface — a screenshot on a "Screen" slot:
 `"materials": { "Body": "@accent", "Screen": { "resourceID": "<uuid>" } }`.
 `clips` (name and duration) and `boundsRadius` are written at import
 and re-derived on every open. A model layer's keyframes carry
-`"camera": { "yaw": -25, "pitch": 10, "roll": 0, "distance": 3.2,
+`"camera": { "yaw": -25, "pitch": 10, "roll": 0, "distance": 4.2,
 "fov": 30 }` (distance in units of `boundsRadius`, so one rule fits
-every model), `"light": { "yaw": 40, "pitch": 50, "intensity": 1 }`
+every model; at the defaults the bounding sphere fills the frame's
+height, and `zoom` 1 on the layer is that frame at canvas height), `"light": { "yaw": 40, "pitch": 50, "intensity": 1 }`
 (ambient and rim come from the theme) and `"clip": { "name": "Open",
 "time": 0 }` (scrubs the animation; absent, the clip runs on layer
 time); every field is optional and ramps like any keyframe value.

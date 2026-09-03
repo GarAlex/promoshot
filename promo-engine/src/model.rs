@@ -380,7 +380,7 @@ pub fn sample_cube_glb_with(half: f32, slot: &str, base_color: [f32; 4]) -> Vec<
     let mut push = |bytes: &[u8], target: u32| -> usize {
         let offset = bin.len();
         bin.extend_from_slice(bytes);
-        while bin.len() % 4 != 0 {
+        while !bin.len().is_multiple_of(4) {
             bin.push(0);
         }
         views.push(format!(
@@ -427,7 +427,7 @@ pub fn sample_cube_glb_with(half: f32, slot: &str, base_color: [f32; 4]) -> Vec<
         a = base_color[3],
     );
     let mut json_bytes = json.into_bytes();
-    while json_bytes.len() % 4 != 0 {
+    while !json_bytes.len().is_multiple_of(4) {
         json_bytes.push(b' ');
     }
     let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
@@ -477,7 +477,7 @@ mod tests {
             .replace(r#","material":0"#, "");
         let mut bytes = glb[..12].to_vec();
         let mut padded = edited.into_bytes();
-        while padded.len() % 4 != 0 {
+        while !padded.len().is_multiple_of(4) {
             padded.push(b' ');
         }
         bytes.extend_from_slice(&(padded.len() as u32).to_le_bytes());

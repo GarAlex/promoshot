@@ -142,6 +142,16 @@ new projects.
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
   "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
   and tint, on every host alike. Stamp `minReaderVersion: 23`.
+- **Models.** A `.glb` in `Resources/` as a resource of `"kind":
+  "model"`, shown by a layer of `"kind": "model"`. The layer is a square
+  picture of the model: `zoom` 1 fills the canvas height with it, and
+  `placement` sizes it like an image. Keyframes take `"camera": { "yaw":
+  -25, "pitch": 10, "distance": 4.2, "fov": 30 }` and `"light": { "yaw":
+  40, "pitch": 50 }`, which ramp — a yaw from -60 to 20 over three
+  seconds is a turntable. `"materials": { "Body": "@accent" }` on the
+  resource paints a slot by the name the file exports. Stamp
+  `minReaderVersion: 29`. `promo_inspect` lists the layer; a missing
+  file is named like any other.
 - **Kinetic reveals.** Beside `wipe`, `fade`, `rise` and `scale`, a
   reveal's `mode` can be `flip` (each unit turns in edge-on, in
   perspective), `tumble` (rights itself from a lean while rising) or

@@ -158,8 +158,9 @@ pub struct ModelClip {
 /// Where a model layer is looked at from. Angles in degrees; `distance`
 /// in units of the model's `boundsRadius`, so a rule written for one
 /// model holds for another; `fov` the vertical field of view. Absent
-/// fields take the defaults: yaw -25, pitch 10, roll 0, distance 3.2,
-/// fov 30 — a three-quarter view that reads as a product shot.
+/// fields take the defaults: yaw -25, pitch 10, roll 0, distance 4.2,
+/// fov 30 — a three-quarter view that reads as a product shot, far
+/// enough that the model's bounding sphere fits the frame's height.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Camera {
@@ -186,7 +187,7 @@ impl Camera {
         self.roll.unwrap_or(0.0)
     }
     pub fn distance(&self) -> f64 {
-        self.distance.unwrap_or(3.2).max(1.05)
+        self.distance.unwrap_or(4.2).max(1.05)
     }
     pub fn fov(&self) -> f64 {
         self.fov.unwrap_or(30.0).clamp(5.0, 120.0)

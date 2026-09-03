@@ -190,9 +190,23 @@ impl Project {
             // Captions render in the core now (promo-text).
             ProjectLayerKind::Caption => None,
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
-            // A model draws through the engine's model pass; until that pass
-            // lands (3D plan P0, step 3) the layer is carried and skipped.
-            ProjectLayerKind::Model => None,
+            // A model draws through the engine's model pass from its `.glb`;
+            // the only question is whether the file is there.
+            ProjectLayerKind::Model => {
+                let resource = layer
+                    .resource_id
+                    .as_deref()
+                    .and_then(|id| self.resource(id));
+                match resource {
+                    None => Some(Unsupported::MissingResource(layer.name.clone())),
+                    Some(r) => match self.resource_path(r) {
+                        Some(path) if path.exists() => None,
+                        _ => Some(Unsupported::MissingFile(
+                            self.dir.join("Resources").join(&r.filename),
+                        )),
+                    },
+                }
+            }
             // Video is decoded through promo-media now; the only question is
             // whether the file is there and a backend will take it.
             // A composition draws itself from the document — no file to

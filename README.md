@@ -381,6 +381,17 @@ and a softness: the plate becomes transparent before the layer's grade,
 border and mask, in the compositor, so a green-screen clip composes
 over anything on every host alike.
 
+## Models
+
+A resource of kind `model` is a glTF 2.0 binary (`.glb`) in `Resources/`;
+a layer of kind `model` draws it through a PBR-lite pass into a texture
+at the layer's size, and from there it is a picture like any other:
+placement, opacity, transitions, masks, effects and the contact shadow
+all apply. Keyframes carry a `camera` (yaw, pitch, roll, distance in
+bounds radii, fov) and a `light`; `materials` on the resource bind a
+slot name to a colour — a palette name works, so `@accent` re-skins the
+body with the theme. Lighting defaults come from the theme. Rung 29.
+
 ## Text with a side
 
 A caption style may carry `depth`: copies of the words stacked under the

@@ -259,6 +259,7 @@ impl Renderer {
         // the point — per-time frames skip the cache, and a motion-blur
         // walk gets the export-grade sample cap rather than the preview's.
         engine.set_export_mode(true);
+        Self::provide_models(&mut engine, project);
 
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("promo-cli-target"),
@@ -374,6 +375,11 @@ impl Renderer {
             frames.insert(resource.id.clone(), (pixels, width, height, 0));
         }
         for layer in promo_model::nesting::all_layers(&project.meta) {
+            // A model layer's file is a `.glb`, not a picture: the engine
+            // gets its bytes through `provide_models`, nothing to stage.
+            if layer.kind == promo_model::ProjectLayerKind::Model {
+                continue;
+            }
             if project.unsupported(layer).is_some() {
                 continue;
             }
@@ -545,6 +551,26 @@ impl Renderer {
     /// list previews without a reopen. The state swaps INSIDE the mutex:
     /// the engine holds a raw pointer to the box, so the box must never
     /// move.
+    /// Every model resource's bytes, read here (the engine does no I/O)
+    /// and handed over. A missing or undecodable file leaves the layer
+    /// drawing nothing; `unsupported()` names the missing ones.
+    fn provide_models(engine: &mut PreviewEngine, project: &Project) {
+        for resource in project.meta.resources.as_deref().unwrap_or(&[]) {
+            if resource.kind != promo_model::ProjectResourceKind::Model {
+                continue;
+            }
+            let Some(path) = project.resource_path(resource) else {
+                continue;
+            };
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            if let Err(why) = engine.provide_model(&resource.id, &bytes) {
+                eprintln!("model {}: {why}", resource.filename);
+            }
+        }
+    }
+
     pub fn set_project(&mut self, project: &Project) -> Result<(), String> {
         let (frames, cuts, videos) = Self::stage(project, &self.registry)?;
         {
@@ -557,6 +583,7 @@ impl Renderer {
             state.videos = videos;
         }
         self.engine.set_project(project.meta.clone());
+        Self::provide_models(&mut self.engine, project);
         Ok(())
     }
 
@@ -1606,6 +1633,84 @@ mod tests {
         assert!(
             samples.iter().all(|&v| v >= 200),
             "within bounds: {samples:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Models (rung 29): a generated cube glb on a model layer renders lit
+    /// — face-on it is one shade, from a keyed three-quarter camera it is
+    /// several with the top face brightest — and a `@accent` material
+    /// binding paints it the palette's red.
+    #[test]
+    fn a_model_layer_renders_lit_and_takes_the_palette() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-model-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("cube.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.75, 0.75, 0.75, 1.0]),
+        )
+        .unwrap();
+        let doc = |materials: &str| {
+            format!(
+                r#"{{"id":"P","name":"Model","createdAt":0,"state":"recorded","minReaderVersion":29,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000",
+                  "palette":[{{"name":"accent","colorHex":"E02020"}}]}},
+                "resources":[{{"id":"M","kind":"model","filename":"cube.glb","displayName":"Cube","addedAt":0{materials}}}],
+                "layers":[{{"id":"L","name":"cube","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"M",
+                  "keyframes":[
+                    {{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":0}},"transitionDuration":0}},
+                    {{"id":"K1","time":1,"camera":{{"yaw":35,"pitch":25}},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let render = |json: &str, time: f64| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            renderer.frame_bgra(time).expect("frame")
+        };
+        // Luminance of the pixels that are not the black background, read
+        // between the 10th and 90th percentiles so anti-aliased edges, the
+        // rim light and the contact shadow do not decide the answer.
+        let lit = |frame: &[u8]| -> (usize, u32, u32) {
+            let mut lum: Vec<u32> = frame
+                .chunks_exact(4)
+                .filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 40)
+                .map(|p| (p[2] as u32 * 299 + p[1] as u32 * 587 + p[0] as u32 * 114) / 1000)
+                .collect();
+            lum.sort_unstable();
+            let n = lum.len();
+            if n == 0 {
+                return (0, 0, 0);
+            }
+            (n, lum[n / 10], lum[n * 9 / 10])
+        };
+        let (n, lo, hi) = lit(&render(&doc(""), 0.0));
+        assert!(n > 320 * 320 / 8, "the cube is there: {n} lit");
+        assert!(hi - lo < 30, "face-on is one shade: {lo}..{hi}");
+        let (_, lo, hi) = lit(&render(&doc(""), 1.0));
+        assert!(
+            hi - lo > 30,
+            "three-quarter view shows several shades: {lo}..{hi}"
+        );
+
+        let red = render(&doc(r#","materials":{"Body":"@accent"}"#), 1.0);
+        let (mut r, mut b, mut n) = (0u64, 0u64, 0u64);
+        for p in red.chunks_exact(4) {
+            if p[0] as u32 + p[1] as u32 + p[2] as u32 > 30 {
+                r += p[2] as u64;
+                b += p[0] as u64;
+                n += 1;
+            }
+        }
+        assert!(
+            n > 0 && r > b * 2,
+            "painted with the palette's red: r {r} vs b {b} over {n}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
