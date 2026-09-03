@@ -4776,6 +4776,194 @@
   "page": "docs/demo/demo31.md"
  },
  {
+  "id": "32",
+  "slug": "32-stand",
+  "title": "Stand",
+  "blurb": "A stand made of parts \u2014 a plinth, a chrome stem, a plate and a ring written like an SVG \u2014 with the glazed vase standing on it under the studio.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 560 px tall in the centre (offset 20 px up), whose keyframes carry the camera (swinging from a yaw of -30 to 30, pitch 14 to 10, with an ease in and out) and the key light (sweeping from a yaw of -60 to 60 at intensity 1.3). Its members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, positioned at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]), a Plate box (size [1.2,0.06,1.2], radius 0.03, positioned at y 0.81) and a Ring torus (radius 0.62, tube 0.02, at y 0.85) \u2014 painted dark 1E2430 on Base and Plate and chrome D2D6DC (metallic 1, roughness 0.2) on Stem and Ring, offset 0.45 down; and vase.glb painted F2E9DC with a gloss finish (metallic 0.05, roughness 0.15), offset 0.62 up so it stands on the plate, turning from a yaw of -20 to 20; and along the bottom a bold caption 'Made from parts.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- Made from parts.",
+  "resources": [
+   {
+    "file": "vase.glb",
+    "kind": "file",
+    "path": "demos/32-stand/resources/vase.glb"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 16,
+   "total": 16,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:stage",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:finish",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:environment",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:partsBody",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=61 cost=$4.65 secs=707",
+   "run": {
+    "turns": 61,
+    "wall_s": 705,
+    "api_s": 696,
+    "cost_usd": 4.65,
+    "tokens": {
+     "input": 120,
+     "cache_read": 4998270,
+     "cache_write": 96587,
+     "output": 47352,
+     "thinking": 27890
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1434,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 5094977,
+      "output": 47352,
+      "cost_usd": 4.65
+     }
+    ],
+    "mcp": {
+     "calls": 14,
+     "ms": 6501,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 3053,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 2795,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 452,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 3,
+       "ms": 184,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 2,
+       "ms": 17,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is written, validated, and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9 s, 60 fps, `minReaderVersion: 37`\n- **Ground** \u2014 radial gradient, `3C4149` centre \u2192 `14171B` edge, plus `environment: studio` (what the chrome mirrors).\n- **Bench** \u2014 the one `stage` layer, placed `{height: 560, anchor: center, offset: [0,-20]}`. Its keyframes carry the stage camera (yaw \u221230\u219230, pitch 14\u219210, `easeInOut` over the full 9 s) and the key light (yaw \u221260\u219260 at intensity 1.3).\n  - **Stand** \u2014 model resource, no file, `recipe.parts`: Base cylinder (0.95 \u00d7 0.08 at y 0.04), Stem lathe on the given profile, Plate box `[1.2,0.06,1.2]` r 0.03 at y 0.81, Ring torus (0.62/0.02) at y 0.85. Base + Plate `1E2430`; Stem + Ring `D2D6DC` at metallic 1 / roughness 0.2. `stageOffset [0,-0.45]`.\n  - **Vase** \u2014 `vase.glb`, its `Body` slot painted `F2E9DC` with metallic 0.05 / roughness 0.15, turning yaw \u221220\u219220 across the 9 s.\n- **Caption** \u2014 bold \"Made from parts.\" along the bottom, from 1.2 s, `reveal: {by: \"word\", mode: \"fade\", secondsPer: 0.45}`.\n\nTwo judgment calls worth flagging:\n\n- **Vase offset is 1.19, not 0.62.** At 0.62 the vase sank about halfway through the plate \u2014 `stageOffset` is measured in the *stage's* bounds radii, and with this stand and this vase (1.5 units tall against the stand's 0.87) 0.62 lands well short. I calibrated against the render: at 1.19 the vase's foot meets the plate's top face exactly, which is what \"so it stands on the plate\" asks for.\n- **The caption is its own layer, not a stage member.** As a member it inflates the stage's bounds box the instant it appears, and the 560 px placement then rescales the bodies \u2014 a hard 17 % size pop at 1.2 s. Outside the stage the geometry is constant and the caption sits along the bottom of the frame rather than the botto",
+   "contact": "docs/demo/32-stand/contact-result.png",
+   "reference_contact": "docs/demo/32-stand/contact-reference.png",
+   "video": "docs/demo/32-stand/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/32-stand.mp4",
+   "video_hd_bytes": 250162,
+   "metadata": "docs/demo/32-stand/result-metadata.json",
+   "gif": "docs/demo/32-stand/result.gif",
+   "thumb": "docs/demo/32-stand/thumb.png"
+  },
+  "page": "docs/demo/demo32.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",
