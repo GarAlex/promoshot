@@ -1,6 +1,6 @@
 {
   "id": "stand-9s",
-  "name": "Made from parts",
+  "name": "Made From Parts",
   "createdAt": 0,
   "state": "recorded",
   "minReaderVersion": 37,
@@ -11,32 +11,33 @@
   "compositionSettings": {
     "canvasWidth": 1440,
     "canvasHeight": 900,
-    "fps": 60,
+    "fps": 30,
     "palette": [
-      { "name": "greyLift", "colorHex": "3C4149" },
-      { "name": "greyDeep", "colorHex": "14171B" },
-      { "name": "dark", "colorHex": "1E2430" },
+      { "name": "grey-hi", "colorHex": "3C4149" },
+      { "name": "grey-lo", "colorHex": "14161A" },
+      { "name": "ink", "colorHex": "1E2430" },
       { "name": "chrome", "colorHex": "D2D6DC" },
       { "name": "cream", "colorHex": "F2E9DC" },
-      { "name": "text", "colorHex": "FFFFFF" }
+      { "name": "text", "colorHex": "F4F6F9" }
     ],
-    "backgroundColorHex": "@greyDeep",
+    "backgroundColorHex": "@grey-lo",
     "backgroundGradient": {
       "kind": "radial",
-      "start": [0.5, 0.46],
-      "end": [1.0, 1.0],
+      "start": [0.5, 0.44],
+      "end": [1.02, 1.02],
       "repeat": "clamp",
       "stops": [
-        { "colorHex": "@greyLift", "at": 0 },
-        { "colorHex": "@greyDeep", "at": 1 }
+        { "colorHex": "@grey-hi", "at": 0 },
+        { "colorHex": "@grey-lo", "at": 1 }
       ]
     },
     "environment": { "preset": "studio", "intensity": 1, "rotation": 0 },
     "subtitleFontFamily": "system",
-    "subtitleFontSize": 56,
+    "subtitleFontSize": 58,
     "subtitleBold": true,
     "subtitleColorHex": "@text",
     "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 16,
     "subtitleLeftMargin": 120,
     "subtitleRightMargin": 120
   },
@@ -54,14 +55,22 @@
         "parts": [
           {
             "slot": "Base",
-            "shape": { "cylinder": { "radius": 0.95, "height": 0.08 } },
+            "shape": { "cylinder": { "radius": 0.95, "height": 0.08, "segments": 96 } },
             "position": [0, 0.04, 0]
           },
           {
             "slot": "Stem",
             "shape": {
               "lathe": {
-                "profile": [[0.32, 0.08], [0.16, 0.2], [0.12, 0.5], [0.16, 0.7], [0.36, 0.78], [0, 0.78]]
+                "profile": [
+                  [0.32, 0.08],
+                  [0.16, 0.2],
+                  [0.12, 0.5],
+                  [0.16, 0.7],
+                  [0.36, 0.78],
+                  [0, 0.78]
+                ],
+                "segments": 96
               }
             }
           },
@@ -72,14 +81,14 @@
           },
           {
             "slot": "Ring",
-            "shape": { "torus": { "radius": 0.62, "tube": 0.02 } },
+            "shape": { "torus": { "radius": 0.62, "tube": 0.02, "segments": 96 } },
             "position": [0, 0.85, 0]
           }
         ]
       },
       "materials": {
-        "Base": { "colorHex": "@dark" },
-        "Plate": { "colorHex": "@dark" },
+        "Base": { "colorHex": "@ink" },
+        "Plate": { "colorHex": "@ink" },
         "Stem": { "colorHex": "@chrome", "metallic": 1, "roughness": 0.2 },
         "Ring": { "colorHex": "@chrome", "metallic": 1, "roughness": 0.2 }
       }
@@ -119,21 +128,93 @@
       "duration": 9,
       "keyframes": [
         {
-          "id": "b0",
+          "id": "s0",
           "time": 0,
           "transitionDuration": 0,
           "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
-          "camera": { "yaw": -30, "pitch": 14, "distance": 4.0 },
-          "light": { "yaw": -60, "pitch": 45, "intensity": 1.3 }
+          "camera": { "yaw": -30, "pitch": 22, "distance": 4.9 },
+          "light": { "yaw": -140, "pitch": 70, "intensity": 1.2 }
         },
         {
-          "id": "b1",
-          "time": 9,
-          "transitionDuration": 9,
-          "easing": "easeInOut",
+          "id": "s1",
+          "time": 1.05,
+          "transitionDuration": 1.05,
+          "easing": "easeOut",
           "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
-          "camera": { "yaw": 30, "pitch": 10, "distance": 4.0 },
-          "light": { "yaw": 60, "pitch": 45, "intensity": 1.3 }
+          "camera": { "yaw": 71.1, "pitch": 17.2, "distance": 4.66 },
+          "light": { "yaw": -60, "pitch": 54, "intensity": 1.32 }
+        },
+        {
+          "id": "s2",
+          "time": 1.3,
+          "transitionDuration": 0.25,
+          "easing": "easeOut",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 75, "pitch": 17, "distance": 4.65 },
+          "light": { "yaw": -58, "pitch": 53.5, "intensity": 1.325 }
+        },
+        {
+          "id": "s3",
+          "time": 3.0,
+          "transitionDuration": 1.7,
+          "easing": "linear",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 75, "pitch": 16, "distance": 4.6 },
+          "light": { "yaw": -48, "pitch": 50, "intensity": 1.35 }
+        },
+        {
+          "id": "s4",
+          "time": 4.15,
+          "transitionDuration": 1.15,
+          "easing": "easeOut",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 196, "pitch": 12.13, "distance": 4.358 },
+          "light": { "yaw": 40, "pitch": 38, "intensity": 1.45 }
+        },
+        {
+          "id": "s5",
+          "time": 4.4,
+          "transitionDuration": 0.25,
+          "easing": "easeOut",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 200, "pitch": 12, "distance": 4.35 },
+          "light": { "yaw": 42, "pitch": 37.5, "intensity": 1.455 }
+        },
+        {
+          "id": "s6",
+          "time": 6.0,
+          "transitionDuration": 1.6,
+          "easing": "linear",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 200, "pitch": 11, "distance": 4.3 },
+          "light": { "yaw": 52, "pitch": 34, "intensity": 1.48 }
+        },
+        {
+          "id": "s7",
+          "time": 7.15,
+          "transitionDuration": 1.15,
+          "easing": "easeOut",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 325.8, "pitch": 7.13, "distance": 4.058 },
+          "light": { "yaw": 140, "pitch": 24, "intensity": 1.58 }
+        },
+        {
+          "id": "s8",
+          "time": 7.4,
+          "transitionDuration": 0.25,
+          "easing": "easeOut",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 330, "pitch": 7, "distance": 4.05 },
+          "light": { "yaw": 142, "pitch": 23.5, "intensity": 1.585 }
+        },
+        {
+          "id": "s9",
+          "time": 9.0,
+          "transitionDuration": 1.6,
+          "easing": "linear",
+          "placement": { "height": 560, "anchor": "center", "offset": [0, -20] },
+          "camera": { "yaw": 330, "pitch": 6, "distance": 4.0 },
+          "light": { "yaw": 150, "pitch": 22, "intensity": 1.6 }
         }
       ],
       "members": [
@@ -147,7 +228,13 @@
           "duration": 9,
           "resourceID": "stand",
           "keyframes": [
-            { "id": "s0", "time": 0, "transitionDuration": 0, "depth": 0, "stageOffset": [0, -0.45] }
+            {
+              "id": "ms0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0,
+              "stageOffset": [0, -0.45]
+            }
           ]
         },
         {
@@ -161,20 +248,20 @@
           "resourceID": "vase",
           "keyframes": [
             {
-              "id": "v0",
+              "id": "mv0",
               "time": 0,
               "transitionDuration": 0,
               "depth": 0,
-              "stageOffset": [0, 1.19],
+              "stageOffset": [0, 0.9],
               "camera": { "yaw": -20 }
             },
             {
-              "id": "v1",
+              "id": "mv1",
               "time": 9,
               "transitionDuration": 9,
               "easing": "easeInOut",
               "depth": 0,
-              "stageOffset": [0, 1.19],
+              "stageOffset": [0, 0.9],
               "camera": { "yaw": 20 }
             }
           ]
@@ -182,8 +269,8 @@
       ]
     },
     {
-      "id": "cap",
-      "name": "Caption",
+      "id": "caption",
+      "name": "Made from parts",
       "sortIndex": 2,
       "kind": "caption",
       "isEnabled": true,
@@ -191,13 +278,11 @@
       "duration": 7.8,
       "captionText": "Made from parts.",
       "captionStyle": {
-        "alignment": "center",
+        "fontSize": 58,
         "bold": true,
-        "fontSize": 56,
-        "colorHex": "@text",
-        "backgroundOpacity": 0.0,
-        "placement": { "anchor": "bottom", "offset": [0, -72] },
-        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.45 }
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -64] },
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.34 }
       },
       "keyframes": [
         { "id": "c0", "time": 0, "opacity": 1, "transitionDuration": 0 }

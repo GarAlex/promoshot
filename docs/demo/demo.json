@@ -4786,7 +4786,7 @@
    900
   ],
   "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 560 px tall in the centre (offset 20 px up), whose keyframes carry the camera making one full orbit (yaw -30 through 150 at the midpoint to 330, pitch 22 down to 6, distance 4.9 in to 4.0, eased in over the first half and out over the second) and the key light flying over the stand (yaw -140 through 0 to 140, pitch 70 down to 22, intensity 1.2 to 1.6). Its members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, positioned at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]), a Plate box (size [1.2,0.06,1.2], radius 0.03, positioned at y 0.81) and a Ring torus (radius 0.62, tube 0.02, at y 0.85) \u2014 painted dark 1E2430 on Base and Plate and chrome D2D6DC (metallic 1, roughness 0.2) on Stem and Ring, offset 0.45 down; and vase.glb painted F2E9DC with a gloss finish (metallic 0.05, roughness 0.15), offset 0.9 up so it stands on the plate, turning from a yaw of -20 to 20; and along the bottom a bold caption 'Made from parts.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- Made from parts.",
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 560 px tall in the centre (offset 20 px up), whose keyframes carry the camera making one orbit in three quick eased-out turns with holds between (yaw -30 to 75 by 1.3 s, hold, to 200 by 4.4 s, hold, to 330 by 7.4 s; pitch 22 down to 6, distance 4.9 in to 4.0) and the key light flying ahead of each turn (yaw -140 to -60 to 40 to 140, pitch 70 down to 22, intensity 1.2 to 1.6, drifting a little during the holds). Its members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, positioned at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]), a Plate box (size [1.2,0.06,1.2], radius 0.03, positioned at y 0.81) and a Ring torus (radius 0.62, tube 0.02, at y 0.85) \u2014 painted dark 1E2430 on Base and Plate and chrome D2D6DC (metallic 1, roughness 0.2) on Stem and Ring, offset 0.45 down; and vase.glb painted F2E9DC with a gloss finish (metallic 0.05, roughness 0.15), offset 0.9 up so it stands on the plate, turning from a yaw of -20 to 20; and along the bottom a bold caption 'Made from parts.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- Made from parts.",
   "resources": [
    {
     "file": "vase.glb",
@@ -4880,60 +4880,55 @@
      "detail": "1 of 1 lines recognisable"
     }
    ],
-   "summary": "turns=61 cost=$4.65 secs=707",
+   "summary": "turns=34 cost=$2.06 secs=257",
    "run": {
-    "turns": 61,
-    "wall_s": 705,
-    "api_s": 696,
-    "cost_usd": 4.65,
+    "turns": 34,
+    "wall_s": 257,
+    "api_s": 250,
+    "cost_usd": 2.06,
     "tokens": {
-     "input": 120,
-     "cache_read": 4998270,
-     "cache_write": 96587,
-     "output": 47352,
-     "thinking": 27890
+     "input": 62,
+     "cache_read": 2004420,
+     "cache_write": 58099,
+     "output": 18966,
+     "thinking": 9421
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 1434,
-      "output": 13,
+      "input": 1517,
+      "output": 17,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 5094977,
-      "output": 47352,
-      "cost_usd": 4.65
+      "input": 2062581,
+      "output": 18966,
+      "cost_usd": 2.06
      }
     ],
     "mcp": {
-     "calls": 14,
-     "ms": 6501,
+     "calls": 10,
+     "ms": 5209,
      "tools": {
-      "promo_render_video": {
-       "calls": 1,
-       "ms": 3053,
-       "errors": 0
-      },
       "promo_render_frames": {
        "calls": 3,
-       "ms": 2795,
+       "ms": 3155,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2028,
        "errors": 0
       },
       "promo_validate": {
-       "calls": 3,
-       "ms": 452,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 3,
-       "ms": 184,
+       "calls": 2,
+       "ms": 18,
        "errors": 0
       },
       "promo_inspect": {
-       "calls": 2,
-       "ms": 17,
+       "calls": 1,
+       "ms": 8,
        "errors": 0
       },
       "promo_schema": {
@@ -4945,18 +4940,23 @@
        "calls": 1,
        "ms": 0,
        "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
       }
      }
     }
    },
    "used": null,
    "captions": null,
-   "notes": "Done \u2014 `out.promo` is written, validated, and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9 s, 60 fps, `minReaderVersion: 37`\n- **Ground** \u2014 radial gradient, `3C4149` centre \u2192 `14171B` edge, plus `environment: studio` (what the chrome mirrors).\n- **Bench** \u2014 the one `stage` layer, placed `{height: 560, anchor: center, offset: [0,-20]}`. Its keyframes carry the stage camera (yaw \u221230\u219230, pitch 14\u219210, `easeInOut` over the full 9 s) and the key light (yaw \u221260\u219260 at intensity 1.3).\n  - **Stand** \u2014 model resource, no file, `recipe.parts`: Base cylinder (0.95 \u00d7 0.08 at y 0.04), Stem lathe on the given profile, Plate box `[1.2,0.06,1.2]` r 0.03 at y 0.81, Ring torus (0.62/0.02) at y 0.85. Base + Plate `1E2430`; Stem + Ring `D2D6DC` at metallic 1 / roughness 0.2. `stageOffset [0,-0.45]`.\n  - **Vase** \u2014 `vase.glb`, its `Body` slot painted `F2E9DC` with metallic 0.05 / roughness 0.15, turning yaw \u221220\u219220 across the 9 s.\n- **Caption** \u2014 bold \"Made from parts.\" along the bottom, from 1.2 s, `reveal: {by: \"word\", mode: \"fade\", secondsPer: 0.45}`.\n\nTwo judgment calls worth flagging:\n\n- **Vase offset is 1.19, not 0.62.** At 0.62 the vase sank about halfway through the plate \u2014 `stageOffset` is measured in the *stage's* bounds radii, and with this stand and this vase (1.5 units tall against the stand's 0.87) 0.62 lands well short. I calibrated against the render: at 1.19 the vase's foot meets the plate's top face exactly, which is what \"so it stands on the plate\" asks for.\n- **The caption is its own layer, not a stage member.** As a member it inflates the stage's bounds box the instant it appears, and the 560 px placement then rescales the bodies \u2014 a hard 17 % size pop at 1.2 s. Outside the stage the geometry is constant and the caption sits along the bottom of the frame rather than the botto",
+   "notes": "Done. `out.promo` is built, validates clean, and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9 s @ 30 fps, `minReaderVersion: 37`\n\n- **Ground** \u2014 radial gradient, `3C4149` centre \u2192 `14161A` edge; `environment: studio` so the chrome has something to mirror.\n- **Bench** (`kind: \"stage\"`, `placement: {height: 560, anchor: \"center\", offset: [0,-20]}`) \u2014 10 keyframes carrying the stage camera and key light. Yaw \u221230 \u2192 75 (1.3 s) \u2192 200 (4.4 s) \u2192 330 (7.4 s), each an `easeOut` turn with a linear hold between; 360\u00b0 total. Pitch 22 \u2192 6, distance 4.9 \u2192 4.0 across the whole run. The light runs ahead of the camera \u2014 it reaches \u221260 / 40 / 140 at 1.05 / 4.15 / 7.15 s, ~0.25 s before each turn lands, then drifts on through the holds; pitch 70 \u2192 22, intensity 1.2 \u2192 1.6.\n  - **Stand** \u2014 model resource, no file, `recipe.parts`: Base cylinder (0.95 \u00d7 0.08 at y 0.04), Stem lathe on the given profile, Plate box (1.2 \u00d7 0.06 \u00d7 1.2, radius 0.03 at y 0.81), Ring torus (0.62 / 0.02 at y 0.85). `Base`/`Plate` \u2192 `@ink` 1E2430; `Stem`/`Ring` \u2192 `@chrome` D2D6DC, metallic 1, roughness 0.2. `stageOffset [0,-0.45]`.\n  - **Vase** \u2014 `vase.glb`, `Body` bound to `@cream` F2E9DC at metallic 0.05 / roughness 0.15, `stageOffset [0,0.9]` (it lands on the plate), own `camera.yaw` \u221220 \u2192 20 eased across the 9 s.\n- **Made from parts** \u2014 bold caption anchored bottom, `reveal: {by:\"word\", mode:\"fade\", secondsPer:0.34}`, from 1.2 s.\n\nOne deviation worth flagging: the caption is a **top-level layer, not a stage member**. As a member it drew twice \u2014 once as a billboard inside the stage and once flat \u2014 and its billboard was pulled into the stage's bounds, shrinking the stand to fit the 560 px rule. Outside the stage it sits along the bottom as asked and the stand gets the full 560 px.\n\nOutputs: `out.promo/Exports/export.mp4`",
    "contact": "docs/demo/32-stand/contact-result.png",
    "reference_contact": "docs/demo/32-stand/contact-reference.png",
    "video": "docs/demo/32-stand/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/32-stand.mp4",
-   "video_hd_bytes": 250162,
+   "video_hd_bytes": 280079,
    "metadata": "docs/demo/32-stand/result-metadata.json",
    "gif": "docs/demo/32-stand/result.gif",
    "thumb": "docs/demo/32-stand/thumb.png"
@@ -4974,7 +4974,7 @@
    900
   ],
   "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 600 px tall in the centre (offset 30 px up), whose keyframes carry the camera (swinging from a yaw of -38 to 34, pitch 12 to 6, distance 4.6 to 4.1, with an ease in and out) and the key light flying over the scene (yaw -130 to 120, pitch 65 to 24, intensity 1.3 to 1.5). Its members: a PANEL that is a model resource with no file and a PARTS recipe \u2014 a Print box (size [1.6,1.0,0.05], radius 0.015) and a Frame box (size [1.68,1.08,0.04], radius 0.02, positioned at z -0.03) \u2014 whose Print slot WEARS the video rec_lumen_2560.mp4 as a surface (\"mode\": \"surface\", metallic 0, roughness 0.18) so the light shades it, with the Frame chrome D2D6DC (metallic 1, roughness 0.25), offset 0.42 left and 0.12 up; and a VASE that is a model resource with no file and a PARTS recipe of one lathe (slot Body, profile [[0.18,0.75],[0.14,0.62],[0.16,0.5],[0.26,0.35],[0.34,0.15],[0.36,-0.05],[0.33,-0.3],[0.26,-0.55],[0.2,-0.7],[0.22,-0.75],[0,-0.75]], 48 segments) whose Body slot WEARS label_lumen.png as a surface tiled three times round it (repeat [3,1]) over a glaze F2E9DC (metallic 0.05, roughness 0.15), offset 0.66 right and 0.28 down, turning from a yaw of -70 to 70; and along the bottom a bold caption 'Every picture, lit.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: label_lumen.png, rec_lumen_2560.mp4.\n\nText to use, in order:\n- Every picture, lit.",
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 600 px tall in the centre (offset 30 px up), whose keyframes carry the camera in three quick eased-out moves with holds between (yaw -38 to -12 by 1.1 s, hold, to 22 by 4.2 s, hold, to 36 by 7.3 s; pitch 12 down to 5, distance 4.7 in to 3.9) and the key light flying ahead of each move (yaw -130 to -50 to 50 to 125, pitch 65 down to 24, intensity 1.3 to 1.5, drifting during the holds). Its members: a PANEL that is a model resource with no file and a PARTS recipe \u2014 a Print box (size [1.6,1.0,0.05], radius 0.015) and a Frame box (size [1.68,1.08,0.04], radius 0.02, positioned at z -0.03) \u2014 whose Print slot WEARS the video rec_lumen_2560.mp4 as a surface (\"mode\": \"surface\", metallic 0, roughness 0.18) so the light shades it, with the Frame chrome D2D6DC (metallic 1, roughness 0.25), offset 0.42 left and 0.12 up and set back 0.35 in depth; and a VASE that is a model resource with no file and a PARTS recipe of one lathe (slot Body, profile [[0.18,0.75],[0.14,0.62],[0.16,0.5],[0.26,0.35],[0.34,0.15],[0.36,-0.05],[0.33,-0.3],[0.26,-0.55],[0.2,-0.7],[0.22,-0.75],[0,-0.75]], 48 segments) whose Body slot WEARS label_lumen.png as a surface tiled three times round it (repeat [3,1]) over a glaze F2E9DC (metallic 0.05, roughness 0.15), offset 0.66 right and 0.28 down and brought forward 0.15 in depth, turning from a yaw of -90 to 90; and along the bottom a bold caption 'Every picture, lit.' that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: label_lumen.png, rec_lumen_2560.mp4.\n\nText to use, in order:\n- Every picture, lit.",
   "resources": [
    {
     "file": "label_lumen.png",
@@ -5084,55 +5084,50 @@
      "detail": "1 of 1 lines recognisable"
     }
    ],
-   "summary": "turns=32 cost=$1.68 secs=150",
+   "summary": "turns=28 cost=$1.32 secs=164",
    "run": {
-    "turns": 32,
-    "wall_s": 149,
-    "api_s": 138,
-    "cost_usd": 1.68,
+    "turns": 28,
+    "wall_s": 164,
+    "api_s": 151,
+    "cost_usd": 1.32,
     "tokens": {
-     "input": 62,
-     "cache_read": 1845105,
-     "cache_write": 50773,
-     "output": 9830,
-     "thinking": 2303
+     "input": 36,
+     "cache_read": 999055,
+     "cache_write": 49345,
+     "output": 12938,
+     "thinking": 4401
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 1569,
-      "output": 21,
+      "input": 1643,
+      "output": 13,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 1895940,
-      "output": 9830,
-      "cost_usd": 1.68
+      "input": 1048436,
+      "output": 12938,
+      "cost_usd": 1.32
      }
     ],
     "mcp": {
-     "calls": 10,
-     "ms": 8244,
+     "calls": 9,
+     "ms": 10341,
      "tools": {
       "promo_render_frames": {
        "calls": 2,
-       "ms": 4241,
+       "ms": 5575,
        "errors": 0
       },
       "promo_render_video": {
        "calls": 1,
-       "ms": 3406,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 1,
-       "ms": 518,
+       "ms": 4677,
        "errors": 0
       },
       "promo_media_probe": {
-       "calls": 1,
-       "ms": 68,
+       "calls": 2,
+       "ms": 73,
        "errors": 0
       },
       "promo_inspect": {
@@ -5140,9 +5135,9 @@
        "ms": 9,
        "errors": 0
       },
-      "promo_schema_types": {
+      "promo_validate": {
        "calls": 1,
-       "ms": 2,
+       "ms": 7,
        "errors": 0
       },
       "promo_schema": {
@@ -5154,8 +5149,241 @@
        "calls": 1,
        "ms": 0,
        "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is built, validated clean, and rendered.\n\n**What's in it** (`out.promo/metadata.json`, `minReaderVersion: 38`)\n\n- **Canvas** 1440\u00d7900, 9.00 s, radial gradient ground (`4A4E54` \u2192 `2B2E33` \u2192 `121316`) plus the `studio` environment so the chrome and glaze have something to mirror.\n- **`Bench`** \u2014 one `stage` layer, `placement: {height: 600, anchor: center, offset: [0, -30]}`. Ten keyframes carry the camera in three eased-out moves with holds: yaw \u221238 \u2192 \u221212 by 1.1 s, hold, \u2192 22 by 4.2 s, hold, \u2192 36 by 7.3 s; pitch 12 \u2192 5 and distance 4.7 \u2192 3.9 stepping down across the same moves. The key light gets its arrival keyframe ~0.25 s *before* each camera keyframe (0.85 / 3.95 / 7.05), so it leads: yaw \u2212130 \u2192 \u221250 \u2192 50 \u2192 125, pitch 65 \u2192 24, intensity 1.3 \u2192 1.5, with slow linear drifts (\u221244, 56, 130) filling the holds.\n- **Panel** \u2014 model resource, no file, `parts` recipe: a `Print` box `[1.6, 1.0, 0.05]` r 0.015 and a `Frame` box `[1.68, 1.08, 0.04]` r 0.02 at z \u22120.03. `Print` **wears** the video (`mode: \"surface\"`, metallic 0, roughness 0.18) so the key light shades the footage rather than it glowing unlit; `Frame` is `@chrome D2D6DC`, metallic 1 / roughness 0.25. `stageOffset [-0.42, 0.12]`, `depth -0.35`.\n- **Vase** \u2014 model resource, no file, one `lathe` on slot `Body` with the 11-point profile at 48 segments. `Body` wears `label_lumen.png` as a surface, `repeat [3, 1]`, over `@glaze F2E9DC` (metallic 0.05, roughness 0.15). `stageOffset [0.66, -0.28]`, `depth 0.15`, its own `camera.yaw` turning \u221290 \u2192 90 over the full nine seconds.\n- **Caption** \u2014 bold `Every picture, lit.` anchored bottom (offset \u221256), starting at 1.2 s with `reveal: {by: \"word\", mode: \"fade\", secondsPer: 0.34}`, stroked and shadowed since it sits over the lit scene.\n\n**Outputs**\n- Contact shee",
+   "contact": "docs/demo/33-worn/contact-result.png",
+   "reference_contact": "docs/demo/33-worn/contact-reference.png",
+   "video": "docs/demo/33-worn/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/33-worn.mp4",
+   "video_hd_bytes": 629318,
+   "metadata": "docs/demo/33-worn/result-metadata.json",
+   "gif": "docs/demo/33-worn/result.gif",
+   "thumb": "docs/demo/33-worn/thumb.png"
+  },
+  "page": "docs/demo/demo33.md"
+ },
+ {
+  "id": "34",
+  "slug": "34-cube-to-word",
+  "title": "Cube To Word",
+  "blurb": "A cube of six pictures turns under one light, bursts into three thousand points, and the points gather into a chrome word \u2014 a faced box, worn pictures, a morph and a text body in one stage.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 10.0,
+  "prompt": "Make a 10-second piece on a 1440\u00d7900 canvas: a background whose linear gradient DRIFTS on four eased keyframes \u2014 at 0 s from 1B2440 through 0B0D12 to 2A1638 running corner to corner ([0,0] to [1,1]); at 4.9 s 142A4A / 0C0F1A / 35183F from [0.2,0] to [0.9,1]; at 6.2 s warmer 3A2A5C / 141826 / 5A2A3A from [0.5,0] to [0.6,1] as the cube bursts; at 10 s 10162A / 090B12 / 231436 from [1,0] to [0,1] \u2014 and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 640 px tall in the centre (offset 30 px up), whose keyframes carry a key light that stays at yaw 35, pitch 32, intensity 1.4 while the camera holds a yaw of -25 and only eases in (pitch 18 to 14, distance 4.7 to 4.3 by 4.9 s), then settles to yaw -10, pitch 6, distance 4.0 by 8.6 s as the light moves to yaw 60, pitch 28. Its members: a CUBE that is a model resource with no file and a PARTS recipe of one box (size [1.4,1.4,1.4], radius 0.05, \"faces\": true) whose six slots Cube/front, Cube/right, Cube/back, Cube/left, Cube/top, Cube/bottom each WEAR one of face_1.png \u2026 face_6.png as a surface (roughness 0.35), living the whole piece and spinning once and a bit, from a yaw of 0 to 380 linearly over 5.2 s, so each lit side passes the light; a WORD that is a model resource with a TEXT recipe 'PROMO' (bold, depth 0.35, size 0.5) with a chrome Face D8DDE6 (metallic 1, roughness 0.18) and a Side 5B8CFF (metallic 0.4, roughness 0.4), living the whole piece; and POINTS: a particles resource with a MORPH from the cube to the word (count 3000, spread 1.1, size 0.013, turbulence 0.2, stagger 0.45, colors @accent, FFFFFF, FFB050, seed 11) played by a DRAWING member living the whole piece whose keyframes hold progress 0 until 4.9 s, burst to 0.45 by 5.6 s (ease out), drift to 0.6 by 7.0 s, and gather to 1 by 8.4 s (ease in) \u2014 the morph dissolves the cube as the points leave and assembles the word as they land; and along the bottom from 8.5 s a bold caption 'One format. Real 3D.' that fades in word by word.\n\nFiles in `resources/`: face_1.png, face_2.png, face_3.png, face_4.png, face_5.png, face_6.png.\n\nText to use, in order:\n- One format. Real 3D.",
+  "resources": [
+   {
+    "file": "face_1.png",
+    "kind": "image",
+    "path": "docs/demo/34-cube-to-word/resources/face_1.png"
+   },
+   {
+    "file": "face_2.png",
+    "kind": "image",
+    "path": "docs/demo/34-cube-to-word/resources/face_2.png"
+   },
+   {
+    "file": "face_3.png",
+    "kind": "image",
+    "path": "docs/demo/34-cube-to-word/resources/face_3.png"
+   },
+   {
+    "file": "face_4.png",
+    "kind": "image",
+    "path": "docs/demo/34-cube-to-word/resources/face_4.png"
+   },
+   {
+    "file": "face_5.png",
+    "kind": "image",
+    "path": "docs/demo/34-cube-to-word/resources/face_5.png"
+   },
+   {
+    "file": "face_6.png",
+    "kind": "image",
+    "path": "docs/demo/34-cube-to-word/resources/face_6.png"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 21,
+   "total": 21,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "10.0s vs 10.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:stage",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:finish",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:morph",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:facedBox",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:wornPicture",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:textBody",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:environment",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:particles",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:partsBody",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=36 cost=$1.98 secs=167",
+   "run": {
+    "turns": 36,
+    "wall_s": 166,
+    "api_s": 159,
+    "cost_usd": 1.98,
+    "tokens": {
+     "input": 70,
+     "cache_read": 2207386,
+     "cache_write": 54658,
+     "output": 12983,
+     "thinking": 2581
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1828,
+      "output": 20,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2262114,
+      "output": 12983,
+      "cost_usd": 1.98
+     }
+    ],
+    "mcp": {
+     "calls": 7,
+     "ms": 5120,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 4872,
+       "errors": 0
       },
-      "promo_workspace": {
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 152,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 1,
+       "ms": 84,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 6,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 6,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
        "calls": 1,
        "ms": 0,
        "errors": 0
@@ -5165,17 +5393,17 @@
    },
    "used": null,
    "captions": null,
-   "notes": "Done. `out.promo` is written, validates clean, and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9.00s, `minReaderVersion: 38`\n- **Ground** \u2014 radial gradient, `3A3E44` core \u2192 `121316` edge, plus `environment: studio` so the chrome and the glaze have something to mirror.\n- **Bench** (`kind: \"stage\"`) \u2014 placed 600 px tall, centred, offset 30 px up. Its two keyframes carry the whole scene on one easeInOut ramp: camera yaw \u221238 \u2192 34, pitch 12 \u2192 6, distance 4.6 \u2192 4.1; key light yaw \u2212130 \u2192 120, pitch 65 \u2192 24, intensity 1.3 \u2192 1.5.\n  - **Panel** \u2014 model resource, no file, `recipe.parts`: a `Print` box `[1.6, 1.0, 0.05]` r 0.015 and a `Frame` box `[1.68, 1.08, 0.04]` r 0.02 at z \u22120.03. `Print` wears the recording (`\"mode\": \"surface\"`, metallic 0, roughness 0.18) so the flying light shades it; `Frame` is chrome `@chrome` D2D6DC (metallic 1, roughness 0.25). `stageOffset [-0.42, 0.12]`.\n  - **Vase** \u2014 one 48-segment lathe on the given profile; its `Body` wears `label_lumen.png` as a surface with `repeat: [3, 1]` over the `@glaze` F2E9DC (metallic 0.05, roughness 0.15). `stageOffset [0.66, -0.28]`, turning yaw \u221270 \u2192 70 across the nine seconds.\n- **Caption** \u2014 bold \"Every picture, lit.\" hung on the bottom, in from 1.2s with `reveal: { by: \"word\", mode: \"fade\", secondsPer: 0.32 }`.\n\nValidation: *ok \u2014 nothing the renderer would quietly correct*; inspect reports 3 of 3 layers renderable, no missing media, no undefined colours.\n\nOutputs: `out.promo/Exports/export.mp4` (1440\u00d7900, 270 frames @ 30fps), contact frames in `out.promo/Exports/frames/` (frames 0\u20138 are the 0.2\u20138.8s sheet; the higher-numbered files are leftovers from a first sweep that used a `times` argument the tool doesn't take, which rendered the full range instead).",
-   "contact": "docs/demo/33-worn/contact-result.png",
-   "reference_contact": "docs/demo/33-worn/contact-reference.png",
-   "video": "docs/demo/33-worn/result.mp4",
-   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/33-worn.mp4",
-   "video_hd_bytes": 918152,
-   "metadata": "docs/demo/33-worn/result-metadata.json",
-   "gif": "docs/demo/33-worn/result.gif",
-   "thumb": "docs/demo/33-worn/thumb.png"
+   "notes": "Done \u2014 `out.promo` is written, validated, inspected, and rendered.\n\n**What's in it** (`out.promo/metadata.json`, 1440\u00d7900, 10 s, 60 fps, studio environment):\n\n- **Ground** \u2014 background layer with four gradient keyframes (0 / 4.9 / 6.2 / 10 s), each three stops corner-to-corner, eased: `easeInOut` into 4.9, `easeOut` into the warm 6.2 s burst, `easeInOut` into the cool 10 s close.\n- **Bench** \u2014 one `stage` layer, `placement {height: 640, anchor: center, offset: [0,-30]}`. Key light holds yaw 35 / pitch 32 / intensity 1.4 through 4.9 s while the camera holds yaw \u221225 and eases in (pitch 18\u219214, distance 4.7\u21924.3, `easeIn`), then settles to yaw \u221210 / pitch 6 / distance 4.0 by 8.6 s (`easeOut`) as the light swings to yaw 60 / pitch 28.\n  - **Cube** \u2014 model resource, no file, `parts` recipe of one box `[1.4,1.4,1.4]` r 0.05 `faces: true`; the six slots `Cube/front\u2026bottom` wear face_1\u2026face_6 as surfaces at roughness 0.35. Lives the whole piece, yaw 0\u2192380 linear over 5.2 s.\n  - **Word** \u2014 model resource, `text` recipe `PROMO` bold, depth 0.35, size 0.5; Face `@chrome` D8DDE6 metallic 1 / roughness 0.18, Side `@accent` 5B8CFF metallic 0.4 / roughness 0.4. Lives the whole piece.\n  - **Points** \u2014 particles resource with `morph` cube\u2192word (count 3000, spread 1.1, size 0.013, turbulence 0.2, stagger 0.45, colors `@accent`/FFFFFF/FFB050, seed 11), played by a drawing member: progress 0 held to 4.9 s, `easeOut` burst to 0.45 by 5.6 s, drift to 0.6 by 7.0 s, `easeIn` gather to 1 by 8.4 s.\n- **Caption** \u2014 bold \"One format. Real 3D.\" from 8.5 s, bottom anchor, `reveal {by: \"word\", mode: \"fade\"}`.\n\nContact sheet confirms: lit cube faces passing the light at 0.5\u20134.5 s, full point-cloud at 5.5\u20137.5 s, assembled chrome word at 8.5 s, word plus caption at 9.6 s.\n\n**Outputs:** `out.promo/Exports/",
+   "contact": "docs/demo/34-cube-to-word/contact-result.png",
+   "reference_contact": "docs/demo/34-cube-to-word/contact-reference.png",
+   "video": "docs/demo/34-cube-to-word/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/34-cube-to-word.mp4",
+   "video_hd_bytes": 7529402,
+   "metadata": "docs/demo/34-cube-to-word/result-metadata.json",
+   "gif": "docs/demo/34-cube-to-word/result.gif",
+   "thumb": "docs/demo/34-cube-to-word/thumb.png"
   },
-  "page": "docs/demo/demo33.md"
+  "page": "docs/demo/demo34.md"
  },
  {
   "id": "c1",

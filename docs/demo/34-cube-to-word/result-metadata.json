@@ -1,0 +1,169 @@
+{
+  "id": "cube-to-word",
+  "name": "Cube to Word",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 39,
+  "trimStart": 0,
+  "trimEnd": 10,
+  "videoDuration": 10,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "fps": 60,
+    "palette": [
+      { "name": "canvas", "colorHex": "0B0D12" },
+      { "name": "text", "colorHex": "F3F5FF" },
+      { "name": "text-bg", "colorHex": "0B0D12" },
+      { "name": "edge", "colorHex": "26364F" },
+      { "name": "caption-outline", "colorHex": "090B12" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "FFB050" },
+      { "name": "accent", "colorHex": "5B8CFF" },
+      { "name": "chrome", "colorHex": "D8DDE6" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [1, 1],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "1B2440", "at": 0 },
+        { "colorHex": "0B0D12", "at": 0.5 },
+        { "colorHex": "2A1638", "at": 1 }
+      ]
+    },
+    "environment": { "preset": "studio", "intensity": 1, "rotation": 0 },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleBackgroundPadding": 18,
+    "subtitleBackgroundCornerRadius": 12,
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleLeftMargin": 120,
+    "subtitleRightMargin": 120,
+    "subtitleVerticalMargin": 760,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow"
+  },
+  "resources": [
+    { "id": "face1", "kind": "image", "filename": "face_1.png", "displayName": "Face 1", "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [], "pixelWidth": 768, "pixelHeight": 768 },
+    { "id": "face2", "kind": "image", "filename": "face_2.png", "displayName": "Face 2", "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [], "pixelWidth": 768, "pixelHeight": 768 },
+    { "id": "face3", "kind": "image", "filename": "face_3.png", "displayName": "Face 3", "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [], "pixelWidth": 768, "pixelHeight": 768 },
+    { "id": "face4", "kind": "image", "filename": "face_4.png", "displayName": "Face 4", "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [], "pixelWidth": 768, "pixelHeight": 768 },
+    { "id": "face5", "kind": "image", "filename": "face_5.png", "displayName": "Face 5", "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [], "pixelWidth": 768, "pixelHeight": 768 },
+    { "id": "face6", "kind": "image", "filename": "face_6.png", "displayName": "Face 6", "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [], "pixelWidth": 768, "pixelHeight": 768 },
+
+    { "id": "cube", "kind": "model", "filename": "", "displayName": "Cube", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [], "clips": [],
+      "recipe": { "parts": [
+        { "slot": "Cube", "shape": { "box": { "size": [1.4, 1.4, 1.4], "radius": 0.05, "faces": true } } }
+      ] },
+      "materials": {
+        "Cube/front":  { "resourceID": "face1", "mode": "surface", "roughness": 0.35 },
+        "Cube/right":  { "resourceID": "face2", "mode": "surface", "roughness": 0.35 },
+        "Cube/back":   { "resourceID": "face3", "mode": "surface", "roughness": 0.35 },
+        "Cube/left":   { "resourceID": "face4", "mode": "surface", "roughness": 0.35 },
+        "Cube/top":    { "resourceID": "face5", "mode": "surface", "roughness": 0.35 },
+        "Cube/bottom": { "resourceID": "face6", "mode": "surface", "roughness": 0.35 }
+      } },
+
+    { "id": "word", "kind": "model", "filename": "", "displayName": "Word", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [], "clips": [],
+      "recipe": { "text": { "text": "PROMO", "bold": true, "depth": 0.35, "size": 0.5 } },
+      "materials": {
+        "Face": { "colorHex": "@chrome", "metallic": 1, "roughness": 0.18 },
+        "Side": { "colorHex": "@accent", "metallic": 0.4, "roughness": 0.4 }
+      } },
+
+    { "id": "points", "kind": "particles", "filename": "", "displayName": "Points", "addedAt": 0,
+      "imageCuts": [], "disabledAudioTrackIndices": [],
+      "particles": {
+        "colors": ["@accent", "FFFFFF", "FFB050"],
+        "seed": 11,
+        "morph": { "from": "cube", "to": "word", "count": 3000, "spread": 1.1,
+                   "size": 0.013, "turbulence": 0.2, "stagger": 0.45 }
+      } }
+  ],
+  "layers": [
+    { "id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 10,
+      "keyframes": [
+        { "id": "bgk0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "linear", "start": [0, 0], "end": [1, 1], "repeat": "clamp",
+            "stops": [ { "colorHex": "1B2440", "at": 0 }, { "colorHex": "0B0D12", "at": 0.5 }, { "colorHex": "2A1638", "at": 1 } ] } },
+        { "id": "bgk1", "time": 4.9, "transitionDuration": 4.9, "easing": "easeInOut",
+          "gradient": { "kind": "linear", "start": [0.2, 0], "end": [0.9, 1], "repeat": "clamp",
+            "stops": [ { "colorHex": "142A4A", "at": 0 }, { "colorHex": "0C0F1A", "at": 0.5 }, { "colorHex": "35183F", "at": 1 } ] } },
+        { "id": "bgk2", "time": 6.2, "transitionDuration": 1.3, "easing": "easeOut",
+          "gradient": { "kind": "linear", "start": [0.5, 0], "end": [0.6, 1], "repeat": "clamp",
+            "stops": [ { "colorHex": "3A2A5C", "at": 0 }, { "colorHex": "141826", "at": 0.5 }, { "colorHex": "5A2A3A", "at": 1 } ] } },
+        { "id": "bgk3", "time": 10, "transitionDuration": 3.8, "easing": "easeInOut",
+          "gradient": { "kind": "linear", "start": [1, 0], "end": [0, 1], "repeat": "clamp",
+            "stops": [ { "colorHex": "10162A", "at": 0 }, { "colorHex": "090B12", "at": 0.5 }, { "colorHex": "231436", "at": 1 } ] } }
+      ] },
+
+    { "id": "bench", "name": "Bench", "sortIndex": 1, "kind": "stage",
+      "isEnabled": true, "startTime": 0, "duration": 10,
+      "keyframes": [
+        { "id": "sk0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 640, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": -25, "pitch": 18, "distance": 4.7 },
+          "light": { "yaw": 35, "pitch": 32, "intensity": 1.4 } },
+        { "id": "sk1", "time": 4.9, "transitionDuration": 4.9, "easing": "easeIn",
+          "placement": { "height": 640, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": -25, "pitch": 14, "distance": 4.3 },
+          "light": { "yaw": 35, "pitch": 32, "intensity": 1.4 } },
+        { "id": "sk2", "time": 8.6, "transitionDuration": 3.7, "easing": "easeOut",
+          "placement": { "height": 640, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": -10, "pitch": 6, "distance": 4.0 },
+          "light": { "yaw": 60, "pitch": 28, "intensity": 1.4 } }
+      ],
+      "members": [
+        { "id": "m-cube", "name": "Cube", "sortIndex": 0, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 10, "resourceID": "cube",
+          "keyframes": [
+            { "id": "ck0", "time": 0, "transitionDuration": 0, "camera": { "yaw": 0 } },
+            { "id": "ck1", "time": 5.2, "transitionDuration": 5.2, "easing": "linear", "camera": { "yaw": 380 } }
+          ] },
+        { "id": "m-word", "name": "Word", "sortIndex": 1, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 10, "resourceID": "word",
+          "keyframes": [
+            { "id": "wk0", "time": 0, "transitionDuration": 0 }
+          ] },
+        { "id": "m-points", "name": "Points", "sortIndex": 2, "kind": "drawing",
+          "isEnabled": true, "startTime": 0, "duration": 10, "resourceID": "points",
+          "keyframes": [
+            { "id": "pk0", "time": 0,   "transitionDuration": 0,   "progress": 0 },
+            { "id": "pk1", "time": 4.9, "transitionDuration": 0,   "progress": 0 },
+            { "id": "pk2", "time": 5.6, "transitionDuration": 0.7, "easing": "easeOut", "progress": 0.45 },
+            { "id": "pk3", "time": 7.0, "transitionDuration": 1.4, "progress": 0.6 },
+            { "id": "pk4", "time": 8.4, "transitionDuration": 1.4, "easing": "easeIn", "progress": 1 }
+          ] }
+      ] },
+
+    { "id": "cap", "name": "Caption", "sortIndex": 2, "kind": "caption",
+      "isEnabled": true, "startTime": 8.5, "duration": 1.5,
+      "captionText": "One format. Real 3D.",
+      "captionStyle": {
+        "bold": true,
+        "fontSize": 58,
+        "alignment": "center",
+        "placement": { "anchor": "bottom", "offset": [0, -64] },
+        "backgroundOpacity": 0.0,
+        "shadowOpacity": 0.5,
+        "shadowRadius": 12,
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.22, "unitSeconds": 0.3, "easing": "easeOut" }
+      },
+      "keyframes": [
+        { "id": "cpk0", "time": 0, "opacity": 1, "transitionDuration": 0 }
+      ] }
+  ]
+}

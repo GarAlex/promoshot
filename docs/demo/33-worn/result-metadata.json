@@ -1,6 +1,6 @@
 {
-  "id": "worn-bench",
-  "name": "Every picture, lit.",
+  "id": "lumen-worn-bench",
+  "name": "Lumen Bench",
   "createdAt": 0,
   "state": "recorded",
   "minReaderVersion": 38,
@@ -8,122 +8,329 @@
   "trimEnd": 9,
   "videoDuration": 9,
   "subtitles": [],
-
   "compositionSettings": {
     "canvasWidth": 1440,
     "canvasHeight": 900,
-    "palette": [
-      { "name": "ground-core", "colorHex": "3A3E44" },
-      { "name": "ground-edge", "colorHex": "121316" },
-      { "name": "chrome", "colorHex": "D2D6DC" },
-      { "name": "glaze", "colorHex": "F2E9DC" },
-      { "name": "text", "colorHex": "F6F7F9" }
-    ],
-    "backgroundColorHex": "@ground-edge",
+    "backgroundColorHex": "@ground",
     "backgroundGradient": {
       "kind": "radial",
       "start": [0.5, 0.44],
-      "end": [1.0, 1.0],
+      "end": [1.02, 1.06],
+      "repeat": "clamp",
       "stops": [
-        { "colorHex": "@ground-core", "at": 0 },
-        { "colorHex": "@ground-edge", "at": 1 }
+        { "colorHex": "@groundLift", "at": 0 },
+        { "colorHex": "@ground", "at": 0.62 },
+        { "colorHex": "@groundDeep", "at": 1 }
       ]
     },
     "environment": { "preset": "studio", "intensity": 1, "rotation": 0 },
+    "palette": [
+      { "name": "groundLift", "colorHex": "4A4E54" },
+      { "name": "ground", "colorHex": "2B2E33" },
+      { "name": "groundDeep", "colorHex": "121316" },
+      { "name": "chrome", "colorHex": "D2D6DC" },
+      { "name": "glaze", "colorHex": "F2E9DC" },
+      { "name": "text", "colorHex": "FFFFFF" }
+    ],
     "subtitleFontFamily": "system",
-    "subtitleFontSize": 62,
+    "subtitleFontSize": 58,
     "subtitleBold": true,
     "subtitleColorHex": "@text",
     "subtitleBackgroundOpacity": 0.0,
-    "subtitleBackgroundPadding": 16,
-    "subtitleLeftMargin": 120,
-    "subtitleRightMargin": 120
+    "subtitleBackgroundPadding": 18,
+    "subtitleLeftMargin": 110,
+    "subtitleRightMargin": 110
   },
-
   "resources": [
-    { "id": "rec", "kind": "video", "filename": "rec_lumen_2560.mp4",
-      "displayName": "Lumen recording", "addedAt": 0,
-      "duration": 15, "trimStart": 0, "trimEnd": 9,
-      "imageCuts": [], "disabledAudioTrackIndices": [] },
-
-    { "id": "label", "kind": "image", "filename": "label_lumen.png",
-      "displayName": "Lumen label", "addedAt": 0,
-      "pixelWidth": 768, "pixelHeight": 384,
-      "imageCuts": [], "disabledAudioTrackIndices": [] },
-
-    { "id": "panel", "kind": "model", "filename": "",
-      "displayName": "Panel", "addedAt": 0,
-      "imageCuts": [], "disabledAudioTrackIndices": [], "clips": [],
-      "recipe": { "parts": [
-        { "slot": "Print", "shape": { "box": { "size": [1.6, 1.0, 0.05], "radius": 0.015 } } },
-        { "slot": "Frame", "shape": { "box": { "size": [1.68, 1.08, 0.04], "radius": 0.02 } },
-          "position": [0, 0, -0.03] }
-      ] },
+    {
+      "id": "rec",
+      "kind": "video",
+      "filename": "rec_lumen_2560.mp4",
+      "displayName": "Lumen Recording",
+      "addedAt": 0,
+      "duration": 15,
+      "trimStart": 0,
+      "trimEnd": 9,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": []
+    },
+    {
+      "id": "label",
+      "kind": "image",
+      "filename": "label_lumen.png",
+      "displayName": "Lumen Label",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 768,
+      "pixelHeight": 384
+    },
+    {
+      "id": "panel",
+      "kind": "model",
+      "filename": "",
+      "displayName": "Panel",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "recipe": {
+        "parts": [
+          {
+            "slot": "Print",
+            "shape": { "box": { "size": [1.6, 1.0, 0.05], "radius": 0.015 } }
+          },
+          {
+            "slot": "Frame",
+            "shape": { "box": { "size": [1.68, 1.08, 0.04], "radius": 0.02 } },
+            "position": [0, 0, -0.03]
+          }
+        ]
+      },
       "materials": {
-        "Print": { "resourceID": "rec", "mode": "surface", "metallic": 0, "roughness": 0.18 },
-        "Frame": { "colorHex": "@chrome", "metallic": 1, "roughness": 0.25 }
-      } },
-
-    { "id": "vase", "kind": "model", "filename": "",
-      "displayName": "Vase", "addedAt": 0,
-      "imageCuts": [], "disabledAudioTrackIndices": [], "clips": [],
-      "recipe": { "parts": [
-        { "slot": "Body", "shape": { "lathe": { "segments": 48, "profile": [
-          [0.18, 0.75], [0.14, 0.62], [0.16, 0.5], [0.26, 0.35], [0.34, 0.15],
-          [0.36, -0.05], [0.33, -0.3], [0.26, -0.55], [0.2, -0.7], [0.22, -0.75],
-          [0, -0.75]
-        ] } } }
-      ] },
+        "Print": {
+          "resourceID": "rec",
+          "mode": "surface",
+          "metallic": 0,
+          "roughness": 0.18
+        },
+        "Frame": {
+          "colorHex": "@chrome",
+          "metallic": 1,
+          "roughness": 0.25
+        }
+      }
+    },
+    {
+      "id": "vase",
+      "kind": "model",
+      "filename": "",
+      "displayName": "Vase",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "recipe": {
+        "parts": [
+          {
+            "slot": "Body",
+            "shape": {
+              "lathe": {
+                "profile": [
+                  [0.18, 0.75],
+                  [0.14, 0.62],
+                  [0.16, 0.5],
+                  [0.26, 0.35],
+                  [0.34, 0.15],
+                  [0.36, -0.05],
+                  [0.33, -0.3],
+                  [0.26, -0.55],
+                  [0.2, -0.7],
+                  [0.22, -0.75],
+                  [0, -0.75]
+                ],
+                "segments": 48
+              }
+            }
+          }
+        ]
+      },
       "materials": {
-        "Body": { "resourceID": "label", "mode": "surface", "repeat": [3, 1],
-                  "colorHex": "@glaze", "metallic": 0.05, "roughness": 0.15 }
-      } }
+        "Body": {
+          "resourceID": "label",
+          "mode": "surface",
+          "repeat": [3, 1],
+          "colorHex": "@glaze",
+          "metallic": 0.05,
+          "roughness": 0.15
+        }
+      }
+    }
   ],
-
   "layers": [
-    { "id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
-      "isEnabled": true, "startTime": 0, "duration": 9, "keyframes": [] },
-
-    { "id": "bench", "name": "Bench", "sortIndex": 1, "kind": "stage",
-      "isEnabled": true, "startTime": 0, "duration": 9,
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 9,
+      "keyframes": []
+    },
+    {
+      "id": "bench",
+      "name": "Bench",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 9,
       "keyframes": [
-        { "id": "s0", "time": 0, "transitionDuration": 0,
+        {
+          "id": "s0",
+          "time": 0,
+          "transitionDuration": 0,
           "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
-          "camera": { "yaw": -38, "pitch": 12, "distance": 4.6 },
-          "light": { "yaw": -130, "pitch": 65, "intensity": 1.3 } },
-        { "id": "s1", "time": 9, "transitionDuration": 9, "easing": "easeInOut",
+          "camera": { "yaw": -38, "pitch": 12, "distance": 4.7 },
+          "light": { "yaw": -130, "pitch": 65, "intensity": 1.3 }
+        },
+        {
+          "id": "s1",
+          "time": 0.85,
+          "transitionDuration": 0.85,
+          "easing": "easeOut",
           "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
-          "camera": { "yaw": 34, "pitch": 6, "distance": 4.1 },
-          "light": { "yaw": 120, "pitch": 24, "intensity": 1.5 } }
+          "camera": { "yaw": -13.3, "pitch": 9.63, "distance": 4.42 },
+          "light": { "yaw": -50, "pitch": 48, "intensity": 1.38 }
+        },
+        {
+          "id": "s2",
+          "time": 1.1,
+          "transitionDuration": 0.25,
+          "easing": "easeOut",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": -12, "pitch": 9.5, "distance": 4.4 },
+          "light": { "yaw": -50, "pitch": 48, "intensity": 1.38 }
+        },
+        {
+          "id": "s3",
+          "time": 3.0,
+          "transitionDuration": 1.9,
+          "easing": "linear",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": -12, "pitch": 9.5, "distance": 4.4 },
+          "light": { "yaw": -44, "pitch": 44, "intensity": 1.36 }
+        },
+        {
+          "id": "s4",
+          "time": 3.95,
+          "transitionDuration": 0.95,
+          "easing": "easeOut",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": 20.5, "pitch": 7.11, "distance": 4.16 },
+          "light": { "yaw": 50, "pitch": 33, "intensity": 1.44 }
+        },
+        {
+          "id": "s5",
+          "time": 4.2,
+          "transitionDuration": 0.25,
+          "easing": "easeOut",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": 22, "pitch": 7, "distance": 4.15 },
+          "light": { "yaw": 50, "pitch": 33, "intensity": 1.44 }
+        },
+        {
+          "id": "s6",
+          "time": 6.1,
+          "transitionDuration": 1.9,
+          "easing": "linear",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": 22, "pitch": 7, "distance": 4.15 },
+          "light": { "yaw": 56, "pitch": 30, "intensity": 1.42 }
+        },
+        {
+          "id": "s7",
+          "time": 7.05,
+          "transitionDuration": 0.95,
+          "easing": "easeOut",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": 35.4, "pitch": 5.09, "distance": 3.91 },
+          "light": { "yaw": 125, "pitch": 24, "intensity": 1.5 }
+        },
+        {
+          "id": "s8",
+          "time": 7.3,
+          "transitionDuration": 0.25,
+          "easing": "easeOut",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": 36, "pitch": 5, "distance": 3.9 },
+          "light": { "yaw": 125, "pitch": 24, "intensity": 1.5 }
+        },
+        {
+          "id": "s9",
+          "time": 9.0,
+          "transitionDuration": 1.7,
+          "easing": "linear",
+          "placement": { "height": 600, "anchor": "center", "offset": [0, -30] },
+          "camera": { "yaw": 36, "pitch": 5, "distance": 3.9 },
+          "light": { "yaw": 130, "pitch": 24, "intensity": 1.5 }
+        }
       ],
       "members": [
-        { "id": "m-panel", "name": "Panel", "sortIndex": 0, "kind": "model",
-          "isEnabled": true, "startTime": 0, "duration": 9, "resourceID": "panel",
+        {
+          "id": "m-panel",
+          "name": "Panel",
+          "sortIndex": 0,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "panel",
           "keyframes": [
-            { "id": "p0", "time": 0, "transitionDuration": 0,
-              "stageOffset": [-0.42, 0.12] }
-          ] },
-        { "id": "m-vase", "name": "Vase", "sortIndex": 1, "kind": "model",
-          "isEnabled": true, "startTime": 0, "duration": 9, "resourceID": "vase",
+            {
+              "id": "p0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": -0.35,
+              "stageOffset": [-0.42, 0.12]
+            }
+          ]
+        },
+        {
+          "id": "m-vase",
+          "name": "Vase",
+          "sortIndex": 1,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "vase",
           "keyframes": [
-            { "id": "v0", "time": 0, "transitionDuration": 0,
+            {
+              "id": "v0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0.15,
               "stageOffset": [0.66, -0.28],
-              "camera": { "yaw": -70 } },
-            { "id": "v1", "time": 9, "transitionDuration": 9,
+              "camera": { "yaw": -90 }
+            },
+            {
+              "id": "v1",
+              "time": 9,
+              "transitionDuration": 9,
+              "easing": "linear",
+              "depth": 0.15,
               "stageOffset": [0.66, -0.28],
-              "camera": { "yaw": 70 } }
-          ] }
-      ] },
-
-    { "id": "cap", "name": "Caption", "sortIndex": 2, "kind": "caption",
-      "isEnabled": true, "startTime": 1.2, "duration": 7.8,
+              "camera": { "yaw": 90 }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap",
+      "name": "Caption",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.2,
+      "duration": 7.8,
       "captionText": "Every picture, lit.",
       "captionStyle": {
+        "isBold": true,
+        "fontSize": 58,
         "alignment": "center",
-        "placement": { "anchor": "bottom", "offset": [0, -64] },
-        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.32 },
-        "shadowOpacity": 0.5, "shadowRadius": 12
+        "placement": { "anchor": "bottom", "offset": [0, -56] },
+        "strokeColorHex": "0A0A0A",
+        "strokeWidth": 5,
+        "shadowOpacity": 0.5,
+        "shadowRadius": 10,
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.34 }
       },
-      "keyframes": [] }
+      "keyframes": [
+        { "id": "c0", "time": 0, "opacity": 1, "transitionDuration": 0 }
+      ]
+    }
   ]
 }

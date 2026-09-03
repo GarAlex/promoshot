@@ -267,8 +267,8 @@
    "duration": 10.0,
    "keyframes": [
     {
-     "id": "B1438575-27AA-5F73-5103-9535EEDBFC5C",
-     "time": 0,
+     "id": "55967892-62AC-9BAD-C384-E613688152DC",
+     "time": 0.0,
      "transitionDuration": 0,
      "gradient": {
       "kind": "linear",
@@ -295,6 +295,99 @@
        }
       ]
      }
+    },
+    {
+     "id": "4D62EEE2-156D-5806-6ABB-6C201DB48D62",
+     "time": 4.9,
+     "transitionDuration": 4.9,
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.2,
+       0.0
+      ],
+      "end": [
+       0.9,
+       1.0
+      ],
+      "stops": [
+       {
+        "colorHex": "142A4A",
+        "at": 0
+       },
+       {
+        "colorHex": "0C0F1A",
+        "at": 0.55
+       },
+       {
+        "colorHex": "35183F",
+        "at": 1
+       }
+      ]
+     },
+     "easing": "easeInOut"
+    },
+    {
+     "id": "31160990-3FBE-0439-01C6-CE27F9DEF479",
+     "time": 6.2,
+     "transitionDuration": 1.2999999999999998,
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.5,
+       0.0
+      ],
+      "end": [
+       0.6,
+       1.0
+      ],
+      "stops": [
+       {
+        "colorHex": "3A2A5C",
+        "at": 0
+       },
+       {
+        "colorHex": "141826",
+        "at": 0.55
+       },
+       {
+        "colorHex": "5A2A3A",
+        "at": 1
+       }
+      ]
+     },
+     "easing": "easeInOut"
+    },
+    {
+     "id": "56E8ACEA-3EB2-7A23-4424-8CBBA066EF24",
+     "time": 10.0,
+     "transitionDuration": 3.8,
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       1.0,
+       0.0
+      ],
+      "end": [
+       0.0,
+       1.0
+      ],
+      "stops": [
+       {
+        "colorHex": "10162A",
+        "at": 0
+       },
+       {
+        "colorHex": "090B12",
+        "at": 0.55
+       },
+       {
+        "colorHex": "231436",
+        "at": 1
+       }
+      ]
+     },
+     "easing": "easeInOut"
     }
    ]
   },
