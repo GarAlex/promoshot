@@ -162,6 +162,14 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         n = -n;
     }
     var albedo = material.base_color;
+    if (material.factors.z > 2.5) {
+        // A picture standing in the scene with its own transparency — a
+        // caption's raster on a billboard: straight through, premultiplied,
+        // and nothing written where it is clear.
+        let t = textureSample(base_tex, base_samp, in.uv);
+        if (t.a < 0.02) { discard; }
+        return t;
+    }
     if (material.factors.z > 1.5) {
         // A picture BOUND to the slot by the project — a screenshot on a
         // screen — reads as the screen would: the picture itself, unlit,
@@ -738,14 +746,16 @@ impl ModelPass {
                 )?;
                 self.set_texture(ctx, &mut model, 0, texture);
                 if let Some(m) = model.materials.get_mut(0) {
-                    // The quad IS the picture's box: no letterbox.
+                    // The quad IS the picture's box: no letterbox, and the
+                    // picture's own alpha decides what is drawn.
                     m.aspect = size[0] / size[1].max(1e-6);
+                    m.textured = 3.0;
                     ctx.queue.write_buffer(
                         &m.uniform,
                         0,
                         as_bytes(&MaterialRaw {
                             base_color: m.base_color,
-                            factors: [m.metallic, m.roughness, 2.0, 1.0],
+                            factors: [m.metallic, m.roughness, 3.0, 1.0],
                             fit: [m.aspect, 0.0, 0.0, 0.0],
                         }),
                     );

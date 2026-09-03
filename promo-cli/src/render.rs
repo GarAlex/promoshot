@@ -1750,6 +1750,32 @@ mod tests {
             g > 120 && g > r + 60 && g > b + 60,
             "the picture stands in front of both: {r},{g},{b}"
         );
+        // A caption member in front of everything: white glyph pixels reach
+        // the middle band, and the red cube shows between its glyphs.
+        let caption = r#",{"id":"L4","name":"words","sortIndex":3,"kind":"caption","isEnabled":true,"stage":"s",
+            "startTime":0,"duration":2,"captionText":"IIIIIIII",
+            "captionStyle":{"alignment":"center","subtitleFontSize":120,"subtitleColorHex":"FFFFFF","subtitleBackgroundOpacity":0},
+            "keyframes":[{"id":"K4","time":0,"depth":3.0,"transitionDuration":0}]}"#;
+        std::fs::write(dir.join("metadata.json"), doc(1.0, -1.0, caption)).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let frame = renderer.frame_bgra(0.5).expect("frame");
+        let count = |keep: &dyn Fn(u8, u8, u8) -> bool| -> usize {
+            (120..200)
+                .flat_map(|y| (60..260).map(move |x| (x, y)))
+                .filter(|&(x, y)| {
+                    let i = (y * 320 + x) * 4;
+                    keep(frame[i + 2], frame[i + 1], frame[i])
+                })
+                .count()
+        };
+        let white = count(&|r, g, b| r > 200 && g > 200 && b > 200);
+        assert!(
+            white > 200,
+            "the caption stands in front, white on the scene: {white} px"
+        );
+        let red = count(&|r, g, b| r > 120 && g < 80 && b < 80);
+        assert!(red > 200, "and the cube shows between its glyphs: {red} px");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

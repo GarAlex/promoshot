@@ -874,7 +874,9 @@ sits at its keyframes' `depth` — its distance from the stage's origin
 along the camera axis in the stage's bounds radii, positive toward the
 viewer, 0 when absent — and across it at its keyframes' `stageOffset`,
 `[right, up]` in the same radii (rung 31), so two devices stand side
-by side. The first member (lowest `sortIndex`) owns the
+by side; a caption member stands as a billboard at its depth, its
+raster keeping the share of the canvas height it would have flat. The
+first member (lowest `sortIndex`) owns the
 picture: its `camera` and `light` are the stage's, and its placement,
 opacity, transitions, masks and effects apply to the whole stage; the
 other members' 2D transforms are ignored inside it (`promo validate`

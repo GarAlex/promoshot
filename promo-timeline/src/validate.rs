@@ -472,15 +472,11 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         for member in members.iter().skip(1) {
-            if matches!(
-                member.kind,
-                ProjectLayerKind::Caption | ProjectLayerKind::Drawing
-            ) {
+            if member.kind == ProjectLayerKind::Drawing {
                 out.push(format!(
-                    "stage \"{name}\": \"{}\" is a {} — captions and drawings inside a \
-                     stage are not drawn yet",
-                    member.name,
-                    member.kind.as_str()
+                    "stage \"{name}\": \"{}\" is a drawing — drawings inside a stage \
+                     are not drawn yet",
+                    member.name
                 ));
             }
             if member.keyframes.iter().any(|k| {

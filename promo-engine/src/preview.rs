@@ -2239,7 +2239,7 @@ impl PreviewEngine {
             // A composition draws itself: rendered by recursion into a
             // texture that then stands where a host frame would.
             let composed = if let Some(stage) = staged.as_deref() {
-                match self.stage_frame(layer, stage, &settings, centre, tier, &used) {
+                match self.stage_frame(layer, stage, &settings, canvas, centre, tier, &used) {
                     Some(id) => Some(id),
                     None => continue,
                 }
@@ -2726,6 +2726,7 @@ impl PreviewEngine {
         first: &ProjectLayer,
         stage: &str,
         settings: &promo_model::CompositionSettings,
+        canvas: Size,
         time: f64,
         tier: i32,
         pinned: &[u64],
@@ -2805,6 +2806,15 @@ impl PreviewEngine {
                 .unwrap_or(0.0) as f32,
             ];
             let frame = match member.kind {
+                // A caption's raster, laid out as it would be on the canvas; its
+                // billboard is as tall in the stage as the caption is on the
+                // canvas, in stage diameters.
+                ProjectLayerKind::Caption => {
+                    let showing =
+                        tl::layer_resource_id(member, time, &resources).map(str::to_string);
+                    self.caption_quad(member, showing.as_deref(), settings, canvas, time, pinned)
+                        .map(|(_, id)| id)
+                }
                 ProjectLayerKind::Image | ProjectLayerKind::Video => {
                     let showing = tl::layer_resource_id(member, time, &resources)
                         .unwrap_or_default()
@@ -2955,7 +2965,7 @@ impl PreviewEngine {
                         matrices,
                     });
                 }
-                ProjectLayerKind::Image | ProjectLayerKind::Video => {
+                ProjectLayerKind::Image | ProjectLayerKind::Video | ProjectLayerKind::Caption => {
                     let Some(id) = item.frame else {
                         continue;
                     };
@@ -2966,8 +2976,13 @@ impl PreviewEngine {
                         entry.frame.width.max(1) as f32,
                         entry.frame.height.max(1) as f32,
                     );
-                    // A billboard is as tall as the stage's radius at zoom 1.
-                    let height = radius * item.zoom;
+                    // A picture is as tall as the stage's radius at zoom 1; a caption
+                    // keeps its share of the canvas height, over the stage's diameter.
+                    let height = if member.kind == ProjectLayerKind::Caption {
+                        (h / canvas.height().max(1.0) as f32) * 2.0 * radius
+                    } else {
+                        radius * item.zoom
+                    };
                     items.push(StageItem::Billboard {
                         texture: entry.frame.texture.view(),
                         center: [
@@ -3039,7 +3054,7 @@ impl PreviewEngine {
                         }
                     }
                 }
-                ProjectLayerKind::Image | ProjectLayerKind::Video => {
+                ProjectLayerKind::Image | ProjectLayerKind::Video | ProjectLayerKind::Caption => {
                     let Some(id) = item.frame else {
                         continue;
                     };
@@ -3050,7 +3065,11 @@ impl PreviewEngine {
                         entry.frame.width.max(1) as f32,
                         entry.frame.height.max(1) as f32,
                     );
-                    let height = radius * item.zoom;
+                    let height = if member.kind == ProjectLayerKind::Caption {
+                        (h / canvas.height().max(1.0) as f32) * 2.0 * radius
+                    } else {
+                        radius * item.zoom
+                    };
                     let (hw, hh) = (height * w / h / 2.0, height / 2.0);
                     let (right, up, _) = promo_gpu::model_pass::camera_basis(&view);
                     let c = [
