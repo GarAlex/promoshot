@@ -1,0 +1,1 @@
+No media. One title: 'LUMEN 2.0' with the line 'See everything.' under it. Make an 8-to-12-second title card, landscape, the kind a motion designer opens a keynote with — solid, dimensional type that moves like it means it. Palette, motion and finish are yours.

@@ -4415,5 +4415,149 @@
    "thumb": "docs/demo/c5-story-with-voice/thumb.png"
   },
   "page": "docs/demo/democ5.md"
+ },
+ {
+  "id": "c6",
+  "slug": "c6-title-card",
+  "title": "Title card",
+  "blurb": "One line and no media: does a fresh agent reach for solid, dimensional, moving type on its own?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   7,
+   13
+  ],
+  "prompt": "No media. One title: 'LUMEN 2.0' with the line 'See everything.' under it. Make an 8-to-12-second title card, landscape, the kind a motion designer opens a keynote with \u2014 solid, dimensional type that moves like it means it. Palette, motion and finish are yours.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "10.5s, asked 7\u201313s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "8 features: effects, gradient, reveal, depth, captionTilt, kineticReveal, transitions, motionBlur"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "3 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "5 layers"
+    }
+   ],
+   "summary": "turns=59 cost=$3.32 secs=692",
+   "run": {
+    "turns": 59,
+    "wall_s": 691,
+    "api_s": 530,
+    "cost_usd": 3.32,
+    "tokens": {
+     "input": 64,
+     "cache_read": 2926913,
+     "cache_write": 97740,
+     "output": 35165,
+     "thinking": 20196
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1064,
+      "output": 18,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 3024717,
+      "output": 35165,
+      "cost_usd": 3.32
+     }
+    ],
+    "mcp": {
+     "calls": 13,
+     "ms": 159425,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 105696,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 52757,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 3,
+       "ms": 499,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 463,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 2,
+       "ms": 10,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "effects",
+    "gradient",
+    "reveal",
+    "depth",
+    "captionTilt",
+    "kineticReveal",
+    "transitions",
+    "motionBlur"
+   ],
+   "captions": [
+    "LUMEN",
+    "LUMEN 2.0",
+    "See everything."
+   ],
+   "notes": "Done. `out.promo` is written, validated, inspected, and rendered.\n\n**The card** \u2014 10.5s, 1920\u00d71080 @ 60fps, no media (it's pure type, so `Resources/` holds only the metadata-defined drawing; nothing to copy).\n\nBeat sheet:\n- **0.0s** \u2014 deep navy radial ground, dim and tight.\n- **0.55s** \u2014 `LUMEN 2.0` flips in character-by-character (`reveal: {by: character, mode: flip}`), leaning from `tiltY -18\u00b0 / tiltX 7\u00b0`, with a 0.5-shutter motion blur smearing each letter as it lands.\n- **1.9s** \u2014 the lean settles to flat and the type eases up 196\u2192220pt as the background blooms open behind it.\n- **2.5s** \u2014 a cyan hairline wipes in from the left beneath the title.\n- **3.1s** \u2014 `See everything.` rises in word-by-word.\n- **through 9.3s** \u2014 slow continuous push to 236pt and a gentle \u22125\u00b0 counter-lean, so nothing is ever fully still.\n- **9.5\u201310.5s** \u2014 type fades, ground closes back down to near-black.\n\n**Dimensionality** is `depth` on the caption: 56 stacked copies at 0.85px, shading white \u2192 `05081C`, which gives a smooth ~48px extruded side that catches light like raked aluminium. A dim, blurred oversized `LUMEN` sits behind as atmosphere. Everything is on a named palette (all eight roles), so re-skinning is one array edit.\n\nThree things I got wrong and corrected against renders, worth noting since they're not obvious from the field names:\n- **`depth` count trades smoothness against darkness.** The shade ramps from the face colour across the copies, so a low count gives dark-but-chunky steps and a high count gives smooth-but-pale. Dense-and-smooth was the better look; the side never goes truly dark.\n- **Drawing layers aspect-fit their content into the layer rect**, and the layer's `zoom` is relative to the canvas \u2014 not the `(canvasHeight / sourceHeight) * zoom` rule media layers use. My ",
+   "contact": "docs/demo/c6-title-card/contact-result.png",
+   "video": "docs/demo/c6-title-card/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c6-title-card.mp4",
+   "video_hd_bytes": 1146868,
+   "metadata": "docs/demo/c6-title-card/result-metadata.json",
+   "gif": "docs/demo/c6-title-card/result.gif",
+   "thumb": "docs/demo/c6-title-card/thumb.png"
+  },
+  "page": "docs/demo/democ6.md"
  }
 ]
