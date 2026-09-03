@@ -900,6 +900,10 @@ or `night` (a cold moon over a dark floor); `intensity` scales it,
 `rotation` turns it about the vertical in degrees. Without one, metals
 mirror a synthetic sky and ground and chrome reads dark on a dark
 theme. A project with an environment carries `minReaderVersion: 35`.
+A file's own normal map and metallic-roughness texture are honoured
+(glTF's layout: roughness in G, metallic in B, multiplied into the
+factors), so a scanned or generated asset reads as its surface, not its
+triangles.
 
 Stages (rung 30). Layers naming the same `"stage": "hero"` are drawn
 together through ONE camera into ONE depth buffer: model members turn

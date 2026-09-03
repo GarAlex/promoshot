@@ -86,6 +86,13 @@ pub struct Material {
     pub double_sided: bool,
     /// The base colour texture, RGBA8 sRGB, if the file carries one.
     pub base_texture: Option<Texture>,
+    /// A tangent-space normal map (RGBA8, linear, +Y up as glTF has it),
+    /// if the file carries one — what makes a scanned or sculpted surface
+    /// read as more than its triangles.
+    pub normal_texture: Option<Texture>,
+    /// The metallic-roughness texture (RGBA8, linear; glTF packs roughness
+    /// in G and metallic in B), multiplied into the factors.
+    pub metal_rough_texture: Option<Texture>,
 }
 
 impl Default for Material {
@@ -97,6 +104,8 @@ impl Default for Material {
             roughness: 0.6,
             double_sided: false,
             base_texture: None,
+            normal_texture: None,
+            metal_rough_texture: None,
         }
     }
 }
@@ -301,6 +310,14 @@ impl Model {
                     .base_color_texture()
                     .and_then(|info| images.get(info.texture().source().index()))
                     .and_then(texture_rgba8);
+                let normal_texture = m
+                    .normal_texture()
+                    .and_then(|info| images.get(info.texture().source().index()))
+                    .and_then(texture_rgba8);
+                let metal_rough_texture = pbr
+                    .metallic_roughness_texture()
+                    .and_then(|info| images.get(info.texture().source().index()))
+                    .and_then(texture_rgba8);
                 Material {
                     name: m.name().unwrap_or("").to_string(),
                     base_color: pbr.base_color_factor(),
@@ -308,6 +325,8 @@ impl Model {
                     roughness: pbr.roughness_factor(),
                     double_sided: m.double_sided(),
                     base_texture,
+                    normal_texture,
+                    metal_rough_texture,
                 }
             })
             .collect();

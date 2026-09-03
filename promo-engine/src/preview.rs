@@ -2635,6 +2635,14 @@ impl PreviewEngine {
                     .base_texture
                     .as_ref()
                     .map(|t| (t.width, t.height, t.rgba.as_slice())),
+                normal: m
+                    .normal_texture
+                    .as_ref()
+                    .map(|t| (t.width, t.height, t.rgba.as_slice())),
+                metal_rough: m
+                    .metal_rough_texture
+                    .as_ref()
+                    .map(|t| (t.width, t.height, t.rgba.as_slice())),
             })
             .collect();
         let gpu = pass

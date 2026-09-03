@@ -394,7 +394,8 @@ body with the theme — and, in the object form, to a finish: `metallic`
 and `roughness` (each 0…1) over the file's own, so one body is chrome in
 this project and matte in the next (rung 32). Lighting defaults come
 from the theme; a scene `environment` (studio, sunset, night; rung
-35) is what metals mirror. Rung 29. Built-in device bodies
+35) is what metals mirror; a file's normal map and metallic-roughness
+texture are honoured. Rung 29. Built-in device bodies
 (phone, tablet, laptop; `promo device`) ship as generated `.glb` files
 with `Body` and `Screen` slots, so the device shot is a model too. A
 model can also be a `recipe` the engine builds at load instead of a file

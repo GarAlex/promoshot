@@ -1384,8 +1384,13 @@ mod tests {
         )
         .unwrap();
         let meta = read(&dir);
+        // The device FRAME is legacy 2.5D: the validator names it (and only
+        // it); the scaffold still lands, so old recipes keep working.
         let warnings = promo_timeline::validate::warnings(&meta);
-        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(
+            warnings.len() == 1 && warnings[0].contains("legacy 2.5D"),
+            "{warnings:?}"
+        );
         let card = meta
             .layers
             .as_deref()

@@ -23,13 +23,17 @@ pub struct MeshInput<'a> {
     pub node: usize,
 }
 
-/// A material's factors and, if any, its base colour texture (RGBA8 sRGB).
+/// A material's factors and, if any, its textures: base colour (RGBA8
+/// sRGB), a tangent-space normal map and a metallic-roughness map (both
+/// RGBA8 linear, glTF's layout: roughness in G, metallic in B).
 pub struct MaterialInput<'a> {
     pub base_color: [f32; 4],
     pub metallic: f32,
     pub roughness: f32,
     pub double_sided: bool,
     pub texture: Option<(u32, u32, &'a [u8])>,
+    pub normal: Option<(u32, u32, &'a [u8])>,
+    pub metal_rough: Option<(u32, u32, &'a [u8])>,
 }
 
 /// One thing on a stage: a model with its node matrices, or a picture
@@ -154,7 +158,8 @@ struct Material {
     // bound by the project (unlit), w = 1 double sided
     factors: vec4<f32>,
     // x = the slot's own aspect (width / height of the surface its uvs
-    // span), so a bound picture is fitted rather than stretched.
+    // span), so a bound picture is fitted rather than stretched; y = 1
+    // when a normal map is bound, z = 1 when a metallic-roughness map is.
     fit: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -163,6 +168,8 @@ struct Material {
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(2) var base_samp: sampler;
+@group(1) @binding(3) var normal_tex: texture_2d<f32>;
+@group(1) @binding(4) var mr_tex: texture_2d<f32>;
 struct Placement {
     model: mat4x4<f32>,
     // The upper 3×3's inverse transpose, for normals under a scale.
@@ -202,6 +209,23 @@ fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
     let lo = c * 12.92;
     let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
     return select(hi, lo, c <= vec3<f32>(0.0031308));
+}
+
+// A tangent frame from screen-space derivatives (Schüler's cotangent
+// frame), so a normal map needs no tangent attribute: `tn` is the map's
+// tangent-space normal, +Y up as glTF stores it.
+fn perturb_normal(n: vec3<f32>, p: vec3<f32>, uv: vec2<f32>, tn: vec3<f32>) -> vec3<f32> {
+    let dp1 = dpdx(p);
+    let dp2 = dpdy(p);
+    let duv1 = dpdx(uv);
+    let duv2 = dpdy(uv);
+    let dp2perp = cross(dp2, n);
+    let dp1perp = cross(n, dp1);
+    let t = dp2perp * duv1.x + dp1perp * duv2.x;
+    let b = dp2perp * duv1.y + dp1perp * duv2.y;
+    let invmax = inverseSqrt(max(dot(t, t), dot(b, b)));
+    let tbn = mat3x3<f32>(-t * invmax, b * invmax, n);
+    return normalize(tbn * tn);
 }
 
 fn env_sample(dir: vec3<f32>, lod: f32) -> vec3<f32> {
@@ -254,8 +278,17 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         let t = textureSample(base_tex, base_samp, in.uv);
         albedo = vec4<f32>(albedo.rgb * srgb_to_linear(t.rgb), albedo.a * t.a);
     }
-    let metallic = material.factors.x;
-    let roughness = clamp(material.factors.y, 0.05, 1.0);
+    if (material.fit.y > 0.5) {
+        let tn = textureSample(normal_tex, base_samp, in.uv).xyz * 2.0 - vec3<f32>(1.0);
+        n = perturb_normal(n, in.world, in.uv, tn);
+    }
+    var metallic = material.factors.x;
+    var roughness = clamp(material.factors.y, 0.05, 1.0);
+    if (material.fit.z > 0.5) {
+        let mr = textureSample(mr_tex, base_samp, in.uv);
+        roughness = clamp(material.factors.y * mr.g, 0.05, 1.0);
+        metallic = material.factors.x * mr.b;
+    }
     let l = normalize(frame.light_dir.xyz);
     let v = normalize(frame.camera_pos.xyz - in.world);
     let h = normalize(l + v);
@@ -379,6 +412,20 @@ struct GpuMaterial {
     /// Width over height of the surface this slot's uvs span, from the
     /// geometry that wears it — what a bound picture is fitted to.
     aspect: f32,
+    /// The file's normal map and metallic-roughness map, if any — kept so
+    /// a rebind (a picture on the slot) carries them along.
+    normal_view: Option<wgpu::TextureView>,
+    mr_view: Option<wgpu::TextureView>,
+}
+
+impl GpuMaterial {
+    /// `fit`'s flags: a normal map bound, a metallic-roughness map bound.
+    fn map_flags(&self) -> (f32, f32) {
+        (
+            if self.normal_view.is_some() { 1.0 } else { 0.0 },
+            if self.mr_view.is_some() { 1.0 } else { 0.0 },
+        )
+    }
 }
 
 /// A model's buffers on the GPU, built once per resource and drawn many
@@ -400,6 +447,8 @@ pub struct ModelPass {
     placement_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     white: wgpu::TextureView,
+    /// A one-texel "straight up" normal map, what an unmapped material binds.
+    flat_normal: wgpu::TextureView,
 }
 
 impl ModelPass {
@@ -467,6 +516,26 @@ impl ModelPass {
                     binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
                     count: None,
                 },
             ],
@@ -546,6 +615,7 @@ impl ModelPass {
             ..Default::default()
         });
         let white = upload_rgba(ctx, 1, 1, &[255, 255, 255, 255]).create_view(&Default::default());
+        let flat_normal = upload_rgba(ctx, 1, 1, &[128, 128, 255, 255]).create_view(&Default::default());
         let envs = [
             upload_env(ctx, EnvPreset::Studio).create_view(&Default::default()),
             upload_env(ctx, EnvPreset::Sunset).create_view(&Default::default()),
@@ -569,6 +639,7 @@ impl ModelPass {
             placement_layout,
             sampler,
             white,
+            flat_normal,
         })
     }
 
@@ -619,9 +690,18 @@ impl ModelPass {
         }
         let mut gpu_materials = Vec::with_capacity(materials.len());
         for (index, m) in materials.iter().enumerate() {
+            let well_formed = |t: &(u32, u32, &[u8])| t.0 > 0 && t.1 > 0 && t.2.len() == (t.0 * t.1 * 4) as usize;
             let texture = m
                 .texture
-                .filter(|(w, h, px)| *w > 0 && *h > 0 && px.len() == (*w * *h * 4) as usize)
+                .filter(well_formed)
+                .map(|(w, h, px)| upload_rgba(ctx, w, h, px).create_view(&Default::default()));
+            let normal_view = m
+                .normal
+                .filter(well_formed)
+                .map(|(w, h, px)| upload_rgba(ctx, w, h, px).create_view(&Default::default()));
+            let mr_view = m
+                .metal_rough
+                .filter(well_formed)
                 .map(|(w, h, px)| upload_rgba(ctx, w, h, px).create_view(&Default::default()));
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("model-material"),
@@ -633,7 +713,12 @@ impl ModelPass {
                         if texture.is_some() { 1.0 } else { 0.0 },
                         if m.double_sided { 1.0 } else { 0.0 },
                     ],
-                    fit: [aspects[index], 0.0, 0.0, 0.0],
+                    fit: [
+                        aspects[index],
+                        if normal_view.is_some() { 1.0 } else { 0.0 },
+                        if mr_view.is_some() { 1.0 } else { 0.0 },
+                        0.0,
+                    ],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
@@ -655,6 +740,18 @@ impl ModelPass {
                         binding: 2,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(
+                            normal_view.as_ref().unwrap_or(&self.flat_normal),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(
+                            mr_view.as_ref().unwrap_or(&self.white),
+                        ),
+                    },
                 ],
             });
             gpu_materials.push(GpuMaterial {
@@ -669,6 +766,8 @@ impl ModelPass {
                 double_sided: m.double_sided,
                 textured: if texture.is_some() { 1.0 } else { 0.0 },
                 aspect: aspects[index],
+                normal_view,
+                mr_view,
             });
         }
         let mut gpu_meshes = Vec::with_capacity(meshes.len());
@@ -761,6 +860,7 @@ impl ModelPass {
             m.base_color = rgba.unwrap_or(m.file_base_color);
             m.metallic = metallic.unwrap_or(m.file_metallic).clamp(0.0, 1.0);
             m.roughness = roughness.unwrap_or(m.file_roughness).clamp(0.0, 1.0);
+            let (has_normal, has_mr) = m.map_flags();
             ctx.queue.write_buffer(
                 &m.uniform,
                 0,
@@ -772,7 +872,7 @@ impl ModelPass {
                         m.textured,
                         if m.double_sided { 1.0 } else { 0.0 },
                     ],
-                    fit: [m.aspect, 0.0, 0.0, 0.0],
+                    fit: [m.aspect, has_normal, has_mr, 0.0],
                 }),
             );
         }
@@ -792,6 +892,7 @@ impl ModelPass {
             return;
         };
         m.textured = 2.0;
+        let (has_normal, has_mr) = m.map_flags();
         ctx.queue.write_buffer(
             &m.uniform,
             0,
@@ -803,7 +904,7 @@ impl ModelPass {
                     2.0,
                     if m.double_sided { 1.0 } else { 0.0 },
                 ],
-                fit: [m.aspect, 0.0, 0.0, 0.0],
+                fit: [m.aspect, has_normal, has_mr, 0.0],
             }),
         );
         m.bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -821,6 +922,18 @@ impl ModelPass {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(
+                        m.normal_view.as_ref().unwrap_or(&self.flat_normal),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(
+                        m.mr_view.as_ref().unwrap_or(&self.white),
+                    ),
                 },
             ],
         });
@@ -889,6 +1002,8 @@ impl ModelPass {
                         roughness: 1.0,
                         double_sided: true,
                         texture: None,
+                        normal: None,
+                        metal_rough: None,
                     }],
                 )?;
                 self.set_texture(ctx, &mut model, 0, texture);
@@ -1798,6 +1913,8 @@ mod tests {
                     roughness: 0.6,
                     double_sided: false,
                     texture: None,
+                    normal: None,
+                    metal_rough: None,
                 }],
             )
             .expect("model");
@@ -1817,6 +1934,162 @@ mod tests {
         }
         let n = lum.len();
         (lum, n)
+    }
+
+    /// Renders the test cube face on under one material, 96 px square,
+    /// and returns the mean brightness of two patches on the front face:
+    /// the left half (uv.x < 0.5) and the right half.
+    fn halves(material: MaterialInput<'_>, light_yaw: f64, light_pitch: f64) -> (u32, u32) {
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[material],
+            )
+            .expect("upload");
+        let view = ModelView {
+            yaw: 0.0,
+            pitch: 0.0,
+            distance: 3.0,
+            light_yaw,
+            light_pitch,
+            ..ModelView::default()
+        };
+        let px = pass
+            .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+            .expect("render");
+        let mean = |x0: usize, x1: usize| -> u32 {
+            let mut sum = 0u32;
+            let mut count = 0u32;
+            for y in 40..56 {
+                for x in x0..x1 {
+                    let i = (y * 96 + x) * 4;
+                    sum += px[i] as u32 + px[i + 1] as u32 + px[i + 2] as u32;
+                    count += 3;
+                }
+            }
+            sum / count
+        };
+        // The face spans roughly x 24..72 at distance 3; uv.x runs left
+        // to right across it.
+        (mean(28, 44), mean(52, 68))
+    }
+
+    /// A normal map tilts the shading: a map whose left half leans its
+    /// normals toward +X reads brighter than the flat right half under a
+    /// light from the right — and darker under one from the left. Both
+    /// directions, so a wrong-signed tangent frame cannot pass.
+    #[test]
+    fn a_normal_map_tilts_the_shading() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let (w, h) = (64u32, 64u32);
+        let mut map = Vec::with_capacity((w * h * 4) as usize);
+        for _y in 0..h {
+            for x in 0..w {
+                // Left half: (0.8, 0, 0.6) — leaning toward +X; right half: straight up.
+                let px: [u8; 4] = if x < w / 2 { [230, 128, 204, 255] } else { [128, 128, 255, 255] };
+                map.extend_from_slice(&px);
+            }
+        }
+        let material = || MaterialInput {
+            base_color: [0.8, 0.8, 0.8, 1.0],
+            metallic: 0.0,
+            roughness: 0.6,
+            double_sided: false,
+            texture: None,
+            normal: Some((w, h, &map)),
+            metal_rough: None,
+        };
+        let (left, right) = halves(material(), 60.0, 20.0);
+        assert!(
+            left > right + 8,
+            "leaning toward the light reads brighter: left {left} right {right}"
+        );
+        let (left, right) = halves(material(), -60.0, 20.0);
+        assert!(
+            left + 8 < right,
+            "leaning away from the light reads darker: left {left} right {right}"
+        );
+        // And the map's +Y: a map leaning every normal upward reads
+        // brighter than a flat one under a light from above, darker under
+        // one from below the horizon.
+        let up_map: Vec<u8> = (0..w * h).flat_map(|_| [128, 230, 204, 255]).collect();
+        let flat_map: Vec<u8> = (0..w * h).flat_map(|_| [128, 128, 255, 255]).collect();
+        let face = |map: &[u8], pitch: f64| -> u32 {
+            let (l, r) = halves(
+                MaterialInput {
+                    base_color: [0.8, 0.8, 0.8, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.6,
+                    double_sided: false,
+                    texture: None,
+                    normal: Some((w, h, map)),
+                    metal_rough: None,
+                },
+                0.0,
+                pitch,
+            );
+            (l + r) / 2
+        };
+        assert!(
+            face(&up_map, 60.0) > face(&flat_map, 60.0) + 8,
+            "leaning up toward a high light reads brighter: {} vs {}",
+            face(&up_map, 60.0),
+            face(&flat_map, 60.0)
+        );
+        assert!(
+            face(&up_map, -40.0) + 8 < face(&flat_map, -40.0),
+            "leaning up under a low light reads darker: {} vs {}",
+            face(&up_map, -40.0),
+            face(&flat_map, -40.0)
+        );
+    }
+
+    /// A metallic-roughness map varies the finish across one material:
+    /// with the factor at full metal, a map whose blue channel is 0 on the
+    /// left and 255 on the right makes the left a dielectric and the right
+    /// a metal, and the two halves read differently.
+    #[test]
+    fn a_metallic_roughness_map_varies_the_finish() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let (w, h) = (64u32, 64u32);
+        let mut map = Vec::with_capacity((w * h * 4) as usize);
+        for _y in 0..h {
+            for x in 0..w {
+                let px: [u8; 4] = if x < w / 2 { [0, 90, 0, 255] } else { [0, 90, 255, 255] };
+                map.extend_from_slice(&px);
+            }
+        }
+        let material = MaterialInput {
+            base_color: [0.8, 0.8, 0.8, 1.0],
+            metallic: 1.0,
+            roughness: 1.0,
+            double_sided: false,
+            texture: None,
+            normal: None,
+            metal_rough: Some((w, h, &map)),
+        };
+        let (left, right) = halves(material, 40.0, 20.0);
+        assert!(
+            (left as i32 - right as i32).abs() > 12,
+            "a dielectric half and a metal half read differently: left {left} right {right}"
+        );
     }
 
     #[test]
@@ -1896,6 +2169,8 @@ mod tests {
                     roughness: 0.6,
                     double_sided: false,
                     texture: None,
+                    normal: None,
+                    metal_rough: None,
                 }],
             )
             .expect("model");
@@ -1948,6 +2223,8 @@ mod tests {
                     roughness: 0.6,
                     double_sided: false,
                     texture: None,
+                    normal: None,
+                    metal_rough: None,
                 }],
             )
             .expect("model");
@@ -2015,6 +2292,8 @@ mod tests {
                     roughness: 0.6,
                     double_sided: false,
                     texture: None,
+                    normal: None,
+                    metal_rough: None,
                 }],
             )
             .expect("model");
