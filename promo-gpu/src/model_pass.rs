@@ -211,9 +211,23 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     let spec_color = mix(vec3<f32>(0.04), albedo.rgb, metallic);
     let specular = spec_color * pow(ndh, shininess) * (1.0 - roughness * 0.6) * step(0.0001, ndl);
     let key = (diffuse + specular) * frame.key_rgb.rgb * frame.light_dir.w;
-    let ambient = albedo.rgb * frame.ambient_rgb.rgb;
-    let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6;
-    let lit = key + ambient + rim;
+    let ambient = albedo.rgb * (1.0 - metallic * 0.8) * frame.ambient_rgb.rgb;
+    let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6 * (1.0 - metallic * 0.5);
+    // A stand-in for the environment a metal mirrors: a sky-to-ground
+    // gradient by the reflection's height with a darker horizon band,
+    // tinted by the base colour for metals and faint on dielectrics at
+    // grazing angles — chrome reads as chrome without an HDR.
+    let refl = reflect(-v, n);
+    let up = clamp(refl.y * 0.5 + 0.5, 0.0, 1.0);
+    let sky = frame.rim_rgb.rgb * 1.4 + vec3<f32>(0.35);
+    let ground = frame.ambient_rgb.rgb * 0.6;
+    var env = mix(ground, sky, up);
+    env = env * (0.7 + 0.3 * smoothstep(0.0, 0.25, abs(refl.y)));
+    let fresnel = pow(1.0 - ndv, 5.0);
+    let gloss = 1.0 - roughness;
+    let mirror = env * albedo.rgb * metallic * (0.75 + 0.25 * fresnel) * (0.5 + 0.5 * gloss);
+    let sheen = env * (0.04 + 0.35 * fresnel) * gloss * (1.0 - metallic);
+    let lit = key + ambient + rim + mirror + sheen;
     let encoded = linear_to_srgb(clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0)));
     return vec4<f32>(encoded * albedo.a, albedo.a);
 }

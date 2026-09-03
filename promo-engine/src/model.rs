@@ -914,6 +914,123 @@ pub fn device_glb(kind: DeviceKind) -> Vec<u8> {
     geo.build(&materials, min, max)
 }
 
+/// Curved bodies for showing a material under a light: a sphere, a torus
+/// and a lathe-turned vase, smooth-shaded, each one `Body` slot with a
+/// material the shape suits — chrome, matte, glossy ceramic. Generated,
+/// like the devices, so a demo of lighting needs no download.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShapeKind {
+    Sphere,
+    Torus,
+    Vase,
+}
+
+impl ShapeKind {
+    pub fn parse(name: &str) -> Option<ShapeKind> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "sphere" => Some(ShapeKind::Sphere),
+            "torus" => Some(ShapeKind::Torus),
+            "vase" => Some(ShapeKind::Vase),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ShapeKind::Sphere => "sphere",
+            ShapeKind::Torus => "torus",
+            ShapeKind::Vase => "vase",
+        }
+    }
+
+    pub const ALL: [ShapeKind; 3] = [ShapeKind::Sphere, ShapeKind::Torus, ShapeKind::Vase];
+}
+
+/// A curved body as a `.glb`, smooth normals, one `Body` slot.
+pub fn shape_glb(kind: ShapeKind) -> Vec<u8> {
+    let mut geo = GlbGeometry::default();
+    let mut indices: Vec<u16> = Vec::new();
+    let (material, min, max) = match kind {
+        ShapeKind::Sphere => {
+            geo.lathe(
+                &(0..=24)
+                    .map(|i| {
+                        let a = std::f32::consts::PI * i as f32 / 24.0;
+                        [0.5 * a.sin(), 0.5 * a.cos()]
+                    })
+                    .collect::<Vec<_>>(),
+                48,
+                &mut indices,
+            );
+            (
+                GlbMaterial {
+                    slot: "Body",
+                    base_color: [0.85, 0.87, 0.9, 1.0],
+                    metallic: 0.9,
+                    roughness: 0.22,
+                    indices: &[],
+                },
+                [-0.5, -0.5, -0.5],
+                [0.5, 0.5, 0.5],
+            )
+        }
+        ShapeKind::Torus => {
+            let (ring, tube) = (0.55f32, 0.22f32);
+            geo.torus(ring, tube, 48, 24, &mut indices);
+            (
+                GlbMaterial {
+                    slot: "Body",
+                    base_color: [0.82, 0.3, 0.2, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.65,
+                    indices: &[],
+                },
+                [-(ring + tube), -tube, -(ring + tube)],
+                [ring + tube, tube, ring + tube],
+            )
+        }
+        ShapeKind::Vase => {
+            // A profile from the neck down to the foot: (radius, height).
+            let profile: Vec<[f32; 2]> = [
+                (0.18, 0.75),
+                (0.14, 0.62),
+                (0.16, 0.5),
+                (0.26, 0.35),
+                (0.34, 0.15),
+                (0.36, -0.05),
+                (0.33, -0.3),
+                (0.26, -0.55),
+                (0.2, -0.7),
+                (0.22, -0.75),
+                (0.0, -0.75),
+            ]
+            .iter()
+            .map(|&(r, y)| [r, y])
+            .collect();
+            geo.lathe(&profile, 48, &mut indices);
+            (
+                GlbMaterial {
+                    slot: "Body",
+                    base_color: [0.93, 0.9, 0.84, 1.0],
+                    metallic: 0.05,
+                    roughness: 0.15,
+                    indices: &[],
+                },
+                [-0.36, -0.75, -0.36],
+                [0.36, 0.75, 0.36],
+            )
+        }
+    };
+    geo.build(
+        &[GlbMaterial {
+            indices: &indices,
+            ..material
+        }],
+        min,
+        max,
+    )
+}
+
 /// One material slot of a generated model: its factors and the indices
 /// (into the shared vertex list) that wear it.
 struct GlbMaterial<'a> {
@@ -1020,7 +1137,9 @@ impl GlbGeometry {
             let b = self.push_vertex(place([q[0], q[1], front_z]), normal, [1.0, 0.0]);
             let c = self.push_vertex(place([q[0], q[1], back_z]), normal, [1.0, 1.0]);
             let d = self.push_vertex(place([p[0], p[1], back_z]), normal, [0.0, 1.0]);
-            into.extend_from_slice(&[a, b, c, a, c, d]);
+            // Wound to face outward for a counter-clockwise outline seen
+            // from the front (the back is the smaller z).
+            into.extend_from_slice(&[a, c, b, a, d, c]);
         }
     }
 
@@ -1192,6 +1311,83 @@ impl GlbGeometry {
         };
         let normal = [0.0, s, c];
         self.face(&outline, z, true, &place, normal, hw, hh, into);
+    }
+
+    /// A surface of revolution about Y from a profile of `(radius, y)`
+    /// points, top to bottom, `segments` round; normals from the profile's
+    /// tangent, so the surface shades smooth.
+    fn lathe(&mut self, profile: &[[f32; 2]], segments: usize, into: &mut Vec<u16>) {
+        let n = profile.len();
+        if n < 2 {
+            return;
+        }
+        let ring = segments + 1;
+        for (i, p) in profile.iter().enumerate() {
+            // The profile's tangent at this point, for the normal.
+            let prev = profile[i.saturating_sub(1)];
+            let next = profile[(i + 1).min(n - 1)];
+            let t = [next[0] - prev[0], next[1] - prev[1]];
+            let len = (t[0] * t[0] + t[1] * t[1]).sqrt().max(1e-6);
+            // Perpendicular to the tangent, pointing outward (+radius).
+            let (nr, ny) = (t[1] / len, -t[0] / len);
+            let (nr, ny) = if nr < 0.0 { (-nr, -ny) } else { (nr, ny) };
+            for s in 0..ring {
+                let a = std::f32::consts::TAU * s as f32 / segments as f32;
+                let (ca, sa) = (a.cos(), a.sin());
+                let position = [p[0] * ca, p[1], p[0] * sa];
+                let normal = if p[0].abs() < 1e-6 {
+                    [0.0, if ny >= 0.0 { 1.0 } else { -1.0 }, 0.0]
+                } else {
+                    [nr * ca, ny, nr * sa]
+                };
+                self.push_vertex(
+                    position,
+                    normal,
+                    [s as f32 / segments as f32, i as f32 / (n - 1) as f32],
+                );
+            }
+        }
+        let base = (self.positions.len() / 3 - n * ring) as u16;
+        for i in 0..n - 1 {
+            for s in 0..segments {
+                let a = base + (i * ring + s) as u16;
+                let b = a + 1;
+                let c = a + ring as u16;
+                let d = c + 1;
+                into.extend_from_slice(&[a, b, c, b, d, c]);
+            }
+        }
+    }
+
+    /// A torus about Y: `ring` from the centre to the tube's middle, `tube`
+    /// the tube's radius; smooth normals.
+    fn torus(&mut self, ring: f32, tube: f32, segments: usize, sides: usize, into: &mut Vec<u16>) {
+        let (cols, rows) = (segments + 1, sides + 1);
+        for i in 0..rows {
+            let v = std::f32::consts::TAU * i as f32 / sides as f32;
+            let (cv, sv) = (v.cos(), v.sin());
+            for s in 0..cols {
+                let u = std::f32::consts::TAU * s as f32 / segments as f32;
+                let (cu, su) = (u.cos(), u.sin());
+                let position = [(ring + tube * cv) * cu, tube * sv, (ring + tube * cv) * su];
+                let normal = [cv * cu, sv, cv * su];
+                self.push_vertex(
+                    position,
+                    normal,
+                    [s as f32 / segments as f32, i as f32 / sides as f32],
+                );
+            }
+        }
+        let base = (self.positions.len() / 3 - rows * cols) as u16;
+        for i in 0..sides {
+            for s in 0..segments {
+                let a = base + (i * cols + s) as u16;
+                let b = a + 1;
+                let c = a + cols as u16;
+                let d = c + 1;
+                into.extend_from_slice(&[a, c, b, b, c, d]);
+            }
+        }
     }
 
     /// Four corners counter-clockwise seen from outside, as two triangles.
@@ -1493,6 +1689,113 @@ mod tests {
             if kind != DeviceKind::Laptop {
                 assert!(z > 0.0, "{}: screen at z {z}", kind.name());
             }
+        }
+    }
+
+    /// The curved bodies decode with smooth normals of unit length that
+    /// point away from the axis, and bounds the size their shape says.
+    /// Every triangle of every generated body must wind the way its
+    /// normals point: the pass discards back faces of a single-sided
+    /// material, so an inside-out mesh shows its far wall through a
+    /// missing near one — a vase whose foot shows through its belly.
+    #[test]
+    fn every_generated_body_winds_outward() {
+        let mut bodies: Vec<(String, Vec<u8>)> = vec![
+            ("cube".into(), sample_cube_glb()),
+            ("turning cube".into(), sample_turning_cube_glb()),
+            ("slab".into(), sample_slab_glb()),
+        ];
+        for kind in DeviceKind::ALL {
+            bodies.push((format!("device {}", kind.name()), device_glb(kind)));
+        }
+        for kind in ShapeKind::ALL {
+            bodies.push((format!("shape {}", kind.name()), shape_glb(kind)));
+        }
+        let mut failures = Vec::new();
+        for (name, glb) in bodies {
+            let model = Model::from_glb(&glb).expect(&name);
+            let (mut agree, mut disagree) = (0usize, 0usize);
+            for mesh in &model.meshes {
+                for tri in mesh.indices.chunks(3) {
+                    let [i0, i1, i2] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
+                    let (p0, p1, p2) = (mesh.positions[i0], mesh.positions[i1], mesh.positions[i2]);
+                    let e1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+                    let e2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+                    let g = [
+                        e1[1] * e2[2] - e1[2] * e2[1],
+                        e1[2] * e2[0] - e1[0] * e2[2],
+                        e1[0] * e2[1] - e1[1] * e2[0],
+                    ];
+                    let area = (g[0] * g[0] + g[1] * g[1] + g[2] * g[2]).sqrt();
+                    if area < 1e-7 {
+                        continue; // a degenerate fan triangle at a lathe's axis
+                    }
+                    let n = [i0, i1, i2].iter().fold([0.0f32; 3], |acc, &i| {
+                        let v = mesh.normals[i];
+                        [acc[0] + v[0], acc[1] + v[1], acc[2] + v[2]]
+                    });
+                    let d = g[0] * n[0] + g[1] * n[1] + g[2] * n[2];
+                    if d > 0.0 {
+                        agree += 1;
+                    } else {
+                        disagree += 1;
+                    }
+                }
+            }
+            if disagree > 0 {
+                failures.push(format!(
+                    "{name}: {disagree} of {} triangles wind against their normals",
+                    agree + disagree
+                ));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn the_curved_shapes_have_smooth_outward_normals() {
+        for kind in ShapeKind::ALL {
+            let model = Model::from_glb(&shape_glb(kind))
+                .unwrap_or_else(|e| panic!("{}: {e}", kind.name()));
+            let mesh = &model.meshes[0];
+            assert!(
+                mesh.indices.len() > 3 * 500,
+                "{}: enough triangles",
+                kind.name()
+            );
+            let mut outward = 0usize;
+            for (p, n) in mesh.positions.iter().zip(&mesh.normals) {
+                let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+                assert!(
+                    (len - 1.0).abs() < 1e-3,
+                    "{}: unit normal, got {len}",
+                    kind.name()
+                );
+                // Outward from the surface's own centre: the axis for a lathe,
+                // the ring through the tube for the torus.
+                let centre = if kind == ShapeKind::Torus {
+                    let u = p[2].atan2(p[0]);
+                    [0.55 * u.cos(), 0.0, 0.55 * u.sin()]
+                } else {
+                    [0.0, p[1], 0.0]
+                };
+                let away = [p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]];
+                let dot = away[0] * n[0] + away[1] * n[1] + away[2] * n[2];
+                if dot >= -1e-4 {
+                    outward += 1;
+                }
+            }
+            assert!(
+                outward as f32 > mesh.positions.len() as f32 * 0.9,
+                "{}: normals point outward",
+                kind.name()
+            );
+            assert!(
+                model.bounds_radius > 0.4 && model.bounds_radius < 1.1,
+                "{}: {}",
+                kind.name(),
+                model.bounds_radius
+            );
         }
     }
 
