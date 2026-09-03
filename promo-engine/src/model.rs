@@ -962,6 +962,7 @@ impl GlbGeometry {
 
     /// A rounded-rectangle face at `z` facing ±Z, uv over its box; a fan
     /// round the centre (the outline is convex).
+    #[allow(clippy::too_many_arguments)]
     fn face(
         &mut self,
         outline: &[[f32; 2]],
