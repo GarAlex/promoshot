@@ -396,6 +396,41 @@ impl Renderer {
                         promo_model::MaterialBinding::Color(_) => None,
                     })
                     .collect();
+                // A bound VIDEO decodes like a video layer would, under the
+                // synthetic slot layer the engine asks with.
+                let bound_videos: Vec<promo_model::ProjectResource> = candidates
+                    .iter()
+                    .filter_map(|id| project.resource(id))
+                    .filter(|r| r.kind == promo_model::ProjectResourceKind::Video)
+                    .cloned()
+                    .collect();
+                for resource in bound_videos {
+                    let Some(source) = project.resource_path(&resource) else {
+                        continue;
+                    };
+                    let (path, proxied) = Self::pick_proxy(&source, proxy, output_long_edge)?;
+                    registry
+                        .open_decoder(&path)
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    let start = layer.start_time.max(0.0);
+                    let end = layer.duration.map(|d| start + d).unwrap_or(f64::MAX);
+                    videos.insert(
+                        format!("slot\u{1f}{}", resource.id),
+                        VideoLayer {
+                            path,
+                            start,
+                            end,
+                            decoder: None,
+                            last: None,
+                            proxied,
+                        },
+                    );
+                }
+                candidates.retain(|id| {
+                    project
+                        .resource(id)
+                        .is_some_and(|r| r.kind != promo_model::ProjectResourceKind::Video)
+                });
             }
             candidates.dedup();
             // Only stills are preloaded; video opens while it is on screen.
@@ -1645,6 +1680,89 @@ mod tests {
         assert!(
             samples.iter().all(|&v| v >= 200),
             "within bounds: {samples:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A video on a slot: the slab's Screen bound to the practice clip
+    /// shows a picture that differs from the slot's own dark material and
+    /// changes between two moments — the recording plays on the screen.
+    #[test]
+    fn a_video_bound_to_a_slot_plays_on_it() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        if Command::new("ffmpeg").arg("-version").output().is_err() {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-slotvideo-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("slab.glb"),
+            promo_engine::model::sample_slab_glb(),
+        )
+        .unwrap();
+        // Two seconds of red then two of blue, so two moments differ for
+        // certain wherever the screen is sampled.
+        let clip = dir.join("Resources").join("talk.mp4");
+        let made = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg("color=c=red:size=320x200:rate=10:duration=2")
+            .args(["-f", "lavfi", "-i"])
+            .arg("color=c=blue:size=320x200:rate=10:duration=2")
+            .args(["-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0", "-pix_fmt", "yuv420p"])
+            .arg(&clip)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !made {
+            eprintln!("ffmpeg could not write the test clip; skipping");
+            return;
+        }
+        let doc = |materials: &str| {
+            format!(
+                r#"{{"id":"P","name":"SlotVideo","createdAt":0,"state":"recorded","minReaderVersion":29,
+                "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"V","kind":"video","filename":"talk.mp4","displayName":"Talk","addedAt":0,"duration":4,
+                    "imageCuts":[],"disabledAudioTrackIndices":[]}},
+                  {{"id":"M","kind":"model","filename":"slab.glb","displayName":"Slab","addedAt":0{materials}}}],
+                "layers":[{{"id":"L","name":"slab","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"M",
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":0,"distance":3.0}},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let screen = |json: &str, time: f64| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(time).expect("frame");
+            // The middle 40×40 of the frame: inside the screen, seen straight on.
+            (140..180)
+                .flat_map(|y| (140..180).map(move |x| (x, y)))
+                .flat_map(|(x, y)| frame[(y * 320 + x) * 4..(y * 320 + x) * 4 + 3].to_vec())
+                .collect()
+        };
+        let dark = screen(&doc(""), 0.5);
+        let bound = doc(r#","materials":{"Screen":{"resourceID":"V"}}"#);
+        let early = screen(&bound, 0.5);
+        let late = screen(&bound, 2.5);
+        let differ = |a: &[u8], b: &[u8]| -> usize {
+            a.iter()
+                .zip(b)
+                .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 24)
+                .count()
+        };
+        assert!(
+            differ(&early, &dark) > early.len() / 4,
+            "the recording shows on the screen"
+        );
+        assert!(
+            differ(&early, &late) > early.len() / 20,
+            "and it moves between moments"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

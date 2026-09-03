@@ -154,8 +154,9 @@ new projects.
   40, "pitch": 50 }`, which ramp — a yaw from -60 to 20 over three
   seconds is a turntable. `"materials": { "Body": "@accent", "Screen": { "resourceID":
   "<image uuid>" } }` on the resource paints a slot by the name the file
-  exports — a colour, or an image resource drawn on that surface. A
-  file with animations lists them under `clips` after import; `"clip":
+  exports — a colour, or an image or video resource drawn on that
+  surface (a screen recording plays on the screen). A file with
+  animations lists them under `clips` after import; `"clip":
   { "name": "Open" }` on a keyframe plays one on layer time, and a
   `time` scrubs it. Stamp
   `minReaderVersion: 29`. `promo_inspect` lists the layer; a missing

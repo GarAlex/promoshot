@@ -2548,10 +2548,26 @@ impl PreviewEngine {
         if !self.models.contains_key(&resource.id) {
             return None;
         }
-        let animated = layer
-            .keyframes
+        // A slot bound to a VIDEO makes the picture move with time, like a
+        // keyed camera does.
+        let all_resources = self.meta.resources.clone().unwrap_or_default();
+        let video_bound = resource
+            .materials
             .iter()
-            .any(|k| k.camera.is_some() || k.light.is_some() || k.clip.is_some());
+            .flat_map(|m| m.values())
+            .any(|b| match b {
+                promo_model::MaterialBinding::Resource { resource_id } => {
+                    all_resources.iter().any(|r| {
+                        &r.id == resource_id && r.kind == promo_model::ProjectResourceKind::Video
+                    })
+                }
+                promo_model::MaterialBinding::Color(_) => false,
+            });
+        let animated = video_bound
+            || layer
+                .keyframes
+                .iter()
+                .any(|k| k.camera.is_some() || k.light.is_some() || k.clip.is_some());
         let key_time = if animated { time } else { -1.0 };
         let transient = self.export_mode && animated;
         let key = (
@@ -2664,11 +2680,23 @@ impl PreviewEngine {
         };
         let mut bound_frames: Vec<(usize, u64)> = Vec::new();
         for (index, bound_id) in pictures {
-            // A still: source time -1, as an image layer asks.
+            // A still asks at source time -1, as an image layer does; a
+            // video asks at the model layer's own clock mapped through the
+            // video's trims, as a video layer does.
+            let source_time = match all_resources.iter().find(|r| r.id == bound_id) {
+                Some(res) if res.kind == promo_model::ProjectResourceKind::Video => {
+                    let view = tl::resource_for_cut(res, None);
+                    match tl::source_time_for_layer(&view, local, layer.beyond_end) {
+                        Some(t) => t,
+                        None => continue,
+                    }
+                }
+                _ => -1.0,
+            };
             if let Some(id) = self.frame(
                 &format!("slot\u{1f}{bound_id}"),
                 &bound_id,
-                -1.0,
+                source_time,
                 tier,
                 pinned,
             ) {
