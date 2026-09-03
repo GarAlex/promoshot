@@ -858,8 +858,10 @@ and re-derived on every open. A model layer's keyframes carry
 every model; at the defaults the bounding sphere fills the frame's
 height, and `zoom` 1 on the layer is that frame at canvas height), `"light": { "yaw": 40, "pitch": 50, "intensity": 1 }`
 (ambient and rim come from the theme) and `"clip": { "name": "Open",
-"time": 0 }` (scrubs the animation; absent, the clip runs on layer
-time); every field is optional and ramps like any keyframe value.
+"time": 0 }` — which of the file's animations plays: `time` scrubs it
+(ramping between keyframes like any value); absent, the clip runs on
+the layer's own time and loops. Every field is optional and ramps like
+any keyframe value.
 `placement` resolves against the model's projected bounds at that
 camera. Strict, as every kind before it: an older reader refuses the
 file. Reader version 29.

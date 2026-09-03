@@ -1649,6 +1649,60 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A clip: the turning cube's `Turn` scrubbed to 0.5 s shows two
+    /// faces where clip time 0 shows one; with no time keyed the clip runs
+    /// on layer time, so the layer at 0.5 s shows the same two faces.
+    #[test]
+    fn a_clip_keyframe_poses_the_model() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-clip-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("cube.glb"),
+            promo_engine::model::sample_turning_cube_glb(),
+        )
+        .unwrap();
+        let doc = |clip: &str| {
+            format!(
+                r#"{{"id":"P","name":"Clip","createdAt":0,"state":"recorded","minReaderVersion":29,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[{{"id":"M","kind":"model","filename":"cube.glb","displayName":"Cube","addedAt":0}}],
+                "layers":[{{"id":"L","name":"cube","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"M",
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":0}}{clip},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let spread = |json: &str, time: f64| -> u32 {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(time).expect("frame");
+            let mut lum: Vec<u32> = frame
+                .chunks_exact(4)
+                .filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 40)
+                .map(|p| (p[2] as u32 * 299 + p[1] as u32 * 587 + p[0] as u32 * 114) / 1000)
+                .collect();
+            lum.sort_unstable();
+            let n = lum.len();
+            assert!(n > 320 * 320 / 12, "the cube is there: {n}");
+            lum[n * 9 / 10] - lum[n / 10]
+        };
+        let rest = spread(&doc(r#","clip":{"name":"Turn","time":0}"#), 0.5);
+        assert!(rest < 30, "at clip time 0 the cube is face-on: {rest}");
+        let turned = spread(&doc(r#","clip":{"name":"Turn","time":0.5}"#), 0.5);
+        assert!(turned > 30, "at clip time 0.5 it shows two faces: {turned}");
+        let running = spread(&doc(r#","clip":{"name":"Turn"}"#), 0.5);
+        assert!(
+            running > 30,
+            "untimed, the clip runs on layer time: {running}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A resource on a slot: the generated slab's Screen bound to a green
     /// PNG shows green where the screen is, seen straight on; the same
     /// project with the binding dropped shows the slab's own dark screen.

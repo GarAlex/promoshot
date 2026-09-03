@@ -13,7 +13,7 @@
 
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
-use promo_gpu::model_pass::{GpuModel, MaterialInput, MeshInput, ModelPass, ModelView};
+use promo_gpu::model_pass::{GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView};
 use promo_gpu::{GpuSurface, ImportedFrame};
 // Only the Apple-typed render entries name this; the provider no longer does.
 use crate::vector::vector_shapes;
@@ -144,6 +144,8 @@ struct LoadedModel {
     /// The frame id each slot was last given a picture from, so a binding
     /// re-binds only when the picture changes.
     bound: HashMap<usize, u64>,
+    /// The rest pose, computed once.
+    rest: Vec<Mat4>,
 }
 
 struct CachedFrame {
@@ -2475,6 +2477,7 @@ impl PreviewEngine {
                 uvs: &m.uvs,
                 indices: &m.indices,
                 material: m.material,
+                node: m.node,
             })
             .collect();
         let materials: Vec<MaterialInput<'_>> = model
@@ -2509,6 +2512,7 @@ impl PreviewEngine {
             }
             self.cache.remove(&id);
         }
+        let rest = model.rest_matrices();
         self.models.insert(
             resource_id.to_string(),
             LoadedModel {
@@ -2516,6 +2520,7 @@ impl PreviewEngine {
                 gpu,
                 painted: HashMap::new(),
                 bound: HashMap::new(),
+                rest,
             },
         );
         Ok(())
@@ -2587,6 +2592,22 @@ impl PreviewEngine {
             pitch: scalar(|k| k.light.and_then(|l| l.pitch)),
             intensity: scalar(|k| k.light.and_then(|l| l.intensity)),
         };
+        // The clip: named by the latest keyframe at or before now that
+        // names one (a step, like a swap); its position ramps between
+        // keyed times, or runs on layer time when no keyframe times it.
+        let clip_name = layer
+            .keyframes
+            .iter()
+            .filter(|k| k.clip.is_some() && k.time <= local + 1e-9)
+            .max_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .or_else(|| layer.keyframes.iter().find(|k| k.clip.is_some()))
+            .and_then(|k| k.clip.as_ref())
+            .map(|c| c.name.clone());
+        let clip_time = scalar(|k| k.clip.as_ref().and_then(|c| c.time)).unwrap_or(local);
         // Lighting from the theme: ambient is the canvas colour, dimmed;
         // the key light white; the rim the accent, if the palette has one.
         let linear = |rgba: [f32; 4]| -> [f32; 3] {
@@ -2691,8 +2712,14 @@ impl PreviewEngine {
             ambient_rgb: ambient,
             rim_rgb: rim,
         };
+        let matrices = match clip_name.as_deref() {
+            Some(name) if loaded.model.clips.iter().any(|c| c.name == name) => {
+                loaded.model.pose(name, clip_time)
+            }
+            _ => loaded.rest.clone(),
+        };
         let texture = pass
-            .render_to_texture(self.ctx, &loaded.gpu, &view, side, side)
+            .render_to_texture(self.ctx, &loaded.gpu, &view, &matrices, side, side)
             .ok()?;
         let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, side, side);
         let bytes = frame.byte_size();

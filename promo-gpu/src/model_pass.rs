@@ -18,6 +18,9 @@ pub struct MeshInput<'a> {
     pub uvs: &'a [[f32; 2]],
     pub indices: &'a [u32],
     pub material: usize,
+    /// Index into the matrices `render` is given — the node the mesh
+    /// hangs from. 0 for a model that is one piece.
+    pub node: usize,
 }
 
 /// A material's factors and, if any, its base colour texture (RGBA8 sRGB).
@@ -94,6 +97,12 @@ struct Material {
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(2) var base_samp: sampler;
+struct Placement {
+    model: mat4x4<f32>,
+    // The upper 3×3's inverse transpose, for normals under a scale.
+    normal: mat4x4<f32>,
+};
+@group(2) @binding(0) var<uniform> placement: Placement;
 
 struct VsIn {
     @location(0) pos: vec3<f32>,
@@ -110,9 +119,10 @@ struct VsOut {
 @vertex
 fn vs_main(v: VsIn) -> VsOut {
     var out: VsOut;
-    out.clip = frame.view_proj * vec4<f32>(v.pos, 1.0);
-    out.world = v.pos;
-    out.normal = v.normal;
+    let world = placement.model * vec4<f32>(v.pos, 1.0);
+    out.clip = frame.view_proj * world;
+    out.world = world.xyz;
+    out.normal = (placement.normal * vec4<f32>(v.normal, 0.0)).xyz;
     out.uv = v.uv;
     return out;
 }
@@ -221,7 +231,28 @@ struct GpuMesh {
     indices: wgpu::Buffer,
     index_count: u32,
     material: usize,
+    /// Which of the caller's matrices places this mesh.
+    node: usize,
+    placement: wgpu::Buffer,
+    placement_bind: wgpu::BindGroup,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct PlacementRaw {
+    model: [[f32; 4]; 4],
+    normal: [[f32; 4]; 4],
+}
+
+/// A column-major 4×4 world matrix, `m[column][row]`.
+pub type Mat4 = [[f32; 4]; 4];
+
+pub const IDENTITY: Mat4 = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+];
 
 struct GpuMaterial {
     uniform: wgpu::Buffer,
@@ -251,6 +282,7 @@ pub struct ModelPass {
     pipeline: wgpu::RenderPipeline,
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
+    placement_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     white: wgpu::TextureView,
 }
@@ -306,9 +338,22 @@ impl ModelPass {
                 },
             ],
         });
+        let placement_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model-placement"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("model-pass"),
-            bind_group_layouts: &[&frame_layout, &material_layout],
+            bind_group_layouts: &[&frame_layout, &material_layout, &placement_layout],
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -372,6 +417,7 @@ impl ModelPass {
             pipeline,
             frame_layout,
             material_layout,
+            placement_layout,
             sampler,
             white,
         })
@@ -507,11 +553,30 @@ impl ModelPass {
                 contents: slice_bytes(&indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
+            let placement = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("model-placement"),
+                contents: as_bytes(&PlacementRaw {
+                    model: IDENTITY,
+                    normal: IDENTITY,
+                }),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+            let placement_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("model-placement"),
+                layout: &self.placement_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: placement.as_entire_binding(),
+                }],
+            });
             gpu_meshes.push(GpuMesh {
                 vertices,
                 indices: index_buffer,
                 index_count,
                 material: mesh.material.min(gpu_materials.len().saturating_sub(1)),
+                node: mesh.node,
+                placement,
+                placement_bind,
             });
         }
         Ok(GpuModel {
@@ -591,15 +656,18 @@ impl ModelPass {
     }
 
     /// Render the model at `width × height` and hand the texture over.
+    /// `matrices` places each mesh by its node (one per node; a mesh whose
+    /// node is out of range draws at the identity).
     pub fn render(
         &self,
         ctx: &GpuContext,
         model: &GpuModel,
         view: &ModelView,
+        matrices: &[Mat4],
         width: u32,
         height: u32,
     ) -> Result<InputTexture, GpuError> {
-        let texture = self.render_to_texture(ctx, model, view, width, height)?;
+        let texture = self.render_to_texture(ctx, model, view, matrices, width, height)?;
         Ok(crate::compositor::Compositor::adopt_owned_texture(texture))
     }
 
@@ -610,12 +678,24 @@ impl ModelPass {
         ctx: &GpuContext,
         model: &GpuModel,
         view: &ModelView,
+        matrices: &[Mat4],
         width: u32,
         height: u32,
     ) -> Result<wgpu::Texture, GpuError> {
         use wgpu::util::DeviceExt;
         let (width, height) = (width.max(1), height.max(1));
         let device = &ctx.device;
+        for mesh in &model.meshes {
+            let m = matrices.get(mesh.node).copied().unwrap_or(IDENTITY);
+            ctx.queue.write_buffer(
+                &mesh.placement,
+                0,
+                as_bytes(&PlacementRaw {
+                    model: m,
+                    normal: normal_matrix(&m),
+                }),
+            );
+        }
         let size = wgpu::Extent3d {
             width,
             height,
@@ -702,6 +782,7 @@ impl ModelPass {
                     continue;
                 };
                 pass.set_bind_group(1, &material.bind, &[]);
+                pass.set_bind_group(2, &mesh.placement_bind, &[]);
                 pass.set_vertex_buffer(0, mesh.vertices.slice(..));
                 pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..mesh.index_count, 0, 0..1);
@@ -717,10 +798,11 @@ impl ModelPass {
         ctx: &GpuContext,
         model: &GpuModel,
         view: &ModelView,
+        matrices: &[Mat4],
         width: u32,
         height: u32,
     ) -> Result<Vec<u8>, GpuError> {
-        let texture = self.render_to_texture(ctx, model, view, width, height)?;
+        let texture = self.render_to_texture(ctx, model, view, matrices, width, height)?;
         read_texture(ctx, &texture, width, height)
     }
 }
@@ -924,6 +1006,38 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
     }
 }
 
+/// The inverse transpose of the upper 3×3, as a 4×4 — what normals go
+/// through under a non-uniform scale. Falls back to the matrix itself
+/// when it is singular.
+fn normal_matrix(m: &Mat4) -> Mat4 {
+    let a = [
+        [m[0][0], m[1][0], m[2][0]],
+        [m[0][1], m[1][1], m[2][1]],
+        [m[0][2], m[1][2], m[2][2]],
+    ]; // row-major 3×3
+    let det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+        - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+        + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+    if det.abs() < 1e-12 {
+        return *m;
+    }
+    let inv = |r: usize, c: usize| -> f32 {
+        // cofactor of (c, r) over det gives inverse(r, c); the transpose of
+        // the inverse is then inverse(c, r) — so take cofactor(r, c) / det.
+        let (r1, r2) = ((r + 1) % 3, (r + 2) % 3);
+        let (c1, c2) = ((c + 1) % 3, (c + 2) % 3);
+        (a[r1][c1] * a[r2][c2] - a[r1][c2] * a[r2][c1]) / det
+    };
+    // Column-major output: out[col][row] = inverse-transpose(row, col) = cofactor(row, col)/det.
+    let mut out = IDENTITY;
+    for (col, column) in out.iter_mut().enumerate().take(3) {
+        for (row, cell) in column.iter_mut().enumerate().take(3) {
+            *cell = inv(row, col);
+        }
+    }
+    out
+}
+
 fn mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut out = [[0.0f32; 4]; 4];
     for (c, col) in out.iter_mut().enumerate() {
@@ -995,6 +1109,7 @@ mod tests {
                     uvs: &uv,
                     indices: &idx,
                     material: 0,
+                    node: 0,
                 }],
                 &[MaterialInput {
                     base_color: [0.8, 0.8, 0.8, 1.0],
@@ -1005,7 +1120,7 @@ mod tests {
                 }],
             )
             .expect("model");
-        pass.render_to_bytes(&ctx, &model, &view, 96, 96)
+        pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
             .expect("render")
     }
 
@@ -1076,6 +1191,58 @@ mod tests {
         );
     }
 
+    /// A matrix places the mesh: the face-on cube turned 45° about Y by
+    /// its node's matrix shows two faces, two shades.
+    #[test]
+    fn a_node_matrix_turns_the_mesh() {
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.8, 0.8, 0.8, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.6,
+                    double_sided: false,
+                    texture: None,
+                }],
+            )
+            .expect("model");
+        let view = ModelView {
+            yaw: 0.0,
+            pitch: 0.0,
+            bounds_radius: (3.0f32).sqrt() * 0.5,
+            ..Default::default()
+        };
+        let (c, s) = (45f32.to_radians().cos(), 45f32.to_radians().sin());
+        let turned: Mat4 = [
+            [c, 0.0, -s, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [s, 0.0, c, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ];
+        let px = pass
+            .render_to_bytes(&ctx, &model, &view, &[turned], 96, 96)
+            .expect("render");
+        let (lum, opaque) = plateaus(&px);
+        assert!(opaque > 96 * 96 / 10, "framed: {opaque}");
+        let (lo, hi) = (*lum.iter().min().unwrap(), *lum.iter().max().unwrap());
+        assert!(
+            hi as i32 - lo as i32 > 30,
+            "two faces, two shades: {lo}..{hi}"
+        );
+    }
+
     #[test]
     fn a_recoloured_slot_changes_the_pixels() {
         let ctx = GpuContext::new().expect("gpu");
@@ -1090,6 +1257,7 @@ mod tests {
                     uvs: &uv,
                     indices: &idx,
                     material: 0,
+                    node: 0,
                 }],
                 &[MaterialInput {
                     base_color: [0.8, 0.8, 0.8, 1.0],
@@ -1105,11 +1273,11 @@ mod tests {
             ..Default::default()
         };
         let grey = pass
-            .render_to_bytes(&ctx, &model, &view, 64, 64)
+            .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 64, 64)
             .expect("grey");
         pass.recolor(&ctx, &mut model, 0, [0.9, 0.1, 0.1, 1.0]);
         let red = pass
-            .render_to_bytes(&ctx, &model, &view, 64, 64)
+            .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 64, 64)
             .expect("red");
         let centre = (32 * 64 + 32) * 4;
         assert!(

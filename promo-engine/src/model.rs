@@ -7,20 +7,26 @@
 //! and placement are measured against. Nothing here touches the GPU; the
 //! pass in `promo-gpu` takes these buffers as they are.
 
+use std::collections::HashMap;
 use std::fmt;
 
-/// A model, decoded. World-space geometry; one entry per primitive.
+/// A model, decoded. Geometry in each node's LOCAL space with the node
+/// tree beside it, so a clip can pose it; one mesh entry per primitive.
 #[derive(Debug, Clone, Default)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
-    /// Centre of the geometry's bounding box and the radius of the sphere
-    /// round it, in the file's units.
+    /// The node tree of the default scene, parents before children.
+    pub nodes: Vec<Node>,
+    /// The file's animations, by name, sampled by [`Model::pose`].
+    pub clips: Vec<Clip>,
+    /// Centre of the geometry's bounding box at rest and the radius of the
+    /// sphere round it, in the file's units, world space.
     pub bounds_center: [f32; 3],
     pub bounds_radius: f32,
 }
 
-/// One primitive, in world space, with one material.
+/// One primitive, in its node's local space, with one material.
 #[derive(Debug, Clone, Default)]
 pub struct Mesh {
     pub positions: Vec<[f32; 3]>,
@@ -28,6 +34,44 @@ pub struct Mesh {
     pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<u32>,
     pub material: usize,
+    /// The node this primitive hangs from — whose matrix places it.
+    pub node: usize,
+}
+
+/// A node of the scene: its rest transform and its parent.
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub parent: Option<usize>,
+    pub translation: [f32; 3],
+    /// Unit quaternion, `[x, y, z, w]`.
+    pub rotation: [f32; 4],
+    pub scale: [f32; 3],
+}
+
+/// One animation: what it moves and for how long.
+#[derive(Debug, Clone, Default)]
+pub struct Clip {
+    pub name: String,
+    pub duration: f32,
+    pub channels: Vec<Channel>,
+}
+
+/// One animated property of one node, keyed in seconds.
+#[derive(Debug, Clone)]
+pub struct Channel {
+    pub node: usize,
+    pub property: Property,
+    pub times: Vec<f32>,
+    /// Translations and scales use three components, rotations four.
+    pub values: Vec<[f32; 4]>,
+    pub step: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Property {
+    Translation,
+    Rotation,
+    Scale,
 }
 
 /// A glTF metallic-roughness material, PBR-lite: what the v1 pass shades.
@@ -88,14 +132,7 @@ impl fmt::Display for ModelError {
 
 impl std::error::Error for ModelError {}
 
-type Mat4 = [[f32; 4]; 4];
-
-const IDENTITY: Mat4 = [
-    [1.0, 0.0, 0.0, 0.0],
-    [0.0, 1.0, 0.0, 0.0],
-    [0.0, 0.0, 1.0, 0.0],
-    [0.0, 0.0, 0.0, 1.0],
-];
+pub type Mat4 = [[f32; 4]; 4];
 
 /// Column-major, as glTF stores them: `m[column][row]`.
 fn mul(a: &Mat4, b: &Mat4) -> Mat4 {
@@ -120,15 +157,93 @@ fn transform_point(m: &Mat4, p: [f32; 3]) -> [f32; 3] {
     }
 }
 
-/// Normals go through the upper 3×3 (uniform scale and rotation are what
-/// models carry; a non-uniform scale would want the inverse transpose,
-/// which v1 does not bother with) and are re-normalised.
-fn transform_normal(m: &Mat4, n: [f32; 3]) -> [f32; 3] {
-    normalize([
-        m[0][0] * n[0] + m[1][0] * n[1] + m[2][0] * n[2],
-        m[0][1] * n[0] + m[1][1] * n[1] + m[2][1] * n[2],
-        m[0][2] * n[0] + m[1][2] * n[1] + m[2][2] * n[2],
-    ])
+/// Column-major matrix from translation, unit quaternion `[x, y, z, w]`
+/// and scale — glTF's node transform.
+fn trs_matrix(t: [f32; 3], r: [f32; 4], s: [f32; 3]) -> Mat4 {
+    let [x, y, z, w] = r;
+    let (xx, yy, zz) = (x * x, y * y, z * z);
+    let (xy, xz, yz) = (x * y, x * z, y * z);
+    let (wx, wy, wz) = (w * x, w * y, w * z);
+    [
+        [
+            (1.0 - 2.0 * (yy + zz)) * s[0],
+            (2.0 * (xy + wz)) * s[0],
+            (2.0 * (xz - wy)) * s[0],
+            0.0,
+        ],
+        [
+            (2.0 * (xy - wz)) * s[1],
+            (1.0 - 2.0 * (xx + zz)) * s[1],
+            (2.0 * (yz + wx)) * s[1],
+            0.0,
+        ],
+        [
+            (2.0 * (xz + wy)) * s[2],
+            (2.0 * (yz - wx)) * s[2],
+            (1.0 - 2.0 * (xx + yy)) * s[2],
+            0.0,
+        ],
+        [t[0], t[1], t[2], 1.0],
+    ]
+}
+
+impl Channel {
+    /// The value at `t` seconds: held before the first key and after the
+    /// last, stepped or linearly blended between (rotations slerp).
+    pub fn sample(&self, t: f32) -> [f32; 4] {
+        let n = self.times.len();
+        if n == 0 {
+            return [0.0; 4];
+        }
+        if t <= self.times[0] || n == 1 {
+            return self.values[0];
+        }
+        if t >= self.times[n - 1] {
+            return self.values[n - 1];
+        }
+        let next = self.times.partition_point(|&k| k <= t).min(n - 1);
+        let prev = next.saturating_sub(1);
+        if self.step {
+            return self.values[prev];
+        }
+        let span = (self.times[next] - self.times[prev]).max(1e-6);
+        let f = ((t - self.times[prev]) / span).clamp(0.0, 1.0);
+        let (a, b) = (self.values[prev], self.values[next]);
+        match self.property {
+            Property::Rotation => slerp(a, b, f),
+            _ => [
+                a[0] + (b[0] - a[0]) * f,
+                a[1] + (b[1] - a[1]) * f,
+                a[2] + (b[2] - a[2]) * f,
+                0.0,
+            ],
+        }
+    }
+}
+
+fn slerp(a: [f32; 4], mut b: [f32; 4], f: f32) -> [f32; 4] {
+    let mut dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    if dot < 0.0 {
+        b = [-b[0], -b[1], -b[2], -b[3]];
+        dot = -dot;
+    }
+    let (wa, wb) = if dot > 0.9995 {
+        (1.0 - f, f)
+    } else {
+        let theta = dot.clamp(-1.0, 1.0).acos();
+        let s = theta.sin().max(1e-6);
+        (((1.0 - f) * theta).sin() / s, (f * theta).sin() / s)
+    };
+    let q = [
+        a[0] * wa + b[0] * wb,
+        a[1] * wa + b[1] * wb,
+        a[2] * wa + b[2] * wb,
+        a[3] * wa + b[3] * wb,
+    ];
+    let len = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
+        .sqrt()
+        .max(1e-9);
+    [q[0] / len, q[1] / len, q[2] / len, q[3] / len]
 }
 
 fn normalize(v: [f32; 3]) -> [f32; 3] {
@@ -204,14 +319,28 @@ impl Model {
             ..Material::default()
         });
 
-        let mut meshes = Vec::new();
+        // The node tree, parents before children, with each primitive in
+        // its node's own space; the glTF node index maps to ours so clips
+        // can find their targets.
         let scene = document
             .default_scene()
             .or_else(|| document.scenes().next())
             .ok_or(ModelError::Empty)?;
-        let mut stack: Vec<(gltf::Node, Mat4)> = scene.nodes().map(|n| (n, IDENTITY)).collect();
+        let mut nodes: Vec<Node> = Vec::new();
+        let mut by_gltf: HashMap<usize, usize> = HashMap::new();
+        let mut meshes = Vec::new();
+        let mut stack: Vec<(gltf::Node, Option<usize>)> =
+            scene.nodes().map(|n| (n, None)).collect();
         while let Some((node, parent)) = stack.pop() {
-            let world = mul(&parent, &node.transform().matrix());
+            let (translation, rotation, scale) = node.transform().decomposed();
+            let index = nodes.len();
+            nodes.push(Node {
+                parent,
+                translation,
+                rotation,
+                scale,
+            });
+            by_gltf.insert(node.index(), index);
             if let Some(mesh) = node.mesh() {
                 for primitive in mesh.primitives() {
                     if primitive.mode() != gltf::mesh::Mode::Triangles {
@@ -221,14 +350,13 @@ impl Model {
                     let Some(positions) = reader.read_positions() else {
                         continue;
                     };
-                    let positions: Vec<[f32; 3]> =
-                        positions.map(|p| transform_point(&world, p)).collect();
+                    let positions: Vec<[f32; 3]> = positions.collect();
                     let indices: Vec<u32> = match reader.read_indices() {
                         Some(read) => read.into_u32().collect(),
                         None => (0..positions.len() as u32).collect(),
                     };
                     let normals: Vec<[f32; 3]> = match reader.read_normals() {
-                        Some(read) => read.map(|n| transform_normal(&world, n)).collect(),
+                        Some(read) => read.collect(),
                         None => flat_normals(&positions, &indices),
                     };
                     let uvs: Vec<[f32; 2]> = match reader.read_tex_coords(0) {
@@ -241,23 +369,104 @@ impl Model {
                         uvs,
                         indices,
                         material: primitive.material().index().unwrap_or(default_material),
+                        node: index,
                     });
                 }
             }
             for child in node.children() {
-                stack.push((child, world));
+                stack.push((child, Some(index)));
             }
         }
         if meshes.iter().all(|m| m.positions.is_empty()) {
             return Err(ModelError::Empty);
         }
 
+        // Clips: every channel whose target is in the scene; times in
+        // seconds from the sampler's input accessor.
+        let mut clips = Vec::new();
+        for animation in document.animations() {
+            let mut clip = Clip {
+                name: animation
+                    .name()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("clip{}", animation.index())),
+                ..Clip::default()
+            };
+            for channel in animation.channels() {
+                let Some(&node) = by_gltf.get(&channel.target().node().index()) else {
+                    continue;
+                };
+                let property = match channel.target().property() {
+                    gltf::animation::Property::Translation => Property::Translation,
+                    gltf::animation::Property::Rotation => Property::Rotation,
+                    gltf::animation::Property::Scale => Property::Scale,
+                    gltf::animation::Property::MorphTargetWeights => continue,
+                };
+                let reader = channel.reader(|b| buffers.get(b.index()).map(|d| &d.0[..]));
+                let Some(inputs) = reader.read_inputs() else {
+                    continue;
+                };
+                let times: Vec<f32> = inputs.collect();
+                let Some(outputs) = reader.read_outputs() else {
+                    continue;
+                };
+                let mut values: Vec<[f32; 4]> = match outputs {
+                    gltf::animation::util::ReadOutputs::Translations(it) => {
+                        it.map(|v| [v[0], v[1], v[2], 0.0]).collect()
+                    }
+                    gltf::animation::util::ReadOutputs::Scales(it) => {
+                        it.map(|v| [v[0], v[1], v[2], 0.0]).collect()
+                    }
+                    gltf::animation::util::ReadOutputs::Rotations(it) => it.into_f32().collect(),
+                    gltf::animation::util::ReadOutputs::MorphTargetWeights(_) => continue,
+                };
+                let interpolation = channel.sampler().interpolation();
+                // A cubic spline stores in-tangent, value, out-tangent per
+                // key; the value is what a linear read of it wants.
+                if interpolation == gltf::animation::Interpolation::CubicSpline
+                    && values.len() == times.len() * 3
+                {
+                    values = values.chunks_exact(3).map(|c| c[1]).collect();
+                }
+                if values.len() != times.len() || times.is_empty() {
+                    continue;
+                }
+                if let Some(&last) = times.last() {
+                    clip.duration = clip.duration.max(last);
+                }
+                clip.channels.push(Channel {
+                    node,
+                    property,
+                    times,
+                    values,
+                    step: interpolation == gltf::animation::Interpolation::Step,
+                });
+            }
+            if !clip.channels.is_empty() {
+                clips.push(clip);
+            }
+        }
+
+        let mut model = Model {
+            meshes,
+            materials,
+            nodes,
+            clips,
+            bounds_center: [0.0; 3],
+            bounds_radius: 1e-6,
+        };
+        // Bounds at rest, world space.
+        let matrices = model.rest_matrices();
         let mut min = [f32::MAX; 3];
         let mut max = [f32::MIN; 3];
-        for p in meshes.iter().flat_map(|m| m.positions.iter()) {
-            for i in 0..3 {
-                min[i] = min[i].min(p[i]);
-                max[i] = max[i].max(p[i]);
+        for mesh in &model.meshes {
+            let m = &matrices[mesh.node];
+            for p in &mesh.positions {
+                let w = transform_point(m, *p);
+                for i in 0..3 {
+                    min[i] = min[i].min(w[i]);
+                    max[i] = max[i].max(w[i]);
+                }
             }
         }
         let center = [
@@ -265,21 +474,83 @@ impl Model {
             (min[1] + max[1]) / 2.0,
             (min[2] + max[2]) / 2.0,
         ];
-        let radius = meshes
+        let radius = model
+            .meshes
             .iter()
-            .flat_map(|m| m.positions.iter())
+            .flat_map(|mesh| {
+                let m = &matrices[mesh.node];
+                mesh.positions.iter().map(move |p| transform_point(m, *p))
+            })
             .map(|p| {
                 let d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
                 (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
             })
             .fold(0.0f32, f32::max);
+        model.bounds_center = center;
+        model.bounds_radius = radius.max(1e-6);
+        Ok(model)
+    }
 
-        Ok(Model {
-            meshes,
-            materials,
-            bounds_center: center,
-            bounds_radius: radius.max(1e-6),
+    /// Every node's world matrix at rest, indexed like `nodes`.
+    pub fn rest_matrices(&self) -> Vec<Mat4> {
+        self.world_matrices(|node| {
+            let n = &self.nodes[node];
+            (n.translation, n.rotation, n.scale)
         })
+    }
+
+    /// Every node's world matrix with `clip` sampled at `time` seconds
+    /// (looping over the clip's duration); the rest pose when the clip is
+    /// unknown. Channels the clip does not touch keep their rest value.
+    pub fn pose(&self, clip: &str, time: f64) -> Vec<Mat4> {
+        let Some(clip) = self.clips.iter().find(|c| c.name == clip) else {
+            return self.rest_matrices();
+        };
+        let t = if clip.duration > 0.0 {
+            (time as f32).rem_euclid(clip.duration)
+        } else {
+            0.0
+        };
+        self.world_matrices(|node| {
+            let n = &self.nodes[node];
+            let mut trs = (n.translation, n.rotation, n.scale);
+            for channel in clip.channels.iter().filter(|c| c.node == node) {
+                let v = channel.sample(t);
+                match channel.property {
+                    Property::Translation => trs.0 = [v[0], v[1], v[2]],
+                    Property::Rotation => trs.1 = v,
+                    Property::Scale => trs.2 = [v[0], v[1], v[2]],
+                }
+            }
+            trs
+        })
+    }
+
+    /// The clip names and lengths, as an import writes them.
+    pub fn clip_summary(&self) -> Vec<(String, f32)> {
+        self.clips
+            .iter()
+            .map(|c| (c.name.clone(), c.duration))
+            .collect()
+    }
+
+    fn world_matrices<F>(&self, local: F) -> Vec<Mat4>
+    where
+        F: Fn(usize) -> ([f32; 3], [f32; 4], [f32; 3]),
+    {
+        // Parents precede children in `nodes` (the walk pushes a parent
+        // before its children are popped), so one pass suffices.
+        let mut out: Vec<Mat4> = Vec::with_capacity(self.nodes.len());
+        for (index, node) in self.nodes.iter().enumerate() {
+            let (t, r, s) = local(index);
+            let m = trs_matrix(t, r, s);
+            let world = match node.parent {
+                Some(parent) if parent < out.len() => mul(&out[parent], &m),
+                _ => m,
+            };
+            out.push(world);
+        }
+        out
     }
 
     /// The slot names, as bindings name them.
@@ -376,6 +647,55 @@ pub fn sample_cube_glb_with(half: f32, slot: &str, base_color: [f32; 4]) -> Vec<
         }],
         [-h, -h, -h],
         [h, h, h],
+    )
+}
+
+/// The sample cube with one clip, `Turn`: a quarter turn about Y over
+/// one second — the fixture for everything that samples a clip.
+pub fn sample_turning_cube_glb() -> Vec<u8> {
+    let h = 0.5f32;
+    let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
+        (
+            [0.0, 0.0, 1.0],
+            [[-h, -h, h], [h, -h, h], [h, h, h], [-h, h, h]],
+        ),
+        (
+            [0.0, 0.0, -1.0],
+            [[h, -h, -h], [-h, -h, -h], [-h, h, -h], [h, h, -h]],
+        ),
+        (
+            [1.0, 0.0, 0.0],
+            [[h, -h, h], [h, -h, -h], [h, h, -h], [h, h, h]],
+        ),
+        (
+            [-1.0, 0.0, 0.0],
+            [[-h, -h, -h], [-h, -h, h], [-h, h, h], [-h, h, -h]],
+        ),
+        (
+            [0.0, 1.0, 0.0],
+            [[-h, h, h], [h, h, h], [h, h, -h], [-h, h, -h]],
+        ),
+        (
+            [0.0, -1.0, 0.0],
+            [[-h, -h, -h], [h, -h, -h], [h, -h, h], [-h, -h, h]],
+        ),
+    ];
+    let mut geo = GlbGeometry::default();
+    let mut indices = Vec::new();
+    for (n, corners) in &faces {
+        geo.quad(*corners, *n, &mut indices);
+    }
+    geo.build_with_turn(
+        &[GlbMaterial {
+            slot: "Body",
+            base_color: [0.75, 0.75, 0.75, 1.0],
+            metallic: 0.0,
+            roughness: 0.6,
+            indices: &indices,
+        }],
+        [-h, -h, -h],
+        [h, h, h],
+        Some(("Turn", 1.0, 90.0)),
     )
 }
 
@@ -483,6 +803,18 @@ impl GlbGeometry {
     }
 
     fn build(&self, materials: &[GlbMaterial<'_>], min: [f32; 3], max: [f32; 3]) -> Vec<u8> {
+        self.build_with_turn(materials, min, max, None)
+    }
+
+    /// As `build`, with an animation named `name` that turns the node
+    /// about Y from rest to `degrees` over `seconds` (linear), when given.
+    fn build_with_turn(
+        &self,
+        materials: &[GlbMaterial<'_>],
+        min: [f32; 3],
+        max: [f32; 3],
+        turn: Option<(&str, f32, f32)>,
+    ) -> Vec<u8> {
         let mut bin: Vec<u8> = Vec::new();
         let mut views = Vec::new();
         let mut push = |bytes: &[u8], target: u32| -> usize {
@@ -491,10 +823,17 @@ impl GlbGeometry {
             while !bin.len().is_multiple_of(4) {
                 bin.push(0);
             }
-            views.push(format!(
-                r#"{{"buffer":0,"byteOffset":{offset},"byteLength":{},"target":{target}}}"#,
-                bytes.len()
-            ));
+            views.push(if target == 0 {
+                format!(
+                    r#"{{"buffer":0,"byteOffset":{offset},"byteLength":{}}}"#,
+                    bytes.len()
+                )
+            } else {
+                format!(
+                    r#"{{"buffer":0,"byteOffset":{offset},"byteLength":{},"target":{target}}}"#,
+                    bytes.len()
+                )
+            });
             views.len() - 1
         };
         let f32s = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_le_bytes()).collect() };
@@ -537,6 +876,28 @@ impl GlbGeometry {
                 r#"{{"attributes":{{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2}},"indices":{accessor},"material":{i}}}"#
             ));
         }
+        let mut animations = String::new();
+        if let Some((name, seconds, degrees)) = turn {
+            let half = (degrees.to_radians() / 2.0) as f32;
+            let times = [0.0f32, seconds];
+            let rotations = [[0.0f32, 0.0, 0.0, 1.0], [0.0, half.sin(), 0.0, half.cos()]];
+            let vt = push(&f32s(&times), 0);
+            let vr = push(
+                &f32s(&rotations.iter().flatten().copied().collect::<Vec<f32>>()),
+                0,
+            );
+            accessors.push(format!(
+                r#"{{"bufferView":{vt},"componentType":5126,"count":2,"type":"SCALAR","min":[0],"max":[{seconds}]}}"#
+            ));
+            let at = accessors.len() - 1;
+            accessors.push(format!(
+                r#"{{"bufferView":{vr},"componentType":5126,"count":2,"type":"VEC4"}}"#
+            ));
+            let ar = accessors.len() - 1;
+            animations = format!(
+                r#","animations":[{{"name":"{name}","samplers":[{{"input":{at},"output":{ar},"interpolation":"LINEAR"}}],"channels":[{{"sampler":0,"target":{{"node":0,"path":"rotation"}}}}]}}]"#
+            );
+        }
         let json = format!(
             r#"{{"asset":{{"version":"2.0","generator":"promo-engine"}},
 "buffers":[{{"byteLength":{}}}],
@@ -545,12 +906,13 @@ impl GlbGeometry {
 "materials":[{}],
 "meshes":[{{"name":"generated","primitives":[{}]}}],
 "nodes":[{{"mesh":0,"name":"generated"}}],
-"scenes":[{{"nodes":[0]}}],"scene":0}}"#,
+"scenes":[{{"nodes":[0]}}],"scene":0{}}}"#,
             bin.len(),
             views.join(","),
             accessors.join(","),
             material_json.join(","),
             primitives.join(","),
+            animations,
         );
         let mut json_bytes = json.into_bytes();
         while !json_bytes.len().is_multiple_of(4) {
@@ -648,6 +1010,33 @@ mod tests {
             (model.bounds_radius - 0.7554).abs() < 0.01,
             "radius {}",
             model.bounds_radius
+        );
+    }
+
+    /// The turning cube's clip samples: identity at 0, a quarter turn at
+    /// 1 s, half-way between at 0.5 s, and the pose loops past the end.
+    #[test]
+    fn a_clip_poses_the_node_over_time() {
+        let model = Model::from_glb(&sample_turning_cube_glb()).expect("decodes");
+        assert_eq!(model.clip_summary(), vec![("Turn".to_string(), 1.0)]);
+        let at = |t: f64| model.pose("Turn", t)[0];
+        let x_axis = |m: Mat4| [m[0][0], m[0][1], m[0][2]];
+        assert!((x_axis(at(0.0))[0] - 1.0).abs() < 1e-5, "rest: x stays x");
+        let quarter = x_axis(at(1.0));
+        assert!(
+            quarter[0].abs() < 1e-4 && (quarter[2] + 1.0).abs() < 1e-4,
+            "a quarter turn about Y: {quarter:?}"
+        );
+        let half = x_axis(at(0.5));
+        assert!(
+            (half[0] - half[2].abs()).abs() < 1e-3,
+            "half-way is 45°: {half:?}"
+        );
+        assert_eq!(at(1.25), at(0.25), "loops past the end");
+        assert_eq!(
+            model.pose("nope", 0.7),
+            model.rest_matrices(),
+            "an unknown clip is the rest pose"
         );
     }
 
