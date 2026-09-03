@@ -46,6 +46,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     palette_warnings(meta, &mut out);
     tilt_keyframe_warnings(meta, &mut out);
     material_binding_warnings(meta, &mut out);
+    stage_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -440,6 +441,65 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 /// the keyframed angle everywhere, so a headless render of an animated
 /// tilt holds one angle inside a moving box. Say so, before someone reads
 /// it in pixels.
+/// A stage (rung 30) is drawn by its FIRST member: that member must be a
+/// model, image or video (the picture rides its quad); captions and
+/// drawings inside a stage are not drawn yet; and the other members' own
+/// 2D transforms — placement, zoom, shifts — are ignored inside the stage
+/// (their `depth` and, for models, camera turn are what count).
+fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    let mut names: Vec<&str> = layers.iter().filter_map(|l| l.stage.as_deref()).collect();
+    names.sort_unstable();
+    names.dedup();
+    for name in names {
+        let mut members: Vec<&promo_model::ProjectLayer> = layers
+            .iter()
+            .filter(|l| l.stage.as_deref() == Some(name))
+            .collect();
+        members.sort_by_key(|l| l.sort_index);
+        let Some(first) = members.first() else {
+            continue;
+        };
+        if !matches!(
+            first.kind,
+            ProjectLayerKind::Model | ProjectLayerKind::Image | ProjectLayerKind::Video
+        ) {
+            out.push(format!(
+                "stage \"{name}\": its first member \"{}\" is a {} layer — a stage is \
+                 drawn through its first member, which must be a model, image or video",
+                first.name,
+                first.kind.as_str()
+            ));
+        }
+        for member in members.iter().skip(1) {
+            if matches!(
+                member.kind,
+                ProjectLayerKind::Caption | ProjectLayerKind::Drawing
+            ) {
+                out.push(format!(
+                    "stage \"{name}\": \"{}\" is a {} — captions and drawings inside a \
+                     stage are not drawn yet",
+                    member.name,
+                    member.kind.as_str()
+                ));
+            }
+            if member.keyframes.iter().any(|k| {
+                k.placement.is_some()
+                    || k.zoom.is_some() && member.kind == ProjectLayerKind::Model
+                    || k.horizontal_shift.is_some()
+                    || k.vertical_shift.is_some()
+            }) {
+                out.push(format!(
+                    "stage \"{name}\": \"{}\" keys a placement or shift — inside a stage \
+                     only its depth (and a picture's zoom) place it; the first member's \
+                     placement places the whole stage",
+                    member.name
+                ));
+            }
+        }
+    }
+}
+
 /// A model's `materials` may bind a slot to a resource: an image or a
 /// video is drawn on that surface; anything else — or a missing id — is a
 /// mistake worth naming before it reads as "the screen stayed dark".

@@ -390,6 +390,7 @@ mod schema_doc_tests {
                 pitch: Some(50.0),
                 intensity: Some(1.0),
             }),
+            depth: Some(0.5),
             clip: Some(ClipTime {
                 name: "Open".into(),
                 time: Some(0.4),
@@ -466,6 +467,7 @@ mod schema_doc_tests {
                 tolerance: Some(0.3),
                 softness: Some(0.1),
             }),
+            stage: Some("hero".into()),
             follow: Some(Follow {
                 zoom: Some(2.0),
                 smoothing: Some(0.35),

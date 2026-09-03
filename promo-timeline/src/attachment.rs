@@ -896,6 +896,7 @@ mod tests {
             chroma_key: None,
             effects: None,
             follow: None,
+            stage: None,
             mask_resource_id: None,
             mask_inverted: None,
             start_time: start,

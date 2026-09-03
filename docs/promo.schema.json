@@ -1768,6 +1768,12 @@
           "format": "int64",
           "type": "integer"
         },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "startTime": {
           "format": "double",
           "type": "number"
@@ -1856,6 +1862,13 @@
           ]
         },
         "contrast": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "depth": {
           "format": "double",
           "type": [
             "number",

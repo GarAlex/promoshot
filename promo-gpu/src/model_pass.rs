@@ -32,6 +32,22 @@ pub struct MaterialInput<'a> {
     pub texture: Option<(u32, u32, &'a [u8])>,
 }
 
+/// One thing on a stage: a model with its node matrices, or a picture
+/// standing in the scene facing the camera.
+pub enum StageItem<'a> {
+    Model {
+        model: &'a GpuModel,
+        matrices: &'a [Mat4],
+    },
+    Billboard {
+        texture: &'a wgpu::TextureView,
+        /// World-space centre of the picture.
+        center: [f32; 3],
+        /// Width and height in world units.
+        size: [f32; 2],
+    },
+}
+
 /// Where the model is looked at from and how it is lit, for one frame.
 #[derive(Debug, Clone, Copy)]
 pub struct ModelView {
@@ -655,6 +671,209 @@ impl ModelPass {
         });
     }
 
+    /// A stage: several models and camera-facing pictures drawn through
+    /// one camera into one depth buffer, at `width × height`. Models draw
+    /// as `render_to_texture` does; a billboard is an unlit quad of its
+    /// picture at `center`, `size` wide and tall in world units, facing
+    /// the camera.
+    pub fn render_scene(
+        &self,
+        ctx: &GpuContext,
+        items: &[StageItem<'_>],
+        view: &ModelView,
+        width: u32,
+        height: u32,
+    ) -> Result<wgpu::Texture, GpuError> {
+        use wgpu::util::DeviceExt;
+        let (width, height) = (width.max(1), height.max(1));
+        let device = &ctx.device;
+        let aspect = width as f32 / height as f32;
+        let frame = frame_uniforms(view, aspect);
+        let (right, up, forward) = camera_basis(view);
+
+        // Billboards become one-quad models for this frame.
+        let mut billboards: Vec<GpuModel> = Vec::new();
+        for item in items {
+            if let StageItem::Billboard {
+                texture,
+                center,
+                size,
+            } = item
+            {
+                let (hw, hh) = (size[0] / 2.0, size[1] / 2.0);
+                let corner = |sx: f32, sy: f32| -> [f32; 3] {
+                    [
+                        center[0] + right[0] * sx * hw + up[0] * sy * hh,
+                        center[1] + right[1] * sx * hw + up[1] * sy * hh,
+                        center[2] + right[2] * sx * hw + up[2] * sy * hh,
+                    ]
+                };
+                let positions = [
+                    corner(-1.0, -1.0),
+                    corner(1.0, -1.0),
+                    corner(1.0, 1.0),
+                    corner(-1.0, 1.0),
+                ];
+                let normal = [-forward[0], -forward[1], -forward[2]];
+                let normals = [normal; 4];
+                let uvs = [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]];
+                let indices = [0u32, 1, 2, 0, 2, 3];
+                let mut model = self.upload(
+                    ctx,
+                    &[MeshInput {
+                        positions: &positions,
+                        normals: &normals,
+                        uvs: &uvs,
+                        indices: &indices,
+                        material: 0,
+                        node: 0,
+                    }],
+                    &[MaterialInput {
+                        base_color: [0.0, 0.0, 0.0, 1.0],
+                        metallic: 0.0,
+                        roughness: 1.0,
+                        double_sided: true,
+                        texture: None,
+                    }],
+                )?;
+                self.set_texture(ctx, &mut model, 0, texture);
+                if let Some(m) = model.materials.get_mut(0) {
+                    // The quad IS the picture's box: no letterbox.
+                    m.aspect = size[0] / size[1].max(1e-6);
+                    ctx.queue.write_buffer(
+                        &m.uniform,
+                        0,
+                        as_bytes(&MaterialRaw {
+                            base_color: m.base_color,
+                            factors: [m.metallic, m.roughness, 2.0, 1.0],
+                            fit: [m.aspect, 0.0, 0.0, 0.0],
+                        }),
+                    );
+                }
+                billboards.push(model);
+            }
+        }
+
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let output = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("stage-output"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OUTPUT_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let msaa = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("stage-msaa"),
+            size,
+            mip_level_count: 1,
+            sample_count: SAMPLES,
+            dimension: wgpu::TextureDimension::D2,
+            format: OUTPUT_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("stage-depth"),
+            size,
+            mip_level_count: 1,
+            sample_count: SAMPLES,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let frame_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("stage-frame"),
+            contents: as_bytes(&frame),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let frame_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("stage-frame"),
+            layout: &self.frame_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: frame_buffer.as_entire_binding(),
+            }],
+        });
+        for item in items {
+            if let StageItem::Model { model, matrices } = item {
+                for mesh in &model.meshes {
+                    let m = matrices.get(mesh.node).copied().unwrap_or(IDENTITY);
+                    ctx.queue.write_buffer(
+                        &mesh.placement,
+                        0,
+                        as_bytes(&PlacementRaw {
+                            model: m,
+                            normal: normal_matrix(&m),
+                        }),
+                    );
+                }
+            }
+        }
+        let output_view = output.create_view(&Default::default());
+        let msaa_view = msaa.create_view(&Default::default());
+        let depth_view = depth.create_view(&Default::default());
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("stage-pass"),
+        });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("stage-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &msaa_view,
+                    resolve_target: Some(&output_view),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &frame_bind, &[]);
+            let mut next_billboard = billboards.iter();
+            for item in items {
+                let model: &GpuModel = match item {
+                    StageItem::Model { model, .. } => model,
+                    StageItem::Billboard { .. } => match next_billboard.next() {
+                        Some(b) => b,
+                        None => continue,
+                    },
+                };
+                for mesh in &model.meshes {
+                    let Some(material) = model.materials.get(mesh.material) else {
+                        continue;
+                    };
+                    pass.set_bind_group(1, &material.bind, &[]);
+                    pass.set_bind_group(2, &mesh.placement_bind, &[]);
+                    pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                }
+            }
+        }
+        ctx.queue.submit(Some(encoder.finish()));
+        Ok(output)
+    }
+
     /// Render the model at `width × height` and hand the texture over.
     /// `matrices` places each mesh by its node (one per node; a mesh whose
     /// node is out of range draws at the identity).
@@ -925,6 +1144,42 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 fn norm(v: [f32; 3]) -> [f32; 3] {
     let l = dot(v, v).sqrt().max(1e-9);
     [v[0] / l, v[1] / l, v[2] / l]
+}
+
+/// The camera's right, up and forward axes in world space — what a
+/// billboard aligns to.
+pub fn camera_basis(view: &ModelView) -> ([f32; 3], [f32; 3], [f32; 3]) {
+    let radius = view.bounds_radius.max(1e-6);
+    let distance = (view.distance.max(1.05) as f32) * radius;
+    let center = view.bounds_center;
+    let toward = direction(view.yaw, view.pitch);
+    let eye = [
+        center[0] + toward[0] * distance,
+        center[1] + toward[1] * distance,
+        center[2] + toward[2] * distance,
+    ];
+    let forward = norm(sub(center, eye));
+    let mut right = norm(cross(forward, [0.0, 1.0, 0.0]));
+    if dot(right, right) < 1e-6 {
+        right = [1.0, 0.0, 0.0];
+    }
+    let mut up = cross(right, forward);
+    let r = deg(view.roll);
+    if r.abs() > 1e-6 {
+        let (c, s) = (r.cos(), r.sin());
+        let new_right = [
+            right[0] * c + up[0] * s,
+            right[1] * c + up[1] * s,
+            right[2] * c + up[2] * s,
+        ];
+        up = [
+            up[0] * c - right[0] * s,
+            up[1] * c - right[1] * s,
+            up[2] * c - right[2] * s,
+        ];
+        right = new_right;
+    }
+    (right, up, forward)
 }
 
 /// A direction from yaw (about +Y, 0 = toward +Z, the viewer's side) and
@@ -1309,6 +1564,75 @@ mod tests {
         assert!(
             hi as i32 - lo as i32 > 30,
             "two faces, two shades: {lo}..{hi}"
+        );
+    }
+
+    /// A stage: a green picture standing in front of the cube covers its
+    /// middle; the same picture behind the cube is covered by it.
+    #[test]
+    fn a_billboard_and_a_model_share_one_depth_buffer() {
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.8, 0.8, 0.8, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.6,
+                    double_sided: false,
+                    texture: None,
+                }],
+            )
+            .expect("model");
+        let green =
+            upload_rgba(&ctx, 2, 2, &[20, 220, 60, 255].repeat(4)).create_view(&Default::default());
+        let view = ModelView {
+            yaw: 0.0,
+            pitch: 0.0,
+            bounds_radius: 1.5,
+            distance: 4.0,
+            ..Default::default()
+        };
+        let centre = |px: &[u8]| -> [u8; 3] {
+            let i = (32 * 64 + 32) * 4;
+            [px[i + 2], px[i + 1], px[i]]
+        };
+        let render = |z: f32| {
+            let items = [
+                StageItem::Model {
+                    model: &model,
+                    matrices: &[IDENTITY],
+                },
+                StageItem::Billboard {
+                    texture: &green,
+                    center: [0.0, 0.0, z],
+                    size: [0.6, 0.6],
+                },
+            ];
+            let texture = pass
+                .render_scene(&ctx, &items, &view, 64, 64)
+                .expect("scene");
+            read_texture(&ctx, &texture, 64, 64).expect("read")
+        };
+        let front = centre(&render(1.0));
+        assert!(
+            front[1] > 150 && front[1] > front[0] + 60,
+            "in front, the picture shows: {front:?}"
+        );
+        let behind = centre(&render(-1.0));
+        assert!(
+            (behind[1] as i32 - behind[0] as i32).abs() < 30,
+            "behind, the cube covers it: {behind:?}"
         );
     }
 

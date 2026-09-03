@@ -13,7 +13,9 @@
 
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
-use promo_gpu::model_pass::{GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView};
+use promo_gpu::model_pass::{
+    GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView, StageItem,
+};
 use promo_gpu::{GpuSurface, ImportedFrame};
 // Only the Apple-typed render entries name this; the provider no longer does.
 use crate::vector::vector_shapes;
@@ -2104,6 +2106,30 @@ impl PreviewEngine {
                 }
                 continue;
             }
+            // A stage member is drawn by the stage; only the FIRST member
+            // (lowest sortIndex) reaches the quad path, carrying the whole
+            // stage's picture.
+            let staged = layer.stage.clone();
+            if let Some(stage) = staged.as_deref() {
+                let first = self
+                    .meta
+                    .layers
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .filter(|l| l.stage.as_deref() == Some(stage))
+                    .min_by_key(|l| l.sort_index)
+                    .map(|l| l.id.clone());
+                if first.as_deref() != Some(layer.id.as_str()) {
+                    continue;
+                }
+                if !matches!(
+                    layer.kind,
+                    ProjectLayerKind::Video | ProjectLayerKind::Image | ProjectLayerKind::Model
+                ) {
+                    continue;
+                }
+            }
             let (_is_media, is_drawing) = match layer.kind {
                 ProjectLayerKind::Video | ProjectLayerKind::Image | ProjectLayerKind::Model => {
                     (true, false)
@@ -2192,36 +2218,43 @@ impl PreviewEngine {
             let swap = tl::transition::active_swap_sampled(layer, centre, time, &resources);
             // A composition draws itself: rendered by recursion into a
             // texture that then stands where a host frame would.
-            let composed = match resources.iter().find(|r| {
-                r.id == showing
-                    && matches!(
-                        r.kind,
-                        promo_model::ProjectResourceKind::Composition
-                            | promo_model::ProjectResourceKind::Model
-                    )
-            }) {
-                Some(resource) if resource.kind == promo_model::ProjectResourceKind::Model => {
-                    // A model draws itself through the model pass; the
-                    // picture then rides the media path like a still.
-                    match self.model_frame(layer, resource, &settings, centre, tier, &used) {
-                        Some(id) => Some(id),
-                        None => continue,
-                    }
+            let composed = if let Some(stage) = staged.as_deref() {
+                match self.stage_frame(layer, stage, &settings, centre, tier, &used) {
+                    Some(id) => Some(id),
+                    None => continue,
                 }
-                Some(resource) => {
-                    match self.composition_frame(
-                        layer,
-                        resource,
-                        source_time,
-                        tier,
-                        doc.depth,
-                        &used,
-                    ) {
-                        Some(id) => Some(id),
-                        None => continue,
+            } else {
+                match resources.iter().find(|r| {
+                    r.id == showing
+                        && matches!(
+                            r.kind,
+                            promo_model::ProjectResourceKind::Composition
+                                | promo_model::ProjectResourceKind::Model
+                        )
+                }) {
+                    Some(resource) if resource.kind == promo_model::ProjectResourceKind::Model => {
+                        // A model draws itself through the model pass; the
+                        // picture then rides the media path like a still.
+                        match self.model_frame(layer, resource, &settings, centre, tier, &used) {
+                            Some(id) => Some(id),
+                            None => continue,
+                        }
                     }
+                    Some(resource) => {
+                        match self.composition_frame(
+                            layer,
+                            resource,
+                            source_time,
+                            tier,
+                            doc.depth,
+                            &used,
+                        ) {
+                            Some(id) => Some(id),
+                            None => continue,
+                        }
+                    }
+                    None => None,
                 }
-                None => None,
             };
             if let Some(swap) = swap.as_ref() {
                 // The outgoing material, whole, underneath — a dissolve or a
@@ -2529,6 +2562,302 @@ impl PreviewEngine {
     /// Whether a model has been provided for a resource.
     pub fn has_model(&self, resource_id: &str) -> bool {
         self.models.contains_key(resource_id)
+    }
+
+    /// A model member's node matrices at `time`: the clip it names posed,
+    /// else rest — the same rule a model layer draws by.
+    fn model_matrices(&self, layer: &ProjectLayer, loaded: &LoadedModel, time: f64) -> Vec<Mat4> {
+        let local = tl::layer_local_time(layer, time);
+        let scalar = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+            tl::interpolation::layer_interpolated_scalar(layer, local, select)
+        };
+        let clip_name = layer
+            .keyframes
+            .iter()
+            .filter(|k| k.clip.is_some() && k.time <= local + 1e-9)
+            .max_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .or_else(|| layer.keyframes.iter().find(|k| k.clip.is_some()))
+            .and_then(|k| k.clip.as_ref())
+            .map(|c| c.name.clone());
+        let keyed_time = scalar(|k| k.clip.as_ref().and_then(|c| c.time));
+        let clip_time = keyed_time.unwrap_or(local);
+        match clip_name.as_deref() {
+            Some(name) if loaded.model.clips.iter().any(|c| c.name == name) => {
+                loaded.model.pose(name, clip_time, keyed_time.is_none())
+            }
+            _ => loaded.rest.clone(),
+        }
+    }
+
+    /// A stage's picture at `time`: every member with this stage name —
+    /// models at their depths, image and video members as billboards
+    /// facing the camera — through the first member's camera and light
+    /// into one depth buffer, on a square the canvas's height, cached per
+    /// time under the stage's name.
+    fn stage_frame(
+        &mut self,
+        first: &ProjectLayer,
+        stage: &str,
+        settings: &promo_model::CompositionSettings,
+        time: f64,
+        tier: i32,
+        pinned: &[u64],
+    ) -> Option<u64> {
+        let transient = self.export_mode;
+        let key = (format!("stage\u{1f}{stage}"), quantize(time), tier);
+        if transient {
+            if let Some(&id) = self.scratch_key.get(&key) {
+                self.hits += 1;
+                return Some(id);
+            }
+        } else if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some(id);
+        }
+
+        let members: Vec<ProjectLayer> = {
+            let mut m: Vec<ProjectLayer> = self
+                .meta
+                .layers
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .filter(|l| l.stage.as_deref() == Some(stage) && tl::layer_is_visible(l, time))
+                .cloned()
+                .collect();
+            m.sort_by_key(|l| l.sort_index);
+            m
+        };
+        let resources = self.meta.resources.clone().unwrap_or_default();
+        let canvas_h = settings.canvas_height.max(1.0);
+        let scale = if tier > 0 { 0.5 } else { 1.0 };
+        let side = ((canvas_h * scale).round() as u32).clamp(8, 2048);
+
+        // The stage's radius: the largest member sphere; depths are in it.
+        let mut radius = 0.0f32;
+        for member in &members {
+            if member.kind == ProjectLayerKind::Model {
+                if let Some(rid) = member.resource_id.as_deref() {
+                    if let Some(loaded) = self.models.get(rid) {
+                        radius = radius.max(loaded.model.bounds_radius);
+                    }
+                }
+            }
+        }
+        if radius <= 0.0 {
+            radius = 1.0;
+        }
+
+        // Every member's depth and, for the pictures, their frames — before
+        // any borrow of the pass, since asking for a frame needs &mut self.
+        struct Prepared {
+            index: usize,
+            depth: f32,
+            zoom: f32,
+            frame: Option<u64>,
+        }
+        let mut prepared: Vec<Prepared> = Vec::new();
+        let mut reach = 0.0f32;
+        for (index, member) in members.iter().enumerate() {
+            let local = tl::layer_local_time(member, time);
+            let depth = tl::interpolation::layer_interpolated_scalar(member, local, |k| k.depth)
+                .unwrap_or(0.0) as f32;
+            let zoom = tl::interpolation::layer_interpolated_scalar(member, local, |k| k.zoom)
+                .unwrap_or(1.0)
+                .max(0.01) as f32;
+            let frame = match member.kind {
+                ProjectLayerKind::Image | ProjectLayerKind::Video => {
+                    let showing = tl::layer_resource_id(member, time, &resources)
+                        .unwrap_or_default()
+                        .to_string();
+                    let source_time = if member.kind == ProjectLayerKind::Video {
+                        match resources.iter().find(|r| r.id == showing) {
+                            Some(res) => {
+                                let view =
+                                    tl::resource_for_cut(res, member.media_cut_id.as_deref());
+                                match tl::source_time_for_layer(&view, local, member.beyond_end) {
+                                    Some(t) => t,
+                                    None => continue,
+                                }
+                            }
+                            None => local,
+                        }
+                    } else {
+                        -1.0
+                    };
+                    self.frame(&member.id, &showing, source_time, tier, pinned)
+                }
+                _ => None,
+            };
+            reach = reach.max(depth.abs() + 1.0);
+            prepared.push(Prepared {
+                index,
+                depth,
+                zoom,
+                frame,
+            });
+        }
+
+        // The stage's camera and light: the first member's.
+        let local = tl::layer_local_time(first, time);
+        let scalar = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+            tl::interpolation::layer_interpolated_scalar(first, local, select)
+        };
+        let camera = promo_model::Camera {
+            yaw: scalar(|k| k.camera.and_then(|c| c.yaw)),
+            pitch: scalar(|k| k.camera.and_then(|c| c.pitch)),
+            roll: scalar(|k| k.camera.and_then(|c| c.roll)),
+            distance: scalar(|k| k.camera.and_then(|c| c.distance)),
+            fov: scalar(|k| k.camera.and_then(|c| c.fov)),
+        };
+        let light = promo_model::Light {
+            yaw: scalar(|k| k.light.and_then(|l| l.yaw)),
+            pitch: scalar(|k| k.light.and_then(|l| l.pitch)),
+            intensity: scalar(|k| k.light.and_then(|l| l.intensity)),
+        };
+        let linear = |rgba: [f32; 4]| -> [f32; 3] {
+            let f = |c: f32| {
+                if c <= 0.04045 {
+                    c / 12.92
+                } else {
+                    ((c + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            [f(rgba[0]), f(rgba[1]), f(rgba[2])]
+        };
+        let background = linear(rgba_from_hex(
+            settings.resolve_color(&settings.background_color_hex),
+        ));
+        let accent = settings.resolve_color("@accent");
+        let rim = if accent == "@accent" {
+            [0.25, 0.3, 0.4]
+        } else {
+            let c = linear(rgba_from_hex(accent));
+            [c[0] * 0.8 + 0.1, c[1] * 0.8 + 0.1, c[2] * 0.8 + 0.1]
+        };
+        let view = ModelView {
+            yaw: camera.yaw(),
+            pitch: camera.pitch(),
+            roll: camera.roll(),
+            distance: camera.distance(),
+            fov: camera.fov(),
+            bounds_center: [0.0; 3],
+            // Far enough that the deepest member still fits.
+            bounds_radius: radius * reach,
+            light_yaw: light.yaw(),
+            light_pitch: light.pitch(),
+            light_intensity: light.intensity(),
+            key_rgb: [1.0, 1.0, 1.0],
+            ambient_rgb: [
+                background[0] * 0.45 + 0.08,
+                background[1] * 0.45 + 0.08,
+                background[2] * 0.45 + 0.08,
+            ],
+            rim_rgb: rim,
+        };
+
+        // Matrices for the model members: their pose, shifted to their depth.
+        let mut model_matrices: Vec<(usize, Vec<Mat4>)> = Vec::new();
+        for item in &prepared {
+            let member = &members[item.index];
+            if member.kind != ProjectLayerKind::Model {
+                continue;
+            }
+            let Some(rid) = member.resource_id.as_deref() else {
+                continue;
+            };
+            let Some(loaded) = self.models.get(rid) else {
+                continue;
+            };
+            let mut matrices = self.model_matrices(member, loaded, time);
+            let shift = item.depth * radius;
+            for m in &mut matrices {
+                m[3][2] += shift;
+            }
+            model_matrices.push((item.index, matrices));
+        }
+
+        let pass = self.model_pass.as_ref()?;
+        let mut items: Vec<StageItem<'_>> = Vec::new();
+        for item in &prepared {
+            let member = &members[item.index];
+            match member.kind {
+                ProjectLayerKind::Model => {
+                    let Some(rid) = member.resource_id.as_deref() else {
+                        continue;
+                    };
+                    let Some(loaded) = self.models.get(rid) else {
+                        continue;
+                    };
+                    let Some((_, matrices)) = model_matrices.iter().find(|(i, _)| *i == item.index)
+                    else {
+                        continue;
+                    };
+                    items.push(StageItem::Model {
+                        model: &loaded.gpu,
+                        matrices,
+                    });
+                }
+                ProjectLayerKind::Image | ProjectLayerKind::Video => {
+                    let Some(id) = item.frame else {
+                        continue;
+                    };
+                    let Some(entry) = self.cache.get(&id).or_else(|| self.scratch.get(&id)) else {
+                        continue;
+                    };
+                    let (w, h) = (
+                        entry.frame.width.max(1) as f32,
+                        entry.frame.height.max(1) as f32,
+                    );
+                    // A billboard is as tall as the stage's radius at zoom 1.
+                    let height = radius * item.zoom;
+                    items.push(StageItem::Billboard {
+                        texture: entry.frame.texture.view(),
+                        center: [0.0, 0.0, item.depth * radius],
+                        size: [height * w / h, height],
+                    });
+                }
+                _ => {}
+            }
+        }
+        if items.is_empty() {
+            return None;
+        }
+        let texture = pass
+            .render_scene(self.ctx, &items, &view, side, side)
+            .ok()?;
+        drop(items);
+        let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, side, side);
+        let bytes = frame.byte_size();
+
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        let entry = CachedFrame {
+            frame,
+            flags: 0,
+            caption_origin: None,
+        };
+        if transient {
+            self.scratch.insert(id, entry);
+            self.scratch_key.insert(key, id);
+            return Some(id);
+        }
+        for victim in self.governor.admit(id, bytes, pinned) {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(id, entry);
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some(id)
     }
 
     /// The model layer's picture at `time`: the model pass into a square

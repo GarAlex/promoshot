@@ -1684,6 +1684,75 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A stage (rung 30): two cubes, red at depth +1 and blue at -1, seen
+    /// straight on through the first member's camera — the near one is
+    /// what the middle shows, and swapping the depths swaps it; a green
+    /// picture member at +2.5 (clear of the near cube's front face at
+    /// its depth plus half its side) stands in front of both.
+    #[test]
+    fn a_stage_orders_its_members_by_depth() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-stage-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("red.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.9, 0.1, 0.1, 1.0]),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("Resources").join("blue.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.1, 0.1, 0.9, 1.0]),
+        )
+        .unwrap();
+        let green = image::RgbaImage::from_pixel(64, 64, image::Rgba([20, 220, 60, 255]));
+        green.save(dir.join("Resources").join("green.png")).unwrap();
+        let doc = |red_depth: f64, blue_depth: f64, picture: &str| {
+            format!(
+                r#"{{"id":"P","name":"Stage","createdAt":0,"state":"recorded","minReaderVersion":30,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"R","kind":"model","filename":"red.glb","displayName":"Red","addedAt":0}},
+                  {{"id":"B","kind":"model","filename":"blue.glb","displayName":"Blue","addedAt":0}},
+                  {{"id":"G","kind":"image","filename":"green.png","displayName":"Green","addedAt":0,"pixelWidth":64,"pixelHeight":64}}],
+                "layers":[
+                  {{"id":"L1","name":"red","sortIndex":0,"kind":"model","isEnabled":true,"stage":"s",
+                    "startTime":0,"duration":2,"resourceID":"R",
+                    "keyframes":[{{"id":"K1","time":0,"camera":{{"yaw":0,"pitch":0,"distance":3.5}},"depth":{red_depth},"transitionDuration":0}}]}},
+                  {{"id":"L2","name":"blue","sortIndex":1,"kind":"model","isEnabled":true,"stage":"s",
+                    "startTime":0,"duration":2,"resourceID":"B",
+                    "keyframes":[{{"id":"K2","time":0,"depth":{blue_depth},"transitionDuration":0}}]}}{picture}]}}"#
+            )
+        };
+        let centre = |json: &str| -> (u8, u8, u8) {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(0.5).expect("frame");
+            let i = (160 * 320 + 160) * 4;
+            (frame[i + 2], frame[i + 1], frame[i])
+        };
+        let (r, g, b) = centre(&doc(1.0, -1.0, ""));
+        assert!(r > 100 && r > b + 60, "red in front: {r},{g},{b}");
+        let (r, g, b) = centre(&doc(-1.0, 1.0, ""));
+        assert!(
+            b > 100 && b > r + 60,
+            "blue in front after the swap: {r},{g},{b}"
+        );
+        let picture = r#",{"id":"L3","name":"green","sortIndex":2,"kind":"image","isEnabled":true,"stage":"s",
+            "startTime":0,"duration":2,"resourceID":"G",
+            "keyframes":[{"id":"K3","time":0,"zoom":0.6,"depth":2.5,"transitionDuration":0}]}"#;
+        let (r, g, b) = centre(&doc(1.0, -1.0, picture));
+        assert!(
+            g > 120 && g > r + 60 && g > b + 60,
+            "the picture stands in front of both: {r},{g},{b}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Placement measures the model, not its sphere: a cube placed 200
     /// tall on a 320 canvas, seen face-on, spans about 200 rows of lit
     /// pixels.

@@ -864,5 +864,18 @@ the layer's own time and loops. Every field is optional and ramps like
 any keyframe value.
 `placement` and `zoom` measure the model's own box on screen at that
 camera (the picture the layer shows is cut to it), so "700 tall,
-centred" is the model 700 tall whatever its shape. Strict, as every kind before it: an older reader refuses the
+centred" is the model 700 tall whatever its shape.
+
+Stages (rung 30). Layers naming the same `"stage": "hero"` are drawn
+together through ONE camera into ONE depth buffer: model members turn
+in place by their own `camera.yaw`/`pitch`, image, video, caption and
+drawing members become billboards facing the camera, and every member
+sits at its keyframes' `depth` — its distance from the stage's origin
+along the camera axis in the stage's bounds radii, positive toward the
+viewer, 0 when absent. The first member (lowest `sortIndex`) owns the
+picture: its `camera` and `light` are the stage's, and its placement,
+opacity, transitions, masks and effects apply to the whole stage; the
+other members' 2D transforms are ignored inside it (`promo validate`
+says so). A caption at depth 0 between a phone at +1 and a laptop at -1
+is the reason stages exist. Reader version 30. Strict, as every kind before it: an older reader refuses the
 file. Reader version 29.

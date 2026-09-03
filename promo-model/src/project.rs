@@ -1612,6 +1612,11 @@ pub struct ProjectLayerKeyframe {
     pub light: Option<Light>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub clip: Option<ClipTime>,
+    /// On a stage member: its distance from the stage's origin along the
+    /// camera axis, in the stage's bounds radii, positive toward the
+    /// viewer; 0 when absent. Ramps like every keyframe value.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub depth: Option<f64>,
     /// 0–1, 1 when unkeyed. Added 2026-08-14 so a composition can express a
     /// fade; the compositor has always had per-quad opacity, only the
     /// keyframe was missing.
@@ -2168,6 +2173,14 @@ pub struct ProjectLayer {
     /// Follow the pointer of the recording this layer shows (rung 26).
     #[serde(default, skip_serializing_if = "is_none")]
     pub follow: Option<Follow>,
+    /// A stage (rung 30): every layer naming the same stage is drawn
+    /// through ONE camera into ONE depth buffer — models turned in place,
+    /// 2D layers as billboards at their keyframes' `depth` — and the
+    /// picture rides the first member's (lowest sortIndex) own placement,
+    /// opacity, transitions, masks and effects. The first member's
+    /// `camera` and `light` are the stage's.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub stage: Option<String>,
     /// The drawing whose ink is this layer's WINDOW: rasterized and
     /// stretched over the layer's rect, the layer only shows where the
     /// drawing has ink. Absent means the whole rect, as always. A static
@@ -3037,6 +3050,12 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 30 is a stage on a layer. An older reader would draw the members
+        // flat and in sort order — a different picture, so it refuses.
+        if layers.iter().any(|l| l.stage.is_some()) {
+            return 30;
+        }
 
         // 29 is a model — a KIND on a resource or a layer, so an older
         // reader refuses the file rather than failing mid-decode.
@@ -3945,6 +3964,11 @@ mod placement_model_tests {
         let mut modelled = meta(&layer(""));
         modelled.layers.as_mut().unwrap()[0].kind = ProjectLayerKind::Model;
         assert_eq!(modelled.minimum_reader_version(), 29);
+
+        // 30: a stage on a layer.
+        let mut staged = meta(&layer(""));
+        staged.layers.as_mut().unwrap()[0].stage = Some("hero".into());
+        assert_eq!(staged.minimum_reader_version(), 30);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

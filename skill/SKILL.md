@@ -166,6 +166,15 @@ new projects.
   `time` scrubs it. Stamp
   `minReaderVersion: 29`. `promo_inspect` lists the layer; a missing
   file is named like any other.
+- **Stages.** Layers naming the same `"stage": "hero"` draw through one
+  camera into one depth buffer: models at their keyframes' `"depth"`
+  (in stage radii, + toward the viewer), images and videos as billboards
+  facing the camera (their `zoom` sizes them against the stage's
+  radius). The first member (lowest `sortIndex`) owns the picture: its
+  `camera`/`light` are the stage's and its placement, opacity and
+  effects apply to the whole stage. A phone at +1, a laptop at -1 and a
+  screenshot between them is the reason. Captions inside a stage are
+  not drawn yet. Stamp `minReaderVersion: 30`.
 - **Kinetic reveals.** Beside `wipe`, `fade`, `rise` and `scale`, a
   reveal's `mode` can be `flip` (each unit turns in edge-on, in
   perspective), `tumble` (rights itself from a lean while rising) or

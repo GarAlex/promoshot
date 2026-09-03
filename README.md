@@ -393,6 +393,9 @@ slot name to a colour — a palette name works, so `@accent` re-skins the
 body with the theme. Lighting defaults come from the theme. Rung 29. Built-in device bodies
 (phone, tablet, laptop; `promo device`) ship as generated `.glb` files
 with `Body` and `Screen` slots, so the device shot is a model too.
+Layers naming the same `stage` draw through one camera into one depth
+buffer, models at their `depth` and pictures as billboards, the first
+member's placement carrying the whole scene (rung 30).
 
 ## Text with a side
 
