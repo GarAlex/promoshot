@@ -394,6 +394,19 @@ fn tool_descriptors() -> Value {
                 "required": ["file"] }
         },
         {
+            "name": "promo_media_turntable",
+            "description": "Eyes on a model: a .glb rendered from N yaws round it, tiled into \
+                one PNG contact sheet with each cell's yaw. Look at this before choosing a \
+                camera for a model layer. (`promo_media_probe` on a .glb names its material \
+                slots, clips and bounds.)",
+            "inputSchema": { "type": "object",
+                "properties": { "file": { "type": "string" },
+                                "count": { "type": "integer" },
+                                "size": { "type": "integer", "description": "cell size in px (default 320)" },
+                                "out": { "type": "string" } },
+                "required": ["file"] }
+        },
+        {
             "name": "promo_media_filmstrip",
             "description": "Eyes on the footage: N evenly spaced frames tiled into one \
                 PNG contact sheet, sampled times returned so a cell maps to a moment. \
@@ -748,7 +761,52 @@ where
 {
     match name {
         "promo_schema" => Ok(promo_model::SCHEMA_QUICK.to_string()),
-        "promo_media_probe" => media::probe(args),
+        "promo_media_probe" => {
+            let is_model = args
+                .get("file")
+                .and_then(Value::as_str)
+                .is_some_and(|f| f.to_ascii_lowercase().ends_with(".glb"));
+            if is_model {
+                let file = args["file"].as_str().unwrap_or_default().to_string();
+                run(config, &["model".to_string(), file, "--json".into()])
+            } else {
+                media::probe(args)
+            }
+        }
+        "promo_media_turntable" => {
+            let file = args
+                .get("file")
+                .and_then(Value::as_str)
+                .ok_or("promo_media_turntable: `file` is required")?
+                .to_string();
+            let stem = Path::new(&file)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("model")
+                .to_string();
+            let out = match args.get("out").and_then(Value::as_str) {
+                Some(out) => out.to_string(),
+                None => config
+                    .workspace
+                    .join(format!("turntable-{stem}.png"))
+                    .display()
+                    .to_string(),
+            };
+            let mut argv = vec![
+                "turntable".to_string(),
+                file,
+                "--out".into(),
+                out,
+                "--json".into(),
+            ];
+            if let Some(n) = args.get("count").and_then(Value::as_u64) {
+                argv.extend(["--count".into(), n.to_string()]);
+            }
+            if let Some(px) = args.get("size").and_then(Value::as_u64) {
+                argv.extend(["--size".into(), format!("{px}x{px}")]);
+            }
+            run(config, &argv)
+        }
         "promo_media_filmstrip" => media::filmstrip(args, &config.workspace),
         "promo_media_silences" => media::silences(args),
         "promo_media_scenes" => media::scenes(args),
@@ -974,6 +1032,7 @@ mod tests {
                 "promo_proxy",
                 "promo_workspace",
                 "promo_media_probe",
+                "promo_media_turntable",
                 "promo_media_filmstrip",
                 "promo_media_silences",
                 "promo_media_scenes",

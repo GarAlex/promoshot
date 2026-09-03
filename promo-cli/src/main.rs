@@ -27,6 +27,8 @@ USAGE:
     promo frames  <project-dir> --out <dir> [--fps <n>] [--from <s>] [--to <s>] [--size <WxH>]
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
     promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
+    promo model   <file.glb> [--json]
+    promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
 
 OPTIONS:
     --time <s>     Timestamp for a still (default 0)
@@ -97,6 +99,17 @@ fn run(args: &[String]) -> Result<(), String> {
         .filter(|a| !a.starts_with("--"))
         .ok_or_else(|| format!("{command}: expected a project directory\n\n{USAGE}"))?;
     let opts = Options::parse(&rest[1..])?;
+    // The model senses take a FILE, not a project: what a glb holds, and
+    // how it looks from around — before anyone places it.
+    if command == "model" || command == "turntable" {
+        let file = Path::new(dir);
+        let answer = match command {
+            "model" => model_probe(file, &opts),
+            _ => turntable(file, &opts),
+        }?;
+        println!("{answer}");
+        return Ok(());
+    }
     let project = Project::open(Path::new(dir))?;
 
     let answer = match command {
@@ -117,6 +130,7 @@ fn run(args: &[String]) -> Result<(), String> {
 struct Options {
     json: bool,
     out: Option<PathBuf>,
+    count: Option<u32>,
     time: Option<f64>,
     fps: Option<f64>,
     from: Option<f64>,
@@ -145,6 +159,9 @@ impl Options {
                     continue;
                 }
                 "--out" => opts.out = Some(PathBuf::from(value()?)),
+                "--count" => {
+                    opts.count = Some(parse_f64(&value()?, flag)?.round().clamp(1.0, 64.0) as u32)
+                }
                 "--time" => opts.time = Some(parse_f64(&value()?, flag)?),
                 "--fps" => opts.fps = Some(parse_f64(&value()?, flag)?),
                 "--proxy" => opts.proxy = render::ProxyPolicy::parse(&value()?)?,
@@ -397,6 +414,161 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
         );
     }
     Ok(out)
+}
+
+/// What a `.glb` holds, for the decision to place it: bounds, the material
+/// slots a `materials` binding may name, the clips a keyframe may play.
+fn model_probe(file: &Path, opts: &Options) -> Result<String, String> {
+    let bytes = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let model = promo_engine::model::Model::from_glb(&bytes).map_err(|e| e.to_string())?;
+    let slots: Vec<serde_json::Value> = model
+        .materials
+        .iter()
+        .filter(|m| !m.name.is_empty())
+        .map(|m| {
+            serde_json::json!({
+                "name": m.name,
+                "baseColor": m.base_color,
+                "metallic": m.metallic,
+                "roughness": m.roughness,
+                "textured": m.base_texture.is_some(),
+                "doubleSided": m.double_sided,
+            })
+        })
+        .collect();
+    let clips: Vec<serde_json::Value> = model
+        .clip_summary()
+        .into_iter()
+        .map(|(name, duration)| serde_json::json!({ "name": name, "duration": duration }))
+        .collect();
+    let triangles: usize = model.meshes.iter().map(|m| m.indices.len() / 3).sum();
+    let summary = serde_json::json!({
+        "kind": "model",
+        "file": file.display().to_string(),
+        "boundsRadius": model.bounds_radius,
+        "boundsCenter": model.bounds_center,
+        "slots": slots,
+        "clips": clips,
+        "meshes": model.meshes.len(),
+        "triangles": triangles,
+    });
+    if opts.json {
+        return Ok(summary.to_string());
+    }
+    let mut out = format!(
+        "model: {} — {} meshes, {} triangles, bounds radius {:.3}\n",
+        file.display(),
+        model.meshes.len(),
+        triangles,
+        model.bounds_radius
+    );
+    for m in model.materials.iter().filter(|m| !m.name.is_empty()) {
+        out.push_str(&format!(
+            "  slot \"{}\"{}{}\n",
+            m.name,
+            if m.base_texture.is_some() {
+                " (textured)"
+            } else {
+                ""
+            },
+            if m.double_sided { " double-sided" } else { "" }
+        ));
+    }
+    for (name, duration) in model.clip_summary() {
+        out.push_str(&format!("  clip \"{name}\" {duration:.2}s\n"));
+    }
+    Ok(out.trim_end().to_string())
+}
+
+/// The model seen from around: `count` yaws evenly round the circle, each
+/// rendered on a square cell by the engine's own pass under the default
+/// light, tiled into one contact sheet — what an agent looks at before
+/// choosing a camera.
+fn turntable(file: &Path, opts: &Options) -> Result<String, String> {
+    let out = opts.out()?;
+    let count = opts.count.unwrap_or(6).clamp(1, 64) as usize;
+    let cell = opts.size.map(|(w, _)| w).unwrap_or(320).clamp(32, 1024);
+    let bytes = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    promo_engine::model::Model::from_glb(&bytes).map_err(|e| e.to_string())?;
+
+    // A throwaway project round the file: a model layer keyed once per
+    // cell, a step between yaws, rendered at whole seconds.
+    let dir = std::env::temp_dir().join(format!(
+        "promo-turntable-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(dir.join("Resources")).map_err(|e| e.to_string())?;
+    let filename = file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("model.glb")
+        .to_string();
+    std::fs::copy(file, dir.join("Resources").join(&filename)).map_err(|e| e.to_string())?;
+    let yaws: Vec<f64> = (0..count)
+        .map(|i| -180.0 + 360.0 * i as f64 / count as f64)
+        .collect();
+    let keyframes: Vec<serde_json::Value> = yaws
+        .iter()
+        .enumerate()
+        .map(|(i, yaw)| {
+            serde_json::json!({
+                "id": format!("K{i}"), "time": i as f64,
+                "camera": { "yaw": yaw, "pitch": 12.0 },
+                "transitionDuration": 0
+            })
+        })
+        .collect();
+    let doc = serde_json::json!({
+        "id": "turntable", "name": "Turntable", "createdAt": 0, "state": "recorded",
+        "minReaderVersion": 29,
+        "trimStart": 0, "trimEnd": count as f64, "videoDuration": count as f64, "subtitles": [],
+        "compositionSettings": { "canvasWidth": cell, "canvasHeight": cell, "backgroundColorHex": "1A1F2B" },
+        "resources": [{ "id": "M", "kind": "model", "filename": filename, "displayName": "Model", "addedAt": 0 }],
+        "layers": [{ "id": "L", "name": "model", "sortIndex": 0, "kind": "model", "isEnabled": true,
+                     "startTime": 0, "duration": count as f64, "resourceID": "M", "keyframes": keyframes }]
+    });
+    std::fs::write(dir.join("metadata.json"), doc.to_string()).map_err(|e| e.to_string())?;
+    let project = Project::open(&dir)?;
+    let mut renderer = render::Renderer::new(&project, cell, cell)?;
+    let (columns, rows) = grid_for(count);
+    let (sheet_w, sheet_h) = (columns as u32 * cell, rows as u32 * cell);
+    let mut sheet = vec![0u8; (sheet_w * sheet_h * 4) as usize];
+    let mut cells = Vec::new();
+    for (i, yaw) in yaws.iter().enumerate() {
+        let rgba = renderer.frame_rgba(i as f64 + 0.5)?;
+        let (cx, cy) = ((i % columns) as u32, (i / columns) as u32);
+        for y in 0..cell {
+            let src = (y * cell * 4) as usize;
+            let dst = (((cy * cell + y) * sheet_w + cx * cell) * 4) as usize;
+            sheet[dst..dst + (cell * 4) as usize]
+                .copy_from_slice(&rgba[src..src + (cell * 4) as usize]);
+        }
+        cells.push(serde_json::json!({ "yaw": yaw, "column": cx, "row": cy }));
+    }
+    render::write_png(out, &sheet, sheet_w, sheet_h)?;
+    let _ = std::fs::remove_dir_all(&dir);
+    if opts.json {
+        return Ok(serde_json::json!({
+            "wrote": out.display().to_string(),
+            "cells": cells, "columns": columns, "rows": rows, "cell": cell,
+        })
+        .to_string());
+    }
+    Ok(format!(
+        "wrote {} ({count} yaws, {columns}x{rows} cells of {cell}px)",
+        out.display()
+    ))
+}
+
+/// The grid a count tiles into — as square as it gets, row-major.
+fn grid_for(count: usize) -> (usize, usize) {
+    let columns = (count as f64).sqrt().ceil().max(1.0) as usize;
+    let rows = count.div_ceil(columns).max(1);
+    (columns, rows)
 }
 
 fn still(project: &Project, opts: &Options) -> Result<String, String> {

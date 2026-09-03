@@ -20,7 +20,11 @@ author here opens in the PromoShot apps unchanged.
    Schema to fill structured output against.
 2. **Look at the footage first** — the senses, before composing:
    - `promo_media_probe` — container, duration, streams, fps, display
-     rotation, channels.
+     rotation, channels. On a `.glb`: its material slots (what a
+     `materials` binding may name), clips and bounds.
+   - `promo_media_turntable` — a `.glb` seen from N yaws round it, one
+     PNG contact sheet with each cell's yaw. Look before choosing a
+     model layer's camera.
    - `promo_media_filmstrip` — a contact sheet of a SOURCE clip, with the
      time each cell samples. Read it before deciding what a clip shows.
    - `promo_media_silences` — silence spans and their inverse; cuts and
