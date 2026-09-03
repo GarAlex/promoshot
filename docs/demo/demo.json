@@ -3922,7 +3922,7 @@
    900
   ],
   "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; sphere.glb, torus.glb and vase.glb in ONE stage named 'bench' \u2014 the sphere first, offset 1.5 left, its body painted the palette's accent, its camera drifting from a yaw of -14 to 14 over the piece with an ease in and out while the key light sweeps from a yaw of -70 to 70 at intensity 1.3; the torus in the middle, lying at a pitch of 55 and turning from a yaw of 20 to 80; the vase offset 1.5 right; the stage placed 520 px tall in the centre; and along the bottom a bold caption 'Metal. Matte. Glaze.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: sphere.glb, torus.glb, vase.glb.\n\nText to use, in order:\n- Metal. Matte. Glaze.",
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment (compositionSettings.environment preset studio); sphere.glb, torus.glb and vase.glb in ONE stage named 'bench' \u2014 the sphere first, offset 1.5 left, its body painted the palette's accent, its camera drifting from a yaw of -14 to 14 over the piece with an ease in and out while the key light sweeps from a yaw of -70 to 70 at intensity 1.3; the torus in the middle, lying at a pitch of 55 and turning from a yaw of 20 to 80; the vase offset 1.5 right; the stage placed 520 px tall in the centre; and along the bottom a bold caption 'Metal. Matte. Glaze.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: sphere.glb, torus.glb, vase.glb.\n\nText to use, in order:\n- Metal. Matte. Glaze.",
   "resources": [
    {
     "file": "sphere.glb",
@@ -3938,179 +3938,6 @@
     "file": "vase.glb",
     "kind": "file",
     "path": "demos/27-materials/resources/vase.glb"
-   }
-  ],
-  "result": {
-   "score": 92,
-   "passed": 12,
-   "total": 13,
-   "checks": [
-    {
-     "check": "canvas",
-     "ok": true,
-     "detail": "[1440, 900] vs [1440, 900]"
-    },
-    {
-     "check": "duration",
-     "ok": true,
-     "detail": "9.0s vs 9.0s"
-    },
-    {
-     "check": "kind:background",
-     "ok": true,
-     "detail": "1 vs 1"
-    },
-    {
-     "check": "kind:model",
-     "ok": true,
-     "detail": "3 vs 3"
-    },
-    {
-     "check": "kind:caption",
-     "ok": true,
-     "detail": "1 vs 1"
-    },
-    {
-     "check": "feature:gradient",
-     "ok": true,
-     "detail": "True"
-    },
-    {
-     "check": "feature:reveal",
-     "ok": true,
-     "detail": "True"
-    },
-    {
-     "check": "feature:stage",
-     "ok": true,
-     "detail": "True"
-    },
-    {
-     "check": "feature:model",
-     "ok": true,
-     "detail": "True"
-    },
-    {
-     "check": "feature:camera",
-     "ok": true,
-     "detail": "True"
-    },
-    {
-     "check": "feature:materials",
-     "ok": false,
-     "detail": "False"
-    },
-    {
-     "check": "feature:depth",
-     "ok": true,
-     "detail": "True"
-    },
-    {
-     "check": "phrases",
-     "ok": true,
-     "detail": "1 of 1 lines recognisable"
-    }
-   ],
-   "summary": "turns=34 cost=$1.43 secs=149",
-   "run": {
-    "turns": 34,
-    "wall_s": 147,
-    "api_s": 143,
-    "cost_usd": 1.43,
-    "tokens": {
-     "input": 52,
-     "cache_read": 1447892,
-     "cache_write": 45285,
-     "output": 9928,
-     "thinking": 2949
-    },
-    "models": [
-     {
-      "model": "claude-haiku-4-5",
-      "input": 1248,
-      "output": 21,
-      "cost_usd": 0.0
-     },
-     {
-      "model": "claude-opus-5",
-      "input": 1493229,
-      "output": 9928,
-      "cost_usd": 1.43
-     }
-    ],
-    "mcp": {
-     "calls": 9,
-     "ms": 2282,
-     "tools": {
-      "promo_render_video": {
-       "calls": 1,
-       "ms": 1551,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 2,
-       "ms": 497,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 2,
-       "ms": 176,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 1,
-       "ms": 49,
-       "errors": 0
-      },
-      "promo_inspect": {
-       "calls": 1,
-       "ms": 9,
-       "errors": 0
-      },
-      "promo_schema": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_schema_full": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      }
-     }
-    }
-   },
-   "used": null,
-   "captions": null,
-   "notes": "Done. `out.promo` validates clean and rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1440\u00d7900, 9 s, 270 frames @ 30 fps.\n\nHow it's built:\n\n- **Ground** \u2014 `backgroundGradient` radial from `@ground` (3B3E44) at centre out to `@edge` (121316) at the corners.\n- **Stage `bench`** \u2014 three `kind: \"model\"` layers sharing one camera and depth buffer, all 0\u20139 s:\n  - *Sphere* (lowest `sortIndex`, so it owns the stage picture): `stageOffset [-1.5, 0]`, `materials: {\"Body\": \"@accent\"}`, `placement {height: 520, anchor: center}`, camera yaw \u221214 \u2192 14 and key light yaw \u221270 \u2192 70 at intensity 1.3, both on one `easeInOut` ramp across the full 9 s.\n  - *Torus*: `stageOffset [0, 0]`, camera pitch 55 (lying flat), yaw 20 \u2192 80, same eased ramp.\n  - *Vase*: `stageOffset [1.5, 0]`.\n- **Caption** \u2014 \"Metal. Matte. Glaze.\", bold 76 pt, anchored bottom with a \u221264 px offset, `depth: {count: 10, offset: [1, 1.5], shade: 0.82, colorHex: \"@edge\"}` for the extrusion, and `reveal: {by: \"word\", mode: \"fade\", secondsPer: 0.45}` starting at 1.2 s \u2014 the contact sheet at 1.5 s shows \"Metal.\" alone, all three words landed by ~2.5 s.\n\nThe material slot in all three `.glb` files is named `Body`, so the accent binding lands on the sphere; the torus and vase keep their own materials, which is what gives the three-materials read. Contact sheet frames are in `out.promo/Exports/frames/`.",
-   "contact": "docs/demo/27-materials/contact-result.png",
-   "reference_contact": "docs/demo/27-materials/contact-reference.png",
-   "video": "docs/demo/27-materials/result.mp4",
-   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/27-materials.mp4",
-   "video_hd_bytes": 366635,
-   "metadata": "docs/demo/27-materials/result-metadata.json",
-   "gif": "docs/demo/27-materials/result.gif",
-   "thumb": "docs/demo/27-materials/thumb.png"
-  },
-  "page": "docs/demo/demo27.md"
- },
- {
-  "id": "28",
-  "slug": "28-finishes",
-  "title": "Finishes",
-  "blurb": "One vase three ways \u2014 chrome, matte, gloss \u2014 the finish written on the binding rather than baked into the file, under a light that sweeps across them.",
-  "kind": "conformance",
-  "canvas": [
-   1440,
-   900
-  ],
-  "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; vase.glb three times in ONE stage named 'bench', as three model resources over the same file \u2014 the first offset 1.5 left, painted silver D2D6DC with a chrome finish written on the binding (metallic 1, roughness 0.12), its camera drifting from a yaw of -14 to 14 over the piece with an ease in and out while the key light sweeps from a yaw of -70 to 70 at intensity 1.3; the second in the middle, painted the palette's accent with a matte finish (metallic 0, roughness 0.85); the third offset 1.5 right, the same accent with a gloss finish (metallic 0, roughness 0.12); every vase turning a little on its own from a yaw of -20 to 20; the stage placed 520 px tall in the centre; and along the bottom a bold caption 'One body. Three finishes.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- One body. Three finishes.",
-  "resources": [
-   {
-    "file": "vase.glb",
-    "kind": "file",
-    "path": "demos/28-finishes/resources/vase.glb"
    }
   ],
   "result": {
@@ -4134,9 +3961,9 @@
      "detail": "1 vs 1"
     },
     {
-     "check": "kind:model",
+     "check": "kind:stage",
      "ok": true,
-     "detail": "3 vs 3"
+     "detail": "1 vs 1"
     },
     {
      "check": "kind:caption",
@@ -4155,6 +3982,184 @@
     },
     {
      "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:environment",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=24 cost=$1.69 secs=147",
+   "run": {
+    "turns": 24,
+    "wall_s": 146,
+    "api_s": 141,
+    "cost_usd": 1.69,
+    "tokens": {
+     "input": 46,
+     "cache_read": 1592627,
+     "cache_write": 64482,
+     "output": 9761,
+     "thinking": 3574
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1261,
+      "output": 20,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1657155,
+      "output": 9761,
+      "cost_usd": 1.69
+     }
+    ],
+    "mcp": {
+     "calls": 7,
+     "ms": 3590,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1583,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 1513,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 486,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is authored, validated, inspected and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9 s, 30 fps, `minReaderVersion: 35`\n\n- **Background**: radial gradient from `@canvas` (3A3A3E) at centre-ish (0.5, 0.46) out to `@canvas-edge` (121214), plus `environment: { preset: \"studio\" }` so the metal has something to mirror.\n- **Stage layer `bench`** (canonical rung-33 form) placed `height: 520, anchor: center`. Its keyframes own the shot: camera yaw \u221214 \u2192 14 over the full 9 s with `easeInOut`, and a separate light track sweeping yaw \u221270 \u2192 70 at intensity 1.3.\n  - **Sphere** \u2014 first member, `stageOffset: [-1.5, 0]`, `Body` bound to `@accent` (E8A33D) with a metallic finish.\n  - **Torus** \u2014 middle, `stageOffset: [0, 0]`, own turn `pitch: 55` with yaw 20 \u2192 80; matte white finish.\n  - **Vase** \u2014 `stageOffset: [1.5, 0]`, glossy pale blue.\n- **Caption** \"Metal. Matte. Glaze.\" \u2014 bold 76 pt, hung `anchor: bottom, offset: [0, -64]`, extruded via `depth` (8 copies, 2 px step), revealed `by: \"word\"`, `mode: \"fade\"` over 1.6 s starting at 1.2 s.\n\nPalette states all eight roles plus `accent`, so the whole piece re-skins from one block.\n\nOutputs: contact sheet in `out.promo/Exports/frames/` (8 frames, 1.2\u20138.8 s at full canvas size) and the video at `out.promo/Exports/export.mp4`.\n\nOne validator note, carried deliberately: the caption's `depth` is the flat compositor's 2.5D extrusion and is flagged as legacy \u2014 the modern equivalent is a text-body model standing in the stage. You asked for an extruded caption along the bottom, so I kept the caption; say the word and I'll swap it for a real text body inside `bench` under the same key light.",
+   "contact": "docs/demo/27-materials/contact-result.png",
+   "reference_contact": "docs/demo/27-materials/contact-reference.png",
+   "video": "docs/demo/27-materials/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/27-materials.mp4",
+   "video_hd_bytes": 372409,
+   "metadata": "docs/demo/27-materials/result-metadata.json",
+   "gif": "docs/demo/27-materials/result.gif",
+   "thumb": "docs/demo/27-materials/thumb.png"
+  },
+  "page": "docs/demo/demo27.md"
+ },
+ {
+  "id": "28",
+  "slug": "28-finishes",
+  "title": "Finishes",
+  "blurb": "One vase three ways \u2014 chrome, matte, gloss \u2014 the finish written on the binding rather than baked into the file, under a light that sweeps across them.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment (compositionSettings.environment preset studio); vase.glb three times in ONE stage named 'bench', as three model resources over the same file \u2014 the first offset 1.5 left, painted silver D2D6DC with a chrome finish written on the binding (metallic 1, roughness 0.12), its camera drifting from a yaw of -14 to 14 over the piece with an ease in and out while the key light sweeps from a yaw of -70 to 70 at intensity 1.3; the second in the middle, painted the palette's accent with a matte finish (metallic 0, roughness 0.85); the third offset 1.5 right, the same accent with a gloss finish (metallic 0, roughness 0.12); every vase turning a little on its own from a yaw of -20 to 20; the stage placed 520 px tall in the centre; and along the bottom a bold caption 'One body. Three finishes.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- One body. Three finishes.",
+  "resources": [
+   {
+    "file": "vase.glb",
+    "kind": "file",
+    "path": "demos/28-finishes/resources/vase.glb"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 15,
+   "total": 15,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:stage",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
      "ok": true,
      "detail": "True"
     },
@@ -4179,7 +4184,7 @@
      "detail": "True"
     },
     {
-     "check": "feature:depth",
+     "check": "feature:environment",
      "ok": true,
      "detail": "True"
     },
@@ -4189,55 +4194,60 @@
      "detail": "1 of 1 lines recognisable"
     }
    ],
-   "summary": "turns=27 cost=$1.49 secs=179",
+   "summary": "turns=41 cost=$2.29 secs=239",
    "run": {
-    "turns": 27,
-    "wall_s": 177,
-    "api_s": 170,
-    "cost_usd": 1.49,
+    "turns": 41,
+    "wall_s": 239,
+    "api_s": 234,
+    "cost_usd": 2.29,
     "tokens": {
-     "input": 52,
-     "cache_read": 1469830,
-     "cache_write": 46896,
-     "output": 11200,
-     "thinking": 4792
+     "input": 80,
+     "cache_read": 2637929,
+     "cache_write": 59073,
+     "output": 15169,
+     "thinking": 6040
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 1289,
-      "output": 16,
+      "input": 1302,
+      "output": 15,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 1516778,
-      "output": 11200,
-      "cost_usd": 1.48
+      "input": 2697082,
+      "output": 15169,
+      "cost_usd": 2.29
      }
     ],
     "mcp": {
-     "calls": 7,
-     "ms": 4970,
+     "calls": 11,
+     "ms": 3489,
      "tools": {
       "promo_render_frames": {
        "calls": 2,
-       "ms": 2804,
+       "ms": 1667,
        "errors": 0
       },
       "promo_render_video": {
        "calls": 1,
-       "ms": 1764,
+       "ms": 1665,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 2,
+       "ms": 131,
        "errors": 0
       },
       "promo_validate": {
-       "calls": 1,
-       "ms": 395,
-       "errors": 0
+       "calls": 3,
+       "ms": 20,
+       "errors": 1
       },
       "promo_inspect": {
        "calls": 1,
-       "ms": 7,
+       "ms": 6,
        "errors": 0
       },
       "promo_schema": {
@@ -4255,12 +4265,12 @@
    },
    "used": null,
    "captions": null,
-   "notes": "Done. `out.promo` validates, inspects clean, and both the contact sheet and the mp4 are rendered.\n\n**What's in it** \u2014 1440\u00d7900, 9s, 30fps:\n\n- **Ground**: radial gradient, `42474E` centre \u2192 `15171A` edge (both named in the palette).\n- **Stage `bench`**, three `model` layers over three model resources all pointing at `vase.glb`:\n  - `vLeft` \u2014 chrome: `\"Body\": { \"colorHex\": \"@silver\", \"metallic\": 1, \"roughness\": 0.12 }`, `stageOffset [-1.5, 0]`. As the first member it owns the stage: `placement { height: 520, anchor: \"center\" }`, camera yaw \u221214 \u2192 14 over the full 9s with `easeInOut`, and the key light yaw \u221270 \u2192 70 at intensity 1.3 on its own (linear) keyframe track, so the ease shapes the camera drift only.\n  - `vMid` \u2014 matte accent (`metallic 0, roughness 0.85`), `stageOffset [0, 0]`.\n  - `vRight` \u2014 gloss accent (`metallic 0, roughness 0.12`), `stageOffset [1.5, 0]`.\n  - `vMid` and `vRight` each turn in place on their own `camera.yaw` \u221220 \u2192 20. `vLeft` turns with the stage camera's \u221214 \u2192 14 \u2014 it has one camera track, and the spec assigns it the stage drift.\n- **Caption**: bold 68pt, anchored bottom, `depth { count: 7, offset: [1.5,1.5], shade: 0.92 }` for the extrusion, revealed `{ by: \"word\", mode: \"fade\" }` starting at 1.2s.\n\nAccent is `D96A3C` (terracotta) \u2014 chosen because a warm mid-saturation body is where matte and gloss read most clearly apart against the grey, which the contact sheet confirms: the matte vase has a broad soft falloff, the gloss one a tight specular streak that tracks the light sweep.\n\n- Project: `out.promo/` (media copied to `Resources/vase.glb`)\n- Video: `out.promo/Exports/export.mp4`\n- Contact sheet frames left in `out.promo/Exports/frames/` \u2014 a cleanup `rm` there was blocked by the sandbox, so delete them by hand if you don't want them.",
+   "notes": "Done \u2014 `out.promo` is authored, validated, inspected, and rendered.\n\n**The piece** (1440\u00d7900, 9 s, 30 fps \u2192 `out.promo/Exports/export.mp4`)\n\n- **Ground**: radial gradient, `3C3D42` centre \u2192 `141416` edge, plus `compositionSettings.environment: { preset: \"studio\" }` \u2014 that's what the chrome vase mirrors.\n- **Stage `bench`** (one `kind: \"stage\"` layer, `placement: { height: 520, anchor: center }`): its keyframes carry the camera drifting yaw \u221214 \u2192 14 over the full 9 s with `easing: \"easeInOut\"`, and the key light sweeping yaw \u221270 \u2192 70 at intensity 1.3.\n- **Three members**, three model resources over the same `vase.glb`, all binding the file's one slot `Body`:\n  - `stageOffset [-1.5, 0]` \u2014 `@silver` `D2D6DC`, `metallic 1`, `roughness 0.12`\n  - `stageOffset [0, 0]` \u2014 `@accent`, `metallic 0`, `roughness 0.85`\n  - `stageOffset [1.5, 0]` \u2014 `@accent`, `metallic 0`, `roughness 0.12`\n  \n  Each turns on its own with a member `camera` yaw \u221220 \u2192 20 across the piece.\n- **Caption** \"One body. Three finishes.\" \u2014 bold, bottom-anchored, `depth: { count: 10, offset: [1, 1.2], shade: 0.86 }` for the extruded side, `reveal: { by: \"word\", mode: \"fade\", secondsPer: 0.3 }` starting at 1.2 s.\n\nPalette names carry the colours (`accent E0603C`, `silver`, `ink`, `ground`, `shade`), so a re-skin is one edit. Validate reports **ok** with one warning: caption `depth` is the flat compositor's 2.5D and is flagged legacy \u2014 the modern equivalent is a text body (a model recipe), but that form has no word-by-word reveal, so I kept the caption as you asked. Contact sheet frames are in `out.promo/Exports/frames/`.",
    "contact": "docs/demo/28-finishes/contact-result.png",
    "reference_contact": "docs/demo/28-finishes/contact-reference.png",
    "video": "docs/demo/28-finishes/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/28-finishes.mp4",
-   "video_hd_bytes": 330236,
+   "video_hd_bytes": 356377,
    "metadata": "docs/demo/28-finishes/result-metadata.json",
    "gif": "docs/demo/28-finishes/result.gif",
    "thumb": "docs/demo/28-finishes/thumb.png"
@@ -4278,7 +4288,7 @@
    900
   ],
   "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; ONE layer of kind 'stage' named 'Bench', placed 520 px tall in the centre, whose own keyframes carry the camera (drifting from a yaw of -14 to 14 over the piece with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3), and whose members are vase.glb three times as three model resources over the same file \u2014 the first offset 1.5 left, painted silver D2D6DC with a chrome finish on the binding (metallic 1, roughness 0.12); the second in the middle, the palette's accent with a matte finish (metallic 0, roughness 0.85); the third offset 1.5 right, the same accent with a gloss finish (metallic 0, roughness 0.12) \u2014 every member turning a little on its own from a yaw of -20 to 20; and along the bottom a bold caption 'One stage. One layer.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- One stage. One layer.",
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment (compositionSettings.environment preset studio); ONE layer of kind 'stage' named 'Bench', placed 520 px tall in the centre, whose own keyframes carry the camera (drifting from a yaw of -14 to 14 over the piece with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3), and whose members are vase.glb three times as three model resources over the same file \u2014 the first offset 1.5 left, painted silver D2D6DC with a chrome finish on the binding (metallic 1, roughness 0.12); the second in the middle, the palette's accent with a matte finish (metallic 0, roughness 0.85); the third offset 1.5 right, the same accent with a gloss finish (metallic 0, roughness 0.12) \u2014 every member turning a little on its own from a yaw of -20 to 20; and along the bottom a bold caption 'One stage. One layer.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- One stage. One camera.",
   "resources": [
    {
     "file": "vase.glb",
@@ -4357,7 +4367,7 @@
      "detail": "True"
     },
     {
-     "check": "feature:depth",
+     "check": "feature:environment",
      "ok": true,
      "detail": "True"
     },
@@ -4367,60 +4377,55 @@
      "detail": "1 of 1 lines recognisable"
     }
    ],
-   "summary": "turns=29 cost=$1.63 secs=143",
+   "summary": "turns=30 cost=$1.59 secs=161",
    "run": {
-    "turns": 29,
-    "wall_s": 141,
-    "api_s": 136,
-    "cost_usd": 1.63,
+    "turns": 30,
+    "wall_s": 161,
+    "api_s": 157,
+    "cost_usd": 1.59,
     "tokens": {
-     "input": 56,
-     "cache_read": 1675319,
-     "cache_write": 53790,
-     "output": 10077,
-     "thinking": 2794
+     "input": 58,
+     "cache_read": 1671979,
+     "cache_write": 47540,
+     "output": 11024,
+     "thinking": 3382
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 1301,
-      "output": 12,
+      "input": 1314,
+      "output": 18,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 1729165,
-      "output": 10077,
-      "cost_usd": 1.63
+      "input": 1719577,
+      "output": 11024,
+      "cost_usd": 1.59
      }
     ],
     "mcp": {
-     "calls": 7,
-     "ms": 2458,
+     "calls": 8,
+     "ms": 1835,
      "tools": {
       "promo_render_video": {
        "calls": 1,
-       "ms": 1728,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 1,
-       "ms": 600,
+       "ms": 1562,
        "errors": 0
       },
       "promo_render_frames": {
-       "calls": 1,
-       "ms": 119,
+       "calls": 2,
+       "ms": 258,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 11,
        "errors": 0
       },
       "promo_inspect": {
        "calls": 1,
-       "ms": 8,
-       "errors": 0
-      },
-      "promo_schema_types": {
-       "calls": 1,
-       "ms": 3,
+       "ms": 4,
        "errors": 0
       },
       "promo_schema": {
@@ -4438,12 +4443,12 @@
    },
    "used": null,
    "captions": null,
-   "notes": "Done \u2014 `out.promo` validates clean and renders.\n\n**`out.promo/`** (canvas 1440\u00d7900, 9 s, 30 fps)\n\n- **Ground** \u2014 radial `backgroundGradient` from a lifted grey `4E5158` at centre through `2A2C31` out to `141518`.\n- **Bench** \u2014 a single `kind: \"stage\"` layer, `minReaderVersion: 33`. Its own keyframes carry the stage's picture: `placement` 520 px tall centred, `camera.yaw` \u221214 \u2192 14 across the full 9 s with `easeInOut`, and `light.yaw` \u221270 \u2192 70 at `intensity: 1.3`.\n- **Members** \u2014 three `model` layers over three resources that all name `vase.glb`, each with its own `Body` binding as a finish object: silver `D2D6DC` / metallic 1 / roughness 0.12; `@accent` / 0 / 0.85; `@accent` / 0 / 0.12. `stageOffset` `[-1.5, 0]`, `[0, 0]`, `[1.5, 0]`; each turns on its own `camera.yaw` \u221220 \u2192 20.\n- **Caption** \u2014 \"One stage. One layer.\", bold 64 pt anchored bottom, `depth` extrusion (7 copies, 2 px offset, 0.7 shade), revealing `{ by: \"word\", mode: \"fade\", secondsPer: 0.34 }` from 1.2 s.\n\nThe three finishes read distinctly: the silver has a tight specular streak, the matte accent is flat, the gloss accent picks up a sharp edge highlight \u2014 and the highlights travel across all three as the key light sweeps.\n\nOutputs: `out.promo/Exports/export.mp4` (1440\u00d7900, 270 frames) and a 9-frame contact sheet in `out.promo/Exports/frames/`.",
+   "notes": "Done. `out.promo` is here, validated, inspected, and rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 9.00s, 3 layers, 3 resources, all renderable.\n\n- **Ground** \u2014 radial gradient, `4A5057` centre \u2192 `2A2E34` \u2192 `121417` edge; `environment: { preset: \"studio\" }` so the chrome mirrors a real soft box.\n- **Bench** \u2014 the single `kind: \"stage\"` layer. Its own two keyframes carry `placement { height: 520, anchor: center }`, the camera drifting `yaw -14 \u2192 14` (`easing: \"easeInOut\"` over the full 9s) and the key light sweeping `yaw -70 \u2192 70` at `intensity 1.3`.\n  - Members: three `model` layers over one `vase.glb`, at `stageOffset` `[-1.5,0]`, `[0,0]`, `[1.5,0]`, each turning on its own `camera.yaw -20 \u2192 20`. Three model resources over the same file, differing only in the `Body` binding: silver `D2D6DC` metallic 1 / roughness 0.12, `@accent` metallic 0 / roughness 0.85, `@accent` metallic 0 / roughness 0.12.\n- **Caption** \u2014 bold, bottom, extruded (`depth`, 8 stacked copies), `reveal { by: \"word\", mode: \"fade\" }` starting at 1.2s.\n\nTwo notes, both deliberate:\n\n1. Your prose named the caption *\"One stage. One layer.\"* but the \"Text to use\" list gave *\"One stage. One camera.\"* \u2014 I used the list, since that's the explicit text directive. One string change if you want the other.\n2. `promo_validate` flags the caption's `depth` as legacy 2.5D and points at a text-body recipe instead. I kept the caption: word-by-word `reveal` is a caption-layer rule and a text body can't do it. Real extruded type would mean giving up the word-by-word fade.\n\nOutputs: `out.promo/Exports/export.mp4` (270 frames @ 30fps) and the contact sheet in `out.promo/Exports/frames/`.",
    "contact": "docs/demo/29-bench/contact-result.png",
    "reference_contact": "docs/demo/29-bench/contact-reference.png",
    "video": "docs/demo/29-bench/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/29-bench.mp4",
-   "video_hd_bytes": 329193,
+   "video_hd_bytes": 359273,
    "metadata": "docs/demo/29-bench/result-metadata.json",
    "gif": "docs/demo/29-bench/result.gif",
    "thumb": "docs/demo/29-bench/thumb.png"
@@ -4461,7 +4466,7 @@
    900
   ],
   "duration": 9.0,
-  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; ONE layer of kind 'stage' named 'Bench', placed 420 px tall in the centre, whose keyframes carry the camera (drifting from a yaw of -12 to 12 with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3); its members are a TITLE that is a real 3D body \u2014 a model resource with no file and a recipe {\"text\": {\"text\": \"PROMO\", \"bold\": true, \"depth\": 0.3}}, its Face painted silver D2D6DC with a chrome finish (metallic 1, roughness 0.12) and its Side painted the palette's edge colour matte (metallic 0, roughness 0.6), offset 0.3 left and turning from a yaw of -12 to 12 \u2014 and vase.glb offset 1.55 right, painted the palette's accent with a matte finish (metallic 0, roughness 0.85), turning from -20 to 20. No caption layer: the title is the body.\n\nFiles in `resources/`: vase.glb.",
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background and the studio scene environment (compositionSettings.environment preset studio); ONE layer of kind 'stage' named 'Bench', placed 420 px tall in the centre, whose keyframes carry the camera (drifting from a yaw of -12 to 12 with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3); its members are a TITLE that is a real 3D body \u2014 a model resource with no file and a recipe {\"text\": {\"text\": \"PROMO\", \"bold\": true, \"depth\": 0.3, \"size\": 0.8}}, its Face painted silver D2D6DC with a chrome finish (metallic 1, roughness 0.12) and its Side painted the palette's edge colour matte (metallic 0, roughness 0.6), offset 0.3 left and turning from a yaw of -12 to 12 \u2014 and vase.glb offset 1.55 right, painted the palette's accent with a matte finish (metallic 0, roughness 0.85), turning from -20 to 20. No caption layer: the title is the body.\n\nFiles in `resources/`: vase.glb.",
   "resources": [
    {
     "file": "vase.glb",
@@ -4471,8 +4476,8 @@
   ],
   "result": {
    "score": 100,
-   "passed": 12,
-   "total": 12,
+   "passed": 13,
+   "total": 13,
    "checks": [
     {
      "check": "canvas",
@@ -4533,67 +4538,62 @@
      "check": "feature:textBody",
      "ok": true,
      "detail": "True"
+    },
+    {
+     "check": "feature:environment",
+     "ok": true,
+     "detail": "True"
     }
    ],
-   "summary": "turns=57 cost=$3.30 secs=420",
+   "summary": "turns=22 cost=$1.18 secs=116",
    "run": {
-    "turns": 57,
-    "wall_s": 419,
-    "api_s": 413,
-    "cost_usd": 3.3,
+    "turns": 22,
+    "wall_s": 116,
+    "api_s": 113,
+    "cost_usd": 1.18,
     "tokens": {
-     "input": 112,
-     "cache_read": 3953299,
-     "cache_write": 68367,
-     "output": 25518,
-     "thinking": 13371
+     "input": 42,
+     "cache_read": 1133363,
+     "cache_write": 40804,
+     "output": 7974,
+     "thinking": 2580
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 1286,
-      "output": 13,
+      "input": 1307,
+      "output": 17,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 4021778,
-      "output": 25518,
-      "cost_usd": 3.3
+      "input": 1174209,
+      "output": 7974,
+      "cost_usd": 1.17
      }
     ],
     "mcp": {
-     "calls": 16,
-     "ms": 4074,
+     "calls": 6,
+     "ms": 1662,
      "tools": {
-      "promo_render_frames": {
-       "calls": 4,
-       "ms": 1630,
-       "errors": 0
-      },
       "promo_render_video": {
        "calls": 1,
-       "ms": 1555,
+       "ms": 1560,
        "errors": 0
       },
-      "promo_media_probe": {
+      "promo_render_frames": {
        "calls": 1,
-       "ms": 573,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 5,
-       "ms": 292,
+       "ms": 94,
        "errors": 0
       },
       "promo_validate": {
-       "calls": 2,
-       "ms": 18,
+       "calls": 1,
+       "ms": 4,
        "errors": 0
       },
       "promo_inspect": {
        "calls": 1,
-       "ms": 6,
+       "ms": 4,
        "errors": 0
       },
       "promo_schema": {
@@ -4611,12 +4611,12 @@
    },
    "used": null,
    "captions": null,
-   "notes": "Done \u2014 `out.promo` validates, inspects clean, and both the contact sheet and the mp4 are rendered.\n\n**What's in it** (`ws/out.promo/metadata.json`, `minReaderVersion: 34`)\n\n- 1440\u00d7900, 9 s, 30 fps. Background is a radial gradient, `3A3D42` at centre out to `121315`, over palette names `ground`/`shade`.\n- One `kind: \"stage\"` layer named **Bench**, `placement { height: 420, anchor: center }`. Its two keyframes carry the whole scene: `camera.yaw` \u221212 \u2192 12 and `light` yaw \u221270 \u2192 70 at `intensity: 1.3`, one 9 s ramp with `easing: \"easeInOut\"` (pitch 6, distance 5 are my picks).\n- Members, both model layers, no caption layer anywhere:\n  - **Title** \u2014 a model resource with `\"filename\": \"\"` and `recipe: {\"text\": {\"text\": \"PROMO\", \"bold\": true, \"depth\": 0.3}}`; `Face` = `@silver` (`D2D6DC`) metallic 1 / roughness 0.12, `Side` = `@edge` metallic 0 / roughness 0.6. `stageOffset [-0.3, 0]`, own `camera.yaw` \u221212 \u2192 12.\n  - **Vase** \u2014 `vase.glb` (copied into `Resources/`), its `Body` slot `@accent` (`C98A4B`) metallic 0 / roughness 0.85. `stageOffset [1.55, 0]`, `camera.yaw` \u221220 \u2192 20.\n\nOutputs: `Exports/export.mp4` (1440\u00d7900, 270 frames) and `Exports/contact/` (8 full-size stills, 0.3 s \u2192 8.7 s). I verified the slot bindings actually land by briefly painting `Face` red and re-rendering, then restored it.\n\n**One thing to flag:** at `height: 420` the bench is wider than the canvas \u2014 the stage box comes out roughly 2000 px across, so the P bleeds off the left edge and the vase's right edge off the right. That's a direct consequence of the specified numbers (420 tall + vase at 1.55 radii out), not something camera distance can fix; I kept 420 as asked. If you want the whole bench inside the frame it's one number: `height: 420` \u2192 about `260`, or `{\"mode\": \"fit\", \"anchor\": \"center\"}`, in bot",
+   "notes": "Done \u2014 `out.promo` is authored, validated, and rendered.\n\n**`out.promo/metadata.json`** (1440\u00d7900, 9 s, `minReaderVersion: 35`)\n\n- **Ground** \u2014 `background` layer over a radial `backgroundGradient` from `@haze` `3E4247` at the centre out to `@deep` `141517` at the corner, plus `compositionSettings.environment: { preset: \"studio\" }` so the chrome has a soft box to mirror.\n- **Bench** \u2014 one `kind: \"stage\"` layer, `placement: { height: 420, anchor: \"center\" }`. Its own keyframes own the scene: `camera.yaw` \u221212 \u2192 12 and `light` yaw \u221270 \u2192 70 at `intensity: 1.3`, both on a single 9-second `easeInOut` ramp.\n- **Members** \u2014 the title is a generated body: a `model` resource with `\"filename\": \"\"` and `recipe: { text: { text: \"PROMO\", bold: true, depth: 0.3, size: 0.8 } }`, its `Face` slot `@silver D2D6DC` at `metallic 1 / roughness 0.12` and its `Side` slot `@edge` at `metallic 0 / roughness 0.6`; it sits at `stageOffset [-0.3, 0]` turning \u221212 \u2192 12. `vase.glb` sits at `stageOffset [1.55, 0]`, its `Body` slot `@accent` at `metallic 0 / roughness 0.85`, turning \u221220 \u2192 20. No caption layer anywhere.\n\nValidate returned \"ok \u2014 nothing the renderer would quietly correct\"; inspect reports 2 layers, 2 resources, 2 of 2 renderable. A contact sheet of 8 moments is in `Exports/frames/` \u2014 the extruded sides of the letters read on the right early and swing to the left as the camera crosses over, and the key light travels across the vase with it.\n\nVideo: `out.promo/Exports/export.mp4` (1440\u00d7900, 270 frames @ 30fps).",
    "contact": "docs/demo/30-title-body/contact-result.png",
    "reference_contact": "docs/demo/30-title-body/contact-reference.png",
    "video": "docs/demo/30-title-body/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/30-title-body.mp4",
-   "video_hd_bytes": 252224,
+   "video_hd_bytes": 259574,
    "metadata": "docs/demo/30-title-body/result-metadata.json",
    "gif": "docs/demo/30-title-body/result.gif",
    "thumb": "docs/demo/30-title-body/thumb.png"

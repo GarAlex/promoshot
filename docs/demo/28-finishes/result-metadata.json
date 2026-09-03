@@ -1,9 +1,9 @@
 {
-  "id": "one-body-three-finishes",
+  "id": "finishes-9s",
   "name": "One Body, Three Finishes",
   "createdAt": 0,
   "state": "recorded",
-  "minReaderVersion": 32,
+  "minReaderVersion": 35,
   "trimStart": 0,
   "trimEnd": 9,
   "videoDuration": 9,
@@ -13,65 +13,72 @@
     "canvasHeight": 900,
     "fps": 30,
     "palette": [
-      { "name": "accent", "colorHex": "D96A3C" },
+      { "name": "accent", "colorHex": "E0603C" },
       { "name": "silver", "colorHex": "D2D6DC" },
-      { "name": "greyCore", "colorHex": "42474E" },
-      { "name": "greyEdge", "colorHex": "15171A" },
-      { "name": "text", "colorHex": "F4F6F8" }
+      { "name": "ink", "colorHex": "F2F3F5" },
+      { "name": "ground", "colorHex": "3C3D42" },
+      { "name": "shade", "colorHex": "141416" }
     ],
-    "backgroundColorHex": "@greyEdge",
+    "backgroundColorHex": "@shade",
     "backgroundGradient": {
       "kind": "radial",
       "start": [0.5, 0.44],
-      "end": [1.02, 1.08],
+      "end": [1.05, 1.05],
       "repeat": "clamp",
       "stops": [
-        { "colorHex": "@greyCore", "at": 0 },
-        { "colorHex": "@greyEdge", "at": 1 }
+        { "colorHex": "@ground", "at": 0 },
+        { "colorHex": "@shade", "at": 1 }
       ]
     },
+    "environment": { "preset": "studio", "intensity": 1, "rotation": 0 },
     "subtitleFontFamily": "system",
-    "subtitleFontSize": 68,
+    "subtitleFontSize": 64,
     "subtitleBold": true,
-    "subtitleColorHex": "@text",
+    "subtitleColorHex": "@ink",
     "subtitleBackgroundOpacity": 0.0,
     "subtitleBackgroundPadding": 16,
-    "subtitleLeftMargin": 120,
-    "subtitleRightMargin": 120
+    "subtitleLeftMargin": 100,
+    "subtitleRightMargin": 100
   },
   "resources": [
     {
-      "id": "vaseChrome",
+      "id": "vase-chrome",
       "kind": "model",
       "filename": "vase.glb",
       "displayName": "Vase — chrome",
       "addedAt": 0,
       "imageCuts": [],
       "disabledAudioTrackIndices": [],
+      "clips": [],
+      "boundsRadius": 0.9065,
       "materials": {
         "Body": { "colorHex": "@silver", "metallic": 1, "roughness": 0.12 }
       }
     },
     {
-      "id": "vaseMatte",
+      "id": "vase-matte",
       "kind": "model",
       "filename": "vase.glb",
       "displayName": "Vase — matte",
       "addedAt": 0,
       "imageCuts": [],
       "disabledAudioTrackIndices": [],
+      "clips": [],
+      "boundsRadius": 0.9065,
       "materials": {
         "Body": { "colorHex": "@accent", "metallic": 0, "roughness": 0.85 }
       }
     },
     {
-      "id": "vaseGloss",
+      "id": "vase-gloss",
       "kind": "model",
       "filename": "vase.glb",
       "displayName": "Vase — gloss",
       "addedAt": 0,
       "imageCuts": [],
       "disabledAudioTrackIndices": [],
+      "clips": [],
+      "boundsRadius": 0.9065,
       "materials": {
         "Body": { "colorHex": "@accent", "metallic": 0, "roughness": 0.12 }
       }
@@ -89,117 +96,121 @@
       "keyframes": []
     },
     {
-      "id": "vLeft",
-      "name": "Chrome",
+      "id": "bench",
+      "name": "bench",
       "sortIndex": 1,
-      "kind": "model",
+      "kind": "stage",
       "isEnabled": true,
       "startTime": 0,
       "duration": 9,
-      "resourceID": "vaseChrome",
-      "stage": "bench",
-      "fadeIn": 0.5,
+      "fadeIn": 0.4,
       "keyframes": [
         {
-          "id": "lp0",
+          "id": "s0",
           "time": 0,
           "transitionDuration": 0,
-          "placement": { "height": 520, "anchor": "center" },
-          "stageOffset": [-1.5, 0]
+          "placement": { "height": 520, "anchor": "center", "offset": [0, 0] },
+          "camera": { "yaw": -14, "pitch": 6, "distance": 4.6 },
+          "light": { "yaw": -70, "pitch": 50, "intensity": 1.3 }
         },
         {
-          "id": "lc0",
-          "time": 0,
-          "transitionDuration": 0,
-          "camera": { "yaw": -14, "pitch": 6, "distance": 5.0, "fov": 28 }
-        },
-        {
-          "id": "lc1",
+          "id": "s1",
           "time": 9,
-          "transitionDuration": 9,
+          "transitionDuration": 0,
+          "transitionPercent": 100,
           "easing": "easeInOut",
-          "camera": { "yaw": 14, "pitch": 6, "distance": 5.0, "fov": 28 }
+          "camera": { "yaw": 14, "pitch": 6, "distance": 4.6 },
+          "light": { "yaw": 70, "pitch": 50, "intensity": 1.3 }
+        }
+      ],
+      "members": [
+        {
+          "id": "m-chrome",
+          "name": "Chrome vase",
+          "sortIndex": 0,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "vase-chrome",
+          "keyframes": [
+            {
+              "id": "mc0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0,
+              "stageOffset": [-1.5, 0],
+              "camera": { "yaw": -20 }
+            },
+            {
+              "id": "mc1",
+              "time": 9,
+              "transitionDuration": 0,
+          "transitionPercent": 100,
+              "camera": { "yaw": 20 }
+            }
+          ]
         },
         {
-          "id": "ll0",
-          "time": 0,
-          "transitionDuration": 0,
-          "light": { "yaw": -70, "pitch": 45, "intensity": 1.3 }
+          "id": "m-matte",
+          "name": "Matte vase",
+          "sortIndex": 1,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "vase-matte",
+          "keyframes": [
+            {
+              "id": "mm0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0,
+              "stageOffset": [0, 0],
+              "camera": { "yaw": -20 }
+            },
+            {
+              "id": "mm1",
+              "time": 9,
+              "transitionDuration": 0,
+          "transitionPercent": 100,
+              "camera": { "yaw": 20 }
+            }
+          ]
         },
         {
-          "id": "ll1",
-          "time": 9,
-          "transitionDuration": 9,
-          "light": { "yaw": 70, "pitch": 45, "intensity": 1.3 }
+          "id": "m-gloss",
+          "name": "Gloss vase",
+          "sortIndex": 2,
+          "kind": "model",
+          "isEnabled": true,
+          "startTime": 0,
+          "duration": 9,
+          "resourceID": "vase-gloss",
+          "keyframes": [
+            {
+              "id": "mg0",
+              "time": 0,
+              "transitionDuration": 0,
+              "depth": 0,
+              "stageOffset": [1.5, 0],
+              "camera": { "yaw": -20 }
+            },
+            {
+              "id": "mg1",
+              "time": 9,
+              "transitionDuration": 0,
+          "transitionPercent": 100,
+              "camera": { "yaw": 20 }
+            }
+          ]
         }
       ]
     },
     {
-      "id": "vMid",
-      "name": "Matte",
-      "sortIndex": 2,
-      "kind": "model",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 9,
-      "resourceID": "vaseMatte",
-      "stage": "bench",
-      "keyframes": [
-        {
-          "id": "mp0",
-          "time": 0,
-          "transitionDuration": 0,
-          "stageOffset": [0, 0]
-        },
-        {
-          "id": "mc0",
-          "time": 0,
-          "transitionDuration": 0,
-          "camera": { "yaw": -20 }
-        },
-        {
-          "id": "mc1",
-          "time": 9,
-          "transitionDuration": 9,
-          "camera": { "yaw": 20 }
-        }
-      ]
-    },
-    {
-      "id": "vRight",
-      "name": "Gloss",
-      "sortIndex": 3,
-      "kind": "model",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 9,
-      "resourceID": "vaseGloss",
-      "stage": "bench",
-      "keyframes": [
-        {
-          "id": "rp0",
-          "time": 0,
-          "transitionDuration": 0,
-          "stageOffset": [1.5, 0]
-        },
-        {
-          "id": "rc0",
-          "time": 0,
-          "transitionDuration": 0,
-          "camera": { "yaw": -20 }
-        },
-        {
-          "id": "rc1",
-          "time": 9,
-          "transitionDuration": 9,
-          "camera": { "yaw": 20 }
-        }
-      ]
-    },
-    {
-      "id": "cap",
+      "id": "caption",
       "name": "Caption",
-      "sortIndex": 4,
+      "sortIndex": 2,
       "kind": "caption",
       "isEnabled": true,
       "startTime": 1.2,
@@ -207,16 +218,14 @@
       "captionText": "One body. Three finishes.",
       "captionStyle": {
         "alignment": "center",
-        "fontSize": 68,
+        "fontSize": 64,
         "bold": true,
-        "colorHex": "@text",
-        "placement": { "anchor": "bottom", "offset": [0, -64] },
-        "depth": { "count": 7, "offset": [1.5, 1.5], "shade": 0.92, "colorHex": "@greyEdge" },
-        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.34, "unitSeconds": 0.5 }
+        "colorHex": "@ink",
+        "placement": { "anchor": "bottom", "offset": [0, -56] },
+        "depth": { "count": 10, "offset": [1, 1.2], "shade": 0.86, "colorHex": "@shade" },
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.3 }
       },
-      "keyframes": [
-        { "id": "cp0", "time": 0, "opacity": 1, "transitionDuration": 0 }
-      ]
+      "keyframes": []
     }
   ]
 }

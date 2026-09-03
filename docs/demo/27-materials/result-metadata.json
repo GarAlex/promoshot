@@ -3,7 +3,7 @@
   "name": "Metal Matte Glaze",
   "createdAt": 0,
   "state": "recorded",
-  "minReaderVersion": 31,
+  "minReaderVersion": 35,
   "trimStart": 0,
   "trimEnd": 9,
   "videoDuration": 9,
@@ -13,171 +13,105 @@
     "canvasHeight": 900,
     "fps": 30,
     "palette": [
-      { "name": "accent", "colorHex": "E8A33D" },
-      { "name": "ground", "colorHex": "3B3E44" },
-      { "name": "edge", "colorHex": "121316" },
-      { "name": "ink", "colorHex": "F6F3EE" }
+      { "name": "canvas", "colorHex": "3A3A3E" },
+      { "name": "canvas-edge", "colorHex": "121214" },
+      { "name": "text", "colorHex": "F4F4F6" },
+      { "name": "text-bg", "colorHex": "101012" },
+      { "name": "edge", "colorHex": "4A4A52" },
+      { "name": "caption-outline", "colorHex": "0B0B0D" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "E8A33D" },
+      { "name": "accent", "colorHex": "E8A33D" }
     ],
-    "backgroundColorHex": "@edge",
+    "backgroundColorHex": "@canvas",
     "backgroundGradient": {
       "kind": "radial",
       "start": [0.5, 0.46],
       "end": [1.0, 1.0],
       "repeat": "clamp",
       "stops": [
-        { "colorHex": "@ground", "at": 0 },
-        { "colorHex": "@edge", "at": 1 }
+        { "colorHex": "@canvas", "at": 0 },
+        { "colorHex": "@canvas-edge", "at": 1 }
       ]
     },
+    "environment": { "preset": "studio", "intensity": 1, "rotation": 0 },
     "subtitleFontFamily": "system",
     "subtitleFontSize": 76,
     "subtitleBold": true,
-    "subtitleColorHex": "@ink",
+    "subtitleColorHex": "@text",
     "subtitleBackgroundOpacity": 0.0,
     "subtitleBackgroundPadding": 18,
     "subtitleLeftMargin": 90,
-    "subtitleRightMargin": 90
+    "subtitleRightMargin": 90,
+    "subtitleVerticalMargin": 760
   },
   "resources": [
-    {
-      "id": "sphereRes",
-      "kind": "model",
-      "filename": "sphere.glb",
-      "displayName": "Sphere",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": []
-    },
-    {
-      "id": "torusRes",
-      "kind": "model",
-      "filename": "torus.glb",
-      "displayName": "Torus",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": []
-    },
-    {
-      "id": "vaseRes",
-      "kind": "model",
-      "filename": "vase.glb",
-      "displayName": "Vase",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": []
-    }
+    { "id": "sphereRes", "kind": "model", "filename": "sphere.glb",
+      "displayName": "Sphere", "addedAt": 0, "imageCuts": [],
+      "disabledAudioTrackIndices": [], "clips": [],
+      "materials": { "Body": { "colorHex": "@accent", "metallic": 1, "roughness": 0.18 } } },
+    { "id": "torusRes", "kind": "model", "filename": "torus.glb",
+      "displayName": "Torus", "addedAt": 0, "imageCuts": [],
+      "disabledAudioTrackIndices": [], "clips": [],
+      "materials": { "Body": { "colorHex": "C9CBD2", "metallic": 0, "roughness": 0.85 } } },
+    { "id": "vaseRes", "kind": "model", "filename": "vase.glb",
+      "displayName": "Vase", "addedAt": 0, "imageCuts": [],
+      "disabledAudioTrackIndices": [], "clips": [],
+      "materials": { "Body": { "colorHex": "6FA8C7", "metallic": 0, "roughness": 0.08 } } }
   ],
   "layers": [
-    {
-      "id": "bg",
-      "name": "Ground",
-      "sortIndex": 0,
-      "kind": "background",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 9,
-      "keyframes": []
-    },
-    {
-      "id": "sphereLayer",
-      "name": "Sphere",
-      "sortIndex": 1,
-      "kind": "model",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 9,
-      "resourceID": "sphereRes",
-      "stage": "bench",
-      "materials": { "Body": "@accent" },
+    { "id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 9, "keyframes": [] },
+
+    { "id": "bench", "name": "bench", "sortIndex": 1, "kind": "stage",
+      "isEnabled": true, "startTime": 0, "duration": 9, "fadeIn": 0.4,
       "keyframes": [
-        {
-          "id": "s0",
-          "time": 0,
-          "transitionDuration": 0,
-          "stageOffset": [-1.5, 0],
+        { "id": "s0", "time": 0, "transitionDuration": 0,
           "placement": { "height": 520, "anchor": "center" },
-          "camera": { "yaw": -14, "pitch": 6, "distance": 4.2 },
-          "light": { "yaw": -70, "pitch": 45, "intensity": 1.3 }
-        },
-        {
-          "id": "s1",
-          "time": 9,
-          "transitionDuration": 9,
-          "easing": "easeInOut",
-          "stageOffset": [-1.5, 0],
-          "placement": { "height": 520, "anchor": "center" },
-          "camera": { "yaw": 14, "pitch": 6, "distance": 4.2 },
-          "light": { "yaw": 70, "pitch": 45, "intensity": 1.3 }
-        }
-      ]
-    },
-    {
-      "id": "torusLayer",
-      "name": "Torus",
-      "sortIndex": 2,
-      "kind": "model",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 9,
-      "resourceID": "torusRes",
-      "stage": "bench",
-      "keyframes": [
-        {
-          "id": "t0",
-          "time": 0,
-          "transitionDuration": 0,
-          "stageOffset": [0, 0],
-          "camera": { "yaw": 20, "pitch": 55 }
-        },
-        {
-          "id": "t1",
-          "time": 9,
-          "transitionDuration": 9,
-          "easing": "easeInOut",
-          "stageOffset": [0, 0],
-          "camera": { "yaw": 80, "pitch": 55 }
-        }
-      ]
-    },
-    {
-      "id": "vaseLayer",
-      "name": "Vase",
-      "sortIndex": 3,
-      "kind": "model",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 9,
-      "resourceID": "vaseRes",
-      "stage": "bench",
-      "keyframes": [
-        {
-          "id": "v0",
-          "time": 0,
-          "transitionDuration": 0,
-          "stageOffset": [1.5, 0]
-        }
-      ]
-    },
-    {
-      "id": "caption",
-      "name": "Headline",
-      "sortIndex": 4,
-      "kind": "caption",
-      "isEnabled": true,
-      "startTime": 1.2,
-      "duration": 7.8,
+          "camera": { "yaw": -14, "pitch": 8, "distance": 4.4 } },
+        { "id": "s1", "time": 9, "transitionDuration": 9, "easing": "easeInOut",
+          "camera": { "yaw": 14, "pitch": 8, "distance": 4.4 } },
+        { "id": "l0", "time": 0, "transitionDuration": 0,
+          "light": { "yaw": -70, "pitch": 45, "intensity": 1.3 } },
+        { "id": "l1", "time": 9, "transitionDuration": 9,
+          "light": { "yaw": 70, "pitch": 45, "intensity": 1.3 } }
+      ],
+      "members": [
+        { "id": "mSphere", "name": "Sphere", "sortIndex": 0, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 9, "resourceID": "sphereRes",
+          "keyframes": [
+            { "id": "sp0", "time": 0, "transitionDuration": 0,
+              "stageOffset": [-1.5, 0], "depth": 0 }
+          ] },
+        { "id": "mTorus", "name": "Torus", "sortIndex": 1, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 9, "resourceID": "torusRes",
+          "keyframes": [
+            { "id": "to0", "time": 0, "transitionDuration": 0,
+              "stageOffset": [0, 0], "depth": 0,
+              "camera": { "yaw": 20, "pitch": 55 } },
+            { "id": "to1", "time": 9, "transitionDuration": 9, "easing": "easeInOut",
+              "camera": { "yaw": 80, "pitch": 55 } }
+          ] },
+        { "id": "mVase", "name": "Vase", "sortIndex": 2, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 9, "resourceID": "vaseRes",
+          "keyframes": [
+            { "id": "va0", "time": 0, "transitionDuration": 0,
+              "stageOffset": [1.5, 0], "depth": 0 }
+          ] }
+      ] },
+
+    { "id": "cap", "name": "Caption", "sortIndex": 2, "kind": "caption",
+      "isEnabled": true, "startTime": 1.2, "duration": 7.8,
       "captionText": "Metal. Matte. Glaze.",
       "captionStyle": {
-        "placement": { "anchor": "bottom", "offset": [0, -64] },
+        "isBold": true,
         "fontSize": 76,
-        "bold": true,
         "alignment": "center",
-        "depth": { "count": 10, "offset": [1, 1.5], "shade": 0.82, "colorHex": "@edge" },
-        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.45, "easing": "easeInOut" }
+        "placement": { "anchor": "bottom", "offset": [0, -64] },
+        "depth": { "count": 8, "offset": [2, 2], "shade": 0.82, "colorHex": "000000" },
+        "reveal": { "by": "word", "mode": "fade", "seconds": 1.6, "easing": "easeInOut" }
       },
-      "keyframes": [
-        { "id": "c0", "time": 0, "opacity": 1, "transitionDuration": 0 }
-      ]
-    }
+      "keyframes": [] }
   ]
 }
