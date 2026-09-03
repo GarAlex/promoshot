@@ -3062,4 +3062,78 @@ mod tests {
         assert_eq!(differing, 0, "the lifted document is the flat one, pixel for pixel");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// A scene environment (rung 35) is what a metal mirrors: the same
+    /// chrome cube reads brighter and differently under the studio than
+    /// under the synthetic sky, and turning the environment turns the
+    /// reflection.
+    #[test]
+    fn a_scene_environment_lights_a_metal() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-env-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        // A sphere: its reflections sweep every direction, so a turned
+        // environment must show — a cube's flat faces each mirror one
+        // direction and can land on the same radiance twice.
+        std::fs::write(
+            dir.join("Resources").join("grey.glb"),
+            promo_engine::model::shape_glb(promo_engine::model::ShapeKind::Sphere),
+        )
+        .unwrap();
+        let doc = |environment: &str| {
+            format!(
+                r#"{{"id":"P","name":"Env","createdAt":0,"state":"recorded","minReaderVersion":35,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"{environment}}},
+                "resources":[
+                  {{"id":"M","kind":"model","filename":"grey.glb","displayName":"Grey","addedAt":0,
+                    "materials":{{"Body":{{"colorHex":"C8C8C8","metallic":1,"roughness":0.1}}}}}}],
+                "layers":[{{"id":"L","name":"grey","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"M",
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":25,"pitch":20,"distance":3.0}},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(0.5).expect("frame");
+            (100..220)
+                .flat_map(|y| (100..220).map(move |x| (x, y)))
+                .flat_map(|(x, y)| frame[(y * 320 + x) * 4..(y * 320 + x) * 4 + 3].to_vec())
+                .collect()
+        };
+        let plain = render(&doc(""));
+        let studio = render(&doc(r#","environment":{"preset":"studio"}"#));
+        let turned = render(&doc(r#","environment":{"preset":"studio","rotation":180}"#));
+        let mean = |a: &[u8]| a.iter().map(|v| *v as u64).sum::<u64>() / a.len() as u64;
+        let differ = |a: &[u8], b: &[u8]| -> usize {
+            a.iter()
+                .zip(b)
+                .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12)
+                .count()
+        };
+        assert!(
+            differ(&studio, &plain) > plain.len() / 5,
+            "the studio changes a chrome cube: {} of {}",
+            differ(&studio, &plain),
+            plain.len()
+        );
+        assert!(
+            mean(&studio) > mean(&plain),
+            "the studio is brighter than the synthetic sky: {} vs {}",
+            mean(&studio),
+            mean(&plain)
+        );
+        assert!(
+            differ(&turned, &studio) > plain.len() / 20,
+            "turning the environment turns the reflection: {} of {}",
+            differ(&turned, &studio),
+            plain.len()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

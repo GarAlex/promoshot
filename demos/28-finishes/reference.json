@@ -2,7 +2,7 @@
  "id": "89DE00F8-F2F6-3940-701E-59B3C37E3D4B",
  "name": "28 Finishes",
  "formatVersion": 2,
- "minReaderVersion": 32,
+ "minReaderVersion": 35,
  "createdAt": 0,
  "state": "ready",
  "trimStart": 0,
@@ -36,7 +36,10 @@
     "name": "text",
     "colorHex": "FFFFFF"
    }
-  ]
+  ],
+  "environment": {
+   "preset": "studio"
+  }
  },
  "resources": [
   {
@@ -105,15 +108,6 @@
       -70
      ]
     },
-    "depth": {
-     "count": 6,
-     "offset": [
-      2,
-      2
-     ],
-     "shade": 0.6,
-     "colorHex": "@edge"
-    },
     "reveal": {
      "by": "word",
      "mode": "fade",
@@ -161,27 +155,43 @@
    ]
   },
   {
-   "id": "A89426BE-7FE0-72FF-B4E3-983E13ABEB52",
-   "name": "Chrome",
+   "id": "2F7EF055-1DDD-CDD4-7D2A-C93CE70DF982",
+   "name": "Bench",
    "sortIndex": 1,
-   "kind": "model",
+   "kind": "stage",
    "isEnabled": true,
    "startTime": 0,
    "duration": 9.0,
-   "resourceID": "B21479AC-60FA-2C64-AE4A-B7B93AE62229",
-   "stage": "bench",
    "fadeIn": 0.5,
    "keyframes": [
     {
      "id": "79F0610C-EA49-9FD5-5DEB-ED7B5DFE4D8D",
      "time": 0,
      "transitionDuration": 0,
+     "placement": {
+      "height": 520,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
      "camera": {
       "yaw": -14,
       "pitch": 12,
       "distance": 5.0,
       "fov": 28
      },
+     "light": {
+      "yaw": -70,
+      "pitch": 45,
+      "intensity": 1.3
+     }
+    },
+    {
+     "id": "4DF381CE-AABB-9F89-2EEB-CAE6A02B668B",
+     "time": 8.7,
+     "transitionDuration": 8.7,
      "placement": {
       "height": 520,
       "anchor": "center",
@@ -190,127 +200,138 @@
        -30
       ]
      },
-     "light": {
-      "yaw": -70,
-      "pitch": 45,
-      "intensity": 1.3
-     },
-     "stageOffset": [
-      -1.5,
-      0.0
-     ]
-    },
-    {
-     "id": "4DF381CE-AABB-9F89-2EEB-CAE6A02B668B",
-     "time": 8.7,
-     "transitionDuration": 8.7,
-     "easing": "easeInOut",
      "camera": {
       "yaw": 14,
       "pitch": 8,
       "distance": 4.8,
       "fov": 28
      },
-     "placement": {
-      "height": 520,
-      "anchor": "center",
-      "offset": [
-       0,
-       -30
-      ]
-     },
      "light": {
       "yaw": 70,
       "pitch": 40,
       "intensity": 1.3
      },
-     "stageOffset": [
-      -1.5,
-      0.0
-     ]
+     "easing": "easeInOut"
     }
-   ]
-  },
-  {
-   "id": "2A303185-461C-C276-04B6-F330FB167BEF",
-   "name": "Matte",
-   "sortIndex": 2,
-   "kind": "model",
-   "isEnabled": true,
-   "startTime": 0,
-   "duration": 9.0,
-   "resourceID": "97B404DA-9695-1C20-FD40-12AF123B1A69",
-   "stage": "bench",
-   "keyframes": [
+   ],
+   "members": [
     {
-     "id": "8858BFF3-3B57-436F-0F55-DF4A584DC85A",
-     "time": 0,
-     "transitionDuration": 0,
-     "camera": {
-      "yaw": -20
-     },
-     "stageOffset": [
-      0.0,
-      0.0
+     "id": "4F81DBB2-F022-5855-B6DA-46589791F18D",
+     "name": "Chrome",
+     "sortIndex": 10,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 9.0,
+     "resourceID": "B21479AC-60FA-2C64-AE4A-B7B93AE62229",
+     "keyframes": [
+      {
+       "id": "56059501-5296-0F51-FF3D-6A42D3FEF454",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        -1.5,
+        0.0
+       ],
+       "camera": {
+        "yaw": -20
+       }
+      },
+      {
+       "id": "A5490451-8E68-092F-0C0B-B28E01544522",
+       "time": 8.7,
+       "transitionDuration": 8.7,
+       "stageOffset": [
+        -1.5,
+        0.0
+       ],
+       "camera": {
+        "yaw": 20
+       },
+       "easing": "easeInOut"
+      }
      ]
     },
     {
-     "id": "5626C207-4FB2-6476-6F03-4D626110DF8C",
-     "time": 8.7,
-     "transitionDuration": 8.7,
-     "easing": "easeInOut",
-     "camera": {
-      "yaw": 20
-     },
-     "stageOffset": [
-      0.0,
-      0.0
-     ]
-    }
-   ]
-  },
-  {
-   "id": "6E3CA9C3-A2EF-13C7-D971-506EDB247AEF",
-   "name": "Gloss",
-   "sortIndex": 3,
-   "kind": "model",
-   "isEnabled": true,
-   "startTime": 0,
-   "duration": 9.0,
-   "resourceID": "69571CF2-46C4-594B-72B5-73F7056C8F50",
-   "stage": "bench",
-   "keyframes": [
-    {
-     "id": "D08EB68F-C388-B11E-777F-11F5DDD0E973",
-     "time": 0,
-     "transitionDuration": 0,
-     "camera": {
-      "yaw": -20
-     },
-     "stageOffset": [
-      1.5,
-      0.0
+     "id": "86571E88-3AAD-DADD-F4CD-9491D03ED570",
+     "name": "Matte",
+     "sortIndex": 11,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 9.0,
+     "resourceID": "97B404DA-9695-1C20-FD40-12AF123B1A69",
+     "keyframes": [
+      {
+       "id": "F5C29AF1-114E-51CB-8C0C-8852E693B926",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        0.0,
+        0.0
+       ],
+       "camera": {
+        "yaw": -20
+       }
+      },
+      {
+       "id": "8B822883-5760-98D8-B64B-D317CF7BEC10",
+       "time": 8.7,
+       "transitionDuration": 8.7,
+       "stageOffset": [
+        0.0,
+        0.0
+       ],
+       "camera": {
+        "yaw": 20
+       },
+       "easing": "easeInOut"
+      }
      ]
     },
     {
-     "id": "26B6BD9C-DF62-3B0A-8F10-55B7E79E47DC",
-     "time": 8.7,
-     "transitionDuration": 8.7,
-     "easing": "easeInOut",
-     "camera": {
-      "yaw": 20
-     },
-     "stageOffset": [
-      1.5,
-      0.0
+     "id": "8FB9CD4E-A184-6C35-8ECB-E768C2F9AA34",
+     "name": "Gloss",
+     "sortIndex": 12,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 9.0,
+     "resourceID": "69571CF2-46C4-594B-72B5-73F7056C8F50",
+     "keyframes": [
+      {
+       "id": "5BCFF6C9-3C44-D9C8-88B7-A9BCCF55942D",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        1.5,
+        0.0
+       ],
+       "camera": {
+        "yaw": -20
+       }
+      },
+      {
+       "id": "2A04B4FE-795C-736E-3EB6-FFDED98410C3",
+       "time": 8.7,
+       "transitionDuration": 8.7,
+       "stageOffset": [
+        1.5,
+        0.0
+       ],
+       "camera": {
+        "yaw": 20
+       },
+       "easing": "easeInOut"
+      }
      ]
     }
    ]
   },
   {
-   "id": "E70C8F5F-16A2-E267-1253-AE1B03295FF8",
+   "id": "4EC13A88-BA99-0E63-6BC0-D84B54853BC0",
    "name": "Title",
-   "sortIndex": 4,
+   "sortIndex": 2,
    "kind": "caption",
    "isEnabled": true,
    "startTime": 1.2,

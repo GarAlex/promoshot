@@ -7,7 +7,7 @@
  "duration": 9.0,
  "kinds": {
   "background": 1,
-  "model": 3,
+  "stage": 1,
   "caption": 1
  },
  "features": {
@@ -26,13 +26,14 @@
   "gradient": true,
   "reveal": true,
   "stage": true,
-  "stageLayer": false,
+  "stageLayer": true,
   "model": true,
   "camera": true,
   "materials": true,
   "finish": false,
   "textBody": false,
-  "depth": true,
+  "environment": true,
+  "depth": false,
   "captionTilt": false,
   "kineticReveal": false,
   "blendModes": [],

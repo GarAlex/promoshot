@@ -1249,6 +1249,36 @@ fn default_black() -> String {
     "000000".into()
 }
 
+/// The light the world gives a body beyond the key light (rung 35): a
+/// built-in ENVIRONMENT the model pass mirrors in metals and sheens on
+/// glossy dielectrics — `studio` (a soft box over neutral grey), `sunset`
+/// (a low warm sun under a cool sky) or `night` (a cold moon over a dark
+/// floor). `intensity` scales it (default 1); `rotation` turns it about
+/// the vertical, in degrees (default 0). Absent, the pass keeps its
+/// synthetic sky and ground.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneEnvironment {
+    pub preset: String,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub intensity: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub rotation: Option<f64>,
+}
+
+impl SceneEnvironment {
+    pub const PRESETS: [&'static str; 3] = ["studio", "sunset", "night"];
+    pub fn intensity(&self) -> f64 {
+        self.intensity.unwrap_or(1.0)
+    }
+    pub fn rotation(&self) -> f64 {
+        self.rotation.unwrap_or(0.0)
+    }
+    pub fn is_known(&self) -> bool {
+        Self::PRESETS.contains(&self.preset.as_str())
+    }
+}
+
 /// Mirrors `CompositionSettings` — every field falls back to its default on
 /// decode (Swift uses `try?` per field), and every field is re-encoded.
 #[derive(Debug, Clone, PartialEq)]
@@ -1301,6 +1331,9 @@ pub struct CompositionSettings {
     /// The reveal every caption falls back to — a project that types all its
     /// captions says it once here.
     pub subtitle_reveal: Option<TextReveal>,
+    /// The scene's environment (rung 35) — what metals mirror. See
+    /// `SceneEnvironment`.
+    pub environment: Option<SceneEnvironment>,
     pub subtitle_background_corner_radius: f64,
     /// What a caption that never chose an alignment gets. Centre, which is
     /// what the renderer already fell back to.
@@ -1370,6 +1403,7 @@ impl Default for CompositionSettings {
             subtitle_shadow_radius: 0.0,
             subtitle_shadow_offset: None,
             subtitle_reveal: None,
+            environment: None,
             subtitle_alignment: SubtitleTextAlignment::Center,
             subtitle_background_corner_radius: 8.0,
             video_border_color_hex: "FFFFFF".into(),
@@ -1425,6 +1459,7 @@ struct CompositionSettingsWire {
     subtitle_shadow_radius: Option<f64>,
     subtitle_shadow_offset: Option<[f64; 2]>,
     subtitle_reveal: Option<TextReveal>,
+    environment: Option<SceneEnvironment>,
     subtitle_background_corner_radius: Option<f64>,
     subtitle_alignment: Option<SubtitleTextAlignment>,
     video_border_color_hex: Option<String>,
@@ -1498,6 +1533,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
                 .unwrap_or(dflt.subtitle_shadow_radius),
             subtitle_shadow_offset: w.subtitle_shadow_offset,
             subtitle_reveal: w.subtitle_reveal,
+            environment: w.environment,
             subtitle_alignment: w.subtitle_alignment.unwrap_or(dflt.subtitle_alignment),
             subtitle_background_corner_radius: w
                 .subtitle_background_corner_radius
@@ -1574,6 +1610,8 @@ impl Serialize for CompositionSettings {
             subtitle_shadow_offset: &'a Option<[f64; 2]>,
             #[serde(skip_serializing_if = "Option::is_none")]
             subtitle_reveal: &'a Option<TextReveal>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            environment: &'a Option<SceneEnvironment>,
             subtitle_background_corner_radius: f64,
             subtitle_alignment: SubtitleTextAlignment,
             video_border_color_hex: &'a str,
@@ -1621,6 +1659,7 @@ impl Serialize for CompositionSettings {
             subtitle_shadow_radius: self.subtitle_shadow_radius,
             subtitle_shadow_offset: &self.subtitle_shadow_offset,
             subtitle_reveal: &self.subtitle_reveal,
+            environment: &self.environment,
             subtitle_alignment: self.subtitle_alignment,
             subtitle_background_corner_radius: self.subtitle_background_corner_radius,
             video_border_color_hex: &self.video_border_color_hex,
@@ -3467,6 +3506,13 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 35 is a scene environment. Dropped by an older reader, every
+        // metal in the project goes back to the synthetic sky — a
+        // different picture, so the rung refuses.
+        if self.composition_settings.environment.is_some() {
+            return 35;
+        }
+
         // 34 is a generated body — a model resource with a `recipe` and
         // no file. An older reader looks for the file, finds none and
         // draws nothing: a different picture, so the rung refuses.
@@ -4466,6 +4512,19 @@ mod placement_model_tests {
                  "layers":[]"#,
         );
         assert_eq!(generated.minimum_reader_version(), 34);
+
+        // 35: a scene environment in the settings.
+        let mut lit = meta(r#""resources":[],"layers":[]"#);
+        lit.composition_settings.environment = Some(SceneEnvironment {
+            preset: "studio".into(),
+            intensity: Some(1.2),
+            rotation: None,
+        });
+        assert_eq!(lit.minimum_reader_version(), 35);
+        let json = lit.to_json().expect("encode");
+        assert!(json.contains(r#""environment":{"preset":"studio","intensity":1.2}"#), "{json}");
+        let back = ProjectMetadata::from_json(&json).expect("decode");
+        assert_eq!(back.composition_settings.environment, lit.composition_settings.environment);
         let body = generated.resources.as_ref().unwrap()[0].recipe.clone().unwrap();
         let BodyRecipe::Text(text) = body;
         assert_eq!(text.text, "Hello");

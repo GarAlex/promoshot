@@ -32,7 +32,8 @@
   "materials": true,
   "finish": true,
   "textBody": false,
-  "depth": true,
+  "environment": true,
+  "depth": false,
   "captionTilt": false,
   "kineticReveal": false,
   "blendModes": [],
@@ -46,7 +47,7 @@
   "placement": true
  },
  "phrases": [
-  "One stage. One layer."
+  "One stage. One camera."
  ],
  "media": [
   "vase.glb"

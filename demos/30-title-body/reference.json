@@ -2,7 +2,7 @@
  "id": "BEB360F9-D1D1-BDF5-03AF-A24E791A9BCB",
  "name": "30 Title Body",
  "formatVersion": 2,
- "minReaderVersion": 34,
+ "minReaderVersion": 35,
  "createdAt": 0,
  "state": "ready",
  "trimStart": 0,
@@ -36,7 +36,10 @@
     "name": "text",
     "colorHex": "FFFFFF"
    }
-  ]
+  ],
+  "environment": {
+   "preset": "studio"
+  }
  },
  "resources": [
   {

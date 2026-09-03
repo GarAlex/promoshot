@@ -892,6 +892,14 @@ any keyframe value.
 `placement` and `zoom` measure the model's own box on screen at that
 camera (the picture the layer shows is cut to it), so "700 tall,
 centred" is the model 700 tall whatever its shape.
+The scene's ENVIRONMENT (rung 35) is what every metal mirrors and every
+glossy surface sheens: `"compositionSettings": { "environment": {
+"preset": "studio", "intensity": 1, "rotation": 0 } }` — `studio` (a
+soft box over neutral grey), `sunset` (a low warm sun under a cool sky)
+or `night` (a cold moon over a dark floor); `intensity` scales it,
+`rotation` turns it about the vertical in degrees. Without one, metals
+mirror a synthetic sky and ground and chrome reads dark on a dark
+theme. A project with an environment carries `minReaderVersion: 35`.
 
 Stages (rung 30). Layers naming the same `"stage": "hero"` are drawn
 together through ONE camera into ONE depth buffer: model members turn

@@ -670,6 +670,11 @@ mod schema_doc_tests {
             subtitle_shadow_radius: 0.0,
             subtitle_shadow_offset: Some([0.0, 4.0]),
             subtitle_reveal: Some(full_reveal()),
+            environment: Some(SceneEnvironment {
+                preset: "studio".into(),
+                intensity: Some(1.2),
+                rotation: Some(45.0),
+            }),
             subtitle_background_corner_radius: 8.0,
             subtitle_alignment: SubtitleTextAlignment::Center,
             video_border_color_hex: "26364F".into(),

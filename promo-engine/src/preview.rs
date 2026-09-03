@@ -139,6 +139,23 @@ type SlotPictures = Vec<(usize, String)>;
 
 /// A model the host provided: decoded, uploaded, and the colours its
 /// slots were last painted (so a binding re-paints only when it changes).
+/// The scene's environment (rung 35) as the pass takes it: a known preset
+/// with its intensity and rotation, or none — the synthetic sky.
+fn environment_view(settings: &promo_model::CompositionSettings) -> promo_gpu::model_pass::EnvironmentView {
+    use promo_gpu::model_pass::{EnvPreset, EnvironmentView};
+    settings
+        .environment
+        .as_ref()
+        .and_then(|e| {
+            EnvPreset::parse(&e.preset).map(|preset| EnvironmentView {
+                preset,
+                intensity: e.intensity().max(0.0) as f32,
+                rotation_deg: e.rotation() as f32,
+            })
+        })
+        .unwrap_or_default()
+}
+
 /// What a `materials` binding paints on one slot: a colour, a finish,
 /// either or both — what the pass is told, and what is remembered so a
 /// slot is repainted only when the binding changes.
@@ -2998,6 +3015,7 @@ impl PreviewEngine {
                 background[2] * 0.45 + 0.08,
             ],
             rim_rgb: rim,
+            environment: environment_view(settings),
         };
 
         // Each model member's slots painted and pictured as its own layer
@@ -3420,6 +3438,7 @@ impl PreviewEngine {
             key_rgb: [1.0, 1.0, 1.0],
             ambient_rgb: ambient,
             rim_rgb: rim,
+            environment: environment_view(settings),
         };
         let matrices = match clip_name.as_deref() {
             Some(name) if loaded.model.clips.iter().any(|c| c.name == name) => {

@@ -2,7 +2,7 @@
  "id": "10405403-5781-08D8-41D2-4CEA0E1601F5",
  "name": "29 Bench",
  "formatVersion": 2,
- "minReaderVersion": 33,
+ "minReaderVersion": 35,
  "createdAt": 0,
  "state": "ready",
  "trimStart": 0,
@@ -36,7 +36,10 @@
     "name": "text",
     "colorHex": "FFFFFF"
    }
-  ]
+  ],
+  "environment": {
+   "preset": "studio"
+  }
  },
  "resources": [
   {
@@ -93,7 +96,7 @@
    "filename": "",
    "displayName": "Caption \u00b7 Title",
    "addedAt": 0,
-   "captionText": "One stage. One layer.",
+   "captionText": "One stage. One camera.",
    "captionStyle": {
     "alignment": "center",
     "subtitleFontSize": 54,
@@ -104,15 +107,6 @@
       0,
       -70
      ]
-    },
-    "depth": {
-     "count": 6,
-     "offset": [
-      2,
-      2
-     ],
-     "shade": 0.6,
-     "colorHex": "@edge"
     },
     "reveal": {
      "by": "word",
@@ -183,9 +177,9 @@
       ]
      },
      "camera": {
-      "yaw": -14,
-      "pitch": 12,
-      "distance": 5.0,
+      "yaw": -32,
+      "pitch": 14,
+      "distance": 5.2,
       "fov": 28
      },
      "light": {
@@ -207,7 +201,7 @@
       ]
      },
      "camera": {
-      "yaw": 14,
+      "yaw": 32,
       "pitch": 8,
       "distance": 4.8,
       "fov": 28
@@ -238,23 +232,7 @@
        "stageOffset": [
         -1.5,
         0.0
-       ],
-       "camera": {
-        "yaw": -20
-       }
-      },
-      {
-       "id": "A5490451-8E68-092F-0C0B-B28E01544522",
-       "time": 8.7,
-       "transitionDuration": 8.7,
-       "stageOffset": [
-        -1.5,
-        0.0
-       ],
-       "camera": {
-        "yaw": 20
-       },
-       "easing": "easeInOut"
+       ]
       }
      ]
     },
@@ -275,23 +253,7 @@
        "stageOffset": [
         0.0,
         0.0
-       ],
-       "camera": {
-        "yaw": -20
-       }
-      },
-      {
-       "id": "8B822883-5760-98D8-B64B-D317CF7BEC10",
-       "time": 8.7,
-       "transitionDuration": 8.7,
-       "stageOffset": [
-        0.0,
-        0.0
-       ],
-       "camera": {
-        "yaw": 20
-       },
-       "easing": "easeInOut"
+       ]
       }
      ]
     },
@@ -312,23 +274,7 @@
        "stageOffset": [
         1.5,
         0.0
-       ],
-       "camera": {
-        "yaw": -20
-       }
-      },
-      {
-       "id": "2A04B4FE-795C-736E-3EB6-FFDED98410C3",
-       "time": 8.7,
-       "transitionDuration": 8.7,
-       "stageOffset": [
-        1.5,
-        0.0
-       ],
-       "camera": {
-        "yaw": 20
-       },
-       "easing": "easeInOut"
+       ]
       }
      ]
     }

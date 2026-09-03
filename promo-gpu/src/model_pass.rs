@@ -69,6 +69,50 @@ pub struct ModelView {
     pub key_rgb: [f32; 3],
     pub ambient_rgb: [f32; 3],
     pub rim_rgb: [f32; 3],
+    /// The world's light beyond the key: a built-in environment metals
+    /// mirror. `EnvPreset::None` keeps the synthetic sky and ground.
+    pub environment: EnvironmentView,
+}
+
+/// A built-in environment, as an equirectangular HDR the pass generates
+/// once: a soft studio, a low warm sunset, a cold night.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EnvPreset {
+    #[default]
+    None,
+    Studio,
+    Sunset,
+    Night,
+}
+
+impl EnvPreset {
+    pub fn parse(name: &str) -> Option<EnvPreset> {
+        match name {
+            "studio" => Some(EnvPreset::Studio),
+            "sunset" => Some(EnvPreset::Sunset),
+            "night" => Some(EnvPreset::Night),
+            _ => None,
+        }
+    }
+}
+
+/// Which environment a frame mirrors, how strongly, and turned how far
+/// about the vertical (degrees).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EnvironmentView {
+    pub preset: EnvPreset,
+    pub intensity: f32,
+    pub rotation_deg: f32,
+}
+
+impl Default for EnvironmentView {
+    fn default() -> Self {
+        EnvironmentView {
+            preset: EnvPreset::None,
+            intensity: 1.0,
+            rotation_deg: 0.0,
+        }
+    }
 }
 
 impl Default for ModelView {
@@ -87,6 +131,7 @@ impl Default for ModelView {
             key_rgb: [1.0, 1.0, 1.0],
             ambient_rgb: [0.18, 0.19, 0.22],
             rim_rgb: [0.25, 0.3, 0.4],
+            environment: EnvironmentView::default(),
         }
     }
 }
@@ -99,6 +144,9 @@ struct Frame {
     key_rgb: vec4<f32>,
     ambient_rgb: vec4<f32>,
     rim_rgb: vec4<f32>,
+    // x = 1 when an environment is bound, y = its intensity, z = its
+    // rotation (radians), w = the blurriest mip level.
+    env_params: vec4<f32>,
 };
 struct Material {
     base_color: vec4<f32>,
@@ -110,6 +158,8 @@ struct Material {
     fit: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(1) var env_tex: texture_2d<f32>;
+@group(0) @binding(2) var env_samp: sampler;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(2) var base_samp: sampler;
@@ -152,6 +202,14 @@ fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
     let lo = c * 12.92;
     let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
     return select(hi, lo, c <= vec3<f32>(0.0031308));
+}
+
+fn env_sample(dir: vec3<f32>, lod: f32) -> vec3<f32> {
+    let d = normalize(dir);
+    let yaw = atan2(d.x, d.z) + frame.env_params.z;
+    let u = yaw / 6.2831853 + 0.5;
+    let v = 0.5 - asin(clamp(d.y, -1.0, 1.0)) / 3.1415927;
+    return textureSampleLevel(env_tex, env_samp, vec2<f32>(u, v), lod).rgb * frame.env_params.y;
 }
 
 @fragment
@@ -213,21 +271,30 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     let key = (diffuse + specular) * frame.key_rgb.rgb * frame.light_dir.w;
     let ambient = albedo.rgb * (1.0 - metallic * 0.8) * frame.ambient_rgb.rgb;
     let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6 * (1.0 - metallic * 0.5);
-    // A stand-in for the environment a metal mirrors: a sky-to-ground
-    // gradient by the reflection's height with a darker horizon band,
-    // tinted by the base colour for metals and faint on dielectrics at
-    // grazing angles — chrome reads as chrome without an HDR.
+    // What a metal mirrors and a glossy dielectric sheens: the scene's
+    // environment when one is bound — an equirectangular HDR sampled at
+    // the reflection, blurrier with roughness, its blurriest level
+    // standing in for irradiance — else a stand-in sky-to-ground gradient
+    // by the reflection's height with a darker horizon band.
     let refl = reflect(-v, n);
-    let up = clamp(refl.y * 0.5 + 0.5, 0.0, 1.0);
-    let sky = frame.rim_rgb.rgb * 1.4 + vec3<f32>(0.35);
-    let ground = frame.ambient_rgb.rgb * 0.6;
-    var env = mix(ground, sky, up);
-    env = env * (0.7 + 0.3 * smoothstep(0.0, 0.25, abs(refl.y)));
+    var env: vec3<f32>;
+    var ambient_env = vec3<f32>(0.0);
+    if (frame.env_params.x > 0.5) {
+        env = env_sample(refl, roughness * frame.env_params.w);
+        ambient_env = env_sample(n, frame.env_params.w);
+    } else {
+        let up = clamp(refl.y * 0.5 + 0.5, 0.0, 1.0);
+        let sky = frame.rim_rgb.rgb * 1.4 + vec3<f32>(0.35);
+        let ground = frame.ambient_rgb.rgb * 0.6;
+        env = mix(ground, sky, up);
+        env = env * (0.7 + 0.3 * smoothstep(0.0, 0.25, abs(refl.y)));
+    }
     let fresnel = pow(1.0 - ndv, 5.0);
     let gloss = 1.0 - roughness;
     let mirror = env * albedo.rgb * metallic * (0.75 + 0.25 * fresnel) * (0.5 + 0.5 * gloss);
     let sheen = env * (0.04 + 0.35 * fresnel) * gloss * (1.0 - metallic);
-    let lit = key + ambient + rim + mirror + sheen;
+    let fill = albedo.rgb * (1.0 - metallic * 0.8) * ambient_env * 0.5;
+    let lit = key + ambient + fill + rim + mirror + sheen;
     let encoded = linear_to_srgb(clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0)));
     return vec4<f32>(encoded * albedo.a, albedo.a);
 }
@@ -242,6 +309,7 @@ struct FrameRaw {
     key_rgb: [f32; 4],
     ambient_rgb: [f32; 4],
     rim_rgb: [f32; 4],
+    env_params: [f32; 4],
 }
 
 #[repr(C)]
@@ -326,6 +394,9 @@ pub struct ModelPass {
     pipeline: wgpu::RenderPipeline,
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
+    /// The built-in environments (studio, sunset, night), generated once.
+    envs: [wgpu::TextureView; 3],
+    env_sampler: wgpu::Sampler,
     placement_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     white: wgpu::TextureView,
@@ -340,16 +411,34 @@ impl ModelPass {
         });
         let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("model-frame"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("model-material"),
@@ -457,10 +546,26 @@ impl ModelPass {
             ..Default::default()
         });
         let white = upload_rgba(ctx, 1, 1, &[255, 255, 255, 255]).create_view(&Default::default());
+        let envs = [
+            upload_env(ctx, EnvPreset::Studio).create_view(&Default::default()),
+            upload_env(ctx, EnvPreset::Sunset).create_view(&Default::default()),
+            upload_env(ctx, EnvPreset::Night).create_view(&Default::default()),
+        ];
+        let env_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("model-environment"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            ..Default::default()
+        });
         Ok(ModelPass {
             pipeline,
             frame_layout,
             material_layout,
+            envs,
+            env_sampler,
             placement_layout,
             sampler,
             white,
@@ -851,10 +956,20 @@ impl ModelPass {
         let frame_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("stage-frame"),
             layout: &self.frame_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: frame_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(self.env_view(view.environment.preset)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.env_sampler),
+                },
+            ],
         });
         for item in items {
             if let StageItem::Model { model, matrices } = item {
@@ -1014,10 +1129,20 @@ impl ModelPass {
         let frame_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("model-frame"),
             layout: &self.frame_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: frame_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(self.env_view(view.environment.preset)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.env_sampler),
+                },
+            ],
         });
         let output_view = output.create_view(&Default::default());
         let msaa_view = msaa.create_view(&Default::default());
@@ -1077,6 +1202,180 @@ impl ModelPass {
         let texture = self.render_to_texture(ctx, model, view, matrices, width, height)?;
         read_texture(ctx, &texture, width, height)
     }
+}
+
+impl ModelPass {
+    /// The bound environment for a preset; `None` binds the studio, which
+    /// the shader ignores when `env_params.x` is 0.
+    fn env_view(&self, preset: EnvPreset) -> &wgpu::TextureView {
+        match preset {
+            EnvPreset::None | EnvPreset::Studio => &self.envs[0],
+            EnvPreset::Sunset => &self.envs[1],
+            EnvPreset::Night => &self.envs[2],
+        }
+    }
+}
+
+/// Equirectangular size of a generated environment and its mip count
+/// (256 × 128 down to 1 × 1, whose one texel is the irradiance stand-in).
+const ENV_WIDTH: u32 = 256;
+const ENV_HEIGHT: u32 = 128;
+const ENV_MIPS: u32 = 8;
+
+/// One preset as linear RGB radiance over the sphere: `yaw` from -π to π
+/// about the vertical, `el` the elevation, -π/2 at the floor.
+fn env_radiance(preset: EnvPreset, yaw: f32, el: f32) -> [f32; 3] {
+    let gauss = |dy: f32, de: f32, sy: f32, se: f32| -> f32 {
+        let dy = (dy + std::f32::consts::PI).rem_euclid(2.0 * std::f32::consts::PI) - std::f32::consts::PI;
+        (-(dy * dy) / (2.0 * sy * sy) - (de * de) / (2.0 * se * se)).exp()
+    };
+    let t = (el / std::f32::consts::FRAC_PI_2).clamp(-1.0, 1.0);
+    let mix3 = |a: [f32; 3], b: [f32; 3], k: f32| [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+    let add = |a: [f32; 3], b: [f32; 3], k: f32| [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+    match preset {
+        EnvPreset::None | EnvPreset::Studio => {
+            let base = if t >= 0.0 {
+                mix3([0.42, 0.42, 0.44], [0.9, 0.9, 0.95], t.powf(0.8))
+            } else {
+                mix3([0.42, 0.42, 0.44], [0.12, 0.12, 0.13], (-t).powf(0.7))
+            };
+            let band = (-(el / 0.12) * (el / 0.12)).exp() * 0.08;
+            let key_box = gauss(yaw - 0.3, el - 0.8, 0.9, 0.35) * 2.6;
+            let fill_box = gauss(yaw - 2.6, el - 0.35, 0.7, 0.3) * 1.0;
+            add(add(add(base, [1.0, 1.0, 1.0], band), [1.0, 1.0, 1.0], key_box), [1.0, 1.0, 1.0], fill_box)
+        }
+        EnvPreset::Sunset => {
+            let base = if t >= 0.0 {
+                mix3([1.0, 0.55, 0.3], [0.2, 0.3, 0.55], t.powf(0.6))
+            } else {
+                mix3([0.6, 0.35, 0.22], [0.16, 0.12, 0.1], (-t).powf(0.6))
+            };
+            let sun = gauss(yaw - 0.5, el - 0.14, 0.05, 0.05);
+            let glow = gauss(yaw - 0.5, el - 0.14, 0.5, 0.35);
+            add(add(base, [8.0, 5.0, 2.5], sun), [1.2, 0.7, 0.35], glow)
+        }
+        EnvPreset::Night => {
+            let base = if t >= 0.0 {
+                mix3([0.06, 0.08, 0.14], [0.02, 0.03, 0.07], t.powf(0.7))
+            } else {
+                mix3([0.06, 0.08, 0.14], [0.02, 0.02, 0.03], (-t).powf(0.7))
+            };
+            let moon = gauss(yaw + 1.0, el - 1.0, 0.08, 0.08);
+            let halo = gauss(yaw + 1.0, el - 1.0, 0.5, 0.4);
+            let city = (gauss(yaw - 0.9, el, 0.15, 0.04) + gauss(yaw - 1.7, el, 0.12, 0.04) + gauss(yaw + 2.2, el, 0.2, 0.04)) * 0.8;
+            add(add(add(base, [2.0, 2.2, 2.8], moon), [0.25, 0.27, 0.35], halo), [1.0, 0.62, 0.3], city)
+        }
+    }
+}
+
+/// IEEE half from a float — what an Rgba16Float texel takes.
+fn f16(x: f32) -> u16 {
+    let b = x.to_bits();
+    let sign = ((b >> 16) & 0x8000) as u16;
+    let exp = ((b >> 23) & 0xff) as i32;
+    let mant = b & 0x7f_ffff;
+    if exp == 0xff {
+        return sign | 0x7c00;
+    }
+    let e = exp - 127 + 15;
+    if e >= 0x1f {
+        return sign | 0x7c00;
+    }
+    if e <= 0 {
+        if e < -10 {
+            return sign;
+        }
+        let m = (mant | 0x80_0000) >> (1 - e);
+        return sign | ((m + 0x1000) >> 13) as u16;
+    }
+    let half = sign | ((e as u16) << 10) | ((mant >> 13) as u16);
+    if mant & 0x1000 != 0 {
+        half + 1
+    } else {
+        half
+    }
+}
+
+/// A preset as an Rgba16Float equirectangular texture with a full mip
+/// chain — each level a box filter of the one above, the last a single
+/// texel of the sphere's mean radiance.
+fn upload_env(ctx: &GpuContext, preset: EnvPreset) -> wgpu::Texture {
+    let (w, h) = (ENV_WIDTH as usize, ENV_HEIGHT as usize);
+    let mut level: Vec<[f32; 4]> = Vec::with_capacity(w * h);
+    for y in 0..h {
+        let el = std::f32::consts::FRAC_PI_2 - (y as f32 + 0.5) / h as f32 * std::f32::consts::PI;
+        for x in 0..w {
+            let yaw = (x as f32 + 0.5) / w as f32 * 2.0 * std::f32::consts::PI - std::f32::consts::PI;
+            let c = env_radiance(preset, yaw, el);
+            level.push([c[0], c[1], c[2], 1.0]);
+        }
+    }
+    let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("model-environment"),
+        size: wgpu::Extent3d {
+            width: ENV_WIDTH,
+            height: ENV_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: ENV_MIPS,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba16Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let (mut lw, mut lh) = (w, h);
+    for mip in 0..ENV_MIPS {
+        let bytes: Vec<u8> = level
+            .iter()
+            .flat_map(|p| p.iter().flat_map(|c| f16(*c).to_le_bytes()))
+            .collect();
+        ctx.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: mip,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &bytes,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some((lw * 8) as u32),
+                rows_per_image: Some(lh as u32),
+            },
+            wgpu::Extent3d {
+                width: lw as u32,
+                height: lh as u32,
+                depth_or_array_layers: 1,
+            },
+        );
+        if mip + 1 == ENV_MIPS {
+            break;
+        }
+        let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
+        let mut next = Vec::with_capacity(nw * nh);
+        for y in 0..nh {
+            for x in 0..nw {
+                let mut acc = [0.0f32; 4];
+                let mut n = 0.0;
+                for dy in 0..2 {
+                    for dx in 0..2 {
+                        let (sx, sy) = ((x * 2 + dx).min(lw - 1), (y * 2 + dy).min(lh - 1));
+                        let p = level[sy * lw + sx];
+                        for k in 0..4 {
+                            acc[k] += p[k];
+                        }
+                        n += 1.0;
+                    }
+                }
+                next.push([acc[0] / n, acc[1] / n, acc[2] / n, acc[3] / n]);
+            }
+        }
+        level = next;
+        lw = nw;
+        lh = nh;
+    }
+    texture
 }
 
 fn upload_rgba(ctx: &GpuContext, width: u32, height: u32, rgba: &[u8]) -> wgpu::Texture {
@@ -1379,6 +1678,12 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
             1.0,
         ],
         rim_rgb: [view.rim_rgb[0], view.rim_rgb[1], view.rim_rgb[2], 1.0],
+        env_params: [
+            if view.environment.preset == EnvPreset::None { 0.0 } else { 1.0 },
+            view.environment.intensity.max(0.0),
+            deg(view.environment.rotation_deg as f64),
+            (ENV_MIPS - 1) as f32,
+        ],
     }
 }
 

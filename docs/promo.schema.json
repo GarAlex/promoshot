@@ -413,6 +413,17 @@
             "null"
           ]
         },
+        "environment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneEnvironment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "fps": {
           "default": null,
           "format": "double",
@@ -2607,6 +2618,31 @@
         "line"
       ],
       "type": "string"
+    },
+    "SceneEnvironment": {
+      "properties": {
+        "intensity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "preset": {
+          "type": "string"
+        },
+        "rotation": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "type": "object"
     },
     "Size": {
       "maxItems": 2,

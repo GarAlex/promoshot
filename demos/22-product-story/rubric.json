@@ -34,6 +34,7 @@
   "materials": false,
   "finish": false,
   "textBody": false,
+  "environment": false,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,

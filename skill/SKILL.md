@@ -173,6 +173,12 @@ new projects.
   `minReaderVersion: 29`, or `32` when a finish (or a colour in the
   object form) is written. `promo_inspect` lists the layer; a missing
   file is named like any other.
+- **Environment.** Chrome and gloss need something to mirror: put
+  `"environment": { "preset": "studio" }` (or `sunset`, `night`;
+  `intensity`, `rotation` in degrees) in `compositionSettings` for any
+  project with a metal or a glossy finish. Without it metals mirror a
+  synthetic sky and read dark on a dark theme. Stamp `minReaderVersion:
+  35`.
 - **Text as a body.** A title that belongs IN the scene — lit by the
   stage's light, chrome or matte, turning, standing between devices —
   is a model resource with a recipe and no file: `{ "kind": "model",

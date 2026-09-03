@@ -49,6 +49,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     stage_layer_warnings(meta, &mut out);
     recipe_warnings(meta, &mut out);
     legacy_2_5d_warnings(meta, &mut out);
+    environment_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
@@ -745,6 +746,29 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 body.size()
             ));
         }
+    }
+}
+
+/// A scene environment (rung 35) names a preset the pass has and an
+/// intensity above zero; anything else falls back to the synthetic sky,
+/// which is worth saying before chrome reads dark for no visible reason.
+fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let Some(env) = meta.composition_settings.environment.as_ref() else {
+        return;
+    };
+    if !env.is_known() {
+        out.push(format!(
+            "compositionSettings.environment names preset \"{}\", which is not one — \
+             studio, sunset or night; the synthetic sky is used instead",
+            env.preset
+        ));
+    }
+    if env.intensity() <= 0.0 {
+        out.push(format!(
+            "compositionSettings.environment has intensity {}; it must be above zero \
+             (1 is the default) or the environment lights nothing",
+            env.intensity()
+        ));
     }
 }
 
@@ -1558,6 +1582,29 @@ mod tests {
         assert!(has("caption \"Title\" uses 2.5D `depth`"), "{found:?}");
         assert!(has("caption \"Title\" keys a 2.5D tilt"), "{found:?}");
         assert!(has("resource \"Shot\" wears a device FRAME"), "{found:?}");
+    }
+    /// An environment preset the pass does not have, or a zero intensity,
+    /// is named; a known preset says nothing and lifts the rung to 35.
+    #[test]
+    fn a_scene_environment_is_checked() {
+        let mut odd = project("", "");
+        odd.composition_settings.environment = Some(promo_model::SceneEnvironment {
+            preset: "cathedral".into(),
+            intensity: Some(0.0),
+            rotation: None,
+        });
+        let found = warnings(&odd);
+        assert!(found.iter().any(|w| w.contains("names preset \"cathedral\"")), "{found:?}");
+        assert!(found.iter().any(|w| w.contains("has intensity 0")), "{found:?}");
+        let mut fine = project("", "");
+        fine.composition_settings.environment = Some(promo_model::SceneEnvironment {
+            preset: "studio".into(),
+            intensity: None,
+            rotation: Some(90.0),
+        });
+        let quiet = warnings(&fine);
+        assert!(!quiet.iter().any(|w| w.contains("environment")), "{quiet:?}");
+        assert_eq!(fine.minimum_reader_version(), 35);
     }
 }
 
