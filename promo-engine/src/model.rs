@@ -997,6 +997,7 @@ impl GlbGeometry {
     }
 
     /// The side band between the front and back outlines.
+    #[allow(clippy::too_many_arguments)]
     fn band(
         &mut self,
         outline: &[[f32; 2]],
@@ -1021,6 +1022,7 @@ impl GlbGeometry {
     }
 
     /// A rounded slab standing in XY (its thin axis Z), centred at `at`.
+    #[allow(clippy::too_many_arguments)]
     fn rounded_slab(
         &mut self,
         hw: f32,
@@ -1039,6 +1041,7 @@ impl GlbGeometry {
     }
 
     /// A thin rounded plate facing +Z at `z`, centred at `at` in XY.
+    #[allow(clippy::too_many_arguments)]
     fn rounded_plate(
         &mut self,
         hw: f32,
@@ -1055,6 +1058,7 @@ impl GlbGeometry {
 
     /// A rounded slab lying flat (its thin axis Y): XY of the outline maps
     /// to XZ of the world, `y` up.
+    #[allow(clippy::too_many_arguments)]
     fn rounded_slab_flat(
         &mut self,
         hw: f32,
@@ -1091,6 +1095,8 @@ impl GlbGeometry {
         self.band(&outline, ht, -ht, &place, &turn, into);
     }
 
+    #[allow(clippy::too_many_arguments)]
+
     fn rounded_plate_flat(
         &mut self,
         hw: f32,
@@ -1116,6 +1122,7 @@ impl GlbGeometry {
 
     /// A rounded slab hinged at `hinge` (its bottom edge), standing up and
     /// leaning back by `lean` radians about the X axis, its front facing +Z.
+    #[allow(clippy::too_many_arguments)]
     fn rounded_slab_leaning(
         &mut self,
         hw: f32,
@@ -1161,6 +1168,8 @@ impl GlbGeometry {
         );
         self.band(&outline, ht, -ht, &place, &turn, into);
     }
+
+    #[allow(clippy::too_many_arguments)]
 
     fn rounded_plate_leaning(
         &mut self,
