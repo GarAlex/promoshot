@@ -1,0 +1,419 @@
+{
+ "id": "46F8B79A-E422-E689-9CDA-275C332DB4CD",
+ "name": "33 Worn",
+ "formatVersion": 2,
+ "minReaderVersion": 38,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 9.0,
+ "videoDuration": 9.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 48,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ],
+  "environment": {
+   "preset": "studio"
+  }
+ },
+ "resources": [
+  {
+   "id": "6471B7FF-B0AE-A7E2-B42E-B8B0AC2EA5FA",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Panel",
+   "addedAt": 0,
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Print",
+      "shape": {
+       "box": {
+        "size": [
+         1.6,
+         1.0,
+         0.05
+        ],
+        "radius": 0.015
+       }
+      }
+     },
+     {
+      "slot": "Frame",
+      "shape": {
+       "box": {
+        "size": [
+         1.68,
+         1.08,
+         0.04
+        ],
+        "radius": 0.02
+       }
+      },
+      "position": [
+       0,
+       0,
+       -0.03
+      ]
+     }
+    ]
+   },
+   "materials": {
+    "Print": {
+     "resourceID": "21764A0F-C093-37C7-1331-A4D3C934BEDC",
+     "mode": "surface",
+     "metallic": 0.0,
+     "roughness": 0.18
+    },
+    "Frame": {
+     "colorHex": "D2D6DC",
+     "metallic": 1,
+     "roughness": 0.25
+    }
+   }
+  },
+  {
+   "id": "43B74F59-EC0A-D5EB-50DB-D5C4421ADA75",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Vase",
+   "addedAt": 0,
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Body",
+      "shape": {
+       "lathe": {
+        "profile": [
+         [
+          0.18,
+          0.75
+         ],
+         [
+          0.14,
+          0.62
+         ],
+         [
+          0.16,
+          0.5
+         ],
+         [
+          0.26,
+          0.35
+         ],
+         [
+          0.34,
+          0.15
+         ],
+         [
+          0.36,
+          -0.05
+         ],
+         [
+          0.33,
+          -0.3
+         ],
+         [
+          0.26,
+          -0.55
+         ],
+         [
+          0.2,
+          -0.7
+         ],
+         [
+          0.22,
+          -0.75
+         ],
+         [
+          0.0,
+          -0.75
+         ]
+        ],
+        "segments": 48
+       }
+      }
+     }
+    ]
+   },
+   "materials": {
+    "Body": {
+     "resourceID": "5A51C601-0032-50C2-0AA5-14679FDE4762",
+     "mode": "surface",
+     "repeat": [
+      3,
+      1
+     ],
+     "colorHex": "F2E9DC",
+     "metallic": 0.05,
+     "roughness": 0.15
+    }
+   }
+  },
+  {
+   "id": "5A51C601-0032-50C2-0AA5-14679FDE4762",
+   "kind": "image",
+   "filename": "label_lumen.png",
+   "displayName": "Label",
+   "addedAt": 0,
+   "pixelWidth": 768,
+   "pixelHeight": 384,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "21764A0F-C093-37C7-1331-A4D3C934BEDC",
+   "kind": "video",
+   "filename": "rec_lumen_2560.mp4",
+   "displayName": "Reel",
+   "addedAt": 0,
+   "duration": 15.0,
+   "videoNaturalWidth": 2560,
+   "videoNaturalHeight": 1600,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "FD85BE8F-EB5A-21B5-AE84-54C8D77F448B",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Title",
+   "addedAt": 0,
+   "captionText": "Every picture, lit.",
+   "captionStyle": {
+    "alignment": "center",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -70
+     ]
+    },
+    "reveal": {
+     "by": "word",
+     "mode": "fade",
+     "seconds": 1.2
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "B1C6AC7C-C1A8-B575-417E-1486DA51B0C5",
+   "name": "Backdrop",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9.0,
+   "keyframes": [
+    {
+     "id": "B1438575-27AA-5F73-5103-9535EEDBFC5C",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.5,
+       0.55
+      ],
+      "end": [
+       1,
+       1
+      ],
+      "stops": [
+       {
+        "colorHex": "2A2F3A",
+        "at": 0
+       },
+       {
+        "colorHex": "0B0D12",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "2F7EF055-1DDD-CDD4-7D2A-C93CE70DF982",
+   "name": "Bench",
+   "sortIndex": 1,
+   "kind": "stage",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9.0,
+   "fadeIn": 0.5,
+   "keyframes": [
+    {
+     "id": "79F0610C-EA49-9FD5-5DEB-ED7B5DFE4D8D",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": -38,
+      "pitch": 12,
+      "distance": 4.6,
+      "fov": 28
+     },
+     "light": {
+      "yaw": -130,
+      "pitch": 65,
+      "intensity": 1.3
+     }
+    },
+    {
+     "id": "4DF381CE-AABB-9F89-2EEB-CAE6A02B668B",
+     "time": 8.7,
+     "transitionDuration": 8.7,
+     "placement": {
+      "height": 600,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": 34,
+      "pitch": 6,
+      "distance": 4.1,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 120,
+      "pitch": 24,
+      "intensity": 1.5
+     },
+     "easing": "easeInOut"
+    }
+   ],
+   "members": [
+    {
+     "id": "FABE5870-B034-02B0-70D3-8BAAA37B8D4A",
+     "name": "Panel",
+     "sortIndex": 10,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 9.0,
+     "resourceID": "6471B7FF-B0AE-A7E2-B42E-B8B0AC2EA5FA",
+     "keyframes": [
+      {
+       "id": "56059501-5296-0F51-FF3D-6A42D3FEF454",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        -0.42,
+        0.12
+       ],
+       "camera": {
+        "yaw": 12
+       }
+      },
+      {
+       "id": "A5490451-8E68-092F-0C0B-B28E01544522",
+       "time": 8.7,
+       "transitionDuration": 8.7,
+       "stageOffset": [
+        -0.42,
+        0.12
+       ],
+       "camera": {
+        "yaw": -6
+       },
+       "easing": "easeInOut"
+      }
+     ]
+    },
+    {
+     "id": "0A5052B2-07EC-5550-193D-04EC5942785C",
+     "name": "Vase",
+     "sortIndex": 11,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 9.0,
+     "resourceID": "43B74F59-EC0A-D5EB-50DB-D5C4421ADA75",
+     "keyframes": [
+      {
+       "id": "F5C29AF1-114E-51CB-8C0C-8852E693B926",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        0.66,
+        -0.28
+       ],
+       "camera": {
+        "yaw": -70
+       }
+      },
+      {
+       "id": "8B822883-5760-98D8-B64B-D317CF7BEC10",
+       "time": 8.7,
+       "transitionDuration": 8.7,
+       "stageOffset": [
+        0.66,
+        -0.28
+       ],
+       "camera": {
+        "yaw": 70
+       },
+       "easing": "easeInOut"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "4EC13A88-BA99-0E63-6BC0-D84B54853BC0",
+   "name": "Title",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.2,
+   "duration": 7.8,
+   "resourceID": "FD85BE8F-EB5A-21B5-AE84-54C8D77F448B",
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ]
+}

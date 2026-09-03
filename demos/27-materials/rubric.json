@@ -31,6 +31,8 @@
   "camera": true,
   "materials": true,
   "finish": false,
+  "wornPicture": false,
+  "wornVideo": false,
   "textBody": false,
   "environment": true,
   "particles": false,

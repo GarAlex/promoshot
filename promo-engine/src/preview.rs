@@ -165,6 +165,27 @@ struct SlotPaint {
     color: Option<[f32; 4]>,
     metallic: Option<f32>,
     roughness: Option<f32>,
+    /// How the slot wears its picture, when the binding says (rung 38).
+    wear: Option<SlotWear>,
+}
+
+/// A bound picture worn as the slot's lit surface (or shown as a
+/// screen), tiled `repeat` times and shifted `offset` in uv units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SlotWear {
+    worn: bool,
+    repeat: [f32; 2],
+    offset: [f32; 2],
+}
+
+impl Default for SlotWear {
+    fn default() -> Self {
+        SlotWear {
+            worn: false,
+            repeat: [1.0, 1.0],
+            offset: [0.0, 0.0],
+        }
+    }
 }
 
 struct LoadedModel {
@@ -2741,6 +2762,14 @@ impl PreviewEngine {
                     }),
                     metallic: binding.metallic().map(|v| v as f32),
                     roughness: binding.roughness().map(|v| v as f32),
+                    wear: binding.needs_rung_38().then(|| {
+                        let (repeat, offset) = (binding.repeat(), binding.offset());
+                        SlotWear {
+                            worn: binding.mode() == promo_model::SurfaceMode::Surface,
+                            repeat: [repeat[0] as f32, repeat[1] as f32],
+                            offset: [offset[0] as f32, offset[1] as f32],
+                        }
+                    }),
                 };
                 if paint != SlotPaint::default() {
                     paints.push((index, paint));
@@ -2792,6 +2821,15 @@ impl PreviewEngine {
                     paint.color,
                     paint.metallic,
                     paint.roughness,
+                );
+                let wear = paint.wear.unwrap_or_default();
+                pass.set_wear(
+                    self.ctx,
+                    &mut loaded.gpu,
+                    index,
+                    wear.worn,
+                    wear.repeat,
+                    wear.offset,
                 );
                 loaded.painted.insert(index, paint);
             }

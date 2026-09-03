@@ -164,14 +164,19 @@ new projects.
   also takes a FINISH over the file's own: `"Body": { "colorHex":
   "@accent", "metallic": 1, "roughness": 0.12 }` is chrome, `{
   "metallic": 0, "roughness": 0.85 }` matte (each 0…1; what is left
-  out keeps the file's value), so one `.glb` serves every look — and
-  a finish on a slot showing a picture does nothing, the picture is
-  drawn unlit. A file with
+  out keeps the file's value), so one `.glb` serves every look. A
+  picture on a slot is a SCREEN by default — unlit, fitted, a finish
+  on it does nothing; `"Body": { "resourceID": "<uuid>", "mode":
+  "surface", "roughness": 0.3, "repeat": [2, 1] }` WEARS it instead:
+  the picture becomes the slot's colour under the light and the
+  finish (a label on a vase, a print on a box, a video on a glossy
+  wall), tiled by `repeat`, shifted by `offset`; where it is
+  transparent the slot's own colour shows. A file with
   animations lists them under `clips` after import; `"clip":
   { "name": "Open" }` on a keyframe plays one on layer time, and a
   `time` scrubs it. Stamp
   `minReaderVersion: 29`, or `32` when a finish (or a colour in the
-  object form) is written. `promo_inspect` lists the layer; a missing
+  object form) is written, or `38` when a picture is worn. `promo_inspect` lists the layer; a missing
   file is named like any other.
 - **Particles.** Confetti, sparks, snow: a resource `{ "kind":
   "particles", "filename": "", "displayName": "Confetti", "addedAt": 0,

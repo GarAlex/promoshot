@@ -580,13 +580,42 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     }
                 }
             }
+            if let Some(name) = binding.mode_name() {
+                if promo_model::SurfaceMode::parse(name).is_none() {
+                    out.push(format!(
+                        "model \"{}\": slot \"{slot}\" has mode \"{name}\", which is not one — \
+                         `screen` (the picture unlit, as a display) or `surface` (the picture \
+                         lit, as the slot's colour under the finish); screen is used",
+                        model.display_name
+                    ));
+                }
+            }
+            let repeat = binding.repeat();
+            if repeat.iter().any(|v| !v.is_finite() || *v <= 0.0) {
+                out.push(format!(
+                    "model \"{}\": slot \"{slot}\" has repeat [{}, {}]; both counts must be \
+                     above zero ([1, 1] lays the picture once over the slot)",
+                    model.display_name, repeat[0], repeat[1]
+                ));
+            }
             let Some(resource_id) = binding.resource_id() else {
+                if binding.needs_rung_38() {
+                    out.push(format!(
+                        "model \"{}\": slot \"{slot}\" says how a picture is worn (mode, \
+                         repeat or offset) but binds none; they do nothing without a \
+                         resourceID",
+                        model.display_name
+                    ));
+                }
                 continue;
             };
-            if binding.metallic().is_some() || binding.roughness().is_some() {
+            if binding.mode() == promo_model::SurfaceMode::Screen
+                && (binding.metallic().is_some() || binding.roughness().is_some())
+            {
                 out.push(format!(
                     "model \"{}\": slot \"{slot}\" shows a picture AND carries a finish; a \
-                     bound picture is drawn unlit, so its metallic/roughness are ignored",
+                     picture shown as a screen is drawn unlit, so its metallic/roughness are \
+                     ignored — write \"mode\": \"surface\" to wear it under the light",
                     model.display_name
                 ));
             }
@@ -1593,6 +1622,30 @@ mod tests {
         assert!(has("slot \"Screen\" shows a picture AND carries a finish"), "{warnings:?}");
         assert!(!has("slot \"Base\""), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 32);
+    }
+
+    /// A picture WORN by its slot (rung 38) takes a finish without
+    /// complaint; an unknown mode, a repeat of zero, and wear on a slot
+    /// with no picture are each named.
+    #[test]
+    fn a_worn_picture_is_lit_and_its_wear_is_checked() {
+        let meta = project(
+            "",
+            r#","resources":[
+                {"id":"S","kind":"image","filename":"s.png","displayName":"Label","addedAt":0},
+                {"id":"M","kind":"model","filename":"b.glb","displayName":"Body","addedAt":0,
+                 "materials":{"Body":{"resourceID":"S","mode":"surface","roughness":0.3,"repeat":[3,1]},
+                              "Lid":{"resourceID":"S","mode":"glossy"},
+                              "Base":{"resourceID":"S","mode":"surface","repeat":[0,1]},
+                              "Foot":{"colorHex":"@accent","mode":"surface"}}}]"#,
+        );
+        let found = warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(!has("slot \"Body\""), "a worn picture wears its finish: {found:?}");
+        assert!(has("slot \"Lid\" has mode \"glossy\""), "{found:?}");
+        assert!(has("slot \"Base\" has repeat [0, 1]"), "{found:?}");
+        assert!(has("slot \"Foot\" says how a picture is worn"), "{found:?}");
+        assert_eq!(meta.minimum_reader_version(), 38);
     }
     /// A stage as one layer (rung 33) is checked one depth deep: a nested
     /// stage, a member naming a stage, a resource on the stage layer, a

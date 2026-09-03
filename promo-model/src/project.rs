@@ -301,8 +301,14 @@ pub enum MaterialBinding {
 /// The object form of a `materials` binding. Every field is optional:
 /// a picture (`resourceID`), a colour (`colorHex`, palette names work),
 /// a finish (`metallic` 0 dielectric … 1 metal, `roughness` 0 mirror …
-/// 1 matte; each 0…1, each absent keeps the file's value). A finish on
-/// a slot that shows a picture is ignored — the picture is drawn unlit.
+/// 1 matte; each 0…1, each absent keeps the file's value), and how the
+/// picture is worn (rung 38): `mode` `screen` (the default) shows it
+/// unlit and fitted, as a display would; `surface` makes it the slot's
+/// colour under the light and the finish — a label, a print, a video
+/// wrapped on a body — stretched over the slot's uv layout, tiled by
+/// `repeat` and shifted by `offset` (uv units). Where the picture is
+/// transparent the slot's own colour shows. A finish on a screen is
+/// ignored — that picture is drawn unlit.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceBinding {
@@ -314,6 +320,35 @@ pub struct SurfaceBinding {
     pub metallic: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub roughness: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub mode: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub repeat: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub offset: Option<[f64; 2]>,
+}
+
+/// How a bound picture is worn by its slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SurfaceMode {
+    /// Unlit and fitted inside the surface with its own proportions —
+    /// a screenshot on a screen.
+    #[default]
+    Screen,
+    /// The slot's colour under the light and the finish, stretched over
+    /// the slot's uv layout — a label on a vase, a video on a wall.
+    Surface,
+}
+
+impl SurfaceMode {
+    pub const NAMES: [&'static str; 2] = ["screen", "surface"];
+    pub fn parse(name: &str) -> Option<SurfaceMode> {
+        match name {
+            "screen" => Some(SurfaceMode::Screen),
+            "surface" => Some(SurfaceMode::Surface),
+            _ => None,
+        }
+    }
 }
 
 impl MaterialBinding {
@@ -356,6 +391,45 @@ impl MaterialBinding {
         }
     }
 
+    /// How the slot wears its picture; an unknown name is a screen.
+    pub fn mode(&self) -> SurfaceMode {
+        self.mode_name()
+            .and_then(SurfaceMode::parse)
+            .unwrap_or_default()
+    }
+    /// The `mode` as written, if any.
+    pub fn mode_name(&self) -> Option<&str> {
+        match self {
+            MaterialBinding::Color(_) => None,
+            MaterialBinding::Surface(s) => s.mode.as_deref(),
+        }
+    }
+    /// How many times the worn picture tiles across u and v; once by
+    /// default.
+    pub fn repeat(&self) -> [f64; 2] {
+        match self {
+            MaterialBinding::Surface(s) => s.repeat.unwrap_or([1.0, 1.0]),
+            MaterialBinding::Color(_) => [1.0, 1.0],
+        }
+    }
+    /// The worn picture's shift in uv units.
+    pub fn offset(&self) -> [f64; 2] {
+        match self {
+            MaterialBinding::Surface(s) => s.offset.unwrap_or([0.0, 0.0]),
+            MaterialBinding::Color(_) => [0.0, 0.0],
+        }
+    }
+    /// Says how the picture is worn (`mode`, `repeat`, `offset`) — fields
+    /// a rung-37 reader drops, showing the picture as a screen instead:
+    /// a different picture, so a project carrying them is 38.
+    pub fn needs_rung_38(&self) -> bool {
+        match self {
+            MaterialBinding::Color(_) => false,
+            MaterialBinding::Surface(s) => {
+                s.mode.is_some() || s.repeat.is_some() || s.offset.is_some()
+            }
+        }
+    }
     /// Written in the object form a rung-29 reader cannot decode — it
     /// knows only `resourceID` there — so a project carrying it is 32.
     pub fn needs_rung_32(&self) -> bool {
@@ -3774,6 +3848,18 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 38 is a picture WORN by its slot — a binding's mode, repeat or
+        // offset. Dropped by an older reader, the picture goes back to an
+        // unlit screen: a different picture, so the rung refuses.
+        if resources.iter().any(|r| {
+            r.materials
+                .iter()
+                .flat_map(|m| m.values())
+                .any(|b| b.needs_rung_38())
+        }) {
+            return 38;
+        }
+
         // 37 is a parts body — a recipe variant a rung-34 reader cannot
         // decode, so the rung refuses the file up front.
         if resources
@@ -4525,6 +4611,54 @@ mod placement_model_tests {
     /// feature at a time, each claiming its own version and nothing more.
     fn full_reveal_for_tests() -> TextReveal {
         serde_json::from_str(r#"{"by":"word","mode":"wipe"}"#).unwrap()
+    }
+
+    /// A picture worn as a surface (rung 38): the binding's mode, repeat
+    /// and offset round-trip, the accessors default what is left out,
+    /// an unknown mode reads as a screen, and any of the three lifts
+    /// the rung.
+    #[test]
+    fn a_worn_picture_is_stamped_thirty_eight() {
+        let doc = |binding: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Worn","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":2,"videoDuration":2,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[
+                      {{"id":"S","kind":"image","filename":"label.png","displayName":"Label","addedAt":0}},
+                      {{"id":"M","kind":"model","filename":"vase.glb","displayName":"Vase","addedAt":0,
+                        "materials":{{"Body":{binding}}}}}],
+                    "layers":[]}}"#
+            ))
+            .expect("decodes")
+        };
+        let screen = doc(r#"{"resourceID":"S","roughness":0.3}"#);
+        let body = |m: &ProjectMetadata| {
+            m.resources.as_ref().unwrap()[1].materials.as_ref().unwrap()["Body"].clone()
+        };
+        assert_eq!(body(&screen).mode(), SurfaceMode::Screen);
+        assert_eq!(screen.minimum_reader_version(), 32);
+
+        let worn = doc(r#"{"resourceID":"S","mode":"surface","roughness":0.3,"repeat":[3,1],"offset":[0.25,0]}"#);
+        let b = body(&worn);
+        assert_eq!(b.mode(), SurfaceMode::Surface);
+        assert_eq!(b.repeat(), [3.0, 1.0]);
+        assert_eq!(b.offset(), [0.25, 0.0]);
+        assert_eq!(worn.minimum_reader_version(), 38);
+        let json = worn.to_json().unwrap();
+        assert!(json.contains(r#""mode":"surface""#), "{json}");
+        assert!(json.contains(r#""repeat":[3.0,1.0]"#), "{json}");
+        let back = ProjectMetadata::from_json(&json).unwrap();
+        assert_eq!(body(&back), b, "the wear survives the round trip");
+
+        let odd = doc(r#"{"resourceID":"S","mode":"glossy"}"#);
+        assert_eq!(body(&odd).mode(), SurfaceMode::Screen, "an unknown mode is a screen");
+        assert_eq!(body(&odd).mode_name(), Some("glossy"));
+        assert_eq!(odd.minimum_reader_version(), 38, "but it is still written, so the rung holds");
+        let tiled = doc(r#"{"resourceID":"S","repeat":[2,2]}"#);
+        assert_eq!(tiled.minimum_reader_version(), 38);
+        assert_eq!(body(&tiled).repeat(), [2.0, 2.0]);
+        assert_eq!(body(&screen).repeat(), [1.0, 1.0]);
     }
 
     #[test]

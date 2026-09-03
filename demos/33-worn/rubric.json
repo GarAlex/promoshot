@@ -1,13 +1,13 @@
 {
- "template": "16 Light Leak",
+ "template": "33 Worn",
  "canvas": [
   1440,
   900
  ],
- "duration": 12,
+ "duration": 9.0,
  "kinds": {
   "background": 1,
-  "image": 4,
+  "stage": 1,
   "caption": 1
  },
  "features": {
@@ -23,44 +23,38 @@
   "viewport": false,
   "motionPath": false,
   "sprite": false,
-  "gradient": false,
+  "gradient": true,
   "reveal": true,
-  "stage": false,
-  "stageLayer": false,
-  "model": false,
-  "camera": false,
-  "materials": false,
-  "finish": false,
-  "wornPicture": false,
-  "wornVideo": false,
+  "stage": true,
+  "stageLayer": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
+  "finish": true,
+  "wornPicture": true,
+  "wornVideo": true,
   "textBody": false,
-  "environment": false,
+  "environment": true,
   "particles": false,
-  "partsBody": false,
+  "partsBody": true,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,
-  "blendModes": [
-   "add",
-   "multiply",
-   "screen"
-  ],
+  "blendModes": [],
   "swaps": 0,
   "transitions": false,
   "timingAnchors": false,
   "mediaCuts": false,
   "narration": false,
-  "motionBlur": true,
+  "motionBlur": false,
   "grade": false,
   "placement": true
  },
  "phrases": [
-  "Light, laid over"
+  "Every picture, lit."
  ],
  "media": [
-  "glow_dot.png",
-  "leak_warm.png",
-  "ui_lumen_1.png",
-  "vignette_soft.png"
+  "label_lumen.png",
+  "rec_lumen_2560.mp4"
  ]
 }

@@ -2962,6 +2962,74 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A picture WORN by a slot (rung 38) takes the light through the
+    /// whole path — project, engine, pass: the same label bound to a
+    /// cube reads the same under a frontal and a grazing key light as a
+    /// screen, and darker under the grazing one once worn.
+    #[test]
+    fn a_worn_picture_takes_the_light() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-worn-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("grey.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.7, 0.7, 0.7, 1.0]),
+        )
+        .unwrap();
+        let mut label = image::RgbaImage::new(8, 8);
+        for px in label.pixels_mut() {
+            *px = image::Rgba([170, 120, 60, 255]);
+        }
+        label.save(dir.join("Resources").join("label.png")).unwrap();
+        let doc = |binding: &str, light_yaw: f64| {
+            format!(
+                r#"{{"id":"P","name":"Worn","createdAt":0,"state":"recorded","minReaderVersion":38,
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"S","kind":"image","filename":"label.png","displayName":"Label","addedAt":0,
+                    "pixelWidth":8,"pixelHeight":8}},
+                  {{"id":"M","kind":"model","filename":"grey.glb","displayName":"Grey","addedAt":0,
+                    "materials":{{"Body":{binding}}}}}],
+                "layers":[{{"id":"L","name":"grey","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":2,"resourceID":"M",
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":0,"distance":3.0}},
+                    "light":{{"yaw":{light_yaw},"pitch":15}},"transitionDuration":0}}]}}]}}"#
+            )
+        };
+        let mean = |json: &str| -> u32 {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(0.5).expect("frame");
+            let (mut sum, mut count) = (0u32, 0u32);
+            for y in 120..200 {
+                for x in 120..200 {
+                    let i = (y * 320 + x) * 4;
+                    sum += frame[i] as u32 + frame[i + 1] as u32 + frame[i + 2] as u32;
+                    count += 3;
+                }
+            }
+            sum / count
+        };
+        let screen = r#"{"resourceID":"S"}"#;
+        let (front, grazing) = (mean(&doc(screen, 0.0)), mean(&doc(screen, 85.0)));
+        assert!(
+            (front as i32 - grazing as i32).abs() < 3,
+            "a screen ignores the light: frontal {front}, grazing {grazing}"
+        );
+        let worn = r#"{"resourceID":"S","mode":"surface","roughness":0.6}"#;
+        let (front, grazing) = (mean(&doc(worn, 0.0)), mean(&doc(worn, 85.0)));
+        assert!(
+            front as i32 - grazing as i32 > 20,
+            "a worn picture is lit: frontal {front}, grazing {grazing}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A stage as one layer (rung 33) draws exactly what its flat form
     /// draws: the same two cubes across a stage, once as members sharing a
     /// stage name with the first carrying the camera and placement, once

@@ -863,9 +863,21 @@ overrides the file's own factors — `metallic` 0 (dielectric) … 1
 leaves out keeps the file's value, so `{ "metallic": 1 }` alone makes
 the file's colour chrome; one body is chrome in this project and matte
 in the next without a second file. A finish on a slot that shows a
-picture does nothing (the picture is drawn unlit), and `promo_validate`
-says so. A project with a finish, or a colour in the object form,
-carries `minReaderVersion: 32`.
+picture as a screen does nothing (that picture is drawn unlit), and
+`promo_validate` says so. A project with a finish, or a colour in the
+object form, carries `minReaderVersion: 32`.
+A picture can be WORN by its slot instead of shown on it (rung 38):
+`"Body": { "resourceID": "<uuid>", "mode": "surface", "roughness": 0.3,
+"repeat": [3, 1] }` makes the picture the slot's colour under the light
+and the finish — a label on a vase, a print on a box, a video playing on
+a lit, reflective surface — stretched over the slot's uv layout,
+`repeat` tiling it across u and v (default `[1, 1]`, once) and `offset`
+shifting it in uv units. Where the picture is transparent the slot's
+own colour shows, so a decal with alpha sits on the body's paint; a
+video binding runs on the layer's clock as it does on a screen. `"mode":
+"screen"` (the default) is the display it always was: unlit, fitted
+inside the surface with its own proportions. A project wearing a
+picture carries `minReaderVersion: 38`.
 `clips` (name and duration) and `boundsRadius` are written at import
 and re-derived on every open.
 Particles (rung 36). A resource of `"kind": "particles"` carries a

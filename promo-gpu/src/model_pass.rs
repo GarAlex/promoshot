@@ -161,6 +161,8 @@ struct Material {
     // span), so a bound picture is fitted rather than stretched; y = 1
     // when a normal map is bound, z = 1 when a metallic-roughness map is.
     fit: vec4<f32>,
+    // A worn picture's tiling: xy repeats across u and v, zw shifts.
+    uv: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var env_tex: texture_2d<f32>;
@@ -244,15 +246,24 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         n = -n;
     }
     var albedo = material.base_color;
-    if (material.factors.z > 2.5) {
+    if (material.factors.z > 3.5) {
+        // A picture WORN by the slot — a label, a print, a video on a
+        // body: the slot's own colour where the picture is clear, the
+        // picture's colour where it is not, then lit and finished like
+        // any surface. Tiled by repeat, shifted by offset; frames arrive
+        // premultiplied.
+        let uv = in.uv * material.uv.xy + material.uv.zw;
+        let t = textureSample(base_tex, base_samp, uv);
+        let straight = t.rgb / max(t.a, 0.001);
+        albedo = vec4<f32>(mix(albedo.rgb, srgb_to_linear(straight), t.a), albedo.a);
+    } else if (material.factors.z > 2.5) {
         // A picture standing in the scene with its own transparency — a
         // caption's raster on a billboard: straight through, premultiplied,
         // and nothing written where it is clear.
         let t = textureSample(base_tex, base_samp, in.uv);
         if (t.a < 0.02) { discard; }
         return t;
-    }
-    if (material.factors.z > 1.5) {
+    } else if (material.factors.z > 1.5) {
         // A picture BOUND to the slot by the project — a screenshot on a
         // screen — reads as the screen would: the picture itself, unlit,
         // fitted inside the surface (its own proportions kept, the slot's
@@ -273,8 +284,7 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         let under = linear_to_srgb(clamp(material.base_color.rgb * frame.ambient_rgb.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
         let shown = mix(under, t.rgb, t.a * inside);
         return vec4<f32>(shown * material.base_color.a, material.base_color.a);
-    }
-    if (material.factors.z > 0.5) {
+    } else if (material.factors.z > 0.5) {
         let t = textureSample(base_tex, base_samp, in.uv);
         albedo = vec4<f32>(albedo.rgb * srgb_to_linear(t.rgb), albedo.a * t.a);
     }
@@ -351,6 +361,7 @@ struct MaterialRaw {
     base_color: [f32; 4],
     factors: [f32; 4],
     fit: [f32; 4],
+    uv: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -407,8 +418,13 @@ struct GpuMaterial {
     file_roughness: f32,
     double_sided: bool,
     /// 0 none, 1 the file's own texture (lit), 2 a picture the project
-    /// bound to the slot (shown as-is).
+    /// bound to the slot (shown as-is, a screen), 3 a billboard's own
+    /// picture, 4 a picture WORN by the slot (lit, under the finish).
     textured: f32,
+    /// Whether a bound picture is worn (lit) rather than shown (a
+    /// screen), and its tiling: repeat u, v and offset u, v.
+    worn: bool,
+    uv: [f32; 4],
     /// Width over height of the surface this slot's uvs span, from the
     /// geometry that wears it — what a bound picture is fitted to.
     aspect: f32,
@@ -706,6 +722,7 @@ impl ModelPass {
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("model-material"),
                 contents: as_bytes(&MaterialRaw {
+                    uv: [1.0, 1.0, 0.0, 0.0],
                     base_color: m.base_color,
                     factors: [
                         m.metallic,
@@ -765,6 +782,8 @@ impl ModelPass {
                 file_roughness: m.roughness,
                 double_sided: m.double_sided,
                 textured: if texture.is_some() { 1.0 } else { 0.0 },
+                worn: false,
+                uv: [1.0, 1.0, 0.0, 0.0],
                 aspect: aspects[index],
                 normal_view,
                 mr_view,
@@ -865,6 +884,7 @@ impl ModelPass {
                 &m.uniform,
                 0,
                 as_bytes(&MaterialRaw {
+                    uv: m.uv,
                     base_color: m.base_color,
                     factors: [
                         m.metallic,
@@ -891,17 +911,18 @@ impl ModelPass {
         let Some(m) = model.materials.get_mut(material) else {
             return;
         };
-        m.textured = 2.0;
+        m.textured = if m.worn { 4.0 } else { 2.0 };
         let (has_normal, has_mr) = m.map_flags();
         ctx.queue.write_buffer(
             &m.uniform,
             0,
             as_bytes(&MaterialRaw {
+                uv: m.uv,
                 base_color: m.base_color,
                 factors: [
                     m.metallic,
                     m.roughness,
-                    2.0,
+                    m.textured,
                     if m.double_sided { 1.0 } else { 0.0 },
                 ],
                 fit: [m.aspect, has_normal, has_mr, 0.0],
@@ -937,6 +958,46 @@ impl ModelPass {
                 },
             ],
         });
+    }
+
+    /// How one slot wears its bound picture: `worn` lights it as the
+    /// slot's colour under the finish (a label, a video on a body),
+    /// else it is shown unlit and fitted, as a screen; `repeat` tiles
+    /// it across u and v, `offset` shifts it. Takes effect on the
+    /// picture already bound and on the next one.
+    pub fn set_wear(
+        &self,
+        ctx: &GpuContext,
+        model: &mut GpuModel,
+        material: usize,
+        worn: bool,
+        repeat: [f32; 2],
+        offset: [f32; 2],
+    ) {
+        let Some(m) = model.materials.get_mut(material) else {
+            return;
+        };
+        m.worn = worn;
+        m.uv = [repeat[0], repeat[1], offset[0], offset[1]];
+        if m.textured > 1.5 && m.textured < 2.5 || m.textured > 3.5 {
+            m.textured = if worn { 4.0 } else { 2.0 };
+        }
+        let (has_normal, has_mr) = m.map_flags();
+        ctx.queue.write_buffer(
+            &m.uniform,
+            0,
+            as_bytes(&MaterialRaw {
+                uv: m.uv,
+                base_color: m.base_color,
+                factors: [
+                    m.metallic,
+                    m.roughness,
+                    m.textured,
+                    if m.double_sided { 1.0 } else { 0.0 },
+                ],
+                fit: [m.aspect, has_normal, has_mr, 0.0],
+            }),
+        );
     }
 
     /// A stage: several models and camera-facing pictures drawn through
@@ -1016,6 +1077,7 @@ impl ModelPass {
                         &m.uniform,
                         0,
                         as_bytes(&MaterialRaw {
+                            uv: m.uv,
                             base_color: m.base_color,
                             factors: [m.metallic, m.roughness, 3.0, 1.0],
                             fit: [m.aspect, 0.0, 0.0, 0.0],
@@ -1983,6 +2045,93 @@ mod tests {
         // The face spans roughly x 24..72 at distance 3; uv.x runs left
         // to right across it.
         (mean(28, 44), mean(52, 68))
+    }
+
+    /// A picture WORN by a slot takes the light and a picture SHOWN as a
+    /// screen does not: the same picture bound to a cube's face reads the
+    /// same under a frontal and a grazing light as a screen, and darker
+    /// under the grazing one once worn — and tiling it changes nothing
+    /// about that.
+    #[test]
+    fn a_worn_picture_takes_the_light_and_a_screen_does_not() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let mut model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.8, 0.8, 0.8, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.6,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload");
+        let picture = upload_rgba(&ctx, 2, 2, &[170, 120, 60, 255].repeat(4));
+        let picture_view = picture.create_view(&Default::default());
+        let face = |model: &GpuModel, light_yaw: f64| -> u32 {
+            let view = ModelView {
+                yaw: 0.0,
+                pitch: 0.0,
+                distance: 3.0,
+                light_yaw,
+                light_pitch: 15.0,
+                ..ModelView::default()
+            };
+            let px = pass
+                .render_to_bytes(&ctx, model, &view, &[IDENTITY], 96, 96)
+                .expect("render");
+            let mut sum = 0u32;
+            let mut count = 0u32;
+            for y in 40..56 {
+                for x in 30..66 {
+                    let i = (y * 96 + x) * 4;
+                    sum += px[i] as u32 + px[i + 1] as u32 + px[i + 2] as u32;
+                    count += 3;
+                }
+            }
+            sum / count
+        };
+        pass.set_texture(&ctx, &mut model, 0, &picture_view);
+        let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
+        assert!(
+            (front as i32 - grazing as i32).abs() < 3,
+            "a screen ignores the light: frontal {front}, grazing {grazing}"
+        );
+        pass.set_wear(&ctx, &mut model, 0, true, [1.0, 1.0], [0.0, 0.0]);
+        let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
+        assert!(
+            front as i32 - grazing as i32 > 20,
+            "a worn picture is lit: frontal {front}, grazing {grazing}"
+        );
+        pass.set_wear(&ctx, &mut model, 0, true, [4.0, 4.0], [0.5, 0.0]);
+        let tiled = face(&model, 0.0);
+        assert!(
+            (tiled as i32 - front as i32).abs() < 3,
+            "a flat picture tiled is the same picture: {tiled} vs {front}"
+        );
+        pass.set_wear(&ctx, &mut model, 0, false, [1.0, 1.0], [0.0, 0.0]);
+        let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
+        assert!(
+            (front as i32 - grazing as i32).abs() < 3,
+            "back to a screen: frontal {front}, grazing {grazing}"
+        );
     }
 
     /// A normal map tilts the shading: a map whose left half leans its

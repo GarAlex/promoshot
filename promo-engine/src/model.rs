@@ -1704,7 +1704,10 @@ impl GlbGeometry {
                 self.push_vertex(
                     position,
                     normal,
-                    [s as f32 / segments as f32, i as f32 / (n - 1) as f32],
+                    // u runs left to right as seen from OUTSIDE the body:
+                    // the angle grows toward +Z, which is screen-left from
+                    // +X, so u counts the other way — a worn label reads.
+                    [1.0 - s as f32 / segments as f32, i as f32 / (n - 1) as f32],
                 );
             }
         }
@@ -1735,7 +1738,7 @@ impl GlbGeometry {
                 self.push_vertex(
                     position,
                     normal,
-                    [s as f32 / segments as f32, i as f32 / sides as f32],
+                    [1.0 - s as f32 / segments as f32, i as f32 / sides as f32],
                 );
             }
         }

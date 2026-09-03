@@ -411,6 +411,16 @@ be one layer of kind `stage` holding its `members`, the camera and light
 on its own keyframes (rung 33) — the same picture, with the stage's
 ownership written down.
 
+## A picture worn by a body
+
+A slot's picture is a screen by default: unlit, fitted, what a
+screenshot on a phone wants. `"mode": "surface"` on the binding wears
+it instead — the image or video becomes the slot's colour under the
+light and the finish, tiled by `repeat` and shifted by `offset`, the
+slot's own colour showing through where the picture is transparent — so
+a label sits on a vase, a print on a box, and a video plays on a glossy
+wall that the key light and the environment still shade. Rung 38.
+
 ## Particles
 
 A resource of kind `particles` is a recipe, not a file — an emitter, a
