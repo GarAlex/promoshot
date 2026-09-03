@@ -168,7 +168,9 @@ new projects.
   file is named like any other.
 - **Stages.** Layers naming the same `"stage": "hero"` draw through one
   camera into one depth buffer: models at their keyframes' `"depth"`
-  (in stage radii, + toward the viewer), images and videos as billboards
+  (in stage radii, + toward the viewer) and `"stageOffset": [right, up]`
+  in the same radii (two devices side by side; rung 31), images and
+  videos as billboards
   facing the camera (their `zoom` sizes them against the stage's
   radius). The first member (lowest `sortIndex`) owns the picture: its
   `camera`/`light` are the stage's and its placement, opacity and

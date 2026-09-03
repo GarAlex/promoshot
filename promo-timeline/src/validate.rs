@@ -491,8 +491,8 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             }) {
                 out.push(format!(
                     "stage \"{name}\": \"{}\" keys a placement or shift — inside a stage \
-                     only its depth (and a picture's zoom) place it; the first member's \
-                     placement places the whole stage",
+                     its depth and stageOffset (and a picture's zoom) place it; the first \
+                     member's placement places the whole stage",
                     member.name
                 ));
             }

@@ -2658,6 +2658,7 @@ impl PreviewEngine {
         struct Prepared {
             index: usize,
             depth: f32,
+            across: [f32; 2],
             zoom: f32,
             frame: Option<u64>,
         }
@@ -2670,6 +2671,16 @@ impl PreviewEngine {
             let zoom = tl::interpolation::layer_interpolated_scalar(member, local, |k| k.zoom)
                 .unwrap_or(1.0)
                 .max(0.01) as f32;
+            let across = [
+                tl::interpolation::layer_interpolated_scalar(member, local, |k| {
+                    k.stage_offset.map(|o| o[0])
+                })
+                .unwrap_or(0.0) as f32,
+                tl::interpolation::layer_interpolated_scalar(member, local, |k| {
+                    k.stage_offset.map(|o| o[1])
+                })
+                .unwrap_or(0.0) as f32,
+            ];
             let frame = match member.kind {
                 ProjectLayerKind::Image | ProjectLayerKind::Video => {
                     let showing = tl::layer_resource_id(member, time, &resources)
@@ -2694,10 +2705,11 @@ impl PreviewEngine {
                 }
                 _ => None,
             };
-            reach = reach.max(depth.abs() + 1.0);
+            reach = reach.max(depth.abs() + across[0].abs() + across[1].abs() + 1.0);
             prepared.push(Prepared {
                 index,
                 depth,
+                across,
                 zoom,
                 frame,
             });
@@ -2775,9 +2787,10 @@ impl PreviewEngine {
                 continue;
             };
             let mut matrices = self.model_matrices(member, loaded, time);
-            let shift = item.depth * radius;
             for m in &mut matrices {
-                m[3][2] += shift;
+                m[3][0] += item.across[0] * radius;
+                m[3][1] += item.across[1] * radius;
+                m[3][2] += item.depth * radius;
             }
             model_matrices.push((item.index, matrices));
         }
@@ -2818,7 +2831,11 @@ impl PreviewEngine {
                     let height = radius * item.zoom;
                     items.push(StageItem::Billboard {
                         texture: entry.frame.texture.view(),
-                        center: [0.0, 0.0, item.depth * radius],
+                        center: [
+                            item.across[0] * radius,
+                            item.across[1] * radius,
+                            item.depth * radius,
+                        ],
                         size: [height * w / h, height],
                     });
                 }

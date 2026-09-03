@@ -1617,6 +1617,11 @@ pub struct ProjectLayerKeyframe {
     /// viewer; 0 when absent. Ramps like every keyframe value.
     #[serde(default, skip_serializing_if = "is_none")]
     pub depth: Option<f64>,
+    /// On a stage member (rung 31): where it sits across the stage,
+    /// `[right, up]` in the stage's bounds radii from the camera axis;
+    /// `[0, 0]` when absent. Ramps like every keyframe value.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub stage_offset: Option<[f64; 2]>,
     /// 0–1, 1 when unkeyed. Added 2026-08-14 so a composition can express a
     /// fade; the compositor has always had per-quad opacity, only the
     /// keyframe was missing.
@@ -3051,6 +3056,16 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 31 is a stage member's offset across the stage. Dropped by an
+        // older reader, the member falls back onto the camera axis — a
+        // different picture, so the rung refuses.
+        if layers
+            .iter()
+            .any(|l| l.stage.is_some() && l.keyframes.iter().any(|k| k.stage_offset.is_some()))
+        {
+            return 31;
+        }
+
         // 30 is a stage on a layer. An older reader would draw the members
         // flat and in sort order — a different picture, so it refuses.
         if layers.iter().any(|l| l.stage.is_some()) {
@@ -3969,6 +3984,10 @@ mod placement_model_tests {
         let mut staged = meta(&layer(""));
         staged.layers.as_mut().unwrap()[0].stage = Some("hero".into());
         assert_eq!(staged.minimum_reader_version(), 30);
+
+        // 31: a stage member placed across the stage.
+        staged.layers.as_mut().unwrap()[0].keyframes[0].stage_offset = Some([1.0, 0.0]);
+        assert_eq!(staged.minimum_reader_version(), 31);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

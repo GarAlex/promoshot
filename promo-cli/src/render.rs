@@ -1753,6 +1753,65 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Across the stage (rung 31): the red cube offset right and the blue
+    /// one left at the same depth — the right third of the frame is red,
+    /// the left third blue, the middle the ground.
+    #[test]
+    fn a_stage_places_members_side_by_side() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-across-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources").join("red.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.9, 0.1, 0.1, 1.0]),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("Resources").join("blue.glb"),
+            promo_engine::model::sample_cube_glb_with(0.5, "Body", [0.1, 0.1, 0.9, 1.0]),
+        )
+        .unwrap();
+        let doc = r#"{"id":"P","name":"Across","createdAt":0,"state":"recorded","minReaderVersion":31,
+            "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"},
+            "resources":[
+              {"id":"R","kind":"model","filename":"red.glb","displayName":"Red","addedAt":0},
+              {"id":"B","kind":"model","filename":"blue.glb","displayName":"Blue","addedAt":0}],
+            "layers":[
+              {"id":"L1","name":"red","sortIndex":0,"kind":"model","isEnabled":true,"stage":"s",
+                "startTime":0,"duration":2,"resourceID":"R",
+                "keyframes":[{"id":"K1","time":0,"camera":{"yaw":0,"pitch":0,"distance":3.0},"stageOffset":[1.6,0],"transitionDuration":0}]},
+              {"id":"L2","name":"blue","sortIndex":1,"kind":"model","isEnabled":true,"stage":"s",
+                "startTime":0,"duration":2,"resourceID":"B",
+                "keyframes":[{"id":"K2","time":0,"stageOffset":[-1.6,0],"transitionDuration":0}]}]}"#;
+        std::fs::write(dir.join("metadata.json"), doc).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let frame = renderer.frame_bgra(0.5).expect("frame");
+        let strip = |x0: usize, x1: usize| -> (u64, u64, u64) {
+            let (mut r, mut b, mut n) = (0u64, 0u64, 0u64);
+            for y in 120..200 {
+                for x in x0..x1 {
+                    let i = (y * 320 + x) * 4;
+                    r += frame[i + 2] as u64;
+                    b += frame[i] as u64;
+                    n += 1;
+                }
+            }
+            (r / n, b / n, n)
+        };
+        let (r, b, _) = strip(220, 300);
+        assert!(r > 60 && r > b * 2, "the right is red: r {r} b {b}");
+        let (r, b, _) = strip(20, 100);
+        assert!(b > 60 && b > r * 2, "the left is blue: r {r} b {b}");
+        let (r, b, _) = strip(150, 170);
+        assert!(r < 30 && b < 30, "the middle is the ground: r {r} b {b}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Placement measures the model, not its sphere: a cube placed 200
     /// tall on a 320 canvas, seen face-on, spans about 200 rows of lit
     /// pixels.

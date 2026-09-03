@@ -391,6 +391,7 @@ mod schema_doc_tests {
                 intensity: Some(1.0),
             }),
             depth: Some(0.5),
+            stage_offset: Some([0.8, -0.2]),
             clip: Some(ClipTime {
                 name: "Open".into(),
                 time: Some(0.4),
