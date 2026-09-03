@@ -1,5 +1,5 @@
 {
-  "id": "turntable-2026",
+  "id": "turntable-slab",
   "name": "Every theme, every angle",
   "createdAt": 0,
   "state": "recorded",
@@ -13,46 +13,65 @@
     "canvasHeight": 900,
     "fps": 30,
     "palette": [
+      { "name": "canvas", "colorHex": "0A1330" },
+      { "name": "text", "colorHex": "F2F6FF" },
+      { "name": "text-bg", "colorHex": "0A1330" },
+      { "name": "edge", "colorHex": "2B4478" },
+      { "name": "caption-outline", "colorHex": "050A18" },
+      { "name": "caption-shadow", "colorHex": "03060F" },
+      { "name": "media-shadow", "colorHex": "03060F" },
+      { "name": "highlight", "colorHex": "5B8CFF" },
       { "name": "accent", "colorHex": "5B8CFF" },
-      { "name": "glow",   "colorHex": "1D3F8E" },
-      { "name": "mid",    "colorHex": "0B1B44" },
-      { "name": "deep",   "colorHex": "04070F" },
-      { "name": "paper",  "colorHex": "F4F7FF" },
-      { "name": "muted",  "colorHex": "9FB6DF" },
-      { "name": "shade",  "colorHex": "03060E" }
+      { "name": "deep", "colorHex": "050A18" }
     ],
-    "backgroundColorHex": "@mid",
+    "backgroundColorHex": "@canvas",
     "backgroundGradient": {
       "kind": "radial",
-      "start": [0.30, 0.42],
-      "end": [1.0, 1.0],
+      "start": [0.3, 0.42],
+      "end": [1.15, 1.05],
       "repeat": "clamp",
       "stops": [
-        { "colorHex": "@glow", "at": 0 },
-        { "colorHex": "@mid",  "at": 0.52 },
-        { "colorHex": "@deep", "at": 1 }
+        { "colorHex": "1D3D77", "at": 0 },
+        { "colorHex": "0C1A3C", "at": 0.55 },
+        { "colorHex": "050A18", "at": 1 }
       ]
     },
     "subtitleFontFamily": "system",
-    "subtitleFontSize": 54,
+    "subtitleFontSize": 30,
     "subtitleBold": true,
-    "subtitleColorHex": "@paper",
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundColorHex": "@text-bg",
     "subtitleBackgroundOpacity": 0.0,
-    "subtitleBackgroundPadding": 16,
-    "subtitleLeftMargin": 660,
-    "subtitleRightMargin": 40,
-    "subtitleVerticalMargin": 300
+    "subtitleBackgroundPadding": 8,
+    "subtitleAlignment": "leading",
+    "subtitleLeftMargin": 830,
+    "subtitleRightMargin": 60,
+    "subtitleVerticalMargin": 380
   },
   "resources": [
     {
-      "id": "phoneModel",
+      "id": "slab",
       "kind": "model",
-      "filename": "phone.glb",
-      "displayName": "Phone",
+      "filename": "slab.glb",
+      "displayName": "Slab",
       "addedAt": 0,
       "imageCuts": [],
       "disabledAudioTrackIndices": [],
-      "materials": { "Body": "@accent" }
+      "materials": {
+        "Body": "@accent",
+        "Screen": { "resourceID": "ui" }
+      }
+    },
+    {
+      "id": "ui",
+      "kind": "image",
+      "filename": "ui_lumen_1.png",
+      "displayName": "Lumen UI",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "pixelWidth": 1216,
+      "pixelHeight": 760
     }
   ],
   "layers": [
@@ -67,30 +86,30 @@
       "keyframes": []
     },
     {
-      "id": "phone",
-      "name": "Phone turntable",
+      "id": "model",
+      "name": "Slab",
       "sortIndex": 1,
       "kind": "model",
       "isEnabled": true,
       "startTime": 0,
       "duration": 7,
-      "resourceID": "phoneModel",
-      "fadeIn": 0.5,
+      "resourceID": "slab",
+      "fadeIn": 0.45,
       "keyframes": [
         {
           "id": "m0",
           "time": 0,
           "transitionDuration": 0,
-          "placement": { "height": 760, "anchor": "center", "offset": [-380, 0] },
-          "camera": { "yaw": -70, "pitch": 8, "roll": 0, "distance": 3.6, "fov": 28 },
-          "light": { "yaw": -55, "pitch": 58, "intensity": 1.15 }
+          "placement": { "height": 600, "anchor": "center", "offset": [-330, 20] },
+          "camera": { "yaw": -70, "pitch": 8, "roll": 0 },
+          "light": { "yaw": -45, "pitch": 48, "intensity": 1 }
         },
         {
           "id": "m1",
           "time": 7,
           "transitionDuration": 7,
           "easing": "easeInOut",
-          "camera": { "yaw": 35, "pitch": 8, "roll": 0, "distance": 3.6, "fov": 28 }
+          "camera": { "yaw": 35, "pitch": 8, "roll": 0 }
         }
       ]
     },
@@ -100,21 +119,23 @@
       "sortIndex": 2,
       "kind": "caption",
       "isEnabled": true,
-      "startTime": 0.35,
-      "duration": 6.65,
+      "startTime": 0.3,
+      "duration": 6.7,
       "captionText": "Every theme,\nevery angle.",
       "captionStyle": {
-        "fontSize": 88,
+        "fontSize": 72,
         "isBold": true,
         "alignment": "leading",
-        "textColorHex": "@paper",
-        "backgroundOpacity": 0.0,
-        "padding": 18,
-        "leftMargin": 660,
-        "rightMargin": 40,
-        "placement": { "anchor": "left", "offset": [660, -110] },
-        "depth": { "count": 14, "offset": [1.6, 1.6], "shade": 0.9, "colorHex": "@shade" },
-        "reveal": { "by": "word", "mode": "slide", "secondsPer": 0.22, "easing": "easeOut" }
+        "textColorHex": "@text",
+        "placement": { "anchor": "left", "offset": [830, -80] },
+        "depth": { "count": 6, "offset": [2, 2], "shade": 0.95, "colorHex": "@deep" },
+        "reveal": {
+          "by": "word",
+          "mode": "slide",
+          "secondsPer": 0.22,
+          "unitSeconds": 0.38,
+          "easing": "easeOut"
+        }
       },
       "keyframes": []
     },
@@ -124,20 +145,22 @@
       "sortIndex": 3,
       "kind": "caption",
       "isEnabled": true,
-      "startTime": 2.35,
-      "duration": 4.65,
-      "captionText": "A .glb on a layer. The palette paints it.",
+      "startTime": 2.3,
+      "duration": 4.7,
+      "captionText": "A .glb on a layer. The palette paints it; a shot fills its screen.",
       "captionStyle": {
-        "fontSize": 32,
+        "fontSize": 30,
         "isBold": false,
         "alignment": "leading",
-        "textColorHex": "@muted",
-        "backgroundOpacity": 0.0,
-        "padding": 14,
-        "leftMargin": 660,
-        "rightMargin": 40,
-        "placement": { "anchor": "left", "offset": [662, 115] },
-        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.09 }
+        "textColorHex": "@text",
+        "placement": { "anchor": "left", "offset": [830, 115] },
+        "reveal": {
+          "by": "word",
+          "mode": "fade",
+          "secondsPer": 0.1,
+          "unitSeconds": 0.3,
+          "easing": "easeOut"
+        }
       },
       "keyframes": []
     }
