@@ -25,6 +25,7 @@
   "sprite": false,
   "gradient": false,
   "reveal": true,
+  "stage": false,
   "model": false,
   "camera": false,
   "materials": false,

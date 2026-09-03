@@ -3724,6 +3724,189 @@
   "page": "docs/demo/demo25.md"
  },
  {
+  "id": "26",
+  "slug": "26-stage",
+  "title": "Stage",
+  "blurb": "The tablet and phone bodies side by side in one stage, one camera orbiting both, a screenshot on each screen.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 8.0,
+  "prompt": "Make an 8-second piece on a 1440\u00d7900 canvas: a radial dark-blue gradient background; the tablet.glb and phone.glb models in ONE stage named 'desk' \u2014 the tablet first, its camera orbiting from a yaw of -38 to 22 over the piece with an ease in and out, the tablet's body painted with the palette's accent and its Screen showing ui_lumen_1.png, offset a little left across the stage; the phone offset right and a little forward in depth, its body the palette's edge colour and its Screen showing ui_lumen_2.png; the stage placed 620 px tall in the centre; and along the bottom a bold caption 'One scene, two devices.' in extruded type that rises in word by word from one second.\n\nFiles in `resources/`: phone.glb, tablet.glb, ui_lumen_1.png, ui_lumen_2.png.\n\nText to use, in order:\n- One scene, two devices.",
+  "resources": [
+   {
+    "file": "phone.glb",
+    "kind": "file",
+    "path": "demos/26-stage/resources/phone.glb"
+   },
+   {
+    "file": "tablet.glb",
+    "kind": "file",
+    "path": "demos/26-stage/resources/tablet.glb"
+   },
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/26-stage/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/26-stage/resources/ui_lumen_2.png"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 12,
+   "total": 12,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "8.0s vs 8.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:model",
+     "ok": true,
+     "detail": "2 vs 2"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:depth",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=31 cost=$2.09 secs=165",
+   "run": {
+    "turns": 31,
+    "wall_s": 164,
+    "api_s": 159,
+    "cost_usd": 2.09,
+    "tokens": {
+     "input": 60,
+     "cache_read": 2222469,
+     "cache_write": 68844,
+     "output": 11432,
+     "thinking": 3955
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1222,
+      "output": 16,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2291373,
+      "output": 11432,
+      "cost_usd": 2.09
+     }
+    ],
+    "mcp": {
+     "calls": 9,
+     "ms": 2115,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1411,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 488,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 206,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` is written, validates clean, and rendered.\n\n**`out.promo/`**\n- `Resources/` \u2014 `tablet.glb`, `phone.glb`, `ui_lumen_1.png`, `ui_lumen_2.png`\n- `metadata.json` \u2014 1440\u00d7900, 8s, 30fps, `minReaderVersion: 31`\n\n**How it's built**\n- **Ground** \u2014 radial `backgroundGradient` from `@accent1` (16407C) at the centre through `@accent2` out to near-black `@accent3`, over a palette that states all eight roles plus `accent`.\n- **Stage `desk`** \u2014 two `model` layers sharing one camera and depth buffer:\n  - *Tablet* (first member, so it owns the picture): `Body \u2192 \"@accent\"`, `Screen \u2192 ui_lumen_1.png`; `stageOffset [-0.6, 0]`; the stage's `placement { height: 620, anchor: \"center\", offset: [0,-26] }`; camera `yaw -38 \u2192 22` across the full 8s with `easing: \"easeInOut\"` (pitch/distance/fov held constant so only the yaw moves); a 0.5s `fadeIn` that carries the whole stage.\n  - *Phone*: `Body \u2192 \"@edge\"`, `Screen \u2192 ui_lumen_2.png`; `stageOffset [0.74, -0.04]`, `depth 0.4` \u2014 right and forward, so it correctly occludes the tablet's corner as the camera swings past.\n- **Caption** \u2014 \"One scene, two devices.\" from t=1s, bold 66pt anchored to the bottom, extruded with `depth { count: 8, offset: [2,3], shade: 0.72 }`, arriving `{ by: \"word\", mode: \"rise\", secondsPer: 0.3 }`.\n\nI widened the two stage offsets and eased the phone's depth from my first pass (0.5 \u2192 0.4) after the contact sheet showed the phone swallowing a third of the tablet at the end of the orbit; both devices now read at every moment.\n\n**Outputs**\n- Contact sheet: `out.promo/Exports/frames/` \u2014 7 frames, 0.4s \u2192 7.6s\n- Video: `out.promo/Exports/export.mp4` \u2014 1440\u00d7900, 240 frames @ 30fps",
+   "contact": "docs/demo/26-stage/contact-result.png",
+   "reference_contact": "docs/demo/26-stage/contact-reference.png",
+   "video": "docs/demo/26-stage/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/26-stage.mp4",
+   "video_hd_bytes": 706409,
+   "metadata": "docs/demo/26-stage/result-metadata.json",
+   "gif": "docs/demo/26-stage/result.gif",
+   "thumb": "docs/demo/26-stage/thumb.png"
+  },
+  "page": "docs/demo/demo26.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",

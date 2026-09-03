@@ -32,6 +32,7 @@ def features(meta):
         "reveal": any((r.get('captionStyle') or {}).get('reveal') for r in res)
                   or any((l.get('captionStyle') or {}).get('reveal') for l in layers)
                   or bool(cs.get('subtitleReveal')),
+        "stage": any(l.get('stage') for l in layers),
         "model": any(l.get('kind') == 'model' for l in layers),
         "camera": any(k.get('camera') or k.get('light') for k in kf),
         "materials": any(r.get('materials') for r in res),
