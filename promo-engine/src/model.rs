@@ -379,13 +379,13 @@ pub fn sample_cube_glb_with(half: f32, slot: &str, base_color: [f32; 4]) -> Vec<
     )
 }
 
-/// A phone-like slab as a `.glb`: a body 0.72 × 1.5 × 0.08 with a `Body`
-/// slot and an inset front face with a `Screen` slot — the shape a
-/// `materials` binding was made for (a screenshot on the screen, the
+/// A tablet-like slab as a `.glb`: a 16:10 body 1.28 × 0.8 × 0.06 with a
+/// `Body` slot and an inset front face with a `Screen` slot — the shape
+/// a `materials` binding was made for (a screenshot on the screen, the
 /// accent on the body). Generated, like the cube, so nothing binary is
 /// checked in; the turntable template and the app's first model use it.
 pub fn sample_slab_glb() -> Vec<u8> {
-    let (w, h, d) = (0.36f32, 0.75f32, 0.04f32);
+    let (w, h, d) = (0.64f32, 0.40f32, 0.03f32);
     let inset = 0.03f32;
     let mut geo = GlbGeometry::default();
     let mut body = Vec::new();
@@ -641,11 +641,11 @@ mod tests {
             screen
                 .indices
                 .iter()
-                .all(|&i| screen.positions[i as usize][2] > 0.04),
+                .all(|&i| screen.positions[i as usize][2] > 0.03),
             "the screen sits in front of the face"
         );
         assert!(
-            (model.bounds_radius - 0.833).abs() < 0.01,
+            (model.bounds_radius - 0.7554).abs() < 0.01,
             "radius {}",
             model.bounds_radius
         );

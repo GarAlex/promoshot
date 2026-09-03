@@ -40,16 +40,31 @@
  },
  "resources": [
   {
-   "id": "3ABE8F70-5BF0-15E2-450E-4D640F81D089",
+   "id": "4C74348C-6630-A2D4-3F8E-D163D18D54D6",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Lumen",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "CF6563C7-3A41-1D67-DA40-E3241A4A6DD9",
    "kind": "model",
-   "filename": "phone.glb",
-   "displayName": "Phone",
+   "filename": "slab.glb",
+   "displayName": "Tablet",
    "addedAt": 0,
    "materials": {
-    "Body": "@accent"
+    "Body": "@accent",
+    "Screen": {
+     "resourceID": "4C74348C-6630-A2D4-3F8E-D163D18D54D6"
+    }
    },
    "clips": [],
-   "boundsRadius": 0.833
+   "boundsRadius": 0.7554
   },
   {
    "id": "704F38E6-77BE-96ED-125A-9CF73C5CA6DC",
@@ -91,7 +106,7 @@
    "filename": "",
    "displayName": "Caption \u00b7 Sub",
    "addedAt": 0,
-   "captionText": "A .glb on a layer. The palette paints it.",
+   "captionText": "A .glb on a layer. The palette paints it; a shot fills its screen.",
    "captionStyle": {
     "alignment": "leading",
     "subtitleFontSize": 30,
@@ -150,14 +165,14 @@
    ]
   },
   {
-   "id": "CFE842A5-037C-B790-EF4B-7EF13E106E7C",
-   "name": "Phone",
+   "id": "0C26EDCC-2C9A-9CB6-EFBD-411CC97CE685",
+   "name": "Tablet",
    "sortIndex": 1,
    "kind": "model",
    "isEnabled": true,
    "startTime": 0,
    "duration": 7.0,
-   "resourceID": "3ABE8F70-5BF0-15E2-450E-4D640F81D089",
+   "resourceID": "CF6563C7-3A41-1D67-DA40-E3241A4A6DD9",
    "fadeIn": 0.5,
    "keyframes": [
     {
@@ -165,7 +180,7 @@
      "time": 0,
      "transitionDuration": 0,
      "placement": {
-      "height": 760,
+      "height": 600,
       "anchor": "left",
       "offset": [
        90,
@@ -189,7 +204,7 @@
      "time": 6.6,
      "transitionDuration": 6.6,
      "placement": {
-      "height": 760,
+      "height": 600,
       "anchor": "left",
       "offset": [
        90,

@@ -1,4 +1,4 @@
-//! `cargo run -p promo-engine --example write_slab -- phone.glb`: the
+//! `cargo run -p promo-engine --example write_slab -- slab.glb`: the
 //! generated phone slab (Body and Screen slots), as a file for a template.
 fn main() {
     let out = std::env::args().nth(1).expect("path");

@@ -25,6 +25,9 @@
   "sprite": false,
   "gradient": true,
   "reveal": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
   "depth": true,
   "captionTilt": false,
   "kineticReveal": true,
@@ -40,9 +43,10 @@
  },
  "phrases": [
   "Every theme,\nevery angle.",
-  "A .glb on a layer. The palette paints it."
+  "A .glb on a layer. The palette paints it; a shot fills its screen."
  ],
  "media": [
-  "phone.glb"
+  "slab.glb",
+  "ui_lumen_1.png"
  ]
 }

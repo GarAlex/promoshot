@@ -86,6 +86,9 @@ struct Material {
     // x = metallic, y = roughness, z = 1 file texture (lit) / 2 a picture
     // bound by the project (unlit), w = 1 double sided
     factors: vec4<f32>,
+    // x = the slot's own aspect (width / height of the surface its uvs
+    // span), so a bound picture is fitted rather than stretched.
+    fit: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(1) @binding(0) var<uniform> material: Material;
@@ -136,10 +139,23 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     if (material.factors.z > 1.5) {
         // A picture BOUND to the slot by the project — a screenshot on a
         // screen — reads as the screen would: the picture itself, unlit,
-        // over the slot's own colour where it is transparent.
-        let t = textureSample(base_tex, base_samp, in.uv);
+        // fitted inside the surface (its own proportions kept, the slot's
+        // colour where it does not reach), over the slot's colour where
+        // it is transparent.
+        let size = vec2<f32>(textureDimensions(base_tex));
+        let picture_aspect = max(size.x, 1.0) / max(size.y, 1.0);
+        let slot_aspect = max(material.fit.x, 0.0001);
+        var scale = vec2<f32>(1.0, 1.0);
+        if (picture_aspect > slot_aspect) {
+            scale.y = picture_aspect / slot_aspect;
+        } else {
+            scale.x = slot_aspect / picture_aspect;
+        }
+        let uv = (in.uv - vec2<f32>(0.5)) * scale + vec2<f32>(0.5);
+        let inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+        let t = textureSample(base_tex, base_samp, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)));
         let under = linear_to_srgb(clamp(material.base_color.rgb * frame.ambient_rgb.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
-        let shown = mix(under, t.rgb, t.a);
+        let shown = mix(under, t.rgb, t.a * inside);
         return vec4<f32>(shown * material.base_color.a, material.base_color.a);
     }
     if (material.factors.z > 0.5) {
@@ -185,6 +201,7 @@ struct FrameRaw {
 struct MaterialRaw {
     base_color: [f32; 4],
     factors: [f32; 4],
+    fit: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -216,6 +233,9 @@ struct GpuMaterial {
     /// 0 none, 1 the file's own texture (lit), 2 a picture the project
     /// bound to the slot (shown as-is).
     textured: f32,
+    /// Width over height of the surface this slot's uvs span, from the
+    /// geometry that wears it — what a bound picture is fitted to.
+    aspect: f32,
 }
 
 /// A model's buffers on the GPU, built once per resource and drawn many
@@ -366,8 +386,44 @@ impl ModelPass {
     ) -> Result<GpuModel, GpuError> {
         use wgpu::util::DeviceExt;
         let device = &ctx.device;
+        // Each slot's surface aspect: the two largest extents of the
+        // vertices its primitives index. A flat screen gives width over
+        // height; a box gives its two longest sides, which is as good as a
+        // wrapped picture can be placed.
+        let mut aspects = vec![1.0f32; materials.len()];
+        for (index, aspect) in aspects.iter_mut().enumerate() {
+            let mut min = [f32::MAX; 3];
+            let mut max = [f32::MIN; 3];
+            let mut any = false;
+            for mesh in meshes.iter().filter(|m| m.material == index) {
+                for &i in mesh.indices {
+                    if let Some(p) = mesh.positions.get(i as usize) {
+                        any = true;
+                        for k in 0..3 {
+                            min[k] = min[k].min(p[k]);
+                            max[k] = max[k].max(p[k]);
+                        }
+                    }
+                }
+            }
+            if any {
+                let mut extents = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+                // Width is the horizontal extent, height the vertical one,
+                // when the surface faces the viewer; otherwise the longest
+                // two axes in that order.
+                let (w, h) = if extents[2] <= extents[0].min(extents[1]) {
+                    (extents[0], extents[1])
+                } else {
+                    extents.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+                    (extents[0], extents[1])
+                };
+                if w > 1e-6 && h > 1e-6 {
+                    *aspect = w / h;
+                }
+            }
+        }
         let mut gpu_materials = Vec::with_capacity(materials.len());
-        for m in materials {
+        for (index, m) in materials.iter().enumerate() {
             let texture = m
                 .texture
                 .filter(|(w, h, px)| *w > 0 && *h > 0 && px.len() == (*w * *h * 4) as usize)
@@ -382,6 +438,7 @@ impl ModelPass {
                         if texture.is_some() { 1.0 } else { 0.0 },
                         if m.double_sided { 1.0 } else { 0.0 },
                     ],
+                    fit: [aspects[index], 0.0, 0.0, 0.0],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
@@ -413,6 +470,7 @@ impl ModelPass {
                 roughness: m.roughness,
                 double_sided: m.double_sided,
                 textured: if texture.is_some() { 1.0 } else { 0.0 },
+                aspect: aspects[index],
             });
         }
         let mut gpu_meshes = Vec::with_capacity(meshes.len());
@@ -478,6 +536,7 @@ impl ModelPass {
                         m.textured,
                         if m.double_sided { 1.0 } else { 0.0 },
                     ],
+                    fit: [m.aspect, 0.0, 0.0, 0.0],
                 }),
             );
         }
@@ -508,6 +567,7 @@ impl ModelPass {
                     2.0,
                     if m.double_sided { 1.0 } else { 0.0 },
                 ],
+                fit: [m.aspect, 0.0, 0.0, 0.0],
             }),
         );
         m.bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
