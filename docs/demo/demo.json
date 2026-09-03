@@ -4268,6 +4268,189 @@
   "page": "docs/demo/demo28.md"
  },
  {
+  "id": "29",
+  "slug": "29-bench",
+  "title": "Bench",
+  "blurb": "The bench of demo 28 as one stage layer \u2014 camera and light on the stage, three finished vases as its members, each turning on its own.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; ONE layer of kind 'stage' named 'Bench', placed 520 px tall in the centre, whose own keyframes carry the camera (drifting from a yaw of -14 to 14 over the piece with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3), and whose members are vase.glb three times as three model resources over the same file \u2014 the first offset 1.5 left, painted silver D2D6DC with a chrome finish on the binding (metallic 1, roughness 0.12); the second in the middle, the palette's accent with a matte finish (metallic 0, roughness 0.85); the third offset 1.5 right, the same accent with a gloss finish (metallic 0, roughness 0.12) \u2014 every member turning a little on its own from a yaw of -20 to 20; and along the bottom a bold caption 'One stage. One layer.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- One stage. One layer.",
+  "resources": [
+   {
+    "file": "vase.glb",
+    "kind": "file",
+    "path": "demos/29-bench/resources/vase.glb"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 15,
+   "total": 15,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:stage",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stageLayer",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:finish",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:depth",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=29 cost=$1.63 secs=143",
+   "run": {
+    "turns": 29,
+    "wall_s": 141,
+    "api_s": 136,
+    "cost_usd": 1.63,
+    "tokens": {
+     "input": 56,
+     "cache_read": 1675319,
+     "cache_write": 53790,
+     "output": 10077,
+     "thinking": 2794
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1301,
+      "output": 12,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1729165,
+      "output": 10077,
+      "cost_usd": 1.63
+     }
+    ],
+    "mcp": {
+     "calls": 7,
+     "ms": 2458,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1728,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 600,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 119,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 3,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done \u2014 `out.promo` validates clean and renders.\n\n**`out.promo/`** (canvas 1440\u00d7900, 9 s, 30 fps)\n\n- **Ground** \u2014 radial `backgroundGradient` from a lifted grey `4E5158` at centre through `2A2C31` out to `141518`.\n- **Bench** \u2014 a single `kind: \"stage\"` layer, `minReaderVersion: 33`. Its own keyframes carry the stage's picture: `placement` 520 px tall centred, `camera.yaw` \u221214 \u2192 14 across the full 9 s with `easeInOut`, and `light.yaw` \u221270 \u2192 70 at `intensity: 1.3`.\n- **Members** \u2014 three `model` layers over three resources that all name `vase.glb`, each with its own `Body` binding as a finish object: silver `D2D6DC` / metallic 1 / roughness 0.12; `@accent` / 0 / 0.85; `@accent` / 0 / 0.12. `stageOffset` `[-1.5, 0]`, `[0, 0]`, `[1.5, 0]`; each turns on its own `camera.yaw` \u221220 \u2192 20.\n- **Caption** \u2014 \"One stage. One layer.\", bold 64 pt anchored bottom, `depth` extrusion (7 copies, 2 px offset, 0.7 shade), revealing `{ by: \"word\", mode: \"fade\", secondsPer: 0.34 }` from 1.2 s.\n\nThe three finishes read distinctly: the silver has a tight specular streak, the matte accent is flat, the gloss accent picks up a sharp edge highlight \u2014 and the highlights travel across all three as the key light sweeps.\n\nOutputs: `out.promo/Exports/export.mp4` (1440\u00d7900, 270 frames) and a 9-frame contact sheet in `out.promo/Exports/frames/`.",
+   "contact": "docs/demo/29-bench/contact-result.png",
+   "reference_contact": "docs/demo/29-bench/contact-reference.png",
+   "video": "docs/demo/29-bench/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/29-bench.mp4",
+   "video_hd_bytes": 329193,
+   "metadata": "docs/demo/29-bench/result-metadata.json",
+   "gif": "docs/demo/29-bench/result.gif",
+   "thumb": "docs/demo/29-bench/thumb.png"
+  },
+  "page": "docs/demo/demo29.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",
