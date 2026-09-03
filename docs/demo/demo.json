@@ -3759,8 +3759,8 @@
   ],
   "result": {
    "score": 100,
-   "passed": 12,
-   "total": 12,
+   "passed": 13,
+   "total": 13,
    "checks": [
     {
      "check": "canvas",
@@ -3798,6 +3798,11 @@
      "detail": "True"
     },
     {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
      "check": "feature:model",
      "ok": true,
      "detail": "True"
@@ -3823,50 +3828,50 @@
      "detail": "1 of 1 lines recognisable"
     }
    ],
-   "summary": "turns=31 cost=$2.09 secs=165",
+   "summary": "turns=40 cost=$1.93 secs=182",
    "run": {
-    "turns": 31,
-    "wall_s": 164,
-    "api_s": 159,
-    "cost_usd": 2.09,
+    "turns": 40,
+    "wall_s": 178,
+    "api_s": 175,
+    "cost_usd": 1.93,
     "tokens": {
-     "input": 60,
-     "cache_read": 2222469,
-     "cache_write": 68844,
-     "output": 11432,
-     "thinking": 3955
+     "input": 66,
+     "cache_read": 2077641,
+     "cache_write": 56210,
+     "output": 12999,
+     "thinking": 3552
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
       "input": 1222,
-      "output": 16,
+      "output": 15,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 2291373,
-      "output": 11432,
-      "cost_usd": 2.09
+      "input": 2133917,
+      "output": 12999,
+      "cost_usd": 1.93
      }
     ],
     "mcp": {
-     "calls": 9,
-     "ms": 2115,
+     "calls": 8,
+     "ms": 2041,
      "tools": {
       "promo_render_video": {
        "calls": 1,
-       "ms": 1411,
+       "ms": 1413,
        "errors": 0
       },
       "promo_validate": {
        "calls": 2,
-       "ms": 488,
-       "errors": 0
+       "ms": 515,
+       "errors": 1
       },
       "promo_render_frames": {
-       "calls": 2,
-       "ms": 206,
+       "calls": 1,
+       "ms": 103,
        "errors": 0
       },
       "promo_inspect": {
@@ -3894,12 +3899,12 @@
    },
    "used": null,
    "captions": null,
-   "notes": "Done \u2014 `out.promo` is written, validates clean, and rendered.\n\n**`out.promo/`**\n- `Resources/` \u2014 `tablet.glb`, `phone.glb`, `ui_lumen_1.png`, `ui_lumen_2.png`\n- `metadata.json` \u2014 1440\u00d7900, 8s, 30fps, `minReaderVersion: 31`\n\n**How it's built**\n- **Ground** \u2014 radial `backgroundGradient` from `@accent1` (16407C) at the centre through `@accent2` out to near-black `@accent3`, over a palette that states all eight roles plus `accent`.\n- **Stage `desk`** \u2014 two `model` layers sharing one camera and depth buffer:\n  - *Tablet* (first member, so it owns the picture): `Body \u2192 \"@accent\"`, `Screen \u2192 ui_lumen_1.png`; `stageOffset [-0.6, 0]`; the stage's `placement { height: 620, anchor: \"center\", offset: [0,-26] }`; camera `yaw -38 \u2192 22` across the full 8s with `easing: \"easeInOut\"` (pitch/distance/fov held constant so only the yaw moves); a 0.5s `fadeIn` that carries the whole stage.\n  - *Phone*: `Body \u2192 \"@edge\"`, `Screen \u2192 ui_lumen_2.png`; `stageOffset [0.74, -0.04]`, `depth 0.4` \u2014 right and forward, so it correctly occludes the tablet's corner as the camera swings past.\n- **Caption** \u2014 \"One scene, two devices.\" from t=1s, bold 66pt anchored to the bottom, extruded with `depth { count: 8, offset: [2,3], shade: 0.72 }`, arriving `{ by: \"word\", mode: \"rise\", secondsPer: 0.3 }`.\n\nI widened the two stage offsets and eased the phone's depth from my first pass (0.5 \u2192 0.4) after the contact sheet showed the phone swallowing a third of the tablet at the end of the orbit; both devices now read at every moment.\n\n**Outputs**\n- Contact sheet: `out.promo/Exports/frames/` \u2014 7 frames, 0.4s \u2192 7.6s\n- Video: `out.promo/Exports/export.mp4` \u2014 1440\u00d7900, 240 frames @ 30fps",
+   "notes": "Done \u2014 `out.promo` validates clean and rendered.\n\n**`out.promo/metadata.json`** (minReaderVersion 31, 1440\u00d7900, 8 s, 30 fps)\n\n- **Ground** \u2014 radial `backgroundGradient` from `@glow` (16336E) at [0.5, 0.42] out through 0B1636 to `@canvas` (060B1E).\n- **Stage `desk`**, two model layers through one camera and one depth buffer:\n  - **Tablet** (`sortIndex` 1, the first member, so it owns the stage): `placement` height 620, anchor center; `camera.yaw` \u221238 \u2192 22 over the full 8 s with `easeInOut` (pitch 12, distance 4.2, fov 30), stage light yaw 40 / pitch 50. `materials`: `Body: \"@accent\"`, `Screen: ui_lumen_1.png`. `stageOffset [-0.45, 0]`, depth 0.\n  - **Phone** (`sortIndex` 2): `materials` `Body: \"@edge\"`, `Screen: ui_lumen_2.png`; `stageOffset [0.78, -0.05]`, `depth 0.45` \u2014 right and forward.\n- **Caption** \"One scene, two devices.\" \u2014 bold 68 pt, anchored bottom at offset [0, \u221256], `depth { count: 7, offset: [2,3], shade: 0.68 }` for the extrusion, `reveal { by: \"word\", mode: \"rise\", secondsPer: 0.32, rise: 0.6 }`, starting at 1 s.\n\nPalette states all eight roles plus `accent` and `glow`, so the tablet body, phone body and gradient are one swap away from a re-skin.\n\n**Outputs**\n- `out.promo/Exports/export.mp4` \u2014 1440\u00d7900, 240 frames @ 30 fps\n- `out.promo/Exports/frames/` \u2014 7-frame contact sheet, 0.4 s \u2192 7.4 s\n\nThe contact sheet confirms the orbit (tablet nearly edge-on at the start, swinging through flat-on and past it), the phone standing right and forward with correct parallax, and the caption assembling word by word from 1 s. One thing worth knowing: both UI PNGs are landscape 1216\u00d7760, so on the phone's portrait Screen slot the picture letterboxes into a band rather than filling it \u2014 a portrait crop of `ui_lumen_2.png` would fill it if you want that.",
    "contact": "docs/demo/26-stage/contact-result.png",
    "reference_contact": "docs/demo/26-stage/contact-reference.png",
    "video": "docs/demo/26-stage/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/26-stage.mp4",
-   "video_hd_bytes": 706409,
+   "video_hd_bytes": 813122,
    "metadata": "docs/demo/26-stage/result-metadata.json",
    "gif": "docs/demo/26-stage/result.gif",
    "thumb": "docs/demo/26-stage/thumb.png"
