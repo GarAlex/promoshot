@@ -43,6 +43,7 @@ def features(meta):
         "textBody": any(isinstance(r.get('recipe'), dict) and 'text' in r['recipe'] for r in res),
         "environment": bool(cs.get('environment')),
         "particles": any(r.get('kind') == 'particles' for r in res),
+        "partsBody": any(isinstance(r.get('recipe'), dict) and 'parts' in r['recipe'] for r in res),
         "depth": any((l.get('captionStyle') or {}).get('depth') for l in layers)
                  or any((r.get('captionStyle') or {}).get('depth') for r in res),
         "captionTilt": any(l.get('kind') == 'caption' and any(k.get('tiltX') is not None or k.get('tiltY') is not None for k in l.get('keyframes') or []) for l in layers),

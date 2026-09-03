@@ -1,14 +1,14 @@
 {
- "template": "01 App Store Hero",
+ "template": "32 Stand",
  "canvas": [
   1440,
   900
  ],
- "duration": 15,
+ "duration": 9.0,
  "kinds": {
   "background": 1,
-  "image": 1,
-  "caption": 5
+  "stage": 1,
+  "caption": 1
  },
  "features": {
   "chromaKey": false,
@@ -23,23 +23,23 @@
   "viewport": false,
   "motionPath": false,
   "sprite": false,
-  "gradient": false,
+  "gradient": true,
   "reveal": true,
-  "stage": false,
-  "stageLayer": false,
-  "model": false,
-  "camera": false,
-  "materials": false,
-  "finish": false,
+  "stage": true,
+  "stageLayer": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
+  "finish": true,
   "textBody": false,
-  "environment": false,
+  "environment": true,
   "particles": false,
-  "partsBody": false,
+  "partsBody": true,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,
   "blendModes": [],
-  "swaps": 4,
+  "swaps": 0,
   "transitions": false,
   "timingAnchors": false,
   "mediaCuts": false,
@@ -49,17 +49,9 @@
   "placement": true
  },
  "phrases": [
-  "Every number, one screen.",
-  "Revenue that explains itself.",
-  "Write without the noise.",
-  "Move, measured.",
-  "Ship the story."
+  "Made from parts."
  ],
  "media": [
-  "ui_lumen_1.png",
-  "ui_lumen_2.png",
-  "ui_lumen_5.png",
-  "ui_pulse_1.png",
-  "ui_verse_1.png"
+  "vase.glb"
  ]
 }

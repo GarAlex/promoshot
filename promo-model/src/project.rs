@@ -383,6 +383,100 @@ pub enum BodyRecipe {
     /// instead: `{ "device": { "kind": "phone" } }`, with `Body` and
     /// `Screen` slots.
     Device(DeviceBody),
+    /// A body made of PARTS (rung 37) — the 3D counterpart of a drawing:
+    /// boxes, spheres, cylinders, tori, a lathe of a profile, an extrude
+    /// of a path, each under a slot and placed by position, rotation and
+    /// scale, unioned by standing together. `{ "parts": [ … ] }`.
+    Parts(Vec<BodyPart>),
+}
+
+/// One part of a parts body: a shape under a `slot` (default "Body"),
+/// scaled, turned (degrees about X, Y, Z, in that order) and moved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BodyPart {
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub slot: Option<String>,
+    pub shape: PartShape,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub position: Option<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub rotation: Option<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub scale: Option<f64>,
+}
+
+impl BodyPart {
+    pub fn slot(&self) -> &str {
+        self.slot.as_deref().filter(|s| !s.is_empty()).unwrap_or("Body")
+    }
+}
+
+/// The shapes a part can be, externally tagged: `{ "box": { "size":
+/// [w, h, d], "radius": r } }`, `{ "sphere": { "radius": r } }`,
+/// `{ "cylinder": { "radius": r, "height": h } }`, `{ "torus": {
+/// "radius": r, "tube": t } }`, `{ "lathe": { "profile": [[radius,
+/// height], …] } }` (turned about Y), `{ "extrude": { "path": [[x, y],
+/// …], "depth": d } }` (a closed polygon in XY pulled along Z, centred).
+/// Units are the body's own; `segments` rounds the curved ones.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PartShape {
+    Box(BoxShape),
+    Sphere(SphereShape),
+    Cylinder(CylinderShape),
+    Torus(TorusShape),
+    Lathe(LatheShape),
+    Extrude(ExtrudeShape),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BoxShape {
+    pub size: [f64; 3],
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub radius: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SphereShape {
+    pub radius: f64,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub segments: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CylinderShape {
+    pub radius: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub segments: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TorusShape {
+    pub radius: f64,
+    pub tube: f64,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub segments: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LatheShape {
+    pub profile: Vec<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub segments: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtrudeShape {
+    pub path: Vec<[f64; 2]>,
+    pub depth: f64,
 }
 
 /// A built-in device body: `phone`, `tablet` or `laptop`.
@@ -3680,6 +3774,15 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 37 is a parts body — a recipe variant a rung-34 reader cannot
+        // decode, so the rung refuses the file up front.
+        if resources
+            .iter()
+            .any(|r| matches!(r.recipe, Some(BodyRecipe::Parts(_))))
+        {
+            return 37;
+        }
+
         // 36 is a particle system — a resource KIND, so an older reader
         // refuses the file rather than failing mid-decode.
         if resources
@@ -4720,8 +4823,33 @@ mod placement_model_tests {
         assert_eq!(recipe.shape(), "square");
         assert_eq!(recipe.life(), [1.0, 2.0], "defaults fill what the recipe leaves out");
         assert!(sparks.to_json().unwrap().contains(r#""particles":{"rate":80.0,"burst":40,"colors":["@accent","FFFFFF"],"shape":"square"}"#));
+
+        // 37: a parts body, a recipe variant.
+        let stand = meta(
+            r#""resources":[{"id":"S","kind":"model","filename":"","displayName":"Stand","addedAt":0,
+                 "recipe":{"parts":[
+                   {"slot":"Base","shape":{"cylinder":{"radius":0.6,"height":0.1}},"position":[0,-0.5,0]},
+                   {"shape":{"sphere":{"radius":0.3,"segments":24}},"position":[0,0.4,0],"rotation":[0,45,0],"scale":1.5},
+                   {"slot":"Plate","shape":{"extrude":{"path":[[-0.5,-0.3],[0.5,-0.3],[0.5,0.3],[-0.5,0.3]],"depth":0.05}}}]}}],
+                 "layers":[]"#,
+        );
+        assert_eq!(stand.minimum_reader_version(), 37);
+        let Some(BodyRecipe::Parts(parts)) = stand.resources.as_ref().unwrap()[0].recipe.clone() else {
+            panic!("a parts recipe");
+        };
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[0].slot(), "Base");
+        assert_eq!(parts[1].slot(), "Body", "a part without a slot is the Body");
+        assert!(matches!(parts[1].shape, PartShape::Sphere(SphereShape { segments: Some(24), .. })));
+        let json = stand.to_json().unwrap();
+        assert!(json.contains(r#""shape":{"cylinder":{"radius":0.6,"height":0.1}}"#), "{json}");
+        assert!(json.contains(r#""rotation":[0.0,45.0,0.0],"scale":1.5"#), "{json}");
         let back = ProjectMetadata::from_json(&json).expect("decode");
-        assert_eq!(back.composition_settings.environment, lit.composition_settings.environment);
+        assert_eq!(
+            back.resources.as_ref().unwrap()[0].recipe,
+            stand.resources.as_ref().unwrap()[0].recipe,
+            "a parts recipe survives the round trip"
+        );
         let body = generated.resources.as_ref().unwrap()[0].recipe.clone().unwrap();
         let BodyRecipe::Text(text) = body else {
             panic!("a text recipe");

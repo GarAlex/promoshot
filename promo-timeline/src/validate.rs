@@ -717,6 +717,37 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         let body = match recipe {
+            promo_model::BodyRecipe::Parts(parts) => {
+                use promo_model::PartShape;
+                if parts.is_empty() {
+                    out.push(format!(
+                        "resource \"{}\": the parts body has no parts",
+                        resource.display_name
+                    ));
+                }
+                for (i, part) in parts.iter().enumerate() {
+                    let bad = match &part.shape {
+                        PartShape::Box(b) => b.size.iter().any(|s| *s <= 0.0).then_some("a box needs a positive size"),
+                        PartShape::Sphere(s) => (s.radius <= 0.0).then_some("a sphere needs a positive radius"),
+                        PartShape::Cylinder(c) => (c.radius <= 0.0 || c.height <= 0.0)
+                            .then_some("a cylinder needs a positive radius and height"),
+                        PartShape::Torus(t) => (t.radius <= 0.0 || t.tube <= 0.0 || t.tube >= t.radius)
+                            .then_some("a torus needs a positive radius and a tube smaller than it"),
+                        PartShape::Lathe(l) => (l.profile.len() < 2).then_some("a lathe needs at least two profile points"),
+                        PartShape::Extrude(e) => (e.path.len() < 3 || e.depth <= 0.0)
+                            .then_some("an extrude needs at least three path points and a positive depth"),
+                    };
+                    if let Some(why) = bad {
+                        out.push(format!(
+                            "resource \"{}\": part {} ({}): {why}",
+                            resource.display_name,
+                            i + 1,
+                            part.slot()
+                        ));
+                    }
+                }
+                continue;
+            }
             promo_model::BodyRecipe::Device(device) => {
                 if !device.is_known() {
                     out.push(format!(
@@ -1665,6 +1696,18 @@ mod tests {
         );
         let found = warnings(&odd);
         assert!(found.iter().any(|w| w.contains("device recipe kind \"watch\" is not a body")), "{found:?}");
+        let parts = project(
+            "",
+            r#","resources":[{"id":"S","kind":"model","filename":"","displayName":"Stand","addedAt":0,
+                 "recipe":{"parts":[{"shape":{"cylinder":{"radius":0,"height":1}}},
+                                    {"slot":"Ring","shape":{"torus":{"radius":0.2,"tube":0.5}}},
+                                    {"shape":{"box":{"size":[1,0.2,0.5]}}}]}}]"#,
+        );
+        let found = warnings(&parts);
+        assert!(found.iter().any(|w| w.contains("part 1 (Body): a cylinder needs")), "{found:?}");
+        assert!(found.iter().any(|w| w.contains("part 2 (Ring): a torus needs")), "{found:?}");
+        assert!(!found.iter().any(|w| w.contains("part 3")), "{found:?}");
+        assert_eq!(parts.minimum_reader_version(), 37);
     }
     /// The 2.5D tricks are named as legacy with their replacement: a
     /// caption's depth and tilt, and a device frame on a resource.

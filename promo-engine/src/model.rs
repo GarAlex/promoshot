@@ -1004,45 +1004,12 @@ pub fn text_glb(body: &promo_model::TextBody) -> Result<Vec<u8>, String> {
 }
 
 fn text_body_glb(outlines: &promo_text::TextOutlines, size: f32, depth: f32) -> Result<Vec<u8>, String> {
-    use lyon_tessellation::geom::point;
-    use lyon_tessellation::path::Path;
-    use lyon_tessellation::{BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers};
-
     let contours: Vec<Vec<[f32; 2]>> = outlines
         .contours
         .iter()
         .filter(|c| c.len() >= 3)
         .map(|c| c.iter().map(|p| [p[0] * size, p[1] * size]).collect())
         .collect();
-    let mut builder = Path::builder();
-    for c in &contours {
-        builder.begin(point(c[0][0], c[0][1]));
-        for p in &c[1..] {
-            builder.line_to(point(p[0], p[1]));
-        }
-        builder.close();
-    }
-    let path = builder.build();
-    let mut buffers: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
-    FillTessellator::new()
-        .tessellate_path(
-            &path,
-            &FillOptions::default()
-                .with_fill_rule(FillRule::NonZero)
-                .with_tolerance(0.002 * size),
-            &mut BuffersBuilder::new(&mut buffers, |v: FillVertex| {
-                let p = v.position();
-                [p.x, p.y]
-            }),
-        )
-        .map_err(|e| format!("{e:?}"))?;
-    if buffers.indices.is_empty() {
-        return Err("the text has no area to extrude".into());
-    }
-
-    let half = depth / 2.0;
-    let (w, h) = (outlines.width * size, outlines.height * size);
-    let uv = |p: [f32; 2]| [p[0] / w.max(1e-6) + 0.5, 0.5 - p[1] / h.max(1e-6)];
     let mut g = GlbGeometry {
         positions: Vec::new(),
         normals: Vec::new(),
@@ -1050,40 +1017,7 @@ fn text_body_glb(outlines: &promo_text::TextOutlines, size: f32, depth: f32) -> 
     };
     let mut face: Vec<u16> = Vec::new();
     let mut side: Vec<u16> = Vec::new();
-    // Front (+Z) and back (−Z): the same triangles, each wound to agree
-    // with its face's normal whichever way the tessellator handed it over.
-    for (z, nz) in [(half, 1.0f32), (-half, -1.0f32)] {
-        let base: Vec<u16> = buffers
-            .vertices
-            .iter()
-            .map(|p| g.push_vertex([p[0], p[1], z], [0.0, 0.0, nz], uv(*p)))
-            .collect();
-        for tri in buffers.indices.chunks(3) {
-            let (a, b, c) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
-            let (pa, pb, pc) = (buffers.vertices[a], buffers.vertices[b], buffers.vertices[c]);
-            let cross = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
-            if (cross > 0.0) == (nz > 0.0) {
-                face.extend_from_slice(&[base[a], base[b], base[c]]);
-            } else {
-                face.extend_from_slice(&[base[a], base[c], base[b]]);
-            }
-        }
-    }
-    // Walls: an outer contour runs counter-clockwise and a hole clockwise,
-    // so the band's outward normal points away from the solid on both.
-    for (i, c) in contours.iter().enumerate() {
-        let inside = contours
-            .iter()
-            .enumerate()
-            .filter(|(j, other)| *j != i && point_in_polygon(c[0], other))
-            .count();
-        let hole = inside % 2 == 1;
-        let mut oriented = c.clone();
-        if (signed_area(c) > 0.0) == hole {
-            oriented.reverse();
-        }
-        g.band(&oriented, half, -half, &|p| p, &|n| n, &mut side);
-    }
+    let (min, max) = extrude_contours(&contours, depth, &mut g, &mut face, &mut side)?;
     let materials = [
         GlbMaterial {
             slot: "Face",
@@ -1100,7 +1034,248 @@ fn text_body_glb(outlines: &promo_text::TextOutlines, size: f32, depth: f32) -> 
             indices: &side,
         },
     ];
-    Ok(g.build(&materials, [-w / 2.0, -h / 2.0, -half], [w / 2.0, h / 2.0, half]))
+    Ok(g.build(&materials, min, max))
+}
+
+/// Closed contours in XY (holes and all, any orientation) pulled `depth`
+/// along Z, centred on Z: the faces tessellated (NonZero), each triangle
+/// wound to agree with its face's normal, the walls through `band` with
+/// outer contours counter-clockwise and holes clockwise so the outward
+/// normal leaves the solid on both. Returns the bounds. Faces go to
+/// `faces`, walls to `sides`.
+fn extrude_contours(
+    contours: &[Vec<[f32; 2]>],
+    depth: f32,
+    g: &mut GlbGeometry,
+    faces: &mut Vec<u16>,
+    sides: &mut Vec<u16>,
+) -> Result<([f32; 3], [f32; 3]), String> {
+    use lyon_tessellation::geom::point;
+    use lyon_tessellation::path::Path;
+    use lyon_tessellation::{BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers};
+
+    let contours: Vec<&Vec<[f32; 2]>> = contours.iter().filter(|c| c.len() >= 3).collect();
+    if contours.is_empty() {
+        return Err("nothing to extrude".into());
+    }
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for c in &contours {
+        for p in c.iter() {
+            min_x = min_x.min(p[0]);
+            max_x = max_x.max(p[0]);
+            min_y = min_y.min(p[1]);
+            max_y = max_y.max(p[1]);
+        }
+    }
+    let (w, h) = ((max_x - min_x).max(1e-6), (max_y - min_y).max(1e-6));
+    let mut builder = Path::builder();
+    for c in &contours {
+        builder.begin(point(c[0][0], c[0][1]));
+        for p in &c[1..] {
+            builder.line_to(point(p[0], p[1]));
+        }
+        builder.close();
+    }
+    let path = builder.build();
+    let mut buffers: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+    FillTessellator::new()
+        .tessellate_path(
+            &path,
+            &FillOptions::default()
+                .with_fill_rule(FillRule::NonZero)
+                .with_tolerance(0.002 * w.max(h)),
+            &mut BuffersBuilder::new(&mut buffers, |v: FillVertex| {
+                let p = v.position();
+                [p.x, p.y]
+            }),
+        )
+        .map_err(|e| format!("{e:?}"))?;
+    if buffers.indices.is_empty() {
+        return Err("the outline has no area to extrude".into());
+    }
+    let half = depth / 2.0;
+    let uv = |p: [f32; 2]| [(p[0] - min_x) / w, 1.0 - (p[1] - min_y) / h];
+    for (z, nz) in [(half, 1.0f32), (-half, -1.0f32)] {
+        let base: Vec<u16> = buffers
+            .vertices
+            .iter()
+            .map(|p| g.push_vertex([p[0], p[1], z], [0.0, 0.0, nz], uv(*p)))
+            .collect();
+        for tri in buffers.indices.chunks(3) {
+            let (a, b, c) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+            let (pa, pb, pc) = (buffers.vertices[a], buffers.vertices[b], buffers.vertices[c]);
+            let cross = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
+            if (cross > 0.0) == (nz > 0.0) {
+                faces.extend_from_slice(&[base[a], base[b], base[c]]);
+            } else {
+                faces.extend_from_slice(&[base[a], base[c], base[b]]);
+            }
+        }
+    }
+    for (i, c) in contours.iter().enumerate() {
+        let inside = contours
+            .iter()
+            .enumerate()
+            .filter(|(j, other)| *j != i && point_in_polygon(c[0], other))
+            .count();
+        let hole = inside % 2 == 1;
+        let mut oriented: Vec<[f32; 2]> = (*c).clone();
+        if (signed_area(c) > 0.0) == hole {
+            oriented.reverse();
+        }
+        g.band(&oriented, half, -half, &|p| p, &|n| n, sides);
+    }
+    Ok(([min_x, min_y, -half], [max_x, max_y, half]))
+}
+
+/// A body made of PARTS (rung 37): each part generated in its own frame
+/// — a box (a rounded slab), a sphere or cylinder (a lathe), a torus, a
+/// lathe of a profile, an extrude of a path — then scaled, turned about
+/// X, Y, Z and moved, its triangles filed under the part's slot. Parts
+/// stand together; there are no booleans. A plain light matte on every
+/// slot; the finish is the project's to bind.
+pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
+    use promo_model::PartShape;
+    if parts.is_empty() {
+        return Err("a parts body needs at least one part".into());
+    }
+    let mut g = GlbGeometry {
+        positions: Vec::new(),
+        normals: Vec::new(),
+        uvs: Vec::new(),
+    };
+    let mut by_slot: Vec<(String, Vec<u16>)> = Vec::new();
+    let mut min = [f32::MAX; 3];
+    let mut max = [f32::MIN; 3];
+    for part in parts {
+        let mut local = GlbGeometry {
+            positions: Vec::new(),
+            normals: Vec::new(),
+            uvs: Vec::new(),
+        };
+        let mut idx: Vec<u16> = Vec::new();
+        let segments = |n: Option<u32>, default: usize| n.map(|n| n.max(3) as usize).unwrap_or(default);
+        match &part.shape {
+            PartShape::Box(b) => {
+                let [w, h, d] = [b.size[0] as f32, b.size[1] as f32, b.size[2] as f32];
+                if w <= 0.0 || h <= 0.0 || d <= 0.0 {
+                    return Err("a box needs a positive size".into());
+                }
+                let r = (b.radius.unwrap_or(0.0) as f32).clamp(0.0, (w.min(h) / 2.0).min(d / 2.0));
+                local.rounded_slab(w / 2.0, h / 2.0, d / 2.0, r, [0.0, 0.0, 0.0], &mut idx);
+            }
+            PartShape::Sphere(sp) => {
+                let r = sp.radius as f32;
+                if r <= 0.0 {
+                    return Err("a sphere needs a positive radius".into());
+                }
+                let rings = segments(sp.segments, 32) / 2;
+                let profile: Vec<[f32; 2]> = (0..=rings)
+                    .map(|i| {
+                        let a = std::f32::consts::PI * i as f32 / rings as f32;
+                        [r * a.sin(), r * a.cos()]
+                    })
+                    .collect();
+                local.lathe(&profile, segments(sp.segments, 32), &mut idx);
+            }
+            PartShape::Cylinder(c) => {
+                let (r, h) = (c.radius as f32, c.height as f32);
+                if r <= 0.0 || h <= 0.0 {
+                    return Err("a cylinder needs a positive radius and height".into());
+                }
+                // Top to bottom, as the lathe winds; the rim points twice,
+                // so the smoothed normals stay flat on the caps and outward
+                // on the wall.
+                let profile = [[0.0, h / 2.0], [r, h / 2.0], [r, h / 2.0], [r, -h / 2.0], [r, -h / 2.0], [0.0, -h / 2.0]];
+                local.lathe(&profile, segments(c.segments, 48), &mut idx);
+            }
+            PartShape::Torus(t) => {
+                let (r, tube) = (t.radius as f32, t.tube as f32);
+                if r <= 0.0 || tube <= 0.0 {
+                    return Err("a torus needs a positive radius and tube".into());
+                }
+                let n = segments(t.segments, 48);
+                local.torus(r, tube, n, (n / 2).max(8), &mut idx);
+            }
+            PartShape::Lathe(l) => {
+                if l.profile.len() < 2 {
+                    return Err("a lathe needs a profile of at least two points".into());
+                }
+                // The lathe winds outward for a profile running top to
+                // bottom; a profile written bottom-up (the natural way to
+                // list [radius, height]) is turned round first.
+                let mut profile: Vec<[f32; 2]> = l.profile.iter().map(|p| [p[0].max(0.0) as f32, p[1] as f32]).collect();
+                if profile.first().map(|p| p[1]) < profile.last().map(|p| p[1]) {
+                    profile.reverse();
+                }
+                local.lathe(&profile, segments(l.segments, 48), &mut idx);
+            }
+            PartShape::Extrude(e) => {
+                if e.path.len() < 3 || e.depth <= 0.0 {
+                    return Err("an extrude needs a path of at least three points and a positive depth".into());
+                }
+                let contour: Vec<[f32; 2]> = e.path.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
+                let mut faces = Vec::new();
+                let mut walls = Vec::new();
+                extrude_contours(&[contour], e.depth as f32, &mut local, &mut faces, &mut walls)?;
+                idx.extend(faces);
+                idx.extend(walls);
+            }
+        }
+        // Place it: scale, then turn about X, Y, Z, then move; normals
+        // turn with it.
+        let scale = part.scale.unwrap_or(1.0).max(1e-6) as f32;
+        let rot = part.rotation.unwrap_or([0.0; 3]);
+        let (rx, ry, rz) = (
+            (rot[0] as f32).to_radians(),
+            (rot[1] as f32).to_radians(),
+            (rot[2] as f32).to_radians(),
+        );
+        let turn = |v: [f32; 3]| -> [f32; 3] {
+            let (cx, sx) = (rx.cos(), rx.sin());
+            let (cy, sy) = (ry.cos(), ry.sin());
+            let (cz, sz) = (rz.cos(), rz.sin());
+            let v = [v[0], v[1] * cx - v[2] * sx, v[1] * sx + v[2] * cx];
+            let v = [v[0] * cy + v[2] * sy, v[1], -v[0] * sy + v[2] * cy];
+            [v[0] * cz - v[1] * sz, v[0] * sz + v[1] * cz, v[2]]
+        };
+        let at = part.position.unwrap_or([0.0; 3]);
+        let base = g.positions.len() / 3;
+        if base + local.positions.len() / 3 > 60_000 {
+            return Err("the parts body has too many vertices — fewer segments, or fewer parts".into());
+        }
+        for i in 0..local.positions.len() / 3 {
+            let p = [local.positions[i * 3] * scale, local.positions[i * 3 + 1] * scale, local.positions[i * 3 + 2] * scale];
+            let p = turn(p);
+            let p = [p[0] + at[0] as f32, p[1] + at[1] as f32, p[2] + at[2] as f32];
+            let n = turn([local.normals[i * 3], local.normals[i * 3 + 1], local.normals[i * 3 + 2]]);
+            for k in 0..3 {
+                min[k] = min[k].min(p[k]);
+                max[k] = max[k].max(p[k]);
+            }
+            g.push_vertex(p, n, [local.uvs[i * 2], local.uvs[i * 2 + 1]]);
+        }
+        let slot = part.slot().to_string();
+        let entry = match by_slot.iter_mut().find(|(name, _)| *name == slot) {
+            Some(entry) => entry,
+            None => {
+                by_slot.push((slot, Vec::new()));
+                by_slot.last_mut().expect("just pushed")
+            }
+        };
+        entry.1.extend(idx.iter().map(|i| *i + base as u16));
+    }
+    let materials: Vec<GlbMaterial<'_>> = by_slot
+        .iter()
+        .map(|(slot, indices)| GlbMaterial {
+            slot,
+            base_color: [0.82, 0.82, 0.85, 1.0],
+            metallic: 0.0,
+            roughness: 0.5,
+            indices,
+        })
+        .collect();
+    Ok(g.build(&materials, min, max))
 }
 
 fn signed_area(c: &[[f32; 2]]) -> f32 {
@@ -1512,8 +1687,11 @@ impl GlbGeometry {
             let t = [next[0] - prev[0], next[1] - prev[1]];
             let len = (t[0] * t[0] + t[1] * t[1]).sqrt().max(1e-6);
             // Perpendicular to the tangent, pointing outward (+radius).
-            let (nr, ny) = (t[1] / len, -t[0] / len);
-            let (nr, ny) = if nr < 0.0 { (-nr, -ny) } else { (nr, ny) };
+            // The outward normal of a profile running top to bottom: the
+            // tangent turned a quarter turn toward +radius — outward on a
+            // wall, up on a top cap that leaves the axis, down on a bottom
+            // cap that returns to it.
+            let (nr, ny) = (-t[1] / len, t[0] / len);
             for s in 0..ring {
                 let a = std::f32::consts::TAU * s as f32 / segments as f32;
                 let (ca, sa) = (a.cos(), a.sin());
@@ -1904,6 +2082,20 @@ mod tests {
             Ok(glb) => bodies.push(("text Ab8 go".into(), glb)),
             Err(e) => eprintln!("text body skipped: {e}"),
         }
+        // Every part shape, turned and moved — the transforms must keep
+        // the winding with the normals.
+        let parts: Vec<promo_model::BodyPart> = serde_json::from_str(
+            r#"[
+              {"slot":"Base","shape":{"cylinder":{"radius":0.6,"height":0.1,"segments":24}},"position":[0,-0.5,0]},
+              {"shape":{"box":{"size":[0.8,0.2,0.5],"radius":0.03}},"rotation":[20,35,10],"position":[0.2,0.1,0]},
+              {"shape":{"sphere":{"radius":0.3,"segments":16}},"position":[0,0.6,0],"scale":1.3},
+              {"shape":{"torus":{"radius":0.4,"tube":0.08,"segments":24}},"rotation":[90,0,30]},
+              {"shape":{"lathe":{"profile":[[0.1,0],[0.3,0.4],[0.2,0.8],[0,0.9]],"segments":24}},"position":[-0.6,0,0]},
+              {"slot":"Plate","shape":{"extrude":{"path":[[-0.5,-0.3],[0.5,-0.3],[0.5,0.3],[0,0.5],[-0.5,0.3]],"depth":0.06}},"rotation":[-60,0,0],"position":[0,1.0,0]}
+            ]"#,
+        )
+        .unwrap();
+        bodies.push(("parts".into(), parts_glb(&parts).expect("parts build")));
         let mut failures = Vec::new();
         for (name, glb) in bodies {
             let model = Model::from_glb(&glb).expect(&name);

@@ -238,6 +238,54 @@
       ],
       "type": "string"
     },
+    "BodyPart": {
+      "properties": {
+        "position": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rotation": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "scale": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shape": {
+          "$ref": "#/$defs/PartShape"
+        },
+        "slot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "shape"
+      ],
+      "type": "object"
+    },
     "BodyRecipe": {
       "oneOf": [
         {
@@ -263,8 +311,47 @@
             "device"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "parts": {
+              "items": {
+                "$ref": "#/$defs/BodyPart"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "parts"
+          ],
+          "type": "object"
         }
       ]
+    },
+    "BoxShape": {
+      "properties": {
+        "radius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "size": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        }
+      },
+      "required": [
+        "size"
+      ],
+      "type": "object"
     },
     "Camera": {
       "properties": {
@@ -741,6 +828,31 @@
       },
       "type": "object"
     },
+    "CylinderShape": {
+      "properties": {
+        "height": {
+          "format": "double",
+          "type": "number"
+        },
+        "radius": {
+          "format": "double",
+          "type": "number"
+        },
+        "segments": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "radius",
+        "height"
+      ],
+      "type": "object"
+    },
     "DeviceBody": {
       "properties": {
         "kind": {
@@ -890,6 +1002,31 @@
       ],
       "type": "string"
     },
+    "ExtrudeShape": {
+      "properties": {
+        "depth": {
+          "format": "double",
+          "type": "number"
+        },
+        "path": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "depth"
+      ],
+      "type": "object"
+    },
     "Follow": {
       "properties": {
         "clickColorHex": {
@@ -988,6 +1125,34 @@
         "upsideDown"
       ],
       "type": "string"
+    },
+    "LatheShape": {
+      "properties": {
+        "profile": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "segments": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
     },
     "LayerAdjustments": {
       "properties": {
@@ -1383,6 +1548,82 @@
         "colorHex"
       ],
       "type": "object"
+    },
+    "PartShape": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "box": {
+              "$ref": "#/$defs/BoxShape"
+            }
+          },
+          "required": [
+            "box"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "sphere": {
+              "$ref": "#/$defs/SphereShape"
+            }
+          },
+          "required": [
+            "sphere"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cylinder": {
+              "$ref": "#/$defs/CylinderShape"
+            }
+          },
+          "required": [
+            "cylinder"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "torus": {
+              "$ref": "#/$defs/TorusShape"
+            }
+          },
+          "required": [
+            "torus"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "lathe": {
+              "$ref": "#/$defs/LatheShape"
+            }
+          },
+          "required": [
+            "lathe"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "extrude": {
+              "$ref": "#/$defs/ExtrudeShape"
+            }
+          },
+          "required": [
+            "extrude"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ParticleRecipe": {
       "properties": {
@@ -2869,6 +3110,26 @@
       ],
       "type": "array"
     },
+    "SphereShape": {
+      "properties": {
+        "radius": {
+          "format": "double",
+          "type": "number"
+        },
+        "segments": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "radius"
+      ],
+      "type": "object"
+    },
     "SpriteSheet": {
       "properties": {
         "columns": {
@@ -3344,6 +3605,31 @@
           "type": "string"
         }
       ]
+    },
+    "TorusShape": {
+      "properties": {
+        "radius": {
+          "format": "double",
+          "type": "number"
+        },
+        "segments": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tube": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "radius",
+        "tube"
+      ],
+      "type": "object"
     },
     "TransitionEdge": {
       "enum": [

@@ -886,6 +886,23 @@ is a closed-form function of its birth time, so any frame renders alone
 and the same on every host. The layer's placement, shifts, opacity and
 transitions apply to the whole field. A project with particles carries
 `minReaderVersion: 36`.
+A body can be made of PARTS (rung 37) — the 3D counterpart of a
+drawing, written by hand the way an SVG is: `"recipe": { "parts": [
+{ "slot": "Base", "shape": { "cylinder": { "radius": 0.6, "height":
+0.1 } }, "position": [0, -0.5, 0] }, { "slot": "Stem", "shape": {
+"lathe": { "profile": [[0.08, 0], [0.06, 0.8], [0.2, 1.0]] } } }, {
+"slot": "Plate", "shape": { "box": { "size": [1.2, 0.05, 0.8],
+"radius": 0.02 } }, "position": [0, 1.0, 0] } ] }`. Shapes: `box`
+(`size` [w, h, d], `radius` rounds the edges), `sphere` (`radius`),
+`cylinder` (`radius`, `height`), `torus` (`radius`, `tube`), `lathe` (a
+`profile` of [radius, height] points turned about Y), `extrude` (a
+closed `path` of [x, y] points pulled `depth` along Z, centred);
+`segments` rounds the curved ones. Each part is scaled, turned by
+`rotation` (degrees about X, Y, Z) and moved by `position`; parts stand
+together (no booleans); a part's `slot` (default "Body") takes colour
+and finish bindings like any body's. Units are the body's own — the
+camera measures in its bounds radius. A project with a parts body
+carries `minReaderVersion: 37`.
 A model may also be GENERATED (rung 34): a `recipe` in place of a
 `filename` — `{ "kind": "model", "filename": "", "recipe": { "text": {
 "text": "Hello", "bold": true, "depth": 0.25, "size": 1 } } }` — and the

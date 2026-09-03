@@ -186,6 +186,22 @@ new projects.
   0.2, turbulence 0.02, shape dot, colors white), `burst` for one bang.
   Deterministic — the same frame every time. Stamp `minReaderVersion:
   36`.
+- **A body from parts.** Anything a product shot needs that is not a
+  device or type — a stand, a plinth, a ring, a puck — is a model
+  resource with a parts recipe, written like an SVG: `{ "kind": "model",
+  "filename": "", "displayName": "Stand", "addedAt": 0, "recipe": {
+  "parts": [ { "slot": "Base", "shape": { "cylinder": { "radius": 0.6,
+  "height": 0.08 } } }, { "slot": "Stem", "shape": { "lathe": {
+  "profile": [[0.1, 0], [0.06, 0.6], [0.16, 0.8]] } } }, { "slot":
+  "Plate", "shape": { "box": { "size": [1.2, 0.05, 0.8], "radius": 0.02
+  } }, "position": [0, 0.82, 0] } ] } }`. Shapes: box (size [w,h,d],
+  radius), sphere (radius), cylinder (radius, height), torus (radius,
+  tube), lathe (profile of [radius, height] about Y), extrude (a closed
+  [x,y] path pulled `depth` along Z); `position`, `rotation` (degrees
+  X,Y,Z) and `scale` place each; `slot` names take colour and finish
+  bindings. Units are the body's own; place it on a stage beside a
+  device or a vase (positions there are in stage radii). Stamp
+  `minReaderVersion: 37`.
 - **Environment.** Chrome and gloss need something to mirror: put
   `"environment": { "preset": "studio" }` (or `sunset`, `night`;
   `intensity`, `rotation` in degrees) in `compositionSettings` for any

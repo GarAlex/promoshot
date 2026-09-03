@@ -2612,6 +2612,7 @@ impl PreviewEngine {
                 promo_model::BodyRecipe::Device(device) => crate::model::DeviceKind::parse(&device.kind)
                     .map(crate::model::device_glb)
                     .ok_or_else(|| format!("unknown device kind {}", device.kind)),
+                promo_model::BodyRecipe::Parts(parts) => crate::model::parts_glb(parts),
             };
             if let Ok(bytes) = built {
                 let _ = self.provide_model(&id, &bytes);

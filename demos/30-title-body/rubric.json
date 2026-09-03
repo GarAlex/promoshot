@@ -33,6 +33,7 @@
   "textBody": true,
   "environment": true,
   "particles": false,
+  "partsBody": false,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,

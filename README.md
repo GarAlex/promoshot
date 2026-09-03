@@ -400,7 +400,10 @@ texture are honoured. Rung 29. Built-in device bodies
 with `Body` and `Screen` slots, so the device shot is a model too. A
 model can also be a `recipe` the engine builds at load instead of a file
 — text as a body first: real type in the 3D world with `Face` and `Side`
-slots, lit and finished like any body (rung 34).
+slots, lit and finished like any body (rung 34); a device body; and a
+body of PARTS — boxes, spheres, cylinders, tori, a lathe, an extrude,
+each under a slot, placed by position, rotation and scale — the 3D
+counterpart of a drawing, authored the way an SVG is (rung 37).
 Layers naming the same `stage` draw through one camera into one depth
 buffer, models at their `depth` and pictures as billboards, the first
 member's placement carrying the whole scene (rung 30). A stage can also
