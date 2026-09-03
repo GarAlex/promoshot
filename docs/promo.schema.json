@@ -238,6 +238,22 @@
       ],
       "type": "string"
     },
+    "BodyRecipe": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/TextBody"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Camera": {
       "properties": {
         "distance": {
@@ -2343,6 +2359,16 @@
             }
           ]
         },
+        "recipe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyRecipe"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "sampling": {
           "anyOf": [
             {
@@ -2897,6 +2923,49 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "TextBody": {
+      "properties": {
+        "bold": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "depth": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fontFamily": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "italic": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "size": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
       "type": "object"
     },
     "TextDepth": {

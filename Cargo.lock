@@ -2051,6 +2051,7 @@ version = "0.2.38"
 dependencies = [
  "criterion",
  "gltf",
+ "lyon_tessellation",
  "promo-gpu",
  "promo-media",
  "promo-model",
@@ -2109,6 +2110,7 @@ dependencies = [
  "cosmic-text",
  "image",
  "promo-model",
+ "ttf-parser 0.21.1",
 ]
 
 [[package]]

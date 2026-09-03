@@ -40,6 +40,7 @@ def features(meta):
         "materials": any(r.get('materials') for r in res),
         "finish": any(isinstance(b, dict) and (b.get('metallic') is not None or b.get('roughness') is not None)
                       for r in res for b in (r.get('materials') or {}).values()),
+        "textBody": any(isinstance(r.get('recipe'), dict) and 'text' in r['recipe'] for r in res),
         "depth": any((l.get('captionStyle') or {}).get('depth') for l in layers)
                  or any((r.get('captionStyle') or {}).get('depth') for r in res),
         "captionTilt": any(l.get('kind') == 'caption' and any(k.get('tiltX') is not None or k.get('tiltY') is not None for k in l.get('keyframes') or []) for l in layers),

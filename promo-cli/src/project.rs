@@ -202,6 +202,8 @@ impl Project {
                     .and_then(|id| self.resource(id));
                 match resource {
                     None => Some(Unsupported::MissingResource(layer.name.clone())),
+                    // A body the document describes (a recipe) needs no file.
+                    Some(r) if r.recipe.is_some() => None,
                     Some(r) => match self.resource_path(r) {
                         Some(path) if path.exists() => None,
                         _ => Some(Unsupported::MissingFile(

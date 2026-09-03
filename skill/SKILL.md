@@ -173,6 +173,18 @@ new projects.
   `minReaderVersion: 29`, or `32` when a finish (or a colour in the
   object form) is written. `promo_inspect` lists the layer; a missing
   file is named like any other.
+- **Text as a body.** A title that belongs IN the scene — lit by the
+  stage's light, chrome or matte, turning, standing between devices —
+  is a model resource with a recipe and no file: `{ "kind": "model",
+  "filename": "", "displayName": "Title", "addedAt": 0, "recipe": {
+  "text": { "text": "Hello", "bold": true, "depth": 0.25 } },
+  "materials": { "Face": { "colorHex": "@accent", "metallic": 1,
+  "roughness": 0.15 }, "Side": "@edge" } }`, played by a model layer or a
+  stage member like any body (the text is 1 em tall × `size` world units,
+  default 1; `depth` in em, default 0.25; `fontFamily`, `bold`,
+  `italic` as a caption's). Keep a body to one line; long text is a
+  caption. Stamp `minReaderVersion: 34`. A caption's 2.5D `depth`/tilt is
+  the flat trick and legacy — reach for the body.
 - **Stages.** Prefer the ONE-LAYER form (rung 33): a layer of `"kind":
   "stage"` whose keyframes carry the `"camera"`, `"light"` and
   `"placement"`, and whose `"members"` are the model, image, video,

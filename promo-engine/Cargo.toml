@@ -13,6 +13,8 @@ promo-text = { path = "../promo-text" }
 # glTF 2.0 binaries for model layers (3D plan P0). `import` decodes the
 # buffers and embedded images; nothing here touches the GPU.
 gltf = { version = "1.4", default-features = false, features = ["import", "utils", "names", "KHR_materials_unlit"] }
+# Faces of a text body: glyph outlines with holes, triangulated.
+lyon_tessellation = "1.0.20"
 
 [dev-dependencies]
 serde_json = "1"

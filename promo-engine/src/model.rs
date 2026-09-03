@@ -947,6 +947,170 @@ impl ShapeKind {
 }
 
 /// A curved body as a `.glb`, smooth normals, one `Body` slot.
+/// Real type in the 3D world (rung 34): `body.text` set in its font,
+/// extruded `depth` em along Z, 1 em = `size` world units, centred on its
+/// box and facing +Z. Two slots: "Face" (front and back) and "Side" (the
+/// walls). The finish is the project's to bind; the file's is a plain
+/// light matte. Curves are flattened finer or coarser so the body fits the
+/// 16-bit index space a generated glb uses.
+pub fn text_glb(body: &promo_model::TextBody) -> Result<Vec<u8>, String> {
+    let size = body.size().max(1e-3) as f32;
+    let depth = body.depth().max(1e-3) as f32 * size;
+    let text = body.text.trim();
+    if text.is_empty() {
+        return Err("the text is empty".into());
+    }
+    let mut chosen = None;
+    for segments in [8usize, 4, 2, 1] {
+        let Some(outlines) = promo_text::outlines(
+            text,
+            body.font_family.as_deref(),
+            body.bold.unwrap_or(false),
+            body.italic.unwrap_or(false),
+            segments,
+        ) else {
+            return Err("no glyph could be shaped — is a font installed?".into());
+        };
+        let points: usize = outlines.contours.iter().map(|c| c.len()).sum();
+        // Two faces of about a vertex a point, walls of four a point.
+        if points * 6 < 60_000 {
+            chosen = Some(outlines);
+            break;
+        }
+    }
+    let Some(outlines) = chosen else {
+        return Err("the text is too long for one body — shorten it, or make one body a line".into());
+    };
+    text_body_glb(&outlines, size, depth)
+}
+
+fn text_body_glb(outlines: &promo_text::TextOutlines, size: f32, depth: f32) -> Result<Vec<u8>, String> {
+    use lyon_tessellation::geom::point;
+    use lyon_tessellation::path::Path;
+    use lyon_tessellation::{BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers};
+
+    let contours: Vec<Vec<[f32; 2]>> = outlines
+        .contours
+        .iter()
+        .filter(|c| c.len() >= 3)
+        .map(|c| c.iter().map(|p| [p[0] * size, p[1] * size]).collect())
+        .collect();
+    let mut builder = Path::builder();
+    for c in &contours {
+        builder.begin(point(c[0][0], c[0][1]));
+        for p in &c[1..] {
+            builder.line_to(point(p[0], p[1]));
+        }
+        builder.close();
+    }
+    let path = builder.build();
+    let mut buffers: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+    FillTessellator::new()
+        .tessellate_path(
+            &path,
+            &FillOptions::default()
+                .with_fill_rule(FillRule::NonZero)
+                .with_tolerance(0.002 * size),
+            &mut BuffersBuilder::new(&mut buffers, |v: FillVertex| {
+                let p = v.position();
+                [p.x, p.y]
+            }),
+        )
+        .map_err(|e| format!("{e:?}"))?;
+    if buffers.indices.is_empty() {
+        return Err("the text has no area to extrude".into());
+    }
+
+    let half = depth / 2.0;
+    let (w, h) = (outlines.width * size, outlines.height * size);
+    let uv = |p: [f32; 2]| [p[0] / w.max(1e-6) + 0.5, 0.5 - p[1] / h.max(1e-6)];
+    let mut g = GlbGeometry {
+        positions: Vec::new(),
+        normals: Vec::new(),
+        uvs: Vec::new(),
+    };
+    let mut face: Vec<u16> = Vec::new();
+    let mut side: Vec<u16> = Vec::new();
+    // Front (+Z) and back (−Z): the same triangles, each wound to agree
+    // with its face's normal whichever way the tessellator handed it over.
+    for (z, nz) in [(half, 1.0f32), (-half, -1.0f32)] {
+        let base: Vec<u16> = buffers
+            .vertices
+            .iter()
+            .map(|p| g.push_vertex([p[0], p[1], z], [0.0, 0.0, nz], uv(*p)))
+            .collect();
+        for tri in buffers.indices.chunks(3) {
+            let (a, b, c) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+            let (pa, pb, pc) = (buffers.vertices[a], buffers.vertices[b], buffers.vertices[c]);
+            let cross = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
+            if (cross > 0.0) == (nz > 0.0) {
+                face.extend_from_slice(&[base[a], base[b], base[c]]);
+            } else {
+                face.extend_from_slice(&[base[a], base[c], base[b]]);
+            }
+        }
+    }
+    // Walls: an outer contour runs counter-clockwise and a hole clockwise,
+    // so the band's outward normal points away from the solid on both.
+    for (i, c) in contours.iter().enumerate() {
+        let inside = contours
+            .iter()
+            .enumerate()
+            .filter(|(j, other)| *j != i && point_in_polygon(c[0], other))
+            .count();
+        let hole = inside % 2 == 1;
+        let mut oriented = c.clone();
+        if (signed_area(c) > 0.0) == hole {
+            oriented.reverse();
+        }
+        g.band(&oriented, half, -half, &|p| p, &|n| n, &mut side);
+    }
+    let materials = [
+        GlbMaterial {
+            slot: "Face",
+            base_color: [0.92, 0.92, 0.94, 1.0],
+            metallic: 0.0,
+            roughness: 0.5,
+            indices: &face,
+        },
+        GlbMaterial {
+            slot: "Side",
+            base_color: [0.80, 0.80, 0.84, 1.0],
+            metallic: 0.0,
+            roughness: 0.5,
+            indices: &side,
+        },
+    ];
+    Ok(g.build(&materials, [-w / 2.0, -h / 2.0, -half], [w / 2.0, h / 2.0, half]))
+}
+
+fn signed_area(c: &[[f32; 2]]) -> f32 {
+    let n = c.len();
+    let mut a = 0.0;
+    for i in 0..n {
+        let (p, q) = (c[i], c[(i + 1) % n]);
+        a += p[0] * q[1] - q[0] * p[1];
+    }
+    a / 2.0
+}
+
+fn point_in_polygon(p: [f32; 2], poly: &[[f32; 2]]) -> bool {
+    let n = poly.len();
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[j]);
+        if (a[1] > p[1]) != (b[1] > p[1]) {
+            let x = (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0];
+            if p[0] < x {
+                inside = !inside;
+            }
+        }
+        j = i;
+    }
+    inside
+}
+
 pub fn shape_glb(kind: ShapeKind) -> Vec<u8> {
     let mut geo = GlbGeometry::default();
     let mut indices: Vec<u16> = Vec::new();
@@ -1710,6 +1874,16 @@ mod tests {
         }
         for kind in ShapeKind::ALL {
             bodies.push((format!("shape {}", kind.name()), shape_glb(kind)));
+        }
+        // Type with holes and curves — the one body whose winding the
+        // tessellator, not our own builders, decides.
+        match text_glb(&promo_model::TextBody {
+            text: "Ab8 go".into(),
+            bold: Some(true),
+            ..Default::default()
+        }) {
+            Ok(glb) => bodies.push(("text Ab8 go".into(), glb)),
+            Err(e) => eprintln!("text body skipped: {e}"),
         }
         let mut failures = Vec::new();
         for (name, glb) in bodies {

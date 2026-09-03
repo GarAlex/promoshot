@@ -47,6 +47,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     tilt_keyframe_warnings(meta, &mut out);
     material_binding_warnings(meta, &mut out);
     stage_layer_warnings(meta, &mut out);
+    recipe_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
@@ -684,6 +685,64 @@ fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     member.name, layer.name
                 ));
             }
+        }
+    }
+}
+
+/// A generated body (rung 34): its recipe must describe something — text
+/// with glyphs, a depth and size above zero — and a body long enough to
+/// strain one mesh is better as a line per body. A recipe beside a
+/// filename is named: the recipe wins.
+fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        let Some(recipe) = resource.recipe.as_ref() else {
+            continue;
+        };
+        if resource.kind != promo_model::ProjectResourceKind::Model {
+            out.push(format!(
+                "resource \"{}\" carries a recipe but is a {} resource; a recipe builds a \
+                 MODEL — set \"kind\": \"model\"",
+                resource.display_name,
+                resource.kind.as_str()
+            ));
+        }
+        if !resource.filename.is_empty() {
+            out.push(format!(
+                "resource \"{}\" carries both a recipe and a filename; the recipe is what \
+                 renders and the file is ignored",
+                resource.display_name
+            ));
+        }
+        let promo_model::BodyRecipe::Text(body) = recipe;
+        if body.text.trim().is_empty() {
+            out.push(format!(
+                "resource \"{}\": the text body's text is empty; it has no glyphs to extrude",
+                resource.display_name
+            ));
+        }
+        if body.text.chars().count() > 80 {
+            out.push(format!(
+                "resource \"{}\": {} characters make a heavy body — a line per body, or a \
+                 caption, reads better",
+                resource.display_name,
+                body.text.chars().count()
+            ));
+        }
+        if body.depth() <= 0.0 {
+            out.push(format!(
+                "resource \"{}\": the text body's depth is {}; it is em along the body's Z and \
+                 must be above zero (0.25 is the default)",
+                resource.display_name,
+                body.depth()
+            ));
+        }
+        if body.size() <= 0.0 {
+            out.push(format!(
+                "resource \"{}\": the text body's size is {}; it is world units per em and \
+                 must be above zero (1 is the default)",
+                resource.display_name,
+                body.size()
+            ));
         }
     }
 }
@@ -1392,6 +1451,35 @@ mod tests {
             "{nested_warnings:?}"
         );
         assert!(!nested_warnings.iter().any(|w| w.contains("flat form")), "{nested_warnings:?}");
+    }
+    /// A text body's recipe is checked: empty text, a depth or size at zero,
+    /// a recipe beside a filename, and an over-long line are each named; a
+    /// sound recipe says nothing and lifts the rung to 34.
+    #[test]
+    fn a_text_body_recipe_is_checked() {
+        let bad = project(
+            "",
+            r#","resources":[
+                {"id":"A","kind":"model","filename":"old.glb","displayName":"Empty","addedAt":0,
+                 "recipe":{"text":{"text":"  ","depth":0}}},
+                {"id":"B","kind":"model","filename":"","displayName":"Long","addedAt":0,
+                 "recipe":{"text":{"text":"The quick brown fox jumps over the lazy dog and keeps on running far past the fence","size":0}}}]"#,
+        );
+        let found = warnings(&bad);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(has("\"Empty\" carries both a recipe and a filename"), "{found:?}");
+        assert!(has("\"Empty\": the text body's text is empty"), "{found:?}");
+        assert!(has("\"Empty\": the text body's depth is 0"), "{found:?}");
+        assert!(has("\"Long\": 83 characters make a heavy body"), "{found:?}");
+        assert!(has("\"Long\": the text body's size is 0"), "{found:?}");
+        let good = project(
+            "",
+            r#","resources":[{"id":"T","kind":"model","filename":"","displayName":"Title","addedAt":0,
+                 "recipe":{"text":{"text":"Hello","bold":true}}}]"#,
+        );
+        let quiet = warnings(&good);
+        assert!(!quiet.iter().any(|w| w.contains("\"Title\"")), "{quiet:?}");
+        assert_eq!(good.minimum_reader_version(), 34);
     }
 }
 

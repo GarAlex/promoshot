@@ -630,6 +630,191 @@ fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFa
 
 /// Process-wide font system. Discovery scans the OS font directories, which
 /// costs tens of milliseconds — far too much to repeat per frame of a video.
+/// The outlines of `text` set in `family` (bold, italic): every glyph's
+/// closed contours as polylines, all glyphs together, in EM units — the
+/// text is 1 em tall at its size — y up, centred on the text's box. Curves
+/// are flattened to `curve_segments` straight pieces each. `None` when
+/// nothing shapes to a glyph: empty text, or no font on this host.
+pub struct TextOutlines {
+    pub contours: Vec<Vec<[f32; 2]>>,
+    pub width: f32,
+    pub height: f32,
+}
+
+pub fn outlines(
+    text: &str,
+    family: Option<&str>,
+    bold: bool,
+    italic: bool,
+    curve_segments: usize,
+) -> Option<TextOutlines> {
+    const EM: f32 = 100.0;
+    struct Placed {
+        font_id: cosmic_text::fontdb::ID,
+        glyph_id: u16,
+        x: f32,
+        y: f32,
+        size: f32,
+    }
+    let mut fonts = font_system().lock().ok()?;
+    let resolved = resolve_family(&mut fonts, family);
+    let placed: Vec<Placed> = {
+        let metrics = Metrics::new(EM, EM * 1.2);
+        let mut buffer = Buffer::new(&mut fonts, metrics);
+        let mut buffer = buffer.borrow_with(&mut fonts);
+        buffer.set_size(None, None);
+        let family = match &resolved {
+            ResolvedFamily::Named(name) => Family::Name(name),
+            ResolvedFamily::Serif => Family::Serif,
+            ResolvedFamily::Monospace => Family::Monospace,
+            ResolvedFamily::SansSerif => Family::SansSerif,
+        };
+        let attrs = Attrs::new()
+            .family(family)
+            .weight(if bold { Weight::BOLD } else { Weight::NORMAL })
+            .style(if italic { Style::Italic } else { Style::Normal });
+        buffer.set_text(text, attrs, Shaping::Advanced);
+        buffer.shape_until_scroll(true);
+        let mut placed = Vec::new();
+        for run in buffer.layout_runs() {
+            for g in run.glyphs {
+                placed.push(Placed {
+                    font_id: g.font_id,
+                    glyph_id: g.glyph_id,
+                    x: g.x + g.x_offset,
+                    y: run.line_y + g.y - g.y_offset,
+                    size: g.font_size,
+                });
+            }
+        }
+        placed
+    };
+    let mut contours: Vec<Vec<[f32; 2]>> = Vec::new();
+    for g in placed {
+        let Some(font) = fonts.get_font(g.font_id) else {
+            continue;
+        };
+        let face = font.rustybuzz();
+        let scale = g.size / face.units_per_em() as f32;
+        let mut flat = Flattener {
+            contours: Vec::new(),
+            current: Vec::new(),
+            last: [0.0, 0.0],
+            segments: curve_segments.max(1),
+            origin: [g.x, g.y],
+            scale,
+        };
+        if face
+            .outline_glyph(ttf_parser::GlyphId(g.glyph_id), &mut flat)
+            .is_some()
+        {
+            contours.extend(flat.finish());
+        }
+    }
+    if contours.is_empty() {
+        return None;
+    }
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for c in &contours {
+        for p in c {
+            min_x = min_x.min(p[0]);
+            max_x = max_x.max(p[0]);
+            min_y = min_y.min(p[1]);
+            max_y = max_y.max(p[1]);
+        }
+    }
+    let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+    for c in &mut contours {
+        for p in c.iter_mut() {
+            // Layout space is y-down; the body stands y-up.
+            *p = [(p[0] - cx) / EM, -(p[1] - cy) / EM];
+        }
+    }
+    Some(TextOutlines {
+        contours,
+        width: (max_x - min_x) / EM,
+        height: (max_y - min_y) / EM,
+    })
+}
+
+/// Collects a glyph's outline as closed polylines in layout space, curves
+/// flattened to a fixed number of pieces.
+struct Flattener {
+    contours: Vec<Vec<[f32; 2]>>,
+    current: Vec<[f32; 2]>,
+    last: [f32; 2],
+    segments: usize,
+    origin: [f32; 2],
+    scale: f32,
+}
+
+impl Flattener {
+    fn map(&self, x: f32, y: f32) -> [f32; 2] {
+        // Font units are y-up; the layout is y-down.
+        [self.origin[0] + x * self.scale, self.origin[1] - y * self.scale]
+    }
+    fn take(&mut self) {
+        if self.current.len() >= 3 {
+            if let (Some(f), Some(l)) = (self.current.first().copied(), self.current.last().copied()) {
+                if (f[0] - l[0]).abs() < 1e-4 && (f[1] - l[1]).abs() < 1e-4 {
+                    self.current.pop();
+                }
+            }
+            if self.current.len() >= 3 {
+                self.contours.push(std::mem::take(&mut self.current));
+                return;
+            }
+        }
+        self.current.clear();
+    }
+    fn finish(mut self) -> Vec<Vec<[f32; 2]>> {
+        self.take();
+        self.contours
+    }
+}
+
+impl ttf_parser::OutlineBuilder for Flattener {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.take();
+        let p = self.map(x, y);
+        self.current.push(p);
+        self.last = p;
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        let p = self.map(x, y);
+        self.current.push(p);
+        self.last = p;
+    }
+    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        let (a, c, p) = (self.last, self.map(x1, y1), self.map(x, y));
+        for i in 1..=self.segments {
+            let t = i as f32 / self.segments as f32;
+            let u = 1.0 - t;
+            self.current.push([
+                u * u * a[0] + 2.0 * u * t * c[0] + t * t * p[0],
+                u * u * a[1] + 2.0 * u * t * c[1] + t * t * p[1],
+            ]);
+        }
+        self.last = p;
+    }
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        let (a, c1, c2, p) = (self.last, self.map(x1, y1), self.map(x2, y2), self.map(x, y));
+        for i in 1..=self.segments {
+            let t = i as f32 / self.segments as f32;
+            let u = 1.0 - t;
+            let (uu, tt) = (u * u, t * t);
+            self.current.push([
+                uu * u * a[0] + 3.0 * uu * t * c1[0] + 3.0 * u * tt * c2[0] + tt * t * p[0],
+                uu * u * a[1] + 3.0 * uu * t * c1[1] + 3.0 * u * tt * c2[1] + tt * t * p[1],
+            ]);
+        }
+        self.last = p;
+    }
+    fn close(&mut self) {
+        self.take();
+    }
+}
+
 fn font_system() -> &'static Mutex<FontSystem> {
     static FONTS: OnceLock<Mutex<FontSystem>> = OnceLock::new();
     FONTS.get_or_init(|| {

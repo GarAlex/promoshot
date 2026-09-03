@@ -197,6 +197,9 @@ pub struct PreviewEngine {
     /// host through `provide_model` (the file is the host's I/O, as every
     /// pixel source is), drawn by the model pass per frame.
     models: HashMap<String, LoadedModel>,
+    /// Recipe bodies built so far, by resource id, with the recipe they
+    /// were built from — rebuilt when it changes.
+    built_recipes: HashMap<String, String>,
     /// Built on the first model; None until then, so a project with no
     /// models pays nothing.
     model_pass: Option<ModelPass>,
@@ -297,6 +300,7 @@ impl PreviewEngine {
             cache: HashMap::new(),
             reveal_cache: HashMap::new(),
             models: HashMap::new(),
+            built_recipes: HashMap::new(),
             model_pass: None,
             overlays: Vec::new(),
             key_of: HashMap::new(),
@@ -896,6 +900,7 @@ impl PreviewEngine {
         output_height: u32,
         overlay: Option<(IOSurfaceRef, u32, u32)>,
     ) -> Result<(), GpuError> {
+        self.ensure_recipe_models();
         let mut scenes = self.build_scenes(time, output_width, output_height)?;
         let canvas = Size::new(
             self.meta.composition_settings.canvas_width,
@@ -985,6 +990,7 @@ impl PreviewEngine {
         output_height: u32,
         overlay: Option<&InputTexture>,
     ) -> Result<(), GpuError> {
+        self.ensure_recipe_models();
         let mut scenes = self.build_scenes(time, output_width, output_height)?;
         if overlay.is_some() {
             let canvas = Size::new(
@@ -2553,6 +2559,35 @@ impl PreviewEngine {
     /// reads the file — I/O is the host's, as with every pixel source —
     /// and calls this once per resource; calling again replaces it. Decode
     /// failures come back as text, and the layer then draws nothing.
+    /// Bodies the document DESCRIBES rather than ships (rung 34: a model
+    /// resource with a `recipe`) are built here, once per recipe and again
+    /// when it changes — the host provides bytes for files only. A recipe
+    /// that cannot be built stays unbuilt (the validator says why) and is
+    /// not retried until it changes.
+    fn ensure_recipe_models(&mut self) {
+        let recipes: Vec<(String, promo_model::BodyRecipe)> = self
+            .meta
+            .resources
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .filter_map(|r| r.recipe.clone().map(|recipe| (r.id.clone(), recipe)))
+            .collect();
+        for (id, recipe) in recipes {
+            let key = format!("{recipe:?}");
+            if self.built_recipes.get(&id) == Some(&key) {
+                continue;
+            }
+            let built = match &recipe {
+                promo_model::BodyRecipe::Text(body) => crate::model::text_glb(body),
+            };
+            if let Ok(bytes) = built {
+                let _ = self.provide_model(&id, &bytes);
+            }
+            self.built_recipes.insert(id, key);
+        }
+    }
+
     pub fn provide_model(&mut self, resource_id: &str, bytes: &[u8]) -> Result<(), String> {
         let model = crate::model::Model::from_glb(bytes).map_err(|e| e.to_string())?;
         if self.model_pass.is_none() {

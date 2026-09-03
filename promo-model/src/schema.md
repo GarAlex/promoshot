@@ -862,7 +862,19 @@ picture does nothing (the picture is drawn unlit), and `promo_validate`
 says so. A project with a finish, or a colour in the object form,
 carries `minReaderVersion: 32`.
 `clips` (name and duration) and `boundsRadius` are written at import
-and re-derived on every open. A model layer's keyframes carry
+and re-derived on every open.
+A model may also be GENERATED (rung 34): a `recipe` in place of a
+`filename` — `{ "kind": "model", "filename": "", "recipe": { "text": {
+"text": "Hello", "bold": true, "depth": 0.25, "size": 1 } } }` — and the
+engine builds the body at load. Text is the first recipe: real type
+standing in the 3D world, 1 em tall × `size` world units, extruded
+`depth` em, centred on its box and facing +Z, with a "Face" slot (front
+and back) and a "Side" slot (the walls) that take colour and finish
+bindings like any body — chrome letters on a bench under the key light,
+turning with a keyed `camera`, standing with the devices in a stage. The
+2.5D `depth` and tilt on a caption are the flat compositor's trick and
+are legacy; a title that lives in the scene is a text body. A project
+with a recipe carries `minReaderVersion: 34`. A model layer's keyframes carry
 `"camera": { "yaw": -25, "pitch": 10, "roll": 0, "distance": 4.2,
 "fov": 30 }` (distance in units of `boundsRadius`, so one rule fits
 every model; at the defaults the bounding sphere fills the frame's

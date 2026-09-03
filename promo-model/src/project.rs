@@ -224,6 +224,48 @@ impl MaterialBinding {
     }
 }
 
+/// What a GENERATED body is made of (rung 34): a recipe the engine builds
+/// at load in place of a file in `Resources/`, so the body is data the
+/// project owns — edited in place, copied, re-skinned by its bindings —
+/// rather than bytes it imported. Extruded TEXT is the first kind: real
+/// type standing in the 3D world, lit and finished like any body, with a
+/// "Face" slot (front and back) and a "Side" slot (the walls). Written
+/// externally tagged: `"recipe": { "text": { … } }`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum BodyRecipe {
+    Text(TextBody),
+}
+
+/// Type as a body: `text` set in `fontFamily` (the caption font stack;
+/// absent means the system face), `bold`/`italic`, extruded `depth` em
+/// along its own Z (default 0.25 — the text is 1 em tall), with 1 em =
+/// `size` world units (default 1). Centred on its box, facing +Z.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TextBody {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub font_family: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub bold: Option<bool>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub italic: Option<bool>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub depth: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub size: Option<f64>,
+}
+
+impl TextBody {
+    pub fn depth(&self) -> f64 {
+        self.depth.unwrap_or(0.25)
+    }
+    pub fn size(&self) -> f64 {
+        self.size.unwrap_or(1.0)
+    }
+}
+
 /// A glTF animation the model carries, written at import (the host reads
 /// the file) and re-derived on every open — the stored-answer rule.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
@@ -2822,6 +2864,10 @@ pub struct ProjectResource {
     /// and what placement sizes before any pixel exists.
     #[serde(default, skip_serializing_if = "is_none")]
     pub bounds_radius: Option<f64>,
+    /// A GENERATED body (rung 34): the recipe the engine builds this model
+    /// from at load, in place of `filename`. See `BodyRecipe`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub recipe: Option<BodyRecipe>,
     /// Pixel size of an IMAGE resource, stamped at import. Placement intents
     /// resolve width/anchoring against it (videos use `videoNatural*`, a
     /// sprite divides by its grid). Optional — a hand-written project may
@@ -2907,6 +2953,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     bounds_radius: Option<f64>,
     #[serde(default)]
+    recipe: Option<BodyRecipe>,
+    #[serde(default)]
     frame: Option<ResourceFrame>,
     #[serde(default)]
     looped: Option<bool>,
@@ -2975,6 +3023,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             video_natural_height: w.video_natural_height,
             pointer: w.pointer,
             materials: w.materials,
+            recipe: w.recipe,
             clips: w.clips,
             bounds_radius: w.bounds_radius,
             frame: w.frame,
@@ -3119,6 +3168,7 @@ impl ProjectResource {
             video_natural_height: None,
             pointer: None,
             materials: None,
+            recipe: None,
             clips: None,
             bounds_radius: None,
             frame: None,
@@ -3416,6 +3466,13 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 34 is a generated body — a model resource with a `recipe` and
+        // no file. An older reader looks for the file, finds none and
+        // draws nothing: a different picture, so the rung refuses.
+        if resources.iter().any(|r| r.recipe.is_some()) {
+            return 34;
+        }
 
         // 33 is a stage as one layer, a KIND — here or inside a
         // composition — so an older reader refuses the file rather than
@@ -4401,6 +4458,22 @@ mod placement_model_tests {
                  "isEnabled":true,"startTime":0,"duration":4,"members":[],"keyframes":[]}]"#,
         );
         assert_eq!(staged.minimum_reader_version(), 33);
+
+        // 34: a generated body — a recipe in place of a file.
+        let generated = meta(
+            r#""resources":[{"id":"T","kind":"model","filename":"","displayName":"Title",
+                 "addedAt":0,"recipe":{"text":{"text":"Hello","bold":true,"depth":0.3}}}],
+                 "layers":[]"#,
+        );
+        assert_eq!(generated.minimum_reader_version(), 34);
+        let body = generated.resources.as_ref().unwrap()[0].recipe.clone().unwrap();
+        let BodyRecipe::Text(text) = body;
+        assert_eq!(text.text, "Hello");
+        assert_eq!(text.bold, Some(true));
+        assert_eq!(text.depth(), 0.3);
+        assert_eq!(text.size(), 1.0);
+        let json = generated.to_json().expect("encode");
+        assert!(json.contains(r#""recipe":{"text":{"text":"Hello","bold":true,"depth":0.3}}"#), "{json}");
     }
 
     /// A stage layer lowers to the flat form the renderers walk: the

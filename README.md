@@ -395,7 +395,10 @@ and `roughness` (each 0…1) over the file's own, so one body is chrome in
 this project and matte in the next (rung 32). Lighting defaults come
 from the theme. Rung 29. Built-in device bodies
 (phone, tablet, laptop; `promo device`) ship as generated `.glb` files
-with `Body` and `Screen` slots, so the device shot is a model too.
+with `Body` and `Screen` slots, so the device shot is a model too. A
+model can also be a `recipe` the engine builds at load instead of a file
+— text as a body first: real type in the 3D world with `Face` and `Side`
+slots, lit and finished like any body (rung 34).
 Layers naming the same `stage` draw through one camera into one depth
 buffer, models at their `depth` and pictures as billboards, the first
 member's placement carrying the whole scene (rung 30). A stage can also
