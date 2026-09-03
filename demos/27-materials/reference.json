@@ -1,0 +1,291 @@
+{
+ "id": "C2C02E2F-119C-13D8-2495-A82704FB9EE6",
+ "name": "27 Materials",
+ "formatVersion": 2,
+ "minReaderVersion": 31,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 9.0,
+ "videoDuration": 9.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 48,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "40C23E4D-219F-5DC7-198C-D2D8A44B1F53",
+   "kind": "model",
+   "filename": "sphere.glb",
+   "displayName": "Sphere",
+   "addedAt": 0,
+   "clips": [],
+   "boundsRadius": 0.5,
+   "materials": {
+    "Body": "@accent"
+   }
+  },
+  {
+   "id": "498C23A4-4358-CA71-17A5-73F446B5C134",
+   "kind": "model",
+   "filename": "torus.glb",
+   "displayName": "Torus",
+   "addedAt": 0,
+   "clips": [],
+   "boundsRadius": 0.77
+  },
+  {
+   "id": "87CCEDB1-AD14-65F9-A178-DA91F0E905CF",
+   "kind": "model",
+   "filename": "vase.glb",
+   "displayName": "Vase",
+   "addedAt": 0,
+   "clips": [],
+   "boundsRadius": 0.7816
+  },
+  {
+   "id": "00985CE0-71B1-E36D-0BB7-6B5D1AB51E1E",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Title",
+   "addedAt": 0,
+   "captionText": "Metal. Matte. Glaze.",
+   "captionStyle": {
+    "alignment": "center",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -70
+     ]
+    },
+    "depth": {
+     "count": 6,
+     "offset": [
+      2,
+      2
+     ],
+     "shade": 0.6,
+     "colorHex": "@edge"
+    },
+    "reveal": {
+     "by": "word",
+     "mode": "fade",
+     "seconds": 1.2
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "B1C6AC7C-C1A8-B575-417E-1486DA51B0C5",
+   "name": "Backdrop",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9.0,
+   "keyframes": [
+    {
+     "id": "B1438575-27AA-5F73-5103-9535EEDBFC5C",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.5,
+       0.55
+      ],
+      "end": [
+       1,
+       1
+      ],
+      "stops": [
+       {
+        "colorHex": "2A2F3A",
+        "at": 0
+       },
+       {
+        "colorHex": "0B0D12",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "775AFECF-CD43-57C7-033B-A9FE43BE0D9D",
+   "name": "Sphere",
+   "sortIndex": 1,
+   "kind": "model",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9.0,
+   "resourceID": "40C23E4D-219F-5DC7-198C-D2D8A44B1F53",
+   "stage": "bench",
+   "fadeIn": 0.5,
+   "keyframes": [
+    {
+     "id": "79F0610C-EA49-9FD5-5DEB-ED7B5DFE4D8D",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 520,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": -14,
+      "pitch": 12,
+      "distance": 5.0,
+      "fov": 28
+     },
+     "light": {
+      "yaw": -70,
+      "pitch": 45,
+      "intensity": 1.3
+     },
+     "stageOffset": [
+      -1.5,
+      0.0
+     ]
+    },
+    {
+     "id": "4DF381CE-AABB-9F89-2EEB-CAE6A02B668B",
+     "time": 8.7,
+     "transitionDuration": 8.7,
+     "placement": {
+      "height": 520,
+      "anchor": "center",
+      "offset": [
+       0,
+       -30
+      ]
+     },
+     "camera": {
+      "yaw": 14,
+      "pitch": 8,
+      "distance": 4.8,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 70,
+      "pitch": 40,
+      "intensity": 1.3
+     },
+     "stageOffset": [
+      -1.5,
+      0.0
+     ],
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "0AA5FD8A-1634-BEFD-8E93-1C2D1AB94B33",
+   "name": "Torus",
+   "sortIndex": 2,
+   "kind": "model",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9.0,
+   "resourceID": "498C23A4-4358-CA71-17A5-73F446B5C134",
+   "stage": "bench",
+   "keyframes": [
+    {
+     "id": "8858BFF3-3B57-436F-0F55-DF4A584DC85A",
+     "time": 0,
+     "transitionDuration": 0,
+     "stageOffset": [
+      0.0,
+      -0.1
+     ],
+     "camera": {
+      "yaw": 20,
+      "pitch": 55
+     }
+    },
+    {
+     "id": "5626C207-4FB2-6476-6F03-4D626110DF8C",
+     "time": 8.7,
+     "transitionDuration": 8.7,
+     "stageOffset": [
+      0.0,
+      -0.1
+     ],
+     "camera": {
+      "yaw": 80,
+      "pitch": 55
+     },
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "4EE795EC-E2A2-25C9-48A6-458DFCBDB27D",
+   "name": "Vase",
+   "sortIndex": 3,
+   "kind": "model",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 9.0,
+   "resourceID": "87CCEDB1-AD14-65F9-A178-DA91F0E905CF",
+   "stage": "bench",
+   "keyframes": [
+    {
+     "id": "D08EB68F-C388-B11E-777F-11F5DDD0E973",
+     "time": 0,
+     "transitionDuration": 0,
+     "stageOffset": [
+      1.5,
+      0.0
+     ]
+    }
+   ]
+  },
+  {
+   "id": "E70C8F5F-16A2-E267-1253-AE1B03295FF8",
+   "name": "Title",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.2,
+   "duration": 7.8,
+   "resourceID": "00985CE0-71B1-E36D-0BB7-6B5D1AB51E1E",
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ]
+}

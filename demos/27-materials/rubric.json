@@ -1,0 +1,53 @@
+{
+ "template": "27 Materials",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 9.0,
+ "kinds": {
+  "background": 1,
+  "model": 3,
+  "caption": 1
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": true,
+  "reveal": true,
+  "stage": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
+  "depth": true,
+  "captionTilt": false,
+  "kineticReveal": false,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "Metal. Matte. Glaze."
+ ],
+ "media": [
+  "sphere.glb",
+  "torus.glb",
+  "vase.glb"
+ ]
+}
