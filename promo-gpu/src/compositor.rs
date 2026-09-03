@@ -58,6 +58,17 @@ pub struct SceneQuad {
     pub tint_rgba: [f32; 4],
     /// How this quad combines with what is already drawn.
     pub blend: QuadBlend,
+    /// Lean in perspective: degrees about the X axis (top toward or away
+    /// from the viewer) then the Y axis (a side toward the viewer) — the
+    /// device slab's own pinhole camera, on the quad. `[0, 0]` is flat.
+    pub tilt: [f64; 2],
+    /// The camera's distance for the tilt, canvas px; 0 derives it from
+    /// the rect (3.2 × its longer side, the slab's rule). A caption drawn
+    /// as reveal pieces sets one distance for every piece.
+    pub tilt_distance: f64,
+    /// The point the tilt turns about, canvas px; `None` is the rect's
+    /// centre. Pieces of one picture share the whole picture's.
+    pub tilt_pivot: Option<[f64; 2]>,
     /// Index of this quad's MASK texture in the textures passed to
     /// `compose`, or `None` for no mask. Sampled in QUAD-LOCAL coordinates
     /// (corner to corner over the rect, ignoring `uv_rect`), its alpha
@@ -133,6 +144,9 @@ impl Default for SceneQuad {
             texture: None,
             rect: [0.0; 4],
             rotation_deg: 0.0,
+            tilt: [0.0; 2],
+            tilt_distance: 0.0,
+            tilt_pivot: None,
             corner_radius: 0.0,
             border_width: 0.0,
             border_rgba: [0.0; 4],
@@ -284,6 +298,11 @@ struct Quad {
     // x = sharpen amount, y = glow amount (the glow texture is `quad_fx`),
     // z = glitch amount, w = glitch seed.
     fx_b: vec4<f32>,
+    // Tilt: x = about X (rad), y = about Y (rad), z = the camera's distance
+    // in canvas px (0 = flat), w = unused.
+    tilt: vec4<f32>,
+    // xy = the point the tilt turns about, canvas px.
+    tilt_pivot: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -321,15 +340,36 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
     let s = quad.rot_radius_border.y;
     let rotated = vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c) + center;
 
+    // Tilt: the device slab's pinhole camera (`PhoneFrameGeometry::project`
+    // — rotate about Y then X, camera on +z), applied to the rotated
+    // corner about the pivot. The clip position keeps its w, so the
+    // rasteriser interpolates `local` perspective-correctly and the
+    // corners, border, mask and texture all lean with the quad.
+    var placed = rotated;
+    var w = 1.0;
+    if (quad.tilt.z > 0.0) {
+        let q = rotated - quad.tilt_pivot.xy;
+        let cy = cos(quad.tilt.y);
+        let sy = sin(quad.tilt.y);
+        let x1 = q.x * cy;
+        let z1 = -q.x * sy;
+        let cx = cos(quad.tilt.x);
+        let sx = sin(quad.tilt.x);
+        let y2 = q.y * cx - z1 * sx;
+        let z2 = q.y * sx + z1 * cx;
+        w = (quad.tilt.z - z2) / quad.tilt.z;
+        placed = quad.tilt_pivot.xy + vec2<f32>(x1, y2) / w;
+    }
+
     // Canvas -> output px (letterbox), then -> NDC (y flip).
-    let out_px = rotated * globals.fit.xy + globals.fit.zw;
+    let out_px = placed * globals.fit.xy + globals.fit.zw;
     let ndc = vec2<f32>(
         out_px.x / globals.output_size.x * 2.0 - 1.0,
         1.0 - out_px.y / globals.output_size.y * 2.0,
     );
 
     var out: VsOut;
-    out.pos = vec4<f32>(ndc, 0.0, 1.0);
+    out.pos = vec4<f32>(ndc * w, 0.0, w);
     out.local = local;
     return out;
 }
@@ -655,6 +695,8 @@ struct QuadRaw {
     lut_params: [f32; 4],
     fx_a: [f32; 4],
     fx_b: [f32; 4],
+    tilt: [f32; 4],
+    tilt_pivot: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -1600,6 +1642,28 @@ impl Compositor {
                     q.glitch[0],
                     q.glitch[1],
                 ],
+                tilt: {
+                    let leans = q.tilt[0] != 0.0 || q.tilt[1] != 0.0;
+                    let distance = if !leans {
+                        0.0
+                    } else if q.tilt_distance > 0.0 {
+                        q.tilt_distance
+                    } else {
+                        q.rect[2].max(q.rect[3]) * 3.2
+                    };
+                    [
+                        q.tilt[0].to_radians() as f32,
+                        q.tilt[1].to_radians() as f32,
+                        distance as f32,
+                        0.0,
+                    ]
+                },
+                tilt_pivot: {
+                    let pivot = q
+                        .tilt_pivot
+                        .unwrap_or([q.rect[0] + q.rect[2] / 2.0, q.rect[1] + q.rect[3] / 2.0]);
+                    [pivot[0] as f32, pivot[1] as f32, 0.0, 0.0]
+                },
             };
             let offset = QUAD_STRIDE as usize * i;
             staging[offset..offset + std::mem::size_of::<QuadRaw>()]
@@ -2121,6 +2185,8 @@ impl Compositor {
             lut_params: [0.0, 1.0, 2.0, 0.0],
             fx_a: [0.0; 4],
             fx_b: [0.0; 4],
+            tilt: [0.0; 4],
+            tilt_pivot: [0.0; 4],
         };
         self.ensure_quad_capacity(ctx, 1);
         ctx.queue.write_buffer(&self.quad_buf, 0, as_bytes(&raw));
@@ -3355,6 +3421,66 @@ mod tests {
     /// A scene that GROWS a quad between frames — a click ring appearing
     /// above a layer — draws the new quad: the buffer reallocates and the
     /// cached bind groups must follow it.
+    #[test]
+    /// A tilt about Y turns one side toward the viewer: the quad gets
+    /// narrower than its rect, the near edge stays taller than the far
+    /// one, and a flat quad through the same path is untouched.
+    fn a_tilted_quad_foreshortens_toward_its_far_edge() {
+        let ctx = GpuContext::new().expect("gpu");
+        let mut comp = Compositor::new(&ctx).expect("compositor");
+        let out = OwnedIoSurface::new_bgra(64, 64).expect("output surface");
+        let white = SceneQuad {
+            rect: [8.0, 8.0, 48.0, 48.0],
+            solid_rgba: [1.0, 1.0, 1.0, 1.0],
+            opacity: 1.0,
+            ..Default::default()
+        };
+        // (lit columns, lit rows in the first lit column, in the last).
+        let lit = |pixels: &[u8]| -> (usize, usize, usize) {
+            let mut columns = [0usize; 64];
+            for y in 0..64 {
+                for (x, count) in columns.iter_mut().enumerate() {
+                    if px64(pixels, x, y)[0] > 128 {
+                        *count += 1;
+                    }
+                }
+            }
+            let first = (0..64).find(|&x| columns[x] > 0).unwrap_or(0);
+            let last = (0..64).rev().find(|&x| columns[x] > 0).unwrap_or(0);
+            (
+                columns.iter().filter(|&&c| c > 0).count(),
+                columns[first],
+                columns[last],
+            )
+        };
+        comp.compose_to_iosurface(
+            &ctx,
+            &full_scene(white, [0.0, 0.0, 0.0, 1.0]),
+            &[],
+            out.raw(),
+        )
+        .expect("flat");
+        assert_eq!(
+            lit(&out.read_pixels().expect("readback")).0,
+            48,
+            "a flat quad fills its rect"
+        );
+        let leaning = SceneQuad {
+            tilt: [0.0, 55.0],
+            ..white
+        };
+        comp.compose_to_iosurface(
+            &ctx,
+            &full_scene(leaning, [0.0, 0.0, 0.0, 1.0]),
+            &[],
+            out.raw(),
+        )
+        .expect("tilted");
+        let (width, near, far) = lit(&out.read_pixels().expect("readback"));
+        assert!(width < 40, "foreshortened: {width} columns lit of 48");
+        assert!(near > far + 4, "the near edge is taller: {near} vs {far}");
+    }
+
     #[test]
     fn a_quad_added_between_frames_is_drawn() {
         let ctx = GpuContext::new().expect("gpu");

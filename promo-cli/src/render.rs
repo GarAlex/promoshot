@@ -1610,6 +1610,78 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Caption tilt: `tiltY` keyframes on a caption layer lean it in
+    /// perspective — the lit width of a wide white word narrows against
+    /// its flat twin, and its near edge stays the taller one.
+    #[test]
+    fn a_caption_with_tilt_keyframes_leans() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-tilt-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = |keyframes: &str| {
+            format!(
+                r#"{{"id":"P","name":"Tilt","createdAt":0,"state":"recorded",
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":640,"canvasHeight":360,"backgroundColorHex":"000000",
+                  "subtitleFontSize":120,"subtitleBold":true,"subtitleColorHex":"FFFFFF",
+                  "subtitleBackgroundOpacity":0,"subtitleVerticalMargin":100}},
+                "resources":[],
+                "layers":[{{"id":"L","name":"word","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":2,"captionText":"WWWWWW",
+                  "captionStyle":{{"alignment":"center"}},"keyframes":[{keyframes}]}}]}}"#
+            )
+        };
+        let lit = |json: &str| -> (usize, usize, usize) {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 640, 360).expect("renderer");
+            let stride = renderer.width as usize;
+            let frame = renderer.frame_bgra(1.0).expect("frame");
+            let mut columns = vec![0usize; 640];
+            for y in 0..360 {
+                for (x, count) in columns.iter_mut().enumerate() {
+                    if frame[(y * stride + x) * 4 + 2] > 128 {
+                        *count += 1;
+                    }
+                }
+            }
+            let first = columns.iter().position(|&c| c > 0).unwrap_or(0);
+            let last = columns.iter().rposition(|&c| c > 0).unwrap_or(0);
+            // The outermost lit column of a glyph raster is a letter's own
+            // edge, so the edges are read as the tallest column in each
+            // outer third of the lit span.
+            let third = (last.saturating_sub(first) / 3).max(1);
+            let tallest =
+                |range: std::ops::Range<usize>| columns[range].iter().copied().max().unwrap_or(0);
+            (
+                last.saturating_sub(first),
+                tallest(first..(first + third).min(last + 1)),
+                tallest(last.saturating_sub(third)..last + 1),
+            )
+        };
+        let flat = lit(&doc(""));
+        let leaning = lit(&doc(
+            r#"{"id":"K","time":0,"tiltX":0,"tiltY":60,"transitionDuration":0}"#,
+        ));
+        assert!(flat.0 > 300, "the flat word is wide: {}", flat.0);
+        assert!(
+            leaning.0 < flat.0 * 3 / 4,
+            "a tilted caption is narrower: {} vs {} flat",
+            leaning.0,
+            flat.0
+        );
+        assert!(
+            leaning.1 > leaning.2,
+            "its near edge is taller: {} vs {}",
+            leaning.1,
+            leaning.2
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Extruded type (rung 27): a big white word on black gains a side —
     /// grey pixels down-right of every stroke that the flat twin does not
     /// have — and the face stays white.

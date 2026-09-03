@@ -540,7 +540,11 @@ Semantics worth knowing:
   are optional 0..1.
 - `tiltX` / `tiltY` (degrees) on an image layer's keyframes tilt a
   device-framed screenshot in 2.5D. They animate like any other
-  track; leaving them out keeps the frame's own static tilt.
+  track; leaving them out keeps the frame's own static tilt. The same
+  two fields on a CAPTION layer's keyframes lean the caption in
+  perspective — `tiltY` turns a side toward the viewer, `tiltX` the
+  top — with the camera the device frames use, so a leaning title and
+  a turned phone agree. An extrusion and a reveal lean with it.
 - opacity is 0..1 and defaults to 1. Cross-dissolve by overlapping two
   layers in time and fading one down as the other comes up.
 - `fadeIn` / `fadeOut` on a LAYER, in seconds, are the shorthand for

@@ -142,6 +142,11 @@ new projects.
   layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
   "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
   and tint, on every host alike. Stamp `minReaderVersion: 23`.
+- **Tilt on captions.** `tiltX` / `tiltY` (degrees) on a caption layer's
+  keyframes lean it in perspective, on the device frames' own camera: a
+  title swinging in from `"tiltY": 60` to `0` over half a second, a
+  lower third leaning back `"tiltX": -8`. They ramp like any keyframe
+  value, easing included.
 - **Extruded type.** `"captionStyle": { "depth": { "count": 6, "offset":
   [2, 2], "shade": 0.6 } }` stacks darker copies under a caption so it
   reads as solid letters with a side; `colorHex` colours the side (a

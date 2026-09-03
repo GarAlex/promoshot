@@ -387,6 +387,8 @@ A caption style may carry `depth`: copies of the words stacked under the
 face, each a little further along and darker, so the type reads as
 solid letters with a side — the classic extrusion, pure 2D, lit by
 choosing the offset. A reveal extrudes each arriving piece the same way.
+`tiltX` / `tiltY` keyframes on a caption lean it in perspective, on the
+same camera the device frames use, and the side leans with the face.
 
 ## Follow the pointer
 

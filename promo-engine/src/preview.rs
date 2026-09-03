@@ -1872,6 +1872,9 @@ impl PreviewEngine {
                         &used,
                     ) {
                         quad.opacity = tl::layer_opacity(layer, time) as f32;
+                        if let Some((tilt_x, tilt_y)) = tl::layer_tilt_offset(layer, time) {
+                            quad.tilt = [tilt_x, tilt_y];
+                        }
                         // A push shoves the outgoing material out the far
                         // side; every other kind leaves it where it is and
                         // arrives over it.
@@ -1885,6 +1888,17 @@ impl PreviewEngine {
                     self.caption_quad(layer, showing.as_deref(), &settings, canvas, time, &used)
                 {
                     quad.opacity = tl::layer_opacity(layer, time) as f32;
+                    // Tilt keyframes lean a caption in perspective — the
+                    // device slab's own pinhole camera, on the quad. Set
+                    // before the extrusion, so the side leans with the face.
+                    if let Some((tilt_x, tilt_y)) = tl::layer_tilt_offset(layer, time) {
+                        quad.tilt = [tilt_x, tilt_y];
+                        quad.tilt_distance = quad.rect[2].max(quad.rect[3]) * 3.2;
+                        quad.tilt_pivot = Some([
+                            quad.rect[0] + quad.rect[2] / 2.0,
+                            quad.rect[1] + quad.rect[3] / 2.0,
+                        ]);
+                    }
                     if let Some(swap) = swap.as_ref() {
                         apply_effect(&mut quad, swap.effect, canvas, time);
                     }
