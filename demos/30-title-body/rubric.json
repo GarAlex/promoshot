@@ -1,14 +1,13 @@
 {
- "template": "25 Turntable",
+ "template": "30 Title Body",
  "canvas": [
   1440,
   900
  ],
- "duration": 7.0,
+ "duration": 9.0,
  "kinds": {
   "background": 1,
-  "model": 1,
-  "caption": 2
+  "stage": 1
  },
  "features": {
   "chromaKey": false,
@@ -24,17 +23,17 @@
   "motionPath": false,
   "sprite": false,
   "gradient": true,
-  "reveal": true,
-  "stage": false,
-  "stageLayer": false,
+  "reveal": false,
+  "stage": true,
+  "stageLayer": true,
   "model": true,
   "camera": true,
   "materials": true,
-  "finish": false,
-  "textBody": false,
-  "depth": true,
+  "finish": true,
+  "textBody": true,
+  "depth": false,
   "captionTilt": false,
-  "kineticReveal": true,
+  "kineticReveal": false,
   "blendModes": [],
   "swaps": 0,
   "transitions": false,
@@ -45,12 +44,8 @@
   "grade": false,
   "placement": true
  },
- "phrases": [
-  "Every theme,\nevery angle.",
-  "A .glb on a layer. The palette paints it; a shot fills its screen."
- ],
+ "phrases": [],
  "media": [
-  "tablet.glb",
-  "ui_lumen_1.png"
+  "vase.glb"
  ]
 }

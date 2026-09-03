@@ -33,6 +33,7 @@
   "camera": false,
   "materials": false,
   "finish": false,
+  "textBody": false,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,

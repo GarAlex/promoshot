@@ -1,0 +1,9 @@
+Make a 9-second piece on a 1440×900 canvas: a radial dark-grey gradient background; ONE layer of kind 'stage' named 'Bench', placed 420 px tall in the centre, whose keyframes carry the camera (drifting from a yaw of -12 to 12 with an ease in and out) and the key light (sweeping from a yaw of -70 to 70 at intensity 1.3); its members are a TITLE that is a real 3D body — a model resource with no file and a recipe {"text": {"text": "PROMO", "bold": true, "depth": 0.3}}, its Face painted silver D2D6DC with a chrome finish (metallic 1, roughness 0.12) and its Side painted the palette's edge colour matte (metallic 0, roughness 0.6), offset 0.3 left and turning from a yaw of -12 to 12 — and vase.glb offset 1.55 right, painted the palette's accent with a matte finish (metallic 0, roughness 0.85), turning from -20 to 20. No caption layer: the title is the body.
+
+Files in `resources/`: vase.glb.
+
+Use the PromoShot skill and the PromoShot MCP tools for this. Work in the
+current folder: the media is in `resources/`. Write the project as a
+`.promo` folder named `out.promo` here (copy the media you use into its
+`Resources/`), validate it, inspect it, render a contact sheet of a few
+moments, and render the video. Do not ask questions; make sensible choices.
