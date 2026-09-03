@@ -407,6 +407,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
     }
 
+    wrong_level_warnings(meta, &mut out);
     let required = meta.minimum_reader_version();
     match meta.min_reader_version {
         Some(declared) if declared >= required => {}
@@ -423,6 +424,58 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         None => {}
     }
     out
+}
+
+/// A field written at the wrong level is not an error to the parser — it
+/// survives as an unknown key and is ignored — so the picture it was meant
+/// to change stays as it was and nothing says why. These are the ones a
+/// model author reaches for: `materials` on the layer instead of the
+/// resource, a `camera` on the layer instead of a keyframe.
+fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    const RESOURCE_ONLY: [&str; 3] = ["materials", "clips", "boundsRadius"];
+    const KEYFRAME_ONLY: [&str; 5] = ["camera", "light", "stageOffset", "depth", "clip"];
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        for key in RESOURCE_ONLY {
+            if layer.extra.contains_key(key) {
+                out.push(format!(
+                    "layer \"{}\" carries \"{key}\", which belongs on the model \
+                     RESOURCE it plays (resources[].{key}) — here it is ignored, \
+                     and dropped on the next save",
+                    layer.name
+                ));
+            }
+        }
+        for key in KEYFRAME_ONLY {
+            if layer.extra.contains_key(key) {
+                out.push(format!(
+                    "layer \"{}\" carries \"{key}\" at the layer level — it belongs \
+                     on a KEYFRAME of the layer (keyframes[].{key}); here it is \
+                     ignored, and dropped on the next save",
+                    layer.name
+                ));
+            }
+        }
+    }
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        for key in KEYFRAME_ONLY {
+            if resource.extra.contains_key(key) {
+                out.push(format!(
+                    "resource \"{}\" carries \"{key}\", which belongs on a keyframe \
+                     of the layer that plays it (layers[].keyframes[].{key}) — here \
+                     it is ignored, and dropped on the next save",
+                    resource.display_name
+                ));
+            }
+        }
+        if resource.extra.contains_key("stage") {
+            out.push(format!(
+                "resource \"{}\" carries \"stage\", which belongs on the layer that \
+                 plays it (layers[].stage) — here it is ignored, and dropped on \
+                 the next save",
+                resource.display_name
+            ));
+        }
+    }
 }
 
 /// A duration rule wired to nothing does nothing, and says so here rather
@@ -776,6 +829,26 @@ mod tests {
                  "startTime":0,"duration":4,
                  "keyframes":[{{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A04","time":2,"transitionDuration":0{keyframe}}}]}}"#
         )
+    }
+
+    #[test]
+    fn a_model_field_at_the_wrong_level_is_named() {
+        // The mistake a fresh agent made on demo 27: `materials` on the
+        // layer, where it is an unknown key, so the sphere stayed grey.
+        let meta = project(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A05","name":"Sphere","sortIndex":1,"kind":"model",
+                "isEnabled":true,"startTime":0,"duration":2,"resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A06",
+                "materials":{"Body":"@accent"},"camera":{"yaw":10},"keyframes":[]}"#,
+            r#","resources":[{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A06","kind":"model","filename":"s.glb",
+                "displayName":"Sphere","addedAt":0,"stage":"bench","light":{"yaw":1}}],"minReaderVersion":31"#,
+        );
+        let warnings = warnings(&meta);
+        let has = |needle: &str| warnings.iter().any(|w| w.contains(needle));
+        assert!(has("layer \"Sphere\" carries \"materials\""), "{warnings:?}");
+        assert!(has("resources[].materials"), "{warnings:?}");
+        assert!(has("carries \"camera\" at the layer level"), "{warnings:?}");
+        assert!(has("resource \"Sphere\" carries \"light\""), "{warnings:?}");
+        assert!(has("resource \"Sphere\" carries \"stage\""), "{warnings:?}");
     }
 
     #[test]
