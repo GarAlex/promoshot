@@ -1,0 +1,19 @@
+{
+ "kind": "creative",
+ "template": "C8 A scene, not a shot",
+ "media": [
+  "tablet.glb",
+  "phone.glb",
+  "ui_lumen_1.png",
+  "ui_lumen_2.png",
+  "ui_lumen_5.png"
+ ],
+ "duration": [
+  11,
+  19
+ ],
+ "must_use": [
+  "tablet.glb",
+  "phone.glb"
+ ]
+}

@@ -40,6 +40,10 @@ SETS = [
   "goal": "A 3D model of a tablet (slab.glb — look at it before you place it) and three screenshots of Lumen, an analytics app. Make a 10-to-15-second product spot, landscape, where the device is the hero: show the app on its screen, move the camera like a product film would, and say one thing worth saying. Palette, type and motion are yours.",
   "media": {"25-turntable": ["slab.glb"], "01-app-store-hero": ["ui_lumen_1.png", "ui_lumen_2.png", "ui_lumen_5.png"]},
   "duration": [9, 16], "must_use": ["slab.glb"]},
+ {"id": "c8", "slug": "scene", "title": "A scene, not a shot",
+  "goal": "Two device models (tablet.glb and phone.glb — look at them first) and three screenshots of Lumen, an analytics app. Make a 12-to-18-second landscape piece that is a SCENE rather than a product shot: both devices in one space, the app on both screens, one camera move through it, and a line of type that belongs in the scene. Everything else is yours.",
+  "media": {"26-stage": ["tablet.glb", "phone.glb"], "01-app-store-hero": ["ui_lumen_1.png", "ui_lumen_2.png", "ui_lumen_5.png"]},
+  "duration": [11, 19], "must_use": ["tablet.glb", "phone.glb"]},
 ]
 
 def main():
