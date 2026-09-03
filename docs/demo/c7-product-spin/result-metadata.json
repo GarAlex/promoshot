@@ -1,0 +1,207 @@
+{
+  "id": "lumen-spot",
+  "name": "Lumen — Product Spot",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 29,
+  "trimStart": 0,
+  "trimEnd": 13.4,
+  "videoDuration": 13.4,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "background",      "colorHex": "05080F" },
+      { "name": "text",            "colorHex": "EEF3FF" },
+      { "name": "accent",          "colorHex": "5B8CFF" },
+      { "name": "text-bg",         "colorHex": "0B1220" },
+      { "name": "edge",            "colorHex": "26364F" },
+      { "name": "caption-outline", "colorHex": "060A12" },
+      { "name": "caption-shadow",  "colorHex": "000000" },
+      { "name": "media-shadow",    "colorHex": "000000" },
+      { "name": "highlight",       "colorHex": "5B8CFF" },
+      { "name": "dim",             "colorHex": "8DA0C6" },
+      { "name": "shell",           "colorHex": "232B3A" }
+    ],
+    "backgroundColorHex": "@background",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.5, 0.43],
+      "end": [1.0, 1.0],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "16233F", "at": 0 },
+        { "colorHex": "0B1220", "at": 0.55 },
+        { "colorHex": "04070E", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 56,
+    "subtitleBold": true,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 14,
+    "subtitleLeftMargin": 120,
+    "subtitleRightMargin": 120,
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleShadowOpacity": 0.5,
+    "subtitleShadowRadius": 16
+  },
+
+  "resources": [
+    { "id": "uiOverview", "kind": "image", "filename": "ui_lumen_1.png",
+      "displayName": "Overview", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "uiRevenue", "kind": "image", "filename": "ui_lumen_2.png",
+      "displayName": "Revenue", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "uiRetention", "kind": "image", "filename": "ui_lumen_5.png",
+      "displayName": "Retention", "addedAt": 0,
+      "pixelWidth": 1216, "pixelHeight": 760,
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "slabA", "kind": "model", "filename": "slab.glb",
+      "displayName": "Tablet — Overview", "addedAt": 0,
+      "materials": { "Body": "@shell", "Screen": { "resourceID": "uiOverview" } },
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "slabB", "kind": "model", "filename": "slab.glb",
+      "displayName": "Tablet — Revenue", "addedAt": 0,
+      "materials": { "Body": "@shell", "Screen": { "resourceID": "uiRevenue" } },
+      "imageCuts": [], "disabledAudioTrackIndices": [] },
+
+    { "id": "slabC", "kind": "model", "filename": "slab.glb",
+      "displayName": "Tablet — Retention", "addedAt": 0,
+      "materials": { "Body": "@shell", "Screen": { "resourceID": "uiRetention" } },
+      "imageCuts": [], "disabledAudioTrackIndices": [] }
+  ],
+
+  "layers": [
+    {
+      "id": "bg", "name": "Studio", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 13.4,
+      "keyframes": [
+        { "id": "bg0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "radial", "start": [0.5, 0.43], "end": [1.0, 1.0], "repeat": "clamp",
+            "stops": [ { "colorHex": "16233F", "at": 0 }, { "colorHex": "0B1220", "at": 0.55 }, { "colorHex": "04070E", "at": 1 } ] } },
+        { "id": "bg1", "time": 5.6, "transitionDuration": 2.4, "easing": "easeInOut",
+          "gradient": { "kind": "radial", "start": [0.5, 0.43], "end": [1.0, 1.0], "repeat": "clamp",
+            "stops": [ { "colorHex": "231E48", "at": 0 }, { "colorHex": "0D0B22", "at": 0.55 }, { "colorHex": "05040E", "at": 1 } ] } },
+        { "id": "bg2", "time": 10.2, "transitionDuration": 2.4, "easing": "easeInOut",
+          "gradient": { "kind": "radial", "start": [0.5, 0.43], "end": [1.0, 1.0], "repeat": "clamp",
+            "stops": [ { "colorHex": "113A47", "at": 0 }, { "colorHex": "08181F", "at": 0.55 }, { "colorHex": "04090E", "at": 1 } ] } }
+      ]
+    },
+
+    {
+      "id": "shotA", "name": "Shot A — Overview", "sortIndex": 1, "kind": "model",
+      "isEnabled": true, "startTime": 0, "duration": 5.1,
+      "resourceID": "slabA",
+      "fadeIn": 0.75, "fadeOut": 0.5,
+      "keyframes": [
+        { "id": "a0", "time": 0, "transitionDuration": 0,
+          "camera": { "yaw": -52, "pitch": 17, "roll": 2, "distance": 4.9, "fov": 30 },
+          "light": { "yaw": -40, "pitch": 44, "intensity": 1.15 },
+          "zoom": 0.64, "placement": { "anchor": "center", "offset": [0, -36] } },
+        { "id": "a1", "time": 4.6, "transitionDuration": 4.6, "easing": "easeInOut",
+          "camera": { "yaw": -16, "pitch": 9.5, "roll": 0.8, "distance": 4.15, "fov": 30 },
+          "light": { "yaw": -8, "pitch": 48, "intensity": 1.1 },
+          "zoom": 0.79, "placement": { "anchor": "center", "offset": [0, -50] } }
+      ]
+    },
+
+    {
+      "id": "shotB", "name": "Shot B — Revenue", "sortIndex": 2, "kind": "model",
+      "isEnabled": true, "startTime": 4.6, "duration": 4.9,
+      "resourceID": "slabB",
+      "fadeIn": 0.5, "fadeOut": 0.5,
+      "keyframes": [
+        { "id": "b0", "time": 0, "transitionDuration": 0,
+          "camera": { "yaw": -16, "pitch": 9.5, "roll": 0.8, "distance": 4.15, "fov": 30 },
+          "light": { "yaw": -8, "pitch": 48, "intensity": 1.1 },
+          "zoom": 0.79, "placement": { "anchor": "center", "offset": [0, -50] } },
+        { "id": "b1", "time": 4.4, "transitionDuration": 3.9, "easing": "easeInOut",
+          "camera": { "yaw": 14, "pitch": 5, "roll": 0.3, "distance": 3.6, "fov": 30 },
+          "light": { "yaw": 26, "pitch": 46, "intensity": 1.1 },
+          "zoom": 0.86, "placement": { "anchor": "center", "offset": [0, -62] } }
+      ]
+    },
+
+    {
+      "id": "shotC", "name": "Shot C — Retention", "sortIndex": 3, "kind": "model",
+      "isEnabled": true, "startTime": 9.0, "duration": 4.4,
+      "resourceID": "slabC",
+      "fadeIn": 0.5,
+      "keyframes": [
+        { "id": "c0", "time": 0, "transitionDuration": 0,
+          "camera": { "yaw": 14, "pitch": 5, "roll": 0.3, "distance": 3.6, "fov": 30 },
+          "light": { "yaw": 26, "pitch": 46, "intensity": 1.1 },
+          "zoom": 0.86, "placement": { "anchor": "center", "offset": [0, -62] } },
+        { "id": "c1", "time": 4.4, "transitionDuration": 3.9, "easing": "easeInOut",
+          "camera": { "yaw": -3, "pitch": 2, "roll": 0, "distance": 3.15, "fov": 28 },
+          "light": { "yaw": 4, "pitch": 52, "intensity": 1.15 },
+          "zoom": 0.88, "placement": { "anchor": "center", "offset": [0, -90] } }
+      ]
+    },
+
+    {
+      "id": "kicker", "name": "Wordmark", "sortIndex": 5, "kind": "caption",
+      "isEnabled": true, "startTime": 0.6, "duration": 12.8,
+      "captionText": "LUMEN",
+      "captionStyle": {
+        "fontFamily": "monospaced", "fontSize": 30, "isBold": true,
+        "textColorHex": "@dim", "alignment": "leading",
+        "placement": { "anchor": "topLeft", "offset": [120, 78] },
+        "shadowOpacity": 0.4, "shadowRadius": 10
+      },
+      "fadeIn": 0.7,
+      "keyframes": []
+    },
+
+    {
+      "id": "beat1", "name": "Beat 1", "sortIndex": 6, "kind": "caption",
+      "isEnabled": true, "startTime": 1.6, "duration": 2.9,
+      "captionText": "Six views of one business.",
+      "captionStyle": {
+        "fontSize": 56,
+        "placement": { "anchor": "bottom", "offset": [0, -104] },
+        "reveal": { "by": "word", "mode": "rise", "secondsPer": 0.085, "rise": 0.3, "easing": "easeOut" }
+      },
+      "fadeIn": 0.4, "fadeOut": 0.45,
+      "keyframes": []
+    },
+
+    {
+      "id": "beat2", "name": "Beat 2", "sortIndex": 7, "kind": "caption",
+      "isEnabled": true, "startTime": 5.6, "duration": 3.0,
+      "captionText": "The four numbers that matter never move.",
+      "captionStyle": {
+        "fontSize": 56,
+        "placement": { "anchor": "bottom", "offset": [0, -104] },
+        "reveal": { "by": "word", "mode": "rise", "secondsPer": 0.075, "rise": 0.3, "easing": "easeOut" }
+      },
+      "fadeIn": 0.4, "fadeOut": 0.45,
+      "keyframes": []
+    },
+
+    {
+      "id": "beat3", "name": "Beat 3", "sortIndex": 8, "kind": "caption",
+      "isEnabled": true, "startTime": 9.9, "duration": 3.5,
+      "captionText": "Every metric. One glance.",
+      "captionStyle": {
+        "fontSize": 68,
+        "placement": { "anchor": "bottom", "offset": [0, -96] },
+        "reveal": { "by": "word", "mode": "rise", "secondsPer": 0.12, "rise": 0.28, "easing": "easeOut" }
+      },
+      "fadeIn": 0.45,
+      "keyframes": []
+    }
+  ]
+}

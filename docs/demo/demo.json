@@ -4747,5 +4747,193 @@
    "thumb": "docs/demo/c6-title-card/thumb.png"
   },
   "page": "docs/demo/democ6.md"
+ },
+ {
+  "id": "c7",
+  "slug": "c7-product-spin",
+  "title": "Product spin",
+  "blurb": "A tablet model and three screenshots, no instructions: does a fresh agent look at the model, put the app on its screen and move the camera like a product film?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   9,
+   16
+  ],
+  "prompt": "A 3D model of a tablet (slab.glb \u2014 look at it before you place it) and three screenshots of Lumen, an analytics app. Make a 10-to-15-second product spot, landscape, where the device is the hero: show the app on its screen, move the camera like a product film would, and say one thing worth saying. Palette, type and motion are yours.\n\nFiles in `resources/`: slab.glb, ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png.",
+  "resources": [
+   {
+    "file": "slab.glb",
+    "kind": "file",
+    "path": "demos/c7-product-spin/resources/slab.glb"
+   },
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/c7-product-spin/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/c7-product-spin/resources/ui_lumen_2.png"
+   },
+   {
+    "file": "ui_lumen_5.png",
+    "kind": "image",
+    "path": "docs/demo/c7-product-spin/resources/ui_lumen_5.png"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 7,
+   "total": 7,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "13.4s, asked 9\u201316s"
+    },
+    {
+     "check": "uses:slab.glb",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "5 features: gradient, reveal, model, camera, materials"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "4 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "8 layers"
+    }
+   ],
+   "summary": "turns=72 cost=$4.41 secs=635",
+   "run": {
+    "turns": 72,
+    "wall_s": 634,
+    "api_s": 626,
+    "cost_usd": 4.41,
+    "tokens": {
+     "input": 88,
+     "cache_read": 4178408,
+     "cache_write": 114987,
+     "output": 46833,
+     "thinking": 24615
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1120,
+      "output": 13,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 4293483,
+      "output": 46833,
+      "cost_usd": 4.41
+     }
+    ],
+    "mcp": {
+     "calls": 18,
+     "ms": 6624,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 2915,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 2822,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 2,
+       "ms": 417,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 5,
+       "ms": 310,
+       "errors": 0
+      },
+      "promo_media_turntable": {
+       "calls": 1,
+       "ms": 136,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 14,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "gradient",
+    "reveal",
+    "model",
+    "camera",
+    "materials"
+   ],
+   "captions": [
+    "LUMEN",
+    "Six views of one business.",
+    "The four numbers that matter never move.",
+    "Every metric. One glance."
+   ],
+   "notes": "Done. `out.promo` renders a 13.4s landscape spot: **`out.promo/Exports/lumen-spot.mp4`** (1920\u00d71080, h264, 30fps).\n\n**How it's built**\n\nOne continuous camera move, not three shots. The tablet is a `model` layer; the camera dollies in and orbits the whole 13.4s \u2014 yaw \u221252\u00b0 \u2192 \u221216\u00b0 \u2192 +14\u00b0 \u2192 \u22123\u00b0, pitch 17\u00b0 \u2192 2\u00b0, distance 4.9 \u2192 3.15 boundsRadius, fov easing 30 \u2192 28 on the last push. The device grows from ~300px to ~700px tall, all of it eased `easeInOut`.\n\nThe screen changes are the trick: `materials` lives on the **resource**, not the layer, so there are three model resources all pointing at `slab.glb`, each binding the `Screen` slot to a different screenshot. Each shot's camera move decelerates into a rest pose, and the next layer begins parked on that exact pose \u2014 so during the 0.5s cross-dissolve the camera is holding still and only the UI swaps. I verified both dissolve points by rendering the two sides in isolation: pixel-identical framing.\n\n**What it says**, and why those lines are defensible from the images:\n1. *\"Six views of one business.\"* \u2014 the sidebar has exactly six items.\n2. *\"The four numbers that matter never move.\"* \u2014 Revenue / Active / Churn / NPS are identical and identically placed on all three screens. That's the actual product idea, and the film demonstrates it while saying it.\n3. *\"Every metric. One glance.\"* \u2014 the payoff, on the hero frame where the UI is fully legible.\n\nType is word-by-word `rise` reveals, plate-less over a radial studio gradient that tints navy \u2192 violet \u2192 teal to follow each screen's own accent colour. Palette is named (all eight roles), so it re-skins from one array.\n\nTwo things worth flagging: the model's `Screen` quad has a clean 0..1 UV map (I checked the GLB directly after the first render came out flat grey), which is why the s",
+   "contact": "docs/demo/c7-product-spin/contact-result.png",
+   "video": "docs/demo/c7-product-spin/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c7-product-spin.mp4",
+   "video_hd_bytes": 950245,
+   "metadata": "docs/demo/c7-product-spin/result-metadata.json",
+   "gif": "docs/demo/c7-product-spin/result.gif",
+   "thumb": "docs/demo/c7-product-spin/thumb.png"
+  },
+  "page": "docs/demo/democ7.md"
  }
 ]
