@@ -6,7 +6,7 @@ the two together — so what the doc teaches is exactly what renders here.
 
 | Project | Teaches |
 |---|---|
-| `ProductCard.promo` | The product-promo path: a device-framed app screenshot pushes in over a palette ground, title above — 16:9, 6s |
+| `ProductCard.promo` | The product-promo path: a phone BODY with the app screenshot on its screen pushes in over a palette ground, title above — 16:9, 6s |
 | `TwoClips.promo` | Two video layers overlapped under a wipe (video cannot swap; stills do this on one layer) |
 | `FocusPush.promo` | A recording with a Ken Burns `viewport` push and a stroked lower caption |
 | `Story.promo` | The SAME card re-stamped 9:16 — placement rules are why this is a re-stamp, not a redesign |

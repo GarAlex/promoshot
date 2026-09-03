@@ -1,5 +1,5 @@
 {"id":"kb","name":"Focus Push","createdAt":0,"state":"recorded",
- "minReaderVersion":18,"trimStart":0,"trimEnd":8,"videoDuration":8,
+ "minReaderVersion":34,"trimStart":0,"trimEnd":8,"videoDuration":8,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
    "palette":[{"name":"text","colorHex":"FFFFFF"}],

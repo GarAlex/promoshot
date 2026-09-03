@@ -213,16 +213,12 @@ new projects.
   `slide` (in from the right). Stamp `minReaderVersion: 28`. By word,
   with `"seconds": 1.2`, is the kinetic-type look; by character is
   busier and wants short text.
-- **Tilt on captions.** `tiltX` / `tiltY` (degrees) on a caption layer's
-  keyframes lean it in perspective, on the device frames' own camera: a
-  title swinging in from `"tiltY": 60` to `0` over half a second, a
-  lower third leaning back `"tiltX": -8`. They ramp like any keyframe
-  value, easing included.
-- **Extruded type.** `"captionStyle": { "depth": { "count": 6, "offset":
-  [2, 2], "shade": 0.6 } }` stacks darker copies under a caption so it
-  reads as solid letters with a side; `colorHex` colours the side (a
-  palette name works). Big bold words want it; body text does not.
-  Stamp `minReaderVersion: 27`.
+- **No 2.5D.** A caption's `tiltX`/`tiltY` and `captionStyle.depth`
+  (stacked copies) and the device `frame` on a picture are the flat
+  compositor's old tricks: they still render, `promo_validate` names
+  them legacy, and new work does not use them. A title with a side or a
+  lean is a TEXT BODY in a stage (above); a device is a device BODY with
+  the picture on its Screen slot.
 - **Follow the pointer.** A recording made in the Mac app carries
   `"pointer": { "samples": [[t, x, y], …], "clicks": [[t, x, y], …] }`
   (source seconds, unit coordinates). Put `"follow": { "zoom": 2,

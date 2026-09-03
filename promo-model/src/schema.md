@@ -15,7 +15,7 @@ metadata.json (only the fields that matter for authoring):
 
 {
   "id": "<uuid>", "name": "...", "createdAt": 0, "state": "recorded",
-  "minReaderVersion": 18, "trimStart": 0, "trimEnd": 0,
+  "minReaderVersion": 34, "trimStart": 0, "trimEnd": 0,
   "videoDuration": 0, "subtitles": [],
   "compositionSettings": {
     "canvasWidth": 1920, "canvasHeight": 1080, "fps": 60,
@@ -78,7 +78,7 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 18 at the top
+The format is ONE version: stamp "minReaderVersion": 34 at the top
 level and think no more about it. promo_validate warns when a file
 claims a smaller number than its fields use.
 
@@ -151,7 +151,9 @@ Semantics worth knowing:
   (default black; a palette name works), so the words read as solid
   letters with a side — pick the offset from where the light is. A
   reveal extrudes each arriving piece the same way. A project using it
-  carries `minReaderVersion: 27`.
+  carries `minReaderVersion: 27`. LEGACY: this is the flat compositor's
+  2.5D; a title with a real side is a text body (rung 34, see Models),
+  and `promo_validate` says so.
 - `strokeColorHex` / `strokeWidth` put an OUTLINE round the glyphs, and
   `shadowColorHex` / `shadowOpacity` / `shadowRadius` / `shadowOffset` a
   soft shadow under them. This is what lets a caption sit straight on
@@ -212,7 +214,9 @@ Semantics worth knowing:
   `tiltX`/`tiltY` KEYFRAMES animate the slab's turn from there —
   re-baked per frame by the apps; a headless render (CLI/MCP) bakes
   the frame's stored tilt and validate names the difference when
-  keyframes animate it.
+  keyframes animate it. LEGACY: the device frame is 2.5D; a device is
+  a BODY (`promo device`, rung 29) with the picture bound to its Screen
+  slot, drawn the same everywhere, and `promo_validate` says so.
   Legacy "phone" reads as "device"; any other kind reads as "none",
   because an unknown string is a typo rather than an older frame.
   The slab is built around the picture before the layer is laid out,
@@ -544,7 +548,8 @@ Semantics worth knowing:
   two fields on a CAPTION layer's keyframes lean the caption in
   perspective — `tiltY` turns a side toward the viewer, `tiltX` the
   top — with the camera the device frames use, so a leaning title and
-  a turned phone agree. An extrusion and a reveal lean with it.
+  a turned phone agree. An extrusion and a reveal lean with it. LEGACY:
+  a leaning title is a text body turned by its own `camera` in a stage.
 - opacity is 0..1 and defaults to 1. Cross-dissolve by overlapping two
   layers in time and fading one down as the other comes up.
 - `fadeIn` / `fadeOut` on a LAYER, in seconds, are the shorthand for

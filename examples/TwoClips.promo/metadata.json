@@ -1,5 +1,5 @@
 {"id":"seq","name":"Two Clips","createdAt":0,"state":"recorded",
- "minReaderVersion":18,"trimStart":0,"trimEnd":9.4,"videoDuration":9.4,
+ "minReaderVersion":34,"trimStart":0,"trimEnd":9.4,"videoDuration":9.4,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
    "backgroundColorHex":"0E1726"},

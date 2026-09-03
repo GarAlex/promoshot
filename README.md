@@ -408,6 +408,10 @@ ownership written down.
 
 ## Text with a side
 
+Legacy: the caption `depth` below is the flat compositor's 2.5D. A title
+with a real side is a text body (rung 34) standing in a stage; the
+validator names the old form. It still renders.
+
 A caption style may carry `depth`: copies of the words stacked under the
 face, each a little further along and darker, so the type reads as
 solid letters with a side — the classic extrusion, pure 2D, lit by

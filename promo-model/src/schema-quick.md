@@ -5,7 +5,7 @@ names. Write the JSON, `promo validate` it (the validator runs the
 renderers' own parser — "ok" means it renders), then render or open it.
 This is the authoring subset; `promo_schema_full` is the whole format.
 
-- Stamp `"minReaderVersion": 18`. Ids are strings, unique in the file —
+- Stamp `"minReaderVersion": 34`. Ids are strings, unique in the file —
   short mnemonics ("bg", "clip", "k0") are fine; apps mint UUIDs on adopt.
 - Boilerplate every project carries: `id`, `name`, `createdAt: 0`,
   `state: "recorded"`, `trimStart: 0`, `trimEnd: <seconds>`,
@@ -34,8 +34,8 @@ constant. The fields that matter first:
   px) or `mode: "fit"|"fill"`, plus `anchor` (nine-point grid,
   `topLeft`…`bottomRight`) and `offset: [x, y]`. Reach for this before
   zoom/shift arithmetic; it re-resolves if the media changes.
-- `opacity` 0..1; `rotation` degrees; `tiltX`/`tiltY` degrees turn a
-  device-framed shot in 2.5D.
+- `opacity` 0..1; `rotation` degrees. A model layer's `camera` (yaw,
+  pitch, distance in bounds radii) turns a body.
 - `viewport: [x, y, w, h]` in UNIT source coordinates — the window of the
   source the layer shows. `[0,0,1,1]` is everything; ramping to
   `[0.25,0.25,0.5,0.5]` is the Ken Burns push. Keep `w == h` to keep the
@@ -61,22 +61,25 @@ the same grid media uses (anchor+offset only; margins then only set wrap
 width). A keyframe `fontSize` animates the size in points. Two captions
 must never cross-fade; give each a life clear of both dissolves.
 
-A device frame lives on the RESOURCE:
-`"frame": { "kind": "device", "material": "spaceBlack", "tiltY": 8 }`
-builds a 3D slab around the picture (materials: spaceBlack,
-naturalTitanium, silver, gold, deepBlue, plastic*). `"kind": "border"`
-with `borderWidth`/`cornerRadius` is the flat card. `placement` then sizes
-the whole slab.
+A device is a BODY: `promo device phone --out phone.glb` (tablet,
+laptop too; the app's + Body menu and `promo_device_model` write the
+same file) is a model with `Body` and `Screen` slots. A model RESOURCE
+names the file and binds the slots — `"materials": { "Body": "@edge",
+"Screen": { "resourceID": "<shot>" } }` puts the screenshot on the
+screen — and a model LAYER places it; `placement` sizes the whole body,
+its keyframes' `camera` turns it. The old `frame` on a picture resource
+is legacy 2.5D and `promo_validate` says so. `"kind": "border"` with
+`borderWidth`/`cornerRadius` is still the flat card.
 
 Four recipes. Each is a complete `metadata.json` — copy one beside your
 media, rename ids/filenames, validate.
 
-**16:9 product card** — a device-framed screenshot pushes in over a
-palette ground, title above, 6 seconds:
+**16:9 product card** — a phone body with the screenshot on its screen
+pushes in over a palette ground, title above, 6 seconds:
 
 ```json
 {"id":"card","name":"Product Card","createdAt":0,"state":"recorded",
- "minReaderVersion":18,"trimStart":0,"trimEnd":6,"videoDuration":6,
+ "minReaderVersion":34,"trimStart":0,"trimEnd":6,"videoDuration":6,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
    "palette":[{"name":"canvas","colorHex":"10182B"},
@@ -87,19 +90,24 @@ palette ground, title above, 6 seconds:
  "resources":[{"id":"shot","kind":"image","filename":"shot.png",
    "displayName":"Screenshot","addedAt":0,"imageCuts":[],
    "disabledAudioTrackIndices":[],
-   "pixelWidth":1290,"pixelHeight":2796,
-   "frame":{"kind":"device","material":"spaceBlack","tiltY":10}}],
+   "pixelWidth":1290,"pixelHeight":2796},
+  {"id":"phone","kind":"model","filename":"phone.glb","displayName":"Phone",
+   "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+   "clips":[],"boundsRadius":0.4097,
+   "materials":{"Body":"@edge","Screen":{"resourceID":"shot"}}}],
  "layers":[
   {"id":"bg","name":"Ground","sortIndex":0,"kind":"background",
    "isEnabled":true,"startTime":0,"duration":6,"keyframes":[]},
-  {"id":"card1","name":"Shot","sortIndex":1,"kind":"image",
-   "isEnabled":true,"startTime":0,"duration":6,"resourceID":"shot",
+  {"id":"card1","name":"Phone","sortIndex":1,"kind":"model",
+   "isEnabled":true,"startTime":0,"duration":6,"resourceID":"phone",
    "fadeIn":0.4,
    "keyframes":[
     {"id":"k0","time":0,"transitionDuration":0,
-     "placement":{"height":640,"anchor":"center","offset":[0,40]}},
+     "placement":{"height":640,"anchor":"center","offset":[0,40]},
+     "camera":{"yaw":-14,"pitch":6,"distance":4.6}},
     {"id":"k1","time":5.5,"transitionDuration":5.0,"easing":"easeInOut",
-     "placement":{"height":720,"anchor":"center","offset":[0,40]}}]},
+     "placement":{"height":720,"anchor":"center","offset":[0,40]},
+     "camera":{"yaw":-6,"pitch":6,"distance":4.4}}]},
   {"id":"title","name":"Title","sortIndex":2,"kind":"caption",
    "isEnabled":true,"startTime":0.4,"duration":5.6,
    "captionText":"Meet the new dashboard",
@@ -115,7 +123,7 @@ layer with a swap keyframe carrying the same `transition` object):
 
 ```json
 {"id":"seq","name":"Two Clips","createdAt":0,"state":"recorded",
- "minReaderVersion":18,"trimStart":0,"trimEnd":9.4,"videoDuration":9.4,
+ "minReaderVersion":34,"trimStart":0,"trimEnd":9.4,"videoDuration":9.4,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
    "backgroundColorHex":"0E1726"},
@@ -143,7 +151,7 @@ what it SHOWS pushes in to the top-left quarter:
 
 ```json
 {"id":"kb","name":"Focus Push","createdAt":0,"state":"recorded",
- "minReaderVersion":18,"trimStart":0,"trimEnd":8,"videoDuration":8,
+ "minReaderVersion":34,"trimStart":0,"trimEnd":8,"videoDuration":8,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
    "palette":[{"name":"text","colorHex":"FFFFFF"}],
@@ -179,7 +187,7 @@ redesign:
 
 ```json
 {"id":"story","name":"Story","createdAt":0,"state":"recorded",
- "minReaderVersion":18,"trimStart":0,"trimEnd":6,"videoDuration":6,
+ "minReaderVersion":34,"trimStart":0,"trimEnd":6,"videoDuration":6,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1080,"canvasHeight":1920,
    "palette":[{"name":"canvas","colorHex":"10182B"},
@@ -190,19 +198,24 @@ redesign:
  "resources":[{"id":"shot","kind":"image","filename":"shot.png",
    "displayName":"Screenshot","addedAt":0,"imageCuts":[],
    "disabledAudioTrackIndices":[],
-   "pixelWidth":1290,"pixelHeight":2796,
-   "frame":{"kind":"device","material":"spaceBlack","tiltY":10}}],
+   "pixelWidth":1290,"pixelHeight":2796},
+  {"id":"phone","kind":"model","filename":"phone.glb","displayName":"Phone",
+   "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+   "clips":[],"boundsRadius":0.4097,
+   "materials":{"Body":"@edge","Screen":{"resourceID":"shot"}}}],
  "layers":[
   {"id":"bg","name":"Ground","sortIndex":0,"kind":"background",
    "isEnabled":true,"startTime":0,"duration":6,"keyframes":[]},
-  {"id":"card1","name":"Shot","sortIndex":1,"kind":"image",
-   "isEnabled":true,"startTime":0,"duration":6,"resourceID":"shot",
+  {"id":"card1","name":"Phone","sortIndex":1,"kind":"model",
+   "isEnabled":true,"startTime":0,"duration":6,"resourceID":"phone",
    "fadeIn":0.4,
    "keyframes":[
     {"id":"k0","time":0,"transitionDuration":0,
-     "placement":{"height":900,"anchor":"center","offset":[0,60]}},
+     "placement":{"height":900,"anchor":"center","offset":[0,60]},
+     "camera":{"yaw":-14,"pitch":6,"distance":4.6}},
     {"id":"k1","time":5.5,"transitionDuration":5.0,"easing":"easeInOut",
-     "placement":{"height":1000,"anchor":"center","offset":[0,60]}}]},
+     "placement":{"height":1000,"anchor":"center","offset":[0,60]},
+     "camera":{"yaw":-6,"pitch":6,"distance":4.4}}]},
   {"id":"title","name":"Title","sortIndex":2,"kind":"caption",
    "isEnabled":true,"startTime":0.4,"duration":5.6,
    "captionText":"Meet the new dashboard",

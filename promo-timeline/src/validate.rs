@@ -48,6 +48,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     material_binding_warnings(meta, &mut out);
     stage_layer_warnings(meta, &mut out);
     recipe_warnings(meta, &mut out);
+    legacy_2_5d_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
@@ -742,6 +743,63 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                  must be above zero (1 is the default)",
                 resource.display_name,
                 body.size()
+            ));
+        }
+    }
+}
+
+/// The 2.5D tricks are LEGACY: a caption's `depth` (stacked copies under
+/// the face) and its tilt, and a device FRAME (a box baked round a
+/// picture). Each still renders as it did; each is named with what
+/// replaced it — a text body and a device body, real bodies in a stage,
+/// lit and finished like everything else there.
+fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for layer in promo_model::nesting::all_layers(meta) {
+        if layer.kind != ProjectLayerKind::Caption {
+            continue;
+        }
+        let depth_on_layer = layer
+            .caption_style
+            .as_ref()
+            .is_some_and(|s| s.depth.is_some());
+        let depth_on_resource = layer
+            .resource_id
+            .as_ref()
+            .and_then(|id| resources.iter().find(|r| &r.id == id))
+            .and_then(|r| r.caption_style.as_ref())
+            .is_some_and(|s| s.depth.is_some());
+        if depth_on_layer || depth_on_resource {
+            out.push(format!(
+                "caption \"{}\" uses 2.5D `depth` (stacked copies) — legacy; a title with a \
+                 side is a TEXT BODY: a model resource with a recipe, standing in a stage \
+                 under its light",
+                layer.name
+            ));
+        }
+        if layer
+            .keyframes
+            .iter()
+            .any(|k| k.tilt_x.is_some() || k.tilt_y.is_some())
+        {
+            out.push(format!(
+                "caption \"{}\" keys a 2.5D tilt — legacy; a leaning title is a text body \
+                 turned by its own `camera` in a stage",
+                layer.name
+            ));
+        }
+    }
+    for resource in resources {
+        if resource
+            .frame
+            .as_ref()
+            .is_some_and(|f| f.kind == promo_model::ResourceFrameKind::Device)
+        {
+            out.push(format!(
+                "resource \"{}\" wears a device FRAME — legacy 2.5D; a device is a BODY \
+                 (`promo device`, the app's + Body menu, `promo_device_model`) with the \
+                 picture bound to its Screen slot",
+                resource.display_name
             ));
         }
     }
@@ -1481,6 +1539,26 @@ mod tests {
         assert!(!quiet.iter().any(|w| w.contains("\"Title\"")), "{quiet:?}");
         assert_eq!(good.minimum_reader_version(), 34);
     }
+    /// The 2.5D tricks are named as legacy with their replacement: a
+    /// caption's depth and tilt, and a device frame on a resource.
+    #[test]
+    fn the_2_5d_tricks_are_named_legacy() {
+        let meta = project(
+            r#"{"id":"C","name":"Title","sortIndex":0,"kind":"caption","isEnabled":true,
+                "startTime":0,"duration":4,"captionText":"Hi",
+                "captionStyle":{"depth":{"count":6,"offset":[2,2]}},
+                "keyframes":[{"id":"K","time":0,"transitionDuration":0,"tiltY":30}]},
+               {"id":"P","name":"Phone","sortIndex":1,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":4,"resourceID":"S","keyframes":[]}"#,
+            r#","resources":[{"id":"S","kind":"image","filename":"s.png","displayName":"Shot","addedAt":0,
+                 "frame":{"kind":"device","material":"spaceBlack"}}]"#,
+        );
+        let found = warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(has("caption \"Title\" uses 2.5D `depth`"), "{found:?}");
+        assert!(has("caption \"Title\" keys a 2.5D tilt"), "{found:?}");
+        assert!(has("resource \"Shot\" wears a device FRAME"), "{found:?}");
+    }
 }
 
 #[cfg(test)]
@@ -1548,11 +1626,11 @@ mod palette_tests {
                 meta.name
             );
             // The doc's advice is ONE version: stamp current, think no
-            // more. So a recipe stamps 18 even when its fields need less —
+            // more. So a recipe stamps 34 even when its fields need less —
             // never less than they need.
-            assert_eq!(meta.min_reader_version, Some(18), "recipe {index} stamp");
+            assert_eq!(meta.min_reader_version, Some(34), "recipe {index} stamp");
             assert!(
-                meta.minimum_reader_version() <= 18,
+                meta.minimum_reader_version() <= 34,
                 "recipe {index} uses fields beyond the stamp"
             );
         }
