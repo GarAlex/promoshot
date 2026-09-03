@@ -82,3 +82,50 @@ fn the_model_senses_probe_and_turn() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `promo device` writes each built-in body as a glb the probe reads back
+/// with its Body and Screen slots.
+#[test]
+fn the_device_bodies_write_and_probe() {
+    let dir = std::env::temp_dir().join(format!("promo-devices-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bin = env!("CARGO_BIN_EXE_promo");
+    for kind in ["phone", "tablet", "laptop"] {
+        let out = dir.join(format!("{kind}.glb"));
+        let wrote = Command::new(bin)
+            .args(["device", kind, "--out", out.to_str().unwrap(), "--json"])
+            .output()
+            .expect("run");
+        assert!(
+            wrote.status.success(),
+            "{}",
+            String::from_utf8_lossy(&wrote.stderr)
+        );
+        let json: serde_json::Value = serde_json::from_slice(&wrote.stdout).unwrap();
+        let slots: Vec<&str> = json["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_str().unwrap())
+            .collect();
+        assert!(
+            slots.contains(&"Body") && slots.contains(&"Screen"),
+            "{kind}: {slots:?}"
+        );
+        assert!(
+            out.metadata().map(|m| m.len() > 1000).unwrap_or(false),
+            "{kind}: a real file"
+        );
+    }
+    let bad = Command::new(bin)
+        .args([
+            "device",
+            "toaster",
+            "--out",
+            dir.join("x.glb").to_str().unwrap(),
+        ])
+        .output()
+        .expect("run");
+    assert!(!bad.status.success(), "an unknown body is refused");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -25,6 +25,11 @@ author here opens in the PromoShot apps unchanged.
    - `promo_media_turntable` — a `.glb` seen from N yaws round it, one
      PNG contact sheet with each cell's yaw. Look before choosing a
      model layer's camera.
+   - `promo_device_model` — a built-in phone, tablet or laptop body
+     written into `Resources/` with `Body` and `Screen` slots (the laptop
+     a `Deck`), and the resource entry to add. A screenshot or a screen
+     recording bound to `Screen`, the accent on `Body`, a camera keyed
+     to turn it: the device shot, as a model.
    - `promo_media_filmstrip` — a contact sheet of a SOURCE clip, with the
      time each cell samples. Read it before deciding what a clip shows.
    - `promo_media_silences` — silence spans and their inverse; cuts and

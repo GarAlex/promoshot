@@ -394,6 +394,17 @@ fn tool_descriptors() -> Value {
                 "required": ["file"] }
         },
         {
+            "name": "promo_device_model",
+            "description": "A built-in device body — phone, tablet or laptop — written into the \
+                project's Resources/ as a .glb with Body and Screen slots (the laptop a Deck too), \
+                and the resource entry to add, with its boundsRadius. Bind an image or video to \
+                Screen and the palette's accent to Body; key the camera to turn it.",
+            "inputSchema": { "type": "object",
+                "properties": { "project": { "type": "string" },
+                                "kind": { "type": "string", "enum": ["phone", "tablet", "laptop"] } },
+                "required": ["project", "kind"] }
+        },
+        {
             "name": "promo_media_turntable",
             "description": "Eyes on a model: a .glb rendered from N yaws round it, tiled into \
                 one PNG contact sheet with each cell's yaw. Look at this before choosing a \
@@ -773,6 +784,46 @@ where
                 media::probe(args)
             }
         }
+        "promo_device_model" => {
+            let project = fenced_project(args, config)?;
+            let kind = args
+                .get("kind")
+                .and_then(Value::as_str)
+                .ok_or("promo_device_model: `kind` is phone, tablet or laptop")?
+                .to_string();
+            let resources = Path::new(&project).join("Resources");
+            std::fs::create_dir_all(&resources)
+                .map_err(|e| format!("could not create {}: {e}", resources.display()))?;
+            let filename = format!("device-{kind}.glb");
+            let out = resources.join(&filename).display().to_string();
+            let written = run(
+                config,
+                &[
+                    "device".to_string(),
+                    kind.clone(),
+                    "--out".into(),
+                    out.clone(),
+                    "--json".into(),
+                ],
+            )?;
+            let probe: Value = serde_json::from_str(&written).unwrap_or(Value::Null);
+            let id = uuid::Uuid::new_v4().to_string().to_uppercase();
+            let resource = serde_json::json!({
+                "id": id, "kind": "model", "filename": filename,
+                "displayName": match kind.as_str() { "phone" => "Phone", "tablet" => "Tablet", _ => "Laptop" },
+                "addedAt": 0,
+                "boundsRadius": probe.get("boundsRadius").cloned().unwrap_or(Value::Null),
+                "clips": [],
+                "materials": { "Body": "@accent" }
+            });
+            Ok(serde_json::json!({
+                "wrote": out,
+                "slots": probe.get("slots").cloned().unwrap_or(Value::Null),
+                "resource": resource,
+                "note": "append `resource` to `resources` and point a model layer at its id; bind Screen to an image or video resource"
+            })
+            .to_string())
+        }
         "promo_media_turntable" => {
             let file = args
                 .get("file")
@@ -1032,6 +1083,7 @@ mod tests {
                 "promo_proxy",
                 "promo_workspace",
                 "promo_media_probe",
+                "promo_device_model",
                 "promo_media_turntable",
                 "promo_media_filmstrip",
                 "promo_media_silences",

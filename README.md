@@ -390,7 +390,9 @@ placement, opacity, transitions, masks, effects and the contact shadow
 all apply. Keyframes carry a `camera` (yaw, pitch, roll, distance in
 bounds radii, fov) and a `light`; `materials` on the resource bind a
 slot name to a colour — a palette name works, so `@accent` re-skins the
-body with the theme. Lighting defaults come from the theme. Rung 29.
+body with the theme. Lighting defaults come from the theme. Rung 29. Built-in device bodies
+(phone, tablet, laptop; `promo device`) ship as generated `.glb` files
+with `Body` and `Screen` slots, so the device shot is a model too.
 
 ## Text with a side
 

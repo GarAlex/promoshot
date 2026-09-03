@@ -28,6 +28,7 @@ USAGE:
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
     promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
     promo model   <file.glb> [--json]
+    promo device  <phone|tablet|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
 
 OPTIONS:
@@ -101,10 +102,11 @@ fn run(args: &[String]) -> Result<(), String> {
     let opts = Options::parse(&rest[1..])?;
     // The model senses take a FILE, not a project: what a glb holds, and
     // how it looks from around — before anyone places it.
-    if command == "model" || command == "turntable" {
+    if command == "model" || command == "turntable" || command == "device" {
         let file = Path::new(dir);
         let answer = match command {
             "model" => model_probe(file, &opts),
+            "device" => device(dir, &opts),
             _ => turntable(file, &opts),
         }?;
         println!("{answer}");
@@ -478,6 +480,34 @@ fn model_probe(file: &Path, opts: &Options) -> Result<String, String> {
         out.push_str(&format!("  clip \"{name}\" {duration:.2}s\n"));
     }
     Ok(out.trim_end().to_string())
+}
+
+/// A built-in device body — phone, tablet or laptop — written as a `.glb`
+/// with `Body` and `Screen` slots (the laptop a `Deck` too), the same
+/// bytes the app and the MCP put into a project's Resources.
+fn device(kind: &str, opts: &Options) -> Result<String, String> {
+    let out = opts.out()?;
+    let kind = promo_engine::model::DeviceKind::parse(kind)
+        .ok_or_else(|| format!("device: `{kind}` is not phone, tablet or laptop"))?;
+    let bytes = promo_engine::model::device_glb(kind);
+    std::fs::write(out, &bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    let model = promo_engine::model::Model::from_glb(&bytes).map_err(|e| e.to_string())?;
+    if opts.json {
+        return Ok(serde_json::json!({
+            "wrote": out.display().to_string(),
+            "kind": kind.name(),
+            "boundsRadius": model.bounds_radius,
+            "slots": model.slot_names(),
+            "clips": [],
+        })
+        .to_string());
+    }
+    Ok(format!(
+        "wrote {} ({} — slots {})",
+        out.display(),
+        kind.name(),
+        model.slot_names().join(", ")
+    ))
 }
 
 /// The model seen from around: `count` yaws evenly round the circle, each

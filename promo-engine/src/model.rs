@@ -774,6 +774,143 @@ pub fn sample_slab_glb() -> Vec<u8> {
     )
 }
 
+/// The built-in device bodies (3D plan P4): a phone, a tablet and a
+/// laptop, each with a `Body` slot and a `Screen` slot — the laptop with a
+/// `Deck` too — generated with rounded corners and a bezel so a
+/// screenshot or a recording on the screen reads as the product. What
+/// the device frames were, as models: the tilt that was baked is a
+/// camera keyframe now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceKind {
+    Phone,
+    Tablet,
+    Laptop,
+}
+
+impl DeviceKind {
+    pub fn parse(name: &str) -> Option<DeviceKind> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "phone" => Some(DeviceKind::Phone),
+            "tablet" => Some(DeviceKind::Tablet),
+            "laptop" => Some(DeviceKind::Laptop),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            DeviceKind::Phone => "phone",
+            DeviceKind::Tablet => "tablet",
+            DeviceKind::Laptop => "laptop",
+        }
+    }
+
+    pub const ALL: [DeviceKind; 3] = [DeviceKind::Phone, DeviceKind::Tablet, DeviceKind::Laptop];
+}
+
+/// A device body as a `.glb`.
+pub fn device_glb(kind: DeviceKind) -> Vec<u8> {
+    let body = GlbMaterial {
+        slot: "Body",
+        base_color: [0.16, 0.17, 0.2, 1.0],
+        metallic: 0.7,
+        roughness: 0.35,
+        indices: &[],
+    };
+    let screen = GlbMaterial {
+        slot: "Screen",
+        base_color: [0.03, 0.03, 0.04, 1.0],
+        metallic: 0.0,
+        roughness: 0.15,
+        indices: &[],
+    };
+    let mut geo = GlbGeometry::default();
+    let mut body_idx = Vec::new();
+    let mut screen_idx = Vec::new();
+    let mut deck_idx = Vec::new();
+    let (min, max) = match kind {
+        DeviceKind::Phone => {
+            let (w, h, d) = (0.36f32, 0.76f32, 0.038f32);
+            geo.rounded_slab(w, h, d, 0.07, [0.0; 3], &mut body_idx);
+            geo.rounded_plate(
+                w - 0.028,
+                h - 0.032,
+                0.05,
+                d + 0.001,
+                [0.0; 3],
+                &mut screen_idx,
+            );
+            ([-w, -h, -d], [w, h, d + 0.001])
+        }
+        DeviceKind::Tablet => {
+            let (w, h, d) = (0.64f32, 0.45f32, 0.028f32);
+            geo.rounded_slab(w, h, d, 0.05, [0.0; 3], &mut body_idx);
+            geo.rounded_plate(
+                w - 0.04,
+                h - 0.04,
+                0.03,
+                d + 0.001,
+                [0.0; 3],
+                &mut screen_idx,
+            );
+            ([-w, -h, -d], [w, h, d + 0.001])
+        }
+        DeviceKind::Laptop => {
+            // The base lies flat (its thin axis is Y); the lid stands up
+            // from the back edge, leaning 12° past vertical, its screen
+            // facing +Z. Both are baked into one node.
+            let (w, depth, t) = (0.70f32, 0.46f32, 0.014f32);
+            geo.rounded_slab_flat(w, depth, t, 0.03, [0.0, -0.45, 0.0], &mut body_idx);
+            // The deck: a plate on the base's top face, a shade lighter.
+            geo.rounded_plate_flat(
+                w - 0.05,
+                depth - 0.06,
+                0.02,
+                -0.45 + t + 0.001,
+                [0.0; 3],
+                &mut deck_idx,
+            );
+            let (lw, lh, lt) = (0.70f32, 0.45f32, 0.009f32);
+            let lean = 12.0f32.to_radians();
+            let hinge = [0.0, -0.45 + t, -depth];
+            geo.rounded_slab_leaning(lw, lh, lt, 0.03, hinge, lean, &mut body_idx);
+            geo.rounded_plate_leaning(
+                lw - 0.04,
+                lh - 0.05,
+                0.02,
+                hinge,
+                lean,
+                lt + 0.001,
+                &mut screen_idx,
+            );
+            (
+                [-w, -0.45 - t, -depth - lh * lean.sin() - lt],
+                [w, -0.45 + t + lh * lean.cos() * 2.0, depth],
+            )
+        }
+    };
+    let mut materials = vec![
+        GlbMaterial {
+            indices: &body_idx,
+            ..body
+        },
+        GlbMaterial {
+            indices: &screen_idx,
+            ..screen
+        },
+    ];
+    if !deck_idx.is_empty() {
+        materials.push(GlbMaterial {
+            slot: "Deck",
+            base_color: [0.22, 0.23, 0.26, 1.0],
+            metallic: 0.5,
+            roughness: 0.5,
+            indices: &deck_idx,
+        });
+    }
+    geo.build(&materials, min, max)
+}
+
 /// One material slot of a generated model: its factors and the indices
 /// (into the shared vertex list) that wear it.
 struct GlbMaterial<'a> {
@@ -794,6 +931,260 @@ struct GlbGeometry {
 }
 
 impl GlbGeometry {
+    /// Points of a rounded rectangle (half-extents `hw`, `hh`, corner
+    /// radius `r`) counter-clockwise in the XY plane, 8 segments a corner.
+    fn rounded_outline(hw: f32, hh: f32, r: f32) -> Vec<[f32; 2]> {
+        let r = r.min(hw).min(hh).max(0.0);
+        let segments = 8;
+        let corners = [
+            ([hw - r, hh - r], 0.0f32),
+            ([-hw + r, hh - r], 90.0),
+            ([-hw + r, -hh + r], 180.0),
+            ([hw - r, -hh + r], 270.0),
+        ];
+        let mut out = Vec::with_capacity(4 * (segments + 1));
+        for (centre, start) in corners {
+            for i in 0..=segments {
+                let a = (start + 90.0 * i as f32 / segments as f32).to_radians();
+                out.push([centre[0] + r * a.cos(), centre[1] + r * a.sin()]);
+            }
+        }
+        out
+    }
+
+    fn push_vertex(&mut self, p: [f32; 3], n: [f32; 3], uv: [f32; 2]) -> u16 {
+        let index = (self.positions.len() / 3) as u16;
+        self.positions.extend_from_slice(&p);
+        self.normals.extend_from_slice(&n);
+        self.uvs.extend_from_slice(&uv);
+        index
+    }
+
+    /// A rounded-rectangle face at `z` facing ±Z, uv over its box; a fan
+    /// round the centre (the outline is convex).
+    fn face(
+        &mut self,
+        outline: &[[f32; 2]],
+        z: f32,
+        front: bool,
+        place: &dyn Fn([f32; 3]) -> [f32; 3],
+        normal: [f32; 3],
+        hw: f32,
+        hh: f32,
+        into: &mut Vec<u16>,
+    ) {
+        let centre = self.push_vertex(place([0.0, 0.0, z]), normal, [0.5, 0.5]);
+        let ring: Vec<u16> = outline
+            .iter()
+            .map(|p| {
+                self.push_vertex(
+                    place([p[0], p[1], z]),
+                    normal,
+                    [(p[0] / hw + 1.0) / 2.0, 1.0 - (p[1] / hh + 1.0) / 2.0],
+                )
+            })
+            .collect();
+        let n = ring.len();
+        for i in 0..n {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            if front {
+                into.extend_from_slice(&[centre, a, b]);
+            } else {
+                into.extend_from_slice(&[centre, b, a]);
+            }
+        }
+    }
+
+    /// The side band between the front and back outlines.
+    fn band(
+        &mut self,
+        outline: &[[f32; 2]],
+        front_z: f32,
+        back_z: f32,
+        place: &dyn Fn([f32; 3]) -> [f32; 3],
+        turn_normal: &dyn Fn([f32; 3]) -> [f32; 3],
+        into: &mut Vec<u16>,
+    ) {
+        let n = outline.len();
+        for i in 0..n {
+            let (p, q) = (outline[i], outline[(i + 1) % n]);
+            let edge = [q[0] - p[0], q[1] - p[1]];
+            let len = (edge[0] * edge[0] + edge[1] * edge[1]).sqrt().max(1e-6);
+            let normal = turn_normal([edge[1] / len, -edge[0] / len, 0.0]);
+            let a = self.push_vertex(place([p[0], p[1], front_z]), normal, [0.0, 0.0]);
+            let b = self.push_vertex(place([q[0], q[1], front_z]), normal, [1.0, 0.0]);
+            let c = self.push_vertex(place([q[0], q[1], back_z]), normal, [1.0, 1.0]);
+            let d = self.push_vertex(place([p[0], p[1], back_z]), normal, [0.0, 1.0]);
+            into.extend_from_slice(&[a, b, c, a, c, d]);
+        }
+    }
+
+    /// A rounded slab standing in XY (its thin axis Z), centred at `at`.
+    fn rounded_slab(
+        &mut self,
+        hw: f32,
+        hh: f32,
+        hd: f32,
+        r: f32,
+        at: [f32; 3],
+        into: &mut Vec<u16>,
+    ) {
+        let outline = Self::rounded_outline(hw, hh, r);
+        let place = |p: [f32; 3]| [p[0] + at[0], p[1] + at[1], p[2] + at[2]];
+        let same = |n: [f32; 3]| n;
+        self.face(&outline, hd, true, &place, [0.0, 0.0, 1.0], hw, hh, into);
+        self.face(&outline, -hd, false, &place, [0.0, 0.0, -1.0], hw, hh, into);
+        self.band(&outline, hd, -hd, &place, &same, into);
+    }
+
+    /// A thin rounded plate facing +Z at `z`, centred at `at` in XY.
+    fn rounded_plate(
+        &mut self,
+        hw: f32,
+        hh: f32,
+        r: f32,
+        z: f32,
+        at: [f32; 3],
+        into: &mut Vec<u16>,
+    ) {
+        let outline = Self::rounded_outline(hw, hh, r);
+        let place = |p: [f32; 3]| [p[0] + at[0], p[1] + at[1], p[2] + at[2]];
+        self.face(&outline, z, true, &place, [0.0, 0.0, 1.0], hw, hh, into);
+    }
+
+    /// A rounded slab lying flat (its thin axis Y): XY of the outline maps
+    /// to XZ of the world, `y` up.
+    fn rounded_slab_flat(
+        &mut self,
+        hw: f32,
+        hdepth: f32,
+        ht: f32,
+        r: f32,
+        at: [f32; 3],
+        into: &mut Vec<u16>,
+    ) {
+        let outline = Self::rounded_outline(hw, hdepth, r);
+        // outline (x, y) -> world (x, -, -y): +y of the outline is the back.
+        let place = |p: [f32; 3]| [p[0] + at[0], p[2] + at[1], -p[1] + at[2]];
+        let turn = |n: [f32; 3]| [n[0], n[2], -n[1]];
+        self.face(
+            &outline,
+            ht,
+            true,
+            &place,
+            [0.0, 1.0, 0.0],
+            hw,
+            hdepth,
+            into,
+        );
+        self.face(
+            &outline,
+            -ht,
+            false,
+            &place,
+            [0.0, -1.0, 0.0],
+            hw,
+            hdepth,
+            into,
+        );
+        self.band(&outline, ht, -ht, &place, &turn, into);
+    }
+
+    fn rounded_plate_flat(
+        &mut self,
+        hw: f32,
+        hdepth: f32,
+        r: f32,
+        y: f32,
+        at: [f32; 3],
+        into: &mut Vec<u16>,
+    ) {
+        let outline = Self::rounded_outline(hw, hdepth, r);
+        let place = |p: [f32; 3]| [p[0] + at[0], y + at[1], -p[1] + at[2]];
+        self.face(
+            &outline,
+            0.0,
+            true,
+            &place,
+            [0.0, 1.0, 0.0],
+            hw,
+            hdepth,
+            into,
+        );
+    }
+
+    /// A rounded slab hinged at `hinge` (its bottom edge), standing up and
+    /// leaning back by `lean` radians about the X axis, its front facing +Z.
+    fn rounded_slab_leaning(
+        &mut self,
+        hw: f32,
+        hh: f32,
+        ht: f32,
+        r: f32,
+        hinge: [f32; 3],
+        lean: f32,
+        into: &mut Vec<u16>,
+    ) {
+        let outline = Self::rounded_outline(hw, hh, r);
+        let (c, s) = (lean.cos(), lean.sin());
+        // Local (x, y, z) with y up from the hinge: rotate about X by -lean
+        // (top goes back, toward -Z), then translate to the hinge.
+        let place = move |p: [f32; 3]| {
+            let y = p[1] + hh;
+            [
+                p[0] + hinge[0],
+                y * c - p[2] * s + hinge[1],
+                -(y * s) + p[2] * c + hinge[2],
+            ]
+        };
+        let turn = move |n: [f32; 3]| [n[0], n[1] * c - n[2] * s, -(n[1] * s) + n[2] * c];
+        self.face(
+            &outline,
+            ht,
+            true,
+            &place,
+            turn([0.0, 0.0, 1.0]),
+            hw,
+            hh,
+            into,
+        );
+        self.face(
+            &outline,
+            -ht,
+            false,
+            &place,
+            turn([0.0, 0.0, -1.0]),
+            hw,
+            hh,
+            into,
+        );
+        self.band(&outline, ht, -ht, &place, &turn, into);
+    }
+
+    fn rounded_plate_leaning(
+        &mut self,
+        hw: f32,
+        hh: f32,
+        r: f32,
+        hinge: [f32; 3],
+        lean: f32,
+        z: f32,
+        into: &mut Vec<u16>,
+    ) {
+        let outline = Self::rounded_outline(hw, hh, r);
+        let (c, s) = (lean.cos(), lean.sin());
+        let place = move |p: [f32; 3]| {
+            let y = p[1] + hh;
+            [
+                p[0] + hinge[0],
+                y * c - p[2] * s + hinge[1],
+                -(y * s) + p[2] * c + hinge[2],
+            ]
+        };
+        let normal = [0.0, s, c];
+        self.face(&outline, z, true, &place, normal, hw, hh, into);
+    }
+
     /// Four corners counter-clockwise seen from outside, as two triangles.
     fn quad(&mut self, corners: [[f32; 3]; 4], normal: [f32; 3], into: &mut Vec<u16>) {
         let base = (self.positions.len() / 3) as u16;
@@ -1047,6 +1438,52 @@ mod tests {
             model.rest_matrices(),
             "an unknown clip is the rest pose"
         );
+    }
+
+    /// Every device body decodes with a Body and a Screen (the laptop a
+    /// Deck too), its screen in front of its body where a picture shows,
+    /// and its bounds the size a camera distance expects.
+    #[test]
+    fn the_device_bodies_have_screens() {
+        for kind in DeviceKind::ALL {
+            let model = Model::from_glb(&device_glb(kind)).expect(kind.name());
+            let slots = model.slot_names();
+            assert!(
+                slots.contains(&"Body") && slots.contains(&"Screen"),
+                "{}: {slots:?}",
+                kind.name()
+            );
+            if kind == DeviceKind::Laptop {
+                assert!(slots.contains(&"Deck"));
+            }
+            let screen = model
+                .meshes
+                .iter()
+                .find(|m| model.materials[m.material].name == "Screen")
+                .expect("screen mesh");
+            assert!(
+                screen.indices.len() >= 3 * 36,
+                "{}: a rounded screen fan",
+                kind.name()
+            );
+            assert!(
+                model.bounds_radius > 0.3 && model.bounds_radius < 1.2,
+                "{}: {}",
+                kind.name(),
+                model.bounds_radius
+            );
+            // The screen's centre is in front of the body's centre (for the
+            // laptop: the lid's screen faces +Z above the base).
+            let z: f32 = screen
+                .indices
+                .iter()
+                .map(|&i| screen.positions[i as usize][2])
+                .sum::<f32>()
+                / screen.indices.len() as f32;
+            if kind != DeviceKind::Laptop {
+                assert!(z > 0.0, "{}: screen at z {z}", kind.name());
+            }
+        }
     }
 
     #[test]
