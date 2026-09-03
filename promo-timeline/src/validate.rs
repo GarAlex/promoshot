@@ -45,6 +45,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     duration_rule_warnings(meta, &mut out);
     palette_warnings(meta, &mut out);
     tilt_keyframe_warnings(meta, &mut out);
+    model_layer_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -439,6 +440,22 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 /// the keyframed angle everywhere, so a headless render of an animated
 /// tilt holds one angle inside a moving box. Say so, before someone reads
 /// it in pixels.
+/// The model KIND (rung 29) is in the format ahead of its renderer: a
+/// model layer validates, is carried and saved intact, and draws nothing
+/// until the model pass lands (3D plan P0). Say so, before someone reads
+/// a blank in pixels.
+fn model_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    for layer in meta.layers.as_deref().unwrap_or(&[]) {
+        if layer.kind == ProjectLayerKind::Model {
+            out.push(format!(
+                "layer \"{}\": model layers are not drawn by this build yet — the \
+                 layer is kept and saved, and renders as nothing",
+                layer.name
+            ));
+        }
+    }
+}
+
 fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {

@@ -190,6 +190,9 @@ impl Project {
             // Captions render in the core now (promo-text).
             ProjectLayerKind::Caption => None,
             ProjectLayerKind::Audio => Some(Unsupported::Audio),
+            // A model draws through the engine's model pass; until that pass
+            // lands (3D plan P0, step 3) the layer is carried and skipped.
+            ProjectLayerKind::Model => None,
             // Video is decoded through promo-media now; the only question is
             // whether the file is there and a backend will take it.
             // A composition draws itself from the document — no file to

@@ -378,6 +378,22 @@ mod schema_doc_tests {
             gradient: Some(full_gradient()),
             gain: Some(0.8),
             rotation: Some(3.0),
+            camera: Some(Camera {
+                yaw: Some(-25.0),
+                pitch: Some(10.0),
+                roll: Some(0.0),
+                distance: Some(3.2),
+                fov: Some(30.0),
+            }),
+            light: Some(Light {
+                yaw: Some(40.0),
+                pitch: Some(50.0),
+                intensity: Some(1.0),
+            }),
+            clip: Some(ClipTime {
+                name: "Open".into(),
+                time: Some(0.4),
+            }),
             tilt_x: Some(6.0),
             tilt_y: Some(-4.0),
             opacity: Some(1.0),
@@ -583,6 +599,24 @@ mod schema_doc_tests {
             }]),
             video_natural_width: Some(1920.0),
             video_natural_height: Some(1080.0),
+            materials: Some(
+                [
+                    ("Body".to_string(), MaterialBinding::Color("@accent".into())),
+                    (
+                        "Screen".to_string(),
+                        MaterialBinding::Resource {
+                            resource_id: "shot".into(),
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            clips: Some(vec![ModelClip {
+                name: "Open".into(),
+                duration: 1.6,
+            }]),
+            bounds_radius: Some(1.0),
             pointer: Some(PointerTrack {
                 samples: vec![[0.0, 0.5, 0.5], [1.0, 0.6, 0.4]],
                 clicks: vec![[0.8, 0.6, 0.4]],

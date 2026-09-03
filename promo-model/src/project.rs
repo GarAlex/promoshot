@@ -90,6 +90,10 @@ strict_enum!(
         (Caption, "caption"),
         (Drawing, "drawing"),
         (Audio, "audio"),
+        // A 3D model (rung 29), drawn as a quad by the engine's model pass.
+        // Strict, as every kind before it: an older reader refuses the
+        // file rather than failing mid-decode.
+        (Model, "model"),
     ]
 );
 strict_enum!(
@@ -121,8 +125,110 @@ strict_enum!(
         // A colour look-up table (rung 23): a `.cube` file a layer's
         // adjustments name by id. Strict, as every kind before it.
         (Lut, "lut"),
+        // A glTF 2.0 binary (`.glb`) model (rung 29), with its material
+        // slots bound to colours or resources — see `materials`.
+        (Model, "model"),
     ]
 );
+
+/// What a glTF material SLOT is painted with (rung 29): a colour — a
+/// palette name works, so `@accent` re-skins a body when the theme
+/// changes — or a resource, whose picture (an image, a video's frames)
+/// is drawn onto that surface. A screenshot on a "Screen" slot is the
+/// reason models exist here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum MaterialBinding {
+    Color(String),
+    Resource {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+    },
+}
+
+/// A glTF animation the model carries, written at import (the host reads
+/// the file) and re-derived on every open — the stored-answer rule.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelClip {
+    pub name: String,
+    pub duration: f64,
+}
+
+/// Where a model layer is looked at from. Angles in degrees; `distance`
+/// in units of the model's `boundsRadius`, so a rule written for one
+/// model holds for another; `fov` the vertical field of view. Absent
+/// fields take the defaults: yaw -25, pitch 10, roll 0, distance 3.2,
+/// fov 30 — a three-quarter view that reads as a product shot.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Camera {
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub yaw: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub roll: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub distance: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub fov: Option<f64>,
+}
+
+impl Camera {
+    pub fn yaw(&self) -> f64 {
+        self.yaw.unwrap_or(-25.0)
+    }
+    pub fn pitch(&self) -> f64 {
+        self.pitch.unwrap_or(10.0)
+    }
+    pub fn roll(&self) -> f64 {
+        self.roll.unwrap_or(0.0)
+    }
+    pub fn distance(&self) -> f64 {
+        self.distance.unwrap_or(3.2).max(1.05)
+    }
+    pub fn fov(&self) -> f64 {
+        self.fov.unwrap_or(30.0).clamp(5.0, 120.0)
+    }
+}
+
+/// The key light on a model layer, degrees about the model and a
+/// strength; ambient and rim come from the theme. Defaults: yaw 40,
+/// pitch 50, intensity 1 — lit from the upper left, like the slabs.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Light {
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub yaw: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub intensity: Option<f64>,
+}
+
+impl Light {
+    pub fn yaw(&self) -> f64 {
+        self.yaw.unwrap_or(40.0)
+    }
+    pub fn pitch(&self) -> f64 {
+        self.pitch.unwrap_or(50.0)
+    }
+    pub fn intensity(&self) -> f64 {
+        self.intensity.unwrap_or(1.0).clamp(0.0, 4.0)
+    }
+}
+
+/// Which of a model's clips plays, and where in it. `time` scrubs the
+/// clip at this keyframe (ramping between keyframes like any value);
+/// absent, the clip runs on layer time like a video, trims included.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipTime {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub time: Option<f64>,
+}
 // An audio effect's kind (rung 21). Tolerant, falling back to `None`: an
 // effect a newer build adds is skipped here rather than misapplied.
 tolerant_enum!(
@@ -1497,6 +1603,14 @@ pub struct ProjectLayerKeyframe {
     pub tilt_x: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub tilt_y: Option<f64>,
+    /// A model layer's camera, light and clip position (rung 29). They
+    /// ramp like every other keyframe value.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub camera: Option<Camera>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub light: Option<Light>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub clip: Option<ClipTime>,
     /// 0–1, 1 when unkeyed. Added 2026-08-14 so a composition can express a
     /// fade; the compositor has always had per-quad opacity, only the
     /// keyframe was missing.
@@ -2585,6 +2699,19 @@ pub struct ProjectResource {
     /// `follow` rule. Written by the recorder; absent for everything else.
     #[serde(default, skip_serializing_if = "is_none")]
     pub pointer: Option<PointerTrack>,
+    /// A MODEL resource's material slots, by the names the file exports,
+    /// each bound to a colour or a resource (rung 29). Slots left out
+    /// keep the file's own material.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub materials: Option<std::collections::BTreeMap<String, MaterialBinding>>,
+    /// A model's animation clips, written at import.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub clips: Option<Vec<ModelClip>>,
+    /// Radius of the sphere round a model's geometry, in the file's
+    /// units, written at import: what a camera `distance` is measured in
+    /// and what placement sizes before any pixel exists.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub bounds_radius: Option<f64>,
     /// Pixel size of an IMAGE resource, stamped at import. Placement intents
     /// resolve width/anchoring against it (videos use `videoNatural*`, a
     /// sprite divides by its grid). Optional — a hand-written project may
@@ -2664,6 +2791,12 @@ struct ProjectResourceWire {
     #[serde(default)]
     pointer: Option<PointerTrack>,
     #[serde(default)]
+    materials: Option<std::collections::BTreeMap<String, MaterialBinding>>,
+    #[serde(default)]
+    clips: Option<Vec<ModelClip>>,
+    #[serde(default)]
+    bounds_radius: Option<f64>,
+    #[serde(default)]
     frame: Option<ResourceFrame>,
     #[serde(default)]
     looped: Option<bool>,
@@ -2717,6 +2850,9 @@ impl<'de> Deserialize<'de> for ProjectResource {
             pixel_height: w.pixel_height,
             video_natural_height: w.video_natural_height,
             pointer: w.pointer,
+            materials: w.materials,
+            clips: w.clips,
+            bounds_radius: w.bounds_radius,
             frame: w.frame,
             looped: w.looped,
             extra: w.extra,
@@ -2858,6 +2994,9 @@ impl ProjectResource {
             pixel_height: None,
             video_natural_height: None,
             pointer: None,
+            materials: None,
+            clips: None,
+            bounds_radius: None,
             frame: None,
             looped: None,
             extra: Default::default(),
@@ -2897,6 +3036,16 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 29 is a model — a KIND on a resource or a layer, so an older
+        // reader refuses the file rather than failing mid-decode.
+        if resources
+            .iter()
+            .any(|r| r.kind == ProjectResourceKind::Model)
+            || layers.iter().any(|l| l.kind == ProjectLayerKind::Model)
+        {
+            return 29;
+        }
 
         // 28 is a kinetic reveal mode — flip, tumble, slide — on a caption
         // style or the composition default. An older reader types it on
@@ -3790,6 +3939,11 @@ mod placement_model_tests {
             ..full_reveal_for_tests()
         });
         assert_eq!(defaulted.minimum_reader_version(), 28);
+
+        // 29: a model kind, on a resource or a layer.
+        let mut modelled = meta(&layer(""));
+        modelled.layers.as_mut().unwrap()[0].kind = ProjectLayerKind::Model;
+        assert_eq!(modelled.minimum_reader_version(), 29);
     }
 
     /// A new project must not be born carrying the pre-layer timeline, and

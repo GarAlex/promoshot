@@ -936,6 +936,9 @@ impl Document {
                         promo_model::ProjectLayerKind::Background => {
                             promo_model::ProjectResourceKind::Background
                         }
+                        promo_model::ProjectLayerKind::Model => {
+                            promo_model::ProjectResourceKind::Model
+                        }
                         promo_model::ProjectLayerKind::Video => {
                             promo_model::ProjectResourceKind::Video
                         }

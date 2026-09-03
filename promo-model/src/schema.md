@@ -839,3 +839,24 @@ Colour look-up tables (rung 23). A resource of `"kind": "lut"` is a
 and tint, mixed in by `lutAmount` (0…1, default 1). Any `LUT_3D_SIZE`
 works; `DOMAIN_MIN`/`MAX` are honoured. A project with a lut resource
 carries `minReaderVersion: 23`.
+
+Models (rung 29). A resource of `"kind": "model"` is a glTF 2.0 binary
+(`.glb`) in `Resources/`, drawn by a `"kind": "model"` layer as a quad:
+the engine renders the model to a texture at the layer's pixel size and
+the ordinary machinery does the rest — placement, opacity, transitions,
+masks, effects, shadows. `materials` binds a material SLOT (by the name
+the file exports) to a colour (a palette name works, so `"@accent"`
+re-skins the body with the theme) or to a resource, whose picture is
+drawn on that surface — a screenshot on a "Screen" slot:
+`"materials": { "Body": "@accent", "Screen": { "resourceID": "<uuid>" } }`.
+`clips` (name and duration) and `boundsRadius` are written at import
+and re-derived on every open. A model layer's keyframes carry
+`"camera": { "yaw": -25, "pitch": 10, "roll": 0, "distance": 3.2,
+"fov": 30 }` (distance in units of `boundsRadius`, so one rule fits
+every model), `"light": { "yaw": 40, "pitch": 50, "intensity": 1 }`
+(ambient and rim come from the theme) and `"clip": { "name": "Open",
+"time": 0 }` (scrubs the animation; absent, the clip runs on layer
+time); every field is optional and ramps like any keyframe value.
+`placement` resolves against the model's projected bounds at that
+camera. Strict, as every kind before it: an older reader refuses the
+file. Reader version 29.

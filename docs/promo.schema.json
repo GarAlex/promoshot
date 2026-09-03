@@ -238,6 +238,46 @@
       ],
       "type": "string"
     },
+    "Camera": {
+      "properties": {
+        "distance": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fov": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pitch": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "roll": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "yaw": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ChromaKey": {
       "properties": {
         "colorHex": {
@@ -260,6 +300,24 @@
       },
       "required": [
         "colorHex"
+      ],
+      "type": "object"
+    },
+    "ClipTime": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "time": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
       ],
       "type": "object"
     },
@@ -1083,6 +1141,32 @@
       ],
       "type": "object"
     },
+    "Light": {
+      "properties": {
+        "intensity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pitch": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "yaw": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Marker": {
       "properties": {
         "colorHex": {
@@ -1119,6 +1203,24 @@
         "chapter"
       ],
       "type": "string"
+    },
+    "MaterialBinding": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "properties": {
+            "resourceID": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resourceID"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "MediaCut": {
       "additionalProperties": true,
@@ -1163,6 +1265,22 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "ModelClip": {
+      "properties": {
+        "duration": {
+          "format": "double",
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "duration"
       ],
       "type": "object"
     },
@@ -1711,6 +1829,26 @@
             "null"
           ]
         },
+        "camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Camera"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clip": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClipTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "colorHex": {
           "type": [
             "string",
@@ -1774,6 +1912,16 @@
         },
         "id": {
           "type": "string"
+        },
+        "light": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Light"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "maskOffsetX": {
           "format": "double",
@@ -1961,7 +2109,8 @@
         "image",
         "caption",
         "drawing",
-        "audio"
+        "audio",
+        "model"
       ],
       "type": "string"
     },
@@ -1998,6 +2147,13 @@
             }
           ]
         },
+        "boundsRadius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "captionStyle": {
           "anyOf": [
             {
@@ -2022,6 +2178,15 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "clips": {
+          "items": {
+            "$ref": "#/$defs/ModelClip"
+          },
+          "type": [
+            "array",
+            "null"
           ]
         },
         "composition": {
@@ -2089,6 +2254,15 @@
         "looped": {
           "type": [
             "boolean",
+            "null"
+          ]
+        },
+        "materials": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MaterialBinding"
+          },
+          "type": [
+            "object",
             "null"
           ]
         },
@@ -2236,7 +2410,8 @@
         "background",
         "palette",
         "composition",
-        "lut"
+        "lut",
+        "model"
       ],
       "type": "string"
     },
