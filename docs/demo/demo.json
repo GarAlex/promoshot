@@ -3536,6 +3536,169 @@
   "page": "docs/demo/demo24.md"
  },
  {
+  "id": "25",
+  "slug": "25-turntable",
+  "title": "Turntable",
+  "blurb": "A generated phone model on a turntable, its body painted by the palette, beside extruded kinetic type.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 7.0,
+  "prompt": "Make a 7-second piece on a 1440\u00d7900 canvas: a radial dark-blue gradient background; the phone.glb model placed on the left, 760 px tall, its Body material painted with the palette's accent, turning on a turntable from a yaw of -70 to 35 degrees over the whole piece with an ease in and out, lit from the upper left; on the right a bold two-line title 'Every theme,\\nevery angle.' in extruded type that slides in word by word, and under it a smaller line 'A .glb on a layer. The palette paints it.' that fades in word by word two seconds later.\n\nFiles in `resources/`: phone.glb.\n\nText to use, in order:\n- Every theme,\nevery angle.\n- A .glb on a layer. The palette paints it.",
+  "resources": [
+   {
+    "file": "phone.glb",
+    "kind": "file",
+    "path": "demos/25-turntable/resources/phone.glb"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 10,
+   "total": 10,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "7.0s vs 7.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:model",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 2"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:depth",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:kineticReveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "2 of 2 lines recognisable"
+    }
+   ],
+   "summary": "turns=49 cost=$2.63 secs=300",
+   "run": {
+    "turns": 49,
+    "wall_s": 298,
+    "api_s": 295,
+    "cost_usd": 2.63,
+    "tokens": {
+     "input": 78,
+     "cache_read": 2694907,
+     "cache_write": 74940,
+     "output": 21142,
+     "thinking": 9760
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1189,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 2769925,
+      "output": 21142,
+      "cost_usd": 2.63
+     }
+    ],
+    "mcp": {
+     "calls": 10,
+     "ms": 2131,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1219,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 585,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 318,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo/` is written, validates clean, and the video is rendered.\n\n**`out.promo/`** \u2014 1440\u00d7900, 7.00s, 30fps, 4 layers, 1 resource, all renderable.\n\n- **Ground** \u2014 radial `backgroundGradient` centred at `[0.30, 0.42]` (a pool of light behind the phone), running `glow 1D3F8E \u2192 mid 0B1B44 \u2192 deep 04070F`.\n- **Phone turntable** \u2014 a `kind: \"model\"` layer on `phone.glb` (copied into `Resources/`), `materials: { \"Body\": \"@accent\" }` so the palette paints the body. `placement: { height: 760, anchor: \"center\", offset: [-380, 0] }` puts it 760 px tall centred at x\u2248340. Camera yaw ramps **-70 \u2192 35** across the full 7 s with `easing: \"easeInOut\"`; light at `yaw -55, pitch 58` \u2014 upper left. Half-second fade in.\n- **Title** \u2014 \"Every theme,\\nevery angle.\" at 88 pt bold, extruded via `depth: { count: 14, offset: [1.6, 1.6], shade: 0.9 }`, revealed `{ by: \"word\", mode: \"slide\", secondsPer: 0.22 }` from 0.35 s.\n- **Subtitle** \u2014 \"A .glb on a layer. The palette paints it.\" at 32 pt in `@muted`, `{ by: \"word\", mode: \"fade\" }` starting at 2.35 s \u2014 two seconds after the title.\n\nTwo notes on choices I made: the model's `Screen` slot is left as the file exports it (near-black), so the accent reads as the bezel/body around it \u2014 that's the only surface `Body` covers. And the first depth pass at `shade: 0.72` rendered as a grey drop shadow rather than a solid side; the darker, tighter stack above is what the frames show.\n\nContact sheet: `out.promo/Exports/frames/` (7 frames, 0.2\u20136.9 s). Video: `out.promo/Exports/export.mp4` (210 frames).",
+   "contact": "docs/demo/25-turntable/contact-result.png",
+   "reference_contact": "docs/demo/25-turntable/contact-reference.png",
+   "video": "docs/demo/25-turntable/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/25-turntable.mp4",
+   "video_hd_bytes": 193640,
+   "metadata": "docs/demo/25-turntable/result-metadata.json",
+   "gif": "docs/demo/25-turntable/result.gif",
+   "thumb": "docs/demo/25-turntable/thumb.png"
+  },
+  "page": "docs/demo/demo25.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",

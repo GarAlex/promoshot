@@ -1,0 +1,145 @@
+{
+  "id": "turntable-2026",
+  "name": "Every theme, every angle",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 29,
+  "trimStart": 0,
+  "trimEnd": 7,
+  "videoDuration": 7,
+  "subtitles": [],
+  "compositionSettings": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "fps": 30,
+    "palette": [
+      { "name": "accent", "colorHex": "5B8CFF" },
+      { "name": "glow",   "colorHex": "1D3F8E" },
+      { "name": "mid",    "colorHex": "0B1B44" },
+      { "name": "deep",   "colorHex": "04070F" },
+      { "name": "paper",  "colorHex": "F4F7FF" },
+      { "name": "muted",  "colorHex": "9FB6DF" },
+      { "name": "shade",  "colorHex": "03060E" }
+    ],
+    "backgroundColorHex": "@mid",
+    "backgroundGradient": {
+      "kind": "radial",
+      "start": [0.30, 0.42],
+      "end": [1.0, 1.0],
+      "repeat": "clamp",
+      "stops": [
+        { "colorHex": "@glow", "at": 0 },
+        { "colorHex": "@mid",  "at": 0.52 },
+        { "colorHex": "@deep", "at": 1 }
+      ]
+    },
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 54,
+    "subtitleBold": true,
+    "subtitleColorHex": "@paper",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 16,
+    "subtitleLeftMargin": 660,
+    "subtitleRightMargin": 40,
+    "subtitleVerticalMargin": 300
+  },
+  "resources": [
+    {
+      "id": "phoneModel",
+      "kind": "model",
+      "filename": "phone.glb",
+      "displayName": "Phone",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "materials": { "Body": "@accent" }
+    }
+  ],
+  "layers": [
+    {
+      "id": "bg",
+      "name": "Ground",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 7,
+      "keyframes": []
+    },
+    {
+      "id": "phone",
+      "name": "Phone turntable",
+      "sortIndex": 1,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 7,
+      "resourceID": "phoneModel",
+      "fadeIn": 0.5,
+      "keyframes": [
+        {
+          "id": "m0",
+          "time": 0,
+          "transitionDuration": 0,
+          "placement": { "height": 760, "anchor": "center", "offset": [-380, 0] },
+          "camera": { "yaw": -70, "pitch": 8, "roll": 0, "distance": 3.6, "fov": 28 },
+          "light": { "yaw": -55, "pitch": 58, "intensity": 1.15 }
+        },
+        {
+          "id": "m1",
+          "time": 7,
+          "transitionDuration": 7,
+          "easing": "easeInOut",
+          "camera": { "yaw": 35, "pitch": 8, "roll": 0, "distance": 3.6, "fov": 28 }
+        }
+      ]
+    },
+    {
+      "id": "title",
+      "name": "Title",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.35,
+      "duration": 6.65,
+      "captionText": "Every theme,\nevery angle.",
+      "captionStyle": {
+        "fontSize": 88,
+        "isBold": true,
+        "alignment": "leading",
+        "textColorHex": "@paper",
+        "backgroundOpacity": 0.0,
+        "padding": 18,
+        "leftMargin": 660,
+        "rightMargin": 40,
+        "placement": { "anchor": "left", "offset": [660, -110] },
+        "depth": { "count": 14, "offset": [1.6, 1.6], "shade": 0.9, "colorHex": "@shade" },
+        "reveal": { "by": "word", "mode": "slide", "secondsPer": 0.22, "easing": "easeOut" }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "sub",
+      "name": "Subtitle",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 2.35,
+      "duration": 4.65,
+      "captionText": "A .glb on a layer. The palette paints it.",
+      "captionStyle": {
+        "fontSize": 32,
+        "isBold": false,
+        "alignment": "leading",
+        "textColorHex": "@muted",
+        "backgroundOpacity": 0.0,
+        "padding": 14,
+        "leftMargin": 660,
+        "rightMargin": 40,
+        "placement": { "anchor": "left", "offset": [662, 115] },
+        "reveal": { "by": "word", "mode": "fade", "secondsPer": 0.09 }
+      },
+      "keyframes": []
+    }
+  ]
+}
