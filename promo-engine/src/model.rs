@@ -335,7 +335,6 @@ pub fn sample_cube_glb() -> Vec<u8> {
 
 pub fn sample_cube_glb_with(half: f32, slot: &str, base_color: [f32; 4]) -> Vec<u8> {
     let h = half;
-    // (normal, four corners counter-clockwise seen from outside)
     let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
         (
             [0.0, 0.0, 1.0],
@@ -362,86 +361,214 @@ pub fn sample_cube_glb_with(half: f32, slot: &str, base_color: [f32; 4]) -> Vec<
             [[-h, -h, -h], [h, -h, -h], [h, -h, h], [-h, -h, h]],
         ),
     ];
-    let mut positions = Vec::new();
-    let mut normals = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices: Vec<u16> = Vec::new();
-    for (i, (n, corners)) in faces.iter().enumerate() {
-        let base = (i * 4) as u16;
+    let mut geo = GlbGeometry::default();
+    let mut indices = Vec::new();
+    for (n, corners) in &faces {
+        geo.quad(*corners, *n, &mut indices);
+    }
+    geo.build(
+        &[GlbMaterial {
+            slot,
+            base_color,
+            metallic: 0.0,
+            roughness: 0.6,
+            indices: &indices,
+        }],
+        [-h, -h, -h],
+        [h, h, h],
+    )
+}
+
+/// A phone-like slab as a `.glb`: a body 0.72 × 1.5 × 0.08 with a `Body`
+/// slot and an inset front face with a `Screen` slot — the shape a
+/// `materials` binding was made for (a screenshot on the screen, the
+/// accent on the body). Generated, like the cube, so nothing binary is
+/// checked in; the turntable template and the app's first model use it.
+pub fn sample_slab_glb() -> Vec<u8> {
+    let (w, h, d) = (0.36f32, 0.75f32, 0.04f32);
+    let inset = 0.03f32;
+    let mut geo = GlbGeometry::default();
+    let mut body = Vec::new();
+    let mut screen = Vec::new();
+    geo.quad(
+        [[-w, -h, d], [w, -h, d], [w, h, d], [-w, h, d]],
+        [0.0, 0.0, 1.0],
+        &mut body,
+    );
+    geo.quad(
+        [[w, -h, -d], [-w, -h, -d], [-w, h, -d], [w, h, -d]],
+        [0.0, 0.0, -1.0],
+        &mut body,
+    );
+    geo.quad(
+        [[w, -h, d], [w, -h, -d], [w, h, -d], [w, h, d]],
+        [1.0, 0.0, 0.0],
+        &mut body,
+    );
+    geo.quad(
+        [[-w, -h, -d], [-w, -h, d], [-w, h, d], [-w, h, -d]],
+        [-1.0, 0.0, 0.0],
+        &mut body,
+    );
+    geo.quad(
+        [[-w, h, d], [w, h, d], [w, h, -d], [-w, h, -d]],
+        [0.0, 1.0, 0.0],
+        &mut body,
+    );
+    geo.quad(
+        [[-w, -h, -d], [w, -h, -d], [w, -h, d], [-w, -h, d]],
+        [0.0, -1.0, 0.0],
+        &mut body,
+    );
+    // The screen: an inset rectangle a hair in front of the face, so it
+    // wins the depth test without fighting.
+    let (sw, sh, sz) = (w - inset, h - inset * 1.4, d + 0.002);
+    geo.quad(
+        [[-sw, -sh, sz], [sw, -sh, sz], [sw, sh, sz], [-sw, sh, sz]],
+        [0.0, 0.0, 1.0],
+        &mut screen,
+    );
+    geo.build(
+        &[
+            GlbMaterial {
+                slot: "Body",
+                base_color: [0.12, 0.13, 0.16, 1.0],
+                metallic: 0.6,
+                roughness: 0.35,
+                indices: &body,
+            },
+            GlbMaterial {
+                slot: "Screen",
+                base_color: [0.05, 0.05, 0.06, 1.0],
+                metallic: 0.0,
+                roughness: 0.2,
+                indices: &screen,
+            },
+        ],
+        [-w, -h, -d],
+        [w, h, sz],
+    )
+}
+
+/// One material slot of a generated model: its factors and the indices
+/// (into the shared vertex list) that wear it.
+struct GlbMaterial<'a> {
+    slot: &'a str,
+    base_color: [f32; 4],
+    metallic: f32,
+    roughness: f32,
+    indices: &'a [u16],
+}
+
+/// Vertices for a generated model — positions, flat normals, face uvs —
+/// and the `.glb` they become with one primitive per material.
+#[derive(Default)]
+struct GlbGeometry {
+    positions: Vec<f32>,
+    normals: Vec<f32>,
+    uvs: Vec<f32>,
+}
+
+impl GlbGeometry {
+    /// Four corners counter-clockwise seen from outside, as two triangles.
+    fn quad(&mut self, corners: [[f32; 3]; 4], normal: [f32; 3], into: &mut Vec<u16>) {
+        let base = (self.positions.len() / 3) as u16;
         for (k, c) in corners.iter().enumerate() {
-            positions.extend_from_slice(c);
-            normals.extend_from_slice(n);
-            uvs.extend_from_slice(&[[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]][k]);
+            self.positions.extend_from_slice(c);
+            self.normals.extend_from_slice(&normal);
+            self.uvs
+                .extend_from_slice(&[[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]][k]);
         }
-        indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        into.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
-    let mut bin: Vec<u8> = Vec::new();
-    let mut views = Vec::new();
-    let mut push = |bytes: &[u8], target: u32| -> usize {
-        let offset = bin.len();
-        bin.extend_from_slice(bytes);
-        while !bin.len().is_multiple_of(4) {
-            bin.push(0);
+
+    fn build(&self, materials: &[GlbMaterial<'_>], min: [f32; 3], max: [f32; 3]) -> Vec<u8> {
+        let mut bin: Vec<u8> = Vec::new();
+        let mut views = Vec::new();
+        let mut push = |bytes: &[u8], target: u32| -> usize {
+            let offset = bin.len();
+            bin.extend_from_slice(bytes);
+            while !bin.len().is_multiple_of(4) {
+                bin.push(0);
+            }
+            views.push(format!(
+                r#"{{"buffer":0,"byteOffset":{offset},"byteLength":{},"target":{target}}}"#,
+                bytes.len()
+            ));
+            views.len() - 1
+        };
+        let f32s = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_le_bytes()).collect() };
+        let vp = push(&f32s(&self.positions), 34962);
+        let vn = push(&f32s(&self.normals), 34962);
+        let vt = push(&f32s(&self.uvs), 34962);
+        let vertex_count = self.positions.len() / 3;
+        let mut accessors = vec![
+            format!(
+                r#"{{"bufferView":{vp},"componentType":5126,"count":{vertex_count},"type":"VEC3","min":[{},{},{}],"max":[{},{},{}]}}"#,
+                min[0], min[1], min[2], max[0], max[1], max[2]
+            ),
+            format!(
+                r#"{{"bufferView":{vn},"componentType":5126,"count":{vertex_count},"type":"VEC3"}}"#
+            ),
+            format!(
+                r#"{{"bufferView":{vt},"componentType":5126,"count":{vertex_count},"type":"VEC2"}}"#
+            ),
+        ];
+        let mut material_json = Vec::new();
+        let mut primitives = Vec::new();
+        for (i, m) in materials.iter().enumerate() {
+            let vi = push(
+                &m.indices
+                    .iter()
+                    .flat_map(|x| x.to_le_bytes())
+                    .collect::<Vec<u8>>(),
+                34963,
+            );
+            accessors.push(format!(
+                r#"{{"bufferView":{vi},"componentType":5123,"count":{},"type":"SCALAR"}}"#,
+                m.indices.len()
+            ));
+            let accessor = accessors.len() - 1;
+            material_json.push(format!(
+                r#"{{"name":"{}","pbrMetallicRoughness":{{"baseColorFactor":[{},{},{},{}],"metallicFactor":{},"roughnessFactor":{}}}}}"#,
+                m.slot, m.base_color[0], m.base_color[1], m.base_color[2], m.base_color[3], m.metallic, m.roughness
+            ));
+            primitives.push(format!(
+                r#"{{"attributes":{{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2}},"indices":{accessor},"material":{i}}}"#
+            ));
         }
-        views.push(format!(
-            r#"{{"buffer":0,"byteOffset":{offset},"byteLength":{},"target":{target}}}"#,
-            bytes.len()
-        ));
-        views.len() - 1
-    };
-    let f32s = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_le_bytes()).collect() };
-    let vp = push(&f32s(&positions), 34962);
-    let vn = push(&f32s(&normals), 34962);
-    let vt = push(&f32s(&uvs), 34962);
-    let vi = push(
-        &indices
-            .iter()
-            .flat_map(|x| x.to_le_bytes())
-            .collect::<Vec<u8>>(),
-        34963,
-    );
-    let vertex_count = positions.len() / 3;
-    let json = format!(
-        r#"{{"asset":{{"version":"2.0","generator":"promo-engine"}},
-"buffers":[{{"byteLength":{bin_len}}}],
-"bufferViews":[{views}],
-"accessors":[
- {{"bufferView":{vp},"componentType":5126,"count":{vc},"type":"VEC3","min":[{nh},{nh},{nh}],"max":[{h},{h},{h}]}},
- {{"bufferView":{vn},"componentType":5126,"count":{vc},"type":"VEC3"}},
- {{"bufferView":{vt},"componentType":5126,"count":{vc},"type":"VEC2"}},
- {{"bufferView":{vi},"componentType":5123,"count":{ic},"type":"SCALAR"}}],
-"materials":[{{"name":"{slot}","pbrMetallicRoughness":{{"baseColorFactor":[{r},{g},{b},{a}],"metallicFactor":0.0,"roughnessFactor":0.6}}}}],
-"meshes":[{{"name":"cube","primitives":[{{"attributes":{{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2}},"indices":3,"material":0}}]}}],
-"nodes":[{{"mesh":0,"name":"cube"}}],
+        let json = format!(
+            r#"{{"asset":{{"version":"2.0","generator":"promo-engine"}},
+"buffers":[{{"byteLength":{}}}],
+"bufferViews":[{}],
+"accessors":[{}],
+"materials":[{}],
+"meshes":[{{"name":"generated","primitives":[{}]}}],
+"nodes":[{{"mesh":0,"name":"generated"}}],
 "scenes":[{{"nodes":[0]}}],"scene":0}}"#,
-        bin_len = bin.len(),
-        views = views.join(","),
-        vc = vertex_count,
-        ic = indices.len(),
-        nh = -h,
-        h = h,
-        slot = slot,
-        r = base_color[0],
-        g = base_color[1],
-        b = base_color[2],
-        a = base_color[3],
-    );
-    let mut json_bytes = json.into_bytes();
-    while !json_bytes.len().is_multiple_of(4) {
-        json_bytes.push(b' ');
+            bin.len(),
+            views.join(","),
+            accessors.join(","),
+            material_json.join(","),
+            primitives.join(","),
+        );
+        let mut json_bytes = json.into_bytes();
+        while !json_bytes.len().is_multiple_of(4) {
+            json_bytes.push(b' ');
+        }
+        let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
+        let mut out = Vec::with_capacity(total);
+        out.extend_from_slice(&0x4654_6C67u32.to_le_bytes()); // "glTF"
+        out.extend_from_slice(&2u32.to_le_bytes());
+        out.extend_from_slice(&(total as u32).to_le_bytes());
+        out.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&0x4E4F_534Au32.to_le_bytes()); // "JSON"
+        out.extend_from_slice(&json_bytes);
+        out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+        out.extend_from_slice(&0x004E_4942u32.to_le_bytes()); // "BIN\0"
+        out.extend_from_slice(&bin);
+        out
     }
-    let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
-    let mut out = Vec::with_capacity(total);
-    out.extend_from_slice(&0x4654_6C67u32.to_le_bytes()); // "glTF"
-    out.extend_from_slice(&2u32.to_le_bytes());
-    out.extend_from_slice(&(total as u32).to_le_bytes());
-    out.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
-    out.extend_from_slice(&0x4E4F_534Au32.to_le_bytes()); // "JSON"
-    out.extend_from_slice(&json_bytes);
-    out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
-    out.extend_from_slice(&0x004E_4942u32.to_le_bytes()); // "BIN\0"
-    out.extend_from_slice(&bin);
-    out
 }
 
 #[cfg(test)]
@@ -499,6 +626,29 @@ mod tests {
             "the default material"
         );
         assert!(model.materials[mesh.material].name.is_empty());
+    }
+
+    #[test]
+    fn the_slab_has_a_body_and_a_screen() {
+        let model = Model::from_glb(&sample_slab_glb()).expect("decodes");
+        assert_eq!(model.slot_names(), vec!["Body", "Screen"]);
+        assert_eq!(model.meshes.len(), 2, "one primitive per material");
+        let screen = &model.meshes[1];
+        assert_eq!(screen.indices.len(), 6);
+        // Primitives share one vertex list; the screen's own corners are the
+        // ones its indices name.
+        assert!(
+            screen
+                .indices
+                .iter()
+                .all(|&i| screen.positions[i as usize][2] > 0.04),
+            "the screen sits in front of the face"
+        );
+        assert!(
+            (model.bounds_radius - 0.833).abs() < 0.01,
+            "radius {}",
+            model.bounds_radius
+        );
     }
 
     #[test]

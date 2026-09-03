@@ -1,0 +1,239 @@
+{
+ "id": "EFD054AF-4950-91A9-32B1-52357370425B",
+ "name": "25 Turntable",
+ "formatVersion": 2,
+ "minReaderVersion": 29,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 7.0,
+ "videoDuration": 7.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 48,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 760,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "3ABE8F70-5BF0-15E2-450E-4D640F81D089",
+   "kind": "model",
+   "filename": "phone.glb",
+   "displayName": "Phone",
+   "addedAt": 0,
+   "materials": {
+    "Body": "@accent"
+   },
+   "clips": [],
+   "boundsRadius": 0.833
+  },
+  {
+   "id": "704F38E6-77BE-96ED-125A-9CF73C5CA6DC",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Title",
+   "addedAt": 0,
+   "captionText": "Every theme,\nevery angle.",
+   "captionStyle": {
+    "alignment": "leading",
+    "subtitleFontSize": 72,
+    "subtitleBold": true,
+    "placement": {
+     "anchor": "left",
+     "offset": [
+      760,
+      -60
+     ]
+    },
+    "depth": {
+     "count": 8,
+     "offset": [
+      2,
+      2
+     ],
+     "shade": 0.65,
+     "colorHex": "@edge"
+    },
+    "reveal": {
+     "by": "word",
+     "mode": "slide",
+     "seconds": 1.4
+    }
+   }
+  },
+  {
+   "id": "12D7E347-AA96-1A13-44CC-EC594CFA1956",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Sub",
+   "addedAt": 0,
+   "captionText": "A .glb on a layer. The palette paints it.",
+   "captionStyle": {
+    "alignment": "leading",
+    "subtitleFontSize": 30,
+    "subtitleColorHex": "A9B7D6",
+    "placement": {
+     "anchor": "left",
+     "offset": [
+      760,
+      110
+     ]
+    },
+    "reveal": {
+     "by": "word",
+     "mode": "fade",
+     "seconds": 1.0
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "B1C6AC7C-C1A8-B575-417E-1486DA51B0C5",
+   "name": "Backdrop",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 7.0,
+   "keyframes": [
+    {
+     "id": "B1438575-27AA-5F73-5103-9535EEDBFC5C",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.35,
+       0.45
+      ],
+      "end": [
+       1,
+       1
+      ],
+      "stops": [
+       {
+        "colorHex": "1A2A55",
+        "at": 0
+       },
+       {
+        "colorHex": "0B1220",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "CFE842A5-037C-B790-EF4B-7EF13E106E7C",
+   "name": "Phone",
+   "sortIndex": 1,
+   "kind": "model",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 7.0,
+   "resourceID": "3ABE8F70-5BF0-15E2-450E-4D640F81D089",
+   "fadeIn": 0.5,
+   "keyframes": [
+    {
+     "id": "79F0610C-EA49-9FD5-5DEB-ED7B5DFE4D8D",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 760,
+      "anchor": "left",
+      "offset": [
+       90,
+       0
+      ]
+     },
+     "camera": {
+      "yaw": -70,
+      "pitch": 14,
+      "distance": 4.2,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 35,
+      "pitch": 55,
+      "intensity": 1.1
+     }
+    },
+    {
+     "id": "B94729AC-FEF8-FB4F-FD5C-5753223D75D3",
+     "time": 6.6,
+     "transitionDuration": 6.6,
+     "placement": {
+      "height": 760,
+      "anchor": "left",
+      "offset": [
+       90,
+       0
+      ]
+     },
+     "camera": {
+      "yaw": 35,
+      "pitch": 10,
+      "distance": 4.2,
+      "fov": 28
+     },
+     "light": {
+      "yaw": 35,
+      "pitch": 55,
+      "intensity": 1.1
+     },
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "4EC13A88-BA99-0E63-6BC0-D84B54853BC0",
+   "name": "Title",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.6,
+   "duration": 6.4,
+   "resourceID": "704F38E6-77BE-96ED-125A-9CF73C5CA6DC",
+   "fadeOut": 0.4,
+   "keyframes": []
+  },
+  {
+   "id": "33201E56-EC15-8376-CB93-7CE9D6FD504B",
+   "name": "Sub",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 2.2,
+   "duration": 4.8,
+   "resourceID": "12D7E347-AA96-1A13-44CC-EC594CFA1956",
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ]
+}

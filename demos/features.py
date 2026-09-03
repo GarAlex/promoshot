@@ -32,6 +32,9 @@ def features(meta):
         "reveal": any((r.get('captionStyle') or {}).get('reveal') for r in res)
                   or any((l.get('captionStyle') or {}).get('reveal') for l in layers)
                   or bool(cs.get('subtitleReveal')),
+        "model": any(l.get('kind') == 'model' for l in layers),
+        "camera": any(k.get('camera') or k.get('light') for k in kf),
+        "materials": any(r.get('materials') for r in res),
         "depth": any((l.get('captionStyle') or {}).get('depth') for l in layers)
                  or any((r.get('captionStyle') or {}).get('depth') for r in res),
         "captionTilt": any(l.get('kind') == 'caption' and any(k.get('tiltX') is not None or k.get('tiltY') is not None for k in l.get('keyframes') or []) for l in layers),

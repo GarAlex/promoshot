@@ -1,0 +1,48 @@
+{
+ "template": "25 Turntable",
+ "canvas": [
+  1440,
+  900
+ ],
+ "duration": 7.0,
+ "kinds": {
+  "background": 1,
+  "model": 1,
+  "caption": 2
+ },
+ "features": {
+  "chromaKey": false,
+  "lut": false,
+  "chapters": 0,
+  "markers": 0,
+  "audioEffects": false,
+  "composition": false,
+  "effects": false,
+  "mask": false,
+  "maskInverted": false,
+  "viewport": false,
+  "motionPath": false,
+  "sprite": false,
+  "gradient": true,
+  "reveal": true,
+  "depth": true,
+  "captionTilt": false,
+  "kineticReveal": true,
+  "blendModes": [],
+  "swaps": 0,
+  "transitions": false,
+  "timingAnchors": false,
+  "mediaCuts": false,
+  "narration": false,
+  "motionBlur": false,
+  "grade": false,
+  "placement": true
+ },
+ "phrases": [
+  "Every theme,\nevery angle.",
+  "A .glb on a layer. The palette paints it."
+ ],
+ "media": [
+  "phone.glb"
+ ]
+}
