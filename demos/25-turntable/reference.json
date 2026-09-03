@@ -180,10 +180,10 @@
      "time": 0,
      "transitionDuration": 0,
      "placement": {
-      "height": 600,
+      "height": 420,
       "anchor": "left",
       "offset": [
-       90,
+       60,
        0
       ]
      },
@@ -204,10 +204,10 @@
      "time": 6.6,
      "transitionDuration": 6.6,
      "placement": {
-      "height": 600,
+      "height": 420,
       "anchor": "left",
       "offset": [
-       90,
+       60,
        0
       ]
      },
