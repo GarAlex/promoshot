@@ -1,0 +1,390 @@
+{
+ "id": "lumen-studio",
+ "name": "Lumen \u2014 Studio",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 31,
+ "trimStart": 0,
+ "trimEnd": 16,
+ "videoDuration": 16,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "060911"
+   },
+   {
+    "name": "glow",
+    "colorHex": "1B2C4B"
+   },
+   {
+    "name": "body",
+    "colorHex": "2E3750"
+   },
+   {
+    "name": "accent",
+    "colorHex": "4C7DF0"
+   },
+   {
+    "name": "text",
+    "colorHex": "F2F6FF"
+   },
+   {
+    "name": "caption-shadow",
+    "colorHex": "02040A"
+   }
+  ],
+  "backgroundColorHex": "@canvas",
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 68,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 20,
+  "subtitleLeftMargin": 260,
+  "subtitleRightMargin": 260
+ },
+ "resources": [
+  {
+   "id": "shot-overview",
+   "kind": "image",
+   "filename": "screen_overview.png",
+   "displayName": "Lumen \u2014 Overview",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "shot-revenue",
+   "kind": "image",
+   "filename": "phone_revenue.png",
+   "displayName": "Lumen \u2014 Revenue, on a phone",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 720,
+   "pixelHeight": 1520
+  },
+  {
+   "id": "shot-retention",
+   "kind": "image",
+   "filename": "phone_retention.png",
+   "displayName": "Lumen \u2014 Retention, on a phone",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 720,
+   "pixelHeight": 1520
+  },
+  {
+   "id": "tablet",
+   "kind": "model",
+   "filename": "tablet.glb",
+   "displayName": "Tablet",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 0.7829,
+   "materials": {
+    "Body": "@body",
+    "Screen": {
+     "resourceID": "shot-overview"
+    }
+   }
+  },
+  {
+   "id": "phone-near",
+   "kind": "model",
+   "filename": "phone_a.glb",
+   "displayName": "Phone, near",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 0.3789,
+   "materials": {
+    "Body": "@body",
+    "Screen": {
+     "resourceID": "shot-revenue"
+    }
+   }
+  },
+  {
+   "id": "phone-far",
+   "kind": "model",
+   "filename": "phone_b.glb",
+   "displayName": "Phone, far",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 0.3789,
+   "materials": {
+    "Body": "@body",
+    "Screen": {
+     "resourceID": "shot-retention"
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "ground",
+   "name": "Room",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 16,
+   "keyframes": [
+    {
+     "id": "g0",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.33,
+       0.56
+      ],
+      "end": [
+       1.12,
+       1.12
+      ],
+      "repeat": "clamp",
+      "stops": [
+       {
+        "colorHex": "@glow",
+        "at": 0
+       },
+       {
+        "colorHex": "0B1122",
+        "at": 0.55
+       },
+       {
+        "colorHex": "@canvas",
+        "at": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "g1",
+     "time": 15.9,
+     "transitionDuration": 15.9,
+     "easing": "easeInOut",
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.66,
+       0.44
+      ],
+      "end": [
+       1.12,
+       1.12
+      ],
+      "repeat": "clamp",
+      "stops": [
+       {
+        "colorHex": "213862",
+        "at": 0
+       },
+       {
+        "colorHex": "0B1122",
+        "at": 0.55
+       },
+       {
+        "colorHex": "@canvas",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "stage-tablet",
+   "name": "Tablet \u2014 Overview",
+   "sortIndex": 1,
+   "kind": "model",
+   "stage": "studio",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 16,
+   "resourceID": "tablet",
+   "fadeIn": 1.0,
+   "keyframes": [
+    {
+     "id": "t0",
+     "time": 0,
+     "transitionDuration": 0,
+     "depth": 0,
+     "stageOffset": [
+      0,
+      0
+     ],
+     "placement": {
+      "height": 580,
+      "anchor": "center",
+      "offset": [
+       0,
+       -60
+      ]
+     },
+     "camera": {
+      "yaw": -37,
+      "pitch": 3,
+      "roll": 0,
+      "distance": 7.0,
+      "fov": 32
+     },
+     "light": {
+      "yaw": 34,
+      "pitch": 44,
+      "intensity": 1.05
+     }
+    },
+    {
+     "id": "t1",
+     "time": 15.9,
+     "transitionDuration": 15.9,
+     "easing": "easeInOut",
+     "placement": {
+      "height": 690,
+      "anchor": "center",
+      "offset": [
+       -20,
+       -60
+      ]
+     },
+     "camera": {
+      "yaw": 18,
+      "pitch": 14,
+      "roll": 0,
+      "distance": 5.9,
+      "fov": 32
+     },
+     "light": {
+      "yaw": -20,
+      "pitch": 38,
+      "intensity": 1.05
+     }
+    }
+   ],
+   "fadeOut": 0.7
+  },
+  {
+   "id": "stage-phone-near",
+   "name": "Phone \u2014 Revenue",
+   "sortIndex": 2,
+   "kind": "model",
+   "stage": "studio",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 16,
+   "resourceID": "phone-near",
+   "keyframes": [
+    {
+     "id": "pn0",
+     "time": 0,
+     "transitionDuration": 0,
+     "depth": 0.55,
+     "stageOffset": [
+      1.16,
+      -0.14
+     ],
+     "camera": {
+      "yaw": -14,
+      "pitch": 3
+     }
+    }
+   ]
+  },
+  {
+   "id": "stage-phone-far",
+   "name": "Phone \u2014 Retention",
+   "sortIndex": 3,
+   "kind": "model",
+   "stage": "studio",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 16,
+   "resourceID": "phone-far",
+   "keyframes": [
+    {
+     "id": "pf0",
+     "time": 0,
+     "transitionDuration": 0,
+     "depth": -0.42,
+     "stageOffset": [
+      -1.35,
+      -0.14
+     ],
+     "camera": {
+      "yaw": 16,
+      "pitch": 3
+     }
+    }
+   ]
+  },
+  {
+   "id": "line",
+   "name": "Line",
+   "sortIndex": 4,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 4.2,
+   "duration": 11.8,
+   "captionText": "The whole picture, on every screen.",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 68,
+    "colorHex": "@text",
+    "backgroundOpacity": 0,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -76
+     ]
+    },
+    "shadowColorHex": "@caption-shadow",
+    "shadowOpacity": 0.65,
+    "shadowRadius": 18,
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "seconds": 1.9,
+     "easing": "easeOut"
+    }
+   },
+   "keyframes": [
+    {
+     "id": "l0",
+     "time": 0,
+     "transitionDuration": 0,
+     "opacity": 0,
+     "tiltY": 20
+    },
+    {
+     "id": "l1",
+     "time": 0.6,
+     "transitionDuration": 0.6,
+     "opacity": 1
+    },
+    {
+     "id": "l2",
+     "time": 11.7,
+     "transitionDuration": 11.7,
+     "easing": "easeInOut",
+     "tiltY": -9
+    }
+   ],
+   "fadeOut": 0.7
+  }
+ ]
+}

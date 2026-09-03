@@ -5118,5 +5118,202 @@
    "thumb": "docs/demo/c7-product-spin/thumb.png"
   },
   "page": "docs/demo/democ7.md"
+ },
+ {
+  "id": "c8",
+  "slug": "c8-scene",
+  "title": "A scene, not a shot",
+  "blurb": "Two device bodies, three screenshots, one sentence asking for a scene: does a fresh agent build a stage with both devices, the app on each screen and a camera move through it?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   11,
+   19
+  ],
+  "prompt": "Two device models (tablet.glb and phone.glb \u2014 look at them first) and three screenshots of Lumen, an analytics app. Make a 12-to-18-second landscape piece that is a SCENE rather than a product shot: both devices in one space, the app on both screens, one camera move through it, and a line of type that belongs in the scene. Everything else is yours.\n\nFiles in `resources/`: tablet.glb, phone.glb, ui_lumen_1.png, ui_lumen_2.png, ui_lumen_5.png.",
+  "resources": [
+   {
+    "file": "tablet.glb",
+    "kind": "file",
+    "path": "demos/c8-scene/resources/tablet.glb"
+   },
+   {
+    "file": "phone.glb",
+    "kind": "file",
+    "path": "demos/c8-scene/resources/phone.glb"
+   },
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/c8-scene/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/c8-scene/resources/ui_lumen_2.png"
+   },
+   {
+    "file": "ui_lumen_5.png",
+    "kind": "image",
+    "path": "docs/demo/c8-scene/resources/ui_lumen_5.png"
+   }
+  ],
+  "result": {
+   "score": 88,
+   "passed": 7,
+   "total": 8,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "16.0s, asked 11\u201319s"
+    },
+    {
+     "check": "uses:tablet.glb",
+     "ok": true,
+     "detail": "referenced by a resource"
+    },
+    {
+     "check": "uses:phone.glb",
+     "ok": false,
+     "detail": "not used"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "7 features: gradient, reveal, stage, model, camera, materials, captionTilt"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "1 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "5 layers"
+    }
+   ],
+   "summary": "turns=114 cost=$9.43 secs=1044",
+   "run": {
+    "turns": 114,
+    "wall_s": 1043,
+    "api_s": 1032,
+    "cost_usd": 9.43,
+    "tokens": {
+     "input": 210,
+     "cache_read": 12443322,
+     "cache_write": 151552,
+     "output": 67680,
+     "thinking": 32738
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1123,
+      "output": 15,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 12595084,
+      "output": 67680,
+      "cost_usd": 9.43
+     }
+    ],
+    "mcp": {
+     "calls": 26,
+     "ms": 7686,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 3567,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 3,
+       "ms": 3243,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 12,
+       "ms": 798,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 37,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 3,
+       "ms": 27,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_explain": {
+       "calls": 1,
+       "ms": 4,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "gradient",
+    "reveal",
+    "stage",
+    "model",
+    "camera",
+    "materials",
+    "captionTilt"
+   ],
+   "captions": [
+    "The whole picture, on every screen."
+   ],
+   "notes": "Done. `out.promo` renders a 16-second landscape scene.\n\n**What it is** \u2014 one studio space, three devices standing on a common floor line, each running Lumen:\n\n| | screen | position |\n|---|---|---|\n| tablet (hero) | Overview | stage centre, depth 0 |\n| phone | Revenue | right, foreground (depth +0.55) |\n| phone | Retention | left, behind (depth \u22120.42) |\n\nAll three are members of one `stage` (\"studio\"), so they share a camera and a depth buffer \u2014 the parallax and the overlaps in the last shot are real, not stacked layers.\n\n**The camera move** is a single 15.9s `easeInOut` arc: yaw \u221237\u00b0 \u2192 +18\u00b0, pitch 3\u00b0 \u2192 14\u00b0, distance 7.0 \u2192 5.9 radii, with the frame growing 580 \u2192 690px. It starts wide and low from the left, swings right, rises, and closes in; the key light travels the other way (yaw 34\u00b0 \u2192 \u221220\u00b0) so highlights sweep across the bodies, and the background's radial glow drifts with it.\n\n**The line** \u2014 \"The whole picture, on every screen.\" \u2014 arrives at 4.2s once the space is established, word by word on a `rise` reveal, and leans in perspective (tiltY 20\u00b0 \u2192 \u22129\u00b0) so it turns with the room rather than sitting flat on the glass.\n\n**Two things I had to build**\n\n- The phone screens: the source shots are 1216\u00d7760 landscape and `phone.glb`'s screen is portrait (0.72 \u00d7 1.52), so stretching them would have looked wrong. I recomposed `ui_lumen_2` and `ui_lumen_5` into genuine 720\u00d71520 phone layouts (wordmark bar, page title, KPI cards 2\u00d72, chart, table, top sources) and gamma-lifted all three screens so they read as lit displays against dark bodies.\n- Device scale: the two models aren't in a common unit \u2014 `phone.glb` is 1.52 tall against the tablet's 0.90, so a phone would have towered over a tablet. `phone_a.glb`/`phone_b.glb` are the phone with a 0.45 node scale, which puts it at ~0.7\u00d7",
+   "contact": "docs/demo/c8-scene/contact-result.png",
+   "video": "docs/demo/c8-scene/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c8-scene.mp4",
+   "video_hd_bytes": 1488576,
+   "metadata": "docs/demo/c8-scene/result-metadata.json",
+   "gif": "docs/demo/c8-scene/result.gif",
+   "thumb": "docs/demo/c8-scene/thumb.png"
+  },
+  "page": "docs/demo/democ8.md"
  }
 ]
