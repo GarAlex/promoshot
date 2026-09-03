@@ -738,14 +738,33 @@ impl Document {
             return Self::run_in_composition(meta, resource_id, command);
         }
         let layers = meta.layers.get_or_insert_with(Vec::new);
+        // A stage layer's members (rung 33) are layers too, one depth
+        // down: a command that names a member finds it inside its stage.
         fn find<'a>(
             layers: &'a mut [promo_model::ProjectLayer],
             id: &str,
         ) -> Result<&'a mut promo_model::ProjectLayer, String> {
-            layers
-                .iter_mut()
-                .find(|l| l.id == id)
-                .ok_or_else(|| format!("no layer with id {id}"))
+            for layer in layers.iter_mut() {
+                if layer.id == id {
+                    return Ok(layer);
+                }
+                if let Some(members) = layer.members.as_mut() {
+                    if let Some(member) = members.iter_mut().find(|m| m.id == id) {
+                        return Ok(member);
+                    }
+                }
+            }
+            Err(format!("no layer with id {id}"))
+        }
+        // The survivors of a delete close the gap — the Mac editor
+        // renumbers after a delete, and `MoveLayer` already renumbers, so
+        // a document never carries a hole in its z-order.
+        fn renumber(layers: &mut [promo_model::ProjectLayer]) {
+            let mut order: Vec<usize> = (0..layers.len()).collect();
+            order.sort_by_key(|&i| layers[i].sort_index);
+            for (rank, i) in order.into_iter().enumerate() {
+                layers[i].sort_index = rank as i64;
+            }
         }
         match command {
             Command::RenameLayer { layer_id, name } => {
@@ -823,16 +842,25 @@ impl Document {
             Command::DeleteLayer { layer_id } => {
                 let before = layers.len();
                 layers.retain(|l| l.id != *layer_id);
-                if layers.len() == before {
-                    return Err(format!("no layer with id {layer_id}"));
-                }
-                // The survivors close the gap — the Mac editor renumbers
-                // after a delete, and `MoveLayer` already renumbers, so a
-                // document never carries a hole in its z-order.
-                let mut order: Vec<usize> = (0..layers.len()).collect();
-                order.sort_by_key(|&i| layers[i].sort_index);
-                for (rank, i) in order.into_iter().enumerate() {
-                    layers[i].sort_index = rank as i64;
+                if layers.len() != before {
+                    renumber(layers);
+                } else {
+                    // A stage member (rung 33): dropped from its stage, the
+                    // other members closing the gap.
+                    let mut dropped = false;
+                    for layer in layers.iter_mut() {
+                        if let Some(members) = layer.members.as_mut() {
+                            let n = members.len();
+                            members.retain(|m| m.id != *layer_id);
+                            if members.len() != n {
+                                dropped = true;
+                                renumber(members);
+                            }
+                        }
+                    }
+                    if !dropped {
+                        return Err(format!("no layer with id {layer_id}"));
+                    }
                 }
             }
             Command::UpsertKeyframe { layer_id, keyframe } => {
@@ -2456,5 +2484,60 @@ mod tests {
         }))
         .unwrap();
         assert!(matches!(cmd, Command::SetMarkers { .. }));
+    }
+
+    /// A stage layer's members (rung 33) take layer commands by their own
+    /// id: a keyframe lands on a member, a rename too, and deleting a member
+    /// drops it from its stage while the stage and its siblings stay.
+    #[test]
+    fn a_stage_member_takes_layer_commands_by_its_id() {
+        let raw = r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v","createdAt":0,
+            "state":"recorded","trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+            "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+            "resources":[{"id":"M","kind":"model","filename":"b.glb","displayName":"B","addedAt":0}],
+            "layers":[
+              {"id":"S","name":"bench","sortIndex":0,"kind":"stage","isEnabled":true,
+               "startTime":0,"duration":4,"keyframes":[],
+               "members":[
+                 {"id":"A","name":"Left","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"M","keyframes":[]},
+                 {"id":"B","name":"Right","sortIndex":1,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"M","keyframes":[]}]},
+              {"id":"T","name":"Title","sortIndex":1,"kind":"caption","isEnabled":true,
+               "startTime":0,"duration":4,"captionText":"Hi","keyframes":[]}]}"#;
+        let mut doc = Document::open(raw).unwrap();
+        doc.apply(&Command::RenameLayer {
+            layer_id: "B".into(),
+            name: "Far right".into(),
+        })
+        .expect("a member renames");
+        let keyframe: promo_model::ProjectLayerKeyframe = serde_json::from_str(
+            r#"{"id":"K","time":1.0,"transitionDuration":0,"stageOffset":[1.5,0]}"#,
+        )
+        .unwrap();
+        doc.apply(&Command::UpsertKeyframe {
+            layer_id: "B".into(),
+            keyframe: Box::new(keyframe),
+        })
+        .expect("a member takes a keyframe");
+        let stage = &doc.meta.layers.as_ref().unwrap()[0];
+        let members = stage.members.as_ref().unwrap();
+        assert_eq!(members[1].name, "Far right");
+        assert_eq!(members[1].keyframes.len(), 1);
+        doc.apply(&Command::DeleteLayer {
+            layer_id: "A".into(),
+        })
+        .expect("a member deletes");
+        let layers = doc.meta.layers.as_ref().unwrap();
+        assert_eq!(layers.len(), 2, "the stage and the title stay");
+        let members = layers[0].members.as_ref().unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].id, "B");
+        assert_eq!(members[0].sort_index, 0, "the survivors close the gap");
+        assert!(doc
+            .apply(&Command::DeleteLayer {
+                layer_id: "Z".into()
+            })
+            .is_err());
     }
 }

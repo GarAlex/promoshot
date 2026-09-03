@@ -3425,7 +3425,11 @@ fn lift_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
             })
             .collect();
 
-        let mut inner: Vec<ProjectLayer> = vec![head];
+        // A LOWERED stage's first row is the stage itself — a model-kind
+        // row with no resource — not a body: lifting it back yields the
+        // members alone, so lower → edit → lift is a round trip.
+        let synthetic = first.kind == ProjectLayerKind::Model && first.resource_id.is_none();
+        let mut inner: Vec<ProjectLayer> = if synthetic { Vec::new() } else { vec![head] };
         for member in members.iter().skip(1) {
             let mut m = (*member).clone();
             m.stage = None;
@@ -4694,6 +4698,51 @@ mod placement_model_tests {
         assert_eq!(doc.lifted(), lifted, "lifting is stable");
         let walk = lifted.lowered();
         assert_eq!(walk.layers.as_deref().unwrap().len(), 5, "owner + two members + two plain layers");
+    }
+
+    /// Lower, then lift: the one-layer form comes back with its members and
+    /// no phantom for the camera row — the round trip the app's stage
+    /// projection edits through.
+    #[test]
+    fn lowering_then_lifting_a_stage_layer_is_a_round_trip() {
+        let doc = ProjectMetadata::from_json(
+            r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v",
+                 "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                 "videoDuration":0,"subtitles":[],
+                 "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+                 "resources":[{"id":"M","kind":"model","filename":"body.glb",
+                   "displayName":"Body","addedAt":0}],
+                 "layers":[
+                   {"id":"S","name":"bench","sortIndex":1,"kind":"stage","isEnabled":true,
+                    "startTime":0,"duration":4,
+                    "keyframes":[{"id":"K","time":0,"transitionDuration":0,
+                       "camera":{"yaw":-14,"pitch":12},"placement":{"height":520,"anchor":"center"}}],
+                    "members":[
+                      {"id":"L","name":"Left","sortIndex":0,"kind":"model","isEnabled":true,
+                       "startTime":0,"duration":4,"resourceID":"M",
+                       "keyframes":[{"id":"K1","time":0,"transitionDuration":0,"stageOffset":[-1.5,0]}]},
+                      {"id":"R","name":"Right","sortIndex":1,"kind":"model","isEnabled":true,
+                       "startTime":0,"duration":4,"resourceID":"M",
+                       "keyframes":[{"id":"K2","time":0,"transitionDuration":0,"stageOffset":[1.5,0],
+                          "camera":{"yaw":20}}]}]},
+                   {"id":"T","name":"Title","sortIndex":2,"kind":"caption","isEnabled":true,
+                    "startTime":0,"duration":4,"captionText":"Hi","keyframes":[]}]}"#,
+        )
+        .expect("fixture");
+        let back = doc.lowered().lifted();
+        let layers = back.layers.as_deref().unwrap();
+        assert_eq!(layers.len(), 2, "the stage and the title");
+        let stage = &layers[0];
+        assert_eq!(stage.id, "S");
+        assert_eq!(stage.kind, ProjectLayerKind::Stage);
+        assert_eq!(stage.keyframes[0].camera.and_then(|c| c.yaw), Some(-14.0));
+        assert!(stage.keyframes[0].placement.is_some());
+        let members = stage.members.as_deref().unwrap();
+        let ids: Vec<&str> = members.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["L", "R"], "no phantom for the camera row");
+        assert_eq!(members[0].keyframes[0].stage_offset, Some([-1.5, 0.0]));
+        assert_eq!(members[1].keyframes[0].camera.and_then(|c| c.yaw), Some(20.0));
+        assert_eq!(layers[1].id, "T");
     }
 
     /// A binding's three wire forms decode to what they say and encode
