@@ -180,7 +180,8 @@ new projects.
   `"stageOffset"` and turn (`"camera"` on a member turns that member).
   One depth: a member is never a stage and names no stage; the stage
   layer has no `resourceID`. Stamp `minReaderVersion: 33`. The flat form
-  below draws the same picture and still reads.
+  below still reads and draws the same picture, but it is legacy: the app
+  rewrites it as a stage layer on open.
   Layers naming the same `"stage": "hero"` draw through one
   camera into one depth buffer: models at their keyframes' `"depth"`
   (in stage radii, + toward the viewer) and `"stageOffset": [right, up]`

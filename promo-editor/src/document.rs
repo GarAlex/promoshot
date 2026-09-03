@@ -423,8 +423,12 @@ pub struct Document {
 
 impl Document {
     pub fn open(json: &str) -> Result<Self, String> {
+        // A flat stage (rung 30) is read forever and written no more: the
+        // document works on the one-layer form, so the next save writes it.
         Ok(Self {
-            meta: ProjectMetadata::from_json(json).map_err(|e| e.to_string())?,
+            meta: ProjectMetadata::from_json(json)
+                .map_err(|e| e.to_string())?
+                .lifted(),
             version: 0,
             undo: Vec::new(),
             redo: Vec::new(),
@@ -641,7 +645,9 @@ impl Document {
     /// own parser; the change log names what differs, so a reader follows
     /// it like any other step. Identical content is not a step.
     pub fn replace(&mut self, json: &str) -> Result<bool, String> {
-        let meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
+        let meta = ProjectMetadata::from_json(json)
+            .map_err(|e| e.to_string())?
+            .lifted();
         if meta == self.meta {
             return Ok(false);
         }

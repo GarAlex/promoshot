@@ -906,5 +906,7 @@ member is that member's own turn). One depth: a member is never itself
 a stage and names no `stage`; a stage layer plays no resource of its
 own. It draws exactly what the flat form draws — the renderers lower one
 to the other — with the stage's ownership written down instead of
-falling to whichever member sorts first. A project with a stage layer
-carries `minReaderVersion: 33`.
+falling to whichever member sorts first. This is the canonical form: the
+flat form above is read forever but written no more — the app and
+`promo_apply` lift it into a stage layer on open, and `promo_validate`
+says so. A project with a stage layer carries `minReaderVersion: 33`.

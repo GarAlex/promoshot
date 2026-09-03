@@ -514,6 +514,12 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         let Some(first) = members.first() else {
             continue;
         };
+        out.push(format!(
+            "stage \"{name}\" is written in the flat form (layers sharing a stage name); \
+             the one-layer form is canonical — a layer of kind \"stage\" with `members`, \
+             the camera and light on its own keyframes — and the app and promo_apply \
+             rewrite it so on open"
+        ));
         if !matches!(
             first.kind,
             ProjectLayerKind::Model | ProjectLayerKind::Image | ProjectLayerKind::Video
@@ -663,6 +669,19 @@ fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     member.name,
                     layer.name,
                     member.kind.as_str()
+                ));
+            }
+            if member.keyframes.iter().any(|k| {
+                k.placement.is_some()
+                    || k.zoom.is_some() && member.kind == Kind::Model
+                    || k.horizontal_shift.is_some()
+                    || k.vertical_shift.is_some()
+            }) {
+                out.push(format!(
+                    "member \"{}\" of stage \"{}\" keys a placement or shift — inside a \
+                     stage its depth and stageOffset (and a picture's zoom) place it; the \
+                     stage layer's placement places the whole stage",
+                    member.name, layer.name
                 ));
             }
         }
@@ -1340,6 +1359,39 @@ mod tests {
         assert!(has("stage layer \"Empty\" has no members"), "{warnings:?}");
         assert!(has("layer \"Plain\" carries `members` but is not a stage layer"), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 33);
+    }
+
+    /// The flat form is named as legacy, and a member of a stage layer that
+    /// keys a placement is told where placement lives.
+    #[test]
+    fn the_flat_stage_form_is_named_legacy_and_a_member_placement_is_named() {
+        let flat = project(
+            r#"{"id":"A","name":"Left","sortIndex":0,"kind":"model","isEnabled":true,"stage":"bench",
+                "startTime":0,"duration":4,"resourceID":"M","keyframes":[]},
+               {"id":"B","name":"Right","sortIndex":1,"kind":"model","isEnabled":true,"stage":"bench",
+                "startTime":0,"duration":4,"resourceID":"M","keyframes":[]}"#,
+            r#","resources":[{"id":"M","kind":"model","filename":"b.glb","displayName":"Body","addedAt":0}]"#,
+        );
+        let flat_warnings = warnings(&flat);
+        assert!(
+            flat_warnings.iter().any(|w| w.contains("stage \"bench\" is written in the flat form")),
+            "{flat_warnings:?}"
+        );
+        let nested = project(
+            r#"{"id":"S","name":"bench","sortIndex":0,"kind":"stage","isEnabled":true,
+                "startTime":0,"duration":4,"keyframes":[],
+                "members":[{"id":"A","name":"Left","sortIndex":0,"kind":"model","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"M",
+                  "keyframes":[{"id":"K","time":0,"transitionDuration":0,
+                    "placement":{"height":300,"anchor":"center"}}]}]}"#,
+            r#","resources":[{"id":"M","kind":"model","filename":"b.glb","displayName":"Body","addedAt":0}]"#,
+        );
+        let nested_warnings = warnings(&nested);
+        assert!(
+            nested_warnings.iter().any(|w| w.contains("member \"Left\" of stage \"bench\" keys a placement")),
+            "{nested_warnings:?}"
+        );
+        assert!(!nested_warnings.iter().any(|w| w.contains("flat form")), "{nested_warnings:?}");
     }
 }
 

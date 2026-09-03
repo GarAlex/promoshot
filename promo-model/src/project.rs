@@ -3171,7 +3171,193 @@ fn lower_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
     out
 }
 
+/// A UUID-shaped id derived from another — for the layer and keyframes a
+/// lift must mint (the member half of a flat stage's first member). Stable:
+/// the same input gives the same id, so lifting twice never diverges, and
+/// the app decodes it as a UUID like any other.
+fn derived_id(base: &str, tag: &str) -> String {
+    fn fnv(seed: u64, text: &str) -> u64 {
+        let mut h = seed;
+        for b in text.bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h
+    }
+    let a = fnv(0xcbf2_9ce4_8422_2325, &format!("{base}\u{1f}{tag}"));
+    let b = fnv(0x8422_2325_cbf2_9ce4, &format!("{tag}\u{1f}{base}"));
+    let hex = format!("{a:016X}{b:016X}");
+    format!(
+        "{}-{}-4{}-8{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[13..16],
+        &hex[17..20],
+        &hex[20..32]
+    )
+}
+
+/// Flat stages (rung 30: members sharing a `stage` name, the first by sort
+/// order owning the picture) gathered into stage LAYERS (rung 33).
+fn lift_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
+    let is_flat_member = |l: &ProjectLayer| l.stage.is_some() && l.kind != ProjectLayerKind::Stage;
+    if !layers.iter().any(is_flat_member) {
+        return layers.to_vec();
+    }
+    let mut out: Vec<ProjectLayer> = Vec::with_capacity(layers.len());
+    let mut lifted: Vec<String> = Vec::new();
+    for layer in layers {
+        let Some(name) = layer.stage.as_deref().filter(|_| is_flat_member(layer)) else {
+            out.push(layer.clone());
+            continue;
+        };
+        if lifted.iter().any(|n| n == name) {
+            continue;
+        }
+        lifted.push(name.to_string());
+        let mut members: Vec<&ProjectLayer> = layers
+            .iter()
+            .filter(|l| l.stage.as_deref() == Some(name) && is_flat_member(l))
+            .collect();
+        members.sort_by_key(|l| l.sort_index);
+        let first = members[0];
+
+        // The stage layer: the first member's layer-ness — timing, fades,
+        // transitions, masks, effects, and the camera, light and placement
+        // on its keyframes — under the stage's name and the first member's
+        // id, so anything that named that layer still names the stage.
+        let mut stage = first.clone();
+        stage.kind = ProjectLayerKind::Stage;
+        stage.name = name.to_string();
+        stage.stage = None;
+        stage.resource_id = None;
+        stage.image_filename = None;
+        stage.image_cut_id = None;
+        stage.media_cut_id = None;
+        stage.beyond_end = None;
+        stage.image_orientation = None;
+        stage.image_border_color_hex = None;
+        stage.image_border_width = None;
+        stage.caption_text = None;
+        stage.caption_style = None;
+        stage.caption_voice_clip = None;
+        stage.audio_focus = None;
+        stage.keyframes = first
+            .keyframes
+            .iter()
+            .cloned()
+            .map(|mut k| {
+                k.depth = None;
+                k.stage_offset = None;
+                k.clip = None;
+                k
+            })
+            .collect();
+
+        // The first member, as a member: its body and its place in the
+        // world, nothing of the picture's — a derived id, since the stage
+        // kept the original.
+        let mut head = first.clone();
+        head.id = derived_id(&first.id, "member");
+        head.stage = None;
+        head.members = None;
+        head.fade_in = None;
+        head.fade_out = None;
+        head.transition_in = None;
+        head.transition_out = None;
+        head.motion_blur = None;
+        head.adjustments = None;
+        head.blend_mode = None;
+        head.chroma_key = None;
+        head.effects = None;
+        head.follow = None;
+        head.mask_resource_id = None;
+        head.mask_inverted = None;
+        head.duration_rule = None;
+        head.timing = None;
+        head.releases = Vec::new();
+        head.keyframes = first
+            .keyframes
+            .iter()
+            .filter(|k| k.depth.is_some() || k.stage_offset.is_some() || k.clip.is_some())
+            .map(|k| {
+                let mut m = k.clone();
+                m.id = derived_id(&k.id, "member");
+                m.zoom = None;
+                m.font_size = None;
+                m.vertical_shift = None;
+                m.horizontal_shift = None;
+                m.color_hex = None;
+                m.resource_id = None;
+                m.transition = None;
+                m.gradient = None;
+                m.gain = None;
+                m.rotation = None;
+                m.tilt_x = None;
+                m.tilt_y = None;
+                m.camera = None;
+                m.light = None;
+                m.opacity = None;
+                m.shutter = None;
+                m.saturation = None;
+                m.contrast = None;
+                m.brightness = None;
+                m.tint_amount = None;
+                m.blur = None;
+                m.glow = None;
+                m.vignette = None;
+                m.mask_offset_x = None;
+                m.mask_offset_y = None;
+                m.mask_zoom = None;
+                m.mask_zoom_y = None;
+                m.mask_rotation = None;
+                m.motion_path = None;
+                m.viewport = None;
+                m.placement = None;
+                m
+            })
+            .collect();
+
+        let mut inner: Vec<ProjectLayer> = vec![head];
+        for member in members.iter().skip(1) {
+            let mut m = (*member).clone();
+            m.stage = None;
+            m.members = None;
+            inner.push(m);
+        }
+        stage.members = Some(inner);
+        out.push(stage);
+    }
+    out
+}
+
 impl ProjectMetadata {
+    /// The document with every FLAT stage (rung 30: members sharing a
+    /// `stage` name, the first by sort order owning the picture) gathered
+    /// into a stage LAYER (rung 33): the first member's timing, fades,
+    /// transitions, masks, effects, camera, light and placement become the
+    /// stage layer's, under the stage's name and that member's id; the
+    /// member itself follows inside with only its body, `depth`,
+    /// `stageOffset` and clip, under a derived id; the other members follow
+    /// unchanged. Stages inside composition documents are lifted the same
+    /// way. A document with no flat stage comes back unchanged — so the
+    /// lift is the canonical form: read the flat form forever, write it no
+    /// more. `lifted().lowered()` draws what the flat document drew.
+    pub fn lifted(&self) -> ProjectMetadata {
+        let mut out = self.clone();
+        if let Some(layers) = out.layers.as_mut() {
+            *layers = lift_layers(layers);
+        }
+        if let Some(resources) = out.resources.as_mut() {
+            for resource in resources.iter_mut() {
+                if let Some(composition) = resource.composition.as_mut() {
+                    composition.layers = lift_layers(&composition.layers);
+                }
+            }
+        }
+        out
+    }
+
     /// The document with every STAGE LAYER (rung 33) expanded into the
     /// flat form the renderers walk: the stage layer itself becomes the
     /// stage's first member — a model-kind layer with no resource that
@@ -4276,6 +4462,74 @@ mod placement_model_tests {
         assert_eq!(flat.lowered(), flat);
         assert_eq!(doc.minimum_reader_version(), 33);
         assert_eq!(flat.minimum_reader_version(), 31, "the flat form is what rung 30/31 readers draw");
+    }
+
+    /// A flat stage lifts into one stage layer: the first member's id,
+    /// timing, fades and picture-side keyframe fields become the stage
+    /// layer's, that member follows inside under a derived id with only its
+    /// body and world fields, the other members follow unchanged, and a
+    /// document already in the one-layer form lifts to itself. Lowering the
+    /// lift gives the flat walk back, one layer longer for the owner.
+    #[test]
+    fn a_flat_stage_lifts_to_one_layer() {
+        let doc = ProjectMetadata::from_json(
+            r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v",
+                 "createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                 "videoDuration":0,"subtitles":[],
+                 "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+                 "resources":[{"id":"M","kind":"model","filename":"body.glb",
+                   "displayName":"Body","addedAt":0}],
+                 "layers":[
+                   {"id":"B","name":"Backdrop","sortIndex":0,"kind":"background","isEnabled":true,
+                    "startTime":0,"keyframes":[]},
+                   {"id":"L","name":"Left","sortIndex":1,"kind":"model","isEnabled":true,"stage":"bench",
+                    "startTime":0,"duration":4,"resourceID":"M","fadeIn":0.5,
+                    "keyframes":[{"id":"K1","time":0,"transitionDuration":0,
+                       "camera":{"yaw":-14,"pitch":12},"light":{"yaw":-70},
+                       "placement":{"height":520,"anchor":"center"},"stageOffset":[-1.5,0]}]},
+                   {"id":"R","name":"Right","sortIndex":2,"kind":"model","isEnabled":true,"stage":"bench",
+                    "startTime":0,"duration":4,"resourceID":"M",
+                    "keyframes":[{"id":"K2","time":0,"transitionDuration":0,"stageOffset":[1.5,0],
+                       "camera":{"yaw":20}}]},
+                   {"id":"T","name":"Title","sortIndex":3,"kind":"caption","isEnabled":true,
+                    "startTime":0,"duration":4,"captionText":"Hi","keyframes":[]}]}"#,
+        )
+        .expect("fixture");
+        let lifted = doc.lifted();
+        let layers = lifted.layers.as_deref().unwrap();
+        let ids: Vec<&str> = layers.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids, ["B", "L", "T"], "the stage stands where its first member stood, under its id");
+        let stage = &layers[1];
+        assert_eq!(stage.kind, ProjectLayerKind::Stage);
+        assert_eq!(stage.name, "bench");
+        assert_eq!(stage.stage, None);
+        assert_eq!(stage.resource_id, None);
+        assert_eq!(stage.fade_in, Some(0.5));
+        assert_eq!(stage.keyframes.len(), 1);
+        assert_eq!(stage.keyframes[0].id, "K1");
+        assert_eq!(stage.keyframes[0].camera.and_then(|c| c.yaw), Some(-14.0));
+        assert!(stage.keyframes[0].placement.is_some());
+        assert_eq!(stage.keyframes[0].stage_offset, None, "the world fields left the stage layer");
+        let members = stage.members.as_deref().unwrap();
+        assert_eq!(members.len(), 2);
+        let head = &members[0];
+        assert_ne!(head.id, "L");
+        assert_eq!(head.id.len(), 36, "a UUID-shaped derived id: {}", head.id);
+        assert_eq!(head.kind, ProjectLayerKind::Model);
+        assert_eq!(head.resource_id.as_deref(), Some("M"));
+        assert_eq!(head.fade_in, None);
+        assert_eq!(head.stage, None);
+        assert_eq!(head.keyframes.len(), 1);
+        assert_eq!(head.keyframes[0].stage_offset, Some([-1.5, 0.0]));
+        assert_eq!(head.keyframes[0].camera, None, "the first member had no turn of its own");
+        assert!(head.keyframes[0].placement.is_none());
+        assert_eq!(members[1].id, "R");
+        assert_eq!(members[1].keyframes[0].camera.and_then(|c| c.yaw), Some(20.0));
+        assert_eq!(lifted.minimum_reader_version(), 33);
+        assert_eq!(lifted.lifted(), lifted, "the one-layer form lifts to itself");
+        assert_eq!(doc.lifted(), lifted, "lifting is stable");
+        let walk = lifted.lowered();
+        assert_eq!(walk.layers.as_deref().unwrap().len(), 5, "owner + two members + two plain layers");
     }
 
     /// A binding's three wire forms decode to what they say and encode

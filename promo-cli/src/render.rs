@@ -3043,6 +3043,23 @@ mod tests {
             .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 2)
             .count();
         assert_eq!(differing, 0, "the stage layer is its flat form, pixel for pixel");
+        // And the LIFT of the flat document — what the app and promo_apply
+        // write back — draws the same picture again.
+        let lifted = promo_model::ProjectMetadata::from_json(&flat)
+            .expect("flat")
+            .lifted();
+        assert_eq!(
+            lifted.layers.as_deref().unwrap().len(),
+            1,
+            "one stage layer stands for the two members"
+        );
+        let c = render(&lifted.to_json().expect("encode"));
+        let differing = a
+            .iter()
+            .zip(&c)
+            .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 2)
+            .count();
+        assert_eq!(differing, 0, "the lifted document is the flat one, pixel for pixel");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
