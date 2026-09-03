@@ -830,12 +830,15 @@ pub fn device_glb(kind: DeviceKind) -> Vec<u8> {
     let mut deck_idx = Vec::new();
     let (min, max) = match kind {
         DeviceKind::Phone => {
-            let (w, h, d) = (0.36f32, 0.76f32, 0.038f32);
-            geo.rounded_slab(w, h, d, 0.07, [0.0; 3], &mut body_idx);
+            // To scale with the tablet and laptop (one unit is about 200 mm):
+            // a phone stands three quarters of a unit tall. The first fresh
+            // agent given both bodies scaled the phone down itself.
+            let (w, h, d) = (0.18f32, 0.38f32, 0.019f32);
+            geo.rounded_slab(w, h, d, 0.035, [0.0; 3], &mut body_idx);
             geo.rounded_plate(
-                w - 0.028,
-                h - 0.032,
-                0.05,
+                w - 0.014,
+                h - 0.016,
+                0.025,
                 d + 0.001,
                 [0.0; 3],
                 &mut screen_idx,
