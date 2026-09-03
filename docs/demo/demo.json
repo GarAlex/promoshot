@@ -3912,6 +3912,362 @@
   "page": "docs/demo/demo26.md"
  },
  {
+  "id": "27",
+  "slug": "27-materials",
+  "title": "Materials",
+  "blurb": "Three curved bodies \u2014 chrome, matte, glazed \u2014 on one bench under a key light that sweeps across them, the camera drifting.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; sphere.glb, torus.glb and vase.glb in ONE stage named 'bench' \u2014 the sphere first, offset 1.5 left, its body painted the palette's accent, its camera drifting from a yaw of -14 to 14 over the piece with an ease in and out while the key light sweeps from a yaw of -70 to 70 at intensity 1.3; the torus in the middle, lying at a pitch of 55 and turning from a yaw of 20 to 80; the vase offset 1.5 right; the stage placed 520 px tall in the centre; and along the bottom a bold caption 'Metal. Matte. Glaze.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: sphere.glb, torus.glb, vase.glb.\n\nText to use, in order:\n- Metal. Matte. Glaze.",
+  "resources": [
+   {
+    "file": "sphere.glb",
+    "kind": "file",
+    "path": "demos/27-materials/resources/sphere.glb"
+   },
+   {
+    "file": "torus.glb",
+    "kind": "file",
+    "path": "demos/27-materials/resources/torus.glb"
+   },
+   {
+    "file": "vase.glb",
+    "kind": "file",
+    "path": "demos/27-materials/resources/vase.glb"
+   }
+  ],
+  "result": {
+   "score": 92,
+   "passed": 12,
+   "total": 13,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:model",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": false,
+     "detail": "False"
+    },
+    {
+     "check": "feature:depth",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=34 cost=$1.43 secs=149",
+   "run": {
+    "turns": 34,
+    "wall_s": 147,
+    "api_s": 143,
+    "cost_usd": 1.43,
+    "tokens": {
+     "input": 52,
+     "cache_read": 1447892,
+     "cache_write": 45285,
+     "output": 9928,
+     "thinking": 2949
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1248,
+      "output": 21,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1493229,
+      "output": 9928,
+      "cost_usd": 1.43
+     }
+    ],
+    "mcp": {
+     "calls": 9,
+     "ms": 2282,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1551,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 497,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 176,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 1,
+       "ms": 49,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` validates clean and rendered.\n\n**`out.promo/Exports/export.mp4`** \u2014 1440\u00d7900, 9 s, 270 frames @ 30 fps.\n\nHow it's built:\n\n- **Ground** \u2014 `backgroundGradient` radial from `@ground` (3B3E44) at centre out to `@edge` (121316) at the corners.\n- **Stage `bench`** \u2014 three `kind: \"model\"` layers sharing one camera and depth buffer, all 0\u20139 s:\n  - *Sphere* (lowest `sortIndex`, so it owns the stage picture): `stageOffset [-1.5, 0]`, `materials: {\"Body\": \"@accent\"}`, `placement {height: 520, anchor: center}`, camera yaw \u221214 \u2192 14 and key light yaw \u221270 \u2192 70 at intensity 1.3, both on one `easeInOut` ramp across the full 9 s.\n  - *Torus*: `stageOffset [0, 0]`, camera pitch 55 (lying flat), yaw 20 \u2192 80, same eased ramp.\n  - *Vase*: `stageOffset [1.5, 0]`.\n- **Caption** \u2014 \"Metal. Matte. Glaze.\", bold 76 pt, anchored bottom with a \u221264 px offset, `depth: {count: 10, offset: [1, 1.5], shade: 0.82, colorHex: \"@edge\"}` for the extrusion, and `reveal: {by: \"word\", mode: \"fade\", secondsPer: 0.45}` starting at 1.2 s \u2014 the contact sheet at 1.5 s shows \"Metal.\" alone, all three words landed by ~2.5 s.\n\nThe material slot in all three `.glb` files is named `Body`, so the accent binding lands on the sphere; the torus and vase keep their own materials, which is what gives the three-materials read. Contact sheet frames are in `out.promo/Exports/frames/`.",
+   "contact": "docs/demo/27-materials/contact-result.png",
+   "reference_contact": "docs/demo/27-materials/contact-reference.png",
+   "video": "docs/demo/27-materials/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/27-materials.mp4",
+   "video_hd_bytes": 366635,
+   "metadata": "docs/demo/27-materials/result-metadata.json",
+   "gif": "docs/demo/27-materials/result.gif",
+   "thumb": "docs/demo/27-materials/thumb.png"
+  },
+  "page": "docs/demo/demo27.md"
+ },
+ {
+  "id": "28",
+  "slug": "28-finishes",
+  "title": "Finishes",
+  "blurb": "One vase three ways \u2014 chrome, matte, gloss \u2014 the finish written on the binding rather than baked into the file, under a light that sweeps across them.",
+  "kind": "conformance",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": 9.0,
+  "prompt": "Make a 9-second piece on a 1440\u00d7900 canvas: a radial dark-grey gradient background; vase.glb three times in ONE stage named 'bench', as three model resources over the same file \u2014 the first offset 1.5 left, painted silver D2D6DC with a chrome finish written on the binding (metallic 1, roughness 0.12), its camera drifting from a yaw of -14 to 14 over the piece with an ease in and out while the key light sweeps from a yaw of -70 to 70 at intensity 1.3; the second in the middle, painted the palette's accent with a matte finish (metallic 0, roughness 0.85); the third offset 1.5 right, the same accent with a gloss finish (metallic 0, roughness 0.12); every vase turning a little on its own from a yaw of -20 to 20; the stage placed 520 px tall in the centre; and along the bottom a bold caption 'One body. Three finishes.' in extruded type that fades in word by word from 1.2 seconds.\n\nFiles in `resources/`: vase.glb.\n\nText to use, in order:\n- One body. Three finishes.",
+  "resources": [
+   {
+    "file": "vase.glb",
+    "kind": "file",
+    "path": "demos/28-finishes/resources/vase.glb"
+   }
+  ],
+  "result": {
+   "score": 100,
+   "passed": 14,
+   "total": 14,
+   "checks": [
+    {
+     "check": "canvas",
+     "ok": true,
+     "detail": "[1440, 900] vs [1440, 900]"
+    },
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "9.0s vs 9.0s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:model",
+     "ok": true,
+     "detail": "3 vs 3"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:reveal",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:stage",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:model",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:camera",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:materials",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:finish",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:depth",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "1 of 1 lines recognisable"
+    }
+   ],
+   "summary": "turns=27 cost=$1.49 secs=179",
+   "run": {
+    "turns": 27,
+    "wall_s": 177,
+    "api_s": 170,
+    "cost_usd": 1.49,
+    "tokens": {
+     "input": 52,
+     "cache_read": 1469830,
+     "cache_write": 46896,
+     "output": 11200,
+     "thinking": 4792
+    },
+    "models": [
+     {
+      "model": "claude-haiku-4-5",
+      "input": 1289,
+      "output": 16,
+      "cost_usd": 0.0
+     },
+     {
+      "model": "claude-opus-5",
+      "input": 1516778,
+      "output": 11200,
+      "cost_usd": 1.48
+     }
+    ],
+    "mcp": {
+     "calls": 7,
+     "ms": 4970,
+     "tools": {
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 2804,
+       "errors": 0
+      },
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 1764,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 395,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 7,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "Done. `out.promo` validates, inspects clean, and both the contact sheet and the mp4 are rendered.\n\n**What's in it** \u2014 1440\u00d7900, 9s, 30fps:\n\n- **Ground**: radial gradient, `42474E` centre \u2192 `15171A` edge (both named in the palette).\n- **Stage `bench`**, three `model` layers over three model resources all pointing at `vase.glb`:\n  - `vLeft` \u2014 chrome: `\"Body\": { \"colorHex\": \"@silver\", \"metallic\": 1, \"roughness\": 0.12 }`, `stageOffset [-1.5, 0]`. As the first member it owns the stage: `placement { height: 520, anchor: \"center\" }`, camera yaw \u221214 \u2192 14 over the full 9s with `easeInOut`, and the key light yaw \u221270 \u2192 70 at intensity 1.3 on its own (linear) keyframe track, so the ease shapes the camera drift only.\n  - `vMid` \u2014 matte accent (`metallic 0, roughness 0.85`), `stageOffset [0, 0]`.\n  - `vRight` \u2014 gloss accent (`metallic 0, roughness 0.12`), `stageOffset [1.5, 0]`.\n  - `vMid` and `vRight` each turn in place on their own `camera.yaw` \u221220 \u2192 20. `vLeft` turns with the stage camera's \u221214 \u2192 14 \u2014 it has one camera track, and the spec assigns it the stage drift.\n- **Caption**: bold 68pt, anchored bottom, `depth { count: 7, offset: [1.5,1.5], shade: 0.92 }` for the extrusion, revealed `{ by: \"word\", mode: \"fade\" }` starting at 1.2s.\n\nAccent is `D96A3C` (terracotta) \u2014 chosen because a warm mid-saturation body is where matte and gloss read most clearly apart against the grey, which the contact sheet confirms: the matte vase has a broad soft falloff, the gloss one a tight specular streak that tracks the light sweep.\n\n- Project: `out.promo/` (media copied to `Resources/vase.glb`)\n- Video: `out.promo/Exports/export.mp4`\n- Contact sheet frames left in `out.promo/Exports/frames/` \u2014 a cleanup `rm` there was blocked by the sandbox, so delete them by hand if you don't want them.",
+   "contact": "docs/demo/28-finishes/contact-result.png",
+   "reference_contact": "docs/demo/28-finishes/contact-reference.png",
+   "video": "docs/demo/28-finishes/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/28-finishes.mp4",
+   "video_hd_bytes": 330236,
+   "metadata": "docs/demo/28-finishes/result-metadata.json",
+   "gif": "docs/demo/28-finishes/result.gif",
+   "thumb": "docs/demo/28-finishes/thumb.png"
+  },
+  "page": "docs/demo/demo28.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",
