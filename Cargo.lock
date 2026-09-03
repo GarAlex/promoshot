@@ -1961,7 +1961,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "promo-author"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "promo-editor",
  "promo-model",
@@ -1972,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "promo-cli"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "image",
  "promo-engine",
@@ -1985,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "promo-editor"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "promo-model",
  "promo-timeline",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "promo-engine"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "criterion",
  "promo-gpu",
@@ -2009,7 +2009,7 @@ dependencies = [
 
 [[package]]
 name = "promo-gpu"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "core-foundation 0.10.1",
  "criterion",
@@ -2023,7 +2023,7 @@ dependencies = [
 
 [[package]]
 name = "promo-media"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "promo-gpu",
  "promo-model",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "promo-model"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "jsonschema",
  "schemars",
@@ -2042,7 +2042,7 @@ dependencies = [
 
 [[package]]
 name = "promo-speech"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "keyring",
  "serde_json",
@@ -2052,7 +2052,7 @@ dependencies = [
 
 [[package]]
 name = "promo-text"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "cosmic-text",
  "image",
@@ -2061,7 +2061,7 @@ dependencies = [
 
 [[package]]
 name = "promo-timeline"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "criterion",
  "promo-model",
@@ -2072,7 +2072,7 @@ dependencies = [
 
 [[package]]
 name = "promoshot-mcp"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "promo-author",
  "promo-editor",
