@@ -52,9 +52,9 @@
    "disabledAudioTrackIndices": []
   },
   {
-   "id": "CF6563C7-3A41-1D67-DA40-E3241A4A6DD9",
+   "id": "59B09DA8-B9CC-048E-8824-3793775285C2",
    "kind": "model",
-   "filename": "slab.glb",
+   "filename": "tablet.glb",
    "displayName": "Tablet",
    "addedAt": 0,
    "materials": {
@@ -64,7 +64,7 @@
     }
    },
    "clips": [],
-   "boundsRadius": 0.7554
+   "boundsRadius": 0.7633
   },
   {
    "id": "704F38E6-77BE-96ED-125A-9CF73C5CA6DC",
@@ -172,7 +172,7 @@
    "isEnabled": true,
    "startTime": 0,
    "duration": 7.0,
-   "resourceID": "CF6563C7-3A41-1D67-DA40-E3241A4A6DD9",
+   "resourceID": "59B09DA8-B9CC-048E-8824-3793775285C2",
    "fadeIn": 0.5,
    "keyframes": [
     {

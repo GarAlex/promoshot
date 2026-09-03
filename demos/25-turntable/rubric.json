@@ -46,7 +46,7 @@
   "A .glb on a layer. The palette paints it; a shot fills its screen."
  ],
  "media": [
-  "slab.glb",
+  "tablet.glb",
   "ui_lumen_1.png"
  ]
 }
