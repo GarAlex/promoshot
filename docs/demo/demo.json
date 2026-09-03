@@ -3546,7 +3546,7 @@
    900
   ],
   "duration": 7.0,
-  "prompt": "Make a 7-second piece on a 1440\u00d7900 canvas: a radial dark-blue gradient background; the tablet.glb model placed on the left, 600 px tall, its Body material painted with the palette's accent and its Screen material showing ui_lumen_1.png, turning on a turntable from a yaw of -70 to 35 degrees over the whole piece with an ease in and out, lit from the upper left; on the right a bold two-line title 'Every theme,\\nevery angle.' in extruded type that slides in word by word, and under it a smaller line 'A .glb on a layer. The palette paints it; a shot fills its screen.' that fades in word by word two seconds later.\n\nFiles in `resources/`: tablet.glb, ui_lumen_1.png.\n\nText to use, in order:\n- Every theme,\nevery angle.\n- A .glb on a layer. The palette paints it; a shot fills its screen.",
+  "prompt": "Make a 7-second piece on a 1440\u00d7900 canvas: a radial dark-blue gradient background; the tablet.glb model placed on the left, 420 px tall, its Body material painted with the palette's accent and its Screen material showing ui_lumen_1.png, turning on a turntable from a yaw of -70 to 35 degrees over the whole piece with an ease in and out, lit from the upper left; on the right a bold two-line title 'Every theme,\\nevery angle.' in extruded type that slides in word by word, and under it a smaller line 'A .glb on a layer. The palette paints it; a shot fills its screen.' that fades in word by word two seconds later.\n\nFiles in `resources/`: tablet.glb, ui_lumen_1.png.\n\nText to use, in order:\n- Every theme,\nevery angle.\n- A .glb on a layer. The palette paints it; a shot fills its screen.",
   "resources": [
    {
     "file": "tablet.glb",
@@ -3630,61 +3630,61 @@
      "detail": "2 of 2 lines recognisable"
     }
    ],
-   "summary": "turns=40 cost=$2.38 secs=257",
+   "summary": "turns=42 cost=$1.98 secs=224",
    "run": {
-    "turns": 40,
-    "wall_s": 256,
-    "api_s": 252,
-    "cost_usd": 2.38,
+    "turns": 42,
+    "wall_s": 220,
+    "api_s": 213,
+    "cost_usd": 1.98,
     "tokens": {
-     "input": 60,
-     "cache_read": 2316438,
-     "cache_write": 77684,
-     "output": 17572,
-     "thinking": 8990
+     "input": 64,
+     "cache_read": 2059580,
+     "cache_write": 57390,
+     "output": 14990,
+     "thinking": 5281
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
       "input": 1223,
-      "output": 15,
+      "output": 14,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 2394182,
-      "output": 17572,
-      "cost_usd": 2.37
+      "input": 2117034,
+      "output": 14990,
+      "cost_usd": 1.98
      }
     ],
     "mcp": {
-     "calls": 14,
-     "ms": 2172,
+     "calls": 12,
+     "ms": 5788,
      "tools": {
+      "promo_render_frames": {
+       "calls": 2,
+       "ms": 2565,
+       "errors": 0
+      },
       "promo_render_video": {
        "calls": 1,
-       "ms": 1283,
+       "ms": 2559,
        "errors": 0
       },
       "promo_media_probe": {
        "calls": 2,
-       "ms": 476,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 3,
-       "ms": 305,
+       "ms": 570,
        "errors": 0
       },
       "promo_media_turntable": {
        "calls": 1,
-       "ms": 67,
+       "ms": 70,
        "errors": 0
       },
       "promo_validate": {
-       "calls": 4,
-       "ms": 33,
-       "errors": 1
+       "calls": 2,
+       "ms": 16,
+       "errors": 0
       },
       "promo_inspect": {
        "calls": 1,
@@ -3692,6 +3692,11 @@
        "errors": 0
       },
       "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
        "calls": 1,
        "ms": 0,
        "errors": 0
@@ -3706,12 +3711,12 @@
    },
    "used": null,
    "captions": null,
-   "notes": "Done \u2014 `out.promo` validates clean and the mp4 is rendered.\n\n**`out.promo/`** (metadata.json + `Resources/tablet.glb`, `ui_lumen_1.png`), 1440\u00d7900, 7 s @ 30 fps, `minReaderVersion: 29`.\n\n- **Ground** \u2014 radial gradient centred behind the tablet (`glow 18356F` \u2192 `0A1531` \u2192 `canvas 060B1A`), with the eight palette roles plus `accent 3E7BFF` stated so the whole piece re-skins from one list.\n- **Tablet** \u2014 `kind: \"model\"` layer on the `.glb`; the resource binds `\"Body\": \"@accent\"` and `\"Screen\": { \"resourceID\": \"ui\" }`, so the palette paints the body and the shot fills the screen. Camera keyed yaw \u221270 \u2192 35 over the full 7 s, `easeInOut`, with a slight 8\u00b0 pitch; light at yaw \u221245 / pitch 55 (upper left). Placement is `height 1060` anchored centre at x\u2248360 \u2014 the rule resolves against the model's projected bounds (the bounding sphere), which lands the tablet itself at ~600 px tall, measured on the render.\n- **Title** \u2014 \"Every theme,\\nevery angle.\" at 74 pt bold, extruded via `depth` (10 copies, 2 px down-right to match the light, shaded toward the accent so the side reads solid), revealed `by: \"word\", mode: \"slide\"` from 0.35 s.\n- **Subline** \u2014 28 pt, wraps to two lines in the right column, revealed word-by-word with `mode: \"fade\"` from 2.35 s \u2014 two seconds after the title starts.\n\nChecked a 7-frame contact sheet at full canvas before exporting: the turntable sweep, the word reveals and the column gap all read correctly.\n\n**Output:** `out.promo/Exports/export.mp4` \u2014 1440\u00d7900, 210 frames @ 30 fps.",
+   "notes": "Done \u2014 `out.promo` is authored, validated, inspected, and rendered.\n\n**`out.promo/`**\n- `Resources/tablet.glb`, `Resources/ui_lumen_1.png`\n- `metadata.json` \u2014 1440\u00d7900, 7.00s, 60fps, `minReaderVersion: 29`\n- `Exports/export.mp4` (1440\u00d7900, 420 frames @ 60fps), plus the contact-sheet frames\n\n**How it's built**\n- **Ground** \u2014 radial `backgroundGradient` from `@glow` (16376B) at [0.34, 0.46], through `@deep`, out to `@ink`, so the brightest part of the field sits behind the tablet.\n- **Tablet** \u2014 `kind: \"model\"` layer on `tablet.glb`. The resource carries `materials: { \"Body\": \"@accent\", \"Screen\": { resourceID: screenshot } }`, so the palette's accent paints the shell and `ui_lumen_1.png` fills the display. Placement `height: 420, anchor: \"center\", offset: [-388, 0]` puts it in the left column and holds it at 420 px whatever the yaw. Two camera keyframes: yaw \u221270 at t=0 \u2192 yaw 35 at t=7, `transitionDuration: 7` with `easeInOut`, at pitch 12 / fov 28. `light: { yaw: -48, pitch: 56 }` is the upper-left key.\n- **Title** \u2014 \"Every theme,\\nevery angle.\" at 80pt bold, hung `anchor: \"left\", offset: [700, -78]`, extruded with `depth: { count: 7, offset: [2.5, 2.5], shade: 0.9, colorHex: \"@ink\" }` \u2014 down-right, matching the light. `reveal: { by: \"word\", mode: \"slide\", secondsPer: 0.24 }` from t=0.35.\n- **Sub line** \u2014 30pt in `@muted`, same left edge at x=700, `reveal: { by: \"word\", mode: \"fade\", secondsPer: 0.1 }` starting t=2.35 \u2014 exactly two seconds after the title.\n\n`promo_validate` reports \"ok \u2014 nothing the renderer would quietly correct\"; `promo_inspect` shows 4 of 4 layers renderable, no undefined colours, no unused resources.\n\nOne thing worth knowing: `materials` belongs on the **resource**, not the layer. With it on the layer the project still validated clean, it just rendere",
    "contact": "docs/demo/25-turntable/contact-result.png",
    "reference_contact": "docs/demo/25-turntable/contact-reference.png",
    "video": "docs/demo/25-turntable/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/25-turntable.mp4",
-   "video_hd_bytes": 526327,
+   "video_hd_bytes": 608648,
    "metadata": "docs/demo/25-turntable/result-metadata.json",
    "gif": "docs/demo/25-turntable/result.gif",
    "thumb": "docs/demo/25-turntable/thumb.png"
