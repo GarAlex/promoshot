@@ -1,0 +1,17 @@
+{
+ "kind": "creative",
+ "template": "C7 Product spin",
+ "media": [
+  "slab.glb",
+  "ui_lumen_1.png",
+  "ui_lumen_2.png",
+  "ui_lumen_5.png"
+ ],
+ "duration": [
+  9,
+  16
+ ],
+ "must_use": [
+  "slab.glb"
+ ]
+}

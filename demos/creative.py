@@ -36,6 +36,10 @@ SETS = [
  {"id": "c6", "slug": "title-card", "title": "Title card",
   "goal": "No media. One title: 'LUMEN 2.0' with the line 'See everything.' under it. Make an 8-to-12-second title card, landscape, the kind a motion designer opens a keynote with — solid, dimensional type that moves like it means it. Palette, motion and finish are yours.",
   "media": {}, "duration": [7, 13], "must_use": []},
+ {"id": "c7", "slug": "product-spin", "title": "Product spin",
+  "goal": "A 3D model of a tablet (slab.glb — look at it before you place it) and three screenshots of Lumen, an analytics app. Make a 10-to-15-second product spot, landscape, where the device is the hero: show the app on its screen, move the camera like a product film would, and say one thing worth saying. Palette, type and motion are yours.",
+  "media": {"25-turntable": ["slab.glb"], "01-app-store-hero": ["ui_lumen_1.png", "ui_lumen_2.png", "ui_lumen_5.png"]},
+  "duration": [9, 16], "must_use": ["slab.glb"]},
 ]
 
 def main():
