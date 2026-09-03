@@ -1776,6 +1776,26 @@ mod tests {
         );
         let red = count(&|r, g, b| r > 120 && g < 80 && b < 80);
         assert!(red > 200, "and the cube shows between its glyphs: {red} px");
+        // A drawing member — a filled green oval — in front the same way.
+        let drawing = r#"{"id":"D","kind":"drawing","filename":"","displayName":"Oval","addedAt":0,
+            "pixelWidth":320,"pixelHeight":320,
+            "drawing":{"shapes":[{"id":"S","kind":"oval","points":[[60,60],[260,260]],
+              "strokeColorHex":"10E040","strokeWidth":4,"fillColorHex":"10E040","fillOpacity":1,
+              "arrowStart":false,"arrowEnd":false}]}},"#;
+        let json = doc(1.0, -1.0, r#",{"id":"L5","name":"oval","sortIndex":4,"kind":"drawing","isEnabled":true,"stage":"s",
+            "startTime":0,"duration":2,"resourceID":"D",
+            "keyframes":[{"id":"K5","time":0,"depth":3.0,"transitionDuration":0}]}"#)
+            .replacen(r#""resources":["#, &format!(r#""resources":[{drawing}"#), 1);
+        std::fs::write(dir.join("metadata.json"), json).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let frame = renderer.frame_bgra(0.5).expect("frame");
+        let i = (160 * 320 + 160) * 4;
+        let (r, g, b) = (frame[i + 2], frame[i + 1], frame[i]);
+        assert!(
+            g > 120 && g > r + 60 && g > b + 60,
+            "the drawing stands in front: {r},{g},{b}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1819,7 +1839,7 @@ mod tests {
                 r#""filename":"blue.glb","displayName":"Blue","addedAt":0}"#,
                 r#""filename":"blue.glb","displayName":"Blue","addedAt":0,"materials":{"Body":"10E040"}}"#,
             );
-        std::fs::write(dir.join("metadata.json"), doc).unwrap();
+        std::fs::write(dir.join("metadata.json"), &doc).unwrap();
         let project = crate::project::Project::open(&dir).expect("project");
         let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
         let frame = renderer.frame_bgra(0.5).expect("frame");
@@ -1854,6 +1874,43 @@ mod tests {
             g / n
         };
         assert!(g > 60, "the left is the bound green: g {g}");
+        // The left member keyed with its own camera yaw turns in place: two
+        // faces, two shades on its side of the frame; the right stays one.
+        let turned = doc.replace(
+            r#""keyframes":[{"id":"K2","time":0,"stageOffset":[-1.6,0],"transitionDuration":0}]"#,
+            r#""keyframes":[{"id":"K2","time":0,"stageOffset":[-1.6,0],"camera":{"yaw":40},"transitionDuration":0}]"#,
+        );
+        assert_ne!(turned, doc, "the member keyframe was rewritten");
+        std::fs::write(dir.join("metadata.json"), &turned).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+        let frame = renderer.frame_bgra(0.5).expect("frame");
+        let spread = |x0: usize, x1: usize| -> u32 {
+            let mut lum: Vec<u32> = (120..200)
+                .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    let i = (y * 320 + x) * 4;
+                    (frame[i + 2] as u32 * 299 + frame[i + 1] as u32 * 587 + frame[i] as u32 * 114)
+                        / 1000
+                })
+                .filter(|&l| l > 30)
+                .collect();
+            lum.sort_unstable();
+            if lum.len() < 20 {
+                return 0;
+            }
+            lum[lum.len() * 9 / 10] - lum[lum.len() / 10]
+        };
+        assert!(
+            spread(0, 130) > 25,
+            "the turned member shows two shades: {}",
+            spread(0, 130)
+        );
+        assert!(
+            spread(190, 320) < 25,
+            "the untouched member stays one: {}",
+            spread(190, 320)
+        );
         let (r, b, _) = strip(150, 170);
         assert!(r < 30 && b < 30, "the middle is the ground: r {r} b {b}");
         let _ = std::fs::remove_dir_all(&dir);

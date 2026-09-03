@@ -175,8 +175,9 @@ new projects.
   radius). The first member (lowest `sortIndex`) owns the picture: its
   `camera`/`light` are the stage's and its placement, opacity and
   effects apply to the whole stage. A phone at +1, a laptop at -1 and a
-  screenshot between them is the reason, and a caption member stands
-  in the scene as a billboard at its depth. Stamp `minReaderVersion:
+  screenshot between them is the reason; caption and drawing members
+  stand in the scene as billboards at their depth, and a model member
+  that is not first turns in place by its own `camera` yaw/pitch. Stamp `minReaderVersion:
   30` (31 with `stageOffset`).
 - **Kinetic reveals.** Beside `wipe`, `fade`, `rise` and `scale`, a
   reveal's `mode` can be `flip` (each unit turns in edge-on, in

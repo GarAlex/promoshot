@@ -2816,6 +2816,14 @@ impl PreviewEngine {
                     self.caption_quad(member, showing.as_deref(), settings, canvas, time, pinned)
                         .map(|(_, id)| id)
                 }
+                // A drawing's raster the same way — its shapes as they would be on
+                // the canvas, standing at its depth.
+                ProjectLayerKind::Drawing => {
+                    let showing =
+                        tl::layer_resource_id(member, time, &resources).map(str::to_string);
+                    self.drawing_quad(member, showing.as_deref(), settings, canvas, time, pinned)
+                        .map(|(_, id)| id)
+                }
                 ProjectLayerKind::Image | ProjectLayerKind::Video => {
                     let showing = tl::layer_resource_id(member, time, &resources)
                         .unwrap_or_default()
@@ -2937,6 +2945,43 @@ impl PreviewEngine {
                 continue;
             };
             let mut matrices = self.model_matrices(member, loaded, time);
+            // A member that is not first keeps its own `camera` yaw/pitch as
+            // a TURN of the model about its origin — the stage owns the one
+            // camera, so a keyed yaw on a member is the way to angle it.
+            if member.id != first.id {
+                let local = tl::layer_local_time(member, time);
+                let turn = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+                    tl::interpolation::layer_interpolated_scalar(member, local, select)
+                        .unwrap_or(0.0)
+                        .to_radians() as f32
+                };
+                let (yaw, pitch) = (
+                    turn(|k| k.camera.and_then(|c| c.yaw)),
+                    turn(|k| k.camera.and_then(|c| c.pitch)),
+                );
+                if yaw != 0.0 || pitch != 0.0 {
+                    let (cy, sy, cx, sx) = (yaw.cos(), yaw.sin(), pitch.cos(), pitch.sin());
+                    // Rotate about Y (yaw) then about X (pitch), column-major.
+                    let rot: Mat4 = [
+                        [cy, 0.0, -sy, 0.0],
+                        [sy * sx, cx, cy * sx, 0.0],
+                        [sy * cx, -sx, cy * cx, 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                    ];
+                    let mul = |a: &Mat4, b: &Mat4| -> Mat4 {
+                        let mut out = [[0.0f32; 4]; 4];
+                        for (c, col) in out.iter_mut().enumerate() {
+                            for (r, cell) in col.iter_mut().enumerate() {
+                                *cell = (0..4).map(|k| a[k][r] * b[c][k]).sum();
+                            }
+                        }
+                        out
+                    };
+                    for m in &mut matrices {
+                        *m = mul(&rot, m);
+                    }
+                }
+            }
             for m in &mut matrices {
                 m[3][0] += item.across[0] * radius;
                 m[3][1] += item.across[1] * radius;
@@ -2966,7 +3011,10 @@ impl PreviewEngine {
                         matrices,
                     });
                 }
-                ProjectLayerKind::Image | ProjectLayerKind::Video | ProjectLayerKind::Caption => {
+                ProjectLayerKind::Image
+                | ProjectLayerKind::Video
+                | ProjectLayerKind::Caption
+                | ProjectLayerKind::Drawing => {
                     let Some(id) = item.frame else {
                         continue;
                     };
@@ -2979,7 +3027,10 @@ impl PreviewEngine {
                     );
                     // A picture is as tall as the stage's radius at zoom 1; a caption
                     // keeps its share of the canvas height, over the stage's diameter.
-                    let height = if member.kind == ProjectLayerKind::Caption {
+                    let height = if matches!(
+                        member.kind,
+                        ProjectLayerKind::Caption | ProjectLayerKind::Drawing
+                    ) {
                         (h / canvas.height().max(1.0) as f32) * 2.0 * radius
                     } else {
                         radius * item.zoom
@@ -3055,7 +3106,10 @@ impl PreviewEngine {
                         }
                     }
                 }
-                ProjectLayerKind::Image | ProjectLayerKind::Video | ProjectLayerKind::Caption => {
+                ProjectLayerKind::Image
+                | ProjectLayerKind::Video
+                | ProjectLayerKind::Caption
+                | ProjectLayerKind::Drawing => {
                     let Some(id) = item.frame else {
                         continue;
                     };
@@ -3066,7 +3120,10 @@ impl PreviewEngine {
                         entry.frame.width.max(1) as f32,
                         entry.frame.height.max(1) as f32,
                     );
-                    let height = if member.kind == ProjectLayerKind::Caption {
+                    let height = if matches!(
+                        member.kind,
+                        ProjectLayerKind::Caption | ProjectLayerKind::Drawing
+                    ) {
                         (h / canvas.height().max(1.0) as f32) * 2.0 * radius
                     } else {
                         radius * item.zoom

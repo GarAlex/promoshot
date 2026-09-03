@@ -442,10 +442,10 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 /// tilt holds one angle inside a moving box. Say so, before someone reads
 /// it in pixels.
 /// A stage (rung 30) is drawn by its FIRST member: that member must be a
-/// model, image or video (the picture rides its quad); captions and
-/// drawings inside a stage are not drawn yet; and the other members' own
-/// 2D transforms — placement, zoom, shifts — are ignored inside the stage
-/// (their `depth` and, for models, camera turn are what count).
+/// model, image or video (the picture rides its quad; captions and drawings
+/// stand as billboards); and the other members' own 2D transforms —
+/// placement, zoom, shifts — are ignored inside the stage (their `depth`,
+/// `stageOffset` and, for models, camera turn are what count).
 fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let layers = meta.layers.as_deref().unwrap_or(&[]);
     let mut names: Vec<&str> = layers.iter().filter_map(|l| l.stage.as_deref()).collect();
@@ -472,13 +472,6 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         for member in members.iter().skip(1) {
-            if member.kind == ProjectLayerKind::Drawing {
-                out.push(format!(
-                    "stage \"{name}\": \"{}\" is a drawing — drawings inside a stage \
-                     are not drawn yet",
-                    member.name
-                ));
-            }
             if member.keyframes.iter().any(|k| {
                 k.placement.is_some()
                     || k.zoom.is_some() && member.kind == ProjectLayerKind::Model
