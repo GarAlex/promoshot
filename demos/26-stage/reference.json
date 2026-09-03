@@ -1,0 +1,276 @@
+{
+ "id": "8DFD9E29-D7CE-BD31-3BD8-5F7F1EE81A40",
+ "name": "26 Stage",
+ "formatVersion": 2,
+ "minReaderVersion": 31,
+ "createdAt": 0,
+ "state": "ready",
+ "trimStart": 0,
+ "trimEnd": 8.0,
+ "videoDuration": 8.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 48,
+  "subtitleBackgroundOpacity": 0,
+  "subtitleLeftMargin": 80,
+  "subtitleRightMargin": 80,
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0E1726"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "text",
+    "colorHex": "FFFFFF"
+   }
+  ]
+ },
+ "resources": [
+  {
+   "id": "E7323EFD-07A6-07BC-44E8-6F5CA2E55A56",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Overview",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "7C6358EA-63ED-581A-67C1-254429C75E87",
+   "kind": "image",
+   "filename": "ui_lumen_2.png",
+   "displayName": "Revenue",
+   "addedAt": 0,
+   "pixelWidth": 1216,
+   "pixelHeight": 760,
+   "mediaCuts": [],
+   "imageCuts": [],
+   "disabledAudioTrackIndices": []
+  },
+  {
+   "id": "59B09DA8-B9CC-048E-8824-3793775285C2",
+   "kind": "model",
+   "filename": "tablet.glb",
+   "displayName": "Tablet",
+   "addedAt": 0,
+   "clips": [],
+   "boundsRadius": 0.7633,
+   "materials": {
+    "Body": "@accent",
+    "Screen": {
+     "resourceID": "E7323EFD-07A6-07BC-44E8-6F5CA2E55A56"
+    }
+   }
+  },
+  {
+   "id": "3ABE8F70-5BF0-15E2-450E-4D640F81D089",
+   "kind": "model",
+   "filename": "phone.glb",
+   "displayName": "Phone",
+   "addedAt": 0,
+   "clips": [],
+   "boundsRadius": 0.8194,
+   "materials": {
+    "Body": "@edge",
+    "Screen": {
+     "resourceID": "7C6358EA-63ED-581A-67C1-254429C75E87"
+    }
+   }
+  },
+  {
+   "id": "9DCF7CA4-1F3D-96A2-9833-F9DE4A95D62C",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "Caption \u00b7 Title",
+   "addedAt": 0,
+   "captionText": "One scene, two devices.",
+   "captionStyle": {
+    "alignment": "center",
+    "subtitleFontSize": 56,
+    "subtitleBold": true,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -70
+     ]
+    },
+    "depth": {
+     "count": 6,
+     "offset": [
+      2,
+      2
+     ],
+     "shade": 0.6,
+     "colorHex": "@edge"
+    },
+    "reveal": {
+     "by": "word",
+     "mode": "rise",
+     "seconds": 1.2
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "B1C6AC7C-C1A8-B575-417E-1486DA51B0C5",
+   "name": "Backdrop",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 8.0,
+   "keyframes": [
+    {
+     "id": "B1438575-27AA-5F73-5103-9535EEDBFC5C",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
+      "kind": "radial",
+      "start": [
+       0.5,
+       0.5
+      ],
+      "end": [
+       1,
+       1
+      ],
+      "stops": [
+       {
+        "colorHex": "1B2B4F",
+        "at": 0
+       },
+       {
+        "colorHex": "0A0F1F",
+        "at": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "0C26EDCC-2C9A-9CB6-EFBD-411CC97CE685",
+   "name": "Tablet",
+   "sortIndex": 1,
+   "kind": "model",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 8.0,
+   "resourceID": "59B09DA8-B9CC-048E-8824-3793775285C2",
+   "stage": "desk",
+   "fadeIn": 0.5,
+   "keyframes": [
+    {
+     "id": "79F0610C-EA49-9FD5-5DEB-ED7B5DFE4D8D",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 620,
+      "anchor": "center",
+      "offset": [
+       0,
+       -40
+      ]
+     },
+     "camera": {
+      "yaw": -38,
+      "pitch": 16,
+      "distance": 4.6,
+      "fov": 30
+     },
+     "light": {
+      "yaw": 30,
+      "pitch": 55,
+      "intensity": 1.1
+     },
+     "stageOffset": [
+      -0.35,
+      0.0
+     ]
+    },
+    {
+     "id": "4613B816-496E-C9BF-3C6A-47BC03F22C76",
+     "time": 7.6,
+     "transitionDuration": 7.6,
+     "placement": {
+      "height": 620,
+      "anchor": "center",
+      "offset": [
+       0,
+       -40
+      ]
+     },
+     "camera": {
+      "yaw": 22,
+      "pitch": 10,
+      "distance": 4.2,
+      "fov": 30
+     },
+     "light": {
+      "yaw": 30,
+      "pitch": 55,
+      "intensity": 1.1
+     },
+     "stageOffset": [
+      -0.35,
+      0.0
+     ],
+     "easing": "easeInOut"
+    }
+   ]
+  },
+  {
+   "id": "594FE6D0-1107-817F-EAEF-F63B50090E28",
+   "name": "Phone",
+   "sortIndex": 2,
+   "kind": "model",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 8.0,
+   "resourceID": "3ABE8F70-5BF0-15E2-450E-4D640F81D089",
+   "stage": "desk",
+   "keyframes": [
+    {
+     "id": "8858BFF3-3B57-436F-0F55-DF4A584DC85A",
+     "time": 0,
+     "transitionDuration": 0,
+     "depth": 0.9,
+     "stageOffset": [
+      0.95,
+      -0.15
+     ]
+    }
+   ]
+  },
+  {
+   "id": "4BE5C52E-1182-6BFE-D65D-58D05ACAB569",
+   "name": "Title",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.0,
+   "duration": 7.0,
+   "resourceID": "9DCF7CA4-1F3D-96A2-9833-F9DE4A95D62C",
+   "fadeOut": 0.4,
+   "keyframes": []
+  }
+ ]
+}
