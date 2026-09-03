@@ -491,7 +491,7 @@
      "kind": "model",
      "isEnabled": true,
      "startTime": 0,
-     "duration": 5.2,
+     "duration": 10.0,
      "resourceID": "4AB32ED1-8949-9FDF-A4C5-719DB0839925",
      "keyframes": [
       {
@@ -536,11 +536,25 @@
        "progress": 0.0
       },
       {
+       "id": "E4C3E978-0709-33BF-7EE8-CC8838226814",
+       "time": 5.6,
+       "transitionDuration": 0.7,
+       "progress": 0.45,
+       "easing": "easeOut"
+      },
+      {
+       "id": "00956194-74F5-ECCE-2176-4E6A9A2B9015",
+       "time": 7.0,
+       "transitionDuration": 1.4,
+       "progress": 0.6,
+       "easing": "linear"
+      },
+      {
        "id": "187ED529-CC67-1322-0A3A-D799D51F93C8",
        "time": 8.4,
-       "transitionDuration": 3.5,
+       "transitionDuration": 1.4,
        "progress": 1.0,
-       "easing": "easeInOut"
+       "easing": "easeIn"
       }
      ]
     },
@@ -550,8 +564,8 @@
      "sortIndex": 12,
      "kind": "model",
      "isEnabled": true,
-     "startTime": 8.3,
-     "duration": 1.6999999999999993,
+     "startTime": 0,
+     "duration": 10.0,
      "resourceID": "B91B6322-5656-A667-0246-717CA9B915F8",
      "keyframes": [
       {

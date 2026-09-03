@@ -319,6 +319,9 @@ pub struct PreviewEngine {
     /// Surface samples for morphs (rung 39), by body, count and seed —
     /// taken once, cleared when a body's bytes change.
     morph_samples: HashMap<String, Vec<crate::morph::Sample>>,
+    /// Bodies a morph dissolved last frame, put back whole when no morph
+    /// touches them this frame.
+    dissolved: Vec<String>,
     /// Built on the first model; None until then, so a project with no
     /// models pays nothing.
     model_pass: Option<ModelPass>,
@@ -421,6 +424,7 @@ impl PreviewEngine {
             models: HashMap::new(),
             built_recipes: HashMap::new(),
             morph_samples: HashMap::new(),
+            dissolved: Vec::new(),
             model_pass: None,
             overlays: Vec::new(),
             key_of: HashMap::new(),
@@ -3307,6 +3311,10 @@ impl PreviewEngine {
         // member's progress, offset like the member — as one model of
         // camera-facing quads per cloud.
         let mut cloud_points: Vec<(Vec<crate::morph::Point>, Vec<[f32; 4]>)> = Vec::new();
+        // The bodies a morph is between, and how far each has gone: the
+        // first dissolves over the first half of the flight, the second
+        // assembles over the second — in cells the size of the points.
+        let mut dissolving: Vec<(String, f32, f32)> = Vec::new();
         for item in &prepared {
             let Some(progress) = item.morph else {
                 continue;
@@ -3366,10 +3374,32 @@ impl PreviewEngine {
                 p.position[1] += offset[1];
                 p.position[2] += offset[2];
             }
+            let smooth = |x: f32| {
+                let x = x.clamp(0.0, 1.0);
+                x * x * (3.0 - 2.0 * x)
+            };
+            let cell = morph.size() as f32 * body_radius * 2.5;
+            dissolving.push((morph.from.clone(), smooth(progress / 0.5), cell));
+            dissolving.push((morph.to.clone(), 1.0 - smooth((progress - 0.5) / 0.5), cell));
             cloud_points.push((points, colors));
         }
 
         let pass = self.model_pass.as_ref()?;
+        // Bodies whole again unless a morph is between them this frame.
+        let touched: Vec<String> = dissolving.iter().map(|(id, _, _)| id.clone()).collect();
+        for id in std::mem::take(&mut self.dissolved) {
+            if !touched.contains(&id) {
+                if let Some(loaded) = self.models.get_mut(&id) {
+                    pass.set_dissolve(self.ctx, &mut loaded.gpu, 0.0, 0.0);
+                }
+            }
+        }
+        for (id, amount, cell) in &dissolving {
+            if let Some(loaded) = self.models.get_mut(id) {
+                pass.set_dissolve(self.ctx, &mut loaded.gpu, *amount, *cell);
+            }
+        }
+        self.dissolved = touched;
         let basis = promo_gpu::model_pass::camera_basis(&view);
         let mut clouds: Vec<GpuModel> = Vec::new();
         for (points, colors) in &cloud_points {

@@ -198,9 +198,11 @@ new projects.
   3000, "spread": 1.2 } } }` played by a DRAWING member of the stage
   both bodies are in, whose keyframes ramp `"progress"` 0 → 1 (with
   easing): the points sit on the first body at 0, fly out, and settle
-  on the second at 1. End the first body's member as they leave and
-  start the second's as they land, so the swap is seamless. Stamp
-  `minReaderVersion: 39`.
+  on the second at 1. The first body DISSOLVES as they leave and the
+  second ASSEMBLES as they land, so both bodies can simply live through
+  the whole piece. For an explosion, key progress as a fast eased-out
+  burst (0 → 0.45 in ~0.7 s), a slow drift (→ 0.6 over ~1.5 s), then
+  an eased-in gather (→ 1 in ~1.4 s). Stamp `minReaderVersion: 39`.
 - **A body from parts.** Anything a product shot needs that is not a
   device or type — a stand, a plinth, a ring, a puck — is a model
   resource with a parts recipe, written like an SVG: `{ "kind": "model",

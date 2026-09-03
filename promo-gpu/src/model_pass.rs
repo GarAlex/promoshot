@@ -163,6 +163,9 @@ struct Material {
     fit: vec4<f32>,
     // A worn picture's tiling: xy repeats across u and v, zw shifts.
     uv: vec4<f32>,
+    // x = how much of the surface has dissolved (0 whole, 1 gone), y =
+    // the size of the cells it goes in, world units.
+    extra: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var env_tex: texture_2d<f32>;
@@ -240,6 +243,13 @@ fn env_sample(dir: vec3<f32>, lod: f32) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
+    // A dissolving body: cells of its surface go in a fixed random order
+    // as the amount rises — the order a morph's points leave in.
+    if (material.extra.x > 0.0) {
+        let cell = floor(in.world / max(material.extra.y, 0.0001));
+        let h = fract(sin(dot(cell, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.547);
+        if (h < material.extra.x) { discard; }
+    }
     var n = normalize(in.normal);
     if (!front) {
         if (material.factors.w < 0.5) { discard; }
@@ -362,6 +372,7 @@ struct MaterialRaw {
     factors: [f32; 4],
     fit: [f32; 4],
     uv: [f32; 4],
+    extra: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -447,6 +458,10 @@ struct GpuMaterial {
     /// screen), and its tiling: repeat u, v and offset u, v.
     worn: bool,
     uv: [f32; 4],
+    /// How much of the surface has dissolved (0 whole, 1 gone) and the
+    /// size of the cells it goes in — a morph's body on the way out or in.
+    dissolve: f32,
+    cell: f32,
     /// Width over height of the surface this slot's uvs span, from the
     /// geometry that wears it — what a bound picture is fitted to.
     aspect: f32,
@@ -819,6 +834,7 @@ impl ModelPass {
                 label: Some("model-material"),
                 contents: as_bytes(&MaterialRaw {
                     uv: [1.0, 1.0, 0.0, 0.0],
+                    extra: [0.0; 4],
                     base_color: m.base_color,
                     factors: [
                         m.metallic,
@@ -880,6 +896,8 @@ impl ModelPass {
                 textured: if texture.is_some() { 1.0 } else { 0.0 },
                 worn: false,
                 uv: [1.0, 1.0, 0.0, 0.0],
+                dissolve: 0.0,
+                cell: 0.0,
                 aspect: aspects[index],
                 bound_copy: None,
                 normal_view,
@@ -982,6 +1000,7 @@ impl ModelPass {
                 0,
                 as_bytes(&MaterialRaw {
                     uv: m.uv,
+                    extra: [m.dissolve, m.cell, 0.0, 0.0],
                     base_color: m.base_color,
                     factors: [
                         m.metallic,
@@ -1025,6 +1044,7 @@ impl ModelPass {
             0,
             as_bytes(&MaterialRaw {
                 uv: m.uv,
+                extra: [m.dissolve, m.cell, 0.0, 0.0],
                 base_color: m.base_color,
                 factors: [
                     m.metallic,
@@ -1140,6 +1160,37 @@ impl ModelPass {
         texture
     }
 
+    /// How much of every slot of a body has dissolved — 0 whole, 1 gone —
+    /// in cells `cell` wide, world units. A morph sets it on the body
+    /// its points leave and on the one they land on.
+    pub fn set_dissolve(&self, ctx: &GpuContext, model: &mut GpuModel, amount: f32, cell: f32) {
+        let amount = amount.clamp(0.0, 1.0);
+        for m in &mut model.materials {
+            if (m.dissolve - amount).abs() < 1e-6 && (m.cell - cell).abs() < 1e-6 {
+                continue;
+            }
+            m.dissolve = amount;
+            m.cell = cell;
+            let (has_normal, has_mr) = m.map_flags();
+            ctx.queue.write_buffer(
+                &m.uniform,
+                0,
+                as_bytes(&MaterialRaw {
+                    uv: m.uv,
+                    extra: [m.dissolve, m.cell, 0.0, 0.0],
+                    base_color: m.base_color,
+                    factors: [
+                        m.metallic,
+                        m.roughness,
+                        m.textured,
+                        if m.double_sided { 1.0 } else { 0.0 },
+                    ],
+                    fit: [m.aspect, has_normal, has_mr, 0.0],
+                }),
+            );
+        }
+    }
+
     /// How one slot wears its bound picture: `worn` lights it as the
     /// slot's colour under the finish (a label, a video on a body),
     /// else it is shown unlit and fitted, as a screen; `repeat` tiles
@@ -1168,6 +1219,7 @@ impl ModelPass {
             0,
             as_bytes(&MaterialRaw {
                 uv: m.uv,
+                extra: [m.dissolve, m.cell, 0.0, 0.0],
                 base_color: m.base_color,
                 factors: [
                     m.metallic,
@@ -1258,6 +1310,7 @@ impl ModelPass {
                         0,
                         as_bytes(&MaterialRaw {
                             uv: m.uv,
+                            extra: [m.dissolve, m.cell, 0.0, 0.0],
                             base_color: m.base_color,
                             factors: [m.metallic, m.roughness, 3.0, 1.0],
                             fit: [m.aspect, 0.0, 0.0, 0.0],
@@ -2225,6 +2278,65 @@ mod tests {
         // The face spans roughly x 24..72 at distance 3; uv.x runs left
         // to right across it.
         (mean(28, 44), mean(52, 68))
+    }
+
+    /// A dissolving body loses its surface in cells as the amount rises:
+    /// none at 0, about half at 0.5, all at 1.
+    #[test]
+    fn a_dissolve_takes_the_surface_away_in_cells() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let mut model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.9, 0.9, 0.9, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.6,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload");
+        let opaque = |model: &GpuModel| -> usize {
+            let view = ModelView {
+                yaw: 0.0,
+                pitch: 0.0,
+                distance: 3.0,
+                ..ModelView::default()
+            };
+            let px = pass
+                .render_to_bytes(&ctx, model, &view, &[IDENTITY], 96, 96)
+                .expect("render");
+            px.chunks_exact(4).filter(|c| c[3] > 8).count()
+        };
+        let whole = opaque(&model);
+        assert!(whole > 1000, "the cube is drawn: {whole}");
+        pass.set_dissolve(&ctx, &mut model, 0.5, 0.05);
+        let half = opaque(&model);
+        assert!(
+            half > whole / 4 && half < whole * 3 / 4,
+            "half dissolved: {half} of {whole}"
+        );
+        pass.set_dissolve(&ctx, &mut model, 1.0, 0.05);
+        assert_eq!(opaque(&model), 0, "all gone");
+        pass.set_dissolve(&ctx, &mut model, 0.0, 0.05);
+        assert_eq!(opaque(&model), whole, "and back");
     }
 
     /// A bound picture minifies through a mip chain: a fine checkerboard

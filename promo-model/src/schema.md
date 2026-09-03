@@ -908,9 +908,13 @@ wobble, `stagger` how unevenly they leave and arrive) and gathers them
 on the second body's surface — a cube bursts into points that settle
 into a word. The recipe plays on a DRAWING member of the stage the two
 bodies are in, with `"progress"` on its keyframes; the bodies themselves
-are ordinary members (end the first as the points leave, start the
-second as they land). Every point is a closed-form function of the
-progress and the seed. A project with a morph, a member's progress, or a
+are ordinary members that may live through the whole flight: the first
+DISSOLVES, in cells the size of the points, over the first half of the
+progress, and the second ASSEMBLES the same way over the second half,
+so the bodies need no start or end of their own. Shape the flight with
+the progress keyframes — an explosion is a fast eased-out burst to
+about 0.45, a slow drift, then an eased-in gather to 1. Every point is
+a closed-form function of the progress and the seed. A project with a morph, a member's progress, or a
 faced box carries `minReaderVersion: 39`.
 A body can be made of PARTS (rung 37) — the 3D counterpart of a
 drawing, written by hand the way an SVG is: `"recipe": { "parts": [
