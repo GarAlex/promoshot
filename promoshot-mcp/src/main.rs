@@ -216,6 +216,40 @@ where
     })
 }
 
+/// Every `$ref` in a schema replaced by a named placeholder.
+///
+/// `#/$defs/ProjectLayer` becomes "a ProjectLayer — its shape is in
+/// promo_schema_types, its prose in promo_schema_full"; the bare `#`
+/// schemars writes for a command nested inside another (inComposition)
+/// used to resolve to promo_apply's own ARGUMENT object, which was never
+/// what it meant, and becomes a placeholder saying so. The placeholder
+/// carries no `type`, so it accepts whatever the reference accepted.
+fn without_type_graph(node: Value) -> Value {
+    match node {
+        Value::Object(map) => {
+            if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
+                let named = reference.rsplit('/').next().unwrap_or(reference);
+                let text = if reference == "#" {
+                    "another command, applied inside the composition".to_string()
+                } else {
+                    format!(
+                        "a {named} — its shape is in promo_schema_types, its prose in \
+                         promo_schema_full"
+                    )
+                };
+                return json!({ "description": text });
+            }
+            Value::Object(
+                map.into_iter()
+                    .map(|(key, value)| (key, without_type_graph(value)))
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(without_type_graph).collect()),
+        other => other,
+    }
+}
+
 fn initialize(request: &Value) -> Value {
     // Answer in the client's protocol dialect when it names one; this server
     // uses nothing that has changed across revisions.
@@ -242,18 +276,25 @@ fn tool_descriptors() -> Value {
     let preview = json!({ "type": "boolean", "description":
         "Attach an inline thumbnail of the composition (default true); the \
          same image lands at <project>/Exports/preview.png" });
-    // The editor's Command enum as the `commands` item schema. Its $defs
-    // are hoisted to the inputSchema root so "#/$defs/…" references
-    // resolve from where a client resolves them.
+    // The editor's Command enum as the `commands` item schema — the
+    // vocabulary (which commands exist, and what each names) and NOT the
+    // model's whole type graph.
+    //
+    // Those types used to ride along: schemars pulls every type a command
+    // mentions, and hoisting them put 90 definitions and 84 KB into
+    // `tools/list`, which every client loads on connect and carries in
+    // every request after. It was 83% of the whole tool surface, for the
+    // shapes of a layer and a resource that `promo_schema_types` already
+    // serves on request. Each reference becomes a named placeholder that
+    // says where its shape lives; a placeholder is an empty schema, so no
+    // client rejects an argument it would have accepted.
     let mut command_items = promo_editor::command_schema();
-    let command_defs = command_items
-        .as_object_mut()
-        .and_then(|m| {
-            m.remove("$schema");
-            m.remove("title");
-            m.remove("$defs")
-        })
-        .unwrap_or_else(|| json!({}));
+    if let Some(map) = command_items.as_object_mut() {
+        map.remove("$schema");
+        map.remove("title");
+        map.remove("$defs");
+    }
+    let command_items = without_type_graph(command_items);
     json!([
         {
             "name": "promo_validate",
@@ -312,14 +353,24 @@ fn tool_descriptors() -> Value {
         },
         {
             "name": "promo_render_frames",
-            "description": "A PNG per frame over a range — the contact sheet that catches \
-                a mis-aimed viewport before a full render.",
+            "description": "LOOK at the composition: moments rendered to PNGs and tiled into \
+                one contact sheet, attached to this reply as an image. Bare, it samples 12 \
+                moments across the whole piece — the fastest way to catch an off-centre card, \
+                an empty frame or a mis-aimed viewport. Name `times` for exact moments, or a \
+                from/to/fps range for every frame in it (240 at most). Frames from this tool's \
+                own previous call in the same folder are replaced, never mixed.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,
+                    "times": { "type": "array", "items": { "type": "number" }, "description":
+                        "Exact seconds to render — the sheet's cells follow this order" },
+                    "sample": { "type": "integer", "description":
+                        "How many moments to spread across the range (default 12 when \
+                         neither times nor a range is given)" },
                     "from": { "type": "number" },
                     "to": { "type": "number" },
-                    "fps": { "type": "number" },
+                    "fps": { "type": "number", "description":
+                        "Every frame at this rate over the range — an export, not a look" },
                     "size": { "type": "string", "description": "WxH (default: canvas)" },
                     "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
                         "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
@@ -594,7 +645,6 @@ fn tool_descriptors() -> Value {
                 markers and chapters whole. Every command succeeds or nothing is \
                 written. The schema of `commands` IS the editor's Command enum.",
             "inputSchema": { "type": "object",
-                "$defs": command_defs,
                 "properties": {
                     "project": project,
                     "commands": { "type": "array", "minItems": 1, "items": command_items,
@@ -918,15 +968,43 @@ where
         "promo_render_frames" => {
             let project = fenced_project(args, config)?;
             let out = default_out(args, "outDir", &project, "frames")?;
-            let mut argv = vec!["frames".to_string(), project, "--out".into(), out];
+            let mut argv = vec!["frames".to_string(), project.clone(), "--out".into(), out];
             if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
                 argv.extend(["--proxy".into(), policy.to_string()]);
             }
+            let times: Vec<String> = args
+                .get("times")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_f64)
+                        .map(|t| t.to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !times.is_empty() {
+                argv.extend(["--times".into(), times.join(",")]);
+            }
+            let mut ranged = false;
             for (key, flag) in [("from", "--from"), ("to", "--to"), ("fps", "--fps")] {
                 if let Some(v) = args.get(key).and_then(Value::as_f64) {
                     argv.extend([flag.to_string(), v.to_string()]);
+                    ranged = true;
                 }
             }
+            if let Some(n) = args.get("sample").and_then(Value::as_u64) {
+                argv.extend(["--sample".into(), n.to_string()]);
+            } else if times.is_empty() && !ranged {
+                // A LOOK, not an export. Asked for nothing in particular this
+                // rendered every frame of the composition at its own rate —
+                // 11,880 PNGs across the demo corpus, none of them read as a
+                // whole. Twelve moments is a contact sheet.
+                argv.extend(["--sample".into(), SAMPLE_FRAMES.to_string()]);
+            }
+            // The tool's own ceiling, which the CLI does not have: a person
+            // may fairly ask for three thousand frames, a tool call may not.
+            argv.extend(["--cap".into(), FRAME_CAP.to_string()]);
+            argv.extend(["--sheet".into(), sheet_path(&project)]);
             push_size(&mut argv, args);
             run(config, &argv)
         }
@@ -1012,6 +1090,23 @@ fn fenced_project(args: &Value, config: &Config) -> Result<String, String> {
 
 /// An explicit output path wins; otherwise the project's Exports folder,
 /// created on the way — the same default the app's own tools use.
+/// Moments a bare `promo_render_frames` renders, and the most any one call
+/// will. The ceiling's message names the way out.
+const SAMPLE_FRAMES: usize = 12;
+const FRAME_CAP: usize = 240;
+
+/// Where a frames call leaves its contact sheet: one fixed place per
+/// project, beside the other exports rather than inside the frames folder,
+/// so `frame-*.png` stays a clean glob for ffmpeg and the preview knows
+/// where to look without re-deriving `outDir`.
+fn sheet_path(project: &str) -> String {
+    Path::new(project)
+        .join("Exports")
+        .join("frames-sheet.png")
+        .display()
+        .to_string()
+}
+
 fn default_out(args: &Value, key: &str, project: &str, filename: &str) -> Result<String, String> {
     if let Some(out) = args.get(key).and_then(Value::as_str) {
         return Ok(out.to_string());
@@ -1171,6 +1266,91 @@ mod tests {
             Path::new(&out).parent().unwrap().is_dir(),
             "and Exports exists"
         );
+        std::fs::remove_dir_all(&project).unwrap();
+    }
+
+    /// A bare frames call is a LOOK: twelve sampled moments, a ceiling, and
+    /// a contact sheet — not every frame of the composition. Asked for a
+    /// range or exact times it renders those instead, and the sheet and the
+    /// cap ride along either way.
+    /// The whole tool surface has a CEILING, because every client loads it
+    /// on connect and carries it in every request afterwards. It was 118 KB
+    /// — 29k tokens, 83% of it promo_apply's hoisted type graph — before
+    /// the references became placeholders.
+    #[test]
+    fn the_tool_surface_stays_small() {
+        let bytes = tool_descriptors().to_string().len();
+        assert!(
+            bytes < 45_000,
+            "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
+             and every request pays for it"
+        );
+        // And the ceiling is not met by dropping tools or their prose.
+        let tools = tool_descriptors();
+        let tools = tools.as_array().unwrap();
+        assert_eq!(tools.len(), 27);
+        assert!(
+            tools
+                .iter()
+                .all(|t| t["description"].as_str().is_some_and(|d| d.len() > 40)),
+            "every tool still says what it is for"
+        );
+    }
+
+    #[test]
+    fn frames_samples_and_caps_and_asks_for_a_sheet() {
+        let project = std::env::temp_dir().join(format!("mcp-frames-{}", std::process::id()));
+        std::fs::create_dir_all(&project).unwrap();
+        let call = |arguments: Value| {
+            let seen = std::cell::RefCell::new(Vec::new());
+            let req = serde_json::json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                "params": { "name": "promo_render_frames", "arguments": arguments } });
+            handle(&req, &config(), &recording(&seen)).unwrap();
+            let argv = seen.borrow()[0].clone();
+            argv
+        };
+        let after = |argv: &[String], flag: &str| -> Option<String> {
+            argv.iter()
+                .position(|a| a == flag)
+                .map(|i| argv[i + 1].clone())
+        };
+
+        let bare = call(serde_json::json!({ "project": project.display().to_string() }));
+        assert_eq!(bare[0], "frames");
+        assert_eq!(
+            after(&bare, "--sample"),
+            Some(SAMPLE_FRAMES.to_string()),
+            "{bare:?}"
+        );
+        assert_eq!(after(&bare, "--cap"), Some(FRAME_CAP.to_string()));
+        let sheet = after(&bare, "--sheet").expect("a sheet is always asked for");
+        assert_eq!(
+            Path::new(&sheet).file_name().and_then(|n| n.to_str()),
+            Some("frames-sheet.png"),
+            "{sheet}"
+        );
+
+        // A range means "every frame in it" — the sampling default steps
+        // aside, and the ceiling does not.
+        let ranged = call(serde_json::json!({
+            "project": project.display().to_string(), "from": 0, "to": 2, "fps": 12 }));
+        assert_eq!(after(&ranged, "--sample"), None, "{ranged:?}");
+        assert_eq!(after(&ranged, "--fps"), Some("12".into()));
+        assert_eq!(after(&ranged, "--cap"), Some(FRAME_CAP.to_string()));
+
+        let listed = call(serde_json::json!({
+            "project": project.display().to_string(), "times": [0.5, 2.0] }));
+        assert_eq!(
+            after(&listed, "--times"),
+            Some("0.5,2".into()),
+            "{listed:?}"
+        );
+        assert_eq!(after(&listed, "--sample"), None, "exact moments win");
+
+        // And an explicit sample beats the default.
+        let counted = call(serde_json::json!({
+            "project": project.display().to_string(), "sample": 4 }));
+        assert_eq!(after(&counted, "--sample"), Some("4".into()));
         std::fs::remove_dir_all(&project).unwrap();
     }
 
@@ -1377,9 +1557,9 @@ mod tests {
         std::fs::remove_dir_all(&project).unwrap();
     }
 
-    /// promo_apply's contract is the editor's Command enum: the descriptor
-    /// carries the generated schema with its $defs hoisted so references
-    /// resolve, and a batch through the tool reaches what the scaffold
+    /// promo_apply's contract is the editor's Command VOCABULARY: which
+    /// commands exist and what each names, without the model's type graph
+    /// riding along. A batch through the tool reaches what the scaffold
     /// cannot — here, a deletion on a caption-only project (no probing).
     #[test]
     fn apply_carries_the_command_schema_and_reaches_the_long_tail() {
@@ -1391,8 +1571,15 @@ mod tests {
             .find(|t| t["name"] == "promo_apply")
             .expect("promo_apply offered");
         let schema = &apply["inputSchema"];
-        assert!(schema["$defs"].is_object(), "defs hoisted to the root");
+        assert!(
+            schema.get("$defs").is_none(),
+            "the type graph does not ride along"
+        );
         let text = schema.to_string();
+        assert!(
+            !text.contains("\"$ref\""),
+            "and no reference is left dangling for a client to resolve"
+        );
         for kind in [
             "deleteLayer",
             "moveLayer",

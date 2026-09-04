@@ -2679,6 +2679,7 @@
           ]
         },
         "transitionDuration": {
+          "default": 0.5,
           "format": "double",
           "type": "number"
         },
@@ -2728,8 +2729,7 @@
       },
       "required": [
         "id",
-        "time",
-        "transitionDuration"
+        "time"
       ],
       "type": "object"
     },

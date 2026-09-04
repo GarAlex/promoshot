@@ -2938,9 +2938,16 @@ mod tests {
         };
         let bare = render(&doc(r#"{"Body":"B0B0B0"}"#));
         let object = render(&doc(r#"{"Body":{"colorHex":"B0B0B0"}}"#));
-        assert_eq!(bare, object, "the object form with a colour alone is the bare colour");
-        let chrome = render(&doc(r#"{"Body":{"colorHex":"B0B0B0","metallic":1,"roughness":0.1}}"#));
-        let matte = render(&doc(r#"{"Body":{"colorHex":"B0B0B0","metallic":0,"roughness":1}}"#));
+        assert_eq!(
+            bare, object,
+            "the object form with a colour alone is the bare colour"
+        );
+        let chrome = render(&doc(
+            r#"{"Body":{"colorHex":"B0B0B0","metallic":1,"roughness":0.1}}"#,
+        ));
+        let matte = render(&doc(
+            r#"{"Body":{"colorHex":"B0B0B0","metallic":0,"roughness":1}}"#,
+        ));
         let differ = |a: &[u8], b: &[u8]| -> usize {
             a.iter()
                 .zip(b)
@@ -3001,16 +3008,29 @@ mod tests {
             let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
             renderer.frame_bgra(t).expect("frame")
         };
-        let differ = |a: &[u8], b: &[u8]| a.iter().zip(b).filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12).count();
+        let differ = |a: &[u8], b: &[u8]| {
+            a.iter()
+                .zip(b)
+                .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12)
+                .count()
+        };
         let straight = render(&doc("", ""), 2.0);
         let arced = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 2.0);
         let n = straight.len();
-        assert!(differ(&straight, &arced) > n / 40, "mid-move the arced cube is elsewhere: {} of {n}", differ(&straight, &arced));
+        assert!(
+            differ(&straight, &arced) > n / 40,
+            "mid-move the arced cube is elsewhere: {} of {n}",
+            differ(&straight, &arced)
+        );
         let again = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 2.0);
         assert_eq!(arced, again, "the same instant is the same frame");
         let at_end = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 4.0);
         let at_end_straight = render(&doc("", ""), 4.0);
-        assert!(differ(&at_end, &at_end_straight) < n / 200, "at the keyframe both are where it says: {} of {n}", differ(&at_end, &at_end_straight));
+        assert!(
+            differ(&at_end, &at_end_straight) < n / 200,
+            "at the keyframe both are where it says: {} of {n}",
+            differ(&at_end, &at_end_straight)
+        );
         // Both of these are FLOWN, so they share the canvas-shaped frame the
         // stage draws for a moving camera; any difference between them is
         // the gaze and the route themselves, not the frame's shape.
@@ -3018,8 +3038,20 @@ mod tests {
         // centre and the two gazes really are two different points. (At the
         // midpoint they coincide, which is how this assertion first caught
         // itself.)
-        let gaze_member = render(&doc("", r#","motionPath":{"pathResourceID":"ARC"},"target":{"member":"C"}"#), 1.0);
-        let gaze_centre = render(&doc("", r#","motionPath":{"pathResourceID":"ARC"},"target":"center""#), 1.0);
+        let gaze_member = render(
+            &doc(
+                "",
+                r#","motionPath":{"pathResourceID":"ARC"},"target":{"member":"C"}"#,
+            ),
+            1.0,
+        );
+        let gaze_centre = render(
+            &doc(
+                "",
+                r#","motionPath":{"pathResourceID":"ARC"},"target":"center""#,
+            ),
+            1.0,
+        );
         assert!(
             // Renders are deterministic, so any real difference is signal.
             differ(&gaze_member, &gaze_centre) > n / 200,
@@ -3077,13 +3109,38 @@ mod tests {
         let (start, flight, end) = (frame(0.5), frame(2.0), frame(3.5));
         let again = frame(2.0);
         assert_eq!(flight, again, "the same instant is the same cloud");
-        let lit = |f: &[u8]| f.chunks_exact(4).filter(|px| px[0] > 8 || px[1] > 8 || px[2] > 8).count();
-        assert!(lit(&flight) > 300, "mid-flight the cloud is drawn with no body on stage: {} lit", lit(&flight));
-        let differ = |a: &[u8], b: &[u8]| a.iter().zip(b).filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12).count();
+        let lit = |f: &[u8]| {
+            f.chunks_exact(4)
+                .filter(|px| px[0] > 8 || px[1] > 8 || px[2] > 8)
+                .count()
+        };
+        assert!(
+            lit(&flight) > 300,
+            "mid-flight the cloud is drawn with no body on stage: {} lit",
+            lit(&flight)
+        );
+        let differ = |a: &[u8], b: &[u8]| {
+            a.iter()
+                .zip(b)
+                .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12)
+                .count()
+        };
         let n = start.len();
-        assert!(differ(&start, &flight) > n / 30, "start and flight differ: {} of {n}", differ(&start, &flight));
-        assert!(differ(&flight, &end) > n / 30, "flight and end differ: {} of {n}", differ(&flight, &end));
-        assert!(differ(&start, &end) > n / 30, "start and end differ: {} of {n}", differ(&start, &end));
+        assert!(
+            differ(&start, &flight) > n / 30,
+            "start and flight differ: {} of {n}",
+            differ(&start, &flight)
+        );
+        assert!(
+            differ(&flight, &end) > n / 30,
+            "flight and end differ: {} of {n}",
+            differ(&flight, &end)
+        );
+        assert!(
+            differ(&start, &end) > n / 30,
+            "start and end differ: {} of {n}",
+            differ(&start, &end)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3229,13 +3286,19 @@ mod tests {
         };
         let (r, _) = strip(&b, 220, 300);
         let (_, g) = strip(&b, 20, 100);
-        assert!(r > 60 && g > 60, "the stage layer draws both cubes: r {r} g {g}");
+        assert!(
+            r > 60 && g > 60,
+            "the stage layer draws both cubes: r {r} g {g}"
+        );
         let differing = a
             .iter()
             .zip(&b)
             .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 2)
             .count();
-        assert_eq!(differing, 0, "the stage layer is its flat form, pixel for pixel");
+        assert_eq!(
+            differing, 0,
+            "the stage layer is its flat form, pixel for pixel"
+        );
         // And the LIFT of the flat document — what the app and promo_apply
         // write back — draws the same picture again.
         let lifted = promo_model::ProjectMetadata::from_json(&flat)
@@ -3252,7 +3315,10 @@ mod tests {
             .zip(&c)
             .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 2)
             .count();
-        assert_eq!(differing, 0, "the lifted document is the flat one, pixel for pixel");
+        assert_eq!(
+            differing, 0,
+            "the lifted document is the flat one, pixel for pixel"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3352,13 +3418,26 @@ mod tests {
         std::fs::write(dir.join("metadata.json"), doc).unwrap();
         let project = crate::project::Project::open(&dir).expect("project");
         let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
-        let lit = |frame: &[u8]| frame.chunks(4).filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 60).count();
+        let lit = |frame: &[u8]| {
+            frame
+                .chunks(4)
+                .filter(|p| p[0] as u32 + p[1] as u32 + p[2] as u32 > 60)
+                .count()
+        };
         let a = renderer.frame_bgra(0.4).expect("frame");
         let b = renderer.frame_bgra(0.4).expect("frame");
         let c = renderer.frame_bgra(1.2).expect("frame");
-        assert!(lit(&a) > 200, "confetti lights the canvas: {} pixels", lit(&a));
+        assert!(
+            lit(&a) > 200,
+            "confetti lights the canvas: {} pixels",
+            lit(&a)
+        );
         assert_eq!(a, b, "the same instant is the same picture");
-        let differ = a.iter().zip(&c).filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12).count();
+        let differ = a
+            .iter()
+            .zip(&c)
+            .filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12)
+            .count();
         assert!(differ > 200, "a later instant differs: {differ}");
         let _ = std::fs::remove_dir_all(&dir);
     }

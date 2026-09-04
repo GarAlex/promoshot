@@ -2345,6 +2345,14 @@ pub struct ProjectLayerKeyframe {
     pub mask_zoom_y: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub mask_rotation: Option<f64>,
+    /// The ramp INTO this keyframe, in seconds.
+    ///
+    /// Defaulted rather than required, and that is a correction: this was
+    /// the ONLY field on a keyframe a hand-written file had to carry, and
+    /// leaving it out was every single `promo_validate` failure in 600
+    /// logged tool calls. Its two legacy siblings have defaulted since they
+    /// were written; a layer keyframe now matches them at the same 0.5 s.
+    #[serde(default = "default_transition")]
     pub transition_duration: f64,
     /// The share of the gap from the PREVIOUS keyframe spent moving, as a
     /// percentage: 100 starts moving immediately and arrives exactly here,
@@ -4887,6 +4895,38 @@ mod placement_model_tests {
     /// and offset round-trip, the accessors default what is left out,
     /// an unknown mode reads as a screen, and any of the three lifts
     /// the rung.
+    /// A keyframe may leave out its ramp. This was the ONLY required field
+    /// on a keyframe, and leaving it out was every `promo_validate` failure
+    /// in 600 logged tool calls — a hand-written `{"id":…,"time":0}` is
+    /// what an agent writes, and it decodes now, at the same 0.5 s its two
+    /// legacy siblings have always defaulted to. A stated value still wins,
+    /// and the field is written back on every save.
+    #[test]
+    fn a_keyframe_may_leave_out_its_ramp() {
+        let doc = |keyframe: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Ramp","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[],
+                    "layers":[{{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                      "startTime":0,"duration":4,"keyframes":[{keyframe}]}}]}}"#
+            ))
+        };
+        let bare = doc(r#"{"id":"K","time":0,"zoom":1}"#).expect("decodes without the ramp");
+        let ramp =
+            |m: &ProjectMetadata| m.layers.as_ref().unwrap()[0].keyframes[0].transition_duration;
+        assert_eq!(ramp(&bare), 0.5, "the legacy default");
+        let stated = doc(r#"{"id":"K","time":0,"zoom":1,"transitionDuration":0}"#).unwrap();
+        assert_eq!(ramp(&stated), 0.0, "a stated value wins, zero included");
+        // And it comes back on the way out, so the next reader never has to
+        // default it again.
+        assert!(bare
+            .to_json()
+            .unwrap()
+            .contains(r#""transitionDuration":0.5"#));
+    }
+
     /// Designed type and a rectangle (rung 42): tracking, weight and line
     /// height round-trip on a caption style, a `rect` shape keeps its
     /// corner radius, each of them lifts the rung, and a caption with none

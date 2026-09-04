@@ -65,7 +65,9 @@ author here opens in the PromoShot apps unchanged.
    over them; a layer you shortened yourself keeps its length), a
    canvas change (`patchSettings`), the timeline's markers and chapters
    (`setMarkers`, the list replaced whole), waits and motion paths
-   (keyframe fields). Its schema is in the tool; ids are the file's own. Hand-editing the JSON
+   (keyframe fields). The tool names every command and what each takes;
+   the SHAPES it refers to — a layer, a resource, a keyframe — are in
+   `promo_schema_types`, their prose in `promo_schema_full`. Ids are the file's own. Hand-editing the JSON
    stays first-class for anything a recipe shows. The authoring tools and validate each
    answer with a small thumbnail ATTACHED — a keyframe's glance looks
    where the motion arrives; the others sample the touched layer's
@@ -82,12 +84,15 @@ author here opens in the PromoShot apps unchanged.
    bracketing the time — when a layer is not where you meant. `promo_diff`
    reads the other author's turn: copy `metadata.json` aside before a
    person edits, then diff against the copy.
-5. **Render** — `promo_render_still` at a few moments to LOOK (a mis-aimed
-   viewport or an invisible caption costs seconds here, minutes in a
-   video), `promo_render_frames` for a sheet of moments across a range,
-   then `promo_render_video` for the mp4 or `promo_render_gif` for the
-   looping preview. Outputs land in the project's `Exports/` and return
-   paths, never bytes.
+5. **Render** — `promo_render_frames` FIRST and often: bare, it samples
+   twelve moments across the piece, tiles them into one contact sheet and
+   attaches it as an image, which is the cheapest way to catch a
+   mis-aimed viewport, an empty frame or an invisible caption. Name
+   `times` for exact moments. `promo_render_still` when one moment is
+   the question. Then `promo_render_video` for the mp4 or
+   `promo_render_gif` for the looping preview. A render lands in the
+   project's `Exports/` and returns paths; only the sheet and the
+   authoring tools' glance return pixels.
 
 Narration: `promo_voices` lists a provider's voices (pick a voiceID
 from it); `promo_speak` synthesizes every resource whose `speech.text`

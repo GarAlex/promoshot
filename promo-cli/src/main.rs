@@ -24,7 +24,8 @@ USAGE:
     promo schema [--full|--types]
     promo inspect <project-dir>
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
-    promo frames  <project-dir> --out <dir> [--fps <n>] [--from <s>] [--to <s>] [--size <WxH>]
+    promo frames  <project-dir> --out <dir> [--times <s,s,…>|--sample <n>|--fps <n>]
+                  [--from <s>] [--to <s>] [--size <WxH>] [--sheet <file.png>] [--cap <n>]
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
     promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
     promo model   <file.glb> [--json]
@@ -38,6 +39,11 @@ OPTIONS:
                    are allowed — 59.94 matches a typical screen recording
                    exactly, where 30 resamples it.
     --from/--to    Time range (default: the whole composition)
+    --times <list> Render exactly these seconds, comma separated
+    --sample <n>   n moments spread evenly across the range — a contact
+                   sheet rather than every frame
+    --sheet <file> Also tile the rendered moments into one PNG
+    --cap <n>      Refuse rather than render more than n frames
     --size <WxH>   Output size (default: the project's canvas size)
     --json         Machine output: one JSON object on stdout (errors too)
 
@@ -137,6 +143,16 @@ struct Options {
     fps: Option<f64>,
     from: Option<f64>,
     to: Option<f64>,
+    /// The exact moments to render, when the caller knows them.
+    times: Vec<f64>,
+    /// N moments spread evenly across the range instead of every frame —
+    /// what "a contact sheet" means, and what an agent wants.
+    sample: Option<usize>,
+    /// Refuse rather than render more than this many frames. A person may
+    /// legitimately ask for three thousand; a tool call should not.
+    cap: Option<usize>,
+    /// Also tile the rendered moments into one PNG here.
+    sheet: Option<PathBuf>,
     size: Option<(u32, u32)>,
     proxy: render::ProxyPolicy,
     codec: promo_media::VideoCodec,
@@ -174,6 +190,25 @@ impl Options {
                     i += 1;
                     continue;
                 }
+                "--times" => {
+                    let raw = value()?;
+                    let mut times = Vec::new();
+                    for part in raw.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+                        times.push(parse_f64(part, flag)?);
+                    }
+                    if times.is_empty() {
+                        return Err("--times: expected one or more seconds".into());
+                    }
+                    opts.times = times;
+                }
+                "--sample" => {
+                    opts.sample =
+                        Some(parse_f64(&value()?, flag)?.round().clamp(1.0, 4096.0) as usize)
+                }
+                "--cap" => {
+                    opts.cap = Some(parse_f64(&value()?, flag)?.round().clamp(1.0, 1e6) as usize)
+                }
+                "--sheet" => opts.sheet = Some(PathBuf::from(value()?)),
                 "--from" => opts.from = Some(parse_f64(&value()?, flag)?),
                 "--to" => opts.to = Some(parse_f64(&value()?, flag)?),
                 "--size" => {
@@ -274,12 +309,29 @@ fn build_proxies(project: &Project, opts: &Options) -> Result<String, String> {
 fn validate(project: &Project, opts: &Options) -> Result<String, String> {
     let mut warnings = project.attachment_problems.clone();
     warnings.extend(promo_timeline::validate::warnings(&project.meta));
+    // A layer whose media is gone. `inspect` has always reported these and
+    // `validate` never did, so a project with a hole in it came back "ok —
+    // nothing the renderer would quietly correct" and then rendered the
+    // hole. The tool's own description promises "ok means it will render".
+    for layer in promo_model::nesting::all_layers(&project.meta) {
+        match project.unsupported(layer) {
+            // Audio never reaches a frame, and that is not a fault.
+            None | Some(crate::project::Unsupported::Audio) => {}
+            Some(why) => warnings.push(format!("layer \"{}\" will not render — {why}", layer.name)),
+        }
+    }
     // Issue #9: what a document read alone cannot show — captions laid out
     // flush with an edge or under a picture, viewports trimming a plate.
     warnings.extend(promo_timeline::layout_check::layout_warnings(&project.meta));
 
     if opts.json {
-        return Ok(serde_json::json!({ "ok": true, "warnings": warnings }).to_string());
+        // `ok` is the answer to "will this render as written", not "did the
+        // file parse" — it was a literal `true` beside a list of warnings.
+        return Ok(serde_json::json!({
+            "ok": warnings.is_empty(),
+            "warnings": warnings,
+        })
+        .to_string());
     }
     if warnings.is_empty() {
         return Ok("ok — nothing the renderer would quietly correct".into());
@@ -574,12 +626,7 @@ fn turntable(file: &Path, opts: &Options) -> Result<String, String> {
     for (i, yaw) in yaws.iter().enumerate() {
         let rgba = renderer.frame_rgba(i as f64 + 0.5)?;
         let (cx, cy) = ((i % columns) as u32, (i / columns) as u32);
-        for y in 0..cell {
-            let src = (y * cell * 4) as usize;
-            let dst = (((cy * cell + y) * sheet_w + cx * cell) * 4) as usize;
-            sheet[dst..dst + (cell * 4) as usize]
-                .copy_from_slice(&rgba[src..src + (cell * 4) as usize]);
-        }
+        blit(&mut sheet, sheet_w, &rgba, cell, cell, cx * cell, cy * cell);
         cells.push(serde_json::json!({ "yaw": yaw, "column": cx, "row": cy }));
     }
     render::write_png(out, &sheet, sheet_w, sheet_h)?;
@@ -626,33 +673,183 @@ fn frames(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let (start, end, fps) = range(project, opts);
-    let count = frame_count(start, end, fps);
+    let times = frame_times(start, end, fps, opts);
+    if let Some(cap) = opts.cap {
+        if times.len() > cap {
+            return Err(format!(
+                "{} frames is more than one call should render — ask for a range, \
+                 fewer times, or --sample {cap}",
+                times.len()
+            ));
+        }
+    }
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    // This tool's own previous frames go first. Without it a shorter run
+    // leaves the tail of a longer one behind and the next reader — a person
+    // scrubbing the folder, or ffmpeg globbing it — sees two renders mixed.
+    let replaced = clear_frames(out);
 
     let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
     renderer.set_transparent_plate(opts.alpha);
-    for i in 0..count {
-        let time = start + i as f64 / fps;
+    let count = times.len();
+    // A contact sheet's cells are small on purpose: it is for catching an
+    // off-centre card or an empty frame, not for reading type.
+    let (cell_w, cell_h) = sheet_cell(w, h);
+    let mut cells: Vec<Vec<u8>> = Vec::new();
+    let sheet_of = sheet_sample(count);
+    for (i, &time) in times.iter().enumerate() {
         let rgba = renderer.frame_rgba(time)?;
         let path = out.join(format!("frame-{i:05}.png"));
         render::write_png(&path, &rgba, w, h)?;
+        if opts.sheet.is_some() && sheet_of.contains(&i) {
+            cells.push(downscale(&rgba, w, h, cell_w, cell_h));
+        }
         if i % 30 == 0 || i + 1 == count {
             eprint!("\r  {}/{count} frames", i + 1);
         }
     }
     eprintln!();
+    let mut sheet_note = None;
+    if let Some(path) = &opts.sheet {
+        let (columns, rows) = grid_for(cells.len());
+        // A gutter, on a ground darker than any canvas: cells read as cells
+        // rather than as one smeared picture, and an unfilled slot at the
+        // end reads as empty rather than as a hole.
+        const GAP: u32 = 6;
+        let (sw, sh) = (
+            columns as u32 * (cell_w + GAP) + GAP,
+            rows as u32 * (cell_h + GAP) + GAP,
+        );
+        let mut sheet = Vec::with_capacity((sw * sh * 4) as usize);
+        for _ in 0..(sw * sh) {
+            sheet.extend_from_slice(&[18, 20, 26, 255]);
+        }
+        for (i, cell) in cells.iter().enumerate() {
+            let (column, row) = ((i % columns) as u32, (i / columns) as u32);
+            blit(
+                &mut sheet,
+                sw,
+                cell,
+                cell_w,
+                cell_h,
+                GAP + column * (cell_w + GAP),
+                GAP + row * (cell_h + GAP),
+            );
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        render::write_png(path, &sheet, sw, sh)?;
+        sheet_note = Some((path.display().to_string(), columns, rows, cells.len()));
+    }
     if opts.json {
         return Ok(serde_json::json!({
             "wroteDir": out.display().to_string(),
             "frames": count, "width": w, "height": h,
             "fps": fps, "from": start, "to": end,
+            "replaced": replaced,
+            "times": times.iter().map(|t| (t * 1000.0).round() / 1000.0).collect::<Vec<f64>>(),
+            "sheet": sheet_note.as_ref().map(|(p, c, r, n)| serde_json::json!({
+                "path": p, "columns": c, "rows": r, "cells": n,
+            })),
         })
         .to_string());
     }
-    Ok(format!(
-        "wrote {count} frames to {} ({w}x{h} @ {fps}fps)",
-        out.display()
-    ))
+    let mut text = format!("wrote {count} frames to {} ({w}x{h})", out.display());
+    if replaced > 0 {
+        text.push_str(&format!(", replacing {replaced}"));
+    }
+    if let Some((path, columns, rows, n)) = sheet_note {
+        text.push_str(&format!(
+            "\ncontact sheet {path} ({columns}x{rows}, {n} cells)"
+        ));
+    }
+    Ok(text)
+}
+
+/// The moments to render: exactly what was asked for, N spread evenly, or
+/// every frame at the rate — in that order of precedence.
+fn frame_times(start: f64, end: f64, fps: f64, opts: &Options) -> Vec<f64> {
+    if !opts.times.is_empty() {
+        let mut times = opts.times.clone();
+        times.sort_by(f64::total_cmp);
+        return times;
+    }
+    if let Some(n) = opts.sample {
+        if n == 1 {
+            return vec![(start + end) / 2.0];
+        }
+        let span = (end - start).max(0.0);
+        return (0..n)
+            .map(|i| start + span * i as f64 / (n - 1) as f64)
+            .collect();
+    }
+    (0..frame_count(start, end, fps))
+        .map(|i| start + i as f64 / fps)
+        .collect()
+}
+
+/// Deletes this tool's own `frame-NNNNN.png` from a directory, and answers
+/// how many. Nothing else is touched — a person's own files in the folder
+/// are not this tool's to remove.
+fn clear_frames(dir: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let is_frame = name.starts_with("frame-")
+            && name.ends_with(".png")
+            && name["frame-".len()..name.len() - 4]
+                .chars()
+                .all(|c| c.is_ascii_digit());
+        if is_frame && std::fs::remove_file(entry.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// A sheet cell, long edge 256px, keeping the canvas's proportions.
+fn sheet_cell(w: u32, h: u32) -> (u32, u32) {
+    let long = w.max(h).max(1) as f64;
+    let scale = (256.0 / long).min(1.0);
+    (
+        ((w as f64 * scale).round() as u32).max(1),
+        ((h as f64 * scale).round() as u32).max(1),
+    )
+}
+
+/// Which of `count` frames go on the sheet: all of them up to 24, else 24
+/// spread evenly. A sheet of two hundred thumbnails shows nothing.
+fn sheet_sample(count: usize) -> Vec<usize> {
+    const MOST: usize = 24;
+    if count <= MOST {
+        return (0..count).collect();
+    }
+    (0..MOST).map(|i| i * (count - 1) / (MOST - 1)).collect()
+}
+
+/// Straight RGBA box-resize, through `image`'s triangle filter.
+fn downscale(rgba: &[u8], w: u32, h: u32, dw: u32, dh: u32) -> Vec<u8> {
+    let Some(src) = image::RgbaImage::from_raw(w, h, rgba.to_vec()) else {
+        return vec![0; (dw * dh * 4) as usize];
+    };
+    image::imageops::resize(&src, dw, dh, image::imageops::FilterType::Triangle).into_raw()
+}
+
+/// One cell into the sheet, top-left corner at (x, y).
+fn blit(sheet: &mut [u8], sheet_w: u32, cell: &[u8], cw: u32, ch: u32, x: u32, y: u32) {
+    for row in 0..ch {
+        let src = (row * cw * 4) as usize;
+        let dst = (((y + row) * sheet_w + x) * 4) as usize;
+        let span = (cw * 4) as usize;
+        if src + span <= cell.len() && dst + span <= sheet.len() {
+            sheet[dst..dst + span].copy_from_slice(&cell[src..src + span]);
+        }
+    }
 }
 
 /// Renders straight into ffmpeg's stdin as raw BGRA — no intermediate PNGs,
@@ -766,6 +963,97 @@ fn frame_count(start: f64, end: f64, fps: f64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The moments a frames call renders, in precedence order: exact times,
+    /// then a sample across the range, then every frame at the rate. The
+    /// sample includes both ends, which is what makes a contact sheet show
+    /// the first and last picture.
+    #[test]
+    fn frame_times_follow_what_was_asked_for() {
+        let bare = Options::default();
+        let every = frame_times(0.0, 1.0, 4.0, &bare);
+        assert_eq!(
+            every,
+            vec![0.0, 0.25, 0.5, 0.75],
+            "the export plan's own count"
+        );
+
+        let sampled = Options {
+            sample: Some(5),
+            ..Options::default()
+        };
+        assert_eq!(
+            frame_times(0.0, 8.0, 30.0, &sampled),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        let one = Options {
+            sample: Some(1),
+            ..Options::default()
+        };
+        assert_eq!(
+            frame_times(0.0, 8.0, 30.0, &one),
+            vec![4.0],
+            "one moment is the middle"
+        );
+
+        let listed = Options {
+            times: vec![3.0, 0.5],
+            sample: Some(5),
+            ..Options::default()
+        };
+        assert_eq!(
+            frame_times(0.0, 8.0, 30.0, &listed),
+            vec![0.5, 3.0],
+            "exact times win, in order"
+        );
+    }
+
+    /// A shorter run must not leave the tail of a longer one behind, and
+    /// nothing else in the folder is this tool's to remove.
+    #[test]
+    fn clearing_takes_only_this_tools_frames() {
+        let dir = std::env::temp_dir().join(format!("promo-frames-clear-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in [
+            "frame-00000.png",
+            "frame-00001.png",
+            "frame-x.png",
+            "frames.png",
+            "notes.txt",
+            "frame-00002.jpg",
+        ] {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+        assert_eq!(clear_frames(&dir), 2);
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            ["frame-00002.jpg", "frame-x.png", "frames.png", "notes.txt"]
+        );
+        assert_eq!(clear_frames(&dir), 0, "and it is idempotent");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A sheet shows at most two dozen cells, always including the first
+    /// and the last: two hundred thumbnails show nothing.
+    #[test]
+    fn a_sheet_samples_the_frames_it_shows() {
+        assert_eq!(sheet_sample(6), vec![0, 1, 2, 3, 4, 5]);
+        let many = sheet_sample(600);
+        assert_eq!(many.len(), 24);
+        assert_eq!(many[0], 0);
+        assert_eq!(*many.last().unwrap(), 599);
+        assert!(many.windows(2).all(|w| w[0] < w[1]), "{many:?}");
+        // Cells keep the canvas's proportions, long edge 256.
+        assert_eq!(sheet_cell(1920, 1080), (256, 144));
+        assert_eq!(sheet_cell(2064, 2752), (192, 256));
+        assert_eq!(sheet_cell(120, 90), (120, 90), "never upscaled");
+    }
 
     #[test]
     fn size_parses_and_defaults_to_the_canvas() {

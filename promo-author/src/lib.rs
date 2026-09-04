@@ -713,8 +713,13 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
         .iter()
         .enumerate()
         .map(|(i, c)| {
-            serde_json::from_value(c.clone())
-                .map_err(|e| format!("commands[{i}] ({}): {e} — see the tool's schema", kinds[i]))
+            serde_json::from_value(c.clone()).map_err(|e| {
+                format!(
+                    "commands[{i}] ({}): {e} — the tool names the commands, \
+                         promo_schema_types has the shapes",
+                    kinds[i]
+                )
+            })
         })
         .collect::<Result<_, _>>()?;
 
@@ -1314,7 +1319,11 @@ mod tests {
         .unwrap();
         let second = style(&read(&dir));
         assert_eq!(second.tracking, Some(-1.4), "the new value");
-        assert_eq!(second.weight.map(|w| w.value()), Some(800), "the old weight");
+        assert_eq!(
+            second.weight.map(|w| w.value()),
+            Some(800),
+            "the old weight"
+        );
         assert_eq!(second.font_size, Some(88.0), "and the old size");
 
         let refused = upsert_layer(
@@ -1326,7 +1335,10 @@ mod tests {
             &measured,
         )
         .expect_err("an unknown weight is refused");
-        assert!(refused.contains("heavy"), "and names the real ones: {refused}");
+        assert!(
+            refused.contains("heavy"),
+            "and names the real ones: {refused}"
+        );
     }
 
     /// init → two upserts → a project that decodes, validates with ZERO

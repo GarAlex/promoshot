@@ -175,7 +175,10 @@ impl Project {
             // Vector content is drawn by the engine from the resource; a
             // drawing layer with no document draws nothing.
             ProjectLayerKind::Drawing => {
-                let resource = layer.resource_id.as_deref().and_then(|id| self.resource(id));
+                let resource = layer
+                    .resource_id
+                    .as_deref()
+                    .and_then(|id| self.resource(id));
                 let has_shapes = resource
                     .and_then(|r| r.drawing.as_ref())
                     .is_some_and(|doc| !doc.shapes.is_empty())

@@ -40,6 +40,7 @@ pub fn wanted(tool: &str, args: &Value) -> bool {
             | "promo_apply"
             | "promo_slideshow"
             | "promo_validate"
+            | "promo_render_frames"
     ) && args.get("preview").and_then(Value::as_bool) != Some(false)
 }
 
@@ -52,6 +53,15 @@ where
 {
     let project = crate::fenced_project(args, config)?;
     let dir = Path::new(&project);
+    // A frames call already rendered the pixels and tiled them; the glance
+    // is that sheet, not a second render. This is the whole point of the
+    // tool: one call, one picture, instead of a directory the agent then
+    // reads one PNG at a time.
+    if tool == "promo_render_frames" {
+        let sheet = dir.join("Exports").join("frames-sheet.png");
+        let bytes = std::fs::read(&sheet).map_err(|e| format!("frames-sheet.png: {e}"))?;
+        return Ok(image_block(&bytes));
+    }
     let text = std::fs::read_to_string(dir.join("metadata.json"))
         .map_err(|_| "no metadata.json".to_string())?;
     let doc: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
@@ -79,11 +89,16 @@ where
         ],
     )?;
     let bytes = std::fs::read(&out).map_err(|e| format!("preview.png: {e}"))?;
-    Ok(json!({
+    Ok(image_block(&bytes))
+}
+
+/// PNG bytes as the MCP image content block.
+fn image_block(bytes: &[u8]) -> Value {
+    json!({
         "type": "image",
-        "data": base64(&bytes),
+        "data": base64(bytes),
         "mimeType": "image/png",
-    }))
+    })
 }
 
 /// The layer this call touched: a layer upsert's `id` when it names one,
