@@ -220,8 +220,9 @@ pub struct ParticleRecipe {
 /// by the member's `progress` keyframe — 0 the first body, 1 the second
 /// — so a cube bursts into points and the points settle into a word.
 /// `spread` is how far out they fly and `size` how big a point is, both
-/// in the bodies' radii; `turbulence` a wobble on the way; `stagger` 0…1
-/// how unevenly they leave and arrive. Colours and seed are the recipe's
+/// in the bodies' radii; `turbulence` a wobble on the way; `stagger` 0…1 how
+/// far their paces spread — leaders and laggards, none waiting on a
+/// surface or sitting on one early. Colours and seed are the recipe's
 /// own. Played by a drawing member of the stage the bodies are in.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]

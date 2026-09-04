@@ -533,7 +533,7 @@
        "time": 5.6,
        "transitionDuration": 0.7,
        "progress": 0.45,
-       "easing": "easeOut"
+       "easing": "smooth"
       },
       {
        "id": "CF52BC99-CE17-C2CB-C9C7-D74C25DBEDBF",

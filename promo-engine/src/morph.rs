@@ -176,8 +176,9 @@ pub fn sample_surface(model: &Model, rest: &[Mat4], count: usize, seed: u64) -> 
 
 /// Every particle at `progress`: on the first body at 0, on the second
 /// at 1, and between them flung out along the first body's surface and
-/// back in along a curve, each on its own slightly later clock
-/// (`stagger`), wobbling on the way (`turbulence`), swelling mid-flight.
+/// back in along a curve, each at its own pace (`stagger` spreads the
+/// paces; nothing waits and nothing sits), wobbling on the way
+/// (`turbulence`), swelling mid-flight.
 /// `spread` and `size` are in the same units as the samples.
 #[allow(clippy::too_many_arguments)]
 pub fn morph_points(
@@ -216,10 +217,14 @@ pub fn morph_points(
         let phase = unit(&mut state) * TAU;
         let color = (splitmix(&mut state) % colors.max(1) as u64) as usize;
         let (a, b) = (from[i], to[i]);
-        // This particle's own clock: it leaves and arrives up to `stagger`
-        // of the way after the first.
-        let u = ((progress - delay * stagger) / (1.0 - stagger).max(0.05)).clamp(0.0, 1.0);
-        let e = u * u * (3.0 - 2.0 * u);
+        // This particle's own PACE: every point leaves at 0 and lands at 1,
+        // but each flies on its own power of the progress — leaders ahead,
+        // laggards behind, none ever waiting on a surface or sitting on
+        // one early. `stagger` is how far the paces spread.
+        let pace = ((delay - 0.5) * 2.0 * stagger).exp();
+        // The keyframes' own easing shapes the flight; no ease per point,
+        // which would park the laggards at the start.
+        let e = progress.powf(pace);
         // The way out: halfway between where it was and where it goes,
         // flung along the first body's surface direction.
         let mid = [
@@ -324,5 +329,34 @@ mod tests {
                 "at rest on a body there is nothing to see");
         assert!(at(0.03).iter().all(|p| p.size > 0.0), "the points grow out of the first surface");
         assert_eq!(at(0.5), mid, "the same instant is the same cloud");
+    }
+
+    /// No particle stands still mid-flight: between the presence ramps
+    /// every point moves between one instant and the next, whatever its
+    /// pace — a stagger spreads paces, it never parks a point.
+    #[test]
+    fn no_particle_stands_still_mid_flight() {
+        let model = cube();
+        let rest = model.rest_matrices();
+        let from = sample_surface(&model, &rest, 400, 5);
+        let to: Vec<Sample> = from
+            .iter()
+            .map(|s| Sample {
+                position: [s.position[0] + 3.0, s.position[1] * 0.5, s.position[2]],
+                normal: s.normal,
+            })
+            .collect();
+        let at = |p: f64| morph_points(&from, &to, p, 1.2, 0.02, 0.2, 0.9, 11, 3);
+        let mut slowest = f32::MAX;
+        let mut p = 0.08;
+        while p < 0.92 {
+            let (now, next) = (at(p), at(p + 0.01));
+            for (a, b) in now.iter().zip(&next) {
+                let d = sub(b.position, a.position);
+                slowest = slowest.min((d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt());
+            }
+            p += 0.07;
+        }
+        assert!(slowest > 1e-4, "every point keeps moving; the slowest step was {slowest}");
     }
 }

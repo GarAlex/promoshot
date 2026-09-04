@@ -930,7 +930,8 @@ Particles in a STAGE are a MORPH (rung 39): `"particles": { "colors":
 0.15, "stagger": 0.35 } }` samples `count` points on the first body's
 surface and, as the member's `progress` keyframe ramps 0 → 1, flings
 them out (`spread` and `size` in the bodies' radii, `turbulence` a
-wobble, `stagger` how unevenly they leave and arrive) and gathers them
+wobble, `stagger` how far the points' paces spread — leaders and
+laggards, none waiting) and gathers them
 on the second body's surface — a cube bursts into points that settle
 into a word. The recipe plays on a DRAWING member of the stage the two
 bodies are in, with `"progress"` on its keyframes; the bodies themselves
