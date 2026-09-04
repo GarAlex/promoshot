@@ -274,6 +274,9 @@ fn build_proxies(project: &Project, opts: &Options) -> Result<String, String> {
 fn validate(project: &Project, opts: &Options) -> Result<String, String> {
     let mut warnings = project.attachment_problems.clone();
     warnings.extend(promo_timeline::validate::warnings(&project.meta));
+    // Issue #9: what a document read alone cannot show — captions laid out
+    // flush with an edge or under a picture, viewports trimming a plate.
+    warnings.extend(promo_timeline::layout_check::layout_warnings(&project.meta));
 
     if opts.json {
         return Ok(serde_json::json!({ "ok": true, "warnings": warnings }).to_string());

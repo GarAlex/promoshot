@@ -448,9 +448,28 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
     meta.video_duration = end;
 
     write_metadata(&meta, &meta_path)?;
+    // Issue #9: the layout findings for THIS layer ride the reply, so an
+    // agent fixes a flush caption in the same turn.
+    let notes = layout_notes(&meta, Some(&layer_id));
     Ok(format!(
-        "upserted layer {layer_id}{resource_note}; composition runs {end}s"
+        "upserted layer {layer_id}{resource_note}; composition runs {end}s{notes}"
     ))
+}
+
+/// Layout warnings (a caption at an edge, under a picture; a viewport
+/// cropping a plate) as lines under a reply, or nothing.
+fn layout_notes(meta: &ProjectMetadata, only: Option<&str>) -> String {
+    let found = promo_timeline::layout_check::layout_warnings_for(meta, only);
+    if found.is_empty() {
+        String::new()
+    } else {
+        let mut out = String::from("\nlayout:");
+        for w in found {
+            out.push_str("\n  - ");
+            out.push_str(&w);
+        }
+        out
+    }
 }
 
 /// The motion half of the scaffold (issue #1): one keyframe, created or
@@ -665,8 +684,9 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let meta = ProjectMetadata::from_json(&document.to_json()?)
         .map_err(|e| format!("the edited document no longer parses: {e}"))?;
     write_metadata(&meta, &meta_path)?;
+    let notes = layout_notes(&meta, None);
     Ok(format!(
-        "applied {} command(s) as one step: {}",
+        "applied {} command(s) as one step: {}{notes}",
         commands.len(),
         kinds.join(", ")
     ))

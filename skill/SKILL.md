@@ -367,6 +367,16 @@ exception: spin it in one continuous linear turn (a camera or a member
 yaw of 0 → 360 over the shot) under a light that stays put, so each
 side passes the light; do not chop a spin into moves.
 
+A leading or trailing caption still needs room: `promo_validate` lays
+every caption out for real and names one that sits within 5% of an
+edge ("sits 12 px from the canvas's left edge (safe ≥ 96 px)"), runs
+past the canvas, or is covered by a picture, body or stage that draws
+above it; and a viewport that crops a plate's edge, where type often
+is. The same lines ride the replies of `promo_upsert_layer` and
+`promo_apply`, so fix them in the same turn — with margins, a placement
+offset, a smaller size or a higher sortIndex, never by centring
+everything.
+
 ## With the app attached
 
 The Mac app runs the same tool contract from Settings → Automation, plus

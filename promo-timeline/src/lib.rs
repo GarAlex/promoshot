@@ -7,6 +7,8 @@
 //! parity harness diffs them fixture-by-fixture.
 
 pub mod attachment;
+pub mod caption;
+pub mod layout_check;
 pub mod audio;
 pub mod follow;
 pub mod frame;
