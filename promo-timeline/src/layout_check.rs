@@ -263,10 +263,8 @@ fn layer_rect(
     let source = match crate::sheet_for(resource?) {
         Some(sheet) => {
             let local = ip::layer_local_time(layer, t);
-            match crate::sprite_frame_at(sheet, layer, local, source) {
-                Some(frame) => Size::new(frame.cell.width(), frame.cell.height()),
-                None => return None,
-            }
+            let frame = crate::sprite_frame_at(sheet, layer, local, source)?;
+            Size::new(frame.cell.width(), frame.cell.height())
         }
         None => source,
     };

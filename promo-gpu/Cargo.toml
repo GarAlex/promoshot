@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+
 [dependencies]
 wgpu.workspace = true
 thiserror.workspace = true
@@ -23,6 +24,13 @@ criterion.workspace = true
 [[bench]]
 name = "spike_bench"
 harness = false
+
+# This crate cannot inherit `workspace.lints` — Cargo refuses a crate that
+# both inherits and declares — so the workspace's one clippy allow is
+# repeated here beside the rust lint that keeps it from inheriting. Keep
+# the two in step; the reason is in the root Cargo.toml.
+[lints.clippy]
+chunks_exact_to_as_chunks = "allow"
 
 # objc 0.2's msg_send! expands cfg(feature = "cargo-clippy") checks; declare
 # the value expected so -D warnings doesn't trip on third-party macro output.

@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Scaffold tools over the .promo format: init and upsert, one implementation for every server"
 
+
+[lints]
+workspace = true
+
 [dependencies]
 promo-model = { path = "../promo-model" }
 promo-editor = { path = "../promo-editor" }

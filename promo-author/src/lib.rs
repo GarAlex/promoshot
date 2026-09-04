@@ -849,7 +849,7 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
     let spec: promo_editor::author::AuthorSpec =
         serde_json::from_value(spec).map_err(|e| format!("slideshow: {e}"))?;
     let authored = promo_editor::author::author(&spec)?;
-    let mut meta = ProjectMetadata::from_json(&authored)
+    let meta = ProjectMetadata::from_json(&authored)
         .map_err(|e| format!("the show the wizard wrote no longer parses: {e}"))?;
     // (the stamp is computed by `write_metadata`)
     write_metadata(&meta, &meta_path)?;

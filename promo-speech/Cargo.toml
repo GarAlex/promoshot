@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Narration for PromoShot: the providers, the receipt, the stress spellings, the person's own key from the OS keyring"
 
+
+[lints]
+workspace = true
+
 [dependencies]
 serde_json.workspace = true
 sha2 = "0.10"

@@ -14,6 +14,16 @@ members = [
     "promoshot-mcp",
 ]
 
+# One disagreement with clippy, stated once for every crate.
+#
+# `chunks_exact(4)` over an RGBA buffer is this codebase's pixel idiom —
+# it appears 43 times — and 1.98 wants `as_chunks::<4>().0`. That returns
+# a tuple and changes the shape of every call site, in the code where a
+# slip is a rendering bug, for no gain at runtime. The lint is right in
+# general and wrong here.
+[workspace.lints.clippy]
+chunks_exact_to_as_chunks = "allow"
+
 [workspace.package]
 version = "0.2.60"
 edition = "2021"

@@ -1523,7 +1523,7 @@ mod tests {
                 .expect("rasterized");
             // The lit span of the FIRST line only — the short one.
             let (mut left, mut right) = (out.width as i64, 0i64);
-            let half = (out.height / 2) as u32;
+            let half = out.height / 2;
             for y in 0..half {
                 for x in 0..out.width {
                     if out.rgba[((y * out.width + x) * 4 + 3) as usize] > 8 {
