@@ -285,7 +285,8 @@ new projects.
   busier and wants short text.
 - **Designed type.** A caption's style takes `tracking` (letter spacing
   in points), `weight` ("ultraLight".."black", winning over `isBold`)
-  and `lineHeight` (a multiple of the size, 1.25 unless said). This is
+  and `lineHeight` (a multiple of the size, 1.25 unless said). A weight
+  the family does not have snaps to the nearest one it does. This is
   the difference between a subtitle and a headline: a small eyebrow
   line at +6 tracking, a heavy 88pt headline at −1.4 with a 1.05 line
   height, a medium subtitle under it at 72% opacity. `promo_layer`

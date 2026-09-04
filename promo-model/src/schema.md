@@ -176,7 +176,9 @@ Semantics worth knowing:
   "ultraLight", "thin", "light", "regular", "medium", "semibold",
   "bold", "heavy", "black" — it wins over `isBold`, which only ever
   chose between regular and bold, and "heavy" is where a store
-  headline usually lives. `lineHeight` is line spacing as a multiple
+  headline usually lives. A weight the FAMILY does not have snaps to
+  the nearest one it does, rather than wandering to another typeface:
+  ask a family that stops at bold for "black" and you get its bold. `lineHeight` is line spacing as a multiple
   of the font size, 1.25 unless said; ~1.05 keeps a two-line headline
   reading as one block. A project using any of the three carries
   `minReaderVersion: 42`.

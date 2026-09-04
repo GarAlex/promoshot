@@ -222,6 +222,63 @@ fn style_weight(style: &TextStyle) -> Weight {
     }
 }
 
+/// The nearest weight the FAMILY actually has.
+///
+/// Asked for a weight no face in the family provides, the font stack does
+/// not stay put and pick the closest one — it leaves the family. On this
+/// Mac "Helvetica Neue" at heavy came back as a stranger face lighter than
+/// its own bold, and at black as Helvetica Neue CONDENSED Black: a heavy
+/// headline rendered NARROWER than a bold one. Snapping here keeps every
+/// weight inside the family and off the condensed faces, so the ladder is
+/// monotone and "heavy" on a family that stops at bold is bold.
+fn snap_weight(fonts: &FontSystem, family: &ResolvedFamily, want: Weight, italic: bool) -> Weight {
+    let ResolvedFamily::Named(name) = family else {
+        // A generic family is the font stack's own choice of face; there is
+        // no list to snap against.
+        return want;
+    };
+    let faces: Vec<&cosmic_text::fontdb::FaceInfo> = fonts
+        .db()
+        .faces()
+        .filter(|face| face.families.iter().any(|(n, _)| n == name))
+        .collect();
+    if faces.is_empty() {
+        return want;
+    }
+    // Normal-width faces unless the family has none: a condensed face is a
+    // different typeface, not a heavier one.
+    let normal: Vec<&&cosmic_text::fontdb::FaceInfo> = faces
+        .iter()
+        .filter(|f| f.stretch == cosmic_text::fontdb::Stretch::Normal)
+        .collect();
+    let pool: Vec<&&cosmic_text::fontdb::FaceInfo> = if normal.is_empty() {
+        faces.iter().collect()
+    } else {
+        normal
+    };
+    // And the requested slant, unless the family has none of it.
+    let slanted: Vec<&&&cosmic_text::fontdb::FaceInfo> = pool
+        .iter()
+        .filter(|f| (f.style == cosmic_text::fontdb::Style::Normal) != italic)
+        .collect();
+    let pool: Vec<&&cosmic_text::fontdb::FaceInfo> = if slanted.is_empty() {
+        pool
+    } else {
+        slanted.into_iter().copied().collect()
+    };
+    let heavier_first = want.0 > 500;
+    pool.iter()
+        .map(|face| face.weight)
+        .min_by_key(|w| {
+            let distance = w.0.abs_diff(want.0);
+            // A tie goes the way the request was heading, so 600 between a
+            // 500 and a 700 picks the 700.
+            let tie = if heavier_first { u16::MAX - w.0 } else { w.0 };
+            (distance, tie)
+        })
+        .unwrap_or(want)
+}
+
 /// Distance from every pixel to the nearest covered one, by two chamfer
 /// passes. O(w·h) and round enough for an outline; a separable max filter
 /// would give square corners on round letters.
@@ -393,6 +450,8 @@ pub fn reveal_layout(
         style.font_size as f32,
         (style.font_size * style.line_height) as f32,
     );
+    // Decided before the buffer borrows the font system.
+    let weight = snap_weight(&fonts, &resolved, style_weight(style), style.italic);
     let mut buffer = Buffer::new(&mut fonts, metrics);
     let mut buffer = buffer.borrow_with(&mut fonts);
     buffer.set_size(Some(box_.text_width as f32), None);
@@ -404,7 +463,7 @@ pub fn reveal_layout(
     };
     let attrs = Attrs::new()
         .family(family)
-        .weight(style_weight(style))
+        .weight(weight)
         .style(if style.italic {
             Style::Italic
         } else {
@@ -993,7 +1052,12 @@ fn rasterize_inner(
     };
     let attrs = Attrs::new()
         .family(family)
-        .weight(style_weight(style))
+        .weight(snap_weight(
+            &fonts,
+            &resolved,
+            style_weight(style),
+            style.italic,
+        ))
         .style(if style.italic {
             Style::Italic
         } else {
@@ -1538,12 +1602,17 @@ mod tests {
         );
     }
 
-    /// And the number reaches real faces: across the ladder the same word
-    /// puts down strictly more ink each step, so "medium" and "heavy" are
-    /// two different pictures rather than two spellings of bold.
+    /// And the number reaches real faces: the same word puts down more ink
+    /// at each step the family HAS, and never less at a step it does not.
+    ///
+    /// The second half is the bug `snap_weight` fixes. Asked for a weight
+    /// no face in the family provides, the font stack leaves the family:
+    /// on this Mac "heavy" came back lighter than the family's own bold,
+    /// and "black" came back as Helvetica Neue CONDENSED Black — a heavier
+    /// request rendering NARROWER type. The ladder must never go backwards.
     #[test]
-    fn heavier_weights_put_down_more_ink() {
-        let ink = |weight: u16| -> u64 {
+    fn heavier_weights_never_put_down_less_ink() {
+        let measure = |weight: u16| -> (u32, u64) {
             let style = TextStyle {
                 font_size: 90.0,
                 bold: false,
@@ -1553,17 +1622,69 @@ mod tests {
                 ..TextStyle::default()
             };
             let out = rasterize("Weight", 1920.0, 1080.0, &style).expect("rasterized");
-            out.rgba.chunks_exact(4).map(|px| px[3] as u64).sum()
+            (
+                out.width,
+                out.rgba.chunks_exact(4).map(|px| px[3] as u64).sum(),
+            )
         };
-        let mut last = 0;
-        for weight in [100u16, 400, 700, 900] {
-            let now = ink(weight);
+        let (mut last_width, mut last_ink) = (0u32, 0u64);
+        let mut steps = 0;
+        for weight in [100u16, 200, 300, 400, 500, 600, 700, 800, 900] {
+            let (width, ink) = measure(weight);
             assert!(
-                now > last,
-                "{weight} is heavier than the step before: {now} vs {last}"
+                ink >= last_ink,
+                "{weight} is not lighter than the step before: {ink} vs {last_ink}"
             );
-            last = now;
+            assert!(
+                width >= last_width,
+                "{weight} is not narrower: {width} vs {last_width}"
+            );
+            if ink > last_ink {
+                steps += 1;
+            }
+            last_width = width;
+            last_ink = ink;
         }
+        assert!(
+            steps >= 4,
+            "the number reaches real faces: {steps} distinct weights"
+        );
+    }
+
+    /// And it stays inside the family: every weight the ladder asks for
+    /// snaps to one the family actually has, so a caption never silently
+    /// changes typeface to answer a weight.
+    #[test]
+    fn a_weight_snaps_to_a_face_the_family_has() {
+        let fonts = font_system().lock().expect("font system");
+        let family = ResolvedFamily::Named("Helvetica Neue".to_string());
+        let ResolvedFamily::Named(name) = &family else {
+            unreachable!()
+        };
+        let available: Vec<u16> = fonts
+            .db()
+            .faces()
+            .filter(|f| {
+                f.families.iter().any(|(n, _)| n == name)
+                    && f.stretch == cosmic_text::fontdb::Stretch::Normal
+                    && f.style == cosmic_text::fontdb::Style::Normal
+            })
+            .map(|f| f.weight.0)
+            .collect();
+        if available.is_empty() {
+            return; // A host without the family proves nothing either way.
+        }
+        for want in [100u16, 200, 300, 400, 500, 600, 700, 800, 900] {
+            let snapped = snap_weight(&fonts, &family, Weight(want), false);
+            assert!(
+                available.contains(&snapped.0),
+                "{want} snapped to {} which the family does not have ({available:?})",
+                snapped.0
+            );
+        }
+        // And a family the host does not have leaves the request alone.
+        let missing = ResolvedFamily::Named("No Such Family Here".to_string());
+        assert_eq!(snap_weight(&fonts, &missing, Weight(800), false).0, 800);
     }
 
     #[test]
