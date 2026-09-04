@@ -3267,9 +3267,23 @@ impl PreviewEngine {
         // gaze is what the keyframes' `target` says, ramped between them.
         let (flown_eye, gaze) = {
             let member_place = |id: &str| -> Option<[f32; 3]> {
-                prepared.iter().find(|p| members[p.index].id == id).map(|p| {
-                    [p.across[0] * radius, p.across[1] * radius, p.depth * radius]
-                })
+                if let Some(p) = prepared.iter().find(|p| members[p.index].id == id) {
+                    return Some([p.across[0] * radius, p.across[1] * radius, p.depth * radius]);
+                }
+                // Not drawn at this instant — before its start, after its
+                // end, or switched off — but a camera may still be looking
+                // where it stands, and the framing must not flip frame to
+                // frame because of that.
+                let layer = self
+                    .meta
+                    .layers
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .find(|l| l.stage.as_deref() == Some(stage) && l.id == id)?;
+                let local = tl::layer_local_time(layer, time);
+                let p = tl::route::member_position(layer, local, &resources)?;
+                Some([p[0] as f32 * radius, p[1] as f32 * radius, p[2] as f32 * radius])
             };
             let eye_of = |c: &promo_model::Camera| -> [f64; 3] {
                 let (y, p) = (c.yaw().to_radians(), c.pitch().to_radians());
@@ -3319,7 +3333,10 @@ impl PreviewEngine {
                                 path.start_at.unwrap_or(0.0),
                                 path.end_at.unwrap_or(1.0),
                             );
-                            let p = tl::route::point_along3(&route, from, to, args.0, args.1, args.2, progress);
+                            let own = (radius * reach) as f64;
+                            let p = tl::route::point_along3_scaled(
+                                &route, from, to, args.0, args.1, args.2, progress, own,
+                            );
                             eye = Some([p[0] as f32, p[1] as f32, p[2] as f32]);
                             tangent = Some(tl::route::tangent_along3(&route, from, to, args.0, args.1, args.2, progress));
                         }
@@ -3332,7 +3349,16 @@ impl PreviewEngine {
                     promo_model::CameraTarget::Named(n) if n == "ahead" => {
                         let e = eye?;
                         let t = tangent.unwrap_or([0.0, 0.0, -1.0]);
-                        Some([e[0] + t[0] as f32, e[1] + t[1] as f32, e[2] + t[2] as f32])
+                        // As far ahead as the stage's centre is away, so a
+                        // ramp between "ahead" and a member or a point moves
+                        // the look direction evenly instead of being
+                        // dominated by the far one.
+                        let d = (e[0] * e[0] + e[1] * e[1] + e[2] * e[2]).sqrt().max(1e-3);
+                        Some([
+                            e[0] + t[0] as f32 * d,
+                            e[1] + t[1] as f32 * d,
+                            e[2] + t[2] as f32 * d,
+                        ])
                     }
                     promo_model::CameraTarget::Named(_) => Some([0.0, 0.0, 0.0]),
                     promo_model::CameraTarget::Member { member } => member_place(member),

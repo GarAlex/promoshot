@@ -419,6 +419,24 @@ where
         Some(next) => slope(a, next),
         None => slope(a, b),
     };
+    // A spline through the neighbours can overshoot, and the format's only
+    // way to write a HOLD is two keyframes with the same value — which must
+    // hold, not bulge. Fritsch–Carlson: a flat segment gets flat tangents,
+    // and a tangent that disagrees in sign with the segment, or dwarfs it,
+    // is clipped. The result stays inside the two keyframes' values.
+    let secant = (bv - av) / gap;
+    let (ma, mb) = if secant.abs() < f64::EPSILON {
+        (0.0, 0.0)
+    } else {
+        let clip = |m: f64| {
+            if m / secant <= 0.0 {
+                0.0
+            } else {
+                m.abs().min(3.0 * secant.abs()) * secant.signum()
+            }
+        };
+        (clip(ma), clip(mb))
+    };
     // The ramp may be shorter than the gap (a hold before it): the cubic
     // runs over the ramp, its tangents scaled to the ramp's length.
     let d = ramp_seconds(b, gap).max(1e-9);
@@ -1542,6 +1560,34 @@ mod tests {
             "curved, got {}",
             at.vertical_shift
         );
+    }
+
+    /// The format writes a HOLD as two keyframes with the same value. A
+    /// spline through the neighbours would bulge out of that hold; the
+    /// monotonicity guard keeps it flat, and keeps every smooth ramp
+    /// inside the two values it runs between.
+    #[test]
+    fn smooth_holds_a_repeated_value_and_never_overshoots() {
+        let layer: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,"startTime":0,
+                "keyframes":[{"id":"A","time":0,"zoom":1,"transitionDuration":0},
+                             {"id":"B","time":1,"zoom":2,"transitionDuration":1,"easing":"smooth"},
+                             {"id":"C","time":3,"zoom":2,"transitionDuration":2,"easing":"smooth"},
+                             {"id":"D","time":4,"zoom":1,"transitionDuration":1,"easing":"smooth"}]}"#,
+        )
+        .expect("layer");
+        let at = |t: f64| layer_interpolated_scalar(&layer, t, |k| k.zoom).unwrap();
+        for t in [1.2, 1.5, 2.0, 2.5, 2.9] {
+            assert!(
+                (at(t) - 2.0).abs() < 1e-9,
+                "the hold holds at {t}: {}",
+                at(t)
+            );
+        }
+        for t in [0.25, 0.5, 0.75, 3.25, 3.5, 3.75] {
+            let v = at(t);
+            assert!((1.0..=2.0).contains(&v), "stays between its keyframes at {t}: {v}");
+        }
     }
 
     /// Smooth keeps a value moving through a keyframe: with three

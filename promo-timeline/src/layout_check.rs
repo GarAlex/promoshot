@@ -34,6 +34,11 @@ pub fn layout_warnings_for(meta: &ProjectMetadata, only: Option<&str>) -> Vec<St
         if only.is_some_and(|id| id != layer.id) {
             continue;
         }
+        // A layer switched off draws nothing, so it has no layout to warn
+        // about and covers nothing either.
+        if !layer.is_enabled {
+            continue;
+        }
         if layer.kind == ProjectLayerKind::Caption {
             caption_checks(meta, layer, layers, &resources, canvas, &mut out);
         }
@@ -141,8 +146,8 @@ fn caption_checks(
             {
                 continue;
             }
-            // Something faded out covers nothing.
-            if !ip::layer_is_visible(other, t) || ip::layer_opacity(other, t) < 0.5 {
+            // Something switched off, not yet on, or faded out covers nothing.
+            if !other.is_enabled || !ip::layer_is_visible(other, t) || ip::layer_opacity(other, t) < 0.5 {
                 continue;
             }
             let Some(r) = layer_rect(other, t, settings, resources, canvas) else {

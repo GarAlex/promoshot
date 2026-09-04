@@ -125,10 +125,16 @@ Semantics worth knowing:
   cubic through the neighbouring keyframes' values in time, so a
   value that passes THROUGH several keyframes keeps its speed at each
   one instead of stopping there, which per-ramp easing always does.
-  Use smooth on every keyframe of a move with more than two; as a
-  spline it may overshoot a little between keyframes, so it is for
-  motion, not for a value that must stay within its ends. An unknown
-  value falls back to linear rather than failing the file. It applies to whatever the
+  Use smooth on every keyframe of a move with more than two. It never
+  leaves the two keyframes' own values, and two keyframes with the same
+  value HOLD. It shapes the VALUE, not the clock, so it applies to the
+  keyframed numbers — zoom, position, a stage member's place, and any
+  other scalar — while a gradient, a transition and a caption reveal
+  ramp linearly under it, and along a motion path it means even speed
+  down the curve. A project using it carries `minReaderVersion: 41`,
+  because a reader that does not know it writes "linear" back on save.
+  Every other unknown value falls back to linear rather than failing
+  the file. It applies to whatever the
   keyframe carries — zoom, position, viewport, rotation, opacity,
   gradient — and to the SPEED along a motion path, so an eased move
   travels its curve on the clock it grows on. Because each track

@@ -2050,9 +2050,11 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
     if dot(forward_probe, forward_probe) < 1e-6 {
         forward_probe = [0.0, 0.0, -1.0];
     }
-    let distance = dot(to_center, forward_probe)
-        .max((view.distance.max(1.05) as f32) * radius * 0.25)
-        .max(radius * 0.5);
+    // How far in front of the eye the bounds centre lies. No floor tied to
+    // the ORBIT's distance: a flown eye may sit much closer or further, and
+    // borrowing the orbit's number there pushed the near plane through the
+    // bodies.
+    let distance = dot(to_center, forward_probe);
     let mut forward = norm(sub(center, eye));
     if dot(forward, forward) < 1e-6 {
         forward = [0.0, 0.0, -1.0];
@@ -2087,8 +2089,10 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
         [-dot(right, eye), -dot(up, eye), dot(forward, eye), 1.0],
     ];
     let fov = deg(view.fov.clamp(5.0, 120.0));
-    let near = (distance - radius * 1.5).max(distance * 0.02);
-    let far = distance + radius * 3.0;
+    // Bracket the bounds sphere along the view axis, and keep the near
+    // plane positive however close the eye comes.
+    let near = (distance - radius * 1.5).max(radius * 0.01).max(1e-4);
+    let far = (distance + radius * 3.0).max(near * 1.001);
     let f = 1.0 / (fov / 2.0).tan();
     // Perspective, right-handed, depth 0…1 (wgpu).
     let proj = [

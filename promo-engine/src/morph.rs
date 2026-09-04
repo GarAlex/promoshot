@@ -45,6 +45,34 @@ fn apply(m: &Mat4, p: [f32; 3], w: f32) -> [f32; 3] {
     ]
 }
 
+/// A direction through a placement: the inverse transpose of its upper
+/// 3x3, so an unevenly scaled node still reports the surface's true
+/// outward direction. Falls back to the matrix when it is singular.
+fn normal_direction(m: &Mat4, n: [f32; 3]) -> [f32; 3] {
+    let a = [
+        [m[0][0], m[1][0], m[2][0]],
+        [m[0][1], m[1][1], m[2][1]],
+        [m[0][2], m[1][2], m[2][2]],
+    ];
+    let det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+        - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+        + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+    if det.abs() < 1e-12 {
+        return norm(apply(m, n, 0.0));
+    }
+    let inv = |r: usize, c: usize| -> f32 {
+        let (r0, r1) = ((c + 1) % 3, (c + 2) % 3);
+        let (c0, c1) = ((r + 1) % 3, (r + 2) % 3);
+        (a[r0][c0] * a[r1][c1] - a[r0][c1] * a[r1][c0]) / det
+    };
+    // inverse transpose: (A^-1)^T
+    norm([
+        inv(0, 0) * n[0] + inv(0, 1) * n[1] + inv(0, 2) * n[2],
+        inv(1, 0) * n[0] + inv(1, 1) * n[1] + inv(1, 2) * n[2],
+        inv(2, 0) * n[0] + inv(2, 1) * n[1] + inv(2, 2) * n[2],
+    ])
+}
+
 fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
@@ -106,16 +134,17 @@ pub fn sample_surface(model: &Model, rest: &[Mat4], count: usize, seed: u64) -> 
                 continue;
             }
             // The file's own normal where it has one, the face's otherwise.
+            // A normal goes through the inverse TRANSPOSE of the placement,
+            // or a node scaled unevenly points its samples the wrong way.
             let vn = match (mesh.normals.get(ia), mesh.normals.get(ib), mesh.normals.get(ic)) {
-                (Some(na), Some(nb), Some(nc)) => norm(apply(
+                (Some(na), Some(nb), Some(nc)) => normal_direction(
                     m,
                     [
                         na[0] + nb[0] + nc[0],
                         na[1] + nb[1] + nc[1],
                         na[2] + nb[2] + nc[2],
                     ],
-                    0.0,
-                )),
+                ),
                 _ => norm(n),
             };
             tris.push(Tri {

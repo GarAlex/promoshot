@@ -4000,6 +4000,17 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 41 is `smooth` easing. Every other curve merely LOOKS different in
+        // an older reader; smooth is the one such a reader rewrites to
+        // "linear" on save, turning authored motion into a straight lerp
+        // for good — so the rung refuses rather than let that happen.
+        if crate::nesting::all_layers(self)
+            .iter()
+            .any(|l| l.keyframes.iter().any(|k| k.easing.is_some_and(|e| e.is_smooth())))
+        {
+            return 41;
+        }
+
         // 40 is a path in the stage — a route on a path resource, or a
         // camera with a route or a target. Dropped by an older reader, a
         // fly-through goes straight and a gaze stays on the centre: a
@@ -4802,6 +4813,28 @@ mod placement_model_tests {
     /// and offset round-trip, the accessors default what is left out,
     /// an unknown mode reads as a screen, and any of the three lifts
     /// the rung.
+    /// `smooth` easing (rung 41): an older reader does not merely render it
+    /// differently, it writes "linear" back on save, so the rung refuses.
+    #[test]
+    fn smooth_easing_is_stamped_forty_one() {
+        let doc = |easing: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Ease","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[],
+                    "layers":[{{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                      "startTime":0,"duration":4,
+                      "keyframes":[{{"id":"A","time":0,"zoom":1,"transitionDuration":0}},
+                                   {{"id":"B","time":4,"zoom":2,"transitionDuration":4,"easing":"{easing}"}}]}}]}}"#
+            ))
+            .expect("decodes")
+        };
+        assert_eq!(doc("smooth").minimum_reader_version(), 41);
+        assert!(doc("easeInOut").minimum_reader_version() < 41, "the older curves do not lift it");
+        assert!(doc("smooth").to_json().unwrap().contains(r#""easing":"smooth""#));
+    }
+
     /// A path in the stage (rung 40): a route on a path resource, a camera
     /// route and a gaze round-trip, the gaze decodes in its three forms,
     /// and any of them lifts the rung.

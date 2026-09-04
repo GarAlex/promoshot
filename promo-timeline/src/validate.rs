@@ -998,7 +998,20 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
     }
-    let top = meta.layers.as_deref().unwrap_or(&[]);
+    // Stages live at the top level and inside a composition's own layers;
+    // a route or a gaze is just as wrong in either.
+    let top: Vec<&promo_model::ProjectLayer> = meta
+        .layers
+        .iter()
+        .flatten()
+        .chain(
+            meta.resources
+                .iter()
+                .flatten()
+                .filter_map(|r| r.composition.as_ref())
+                .flat_map(|c| c.layers.iter()),
+        )
+        .collect();
     for stage in top.iter().filter(|l| l.kind == Kind::Stage) {
         let members = stage.members.as_deref().unwrap_or(&[]);
         let is_member = |id: &str| members.iter().any(|m| m.id == id);
@@ -1069,14 +1082,25 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .find(|r| Some(r.id.as_str()) == id)
             .is_some_and(|r| r.particles.as_ref().is_some_and(|p| p.morph.is_some()))
     };
-    let top = meta.layers.as_deref().unwrap_or(&[]);
+    let top: Vec<&promo_model::ProjectLayer> = meta
+        .layers
+        .iter()
+        .flatten()
+        .chain(
+            meta.resources
+                .iter()
+                .flatten()
+                .filter_map(|r| r.composition.as_ref())
+                .flat_map(|c| c.layers.iter()),
+        )
+        .collect();
     let mut members: Vec<&promo_model::ProjectLayer> = Vec::new();
-    for layer in top {
+    for layer in &top {
         if layer.kind == Kind::Stage {
             members.extend(layer.members.iter().flat_map(|m| m.iter()));
         }
     }
-    for layer in top {
+    for layer in &top {
         if layer.kind == Kind::Stage || layer.stage.is_some() {
             continue;
         }

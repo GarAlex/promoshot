@@ -98,7 +98,17 @@ impl Route3 {
     /// curve when `curve` is smooth (the default), straight otherwise.
     pub fn from_route(route: &Route) -> Option<Self> {
         let closed = route.closed();
-        let pts: Vec<V3> = route.points.clone();
+        let mut pts: Vec<V3> = route.points.clone();
+        // A ring written with its first point repeated at the end is the
+        // natural way to draw one; the wrap below would then spline a
+        // degenerate span and grow a hook at the seam.
+        if closed && pts.len() > 2 {
+            if let (Some(first), Some(last)) = (pts.first().copied(), pts.last().copied()) {
+                if length(sub(first, last)) < MIN_SEGMENT {
+                    pts.pop();
+                }
+            }
+        }
         if route.curve() == "linear" || pts.len() < 3 {
             return Self::new(pts, closed);
         }
@@ -180,6 +190,24 @@ impl Route3 {
         lerp(before, after, t)
     }
 
+    /// The normal of the plane a loop lies closest to: the summed cross
+    /// products of successive offsets from its start, which is the shape's
+    /// own "up" and the axis a mirror of it turns about.
+    pub fn plane_normal(&self) -> V3 {
+        let origin = self.start();
+        let mut n = [0.0; 3];
+        for pair in self.points.windows(2) {
+            let c = cross(sub(pair[0], origin), sub(pair[1], origin));
+            n = add(n, c);
+        }
+        let l = length(n);
+        if l < 1e-9 {
+            [0.0, 1.0, 0.0]
+        } else {
+            scale(n, 1.0 / l)
+        }
+    }
+
     /// The direction of travel at `progress`, unit length.
     pub fn tangent_at(&self, progress: f64) -> V3 {
         let h = 0.002;
@@ -207,13 +235,15 @@ pub fn route_of(resources: &[ProjectResource], path: &MotionPath) -> Option<Rout
 /// applied to `local` (a point relative to the route's chord origin):
 /// the smallest turn from one chord direction to the other, a uniform
 /// scale by their lengths, then the move to `from`.
-fn fit(local: V3, chord: V3, from: V3, to: V3) -> V3 {
+fn fit(local: V3, chord: V3, from: V3, to: V3, own_size: f64) -> V3 {
     let chord_length = length(chord);
     let target = sub(to, from);
     let target_length = length(target);
     if chord_length < MIN_SEGMENT || target_length < MIN_SEGMENT {
         // Nowhere to aim: the route plays at its own size from `from`.
-        return add(from, local);
+        // `own_size` carries it into the caller's units — a member's route
+        // is already in stage radii, a camera's must be scaled into world.
+        return add(from, scale(local, own_size));
     }
     let s = target_length / chord_length;
     let u = scale(chord, 1.0 / chord_length);
@@ -257,9 +287,18 @@ fn fit(local: V3, chord: V3, from: V3, to: V3) -> V3 {
     let rolled = if la > 1e-6 && lb > 1e-6 {
         let a = scale(a, 1.0 / la);
         let b = scale(b, 1.0 / lb);
-        let c = dot(a, b).clamp(-1.0, 1.0);
-        let sn = dot(cross(a, b), v);
-        // Rodrigues about v by the angle from a to b.
+        // How much world up can say about the roll at all: nothing when the
+        // move is vertical, where `flat(up)` collapses and its direction
+        // flips as the move crosses. Fading the correction out there keeps
+        // the fit continuous instead of mirroring the arc across the move.
+        let authority = {
+            let x = (1.0 - dot(v, world_up).abs()).clamp(0.0, 1.0);
+            let t = (x / 0.15).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        };
+        let angle = dot(cross(a, b), v).atan2(dot(a, b).clamp(-1.0, 1.0)) * authority;
+        let (c, sn) = (angle.cos(), angle.sin());
+        // Rodrigues about v by the settled angle.
         add(
             add(scale(turned, c), scale(cross(v, turned), sn)),
             scale(v, dot(v, turned) * (1.0 - c)),
@@ -284,6 +323,23 @@ pub fn point_along3(
     end_at: f64,
     progress: f64,
 ) -> V3 {
+    point_along3_scaled(route, from, to, flipped, start_at, end_at, progress, 1.0)
+}
+
+/// `point_along3` with the size a CLOSED route plays at, in the caller's
+/// units: a member's route is already in stage radii, a camera's must be
+/// carried into world units by the stage's radius.
+#[allow(clippy::too_many_arguments)]
+pub fn point_along3_scaled(
+    route: &Route3,
+    from: V3,
+    to: V3,
+    flipped: bool,
+    start_at: f64,
+    end_at: f64,
+    progress: f64,
+    own_scale: f64,
+) -> V3 {
     let (start_at, end_at) = (start_at.clamp(0.0, 1.0), end_at.clamp(0.0, 1.0));
     let along = start_at + (end_at - start_at) * progress.clamp(0.0, 1.0);
     let origin = route.point_at(start_at);
@@ -296,10 +352,28 @@ pub fn point_along3(
             let u = scale(chord, 1.0 / l);
             local = sub(scale(u, 2.0 * dot(local, u)), local);
         } else {
-            local = [local[0], -local[1], local[2]];
+            // A loop has no chord to mirror across, so it is mirrored
+            // inside its OWN plane, about the line it sets off along: the
+            // orbit runs the other way round. Mirroring about the plane
+            // itself — or negating Y, the 2D twin's rule — does nothing at
+            // all to a ring drawn flat in the stage.
+            let n = route.plane_normal();
+            let t0 = route.tangent_at(start_at);
+            let m = cross(n, t0);
+            let ml = length(m);
+            if ml > 1e-9 {
+                let m = scale(m, 1.0 / ml);
+                local = sub(local, scale(m, 2.0 * dot(local, m)));
+            } else {
+                local = sub(local, scale(n, 2.0 * dot(local, n)));
+            }
         }
     }
-    fit(local, chord, from, to)
+    // A route that returns to where it began is an orbit, whatever the file
+    // says: `closed` is a hint, the shape is the fact.
+    let own_size = if route.is_closed() { own_scale } else { 1.0 };
+    let chord = if route.is_closed() { [0.0; 3] } else { chord };
+    fit(local, chord, from, to, own_size)
 }
 
 /// The direction of travel at `progress`, in the fitted space.
@@ -471,6 +545,84 @@ mod tests {
             let centre = lerp(from, to, 0.5);
             assert!(mid[1] > centre[1] + 1.0, "bulges upward for {from:?} → {to:?}: {mid:?}");
         }
+    }
+
+    /// A route that comes back to where it began is an orbit even when the
+    /// file never said `closed`: fitting its hair-thin chord onto the move
+    /// used to scale the whole loop by hundreds.
+    #[test]
+    fn a_route_that_closes_itself_is_an_orbit_without_being_told() {
+        let circle: Vec<V3> = (0..96)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / 96.0;
+                [a.cos(), 0.0, a.sin()]
+            })
+            .collect();
+        let r = Route3::new(circle, false).unwrap();
+        assert!(r.is_closed(), "the shape is the fact, not the flag");
+        let mid = point_along3(&r, [0.0; 3], [2.0, 0.0, 0.0], false, 0.0, 1.0, 0.5);
+        assert!(length(mid) < 4.0, "it plays at its drawn size, not flung: {mid:?}");
+    }
+
+    /// `flipped` mirrors a loop about the loop's own plane. Negating Y —
+    /// the 2D rule — does nothing to a ring drawn in the ground plane.
+    #[test]
+    fn flipping_a_ground_plane_loop_mirrors_it() {
+        let circle: Vec<V3> = (0..24)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / 24.0;
+                [a.cos() * 2.0, 0.0, a.sin() * 2.0]
+            })
+            .collect();
+        let r = Route3::new(circle, true).unwrap();
+        let here = [5.0, 1.0, 5.0];
+        let plain = point_along3(&r, here, here, false, 0.0, 1.0, 0.25);
+        let flipped = point_along3(&r, here, here, true, 0.0, 1.0, 0.25);
+        assert!(!close(plain, flipped), "flipped is not a no-op: {plain:?}");
+        assert!(
+            (length(sub(plain, here)) - length(sub(flipped, here))).abs() < 1e-6,
+            "and it is a mirror, so the same distance out"
+        );
+    }
+
+    /// The fit is continuous as a move passes through vertical, where world
+    /// up says nothing about the roll: two moves a whisker either side of
+    /// straight up must land the arc in nearly the same place.
+    #[test]
+    fn the_fit_does_not_flip_through_vertical() {
+        let arc = Route3::new(vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]], false).unwrap();
+        let at = |to: V3| point_along3(&arc, [0.0; 3], to, false, 0.0, 1.0, 0.5);
+        let eps = 1e-3;
+        let left = at([-eps, 4.0, 0.0]);
+        let right = at([eps, 4.0, 0.0]);
+        assert!(
+            length(sub(left, right)) < 0.05,
+            "either side of vertical is nearly the same fit: {left:?} vs {right:?}"
+        );
+    }
+
+    /// A ring written with its first point repeated is the same ring.
+    #[test]
+    fn a_repeated_first_point_does_not_grow_a_hook() {
+        let ring = |repeat: bool| {
+            let mut pts = vec![[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, 0.0, -1.0]];
+            if repeat {
+                pts.push([1.0, 0.0, 0.0]);
+            }
+            Route3::from_route(&Route {
+                points: pts,
+                curve: None,
+                closed: Some(true),
+            })
+            .unwrap()
+        };
+        let (plain, repeated) = (ring(false), ring(true));
+        assert!(
+            (plain.total_length() - repeated.total_length()).abs() < 1e-6,
+            "same ring, same length: {} vs {}",
+            plain.total_length(),
+            repeated.total_length()
+        );
     }
 
     /// A closed route plays at its own size from the start when the move

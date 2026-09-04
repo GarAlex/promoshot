@@ -450,7 +450,10 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
     write_metadata(&meta, &meta_path)?;
     // Issue #9: the layout findings for THIS layer ride the reply, so an
     // agent fixes a flush caption in the same turn.
-    let notes = layout_notes(&meta, Some(&layer_id));
+    // The whole project's layout, not just this layer's: the caption a new
+    // layer now sits on top of belongs to a different layer, and that is
+    // exactly the case an agent needs told.
+    let notes = layout_notes(&meta, None);
     Ok(format!(
         "upserted layer {layer_id}{resource_note}; composition runs {end}s{notes}"
     ))

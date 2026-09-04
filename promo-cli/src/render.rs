@@ -3011,8 +3011,27 @@ mod tests {
         let at_end = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 4.0);
         let at_end_straight = render(&doc("", ""), 4.0);
         assert!(differ(&at_end, &at_end_straight) < n / 200, "at the keyframe both are where it says: {} of {n}", differ(&at_end, &at_end_straight));
-        let flown = render(&doc("", r#","motionPath":{"pathResourceID":"ARC"},"target":{"member":"C"}"#), 2.0);
-        assert!(differ(&straight, &flown) > n / 40, "a flown camera with its gaze on the cube frames differently: {} of {n}", differ(&straight, &flown));
+        // Both of these are FLOWN, so they share the canvas-shaped frame the
+        // stage draws for a moving camera; any difference between them is
+        // the gaze and the route themselves, not the frame's shape.
+        // At t=1 the cube is half way from -1 to 1, so it is OFF the stage's
+        // centre and the two gazes really are two different points. (At the
+        // midpoint they coincide, which is how this assertion first caught
+        // itself.)
+        let gaze_member = render(&doc("", r#","motionPath":{"pathResourceID":"ARC"},"target":{"member":"C"}"#), 1.0);
+        let gaze_centre = render(&doc("", r#","motionPath":{"pathResourceID":"ARC"},"target":"center""#), 1.0);
+        assert!(
+            // Renders are deterministic, so any real difference is signal.
+            differ(&gaze_member, &gaze_centre) > n / 200,
+            "looking at the cube is not looking at the stage's centre: {} of {n}",
+            differ(&gaze_member, &gaze_centre)
+        );
+        let no_route = render(&doc("", r#","target":{"member":"C"}"#), 1.0);
+        assert!(
+            differ(&gaze_member, &no_route) > n / 200,
+            "flying the route moves the eye, gaze held equal: {} of {n}",
+            differ(&gaze_member, &no_route)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

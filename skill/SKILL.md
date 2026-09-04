@@ -362,15 +362,20 @@ between beats rather than cross-fading. A move that passes THROUGH
 three or more keyframes takes `"easing": "smooth"` on every one of
 them: per-ramp easing (easeIn/easeOut/easeInOut) stops at each
 keyframe and the piece hitches there; smooth is a cubic through the
-neighbouring keyframes that keeps the speed. Ease only the two ends. A body that TURNS is the
+neighbouring keyframes that keeps the speed, never leaving their two
+values, and holding when they are equal. It shapes keyframed NUMBERS;
+a gradient, a transition or a reveal still ramps linearly under it, and
+on a motion path it means even speed along the curve. Ease only the two
+ends. Stamp `minReaderVersion: 41` when you use it. A body that TURNS is the
 exception: spin it in one continuous linear turn (a camera or a member
 yaw of 0 → 360 over the shot) under a light that stays put, so each
 side passes the light; do not chop a spin into moves.
 
 A leading or trailing caption still needs room: `promo_validate` lays
 every caption out for real and names one that runs past the canvas, one
-that sits within 5% of the LEFT or RIGHT edge ("sits 12 px from the
-canvas's left edge (safe ≥ 96 px)"), and one substantially overlapped
+that sits within a safe band of the LEFT or RIGHT edge, 5% of the
+canvas's shorter side ("sits 12 px from the canvas's left edge (safe ≥
+54 px)"), and one substantially overlapped
 by a picture, body or stage that draws above it. Sitting close to the
 BOTTOM is not flagged: that is where a lower third belongs. The same
 lines ride the replies of `promo_upsert_layer` and `promo_apply`, so
