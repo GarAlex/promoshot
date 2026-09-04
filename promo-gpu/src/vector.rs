@@ -727,7 +727,11 @@ mod tests {
                 .sum()
         };
         let square = tessellate(&[rect(0.0)], 1.0, 0.0, 0.0);
-        assert!((area(&square) - 200.0 * 120.0).abs() < 1.0, "{}", area(&square));
+        assert!(
+            (area(&square) - 200.0 * 120.0).abs() < 1.0,
+            "{}",
+            area(&square)
+        );
         let bounds = |mesh: &VertexBuffers<MeshVertex, u32>| {
             let xs: Vec<f32> = mesh.vertices.iter().map(|v| v.pos[0]).collect();
             let ys: Vec<f32> = mesh.vertices.iter().map(|v| v.pos[1]).collect();
@@ -743,7 +747,10 @@ mod tests {
         let rounded = tessellate(&[rect(30.0)], 1.0, 0.0, 0.0);
         let corners = (4.0 - std::f64::consts::PI) * 30.0 * 30.0;
         let lost = area(&square) - area(&rounded);
-        assert!((lost - corners).abs() < corners * 0.02, "four quarter-circles: {lost} vs {corners}");
+        assert!(
+            (lost - corners).abs() < corners * 0.02,
+            "four quarter-circles: {lost} vs {corners}"
+        );
         // Still exactly as wide and tall — a radius rounds the corners, it
         // does not inset the shape.
         assert_eq!(bounds(&rounded), (10.0, 20.0, 210.0, 140.0));
@@ -752,7 +759,11 @@ mod tests {
         // 120-tall rect is clamped to 60, which is a stadium, not a knot.
         let pill = tessellate(&[rect(200.0)], 1.0, 0.0, 0.0);
         let stadium = 200.0 * 120.0 - (4.0 - std::f64::consts::PI) * 60.0 * 60.0;
-        assert!((area(&pill) - stadium).abs() < stadium * 0.02, "clamped: {}", area(&pill));
+        assert!(
+            (area(&pill) - stadium).abs() < stadium * 0.02,
+            "clamped: {}",
+            area(&pill)
+        );
         assert_eq!(bounds(&pill), (10.0, 20.0, 210.0, 140.0));
     }
 

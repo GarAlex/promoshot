@@ -1645,9 +1645,39 @@ mod tests {
             last_width = width;
             last_ink = ink;
         }
+        // How many weights the RESOLVED family actually has, since that is
+        // the ceiling on how many distinct pictures the ladder can make. A
+        // Linux host with only Liberation and DejaVu has two per family,
+        // and requiring four there would fail for the host's font list
+        // rather than for anything this crate did.
+        let available = {
+            let fonts = font_system().lock().expect("font system");
+            let resolved = {
+                let mut probe = FontSystem::new();
+                resolve_family(&mut probe, None)
+            };
+            match resolved {
+                ResolvedFamily::Named(name) => {
+                    let mut weights: Vec<u16> = fonts
+                        .db()
+                        .faces()
+                        .filter(|f| {
+                            f.families.iter().any(|(n, _)| *n == name)
+                                && f.stretch == cosmic_text::fontdb::Stretch::Normal
+                                && f.style == cosmic_text::fontdb::Style::Normal
+                        })
+                        .map(|f| f.weight.0)
+                        .collect();
+                    weights.sort_unstable();
+                    weights.dedup();
+                    weights.len()
+                }
+                _ => 1,
+            }
+        };
         assert!(
-            steps >= 4,
-            "the number reaches real faces: {steps} distinct weights"
+            steps >= available.min(4),
+            "the number reaches every face the family has: {steps} distinct of {available}"
         );
     }
 

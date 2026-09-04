@@ -6747,12 +6747,20 @@ mod tests {
 
         let light = lit(&fixture(r#""weight":"ultraLight""#, "WIDE"));
         let black = lit(&fixture(r#""weight":"black""#, "WIDE"));
-        assert!(black.4 > light.4 * 2, "black is heavier: {} vs {}", black.4, light.4);
+        assert!(
+            black.4 > light.4 * 2,
+            "black is heavier: {} vs {}",
+            black.4,
+            light.4
+        );
 
         let tight = lit(&fixture(r#""lineHeight":1.0"#, "one\\ntwo"));
         let loose = lit(&fixture(r#""lineHeight":2.0"#, "one\\ntwo"));
         let spread = (loose.3 - loose.2) as i64 - (tight.3 - tight.2) as i64;
-        assert!((spread - 40).abs() <= 4, "one extra font size between them: {spread}");
+        assert!(
+            (spread - 40).abs() <= 4,
+            "one extra font size between them: {spread}"
+        );
     }
 
     /// A rectangle is a drawing shape the engine can draw: a filled plate

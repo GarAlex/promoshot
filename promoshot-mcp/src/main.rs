@@ -1659,8 +1659,15 @@ mod tests {
             skill.contains("Never write `minReaderVersion` by hand"),
             "the skill must teach that the stamp is computed, not a number"
         );
-        for stale in ["minReaderVersion\": 19", "minReaderVersion: 19", "minReaderVersion: 34"] {
-            assert!(!skill.contains(stale), "the skill states a literal stamp: {stale}");
+        for stale in [
+            "minReaderVersion\": 19",
+            "minReaderVersion: 19",
+            "minReaderVersion: 34",
+        ] {
+            assert!(
+                !skill.contains(stale),
+                "the skill states a literal stamp: {stale}"
+            );
         }
         assert!(
             !skill.contains("owns the file"),

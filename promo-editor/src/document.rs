@@ -974,21 +974,28 @@ impl Document {
                         || l.mask_resource_id.as_deref() == Some(id)
                         || l.keyframes.iter().any(|k| {
                             k.resource_id.as_deref() == Some(id)
-                                || k.motion_path.as_ref().is_some_and(|m| m.path_resource_id == id)
+                                || k.motion_path
+                                    .as_ref()
+                                    .is_some_and(|m| m.path_resource_id == id)
                                 || k.camera.as_ref().is_some_and(|c| {
-                                    c.motion_path.as_ref().is_some_and(|m| m.path_resource_id == id)
+                                    c.motion_path
+                                        .as_ref()
+                                        .is_some_and(|m| m.path_resource_id == id)
                                 })
                         })
                 };
-                let referenced = promo_model::nesting::all_layers(meta).iter().any(|l| points_at(l))
+                let referenced = promo_model::nesting::all_layers(meta)
+                    .iter()
+                    .any(|l| points_at(l))
                     || meta.resources.iter().flatten().any(|r| {
                         r.materials
                             .iter()
                             .flat_map(|m| m.values())
                             .any(|b| b.resource_id() == Some(id))
-                            || r.particles.as_ref().and_then(|p| p.morph.as_ref()).is_some_and(|m| {
-                                m.from == id || m.to == id
-                            })
+                            || r.particles
+                                .as_ref()
+                                .and_then(|p| p.morph.as_ref())
+                                .is_some_and(|m| m.from == id || m.to == id)
                     });
                 if referenced {
                     return Err(format!(

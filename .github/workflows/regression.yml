@@ -1,0 +1,71 @@
+# The regression round: the whole truth (`check-all.sh`) on Linux, in the
+# environment the Docker image proves the renderer in — lavapipe for a
+# GPU, Liberation and DejaVu for fonts, ffmpeg for video.
+#
+# NOT on every push, by decision: a slice is several commits and the round
+# belongs to the slice, not the commit. It runs when a release is tagged,
+# and whenever anyone asks for it.
+#
+# It does not gate `release` yet. Gating a build on a suite nobody has
+# watched pass in this environment would block shipping on a discovery,
+# and the first run here IS the discovery: the suite has only ever run on
+# a Mac, where the system fonts and a real GPU are different facts.
+name: regression
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Dockerfile's own list: whatever the renderer needs to be real
+      # on a machine with no screen and no GPU.
+      - name: The render environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg mesa-vulkan-drivers libvulkan1 fontconfig \
+            fonts-liberation fonts-dejavu-core
+          fc-list | wc -l
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test
+        run: cargo test --workspace
+
+      # A render, not just a compile: the suite can be green while nothing
+      # reaches a frame. LinuxSmoke.promo exists for this.
+      - name: render
+        run: |
+          cargo build --release -p promo-cli
+          ./target/release/promo validate examples/LinuxSmoke.promo
+          ./target/release/promo frames examples/LinuxSmoke.promo \
+            --out /tmp/frames --sample 6 --sheet /tmp/sheet.png --json
+          python3 - <<'PY'
+          import pathlib, sys
+          sheet = pathlib.Path("/tmp/sheet.png")
+          size = sheet.stat().st_size if sheet.exists() else 0
+          print(f"contact sheet: {size} bytes")
+          # A blank sheet compresses to almost nothing; a real one does not.
+          sys.exit(0 if size > 20_000 else "the sheet is empty — the renderer drew nothing")
+          PY
+
+      - name: keep the sheet
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-contact-sheet
+          path: /tmp/sheet.png
+          if-no-files-found: warn
