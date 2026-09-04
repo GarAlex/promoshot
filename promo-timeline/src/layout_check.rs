@@ -1,10 +1,15 @@
 //! Layout warnings (issue #9): what `promo_validate` could not see while
 //! it only read the document — a caption laid out flush with an edge or
-//! past it, a caption drawn under a picture, a stage or a body that
-//! sits above it, a viewport that crops a plate's edges. Every check
-//! lays the caption out for real (promo-text, CPU only) at a few instants
-//! of its life and reports numbers an agent can act on in the same turn:
-//! "left edge at x=12 (safe ≥ 96)". Soft — never a refusal.
+//! past it, and a caption drawn under a picture, a stage or a body that
+//! sits above it. Every check lays the caption out for real (promo-text,
+//! CPU only) at a few instants of its life and reports numbers an agent
+//! can act on in the same turn: "left edge at x=12 (safe ≥ 96)". Soft —
+//! never a refusal.
+//!
+//! There was a viewport check too, and it is gone: it fired on shipped
+//! projects that looked right, and a check an agent learns to ignore is
+//! worse than no check. The same rule governs what is here — a drawing is
+//! measured by its own shapes, and a particle system covers nothing.
 use crate::caption::caption_style;
 use crate::{interpolation as ip, layer_transform_along_paths, media_rect};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResourceKind, Size};
