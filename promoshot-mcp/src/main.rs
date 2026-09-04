@@ -552,12 +552,19 @@ fn tool_descriptors() -> Value {
         },
         {
             "name": "promo_media_probe",
-            "description": "The facts of a source file before composing with it: container, \
-                duration, streams — codec, size, fps, display rotation, channels. \
-                Distilled JSON, not ffprobe's firehose.",
+            "description": "The facts of one source file or SEVERAL, before composing with \
+                them: container, duration, streams — codec, size, fps, display rotation, \
+                channels. Distilled JSON, not ffprobe's firehose. Each answer carries the \
+                `resource` entry that file becomes, ready to paste into `resources` with \
+                its pixel size already measured — which is what a `placement` rule needs \
+                to resolve against anything other than a square.",
             "inputSchema": { "type": "object",
-                "properties": { "file": { "type": "string" } },
-                "required": ["file"] }
+                "properties": {
+                    "file": { "type": "string", "description": "One path" },
+                    "files": { "type": "array", "items": { "type": "string" }, "description":
+                        "Several paths at once; the answer is keyed by the path asked for" }
+                },
+                "required": [] }
         },
         {
             "name": "promo_media_turntable",
@@ -1002,7 +1009,7 @@ where
                 let file = args["file"].as_str().unwrap_or_default().to_string();
                 run(config, &["model".to_string(), file, "--json".into()])
             } else {
-                media::probe(args)
+                media::probe_many(args)
             }
         }
         "promo_media_turntable" => {

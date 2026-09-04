@@ -31,6 +31,34 @@ fn required_file(args: &Value) -> Result<PathBuf, String> {
 /// The facts, distilled: ffprobe's firehose reduced to what an authoring
 /// decision reads — container duration, each stream's kind, codec, size,
 /// fps, channels. Returned as JSON, machine-first.
+/// One file, or several.
+///
+/// Several because that is what the corpus asked for: fifteen denied
+/// `sips -g pixelWidth -g pixelHeight resources/*.png` calls across the
+/// demo runs, every one of them naming MORE THAN ONE file. An agent with
+/// six sprite sheets to measure was choosing one shell line over six tool
+/// calls, and getting refused by the harness. The answer is keyed by the
+/// path asked for, so a caller can match them up.
+pub fn probe_many(args: &Value) -> Result<String, String> {
+    let Some(list) = args.get("files").and_then(Value::as_array) else {
+        return probe(args);
+    };
+    let paths: Vec<&str> = list.iter().filter_map(Value::as_str).collect();
+    if paths.is_empty() {
+        return Err("`files` is empty — pass one or more paths, or use `file`".into());
+    }
+    let mut out = serde_json::Map::new();
+    for path in paths {
+        let one = json!({ "file": path });
+        let answer = match probe(&one) {
+            Ok(text) => serde_json::from_str::<Value>(&text).unwrap_or(Value::Null),
+            Err(why) => json!({ "error": why }),
+        };
+        out.insert(path.to_string(), answer);
+    }
+    serde_json::to_string_pretty(&Value::Object(out)).map_err(|e| e.to_string())
+}
+
 pub fn probe(args: &Value) -> Result<String, String> {
     let path = required_file(args)?;
     let out = std::process::Command::new("ffprobe")
@@ -53,8 +81,103 @@ pub fn probe(args: &Value) -> Result<String, String> {
         ));
     }
     let raw: Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
-    let distilled = distill_probe(&raw);
+    let mut distilled = distill_probe(&raw);
+    if let Some(resource) = resource_entry(&path, &distilled) {
+        distilled["resource"] = resource;
+    }
     serde_json::to_string_pretty(&distilled).map_err(|e| e.to_string())
+}
+
+/// The resource entry this file becomes, ready to paste into `resources`.
+///
+/// The facts alone left the agent to assemble it, and the one it forgets
+/// is the one that matters: without `pixelWidth`/`pixelHeight` a
+/// `placement` rule resolves against a SQUARE and the layer lands wrong —
+/// the skill's own "measure what you place". Built here and then PARSED
+/// as a `ProjectResource` before it is handed over, so what comes back
+/// cannot be a shape the format would reject.
+fn resource_entry(path: &Path, facts: &Value) -> Option<Value> {
+    let filename = path.file_name()?.to_str()?.to_string();
+    let stem = path.file_stem()?.to_str()?.to_string();
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let video = facts["streams"]
+        .as_array()
+        .is_some_and(|s| s.iter().any(|x| x["type"] == "video"));
+    let audio = facts["streams"]
+        .as_array()
+        .is_some_and(|s| s.iter().any(|x| x["type"] == "audio"));
+    let duration = facts["duration"].as_f64();
+    let (width, height) = facts["streams"]
+        .as_array()
+        .and_then(|s| s.iter().find(|x| x["type"] == "video"))
+        .map(|s| (s["width"].as_f64(), s["height"].as_f64()))
+        .unwrap_or((None, None));
+    // A moving picture has a duration; a still has pixels and no clock.
+    let kind = match (video, audio, duration) {
+        (true, _, Some(d)) if d > 0.0 => "video",
+        (true, _, _) => "image",
+        (false, true, _) => "audio",
+        _ => return None,
+    };
+    let mut entry = json!({
+        "id": uuid::Uuid::new_v4().to_string().to_uppercase(),
+        "kind": kind,
+        "filename": filename,
+        "displayName": pretty_name(&stem),
+        "addedAt": 0,
+        "imageCuts": [],
+        "disabledAudioTrackIndices": [],
+    });
+    match kind {
+        "image" => {
+            entry["pixelWidth"] = json!(width?);
+            entry["pixelHeight"] = json!(height?);
+        }
+        "video" => {
+            entry["duration"] = json!(duration?);
+            entry["trimStart"] = json!(0.0);
+            entry["trimEnd"] = json!(duration?);
+            if let (Some(w), Some(h)) = (width, height) {
+                entry["videoNaturalWidth"] = json!(w);
+                entry["videoNaturalHeight"] = json!(h);
+            }
+        }
+        _ => {
+            if let Some(d) = duration {
+                entry["duration"] = json!(d);
+            }
+        }
+    }
+    let _ = extension;
+    // Through the format's own parser before it is offered: a block that
+    // would not decode is worse than no block.
+    let parsed: promo_model::ProjectResource = serde_json::from_value(entry).ok()?;
+    serde_json::to_value(parsed).ok()
+}
+
+/// "rec_lumen_2560" -> "Rec Lumen 2560": a name a person reads in the
+/// layer list, from the one the file happens to carry.
+fn pretty_name(stem: &str) -> String {
+    let words: Vec<String> = stem
+        .split(['_', '-', ' '])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect();
+    if words.is_empty() {
+        stem.to_string()
+    } else {
+        words.join(" ")
+    }
 }
 
 /// Pure: ffprobe's JSON in, the summary out.
@@ -526,6 +649,82 @@ mod tests {
         assert_eq!(facts["streams"][0]["rotation"], -90.0);
         assert_eq!(facts["streams"][1]["channels"], 2);
         assert_eq!(facts["streams"][1]["sampleRate"], 48000);
+    }
+
+    /// The entry a file becomes, ready to paste — and PARSED as a
+    /// `ProjectResource` on the way out, so it cannot be a shape the
+    /// format rejects. `pixelWidth`/`pixelHeight` are the point: without
+    /// them a `placement` rule resolves against a square and the layer
+    /// lands wrong, and assembling the block by hand is where they go
+    /// missing.
+    #[test]
+    fn a_probe_answers_with_the_resource_the_file_becomes() {
+        let still = serde_json::json!({
+            "format": { "format_name": "png_pipe", "duration": null },
+            "streams": [{ "codec_type": "video", "codec_name": "png",
+                          "width": 2064, "height": 2752, "r_frame_rate": "25/1" }]
+        });
+        let facts = distill_probe(&still);
+        let r = resource_entry(Path::new("/tmp/hero_shot.png"), &facts).expect("an entry");
+        assert_eq!(r["kind"], "image");
+        assert_eq!(r["filename"], "hero_shot.png");
+        assert_eq!(r["displayName"], "Hero Shot", "a name a person reads");
+        assert_eq!(r["pixelWidth"], 2064.0);
+        assert_eq!(r["pixelHeight"], 2752.0);
+        assert!(
+            r["id"].as_str().is_some_and(|id| id.len() == 36),
+            "a UUID: {r}"
+        );
+
+        let clip = serde_json::json!({
+            "format": { "format_name": "mov,mp4", "duration": "6.5" },
+            "streams": [
+                { "codec_type": "video", "codec_name": "h264", "width": 1920,
+                  "height": 1080, "r_frame_rate": "30/1" },
+                { "codec_type": "audio", "codec_name": "aac", "channels": 2 }
+            ]
+        });
+        let v = resource_entry(Path::new("/tmp/clip.mp4"), &distill_probe(&clip)).expect("video");
+        assert_eq!(v["kind"], "video");
+        assert_eq!(v["duration"], 6.5);
+        assert_eq!(v["trimEnd"], 6.5, "trimmed to its whole length to start");
+        assert_eq!(v["videoNaturalWidth"], 1920.0);
+
+        // Sound alone is a resource too, and carries no pixels.
+        let song = serde_json::json!({
+            "format": { "format_name": "mp3", "duration": "12.0" },
+            "streams": [{ "codec_type": "audio", "codec_name": "mp3", "channels": 2 }]
+        });
+        let a = resource_entry(Path::new("/tmp/bed.mp3"), &distill_probe(&song)).expect("audio");
+        assert_eq!(a["kind"], "audio");
+        assert_eq!(a["duration"], 12.0);
+        assert!(a.get("pixelWidth").is_none());
+    }
+
+    /// Several files in one call. Fifteen denied `sips -g pixelWidth`
+    /// calls across the demo runs named MORE THAN ONE file every time: an
+    /// agent with six sprite sheets was choosing one shell line over six
+    /// tool calls. One bad path does not sink the rest of the batch.
+    #[test]
+    fn a_probe_takes_several_files_and_keys_the_answer_by_path() {
+        let answer = probe_many(&serde_json::json!({
+            "files": ["nowhere/a.png", "nowhere/b.png"]
+        }))
+        .expect("a batch answers even when every file is missing");
+        let out: Value = serde_json::from_str(&answer).unwrap();
+        assert_eq!(out.as_object().unwrap().len(), 2);
+        for path in ["nowhere/a.png", "nowhere/b.png"] {
+            assert!(
+                out[path]["error"]
+                    .as_str()
+                    .is_some_and(|e| e.contains("does not exist")),
+                "{out}"
+            );
+        }
+        assert!(
+            probe_many(&serde_json::json!({ "files": [] })).is_err(),
+            "an empty list says so"
+        );
     }
 
     /// A still has no frame rate. ffprobe answers 25/1 for a PNG pipe — its

@@ -162,7 +162,10 @@ a feature's own section rather than the whole 67 KB —
 - **Measure what you place.** A placed image resource wants
   `pixelWidth`/`pixelHeight` (a video, `videoNaturalWidth`/`Height`), or
   a `placement` rule resolves against a SQUARE and lands wrong.
-  `promo_media_probe` answers, and `promo_upsert_layer` stamps them.
+  `promo_media_probe` answers for one file or several at once
+  (`{"files": ["a.png", "b.png"]}`, keyed by path), and each answer
+  carries the `resource` entry that file becomes — paste it into
+  `resources` rather than assembling one and forgetting the size.
 - **Look before you ship.** `promo_render_frames` samples the piece and
   answers with one contact sheet as an image; the authoring tools and
   `promo_validate` attach a glance of the moment they touched. A
