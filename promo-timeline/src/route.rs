@@ -346,6 +346,14 @@ pub fn member_position(layer: &ProjectLayer, local_time: f64, resources: &[Proje
         [o[0], o[1], k.depth.unwrap_or(0.0)]
     };
     let (pa, pb) = (place(a), place(b));
+    if !std::ptr::eq(a, b) && b.easing.unwrap_or(promo_model::Easing::Linear).is_smooth() && b.motion_path.is_none() {
+        // A smooth ramp: each coordinate a cubic through its neighbours.
+        return Some([
+            crate::interpolation::blend(&track, a, b, progress, &|k| place(k)[0]),
+            crate::interpolation::blend(&track, a, b, progress, &|k| place(k)[1]),
+            crate::interpolation::blend(&track, a, b, progress, &|k| place(k)[2]),
+        ]);
+    }
     if !std::ptr::eq(a, b) {
         if let Some(path) = b.motion_path.as_ref() {
             if let Some(route) = route_of(resources, path) {

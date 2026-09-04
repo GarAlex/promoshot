@@ -32,9 +32,10 @@ def poster(video, out):
     subprocess.run([FFMPEG, '-v', 'error', '-y', '-ss', '1', '-i', video, '-frames:v', '1',
                     '-vf', 'scale=480:-2', out], check=False)
 
-def gif(project, out):
+def gif(project, out, fps=6):
+    # A stage moves fast; its preview gets twice the frames.
     env = {**os.environ, 'PATH': '/opt/homebrew/bin:' + os.environ.get('PATH', '')}
-    subprocess.run([PROMO, 'gif', project, '--out', out, '--fps', '6', '--size', '320x200'], check=False, env=env)
+    subprocess.run([PROMO, 'gif', project, '--out', out, '--fps', str(fps), '--size', '320x200'], check=False, env=env)
     if os.path.exists(out) and os.path.getsize(out) < 6_000_000:
         return True
     if os.path.exists(out):
@@ -174,7 +175,7 @@ def main():
             if os.path.exists(os.path.join(project, 'metadata.json')):
                 shutil.copy2(os.path.join(project, 'metadata.json'), os.path.join(out, 'result-metadata.json'))
                 result["metadata"] = f"docs/demo/{name}/result-metadata.json"
-                if gif(project, os.path.join(out, 'result.gif')):
+                if gif(project, os.path.join(out, 'result.gif'), fps=12 if rubric.get('features', {}).get('stage') else 6):
                     result["gif"] = f"docs/demo/{name}/result.gif"
         if result and 'video' in result:
             t = os.path.join(out, 'thumb.png')

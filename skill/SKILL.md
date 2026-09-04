@@ -213,9 +213,11 @@ new projects.
   easing): the points sit on the first body at 0, fly out, and settle
   on the second at 1. The first body DISSOLVES as they leave and the
   second ASSEMBLES as they land, so both bodies can simply live through
-  the whole piece. For an explosion, key progress as a fast eased-out
-  burst (0 → 0.45 in ~0.7 s), a slow drift (→ 0.6 over ~1.5 s), then
-  an eased-in gather (→ 1 in ~1.4 s). Stamp `minReaderVersion: 39`.
+  the whole piece. For an explosion, key progress as a fast burst
+  (0 → 0.45 in ~0.7 s, easeOut), a short drift (→ 0.6 over ~1 s) and a
+  gather (→ 1 in ~1.5 s), the middle and last keyframes `"easing":
+  "smooth"` so the points never stop between. Stamp `minReaderVersion:
+  39`.
 - **A body from parts.** Anything a product shot needs that is not a
   device or type — a stand, a plinth, a ring, a puck — is a model
   resource with a parts recipe, written like an SVG: `{ "kind": "model",
@@ -356,7 +358,11 @@ quick eased-OUT moves of 0.8–1.3 s with holds of about 2 s between (a
 hold is a keyframe repeating the values, reached by a long linear ramp),
 let the key light fly AHEAD of the camera on every move and drift a
 little during the holds, reveal a caption in a second or less, and cut
-between beats rather than cross-fading. A body that TURNS is the
+between beats rather than cross-fading. A move that passes THROUGH
+three or more keyframes takes `"easing": "smooth"` on every one of
+them: per-ramp easing (easeIn/easeOut/easeInOut) stops at each
+keyframe and the piece hitches there; smooth is a cubic through the
+neighbouring keyframes that keeps the speed. Ease only the two ends. A body that TURNS is the
 exception: spin it in one continuous linear turn (a camera or a member
 yaw of 0 → 360 over the shot) under a light that stays put, so each
 side passes the light; do not chop a spin into moves.

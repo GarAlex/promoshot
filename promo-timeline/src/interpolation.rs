@@ -280,10 +280,7 @@ pub fn layer_transform_along_paths(
     }
     let zoom = match track_window(&zoom_track, local_time) {
         None => 1.0,
-        Some((a, b, progress)) => {
-            let av = zoom_of(a);
-            av + (zoom_of(b) - av) * progress
-        }
+        Some((a, b, progress)) => blend(&zoom_track, a, b, progress, &zoom_of),
     };
     let (horizontal_shift, vertical_shift) = match track_window(&position_track, local_time) {
         None => (0.0, 0.0),
@@ -317,7 +314,10 @@ pub fn layer_transform_along_paths(
             };
             match path_point {
                 Some(point) => (point.x(), point.y()),
-                None => (ah + (bh - ah) * progress, av + (bv - av) * progress),
+                None => (
+                    blend(&position_track, a, b, progress, &|k| position_of(k).0),
+                    blend(&position_track, a, b, progress, &|k| position_of(k).1),
+                ),
             }
         }
     };
@@ -381,9 +381,51 @@ where
     // have to be kept in step by hand.
     let sorted = sorted_by_time(&layer.keyframes, |k| select(k).is_some());
     let (a, b, progress) = track_window(&sorted, local_time)?;
-    let av = select(a).unwrap_or(0.0);
-    let bv = select(b).unwrap_or(0.0);
-    Some(av + (bv - av) * progress)
+    let value = |k: &ProjectLayerKeyframe| select(k).unwrap_or(0.0);
+    Some(blend(&sorted, a, b, progress, &value))
+}
+
+/// The value `progress` of the way from `a` to `b`: a lerp, or — when
+/// the ramp into `b` is SMOOTH — a cubic Hermite through the two with
+/// tangents from the keyframes either side (Catmull-Rom in time), so a
+/// value that passes through several keyframes keeps its speed at each
+/// one instead of stopping. The ends of a track take one-sided tangents.
+pub(crate) fn blend<F>(
+    sorted: &[&ProjectLayerKeyframe],
+    a: &ProjectLayerKeyframe,
+    b: &ProjectLayerKeyframe,
+    progress: f64,
+    value: &F,
+) -> f64
+where
+    F: Fn(&ProjectLayerKeyframe) -> f64,
+{
+    let (av, bv) = (value(a), value(b));
+    if std::ptr::eq(a, b) || !b.easing.unwrap_or(Easing::Linear).is_smooth() {
+        return av + (bv - av) * progress;
+    }
+    let ia = sorted.iter().position(|k| std::ptr::eq(*k, a));
+    let ib = sorted.iter().position(|k| std::ptr::eq(*k, b));
+    let (Some(ia), Some(ib)) = (ia, ib) else {
+        return av + (bv - av) * progress;
+    };
+    let gap = (b.time - a.time).max(1e-9);
+    let slope = |p: &ProjectLayerKeyframe, q: &ProjectLayerKeyframe| (value(q) - value(p)) / (q.time - p.time).max(1e-9);
+    let ma = match ia.checked_sub(1).and_then(|i| sorted.get(i)) {
+        Some(prev) => slope(prev, b),
+        None => slope(a, b),
+    };
+    let mb = match sorted.get(ib + 1) {
+        Some(next) => slope(a, next),
+        None => slope(a, b),
+    };
+    // The ramp may be shorter than the gap (a hold before it): the cubic
+    // runs over the ramp, its tangents scaled to the ramp's length.
+    let d = ramp_seconds(b, gap).max(1e-9);
+    let p = progress.clamp(0.0, 1.0);
+    let (p2, p3) = (p * p, p * p * p);
+    let (h00, h10, h01, h11) = (2.0 * p3 - 3.0 * p2 + 1.0, p3 - 2.0 * p2 + p, -2.0 * p3 + 3.0 * p2, p3 - p2);
+    h00 * av + h10 * d * ma + h01 * bv + h11 * d * mb
 }
 
 /// Swift `ProjectLayer.rotation(at:)` — degrees, 0 when unkeyed.
@@ -1500,6 +1542,49 @@ mod tests {
             "curved, got {}",
             at.vertical_shift
         );
+    }
+
+    /// Smooth keeps a value moving through a keyframe: with three
+    /// keyframes 0 → 1 → 3, the speed just before the middle one equals
+    /// the speed just after it (per-ramp easing would stop there), every
+    /// keyframe's value is still hit exactly, and linear data stays a line.
+    #[test]
+    fn smooth_keeps_velocity_across_keyframes() {
+        let make = |keys: &str| -> ProjectLayer {
+            serde_json::from_str(&format!(
+                r#"{{"id": "L", "name": "L", "sortIndex": 0, "kind": "image", "isEnabled": true,
+                     "startTime": 0, "keyframes": [{keys}]}}"#
+            ))
+            .expect("layer")
+        };
+        let smooth = make(
+            r#"{"id":"A","time":0,"zoom":0,"transitionDuration":0},
+               {"id":"B","time":1,"zoom":1,"transitionDuration":1,"easing":"smooth"},
+               {"id":"C","time":2,"zoom":3,"transitionDuration":1,"easing":"smooth"}"#,
+        );
+        let at = |t: f64| layer_interpolated_scalar(&smooth, t, |k| k.zoom).unwrap();
+        assert!((at(1.0) - 1.0).abs() < 1e-9 && (at(2.0) - 3.0).abs() < 1e-9, "through the keyframes");
+        let before = (at(1.0) - at(0.98)) / 0.02;
+        let after = (at(1.02) - at(1.0)) / 0.02;
+        assert!((before - after).abs() < 0.05, "no stop at the middle keyframe: {before} vs {after}");
+        assert!(before > 1.0, "already moving at the keyframe: {before}");
+
+        let stops = make(
+            r#"{"id":"A","time":0,"zoom":0,"transitionDuration":0},
+               {"id":"B","time":1,"zoom":1,"transitionDuration":1,"easing":"easeOut"},
+               {"id":"C","time":2,"zoom":3,"transitionDuration":1,"easing":"easeIn"}"#,
+        );
+        let at_s = |t: f64| layer_interpolated_scalar(&stops, t, |k| k.zoom).unwrap();
+        let after_s = (at_s(1.02) - at_s(1.0)) / 0.02;
+        assert!(after_s < 0.2, "per-ramp easing does stop there: {after_s}");
+
+        let line = make(
+            r#"{"id":"A","time":0,"zoom":0,"transitionDuration":0},
+               {"id":"B","time":1,"zoom":1,"transitionDuration":1,"easing":"smooth"},
+               {"id":"C","time":2,"zoom":2,"transitionDuration":1,"easing":"smooth"}"#,
+        );
+        let at_l = |t: f64| layer_interpolated_scalar(&line, t, |k| k.zoom).unwrap();
+        assert!((at_l(0.5) - 0.5).abs() < 1e-9 && (at_l(1.5) - 1.5).abs() < 1e-9, "linear data stays a line");
     }
 
     /// A hold has no chord for a motion path to fit onto, so the path only

@@ -448,7 +448,7 @@
       "pitch": 32,
       "intensity": 1.4
      },
-     "easing": "easeInOut"
+     "easing": "smooth"
     },
     {
      "id": "067B571C-846C-2BB3-121F-9D7D67587DF1",
@@ -473,7 +473,7 @@
       "pitch": 28,
       "intensity": 1.5
      },
-     "easing": "easeInOut"
+     "easing": "smooth"
     }
    ],
    "members": [
@@ -540,14 +540,14 @@
        "time": 6.5,
        "transitionDuration": 0.9,
        "progress": 0.62,
-       "easing": "linear"
+       "easing": "smooth"
       },
       {
        "id": "2091B2DC-D881-A4D2-1E6D-76FCF6274954",
        "time": 8.2,
        "transitionDuration": 1.7,
        "progress": 1.0,
-       "easing": "easeInOut"
+       "easing": "smooth"
       }
      ]
     },

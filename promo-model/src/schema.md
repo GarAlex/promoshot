@@ -120,9 +120,15 @@ Semantics worth knowing:
   fade or a move; one keyframe is a constant.
 - `easing` shapes the ramp INTO this keyframe: "linear" (the
   default, and what every ramp was before this existed), "easeIn"
-  (slow start), "easeOut" (slow arrival) or "easeInOut" (smoothstep,
-  the workhorse for a camera move). An unknown value falls back to
-  linear rather than failing the file. It applies to whatever the
+  (slow start), "easeOut" (slow arrival), "easeInOut" (smoothstep,
+  the workhorse for a move that starts and stops) or "smooth" — a
+  cubic through the neighbouring keyframes' values in time, so a
+  value that passes THROUGH several keyframes keeps its speed at each
+  one instead of stopping there, which per-ramp easing always does.
+  Use smooth on every keyframe of a move with more than two; as a
+  spline it may overshoot a little between keyframes, so it is for
+  motion, not for a value that must stay within its ends. An unknown
+  value falls back to linear rather than failing the file. It applies to whatever the
   keyframe carries — zoom, position, viewport, rotation, opacity,
   gradient — and to the SPEED along a motion path, so an eased move
   travels its curve on the clock it grows on. Because each track

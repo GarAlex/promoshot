@@ -896,6 +896,7 @@ tolerant_enum!(
         (EaseIn, "easeIn"),
         (EaseOut, "easeOut"),
         (EaseInOut, "easeInOut"),
+        (Smooth, "smooth"),
     ]
 );
 
@@ -913,7 +914,18 @@ impl Easing {
             Easing::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
             // Smoothstep — the workhorse for camera moves.
             Easing::EaseInOut => t * t * (3.0 - 2.0 * t),
+            // Smooth is not a reshaping of progress at all: the ramp runs
+            // on the linear clock and the VALUE follows a cubic through
+            // the neighbouring keyframes (see the timeline), so a move
+            // through several keyframes keeps its speed at each one
+            // instead of stopping there the way per-ramp easing does.
+            Easing::Smooth => t,
         }
+    }
+    /// The ramp whose value is a spline through its neighbours rather
+    /// than a lerp of its two ends.
+    pub fn is_smooth(self) -> bool {
+        matches!(self, Easing::Smooth)
     }
 }
 

@@ -692,7 +692,7 @@
       "pitch": 40,
       "intensity": 1.4
      },
-     "easing": "easeInOut"
+     "easing": "smooth"
     },
     {
      "id": "54925039-0227-4697-542E-DAC8FA399A54",
@@ -721,7 +721,7 @@
       "pitch": 30,
       "intensity": 1.4
      },
-     "easing": "easeOut"
+     "easing": "smooth"
     }
    ],
    "members": [
