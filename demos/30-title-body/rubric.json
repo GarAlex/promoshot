@@ -58,5 +58,6 @@
  "phrases": [],
  "media": [
   "vase.glb"
- ]
+ ],
+ "retired": "Same brief, strictly inside 34-cube-to-word, which builds a text body and then morphs a cube into it."
 }

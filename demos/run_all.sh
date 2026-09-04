@@ -7,6 +7,14 @@ OUT="$HERE/summary.md"
 { echo "# Demo runs — $(date '+%Y-%m-%d %H:%M')"; echo; echo "| demo | score | turns | cost | secs |"; echo "|---|---|---|---|---|"; } > "$OUT"
 for d in "$HERE"/[0-9][0-9]-* "$HERE"/c[0-9]-*; do
   [ -d "$d" ] || continue
+  # A RETIRED demo still publishes — its page and video stay in the
+  # gallery — but it is not run again: its brief and every feature it
+  # exercises belong to another demo that is still here. The reason is in
+  # its own rubric. Run one deliberately with run.sh if you want it.
+  if python3 -c "import json,sys; sys.exit(0 if json.load(open('$d/rubric.json')).get('retired') else 1)" 2>/dev/null; then
+    echo "== $(basename "$d"): retired — $(python3 -c "import json;print(json.load(open('$d/rubric.json'))['retired'])" | cut -c1-60)…"
+    continue
+  fi
   if [ "$SKIP" = 1 ] && ls "$d"/runs/*/score.json > /dev/null 2>&1; then
     echo "== $(basename "$d"): scored already, skipping"
   else
