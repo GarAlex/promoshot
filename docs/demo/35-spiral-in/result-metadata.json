@@ -1,1321 +1,1324 @@
 {
-  "$schema": "https://raw.githubusercontent.com/GarAlex/promoshot/main/docs/promo.schema.json",
-  "id": "spiral-in",
-  "name": "Spiral In",
-  "createdAt": 0,
-  "state": "recorded",
-  "minReaderVersion": 40,
-  "trimStart": 0,
-  "trimEnd": 10,
-  "videoDuration": 10,
-  "subtitles": [],
-  "compositionSettings": {
-    "canvasWidth": 1440,
-    "canvasHeight": 900,
-    "fps": 30,
-    "palette": [
-      {
-        "name": "canvas",
-        "colorHex": "0B0D12"
-      },
-      {
-        "name": "text",
-        "colorHex": "F4F1EA"
-      },
-      {
-        "name": "text-bg",
-        "colorHex": "0B0D12"
-      },
-      {
-        "name": "edge",
-        "colorHex": "2A3348"
-      },
-      {
-        "name": "caption-outline",
-        "colorHex": "07080C"
-      },
-      {
-        "name": "caption-shadow",
-        "colorHex": "000000"
-      },
-      {
-        "name": "media-shadow",
-        "colorHex": "000000"
-      },
-      {
-        "name": "highlight",
-        "colorHex": "FF7A59"
-      },
-      {
-        "name": "accent",
-        "colorHex": "2E9AA8"
-      }
+ "id": "spiral-in",
+ "name": "Fly the camera",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 40,
+ "trimStart": 0,
+ "trimEnd": 10,
+ "videoDuration": 10,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "backgroundGradient": {
+   "kind": "linear",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    1,
+    1
+   ],
+   "repeat": "clamp",
+   "stops": [
+    {
+     "colorHex": "16233F",
+     "at": 0
+    },
+    {
+     "colorHex": "0B0D12",
+     "at": 0.5
+    },
+    {
+     "colorHex": "241A3A",
+     "at": 1
+    }
+   ]
+  },
+  "environment": {
+   "preset": "studio",
+   "intensity": 1,
+   "rotation": 0
+  },
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "0B0D12"
+   },
+   {
+    "name": "text",
+    "colorHex": "F4F7FF"
+   },
+   {
+    "name": "text-bg",
+    "colorHex": "0B0D12"
+   },
+   {
+    "name": "edge",
+    "colorHex": "26364F"
+   },
+   {
+    "name": "caption-outline",
+    "colorHex": "05070C"
+   },
+   {
+    "name": "caption-shadow",
+    "colorHex": "000000"
+   },
+   {
+    "name": "media-shadow",
+    "colorHex": "000000"
+   },
+   {
+    "name": "highlight",
+    "colorHex": "FFD54A"
+   },
+   {
+    "name": "accent",
+    "colorHex": "2D7D8E"
+   }
+  ],
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 64,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 18,
+  "subtitleLeftMargin": 120,
+  "subtitleRightMargin": 120,
+  "subtitleStrokeColorHex": "@caption-outline",
+  "subtitleStrokeWidth": 5,
+  "subtitleShadowColorHex": "@caption-shadow",
+  "subtitleShadowOpacity": 0.5,
+  "subtitleShadowRadius": 14
+ },
+ "resources": [
+  {
+   "id": "helix",
+   "kind": "path",
+   "filename": "",
+   "displayName": "Helix",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "route": {
+    "points": [
+     [
+      0.32,
+      1.0,
+      0.0
+     ],
+     [
+      0.2933,
+      0.9792,
+      0.1215
+     ],
+     [
+      0.2227,
+      0.9583,
+      0.2227
+     ],
+     [
+      0.1196,
+      0.9375,
+      0.2887
+     ],
+     [
+      0.0,
+      0.9167,
+      0.31
+     ],
+     [
+      -0.1177,
+      0.8958,
+      0.2841
+     ],
+     [
+      -0.2157,
+      0.875,
+      0.2157
+     ],
+     [
+      -0.2795,
+      0.8542,
+      0.1158
+     ],
+     [
+      -0.3,
+      0.8333,
+      0.0
+     ],
+     [
+      -0.2749,
+      0.8125,
+      -0.1138
+     ],
+     [
+      -0.2086,
+      0.7917,
+      -0.2086
+     ],
+     [
+      -0.1119,
+      0.7708,
+      -0.2702
+     ],
+     [
+      -0.0,
+      0.75,
+      -0.29
+     ],
+     [
+      0.11,
+      0.7292,
+      -0.2656
+     ],
+     [
+      0.2015,
+      0.7083,
+      -0.2015
+     ],
+     [
+      0.261,
+      0.6875,
+      -0.1081
+     ],
+     [
+      0.28,
+      0.6667,
+      -0.0
+     ],
+     [
+      0.2564,
+      0.6458,
+      0.1062
+     ],
+     [
+      0.1945,
+      0.625,
+      0.1945
+     ],
+     [
+      0.1043,
+      0.6042,
+      0.2518
+     ],
+     [
+      0.0,
+      0.5833,
+      0.27
+     ],
+     [
+      -0.1024,
+      0.5625,
+      0.2471
+     ],
+     [
+      -0.1874,
+      0.5417,
+      0.1874
+     ],
+     [
+      -0.2425,
+      0.5208,
+      0.1005
+     ],
+     [
+      -0.26,
+      0.5,
+      0.0
+     ],
+     [
+      -0.2379,
+      0.4792,
+      -0.0985
+     ],
+     [
+      -0.1803,
+      0.4583,
+      -0.1803
+     ],
+     [
+      -0.0966,
+      0.4375,
+      -0.2333
+     ],
+     [
+      -0.0,
+      0.4167,
+      -0.25
+     ],
+     [
+      0.0947,
+      0.3958,
+      -0.2287
+     ],
+     [
+      0.1732,
+      0.375,
+      -0.1732
+     ],
+     [
+      0.224,
+      0.3542,
+      -0.0928
+     ],
+     [
+      0.24,
+      0.3333,
+      -0.0
+     ],
+     [
+      0.2194,
+      0.3125,
+      0.0909
+     ],
+     [
+      0.1662,
+      0.2917,
+      0.1662
+     ],
+     [
+      0.089,
+      0.2708,
+      0.2148
+     ],
+     [
+      0.0,
+      0.25,
+      0.23
+     ],
+     [
+      -0.0871,
+      0.2292,
+      0.2102
+     ],
+     [
+      -0.1591,
+      0.2083,
+      0.1591
+     ],
+     [
+      -0.2056,
+      0.1875,
+      0.0851
+     ],
+     [
+      -0.22,
+      0.1667,
+      0.0
+     ],
+     [
+      -0.2009,
+      0.1458,
+      -0.0832
+     ],
+     [
+      -0.152,
+      0.125,
+      -0.152
+     ],
+     [
+      -0.0813,
+      0.1042,
+      -0.1963
+     ],
+     [
+      -0.0,
+      0.0833,
+      -0.21
+     ],
+     [
+      0.0794,
+      0.0625,
+      -0.1917
+     ],
+     [
+      0.145,
+      0.0417,
+      -0.145
+     ],
+     [
+      0.1871,
+      0.0208,
+      -0.0775
+     ],
+     [
+      0.2,
+      0.0,
+      -0.0
+     ]
     ],
-    "backgroundColorHex": "@canvas",
-    "backgroundGradient": {
+    "curve": "smooth",
+    "closed": false
+   }
+  },
+  {
+   "id": "arc",
+   "kind": "path",
+   "filename": "",
+   "displayName": "Arc",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "route": {
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0.5,
+      0.45,
+      0.15
+     ],
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "curve": "smooth",
+    "closed": false
+   }
+  },
+  {
+   "id": "stand",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Stand",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Base",
+      "shape": {
+       "cylinder": {
+        "radius": 0.95,
+        "height": 0.08,
+        "segments": 48
+       }
+      },
+      "position": [
+       0,
+       0.04,
+       0
+      ]
+     },
+     {
+      "slot": "Stem",
+      "shape": {
+       "lathe": {
+        "profile": [
+         [
+          0.32,
+          0.08
+         ],
+         [
+          0.16,
+          0.2
+         ],
+         [
+          0.12,
+          0.5
+         ],
+         [
+          0.16,
+          0.7
+         ],
+         [
+          0.36,
+          0.78
+         ],
+         [
+          0,
+          0.78
+         ]
+        ],
+        "segments": 48
+       }
+      }
+     },
+     {
+      "slot": "Plate",
+      "shape": {
+       "box": {
+        "size": [
+         1.2,
+         0.06,
+         1.2
+        ],
+        "radius": 0.03
+       }
+      },
+      "position": [
+       0,
+       0.81,
+       0
+      ]
+     }
+    ]
+   },
+   "materials": {
+    "Base": {
+     "colorHex": "1E2430",
+     "roughness": 0.85
+    },
+    "Plate": {
+     "colorHex": "1E2430",
+     "roughness": 0.8
+    },
+    "Stem": {
+     "colorHex": "D2D6DC",
+     "metallic": 1,
+     "roughness": 0.2
+    }
+   }
+  },
+  {
+   "id": "vase",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Vase",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Body",
+      "shape": {
+       "lathe": {
+        "profile": [
+         [
+          0.18,
+          0.75
+         ],
+         [
+          0.14,
+          0.62
+         ],
+         [
+          0.16,
+          0.5
+         ],
+         [
+          0.26,
+          0.35
+         ],
+         [
+          0.34,
+          0.15
+         ],
+         [
+          0.36,
+          -0.05
+         ],
+         [
+          0.33,
+          -0.3
+         ],
+         [
+          0.26,
+          -0.55
+         ],
+         [
+          0.2,
+          -0.7
+         ],
+         [
+          0.22,
+          -0.75
+         ],
+         [
+          0,
+          -0.75
+         ]
+        ],
+        "segments": 48
+       }
+      }
+     }
+    ]
+   },
+   "materials": {
+    "Body": {
+     "colorHex": "@accent",
+     "metallic": 0.1,
+     "roughness": 0.2
+    }
+   }
+  },
+  {
+   "id": "flower",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Flower",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Stem",
+      "shape": {
+       "cylinder": {
+        "radius": 0.025,
+        "height": 1.7,
+        "segments": 24
+       }
+      },
+      "position": [
+       0.02,
+       0.85,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       6
+      ]
+     },
+     {
+      "slot": "Leaf",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.18,
+          0.25
+         ],
+         [
+          0.12,
+          0.6
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.12,
+          0.6
+         ],
+         [
+          -0.18,
+          0.25
+         ]
+        ],
+        "depth": 0.012
+       }
+      },
+      "scale": 0.36,
+      "position": [
+       0.04,
+       1.05,
+       0
+      ],
+      "rotation": [
+       0,
+       20,
+       -55
+      ]
+     },
+     {
+      "slot": "Leaf",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.18,
+          0.25
+         ],
+         [
+          0.12,
+          0.6
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.12,
+          0.6
+         ],
+         [
+          -0.18,
+          0.25
+         ]
+        ],
+        "depth": 0.012
+       }
+      },
+      "scale": 0.3,
+      "position": [
+       -0.02,
+       1.3,
+       0.02
+      ],
+      "rotation": [
+       0,
+       -160,
+       50
+      ]
+     },
+     {
+      "slot": "Heart",
+      "shape": {
+       "sphere": {
+        "radius": 0.09,
+        "segments": 32
+       }
+      },
+      "position": [
+       0.06,
+       1.76,
+       0
+      ]
+     },
+     {
+      "slot": "Petal",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.22,
+          0.3
+         ],
+         [
+          0.2,
+          0.7
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.2,
+          0.7
+         ],
+         [
+          -0.22,
+          0.3
+         ]
+        ],
+        "depth": 0.014
+       }
+      },
+      "scale": 0.34,
+      "position": [
+       0.06,
+       1.72,
+       0
+      ],
+      "rotation": [
+       -58,
+       0,
+       0
+      ]
+     },
+     {
+      "slot": "Petal",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.22,
+          0.3
+         ],
+         [
+          0.2,
+          0.7
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.2,
+          0.7
+         ],
+         [
+          -0.22,
+          0.3
+         ]
+        ],
+        "depth": 0.014
+       }
+      },
+      "scale": 0.34,
+      "position": [
+       0.06,
+       1.72,
+       0
+      ],
+      "rotation": [
+       -58,
+       60,
+       0
+      ]
+     },
+     {
+      "slot": "Petal",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.22,
+          0.3
+         ],
+         [
+          0.2,
+          0.7
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.2,
+          0.7
+         ],
+         [
+          -0.22,
+          0.3
+         ]
+        ],
+        "depth": 0.014
+       }
+      },
+      "scale": 0.34,
+      "position": [
+       0.06,
+       1.72,
+       0
+      ],
+      "rotation": [
+       -58,
+       120,
+       0
+      ]
+     },
+     {
+      "slot": "Petal",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.22,
+          0.3
+         ],
+         [
+          0.2,
+          0.7
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.2,
+          0.7
+         ],
+         [
+          -0.22,
+          0.3
+         ]
+        ],
+        "depth": 0.014
+       }
+      },
+      "scale": 0.34,
+      "position": [
+       0.06,
+       1.72,
+       0
+      ],
+      "rotation": [
+       -58,
+       180,
+       0
+      ]
+     },
+     {
+      "slot": "Petal",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.22,
+          0.3
+         ],
+         [
+          0.2,
+          0.7
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.2,
+          0.7
+         ],
+         [
+          -0.22,
+          0.3
+         ]
+        ],
+        "depth": 0.014
+       }
+      },
+      "scale": 0.34,
+      "position": [
+       0.06,
+       1.72,
+       0
+      ],
+      "rotation": [
+       -58,
+       240,
+       0
+      ]
+     },
+     {
+      "slot": "Petal",
+      "shape": {
+       "extrude": {
+        "path": [
+         [
+          0,
+          0
+         ],
+         [
+          0.22,
+          0.3
+         ],
+         [
+          0.2,
+          0.7
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          -0.2,
+          0.7
+         ],
+         [
+          -0.22,
+          0.3
+         ]
+        ],
+        "depth": 0.014
+       }
+      },
+      "scale": 0.34,
+      "position": [
+       0.06,
+       1.72,
+       0
+      ],
+      "rotation": [
+       -58,
+       300,
+       0
+      ]
+     }
+    ]
+   },
+   "materials": {
+    "Stem": {
+     "colorHex": "3E8E4A",
+     "roughness": 0.6
+    },
+    "Leaf": {
+     "colorHex": "4CA35A",
+     "roughness": 0.55
+    },
+    "Petal": {
+     "colorHex": "FF7A59",
+     "roughness": 0.45
+    },
+    "Heart": {
+     "colorHex": "FFD54A",
+     "roughness": 0.5
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "bg",
+   "name": "Drift",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 10,
+   "keyframes": [
+    {
+     "id": "bg0",
+     "time": 0,
+     "transitionDuration": 0,
+     "gradient": {
       "kind": "linear",
       "start": [
-        0,
-        0
+       0,
+       0
       ],
       "end": [
-        1,
-        1
+       1,
+       1
       ],
       "repeat": "clamp",
       "stops": [
-        {
-          "colorHex": "16233F",
-          "at": 0
-        },
-        {
-          "colorHex": "0B0D12",
-          "at": 0.5
-        },
-        {
-          "colorHex": "241A3A",
-          "at": 1
-        }
+       {
+        "colorHex": "16233F",
+        "at": 0
+       },
+       {
+        "colorHex": "0B0D12",
+        "at": 0.5
+       },
+       {
+        "colorHex": "241A3A",
+        "at": 1
+       }
       ]
-    },
-    "environment": {
-      "preset": "studio",
-      "intensity": 1,
-      "rotation": 0
-    },
-    "subtitleFontFamily": "system",
-    "subtitleFontSize": 56,
-    "subtitleBold": true,
-    "subtitleColorHex": "@text",
-    "subtitleBackgroundOpacity": 0.0,
-    "subtitleBackgroundPadding": 16,
-    "subtitleLeftMargin": 120,
-    "subtitleRightMargin": 120,
-    "subtitleVerticalMargin": 760,
-    "subtitleShadowColorHex": "@caption-shadow",
-    "subtitleShadowOpacity": 0.55,
-    "subtitleShadowRadius": 14
-  },
-  "resources": [
-    {
-      "id": "helix",
-      "kind": "path",
-      "filename": "",
-      "displayName": "Helix",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "route": {
-        "points": [
-          [
-            0.32,
-            1.0,
-            0.0
-          ],
-          [
-            0.29333,
-            0.97917,
-            0.1215
-          ],
-          [
-            0.22274,
-            0.95833,
-            0.22274
-          ],
-          [
-            0.11959,
-            0.9375,
-            0.28871
-          ],
-          [
-            0.0,
-            0.91667,
-            0.31
-          ],
-          [
-            -0.11768,
-            0.89583,
-            0.28409
-          ],
-          [
-            -0.21567,
-            0.875,
-            0.21567
-          ],
-          [
-            -0.27947,
-            0.85417,
-            0.11576
-          ],
-          [
-            -0.3,
-            0.83333,
-            0.0
-          ],
-          [
-            -0.27485,
-            0.8125,
-            -0.11385
-          ],
-          [
-            -0.2086,
-            0.79167,
-            -0.2086
-          ],
-          [
-            -0.11193,
-            0.77083,
-            -0.27023
-          ],
-          [
-            -0.0,
-            0.75,
-            -0.29
-          ],
-          [
-            0.11002,
-            0.72917,
-            -0.26562
-          ],
-          [
-            0.20153,
-            0.70833,
-            -0.20153
-          ],
-          [
-            0.261,
-            0.6875,
-            -0.10811
-          ],
-          [
-            0.28,
-            0.66667,
-            -0.0
-          ],
-          [
-            0.25638,
-            0.64583,
-            0.10619
-          ],
-          [
-            0.19445,
-            0.625,
-            0.19445
-          ],
-          [
-            0.10428,
-            0.60417,
-            0.25176
-          ],
-          [
-            0.0,
-            0.58333,
-            0.27
-          ],
-          [
-            -0.10237,
-            0.5625,
-            0.24714
-          ],
-          [
-            -0.18738,
-            0.54167,
-            0.18738
-          ],
-          [
-            -0.24252,
-            0.52083,
-            0.10045
-          ],
-          [
-            -0.26,
-            0.5,
-            0.0
-          ],
-          [
-            -0.2379,
-            0.47917,
-            -0.09854
-          ],
-          [
-            -0.18031,
-            0.45833,
-            -0.18031
-          ],
-          [
-            -0.09663,
-            0.4375,
-            -0.23328
-          ],
-          [
-            -0.0,
-            0.41667,
-            -0.25
-          ],
-          [
-            0.09471,
-            0.39583,
-            -0.22866
-          ],
-          [
-            0.17324,
-            0.375,
-            -0.17324
-          ],
-          [
-            0.22404,
-            0.35417,
-            -0.0928
-          ],
-          [
-            0.24,
-            0.33333,
-            -0.0
-          ],
-          [
-            0.21942,
-            0.3125,
-            0.09089
-          ],
-          [
-            0.16617,
-            0.29167,
-            0.16617
-          ],
-          [
-            0.08897,
-            0.27083,
-            0.2148
-          ],
-          [
-            0.0,
-            0.25,
-            0.23
-          ],
-          [
-            -0.08706,
-            0.22917,
-            0.21018
-          ],
-          [
-            -0.1591,
-            0.20833,
-            0.1591
-          ],
-          [
-            -0.20556,
-            0.1875,
-            0.08515
-          ],
-          [
-            -0.22,
-            0.16667,
-            0.0
-          ],
-          [
-            -0.20094,
-            0.14583,
-            -0.08323
-          ],
-          [
-            -0.15203,
-            0.125,
-            -0.15203
-          ],
-          [
-            -0.08132,
-            0.10417,
-            -0.19632
-          ],
-          [
-            -0.0,
-            0.08333,
-            -0.21
-          ],
-          [
-            0.07941,
-            0.0625,
-            -0.19171
-          ],
-          [
-            0.14496,
-            0.04167,
-            -0.14496
-          ],
-          [
-            0.18709,
-            0.02083,
-            -0.07749
-          ],
-          [
-            0.2,
-            0.0,
-            -0.0
-          ]
-        ],
-        "curve": "smooth",
-        "closed": false
-      }
+     }
     },
     {
-      "id": "arc",
-      "kind": "path",
-      "filename": "",
-      "displayName": "Arc",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "route": {
-        "points": [
-          [
-            0,
-            0,
-            0
-          ],
-          [
-            0.5,
-            0.45,
-            0.15
-          ],
-          [
-            1,
-            0,
-            0
-          ]
-        ],
-        "curve": "smooth",
-        "closed": false
-      }
-    },
-    {
-      "id": "stand",
-      "kind": "model",
-      "filename": "",
-      "displayName": "Stand",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "clips": [],
-      "recipe": {
-        "parts": [
-          {
-            "slot": "Base",
-            "shape": {
-              "cylinder": {
-                "radius": 0.95,
-                "height": 0.08,
-                "segments": 64
-              }
-            },
-            "position": [
-              0,
-              0.04,
-              0
-            ]
-          },
-          {
-            "slot": "Stem",
-            "shape": {
-              "lathe": {
-                "profile": [
-                  [
-                    0.32,
-                    0.08
-                  ],
-                  [
-                    0.16,
-                    0.2
-                  ],
-                  [
-                    0.12,
-                    0.5
-                  ],
-                  [
-                    0.16,
-                    0.7
-                  ],
-                  [
-                    0.36,
-                    0.78
-                  ],
-                  [
-                    0,
-                    0.78
-                  ]
-                ],
-                "segments": 64
-              }
-            }
-          },
-          {
-            "slot": "Plate",
-            "shape": {
-              "box": {
-                "size": [
-                  1.2,
-                  0.06,
-                  1.2
-                ],
-                "radius": 0.03
-              }
-            },
-            "position": [
-              0,
-              0.81,
-              0
-            ]
-          }
-        ]
-      },
-      "materials": {
-        "Base": {
-          "colorHex": "1E2430",
-          "roughness": 0.85
-        },
-        "Plate": {
-          "colorHex": "1E2430",
-          "roughness": 0.8
-        },
-        "Stem": {
-          "colorHex": "D2D6DC",
-          "metallic": 1,
-          "roughness": 0.2
-        }
-      }
-    },
-    {
-      "id": "vase",
-      "kind": "model",
-      "filename": "",
-      "displayName": "Vase",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "clips": [],
-      "recipe": {
-        "parts": [
-          {
-            "slot": "Body",
-            "shape": {
-              "lathe": {
-                "profile": [
-                  [
-                    0.18,
-                    0.75
-                  ],
-                  [
-                    0.14,
-                    0.62
-                  ],
-                  [
-                    0.16,
-                    0.5
-                  ],
-                  [
-                    0.26,
-                    0.35
-                  ],
-                  [
-                    0.34,
-                    0.15
-                  ],
-                  [
-                    0.36,
-                    -0.05
-                  ],
-                  [
-                    0.33,
-                    -0.3
-                  ],
-                  [
-                    0.26,
-                    -0.55
-                  ],
-                  [
-                    0.2,
-                    -0.7
-                  ],
-                  [
-                    0.22,
-                    -0.75
-                  ],
-                  [
-                    0,
-                    -0.75
-                  ]
-                ],
-                "segments": 48
-              }
-            }
-          }
-        ]
-      },
-      "materials": {
-        "Body": {
-          "colorHex": "@accent",
-          "metallic": 0.1,
-          "roughness": 0.2
-        }
-      }
-    },
-    {
-      "id": "flower",
-      "kind": "model",
-      "filename": "",
-      "displayName": "Flower",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "clips": [],
-      "recipe": {
-        "parts": [
-          {
-            "slot": "Stem",
-            "shape": {
-              "cylinder": {
-                "radius": 0.025,
-                "height": 1.7,
-                "segments": 24
-              }
-            },
-            "position": [
-              0.02,
-              0.85,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              6
-            ]
-          },
-          {
-            "slot": "Leaf",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.18,
-                    0.25
-                  ],
-                  [
-                    0.12,
-                    0.6
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.12,
-                    0.6
-                  ],
-                  [
-                    -0.18,
-                    0.25
-                  ]
-                ],
-                "depth": 0.012
-              }
-            },
-            "scale": 0.36,
-            "position": [
-              0.04,
-              1.05,
-              0
-            ],
-            "rotation": [
-              0,
-              20,
-              -55
-            ]
-          },
-          {
-            "slot": "Leaf",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.18,
-                    0.25
-                  ],
-                  [
-                    0.12,
-                    0.6
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.12,
-                    0.6
-                  ],
-                  [
-                    -0.18,
-                    0.25
-                  ]
-                ],
-                "depth": 0.012
-              }
-            },
-            "scale": 0.3,
-            "position": [
-              -0.02,
-              1.3,
-              0.02
-            ],
-            "rotation": [
-              0,
-              -160,
-              50
-            ]
-          },
-          {
-            "slot": "Heart",
-            "shape": {
-              "sphere": {
-                "radius": 0.09,
-                "segments": 32
-              }
-            },
-            "position": [
-              0.06,
-              1.76,
-              0
-            ]
-          },
-          {
-            "slot": "Petal",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.22,
-                    0.3
-                  ],
-                  [
-                    0.2,
-                    0.7
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.2,
-                    0.7
-                  ],
-                  [
-                    -0.22,
-                    0.3
-                  ]
-                ],
-                "depth": 0.014
-              }
-            },
-            "scale": 0.34,
-            "position": [
-              0.06,
-              1.72,
-              0
-            ],
-            "rotation": [
-              -58,
-              0,
-              0
-            ]
-          },
-          {
-            "slot": "Petal",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.22,
-                    0.3
-                  ],
-                  [
-                    0.2,
-                    0.7
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.2,
-                    0.7
-                  ],
-                  [
-                    -0.22,
-                    0.3
-                  ]
-                ],
-                "depth": 0.014
-              }
-            },
-            "scale": 0.34,
-            "position": [
-              0.06,
-              1.72,
-              0
-            ],
-            "rotation": [
-              -58,
-              60,
-              0
-            ]
-          },
-          {
-            "slot": "Petal",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.22,
-                    0.3
-                  ],
-                  [
-                    0.2,
-                    0.7
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.2,
-                    0.7
-                  ],
-                  [
-                    -0.22,
-                    0.3
-                  ]
-                ],
-                "depth": 0.014
-              }
-            },
-            "scale": 0.34,
-            "position": [
-              0.06,
-              1.72,
-              0
-            ],
-            "rotation": [
-              -58,
-              120,
-              0
-            ]
-          },
-          {
-            "slot": "Petal",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.22,
-                    0.3
-                  ],
-                  [
-                    0.2,
-                    0.7
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.2,
-                    0.7
-                  ],
-                  [
-                    -0.22,
-                    0.3
-                  ]
-                ],
-                "depth": 0.014
-              }
-            },
-            "scale": 0.34,
-            "position": [
-              0.06,
-              1.72,
-              0
-            ],
-            "rotation": [
-              -58,
-              180,
-              0
-            ]
-          },
-          {
-            "slot": "Petal",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.22,
-                    0.3
-                  ],
-                  [
-                    0.2,
-                    0.7
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.2,
-                    0.7
-                  ],
-                  [
-                    -0.22,
-                    0.3
-                  ]
-                ],
-                "depth": 0.014
-              }
-            },
-            "scale": 0.34,
-            "position": [
-              0.06,
-              1.72,
-              0
-            ],
-            "rotation": [
-              -58,
-              240,
-              0
-            ]
-          },
-          {
-            "slot": "Petal",
-            "shape": {
-              "extrude": {
-                "path": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    0.22,
-                    0.3
-                  ],
-                  [
-                    0.2,
-                    0.7
-                  ],
-                  [
-                    0,
-                    1
-                  ],
-                  [
-                    -0.2,
-                    0.7
-                  ],
-                  [
-                    -0.22,
-                    0.3
-                  ]
-                ],
-                "depth": 0.014
-              }
-            },
-            "scale": 0.34,
-            "position": [
-              0.06,
-              1.72,
-              0
-            ],
-            "rotation": [
-              -58,
-              300,
-              0
-            ]
-          }
-        ]
-      },
-      "materials": {
-        "Stem": {
-          "colorHex": "3E8E4A",
-          "roughness": 0.6
-        },
-        "Leaf": {
-          "colorHex": "4CA35A",
-          "roughness": 0.55
-        },
-        "Petal": {
-          "colorHex": "FF7A59",
-          "roughness": 0.45
-        },
-        "Heart": {
-          "colorHex": "FFD54A",
-          "roughness": 0.5
-        }
-      }
-    }
-  ],
-  "layers": [
-    {
-      "id": "bg",
-      "name": "Drift",
-      "sortIndex": 0,
-      "kind": "background",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 10,
-      "keyframes": [
-        {
-          "id": "bg0",
-          "time": 0,
-          "transitionDuration": 0,
-          "gradient": {
-            "kind": "linear",
-            "start": [
-              0,
-              0
-            ],
-            "end": [
-              1,
-              1
-            ],
-            "repeat": "clamp",
-            "stops": [
-              {
-                "colorHex": "16233F",
-                "at": 0
-              },
-              {
-                "colorHex": "0B0D12",
-                "at": 0.5
-              },
-              {
-                "colorHex": "241A3A",
-                "at": 1
-              }
-            ]
-          }
-        },
-        {
-          "id": "bg1",
-          "time": 5,
-          "transitionDuration": 5,
-          "easing": "easeInOut",
-          "gradient": {
-            "kind": "linear",
-            "start": [
-              0.3,
-              0
-            ],
-            "end": [
-              0.8,
-              1
-            ],
-            "repeat": "clamp",
-            "stops": [
-              {
-                "colorHex": "1B2A4A",
-                "at": 0
-              },
-              {
-                "colorHex": "0D1020",
-                "at": 0.5
-              },
-              {
-                "colorHex": "3A1F44",
-                "at": 1
-              }
-            ]
-          }
-        },
-        {
-          "id": "bg2",
-          "time": 10,
-          "transitionDuration": 5,
-          "easing": "easeInOut",
-          "gradient": {
-            "kind": "linear",
-            "start": [
-              1,
-              0
-            ],
-            "end": [
-              0,
-              1
-            ],
-            "repeat": "clamp",
-            "stops": [
-              {
-                "colorHex": "10162A",
-                "at": 0
-              },
-              {
-                "colorHex": "090B12",
-                "at": 0.5
-              },
-              {
-                "colorHex": "1F1530",
-                "at": 1
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "bench",
-      "name": "Bench",
-      "sortIndex": 1,
-      "kind": "stage",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": 10,
-      "keyframes": [
-        {
-          "id": "c0",
-          "time": 0,
-          "transitionDuration": 0,
-          "placement": {
-            "height": 600,
-            "anchor": "center",
-            "offset": [
-              0,
-              -30
-            ]
-          },
-          "camera": {
-            "yaw": -160,
-            "pitch": 50,
-            "distance": 3.8,
-            "fov": 30,
-            "target": {
-              "point": [
-                0,
-                1.5,
-                0
-              ]
-            }
-          },
-          "light": {
-            "yaw": 40,
-            "pitch": 40,
-            "intensity": 1.4
-          }
-        },
-        {
-          "id": "c1",
-          "time": 7,
-          "transitionDuration": 7,
-          "easing": "smooth",
-          "camera": {
-            "yaw": 20,
-            "pitch": 6,
-            "distance": 3.1,
-            "fov": 30,
-            "motionPath": {
-              "pathResourceID": "helix"
-            },
-            "target": {
-              "point": [
-                0,
-                1.6,
-                0
-              ]
-            }
-          }
-        },
-        {
-          "id": "c2",
-          "time": 9.6,
-          "transitionDuration": 2.6,
-          "easing": "smooth",
-          "camera": {
-            "yaw": 60,
-            "pitch": 10,
-            "distance": 3.4,
-            "motionPath": {
-              "pathResourceID": "arc"
-            },
-            "target": {
-              "point": [
-                0,
-                1.4,
-                0
-              ]
-            }
-          },
-          "light": {
-            "yaw": 70,
-            "pitch": 30,
-            "intensity": 1.4
-          }
-        }
+     "id": "bg1",
+     "time": 5,
+     "transitionDuration": 5,
+     "easing": "easeInOut",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       0.3,
+       0
       ],
-      "members": [
-        {
-          "id": "m-stand",
-          "name": "Stand",
-          "sortIndex": 0,
-          "kind": "model",
-          "isEnabled": true,
-          "startTime": 0,
-          "duration": 10,
-          "resourceID": "stand",
-          "keyframes": [
-            {
-              "id": "s0",
-              "time": 0,
-              "transitionDuration": 0,
-              "stageOffset": [
-                0,
-                -0.45
-              ],
-              "depth": 0
-            }
-          ]
-        },
-        {
-          "id": "m-vase",
-          "name": "Vase",
-          "sortIndex": 1,
-          "kind": "model",
-          "isEnabled": true,
-          "startTime": 0,
-          "duration": 10,
-          "resourceID": "vase",
-          "keyframes": [
-            {
-              "id": "v0",
-              "time": 0,
-              "transitionDuration": 0,
-              "stageOffset": [
-                2.4,
-                1.4
-              ],
-              "depth": 0.6,
-              "camera": {
-                "yaw": -60
-              }
-            },
-            {
-              "id": "v1",
-              "time": 1.6,
-              "transitionDuration": 1.6,
-              "easing": "easeOut",
-              "stageOffset": [
-                0,
-                0.9
-              ],
-              "depth": 0,
-              "motionPath": {
-                "pathResourceID": "arc"
-              },
-              "camera": {
-                "yaw": 20
-              }
-            }
-          ]
-        },
-        {
-          "id": "m-flower",
-          "name": "Flower",
-          "sortIndex": 2,
-          "kind": "model",
-          "isEnabled": true,
-          "startTime": 0,
-          "duration": 10,
-          "resourceID": "flower",
-          "keyframes": [
-            {
-              "id": "f0",
-              "time": 0,
-              "transitionDuration": 0,
-              "stageOffset": [
-                2.4,
-                1.4
-              ],
-              "depth": 0.6,
-              "camera": {
-                "yaw": -60
-              }
-            },
-            {
-              "id": "f1",
-              "time": 1.6,
-              "transitionDuration": 1.6,
-              "easing": "easeOut",
-              "stageOffset": [
-                0,
-                0.9
-              ],
-              "depth": 0,
-              "motionPath": {
-                "pathResourceID": "arc"
-              },
-              "camera": {
-                "yaw": 20
-              }
-            }
-          ]
-        }
+      "end": [
+       0.8,
+       1
+      ],
+      "repeat": "clamp",
+      "stops": [
+       {
+        "colorHex": "1B2A4A",
+        "at": 0
+       },
+       {
+        "colorHex": "0D1020",
+        "at": 0.5
+       },
+       {
+        "colorHex": "3A1F44",
+        "at": 1
+       }
       ]
+     }
     },
     {
-      "id": "cap",
-      "name": "Caption",
-      "sortIndex": 2,
-      "kind": "caption",
-      "isEnabled": true,
-      "startTime": 7.2,
-      "duration": 2.8,
-      "captionText": "Fly the camera.",
-      "captionStyle": {
-        "isBold": true,
-        "alignment": "center",
-        "placement": {
-          "anchor": "bottom",
-          "offset": [
-            0,
-            -64
-          ]
-        },
-        "reveal": {
-          "by": "word",
-          "mode": "fade",
-          "seconds": 1.0
-        }
-      },
-      "keyframes": []
+     "id": "bg2",
+     "time": 10,
+     "transitionDuration": 5,
+     "easing": "easeInOut",
+     "gradient": {
+      "kind": "linear",
+      "start": [
+       1,
+       0
+      ],
+      "end": [
+       0,
+       1
+      ],
+      "repeat": "clamp",
+      "stops": [
+       {
+        "colorHex": "10162A",
+        "at": 0
+       },
+       {
+        "colorHex": "090B12",
+        "at": 0.5
+       },
+       {
+        "colorHex": "1F1530",
+        "at": 1
+       }
+      ]
+     }
     }
-  ]
+   ]
+  },
+  {
+   "id": "bench",
+   "name": "Bench",
+   "sortIndex": 1,
+   "kind": "stage",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 10,
+   "keyframes": [
+    {
+     "id": "c0",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "mode": "fill"
+     },
+     "camera": {
+      "yaw": -160,
+      "pitch": 50,
+      "distance": 5.2,
+      "fov": 30,
+      "target": {
+       "point": [
+        0,
+        1.5,
+        0
+       ]
+      }
+     },
+     "light": {
+      "yaw": 40,
+      "pitch": 40,
+      "intensity": 1.4
+     }
+    },
+    {
+     "id": "c1",
+     "time": 7,
+     "transitionDuration": 7,
+     "easing": "smooth",
+     "camera": {
+      "yaw": 20,
+      "pitch": 6,
+      "distance": 4.4,
+      "fov": 30,
+      "motionPath": {
+       "pathResourceID": "helix"
+      },
+      "target": {
+       "point": [
+        0,
+        1.6,
+        0
+       ]
+      }
+     }
+    },
+    {
+     "id": "c2",
+     "time": 9.6,
+     "transitionDuration": 2.6,
+     "easing": "smooth",
+     "camera": {
+      "yaw": 60,
+      "pitch": 10,
+      "distance": 4.8,
+      "motionPath": {
+       "pathResourceID": "arc"
+      },
+      "target": {
+       "point": [
+        0,
+        1.4,
+        0
+       ]
+      }
+     },
+     "light": {
+      "yaw": 70,
+      "pitch": 30,
+      "intensity": 1.4
+     }
+    }
+   ],
+   "members": [
+    {
+     "id": "m-stand",
+     "name": "Stand",
+     "sortIndex": 0,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 10,
+     "resourceID": "stand",
+     "keyframes": [
+      {
+       "id": "sk0",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        0,
+        -0.45
+       ],
+       "depth": 0
+      }
+     ]
+    },
+    {
+     "id": "m-vase",
+     "name": "Vase",
+     "sortIndex": 1,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 10,
+     "resourceID": "vase",
+     "keyframes": [
+      {
+       "id": "vk0",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        2.4,
+        1.4
+       ],
+       "depth": 0.6,
+       "camera": {
+        "yaw": -60
+       }
+      },
+      {
+       "id": "vk1",
+       "time": 1.6,
+       "transitionDuration": 1.6,
+       "easing": "easeOut",
+       "stageOffset": [
+        0,
+        0.9
+       ],
+       "depth": 0,
+       "motionPath": {
+        "pathResourceID": "arc"
+       },
+       "camera": {
+        "yaw": 20
+       }
+      }
+     ]
+    },
+    {
+     "id": "m-flower",
+     "name": "Flower",
+     "sortIndex": 2,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 10,
+     "resourceID": "flower",
+     "keyframes": [
+      {
+       "id": "fk0",
+       "time": 0,
+       "transitionDuration": 0,
+       "stageOffset": [
+        2.4,
+        1.4
+       ],
+       "depth": 0.6,
+       "camera": {
+        "yaw": -60
+       }
+      },
+      {
+       "id": "fk1",
+       "time": 1.6,
+       "transitionDuration": 1.6,
+       "easing": "easeOut",
+       "stageOffset": [
+        0,
+        0.9
+       ],
+       "depth": 0,
+       "motionPath": {
+        "pathResourceID": "arc"
+       },
+       "camera": {
+        "yaw": 20
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cap",
+   "name": "Caption",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 7.2,
+   "duration": 2.8,
+   "captionText": "Fly the camera.",
+   "fadeIn": 0.25,
+   "captionStyle": {
+    "isBold": true,
+    "fontSize": 64,
+    "placement": {
+     "anchor": "bottom",
+     "offset": [
+      0,
+      -64
+     ]
+    },
+    "backgroundOpacity": 0.0,
+    "padding": 18,
+    "strokeColorHex": "@caption-outline",
+    "strokeWidth": 5,
+    "shadowColorHex": "@caption-shadow",
+    "shadowOpacity": 0.55,
+    "shadowRadius": 14,
+    "reveal": {
+     "by": "word",
+     "mode": "fade",
+     "secondsPer": 0.3
+    }
+   },
+   "keyframes": []
+  }
+ ]
 }

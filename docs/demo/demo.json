@@ -5416,7 +5416,7 @@
    900
   ],
   "duration": 10.0,
-  "prompt": "Make a 10-second piece on a 1440\u00d7900 canvas: a background whose linear gradient drifts on three eased keyframes (16233F / 0B0D12 / 241A3A corner to corner at 0 s; 1B2A4A / 0D1020 / 3A1F44 from [0.3,0] to [0.8,1] at 5 s; 10162A / 090B12 / 1F1530 from [1,0] to [0,1] at 10 s) and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed 600 px tall in the centre (offset 30 px up), with a key light at yaw 40, pitch 40, intensity 1.4. Two PATH resources with a ROUTE: 'Helix' \u2014 49 smooth points of a three-turn helix, from radius 0.32 at height 1.0 winding down to radius 0.2 at height 0 \u2014 and 'Arc' \u2014 three smooth points [0,0,0], [0.5,0.45,0.15], [1,0,0]. The stage's camera keyframes: at 0 s yaw -160, pitch 50, distance 3.8, fov 30, target the point [0,1.5,0]; at 7 s yaw 20, pitch 6, distance 3.1, fov 30, with a motionPath naming the Helix route and target the point [0,1.6,0] (7 s, \"easing\": \"smooth\") so the camera spirals down onto the stand looking at the vase and its flower; at 9.6 s yaw 60, pitch 10, distance 3.4 with a motionPath naming the Arc route and target the point [0,1.4,0] (2.6 s, \"easing\": \"smooth\") as the light moves to yaw 70, pitch 30. Members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]) and a Plate box (size [1.2,0.06,1.2], radius 0.03, at y 0.81) \u2014 painted dark 1E2430 on Base and Plate (roughness 0.85 / 0.8) and chrome D2D6DC on the Stem (metallic 1, roughness 0.2), offset 0.45 down; and a VASE that is a model resource with no file and a PARTS recipe of one lathe (slot Body, profile [[0.18,0.75],[0.14,0.62],[0.16,0.5],[0.26,0.35],[0.34,0.15],[0.36,-0.05],[0.33,-0.3],[0.26,-0.55],[0.2,-0.7],[0.22,-0.75],[0,-0.75]], 48 segments) painted @accent (metallic 0.1, roughness 0.2), which arrives along the Arc route from stageOffset [2.4,1.4] at depth 0.6 to [0,0.9] at depth 0 by 1.6 s (ease out), turning from a yaw of -60 to 20; a FLOWER that is a model resource with no file and a PARTS recipe riding in the vase on the same arc, offsets and turn \u2014 a Stem cylinder (radius 0.025, height 1.7, 24 segments, at [0.02,0.85,0], rotation [0,0,6]), two Leaf extrusions of the path [[0,0],[0.18,0.25],[0.12,0.6],[0,1],[-0.12,0.6],[-0.18,0.25]] (depth 0.012; one scale 0.36 at [0.04,1.05,0] rotation [0,20,-55], one scale 0.3 at [-0.02,1.3,0.02] rotation [0,-160,50]), a Heart sphere (radius 0.09, at [0.06,1.76,0]) and six Petal extrusions of the path [[0,0],[0.22,0.3],[0.2,0.7],[0,1],[-0.2,0.7],[-0.22,0.3]] (depth 0.014, scale 0.34, at [0.06,1.72,0], rotation [-58, k\u00d760, 0] for k 0\u20265) \u2014 painted Stem 3E8E4A (roughness 0.6), Leaf 4CA35A (roughness 0.55), Petal FF7A59 (roughness 0.45), Heart FFD54A (roughness 0.5); and from 7.2 s along the bottom a bold caption 'Fly the camera.' that fades in word by word.\n\nText to use, in order:\n- Fly the camera.",
+  "prompt": "Make a 10-second piece on a 1440\u00d7900 canvas: a background whose linear gradient drifts on three eased keyframes (16233F / 0B0D12 / 241A3A corner to corner at 0 s; 1B2A4A / 0D1020 / 3A1F44 from [0.3,0] to [0.8,1] at 5 s; 10162A / 090B12 / 1F1530 from [1,0] to [0,1] at 10 s) and the studio scene environment; ONE layer of kind 'stage' named 'Bench', placed with \"placement\": {\"mode\": \"fill\"} so the flown camera's canvas-shaped frame is full-bleed, with a key light at yaw 40, pitch 40, intensity 1.4. Two PATH resources with a ROUTE: 'Helix' \u2014 49 smooth points of a three-turn helix, from radius 0.32 at height 1.0 winding down to radius 0.2 at height 0 \u2014 and 'Arc' \u2014 three smooth points [0,0,0], [0.5,0.45,0.15], [1,0,0]. The stage's camera keyframes: at 0 s yaw -160, pitch 50, distance 5.2, fov 30, target the point [0,1.5,0]; at 7 s yaw 20, pitch 6, distance 4.4, fov 30, with a motionPath naming the Helix route and target the point [0,1.6,0] (7 s, \"easing\": \"smooth\") so the camera spirals down onto the stand looking at the vase and its flower; at 9.6 s yaw 60, pitch 10, distance 4.8 with a motionPath naming the Arc route and target the point [0,1.4,0] (2.6 s, \"easing\": \"smooth\") as the light moves to yaw 70, pitch 30. Members: a STAND that is a model resource with no file and a PARTS recipe \u2014 a Base cylinder (radius 0.95, height 0.08, at y 0.04), a Stem lathe (profile [[0.32,0.08],[0.16,0.2],[0.12,0.5],[0.16,0.7],[0.36,0.78],[0,0.78]]) and a Plate box (size [1.2,0.06,1.2], radius 0.03, at y 0.81) \u2014 painted dark 1E2430 on Base and Plate (roughness 0.85 / 0.8) and chrome D2D6DC on the Stem (metallic 1, roughness 0.2), offset 0.45 down; and a VASE that is a model resource with no file and a PARTS recipe of one lathe (slot Body, profile [[0.18,0.75],[0.14,0.62],[0.16,0.5],[0.26,0.35],[0.34,0.15],[0.36,-0.05],[0.33,-0.3],[0.26,-0.55],[0.2,-0.7],[0.22,-0.75],[0,-0.75]], 48 segments) painted @accent (metallic 0.1, roughness 0.2), which arrives along the Arc route from stageOffset [2.4,1.4] at depth 0.6 to [0,0.9] at depth 0 by 1.6 s (ease out), turning from a yaw of -60 to 20; a FLOWER that is a model resource with no file and a PARTS recipe riding in the vase on the same arc, offsets and turn \u2014 a Stem cylinder (radius 0.025, height 1.7, 24 segments, at [0.02,0.85,0], rotation [0,0,6]), two Leaf extrusions of the path [[0,0],[0.18,0.25],[0.12,0.6],[0,1],[-0.12,0.6],[-0.18,0.25]] (depth 0.012; one scale 0.36 at [0.04,1.05,0] rotation [0,20,-55], one scale 0.3 at [-0.02,1.3,0.02] rotation [0,-160,50]), a Heart sphere (radius 0.09, at [0.06,1.76,0]) and six Petal extrusions of the path [[0,0],[0.22,0.3],[0.2,0.7],[0,1],[-0.2,0.7],[-0.22,0.3]] (depth 0.014, scale 0.34, at [0.06,1.72,0], rotation [-58, k\u00d760, 0] for k 0\u20265) \u2014 painted Stem 3E8E4A (roughness 0.6), Leaf 4CA35A (roughness 0.55), Petal FF7A59 (roughness 0.45), Heart FFD54A (roughness 0.5); and from 7.2 s along the bottom a bold caption 'Fly the camera.' that fades in word by word.\n\nText to use, in order:\n- Fly the camera.",
   "resources": [],
   "result": {
    "score": 100,
@@ -5529,50 +5529,50 @@
      "detail": "1 of 1 lines recognisable"
     }
    ],
-   "summary": "turns=30 cost=$2.60 secs=257",
+   "summary": "turns=32 cost=$2.24 secs=245",
    "run": {
-    "turns": 30,
-    "wall_s": 256,
-    "api_s": 252,
-    "cost_usd": 2.6,
+    "turns": 32,
+    "wall_s": 244,
+    "api_s": 238,
+    "cost_usd": 2.24,
     "tokens": {
-     "input": 58,
-     "cache_read": 2463230,
-     "cache_write": 83179,
-     "output": 21232,
-     "thinking": 6502
+     "input": 46,
+     "cache_read": 1785896,
+     "cache_write": 82810,
+     "output": 20625,
+     "thinking": 6284
     },
     "models": [
      {
       "model": "claude-haiku-4-5",
-      "input": 2278,
-      "output": 15,
+      "input": 2289,
+      "output": 14,
       "cost_usd": 0.0
      },
      {
       "model": "claude-opus-5",
-      "input": 2546467,
-      "output": 21232,
-      "cost_usd": 2.59
+      "input": 1868752,
+      "output": 20625,
+      "cost_usd": 2.24
      }
     ],
     "mcp": {
-     "calls": 7,
-     "ms": 2061,
+     "calls": 8,
+     "ms": 4400,
      "tools": {
       "promo_render_video": {
        "calls": 1,
-       "ms": 1924,
+       "ms": 2055,
        "errors": 0
       },
       "promo_render_frames": {
        "calls": 1,
-       "ms": 119,
+       "ms": 1806,
        "errors": 0
       },
       "promo_validate": {
        "calls": 1,
-       "ms": 9,
+       "ms": 528,
        "errors": 0
       },
       "promo_inspect": {
@@ -5582,7 +5582,7 @@
       },
       "promo_schema_types": {
        "calls": 1,
-       "ms": 1,
+       "ms": 3,
        "errors": 0
       },
       "promo_schema": {
@@ -5594,18 +5594,23 @@
        "calls": 1,
        "ms": 0,
        "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
       }
      }
     }
    },
    "used": null,
    "captions": null,
-   "notes": "Done. `out.promo` is written, validates clean, and renders.\n\n**What's in it** \u2014 `out.promo/metadata.json`, 1440\u00d7900, 10 s, 30 fps, `minReaderVersion: 40`, `Resources/` empty (every body is a recipe; nothing in `resources/` was needed).\n\n- **Drift** (background) \u2014 three gradient keyframes at 0/5/10 s, each three stops, eased `easeInOut` on 5 s ramps; `environment: studio`.\n- **Bench** (one `stage` layer) \u2014 `placement` 600 px tall, centre, offset `[0,-30]`; light yaw 40 / pitch 40 / intensity 1.4, moving to yaw 70 / pitch 30 on the 9.6 s keyframe. Camera: 0 s yaw \u2212160 pitch 50 dist 3.8 fov 30 \u2192 7 s yaw 20 pitch 6 dist 3.1 along the **Helix** route (`smooth`, 7 s) \u2192 9.6 s yaw 60 pitch 10 dist 3.4 along the **Arc** route (`smooth`, 2.6 s), gazing at `[0,1.5,0]` \u2192 `[0,1.6,0]` \u2192 `[0,1.4,0]`.\n- **Routes** \u2014 `Helix`: 49 smooth points, three turns, radius 0.32 @ y 1.0 winding to 0.2 @ y 0. `Arc`: the three smooth points given.\n- **Members** \u2014 Stand (cylinder Base / lathe Stem / box Plate; dark `1E2430` + chrome `D2D6DC`, `stageOffset [0,-0.45]`), Vase (48-segment lathe, `@accent` glossy) and Flower (stem, two leaves, heart, six petals at `[-58, k\u00d760, 0]`), the latter two sharing the same arrival: `stageOffset [2.4,1.4]`/depth 0.6 \u2192 `[0,0.9]`/depth 0 over 1.6 s on the Arc, `easeOut`, yaw \u221260 \u2192 20.\n- **Caption** \u2014 \"Fly the camera.\" bold, bottom-anchored, 7.2\u201310 s, `reveal { by: word, mode: fade }`.\n\nTwo choices I made without asking: `@accent` is `2E9AA8` (glossy teal, reads against the orange flower and the navy ground), and the caption is a top-level layer rather than a stage member \u2014 \"along the bottom\" is canvas space, and a caption member would be a billboard flying with the spiralling camera.\n\n**Checks** \u2014 `promo_validate`: \"ok \u2014 nothing the renderer would quietly correct\". `",
+   "notes": "Done. `out.promo` validates clean (\"nothing the renderer would quietly correct\") and the mp4 is at `out.promo/Exports/export.mp4` (1440\u00d7900, 300 frames @ 30fps, 1.9 MB).\n\nWhat's in it:\n\n- **Background** \u2014 a three-stop linear gradient on three `easeInOut` keyframes at 0 / 5 / 10 s, drifting corner-to-corner \u2192 `[0.3,0]\u2192[0.8,1]` \u2192 `[1,0]\u2192[0,1]`, with `environment: { preset: \"studio\" }` so the chrome stem and glazed vase have something to mirror.\n- **Stage 'Bench'**, one `kind: \"stage\"` layer, `placement: { mode: \"fill\" }` \u2014 the flown camera's canvas-shaped frame goes full-bleed. Key light yaw 40 / pitch 40 / intensity 1.4, moving to yaw 70 / pitch 30 by 9.6 s.\n- **Camera** \u2014 0 s yaw \u2212160 pitch 50 dist 5.2 fov 30 looking at `[0,1.5,0]`; 7 s yaw 20 pitch 6 dist 4.4 along the **Helix** route (49 smooth points, three turns, r 0.32 @ y 1.0 \u2192 r 0.2 @ y 0), target `[0,1.6,0]`, `smooth` over 7 s; 9.6 s yaw 60 pitch 10 dist 4.8 along **Arc**, target `[0,1.4,0]`, `smooth` over 2.6 s.\n- **Members** \u2014 Stand (cylinder Base / lathe Stem / rounded-box Plate, dark `1E2430` and chrome `D2D6DC`, offset 0.45 down); Vase (48-segment lathe, `@accent` at metallic 0.1 / roughness 0.2) and Flower (stem, two leaves, six petals, heart) both flying the Arc from `[2.4,1.4]` at depth 0.6 to `[0,0.9]` at depth 0 by 1.6 s with `easeOut`, turning yaw \u221260 \u2192 20.\n- **Caption** \u2014 'Fly the camera.' from 7.2 s, bold 64 pt, `reveal: { by: \"word\", mode: \"fade\" }`.\n\nTwo judgment calls worth flagging: the caption is a **top-level layer over the stage**, not a stage member \u2014 \"along the bottom\" only holds for a flat overlay; as a billboard member it would tumble with the spiralling camera. And `@accent` is a glazed teal (`2D7D8E`), picked to sit against the orange petals; it's one palette entry to change.\n\n`resource",
    "contact": "docs/demo/35-spiral-in/contact-result.png",
    "reference_contact": "docs/demo/35-spiral-in/contact-reference.png",
    "video": "docs/demo/35-spiral-in/result.mp4",
    "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/35-spiral-in.mp4",
-   "video_hd_bytes": 1000754,
+   "video_hd_bytes": 1125068,
    "metadata": "docs/demo/35-spiral-in/result-metadata.json",
    "gif": "docs/demo/35-spiral-in/result.gif",
    "thumb": "docs/demo/35-spiral-in/thumb.png"
