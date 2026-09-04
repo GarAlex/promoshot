@@ -2962,6 +2962,60 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A route (rung 40) through the whole path: a member flown into its
+    /// keyframe along an arc is somewhere else mid-move than the same
+    /// member moving straight, a camera flown along a route with its gaze
+    /// on the member frames differently from the plain orbit, and the same
+    /// instant renders the same twice.
+    #[test]
+    fn a_route_bends_a_member_and_flies_the_camera() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-route-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = |member_path: &str, camera_extra: &str| {
+            format!(
+                r#"{{"id":"P","name":"Route","createdAt":0,"state":"recorded","minReaderVersion":40,
+                "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+                    "recipe":{{"parts":[{{"slot":"Cube","shape":{{"box":{{"size":[0.6,0.6,0.6]}}}}}}]}},
+                    "materials":{{"Cube":"FF8040"}}}},
+                  {{"id":"ARC","kind":"path","filename":"","displayName":"Arc","addedAt":0,
+                    "route":{{"points":[[0,0,0],[1,2,0],[2,0,0]],"curve":"linear"}}}}],
+                "layers":[{{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":10,"distance":5.0}},"placement":{{"height":300,"anchor":"center"}},"transitionDuration":0}},
+                               {{"id":"K1","time":4,"camera":{{"yaw":120,"pitch":10,"distance":5.0{camera_extra}}},"placement":{{"height":300,"anchor":"center"}},"transitionDuration":4}}],
+                  "members":[
+                    {{"id":"C","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"CUBE",
+                     "keyframes":[{{"id":"M0","time":0,"stageOffset":[-1,0],"transitionDuration":0}},
+                                  {{"id":"M1","time":4,"stageOffset":[1,0]{member_path},"transitionDuration":4}}]}}]}}]}}"#
+            )
+        };
+        let render = |json: &str, t: f64| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            renderer.frame_bgra(t).expect("frame")
+        };
+        let differ = |a: &[u8], b: &[u8]| a.iter().zip(b).filter(|(x, y)| (**x as i32 - **y as i32).abs() > 12).count();
+        let straight = render(&doc("", ""), 2.0);
+        let arced = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 2.0);
+        let n = straight.len();
+        assert!(differ(&straight, &arced) > n / 40, "mid-move the arced cube is elsewhere: {} of {n}", differ(&straight, &arced));
+        let again = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 2.0);
+        assert_eq!(arced, again, "the same instant is the same frame");
+        let at_end = render(&doc(r#","motionPath":{"pathResourceID":"ARC"}"#, ""), 4.0);
+        let at_end_straight = render(&doc("", ""), 4.0);
+        assert!(differ(&at_end, &at_end_straight) < n / 200, "at the keyframe both are where it says: {} of {n}", differ(&at_end, &at_end_straight));
+        let flown = render(&doc("", r#","motionPath":{"pathResourceID":"ARC"},"target":{"member":"C"}"#), 2.0);
+        assert!(differ(&straight, &flown) > n / 40, "a flown camera with its gaze on the cube frames differently: {} of {n}", differ(&straight, &flown));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A morph (rung 39) through the whole path: a faced cube bursts into
     /// points that gather on a word. The frames at the start, mid-flight
     /// and the end differ from one another, the cloud is drawn when no

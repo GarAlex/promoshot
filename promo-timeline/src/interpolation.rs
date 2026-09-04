@@ -14,7 +14,7 @@ pub struct Transform {
     pub horizontal_shift: f64,
 }
 
-fn sorted_by_time<F>(keyframes: &[ProjectLayerKeyframe], has_field: F) -> Vec<&ProjectLayerKeyframe>
+pub(crate) fn sorted_by_time<F>(keyframes: &[ProjectLayerKeyframe], has_field: F) -> Vec<&ProjectLayerKeyframe>
 where
     F: Fn(&ProjectLayerKeyframe) -> bool,
 {
@@ -333,7 +333,7 @@ pub fn layer_transform_along_paths(
 /// keyframe, after the last, and during a hold the pair degenerates to
 /// `(k, k, 1.0)` — the value simply IS that keyframe's. `None` on an empty
 /// track, so the caller owns the track's resting constant.
-fn track_window<'a>(
+pub(crate) fn track_window<'a>(
     sorted: &[&'a ProjectLayerKeyframe],
     local_time: f64,
 ) -> Option<(&'a ProjectLayerKeyframe, &'a ProjectLayerKeyframe, f64)> {

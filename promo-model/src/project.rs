@@ -347,6 +347,33 @@ pub enum MaterialBinding {
     Surface(SurfaceBinding),
 }
 
+/// A path in the STAGE (rung 40): points in stage radii, its own origin
+/// anywhere. A `motionPath` on a stage member's keyframe or on a camera
+/// bends the move into that keyframe along it, fitted the way a 2D path
+/// is — first point onto where the move starts, last onto where it
+/// ends, a closed route at its own size — so one arc serves any move.
+/// `curve` "smooth" (the default, a curve through the points) or
+/// "linear"; `closed` joins the last point to the first.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Route {
+    pub points: Vec<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub curve: Option<String>,
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub closed: Option<bool>,
+}
+
+impl Route {
+    pub const CURVES: [&'static str; 2] = ["smooth", "linear"];
+    pub fn curve(&self) -> &str {
+        self.curve.as_deref().unwrap_or("smooth")
+    }
+    pub fn closed(&self) -> bool {
+        self.closed.unwrap_or(false)
+    }
+}
+
 /// The object form of a `materials` binding. Every field is optional:
 /// a picture (`resourceID`), a colour (`colorHex`, palette names work),
 /// a finish (`metallic` 0 dielectric … 1 metal, `roughness` 0 mirror …
@@ -666,7 +693,7 @@ pub struct ModelClip {
 /// fields take the defaults: yaw -25, pitch 10, roll 0, distance 4.2,
 /// fov 30 — a three-quarter view that reads as a product shot, far
 /// enough that the model's bounding sphere fits the frame's height.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Camera {
     #[serde(default, skip_serializing_if = "is_none")]
@@ -679,6 +706,40 @@ pub struct Camera {
     pub distance: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub fov: Option<f64>,
+    /// The route the camera flies INTO this keyframe (rung 40): a
+    /// `path` resource with a `route`, fitted between where the camera
+    /// was at the previous keyframe and where this one puts it — the
+    /// same rule as a layer's `motionPath`. Yaw, pitch and distance
+    /// still say where the move starts and ends; the route bends it.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub motion_path: Option<MotionPath>,
+    /// Where the camera LOOKS while it moves (rung 40): `"center"` (the
+    /// stage's centre, the default), `"ahead"` (along its route), a
+    /// member (`{ "member": "<layer id>" }`) or a point (`{ "point":
+    /// [x, y, z] }`, stage radii). Ramps between keyframes.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub target: Option<CameraTarget>,
+}
+
+/// What a moving camera looks at: a name (`center`, `ahead`), a stage
+/// member by its layer id, or a point in stage radii.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum CameraTarget {
+    Named(String),
+    Member { member: String },
+    Point { point: [f64; 3] },
+}
+
+impl CameraTarget {
+    pub const NAMES: [&'static str; 2] = ["center", "ahead"];
+    /// The name written, for a named target.
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            CameraTarget::Named(n) => Some(n),
+            _ => None,
+        }
+    }
 }
 
 impl Camera {
@@ -3231,6 +3292,11 @@ pub struct ProjectResource {
     /// Set on `path` resources, and only on them.
     #[serde(default, skip_serializing_if = "is_none")]
     pub path: Option<PathDocument>,
+    /// A path resource's ROUTE in the stage (rung 40): points in stage
+    /// radii, its own origin anywhere, for a `motionPath` on a stage
+    /// member's keyframe or on a camera.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub route: Option<Route>,
     /// Present when an IMAGE is a sprite sheet: the same file, read as a grid
     /// of frames that cycle over the layer's local time.
     #[serde(default, skip_serializing_if = "is_none")]
@@ -3351,6 +3417,7 @@ struct ProjectResourceWire {
     drawing: Option<DrawingDocument>,
     #[serde(default)]
     particles: Option<ParticleRecipe>,
+    route: Option<Route>,
     #[serde(default)]
     path: Option<PathDocument>,
     #[serde(default)]
@@ -3445,6 +3512,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             caption_voice_clip: w.caption_voice_clip,
             drawing: w.drawing,
             particles: w.particles,
+            route: w.route,
             path: w.path,
             sprite: w.sprite,
             sampling: w.sampling,
@@ -3606,6 +3674,7 @@ impl ProjectResource {
             materials: None,
             recipe: None,
             particles: None,
+            route: None,
             clips: None,
             bounds_radius: None,
             frame: None,
@@ -3907,6 +3976,22 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 40 is a path in the stage — a route on a path resource, or a
+        // camera with a route or a target. Dropped by an older reader, a
+        // fly-through goes straight and a gaze stays on the centre: a
+        // different picture, so the rung refuses.
+        let route = resources.iter().any(|r| r.route.is_some());
+        let flown = crate::nesting::all_layers(self).iter().any(|l| {
+            l.keyframes.iter().any(|k| {
+                k.camera
+                    .as_ref()
+                    .is_some_and(|c| c.motion_path.is_some() || c.target.is_some())
+            })
+        });
+        if route || flown {
+            return 40;
+        }
 
         // 39 is particles in a stage (a morph), a box with faces, or a
         // member's progress — each dropped by an older reader for a
@@ -4694,6 +4779,60 @@ mod placement_model_tests {
     /// and offset round-trip, the accessors default what is left out,
     /// an unknown mode reads as a screen, and any of the three lifts
     /// the rung.
+    /// A path in the stage (rung 40): a route on a path resource, a camera
+    /// route and a gaze round-trip, the gaze decodes in its three forms,
+    /// and any of them lifts the rung.
+    #[test]
+    fn a_route_and_a_camera_gaze_are_stamped_forty() {
+        let doc = |resources: &str, keyframe: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Route","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[{resources}],
+                    "layers":[{{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+                      "keyframes":[{keyframe}],"members":[]}}]}}"#
+            ))
+            .expect("decodes")
+        };
+        let route = r#"{"id":"R","kind":"path","filename":"","displayName":"Helix","addedAt":0,
+            "route":{"points":[[0,0,0],[1,0.5,0],[1,1,1]],"curve":"smooth","closed":false}}"#;
+        let plain = doc(route, r#"{"id":"K","time":0,"transitionDuration":0}"#);
+        assert_eq!(plain.minimum_reader_version(), 40, "a route lifts the rung");
+        let r = plain.resources.as_ref().unwrap()[0].route.clone().unwrap();
+        assert_eq!(r.points.len(), 3);
+        assert_eq!(r.curve(), "smooth");
+        assert!(!r.closed());
+        let json = plain.to_json().unwrap();
+        assert!(json.contains(r#""route":{"points":[[0.0,0.0,0.0],[1.0,0.5,0.0],[1.0,1.0,1.0]],"curve":"smooth","closed":false}"#), "{json}");
+
+        let flown = doc(
+            "",
+            r#"{"id":"K","time":2,"camera":{"yaw":40,"motionPath":{"pathResourceID":"R","flipped":true},"target":"ahead"},
+                "transitionDuration":2}"#,
+        );
+        assert_eq!(flown.minimum_reader_version(), 40, "a camera route lifts the rung");
+        let cam = flown.layers.as_ref().unwrap()[0].keyframes[0].camera.clone().unwrap();
+        assert_eq!(cam.motion_path.as_ref().unwrap().path_resource_id, "R");
+        assert_eq!(cam.target.as_ref().and_then(|t| t.name()), Some("ahead"));
+        let json = flown.to_json().unwrap();
+        assert!(json.contains(r#""motionPath":{"pathResourceID":"R","flipped":true}"#), "{json}");
+        assert!(json.contains(r#""target":"ahead""#), "{json}");
+
+        let on_member = doc("", r#"{"id":"K","time":0,"camera":{"target":{"member":"V"}},"transitionDuration":0}"#);
+        assert_eq!(on_member.minimum_reader_version(), 40);
+        let cam = on_member.layers.as_ref().unwrap()[0].keyframes[0].camera.clone().unwrap();
+        assert_eq!(cam.target, Some(CameraTarget::Member { member: "V".into() }));
+        let at_point = doc("", r#"{"id":"K","time":0,"camera":{"target":{"point":[0,1,0]}},"transitionDuration":0}"#);
+        let cam = at_point.layers.as_ref().unwrap()[0].keyframes[0].camera.clone().unwrap();
+        assert_eq!(cam.target, Some(CameraTarget::Point { point: [0.0, 1.0, 0.0] }));
+        let back = ProjectMetadata::from_json(&at_point.to_json().unwrap()).unwrap();
+        assert_eq!(back.layers.as_ref().unwrap()[0].keyframes[0].camera, Some(cam));
+
+        let still = doc("", r#"{"id":"K","time":0,"camera":{"yaw":10},"transitionDuration":0}"#);
+        assert!(still.minimum_reader_version() < 40, "a plain camera does not");
+    }
+
     /// A morph (rung 39): the recipe round-trips with its defaults
     /// filled, a member's `progress` is a keyframe value, and a morph, a
     /// progress or a faced box each lift the rung.
@@ -5186,13 +5325,13 @@ mod placement_model_tests {
         assert_eq!(owner.stage.as_deref(), Some("S"));
         assert!(owner.members.is_none());
         assert_eq!(owner.fade_in, Some(0.5));
-        assert_eq!(owner.keyframes[0].camera.and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(owner.keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(-14.0));
         assert_eq!(owner.keyframes[0].light.and_then(|l| l.yaw), Some(-70.0));
         for member in &layers[2..4] {
             assert_eq!(member.stage.as_deref(), Some("S"));
             assert!(member.members.is_none());
         }
-        assert_eq!(layers[3].keyframes[0].camera.and_then(|c| c.yaw), Some(20.0), "a member keeps its own turn");
+        assert_eq!(layers[3].keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(20.0), "a member keeps its own turn");
         // The wire keeps the nested form; the flat form lowers to itself.
         let json = doc.to_json().expect("encode");
         assert!(json.contains(r#""kind":"stage""#) && json.contains(r#""members":["#), "{json}");
@@ -5244,7 +5383,7 @@ mod placement_model_tests {
         assert_eq!(stage.fade_in, Some(0.5));
         assert_eq!(stage.keyframes.len(), 1);
         assert_eq!(stage.keyframes[0].id, "K1");
-        assert_eq!(stage.keyframes[0].camera.and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(stage.keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(-14.0));
         assert!(stage.keyframes[0].placement.is_some());
         assert_eq!(stage.keyframes[0].stage_offset, None, "the world fields left the stage layer");
         let members = stage.members.as_deref().unwrap();
@@ -5261,7 +5400,7 @@ mod placement_model_tests {
         assert_eq!(head.keyframes[0].camera, None, "the first member had no turn of its own");
         assert!(head.keyframes[0].placement.is_none());
         assert_eq!(members[1].id, "R");
-        assert_eq!(members[1].keyframes[0].camera.and_then(|c| c.yaw), Some(20.0));
+        assert_eq!(members[1].keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(20.0));
         assert_eq!(lifted.minimum_reader_version(), 33);
         assert_eq!(lifted.lifted(), lifted, "the one-layer form lifts to itself");
         assert_eq!(doc.lifted(), lifted, "lifting is stable");
@@ -5304,13 +5443,13 @@ mod placement_model_tests {
         let stage = &layers[0];
         assert_eq!(stage.id, "S");
         assert_eq!(stage.kind, ProjectLayerKind::Stage);
-        assert_eq!(stage.keyframes[0].camera.and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(stage.keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(-14.0));
         assert!(stage.keyframes[0].placement.is_some());
         let members = stage.members.as_deref().unwrap();
         let ids: Vec<&str> = members.iter().map(|m| m.id.as_str()).collect();
         assert_eq!(ids, ["L", "R"], "no phantom for the camera row");
         assert_eq!(members[0].keyframes[0].stage_offset, Some([-1.5, 0.0]));
-        assert_eq!(members[1].keyframes[0].camera.and_then(|c| c.yaw), Some(20.0));
+        assert_eq!(members[1].keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(20.0));
         assert_eq!(layers[1].id, "T");
     }
 

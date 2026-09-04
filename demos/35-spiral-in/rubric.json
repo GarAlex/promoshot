@@ -1,14 +1,14 @@
 {
- "template": "11 Whip Deck",
+ "template": "35 Spiral In",
  "canvas": [
   1440,
   900
  ],
- "duration": 10,
+ "duration": 10.0,
  "kinds": {
   "background": 1,
-  "image": 1,
-  "caption": 2
+  "stage": 1,
+  "caption": 1
  },
  "features": {
   "chromaKey": false,
@@ -21,49 +21,43 @@
   "mask": false,
   "maskInverted": false,
   "viewport": false,
-  "motionPath": false,
+  "motionPath": true,
   "sprite": false,
-  "gradient": false,
+  "gradient": true,
   "reveal": true,
-  "stage": false,
-  "stageLayer": false,
-  "model": false,
-  "camera": false,
-  "materials": false,
-  "finish": false,
+  "stage": true,
+  "stageLayer": true,
+  "model": true,
+  "camera": true,
+  "materials": true,
+  "finish": true,
   "morph": false,
-  "route": false,
-  "cameraRoute": false,
-  "cameraTarget": false,
-  "memberRoute": false,
+  "route": true,
+  "cameraRoute": true,
+  "cameraTarget": true,
+  "memberRoute": true,
   "facedBox": false,
   "wornPicture": false,
   "wornVideo": false,
   "textBody": false,
-  "environment": false,
+  "environment": true,
   "particles": false,
-  "partsBody": false,
+  "partsBody": true,
   "depth": false,
   "captionTilt": false,
   "kineticReveal": false,
   "blendModes": [],
-  "swaps": 3,
-  "transitions": true,
+  "swaps": 0,
+  "transitions": false,
   "timingAnchors": false,
   "mediaCuts": false,
   "narration": false,
-  "motionBlur": true,
+  "motionBlur": false,
   "grade": false,
   "placement": true
  },
  "phrases": [
-  "One deck. Every screen.",
-  "See it move."
+  "Fly the camera."
  ],
- "media": [
-  "ui_lumen_1.png",
-  "ui_lumen_2.png",
-  "ui_pulse_1.png",
-  "ui_verse_1.png"
- ]
+ "media": []
 }

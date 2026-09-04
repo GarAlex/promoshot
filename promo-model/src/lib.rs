@@ -384,6 +384,8 @@ mod schema_doc_tests {
                 roll: Some(0.0),
                 distance: Some(3.2),
                 fov: Some(30.0),
+                motion_path: None,
+                target: None,
             }),
             light: Some(Light {
                 yaw: Some(40.0),
@@ -622,6 +624,7 @@ mod schema_doc_tests {
             bounds_radius: Some(1.0),
             recipe: None,
             particles: None,
+            route: None,
             pointer: Some(PointerTrack {
                 samples: vec![[0.0, 0.5, 0.5], [1.0, 0.6, 0.4]],
                 clicks: vec![[0.8, 0.6, 0.4]],

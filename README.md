@@ -429,6 +429,13 @@ colour over life, a shape — played by a drawing layer. Every particle is
 a closed-form function of its birth time and the seed, so any frame
 renders alone and identically on every host. Rung 36.
 
+A path resource can carry a route in the stage (rung 40): 3D points in
+stage radii that a member's or a camera's `motionPath` follows, fitted
+between two keyframes exactly as the 2D motion path is, with a camera
+`target` — the centre, ahead, a member or a point — saying where it
+looks on the way. A spiral that keeps looking inward is one route and
+one keyframe.
+
 Particles in a stage are a morph (rung 39): the recipe names two bodies,
 samples the first's surface, and as a drawing member's `progress`
 keyframe ramps from 0 to 1 the points fly out and gather on the second

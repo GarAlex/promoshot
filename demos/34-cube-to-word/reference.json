@@ -154,7 +154,7 @@
      "spread": 1.1,
      "size": 0.013,
      "turbulence": 0.2,
-     "stagger": 0.45
+     "stagger": 0.3
     }
    }
   },
@@ -536,18 +536,18 @@
        "easing": "easeOut"
       },
       {
-       "id": "00956194-74F5-ECCE-2176-4E6A9A2B9015",
-       "time": 7.0,
-       "transitionDuration": 1.4,
-       "progress": 0.6,
+       "id": "CF52BC99-CE17-C2CB-C9C7-D74C25DBEDBF",
+       "time": 6.5,
+       "transitionDuration": 0.9,
+       "progress": 0.62,
        "easing": "linear"
       },
       {
-       "id": "187ED529-CC67-1322-0A3A-D799D51F93C8",
-       "time": 8.4,
-       "transitionDuration": 1.4,
+       "id": "2091B2DC-D881-A4D2-1E6D-76FCF6274954",
+       "time": 8.2,
+       "transitionDuration": 1.7,
        "progress": 1.0,
-       "easing": "easeIn"
+       "easing": "easeInOut"
       }
      ]
     },

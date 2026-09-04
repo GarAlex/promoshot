@@ -191,6 +191,19 @@ new projects.
   0.2, turbulence 0.02, shape dot, colors white), `burst` for one bang.
   Deterministic — the same frame every time. Stamp `minReaderVersion:
   36`.
+- **A route through the stage.** The 3D twin of a motion path: a
+  `{ "kind": "path", "filename": "", "displayName": "Helix", "addedAt":
+  0, "route": { "points": [[x, y, z], …], "curve": "smooth" } }` in
+  stage radii, and `"motionPath": { "pathResourceID": "<uuid>" }` on a
+  stage member's keyframe bends its move into that keyframe along the
+  route (fitted between the two keyframes' `stageOffset`/`depth`, so the
+  route's own size and place do not matter; a closed route orbits at its
+  own size). Inside a keyframe's `camera` the same `motionPath` flies the
+  camera between the two orbit eyes, and `"target"` says where it looks
+  on the way: `"center"`, `"ahead"`, `{ "member": "<layer id>" }` or `{
+  "point": [x, y, z] }`. A spiral in on the vase: a helix route, one
+  camera keyframe with that motionPath and `{ "member": "<vase>" }`.
+  Stamp `minReaderVersion: 40`.
 - **A body bursting into a word.** Particles in a STAGE are a morph:
   `{ "kind": "particles", "filename": "", "displayName": "Points",
   "addedAt": 0, "particles": { "colors": ["@accent", "FFFFFF"],

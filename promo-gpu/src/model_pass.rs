@@ -76,6 +76,11 @@ pub struct ModelView {
     /// The world's light beyond the key: a built-in environment metals
     /// mirror. `EnvPreset::None` keeps the synthetic sky and ground.
     pub environment: EnvironmentView,
+    /// A camera flown along a route (rung 40): where it IS, in world
+    /// units, instead of the orbit yaw/pitch/distance describe; and what
+    /// it looks at instead of the bounds centre. Either alone works.
+    pub eye: Option<[f32; 3]>,
+    pub target: Option<[f32; 3]>,
 }
 
 /// A built-in environment, as an equirectangular HDR the pass generates
@@ -136,8 +141,28 @@ impl Default for ModelView {
             ambient_rgb: [0.18, 0.19, 0.22],
             rim_rgb: [0.25, 0.3, 0.4],
             environment: EnvironmentView::default(),
+            eye: None,
+            target: None,
         }
     }
+}
+
+/// Where the camera stands and what it looks at: the orbit the view
+/// describes unless a flown eye or a gaze replaces them.
+fn eye_and_center(view: &ModelView) -> ([f32; 3], [f32; 3]) {
+    let radius = view.bounds_radius.max(1e-6);
+    let distance = (view.distance.max(1.05) as f32) * radius;
+    let center = view.target.unwrap_or(view.bounds_center);
+    let eye = view.eye.unwrap_or_else(|| {
+        let toward = direction(view.yaw, view.pitch);
+        let about = view.bounds_center;
+        [
+            about[0] + toward[0] * distance,
+            about[1] + toward[1] * distance,
+            about[2] + toward[2] * distance,
+        ]
+    });
+    (eye, center)
 }
 
 const SHADER: &str = r#"
@@ -1910,16 +1935,11 @@ fn norm(v: [f32; 3]) -> [f32; 3] {
 /// The camera's right, up and forward axes in world space — what a
 /// billboard aligns to.
 pub fn camera_basis(view: &ModelView) -> ([f32; 3], [f32; 3], [f32; 3]) {
-    let radius = view.bounds_radius.max(1e-6);
-    let distance = (view.distance.max(1.05) as f32) * radius;
-    let center = view.bounds_center;
-    let toward = direction(view.yaw, view.pitch);
-    let eye = [
-        center[0] + toward[0] * distance,
-        center[1] + toward[1] * distance,
-        center[2] + toward[2] * distance,
-    ];
-    let forward = norm(sub(center, eye));
+    let (eye, center) = eye_and_center(view);
+    let mut forward = norm(sub(center, eye));
+    if dot(forward, forward) < 1e-6 {
+        forward = [0.0, 0.0, -1.0];
+    }
     let mut right = norm(cross(forward, [0.0, 1.0, 0.0]));
     if dot(right, right) < 1e-6 {
         right = [1.0, 0.0, 0.0];
@@ -2020,15 +2040,18 @@ pub fn crop_texture(
 
 fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
     let radius = view.bounds_radius.max(1e-6);
-    let distance = (view.distance.max(1.05) as f32) * radius;
-    let center = view.bounds_center;
-    let toward = direction(view.yaw, view.pitch);
-    let eye = [
-        center[0] + toward[0] * distance,
-        center[1] + toward[1] * distance,
-        center[2] + toward[2] * distance,
-    ];
-    let forward = norm(sub(center, eye));
+    let (eye, center) = eye_and_center(view);
+    // Depth range around where the eye actually is: from the flown eye
+    // to the bounds centre, never tighter than the orbit's.
+    let distance = {
+        let d = sub(view.bounds_center, eye);
+        let flown = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        flown.max((view.distance.max(1.05) as f32) * radius * 0.25).max(radius * 0.5)
+    };
+    let mut forward = norm(sub(center, eye));
+    if dot(forward, forward) < 1e-6 {
+        forward = [0.0, 0.0, -1.0];
+    }
     let world_up = [0.0, 1.0, 0.0];
     let mut right = norm(cross(forward, world_up));
     if dot(right, right) < 1e-6 {

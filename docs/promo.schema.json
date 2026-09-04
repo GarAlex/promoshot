@@ -375,6 +375,16 @@
             "null"
           ]
         },
+        "motionPath": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "pitch": {
           "format": "double",
           "type": [
@@ -389,6 +399,16 @@
             "null"
           ]
         },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "yaw": {
           "format": "double",
           "type": [
@@ -398,6 +418,41 @@
         }
       },
       "type": "object"
+    },
+    "CameraTarget": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "properties": {
+            "member": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "member"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "point": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "point"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ChromaKey": {
       "properties": {
@@ -2904,6 +2959,16 @@
             }
           ]
         },
+        "route": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Route"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "sampling": {
           "anyOf": [
             {
@@ -3143,6 +3208,38 @@
         "line"
       ],
       "type": "string"
+    },
+    "Route": {
+      "properties": {
+        "closed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "curve": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "points": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "points"
+      ],
+      "type": "object"
     },
     "SceneEnvironment": {
       "properties": {

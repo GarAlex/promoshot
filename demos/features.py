@@ -41,6 +41,12 @@ def features(meta):
         "finish": any(isinstance(b, dict) and (b.get('metallic') is not None or b.get('roughness') is not None)
                       for r in res for b in (r.get('materials') or {}).values()),
         "morph": any(isinstance(r.get('particles'), dict) and r['particles'].get('morph') for r in res),
+        "route": any(isinstance(r.get('route'), dict) for r in res),
+        "cameraRoute": any(isinstance(k.get('camera'), dict) and k['camera'].get('motionPath')
+                           for l in layers for k in l.get('keyframes') or []),
+        "cameraTarget": any(isinstance(k.get('camera'), dict) and k['camera'].get('target') is not None
+                            for l in layers for k in l.get('keyframes') or []),
+        "memberRoute": any(k.get('motionPath') for l in layers for m in l.get('members') or [] for k in m.get('keyframes') or []),
         "facedBox": any(isinstance(r.get('recipe'), dict) and any(
                             isinstance(p.get('shape'), dict) and (p['shape'].get('box') or {}).get('faces')
                             for p in r['recipe'].get('parts') or []) for r in res),

@@ -3130,16 +3130,13 @@ impl PreviewEngine {
             let zoom = tl::interpolation::layer_interpolated_scalar(member, local, |k| k.zoom)
                 .unwrap_or(1.0)
                 .max(0.01) as f32;
-            let across = [
-                tl::interpolation::layer_interpolated_scalar(member, local, |k| {
-                    k.stage_offset.map(|o| o[0])
-                })
-                .unwrap_or(0.0) as f32,
-                tl::interpolation::layer_interpolated_scalar(member, local, |k| {
-                    k.stage_offset.map(|o| o[1])
-                })
-                .unwrap_or(0.0) as f32,
-            ];
+            // Across, up and depth move TOGETHER (rung 40): one point in
+            // the stage, bent along the member's route when a keyframe
+            // names one — else the straight line they always took.
+            let (across, depth) = match tl::route::member_position(member, local, &resources) {
+                Some(p) => ([p[0] as f32, p[1] as f32], p[2] as f32),
+                None => ([0.0, 0.0], depth),
+            };
             // A drawing member playing a MORPH is a cloud in the stage, not
             // a billboard: no raster, a progress instead.
             let morph = if member.kind == ProjectLayerKind::Drawing
@@ -3212,16 +3209,92 @@ impl PreviewEngine {
             tl::interpolation::layer_interpolated_scalar(first, local, select)
         };
         let camera = promo_model::Camera {
-            yaw: scalar(|k| k.camera.and_then(|c| c.yaw)),
-            pitch: scalar(|k| k.camera.and_then(|c| c.pitch)),
-            roll: scalar(|k| k.camera.and_then(|c| c.roll)),
-            distance: scalar(|k| k.camera.and_then(|c| c.distance)),
-            fov: scalar(|k| k.camera.and_then(|c| c.fov)),
+            yaw: scalar(|k| k.camera.as_ref().and_then(|c| c.yaw)),
+            pitch: scalar(|k| k.camera.as_ref().and_then(|c| c.pitch)),
+            roll: scalar(|k| k.camera.as_ref().and_then(|c| c.roll)),
+            distance: scalar(|k| k.camera.as_ref().and_then(|c| c.distance)),
+            fov: scalar(|k| k.camera.as_ref().and_then(|c| c.fov)),
+            motion_path: None,
+            target: None,
         };
         let light = promo_model::Light {
             yaw: scalar(|k| k.light.and_then(|l| l.yaw)),
             pitch: scalar(|k| k.light.and_then(|l| l.pitch)),
             intensity: scalar(|k| k.light.and_then(|l| l.intensity)),
+        };
+        // A flown camera (rung 40): the move INTO a keyframe with a route
+        // bends the eye along it, fitted between the two orbit eyes; the
+        // gaze is what the keyframes' `target` says, ramped between them.
+        let (flown_eye, gaze) = {
+            let member_place = |id: &str| -> Option<[f32; 3]> {
+                prepared.iter().find(|p| members[p.index].id == id).map(|p| {
+                    [p.across[0] * radius, p.across[1] * radius, p.depth * radius]
+                })
+            };
+            let eye_of = |c: &promo_model::Camera| -> [f64; 3] {
+                let (y, p) = (c.yaw().to_radians(), c.pitch().to_radians());
+                let d = c.distance().max(1.05) * (radius * reach) as f64;
+                [p.cos() * y.sin() * d, p.sin() * d, p.cos() * y.cos() * d]
+            };
+            let track: Vec<&promo_model::ProjectLayerKeyframe> = {
+                let mut t: Vec<_> = first.keyframes.iter().filter(|k| k.camera.is_some()).collect();
+                t.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+                t
+            };
+            let window = tl::route::camera_window(&track, local);
+            let mut eye: Option<[f32; 3]> = None;
+            let mut tangent: Option<[f64; 3]> = None;
+            if let Some((a, b, progress)) = window {
+                if !std::ptr::eq(a, b) {
+                    if let Some(path) = b.camera.as_ref().and_then(|c| c.motion_path.as_ref()) {
+                        if let Some(route) = tl::route::route_of(&resources, path) {
+                            let (from, to) = (
+                                eye_of(a.camera.as_ref().expect("in the track")),
+                                eye_of(b.camera.as_ref().expect("in the track")),
+                            );
+                            let args = (
+                                path.flipped.unwrap_or(false),
+                                path.start_at.unwrap_or(0.0),
+                                path.end_at.unwrap_or(1.0),
+                            );
+                            let p = tl::route::point_along3(&route, from, to, args.0, args.1, args.2, progress);
+                            eye = Some([p[0] as f32, p[1] as f32, p[2] as f32]);
+                            tangent = Some(tl::route::tangent_along3(&route, from, to, args.0, args.1, args.2, progress));
+                        }
+                    }
+                }
+            }
+            let target_of = |k: &promo_model::ProjectLayerKeyframe, eye: Option<[f32; 3]>| -> Option<[f32; 3]> {
+                let target = k.camera.as_ref()?.target.as_ref()?;
+                match target {
+                    promo_model::CameraTarget::Named(n) if n == "ahead" => {
+                        let e = eye?;
+                        let t = tangent.unwrap_or([0.0, 0.0, -1.0]);
+                        Some([e[0] + t[0] as f32, e[1] + t[1] as f32, e[2] + t[2] as f32])
+                    }
+                    promo_model::CameraTarget::Named(_) => Some([0.0, 0.0, 0.0]),
+                    promo_model::CameraTarget::Member { member } => member_place(member),
+                    promo_model::CameraTarget::Point { point } => Some([
+                        point[0] as f32 * radius,
+                        point[1] as f32 * radius,
+                        point[2] as f32 * radius,
+                    ]),
+                }
+            };
+            let gaze = window.and_then(|(a, b, progress)| {
+                let (ta, tb) = (target_of(a, eye), target_of(b, eye));
+                match (ta, tb) {
+                    (Some(ta), Some(tb)) => Some([
+                        ta[0] + (tb[0] - ta[0]) * progress as f32,
+                        ta[1] + (tb[1] - ta[1]) * progress as f32,
+                        ta[2] + (tb[2] - ta[2]) * progress as f32,
+                    ]),
+                    (None, Some(tb)) => Some(tb),
+                    (Some(ta), None) => Some(ta),
+                    (None, None) => None,
+                }
+            });
+            (eye, gaze)
         };
         let linear = |rgba: [f32; 4]| -> [f32; 3] {
             let f = |c: f32| {
@@ -3263,6 +3336,8 @@ impl PreviewEngine {
             ],
             rim_rgb: rim,
             environment: environment_view(settings),
+            eye: flown_eye,
+            target: gaze,
         };
 
         // Each model member's slots painted and pictured as its own layer
@@ -3306,8 +3381,8 @@ impl PreviewEngine {
                         .to_radians() as f32
                 };
                 let (yaw, pitch) = (
-                    turn(|k| k.camera.and_then(|c| c.yaw)),
-                    turn(|k| k.camera.and_then(|c| c.pitch)),
+                    turn(|k| k.camera.as_ref().and_then(|c| c.yaw)),
+                    turn(|k| k.camera.as_ref().and_then(|c| c.pitch)),
                 );
                 if yaw != 0.0 || pitch != 0.0 {
                     let (cy, sy, cx, sx) = (yaw.cos(), yaw.sin(), pitch.cos(), pitch.sin());
@@ -3704,7 +3779,11 @@ impl PreviewEngine {
             .ok()?;
         drop(items);
         let mut content_box: Option<(u32, u32, u32, u32)> = None;
-        let (texture, frame_w, frame_h) = if lo[0] < hi[0] && lo[1] < hi[1] {
+        // A flown camera, or one with a gaze, frames the shot itself: the
+        // stage draws its whole square and the placement scales that, so
+        // looking away from the bodies does not zoom into whatever is left.
+        let framed_by_camera = view.eye.is_some() || view.target.is_some();
+        let (texture, frame_w, frame_h) = if !framed_by_camera && lo[0] < hi[0] && lo[1] < hi[1] {
             let px = |f: f32| (f * side as f32).round();
             let x0 = (px(lo[0]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
             let y0 = (px(lo[1]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
@@ -3829,11 +3908,13 @@ impl PreviewEngine {
             tl::interpolation::layer_interpolated_scalar(layer, local, select)
         };
         let camera = promo_model::Camera {
-            yaw: scalar(|k| k.camera.and_then(|c| c.yaw)),
-            pitch: scalar(|k| k.camera.and_then(|c| c.pitch)),
-            roll: scalar(|k| k.camera.and_then(|c| c.roll)),
-            distance: scalar(|k| k.camera.and_then(|c| c.distance)),
-            fov: scalar(|k| k.camera.and_then(|c| c.fov)),
+            yaw: scalar(|k| k.camera.as_ref().and_then(|c| c.yaw)),
+            pitch: scalar(|k| k.camera.as_ref().and_then(|c| c.pitch)),
+            roll: scalar(|k| k.camera.as_ref().and_then(|c| c.roll)),
+            distance: scalar(|k| k.camera.as_ref().and_then(|c| c.distance)),
+            fov: scalar(|k| k.camera.as_ref().and_then(|c| c.fov)),
+            motion_path: None,
+            target: None,
         };
         let light = promo_model::Light {
             yaw: scalar(|k| k.light.and_then(|l| l.yaw)),
@@ -3903,6 +3984,8 @@ impl PreviewEngine {
             ambient_rgb: ambient,
             rim_rgb: rim,
             environment: environment_view(settings),
+            eye: None,
+            target: None,
         };
         let matrices = match clip_name.as_deref() {
             Some(name) if loaded.model.clips.iter().any(|c| c.name == name) => {

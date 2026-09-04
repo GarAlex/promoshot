@@ -898,6 +898,26 @@ is a closed-form function of its birth time, so any frame renders alone
 and the same on every host. The layer's placement, shifts, opacity and
 transitions apply to the whole field. A project with particles carries
 `minReaderVersion: 36`.
+A path can be a ROUTE in the stage (rung 40): a `path` resource with
+`"route": { "points": [[x, y, z], …], "curve": "smooth", "closed":
+false }`, points in stage radii with its own origin anywhere. A
+`motionPath` on a stage MEMBER's keyframe (`{ "pathResourceID":
+"<uuid>", "flipped": false, "startAt": 0, "endAt": 1 }`) bends the move
+into that keyframe along the route, fitted exactly as a 2D motion path
+is — first point onto where the move starts (the previous keyframe's
+`stageOffset` and `depth`), last onto where it ends, a closed route at
+its own size from the start — so one arc serves any move. The same
+`motionPath` inside a keyframe's `camera` flies the camera along the
+route between the two orbit eyes the keyframes describe, and the
+camera's `target` says where it looks meanwhile: `"center"` (the
+default), `"ahead"` (along the route), `{ "member": "<layer id>" }` or
+`{ "point": [x, y, z] }`; a target ramps between keyframes like every
+value. A stage whose camera has a route or a target frames the shot
+itself: it draws its whole square and the placement scales the square,
+where an orbiting camera's stage is cut to its bodies' box. A helix that spirals in while looking at the vase is a route
+resource, a camera keyframe with that `motionPath` and `{ "member":
+"<vase>" }`, and nothing else. A project with a route, a camera route or
+a gaze carries `minReaderVersion: 40`.
 Particles in a STAGE are a MORPH (rung 39): `"particles": { "colors":
 ["@accent", "FFFFFF"], "seed": 3, "morph": { "from": "<cube uuid>", "to":
 "<word uuid>", "count": 3000, "spread": 1.2, "size": 0.02, "turbulence":

@@ -50,6 +50,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     recipe_warnings(meta, &mut out);
     legacy_2_5d_warnings(meta, &mut out);
     morph_warnings(meta, &mut out);
+    route_warnings(meta, &mut out);
     environment_warnings(meta, &mut out);
     particle_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
@@ -964,6 +965,98 @@ fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
 }
 
+/// A route (rung 40) is a path resource's 3D points; a stage member's or
+/// a camera's `motionPath` must name one, a route needs two points and
+/// a known curve, and a camera's gaze must be a name it knows or a
+/// member the stage has.
+fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    use promo_model::ProjectLayerKind as Kind;
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for resource in resources {
+        let Some(route) = resource.route.as_ref() else {
+            continue;
+        };
+        if resource.kind != promo_model::ProjectResourceKind::Path {
+            out.push(format!(
+                "resource \"{}\" carries a `route` but is a {} resource; a route lives on a \
+                 \"kind\": \"path\" resource",
+                resource.display_name,
+                resource.kind.as_str()
+            ));
+        }
+        if route.points.len() < 2 {
+            out.push(format!(
+                "resource \"{}\": a route needs at least two points",
+                resource.display_name
+            ));
+        }
+        if !promo_model::Route::CURVES.contains(&route.curve()) {
+            out.push(format!(
+                "resource \"{}\": route curve \"{}\" is not one — smooth or linear",
+                resource.display_name,
+                route.curve()
+            ));
+        }
+    }
+    let top = meta.layers.as_deref().unwrap_or(&[]);
+    for stage in top.iter().filter(|l| l.kind == Kind::Stage) {
+        let members = stage.members.as_deref().unwrap_or(&[]);
+        let is_member = |id: &str| members.iter().any(|m| m.id == id);
+        for member in members {
+            for k in &member.keyframes {
+                let Some(path) = k.motion_path.as_ref() else {
+                    continue;
+                };
+                let has_route = resources
+                    .iter()
+                    .any(|r| r.id == path.path_resource_id && r.route.is_some());
+                if !has_route {
+                    out.push(format!(
+                        "member \"{}\" of stage \"{}\" names a motionPath ({}) that is not a \
+                         path resource with a `route`; in a stage a move follows a 3D route, \
+                         so it goes straight instead",
+                        member.name, stage.name, path.path_resource_id
+                    ));
+                }
+            }
+        }
+        for k in &stage.keyframes {
+            let Some(camera) = k.camera.as_ref() else {
+                continue;
+            };
+            if let Some(path) = camera.motion_path.as_ref() {
+                let has_route = resources
+                    .iter()
+                    .any(|r| r.id == path.path_resource_id && r.route.is_some());
+                if !has_route {
+                    out.push(format!(
+                        "stage \"{}\": the camera's motionPath ({}) is not a path resource with \
+                         a `route`; the camera moves on its orbit instead",
+                        stage.name, path.path_resource_id
+                    ));
+                }
+            }
+            match camera.target.as_ref() {
+                Some(promo_model::CameraTarget::Named(n)) if !promo_model::CameraTarget::NAMES.contains(&n.as_str()) => {
+                    out.push(format!(
+                        "stage \"{}\": camera target \"{n}\" is not one — center, ahead, a \
+                         member or a point; the centre is used",
+                        stage.name
+                    ));
+                }
+                Some(promo_model::CameraTarget::Member { member }) if !is_member(member) => {
+                    out.push(format!(
+                        "stage \"{}\": the camera looks at member {member}, which the stage does \
+                         not have; the centre is used",
+                        stage.name
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// A morph (rung 39) plays inside the stage its bodies are in, on a
 /// drawing member whose keyframes carry `progress`: a morph on the
 /// canvas draws nothing, and a `progress` anywhere else does nothing.
@@ -1712,6 +1805,41 @@ mod tests {
         assert!(has("slot \"Screen\" shows a picture AND carries a finish"), "{warnings:?}");
         assert!(!has("slot \"Base\""), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 32);
+    }
+
+    /// A route (rung 40): a good one says nothing; a route with one point,
+    /// a member's motionPath naming a flat stroke, a camera looking at a
+    /// member the stage lacks and an unknown gaze are each named.
+    #[test]
+    fn a_route_is_checked() {
+        let meta = project(
+            r#"{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+                "keyframes":[{"id":"K0","time":0,"camera":{"yaw":0},"transitionDuration":0},
+                             {"id":"K1","time":4,"camera":{"yaw":90,"motionPath":{"pathResourceID":"H"},"target":{"member":"GHOST"}},"transitionDuration":4},
+                             {"id":"K2","time":5,"camera":{"target":"sideways"},"transitionDuration":0}],
+                "members":[
+                  {"id":"A","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"CUBE",
+                   "keyframes":[{"id":"M0","time":0,"stageOffset":[0,0],"transitionDuration":0},
+                                {"id":"M1","time":4,"stageOffset":[1,0],"motionPath":{"pathResourceID":"FLAT"},"transitionDuration":4}]}]}"#,
+            r#","resources":[
+                {"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+                 "recipe":{"parts":[{"slot":"Cube","shape":{"box":{"size":[1,1,1]}}}]}},
+                {"id":"H","kind":"path","filename":"","displayName":"Helix","addedAt":0,
+                 "route":{"points":[[0,0,0],[1,1,1]]}},
+                {"id":"ONE","kind":"path","filename":"","displayName":"Dot","addedAt":0,
+                 "route":{"points":[[0,0,0]],"curve":"wavy"}},
+                {"id":"FLAT","kind":"path","filename":"","displayName":"Stroke","addedAt":0,
+                 "path":{"start":[0,0],"end":[1,1],"controls":[]}}]"#,
+        );
+        let found = warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(has("resource \"Dot\": a route needs at least two points"), "{found:?}");
+        assert!(has("route curve \"wavy\" is not one"), "{found:?}");
+        assert!(has("member \"Cube\" of stage \"Stage\" names a motionPath (FLAT)"), "{found:?}");
+        assert!(has("looks at member GHOST"), "{found:?}");
+        assert!(has("camera target \"sideways\" is not one"), "{found:?}");
+        assert!(!has("motionPath (H)"), "a real route says nothing: {found:?}");
+        assert_eq!(meta.minimum_reader_version(), 40);
     }
 
     /// A morph (rung 39): a good one says nothing; a morph on the canvas, a

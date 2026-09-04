@@ -15,6 +15,7 @@ pub mod interpolation;
 pub mod layout;
 pub mod mapping;
 pub mod motion;
+pub mod route;
 pub mod plan;
 pub mod reveal;
 pub mod sprite;
