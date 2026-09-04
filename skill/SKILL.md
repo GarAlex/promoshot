@@ -3,12 +3,35 @@ name: promoshot
 description: Author and render PromoShot .promo video projects (App Store shots, promo reels, slideshows) via promoshot-mcp or the promo CLI. Use when the user wants a promo video, marketing screenshot, device-framed app demo, or to edit a .promo folder — headless via promoshot-mcp/CLI, or through the PromoShot app's automation server.
 ---
 
-# Authoring PromoShot projects, headless
+# Authoring PromoShot projects
 
 A PromoShot project is a **folder named `<Name>.promo`**: `metadata.json`
 plus `Resources/` holding the media it names. The file is the interface —
 everything below writes, checks, or renders that file, and a project you
 author here opens in the PromoShot apps unchanged.
+
+## Two modes, and they are not the same job
+
+**Nobody watching** (the headless server, the CLI): the file is yours.
+Write `metadata.json` directly, validate, look, render. That is what the
+rest of this document assumes.
+
+**The project is OPEN in the PromoShot app**: the file is SHARED, not
+yours. Write through `promo_upsert_layer`, `promo_upsert_keyframe` and
+`promo_apply` instead. Those three go through the person's live document:
+their unsaved work is folded in first, your change lands as ONE step in
+their own undo history — they can ⌘Z you — and with "Ask before applying"
+on it stages as a proposal they accept, rather than a write. A whole-file
+write carries only a RESULT; a command carries the INTENT, which is what
+lets the editor redraw one row instead of reloading, and hand the person
+one reversible step instead of an opaque adoption of everything.
+
+How to tell which mode you are in: the app's server offers `promo_open`,
+`promo_context` and `promo_list_projects`, and declares `resources`; the
+headless one offers none of those. `promo_context` then says which
+projects are actually open, which layer is selected, where the playhead
+is, and whether Ask before applying is on. Read it before your first
+write, not after. The detail is under "With the app attached" below.
 
 ## The loop
 
