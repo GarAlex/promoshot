@@ -778,6 +778,7 @@ mod schema_doc_tests {
         "easeIn",
         "easeOut",
         "easeInOut",
+        "smooth",
         // Reveal units and modes.
         "character",
         "word",

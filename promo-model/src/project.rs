@@ -3848,7 +3848,16 @@ fn lift_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
         head.keyframes = first
             .keyframes
             .iter()
-            .filter(|k| k.depth.is_some() || k.stage_offset.is_some() || k.clip.is_some())
+            // A member keyframe is anything that places, poses, routes or
+            // paces it: `motionPath` is its ROUTE (rung 40) and `progress`
+            // drives a morph (rung 39), so neither may be filtered out here.
+            .filter(|k| {
+                k.depth.is_some()
+                    || k.stage_offset.is_some()
+                    || k.clip.is_some()
+                    || k.progress.is_some()
+                    || k.motion_path.is_some()
+            })
             .map(|k| {
                 let mut m = k.clone();
                 m.id = derived_id(&k.id, "member");
@@ -3880,7 +3889,8 @@ fn lift_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
                 m.mask_zoom = None;
                 m.mask_zoom_y = None;
                 m.mask_rotation = None;
-                m.motion_path = None;
+                // NOT `motion_path`: on a stage member that is its route
+                // through the stage (rung 40), not a canvas path.
                 m.viewport = None;
                 m.placement = None;
                 m
@@ -5359,6 +5369,42 @@ mod placement_model_tests {
     /// body and world fields, the other members follow unchanged, and a
     /// document already in the one-layer form lifts to itself. Lowering the
     /// lift gives the flat walk back, one layer longer for the owner.
+    /// A member's `motionPath` is its ROUTE (rung 40). Lifting a flat
+    /// stage must not scrub it off the first member, or opening a project
+    /// deletes the flight and the next save makes that permanent.
+    #[test]
+    fn lifting_keeps_a_members_route_and_progress() {
+        let meta = ProjectMetadata::from_json(
+            r#"{"id":"P","name":"Flat","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":4,
+                "videoDuration":4,"subtitles":[],"compositionSettings":{"canvasWidth":320,"canvasHeight":320},
+                "resources":[{"id":"R","kind":"path","filename":"","displayName":"Arc","addedAt":0,
+                              "route":{"points":[[0,0,0],[1,1,0],[2,0,0]]}}],
+                "layers":[
+                  {"id":"A","name":"Vase","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,
+                   "duration":4,"resourceID":"M","stage":"bench",
+                   "keyframes":[{"id":"K0","time":0,"stageOffset":[0,0],"transitionDuration":0},
+                                {"id":"K1","time":4,"stageOffset":[1,0],
+                                 "motionPath":{"pathResourceID":"R"},"transitionDuration":4}]},
+                  {"id":"B","name":"Points","sortIndex":1,"kind":"drawing","isEnabled":true,"startTime":0,
+                   "duration":4,"resourceID":"M2","stage":"bench",
+                   "keyframes":[{"id":"P0","time":0,"progress":0,"transitionDuration":0}]}]}"#,
+        )
+        .expect("decodes");
+        let lifted = meta.lifted();
+        let stage = &lifted.layers.as_ref().unwrap()[0];
+        let members = stage.members.as_ref().expect("members");
+        let first = &members[0];
+        assert!(
+            first.keyframes.iter().any(|k| k.motion_path.is_some()),
+            "the first member keeps its route: {:?}",
+            first.keyframes
+        );
+        assert!(
+            members[1].keyframes.iter().any(|k| k.progress.is_some()),
+            "a morph member keeps its progress"
+        );
+    }
+
     #[test]
     fn a_flat_stage_lifts_to_one_layer() {
         let doc = ProjectMetadata::from_json(

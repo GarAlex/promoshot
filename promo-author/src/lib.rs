@@ -506,9 +506,12 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
         .ok_or_else(|| format!("no layer `{layer_id}` — promo_inspect lists the ids"))?;
 
     if let Some(spelling) = args.get("easing").and_then(Value::as_str) {
-        if !matches!(spelling, "linear" | "easeIn" | "easeOut" | "easeInOut") {
+        if !matches!(
+            spelling,
+            "linear" | "easeIn" | "easeOut" | "easeInOut" | "smooth"
+        ) {
             return Err(format!(
-                "easing `{spelling}` — linear, easeIn, easeOut or easeInOut \
+                "easing `{spelling}` — linear, easeIn, easeOut, easeInOut or smooth \
                  (the renderer would degrade a typo to linear silently; \
                  this tool refuses it instead)"
             ));

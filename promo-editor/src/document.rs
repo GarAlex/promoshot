@@ -861,6 +861,26 @@ impl Document {
                     if !dropped {
                         return Err(format!("no layer with id {layer_id}"));
                     }
+                    // A camera that was looking AT the departed member has
+                    // nothing to look at: clear the gaze rather than leave a
+                    // pointer at a member the stage no longer has. The
+                    // engine falls back to the stage centre either way; this
+                    // keeps the file honest about it.
+                    for layer in layers.iter_mut() {
+                        for keyframe in layer.keyframes.iter_mut() {
+                            let names_it = keyframe.camera.as_ref().is_some_and(|c| {
+                                matches!(
+                                    c.target.as_ref(),
+                                    Some(promo_model::CameraTarget::Member { member }) if member == layer_id
+                                )
+                            });
+                            if names_it {
+                                if let Some(camera) = keyframe.camera.as_mut() {
+                                    camera.target = None;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             Command::UpsertKeyframe { layer_id, keyframe } => {
@@ -942,12 +962,34 @@ impl Document {
                 }
             }
             Command::DeleteResource { resource_id } => {
-                let referenced = layers.iter().any(|l| {
-                    l.resource_id.as_deref() == Some(resource_id.as_str())
-                        || l.keyframes
+                // Every way a project can POINT at a resource, not just the
+                // two a layer states directly: a mask, a route on a member
+                // or on the camera (rung 40), a picture worn by a slot
+                // (rung 38), and the two bodies a morph flies between
+                // (rung 39). Missing one lets a delete succeed and the
+                // project quietly render something else.
+                let id = resource_id.as_str();
+                let points_at = |l: &promo_model::ProjectLayer| -> bool {
+                    l.resource_id.as_deref() == Some(id)
+                        || l.mask_resource_id.as_deref() == Some(id)
+                        || l.keyframes.iter().any(|k| {
+                            k.resource_id.as_deref() == Some(id)
+                                || k.motion_path.as_ref().is_some_and(|m| m.path_resource_id == id)
+                                || k.camera.as_ref().is_some_and(|c| {
+                                    c.motion_path.as_ref().is_some_and(|m| m.path_resource_id == id)
+                                })
+                        })
+                };
+                let referenced = promo_model::nesting::all_layers(meta).iter().any(|l| points_at(l))
+                    || meta.resources.iter().flatten().any(|r| {
+                        r.materials
                             .iter()
-                            .any(|k| k.resource_id.as_deref() == Some(resource_id.as_str()))
-                });
+                            .flat_map(|m| m.values())
+                            .any(|b| b.resource_id() == Some(id))
+                            || r.particles.as_ref().and_then(|p| p.morph.as_ref()).is_some_and(|m| {
+                                m.from == id || m.to == id
+                            })
+                    });
                 if referenced {
                     return Err(format!(
                         "resource {resource_id} is still referenced by a layer; delete or repoint the layers first"

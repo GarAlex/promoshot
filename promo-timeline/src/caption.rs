@@ -115,7 +115,9 @@ pub fn rgba_bytes(hex: &str, alpha: f64) -> [u8; 4] {
     ]
 }
 
-/// `RRGGBB` or `RRGGBBAA`, a leading `#` allowed; black when it is not one.
+/// `RRGGBB`, a leading `#` allowed; black when it is not one. The ONE
+/// hex parser the renderer and the checks share, so a colour cannot mean
+/// one thing on a caption and another on a border.
 pub fn rgba_from_hex(hex: &str) -> [f32; 4] {
     let mut value = hex.trim().to_uppercase();
     if let Some(stripped) = value.strip_prefix('#') {
@@ -124,19 +126,13 @@ pub fn rgba_from_hex(hex: &str) -> [f32; 4] {
     let Ok(parsed) = u64::from_str_radix(&value, 16) else {
         return [0.0, 0.0, 0.0, 1.0];
     };
-    match value.len() {
-        6 => [
-            ((parsed >> 16) & 0xFF) as f32 / 255.0,
-            ((parsed >> 8) & 0xFF) as f32 / 255.0,
-            (parsed & 0xFF) as f32 / 255.0,
-            1.0,
-        ],
-        8 => [
-            ((parsed >> 24) & 0xFF) as f32 / 255.0,
-            ((parsed >> 16) & 0xFF) as f32 / 255.0,
-            ((parsed >> 8) & 0xFF) as f32 / 255.0,
-            (parsed & 0xFF) as f32 / 255.0,
-        ],
-        _ => [0.0, 0.0, 0.0, 1.0],
+    if value.len() != 6 {
+        return [0.0, 0.0, 0.0, 1.0];
     }
+    [
+        ((parsed >> 16) & 0xFF) as f32 / 255.0,
+        ((parsed >> 8) & 0xFF) as f32 / 255.0,
+        (parsed & 0xFF) as f32 / 255.0,
+        1.0,
+    ]
 }

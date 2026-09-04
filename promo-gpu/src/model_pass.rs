@@ -2041,13 +2041,18 @@ pub fn crop_texture(
 fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
     let radius = view.bounds_radius.max(1e-6);
     let (eye, center) = eye_and_center(view);
-    // Depth range around where the eye actually is: from the flown eye
-    // to the bounds centre, never tighter than the orbit's.
-    let distance = {
-        let d = sub(view.bounds_center, eye);
-        let flown = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-        flown.max((view.distance.max(1.05) as f32) * radius * 0.25).max(radius * 0.5)
-    };
+    // Depth range along the VIEW AXIS: how far the bounds centre lies in
+    // front of the eye, which is what near and far must bracket. Measuring
+    // the straight-line distance instead slices an off-axis body open once
+    // the gaze points away from the centre.
+    let to_center = sub(view.bounds_center, eye);
+    let mut forward_probe = norm(sub(view.target.unwrap_or(view.bounds_center), eye));
+    if dot(forward_probe, forward_probe) < 1e-6 {
+        forward_probe = [0.0, 0.0, -1.0];
+    }
+    let distance = dot(to_center, forward_probe)
+        .max((view.distance.max(1.05) as f32) * radius * 0.25)
+        .max(radius * 0.5);
     let mut forward = norm(sub(center, eye));
     if dot(forward, forward) < 1e-6 {
         forward = [0.0, 0.0, -1.0];

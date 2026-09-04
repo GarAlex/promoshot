@@ -219,6 +219,46 @@ fn cloud_model(
     pass.upload(ctx, &meshes, &materials).ok()
 }
 
+/// How big a stage renders. An orbiting stage draws a SQUARE, cut to its
+/// bodies' box and then placed. A stage whose camera is flown or carries a
+/// gaze frames the shot itself, so it draws a frame with the canvas's
+/// aspect, as tall as the square would have been and wider to match, and
+/// the placement scales that whole picture.
+fn stage_frame_size(side: u32, canvas: Size, framed_by_camera: bool) -> (u32, u32) {
+    if !framed_by_camera {
+        return (side, side);
+    }
+    let (cw, ch) = (canvas.width().max(1.0), canvas.height().max(1.0));
+    let scaled = |v: f64| ((side as f64 * v).round() as u32).clamp(8, 2048);
+    if cw >= ch {
+        (scaled(cw / ch), side)
+    } else {
+        (side, scaled(ch / cw))
+    }
+}
+
+#[cfg(test)]
+mod stage_frame_tests {
+    use super::stage_frame_size;
+    use promo_model::Size;
+
+    /// An orbiting stage is a square; a flown or gazing one takes the
+    /// canvas's aspect, keeping the square's shorter side.
+    #[test]
+    fn a_flown_stage_takes_the_canvas_aspect() {
+        let wide = Size::new(1440.0, 900.0);
+        assert_eq!(stage_frame_size(900, wide, false), (900, 900), "an orbit stays square");
+        assert_eq!(stage_frame_size(900, wide, true), (1440, 900), "flown: as wide as the canvas");
+        let tall = Size::new(1080.0, 1920.0);
+        assert_eq!(stage_frame_size(1080, tall, true), (1080, 1920), "and as tall on a portrait canvas");
+        let square = Size::new(800.0, 800.0);
+        assert_eq!(stage_frame_size(800, square, true), (800, 800));
+        // The cap holds, so a huge canvas cannot ask for an oversized target.
+        let (w, h) = stage_frame_size(2048, Size::new(4000.0, 900.0), true);
+        assert!(w <= 2048 && h == 2048, "clamped: {w}x{h}");
+    }
+}
+
 fn environment_view(settings: &promo_model::CompositionSettings) -> promo_gpu::model_pass::EnvironmentView {
     use promo_gpu::model_pass::{EnvPreset, EnvironmentView};
     settings
@@ -3236,6 +3276,31 @@ impl PreviewEngine {
                 let d = c.distance().max(1.05) * (radius * reach) as f64;
                 [p.cos() * y.sin() * d, p.sin() * d, p.cos() * y.cos() * d]
             };
+            // The camera AT an instant, field by field, exactly as the
+            // orbit camera is built: a keyframe that omits `pitch` inherits
+            // the last one that set it rather than snapping to the global
+            // default, so a route is fitted to the eye the camera really
+            // has at each end and the flight hands back without a pop.
+            let camera_at = |t: f64| -> promo_model::Camera {
+                let s = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+                    tl::interpolation::layer_interpolated_scalar(first, t, select)
+                };
+                promo_model::Camera {
+                    yaw: s(|k| k.camera.as_ref().and_then(|c| c.yaw)),
+                    pitch: s(|k| k.camera.as_ref().and_then(|c| c.pitch)),
+                    roll: s(|k| k.camera.as_ref().and_then(|c| c.roll)),
+                    distance: s(|k| k.camera.as_ref().and_then(|c| c.distance)),
+                    fov: s(|k| k.camera.as_ref().and_then(|c| c.fov)),
+                    motion_path: None,
+                    target: None,
+                }
+            };
+            // A gaze is in play only when some keyframe states one; without
+            // that an ordinary orbit stage keeps its bodies-box framing.
+            let uses_gaze = first
+                .keyframes
+                .iter()
+                .any(|k| k.camera.as_ref().is_some_and(|c| c.target.is_some()));
             let track: Vec<&promo_model::ProjectLayerKeyframe> = {
                 let mut t: Vec<_> = first.keyframes.iter().filter(|k| k.camera.is_some()).collect();
                 t.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
@@ -3248,10 +3313,7 @@ impl PreviewEngine {
                 if !std::ptr::eq(a, b) {
                     if let Some(path) = b.camera.as_ref().and_then(|c| c.motion_path.as_ref()) {
                         if let Some(route) = tl::route::route_of(&resources, path) {
-                            let (from, to) = (
-                                eye_of(a.camera.as_ref().expect("in the track")),
-                                eye_of(b.camera.as_ref().expect("in the track")),
-                            );
+                            let (from, to) = (eye_of(&camera_at(a.time)), eye_of(&camera_at(b.time)));
                             let args = (
                                 path.flipped.unwrap_or(false),
                                 path.start_at.unwrap_or(0.0),
@@ -3282,17 +3344,21 @@ impl PreviewEngine {
                 }
             };
             let gaze = window.and_then(|(a, b, progress)| {
-                let (ta, tb) = (target_of(a, eye), target_of(b, eye));
-                match (ta, tb) {
-                    (Some(ta), Some(tb)) => Some([
-                        ta[0] + (tb[0] - ta[0]) * progress as f32,
-                        ta[1] + (tb[1] - ta[1]) * progress as f32,
-                        ta[2] + (tb[2] - ta[2]) * progress as f32,
-                    ]),
-                    (None, Some(tb)) => Some(tb),
-                    (Some(ta), None) => Some(ta),
-                    (None, None) => None,
+                if !uses_gaze {
+                    return None;
                 }
+                // The documented default: a keyframe that states no target,
+                // and a target naming a member the stage no longer has,
+                // both look at the stage's centre — and the move between
+                // two targets ramps like every other keyframe value.
+                let centre = [0.0f32; 3];
+                let ta = target_of(a, eye).unwrap_or(centre);
+                let tb = target_of(b, eye).unwrap_or(centre);
+                Some([
+                    ta[0] + (tb[0] - ta[0]) * progress as f32,
+                    ta[1] + (tb[1] - ta[1]) * progress as f32,
+                    ta[2] + (tb[2] - ta[2]) * progress as f32,
+                ])
             });
             (eye, gaze)
         };
@@ -3774,15 +3840,17 @@ impl PreviewEngine {
             let wanted = (canvas_h * scale / covered as f64).round() as u32;
             wanted.clamp(side, 2048)
         };
+        // A flown camera, or one with a gaze, frames the shot itself, so it
+        // sees a frame with the CANVAS's aspect — a real camera's picture —
+        // and `placement: {mode: "fill"}` makes the stage a full-bleed 3D
+        // world. An orbiting camera keeps the square cut to its bodies' box.
+        let framed_by_camera = view.eye.is_some() || view.target.is_some();
+        let (render_w, render_h) = stage_frame_size(side, canvas, framed_by_camera);
         let texture = pass
-            .render_scene(self.ctx, &items, &view, side, side)
+            .render_scene(self.ctx, &items, &view, render_w, render_h)
             .ok()?;
         drop(items);
         let mut content_box: Option<(u32, u32, u32, u32)> = None;
-        // A flown camera, or one with a gaze, frames the shot itself: the
-        // stage draws its whole square and the placement scales that, so
-        // looking away from the bodies does not zoom into whatever is left.
-        let framed_by_camera = view.eye.is_some() || view.target.is_some();
         let (texture, frame_w, frame_h) = if !framed_by_camera && lo[0] < hi[0] && lo[1] < hi[1] {
             let px = |f: f32| (f * side as f32).round();
             let x0 = (px(lo[0]) - 1.0).clamp(0.0, side as f32 - 2.0) as u32;
@@ -3803,7 +3871,7 @@ impl PreviewEngine {
                 content_box = Some((bx0 - x0, by0 - y0, bx1 - bx0, by1 - by0));
             }
             if w >= side && h >= side {
-                (texture, side, side)
+                (texture, render_w, render_h)
             } else {
                 (
                     promo_gpu::model_pass::crop_texture(self.ctx, &texture, x0, y0, w, h),
@@ -3812,7 +3880,7 @@ impl PreviewEngine {
                 )
             }
         } else {
-            (texture, side, side)
+            (texture, render_w, render_h)
         };
         let frame = promo_gpu::ImportedFrame::from_owned_texture(texture, frame_w, frame_h);
         let bytes = frame.byte_size();
@@ -4755,35 +4823,9 @@ fn caption_scene_quad(x: f64, y: f64, w: f64, h: f64) -> SceneQuad {
 
 pub use promo_timeline::caption::caption_style;
 
-/// Hex + alpha as straight RGBA bytes.
-fn rgba_bytes(hex: &str, alpha: f64) -> [u8; 4] {
-    let c = rgba_from_hex(hex);
-    [
-        (c[0] * 255.0).round() as u8,
-        (c[1] * 255.0).round() as u8,
-        (c[2] * 255.0).round() as u8,
-        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
-    ]
-}
-
-fn rgba_from_hex(hex: &str) -> [f32; 4] {
-    let mut value = hex.trim().to_uppercase();
-    if let Some(stripped) = value.strip_prefix('#') {
-        value = stripped.to_string();
-    }
-    let Ok(parsed) = u64::from_str_radix(&value, 16) else {
-        return [0.0, 0.0, 0.0, 1.0];
-    };
-    if value.len() != 6 {
-        return [0.0, 0.0, 0.0, 1.0];
-    }
-    [
-        ((parsed & 0xFF0000) >> 16) as f32 / 255.0,
-        ((parsed & 0x00FF00) >> 8) as f32 / 255.0,
-        (parsed & 0x0000FF) as f32 / 255.0,
-        1.0,
-    ]
-}
+// One hex parser for the whole renderer, shared with the caption style
+// and the layout checks.
+pub use promo_timeline::caption::{rgba_bytes, rgba_from_hex};
 
 // Fixtures shared by both suites. Kept out of either module so the IOSurface
 // path and the portable path assert against the same composition — that is

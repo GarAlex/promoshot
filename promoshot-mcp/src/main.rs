@@ -564,7 +564,7 @@ fn tool_descriptors() -> Value {
                     "tiltX": { "type": "number" },
                     "tiltY": { "type": "number" },
                     "easing": { "type": "string",
-                        "enum": ["linear", "easeIn", "easeOut", "easeInOut"] },
+                        "enum": ["linear", "easeIn", "easeOut", "easeInOut", "smooth"] },
                     "transitionDuration": { "type": "number", "description":
                         "Seconds of ramp INTO this keyframe" },
                     "preview": preview

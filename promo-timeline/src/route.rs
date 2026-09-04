@@ -339,22 +339,37 @@ pub fn camera_window<'a>(
 /// into a keyframe bent along its `motionPath` when that names a route.
 /// `None` when no keyframe places it.
 pub fn member_position(layer: &ProjectLayer, local_time: f64, resources: &[ProjectResource]) -> Option<V3> {
+    // Each coordinate keeps its OWN keyframe track, exactly as three
+    // independent scalars did before routes existed: a keyframe that states
+    // only `stageOffset` leaves `depth` held by the last keyframe that set
+    // it, rather than dragging it toward zero. Smooth easing rides along,
+    // since the scalar reader splines per track.
+    use crate::interpolation::layer_interpolated_scalar as scalar;
+    let across_x = |t: f64| scalar(layer, t, |k| k.stage_offset.map(|o| o[0]));
+    let across_y = |t: f64| scalar(layer, t, |k| k.stage_offset.map(|o| o[1]));
+    let depth_at = |t: f64| scalar(layer, t, |k| k.depth);
     let track = sorted_by_time(&layer.keyframes, |k| k.stage_offset.is_some() || k.depth.is_some());
     let (a, b, progress) = track_window(&track, local_time)?;
-    let place = |k: &promo_model::ProjectLayerKeyframe| -> V3 {
-        let o = k.stage_offset.unwrap_or([0.0, 0.0]);
-        [o[0], o[1], k.depth.unwrap_or(0.0)]
-    };
-    let (pa, pb) = (place(a), place(b));
-    if !std::ptr::eq(a, b) && b.easing.unwrap_or(promo_model::Easing::Linear).is_smooth() && b.motion_path.is_none() {
-        // A smooth ramp: each coordinate a cubic through its neighbours.
+    // Only a ROUTE moves the three together: the fit needs one point at each
+    // end of the move, so an absent field takes the value its own track
+    // holds at that keyframe's time.
+    let routed = !std::ptr::eq(a, b) && b.motion_path.is_some();
+    if !routed {
         return Some([
-            crate::interpolation::blend(&track, a, b, progress, &|k| place(k)[0]),
-            crate::interpolation::blend(&track, a, b, progress, &|k| place(k)[1]),
-            crate::interpolation::blend(&track, a, b, progress, &|k| place(k)[2]),
+            across_x(local_time).unwrap_or(0.0),
+            across_y(local_time).unwrap_or(0.0),
+            depth_at(local_time).unwrap_or(0.0),
         ]);
     }
-    if !std::ptr::eq(a, b) {
+    let place = |k: &promo_model::ProjectLayerKeyframe| -> V3 {
+        [
+            k.stage_offset.map(|o| o[0]).or_else(|| across_x(k.time)).unwrap_or(0.0),
+            k.stage_offset.map(|o| o[1]).or_else(|| across_y(k.time)).unwrap_or(0.0),
+            k.depth.or_else(|| depth_at(k.time)).unwrap_or(0.0),
+        ]
+    };
+    let (pa, pb) = (place(a), place(b));
+    {
         if let Some(path) = b.motion_path.as_ref() {
             if let Some(route) = route_of(resources, path) {
                 return Some(point_along3(
@@ -417,6 +432,28 @@ mod tests {
         let flipped = point_along3(&r, from, to, true, 0.0, 1.0, 0.5);
         assert!((length(sub(flipped, from)) - length(sub(mid, from))).abs() < 1e-6);
         assert!(!close(flipped, mid));
+    }
+
+    /// Each of a member's three coordinates keeps its OWN keyframe track:
+    /// a keyframe that states only `stageOffset` must not drag `depth`
+    /// toward zero, which is what a single fused track does.
+    #[test]
+    fn a_member_holds_the_coordinate_a_keyframe_does_not_state() {
+        let layer: promo_model::ProjectLayer = serde_json::from_str(
+            r#"{"id":"M","name":"Vase","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,
+                "duration":4,
+                "keyframes":[{"id":"K0","time":0,"stageOffset":[0,0],"depth":1.5,"transitionDuration":0},
+                             {"id":"K1","time":2,"stageOffset":[1,0],"transitionDuration":2}]}"#,
+        )
+        .expect("layer");
+        let at = |t: f64| member_position(&layer, t, &[]).expect("placed");
+        assert!((at(2.0)[0] - 1.0).abs() < 1e-9, "across arrives: {:?}", at(2.0));
+        assert!(
+            (at(2.0)[2] - 1.5).abs() < 1e-9,
+            "depth holds where no later keyframe states it: {:?}",
+            at(2.0)
+        );
+        assert!((at(1.0)[2] - 1.5).abs() < 1e-9, "and holds mid-ramp: {:?}", at(1.0));
     }
 
     /// An arc drawn bulging upward bulges upward in the stage whichever way

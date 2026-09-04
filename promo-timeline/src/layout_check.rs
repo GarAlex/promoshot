@@ -6,16 +6,13 @@
 //! of its life and reports numbers an agent can act on in the same turn:
 //! "left edge at x=12 (safe ≥ 96)". Soft — never a refusal.
 use crate::caption::caption_style;
-use crate::{interpolation as ip, layer_transform_along_paths, media_rect, viewport};
+use crate::{interpolation as ip, layer_transform_along_paths, media_rect};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResourceKind, Size};
 
 /// The band inside the canvas a caption should keep clear of, as a share
 /// of the shorter side: 5% is 54 px on a 1080-high canvas, 96 px on a
 /// 1920-wide one.
 const SAFE_SHARE: f64 = 0.05;
-/// A viewport that trims less than this much of a side is a nudge, not a
-/// crop worth naming.
-const CROP_SHARE: f64 = 0.02;
 
 /// Every layout warning for the project.
 pub fn layout_warnings(meta: &ProjectMetadata) -> Vec<String> {
@@ -37,10 +34,8 @@ pub fn layout_warnings_for(meta: &ProjectMetadata, only: Option<&str>) -> Vec<St
         if only.is_some_and(|id| id != layer.id) {
             continue;
         }
-        match layer.kind {
-            ProjectLayerKind::Caption => caption_checks(meta, layer, layers, &resources, canvas, &mut out),
-            ProjectLayerKind::Image | ProjectLayerKind::Video => viewport_checks(layer, &mut out),
-            _ => {}
+        if layer.kind == ProjectLayerKind::Caption {
+            caption_checks(meta, layer, layers, &resources, canvas, &mut out);
         }
     }
     out
@@ -115,27 +110,39 @@ fn caption_checks(
                 overflow = Some((amount, side.into(), t));
             }
         }
-        // Inside the canvas but within the safe band.
-        let gaps = [(x0, "left"), (y0, "top"), (w - x1, "right"), (h - y1, "bottom")];
+        // Inside the canvas but within the safe band. LEFT and RIGHT only:
+        // that is where reading breaks and where the ticket's cases sat,
+        // while a caption close to the bottom is an ordinary lower third.
+        // Running PAST any edge is still reported, above.
+        let gaps = [(x0, "left"), (w - x1, "right")];
         for (gap, side) in gaps {
             if gap >= -0.5 && gap < safe && tight.as_ref().is_none_or(|g| gap < g.0) {
                 tight = Some((gap, side.into(), t));
             }
         }
-        // Under something drawn above it.
+        // Under something drawn above it. A picture or a clip fills its
+        // rect, so a tenth of the caption behind one is already a problem;
+        // a body, a stage or a drawing is mostly TRANSPARENT inside its
+        // rect, so only a large overlap is worth naming — anything less
+        // reads as a false alarm and teaches an agent to ignore the check.
         for other in layers {
             if std::ptr::eq(other, layer) || other.sort_index <= layer.sort_index {
                 continue;
             }
-            if !matches!(
+            let opaque_rect = matches!(
                 other.kind,
-                ProjectLayerKind::Image
-                    | ProjectLayerKind::Video
-                    | ProjectLayerKind::Model
-                    | ProjectLayerKind::Stage
-                    | ProjectLayerKind::Drawing
-            ) || !ip::layer_is_visible(other, t)
+                ProjectLayerKind::Image | ProjectLayerKind::Video
+            );
+            if !opaque_rect
+                && !matches!(
+                    other.kind,
+                    ProjectLayerKind::Model | ProjectLayerKind::Stage | ProjectLayerKind::Drawing
+                )
             {
+                continue;
+            }
+            // Something faded out covers nothing.
+            if !ip::layer_is_visible(other, t) || ip::layer_opacity(other, t) < 0.5 {
                 continue;
             }
             let Some(r) = layer_rect(other, t, settings, resources, canvas) else {
@@ -144,7 +151,8 @@ fn caption_checks(
             let ix = (x1.min(r[0] + r[2]) - x0.max(r[0])).max(0.0);
             let iy = (y1.min(r[1] + r[3]) - y0.max(r[1])).max(0.0);
             let share = (ix * iy) / (b.width * b.height).max(1.0);
-            if share > 0.1 && covered.as_ref().is_none_or(|c| share > c.0) {
+            let floor = if opaque_rect { 0.1 } else { 0.6 };
+            if share > floor && covered.as_ref().is_none_or(|c| share > c.0) {
                 covered = Some((share, other.name.clone(), t));
             }
         }
@@ -165,7 +173,7 @@ fn caption_checks(
     }
     if let Some((share, name, t)) = covered {
         out.push(format!(
-            "caption \"{}\" is {:.0}% covered by \"{name}\" at {t:.1}s, which draws above it; move the \
+            "caption \"{}\" is {:.0}% overlapped by \"{name}\" at {t:.1}s, which draws above it; move the \
              caption, raise its sortIndex above \"{name}\", or trim the other layer's placement",
             layer.name,
             share * 100.0
@@ -199,39 +207,27 @@ fn layer_rect(
         }
         _ => Size::new(canvas.height(), canvas.height()),
     };
+    // A sprite shows one CELL, not the sheet it is stored in.
+    let source = match crate::sheet_for(resource?) {
+        Some(sheet) => {
+            let local = ip::layer_local_time(layer, t);
+            match crate::sprite_frame_at(sheet, layer, local, source) {
+                Some(frame) => Size::new(frame.cell.width(), frame.cell.height()),
+                None => return None,
+            }
+        }
+        None => source,
+    };
     let tr = layer_transform_along_paths(layer, t, settings, resources);
-    let rect = media_rect(source, canvas, tr.zoom, tr.horizontal_shift, tr.vertical_shift);
+    // A drawing lays out by its own rule, which is what the renderer uses.
+    let rect = if layer.kind == ProjectLayerKind::Drawing {
+        crate::drawing_rect(source, canvas, tr.zoom, tr.horizontal_shift, tr.vertical_shift)
+    } else {
+        media_rect(source, canvas, tr.zoom, tr.horizontal_shift, tr.vertical_shift)
+    };
     Some([rect.x(), rect.y(), rect.width(), rect.height()])
 }
 
-fn viewport_checks(layer: &ProjectLayer, out: &mut Vec<String>) {
-    let mut worst: Option<(f64, String, f64)> = None;
-    for t in instants(layer) {
-        let Some(v) = viewport::layer_viewport(layer, t) else {
-            continue;
-        };
-        let trims = [
-            (v[0], "left"),
-            (v[1], "top"),
-            (1.0 - (v[0] + v[2]), "right"),
-            (1.0 - (v[1] + v[3]), "bottom"),
-        ];
-        for (share, side) in trims {
-            if share > CROP_SHARE && worst.as_ref().is_none_or(|x| share > x.0) {
-                worst = Some((share, side.into(), t));
-            }
-        }
-    }
-    if let Some((share, side, t)) = worst {
-        out.push(format!(
-            "layer \"{}\" crops {:.0}% off its picture's {side} edge at {t:.1}s (viewport); type or a \
-             mark near that edge of the plate will be cut — keep the viewport inset off the edge that \
-             carries it",
-            layer.name,
-            share * 100.0
-        ));
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -289,10 +285,9 @@ mod tests {
     }
 
     /// A caption under a picture that draws above it is named with the
-    /// covering layer; a viewport that trims a plate's edge is named with
-    /// the side and the share.
+    /// overlapping layer and the share.
     #[test]
-    fn a_covered_caption_and_a_cropping_viewport_are_named() {
+    fn a_caption_under_a_picture_is_named() {
         if !fonts_available() {
             eprintln!("no fonts; skipping");
             return;
@@ -306,9 +301,10 @@ mod tests {
             r#"{"id":"S","kind":"image","filename":"s.png","displayName":"Shot","addedAt":0,"pixelWidth":1200,"pixelHeight":900}"#,
         );
         let found = layout_warnings(&meta);
-        assert!(found.iter().any(|w| w.contains("caption \"CTA\" is") && w.contains("covered by \"Phone\"")), "{found:?}");
-        assert!(found.iter().any(|w| w.contains("layer \"Phone\" crops 6% off its picture's left edge")), "{found:?}");
-        let only_phone = layout_warnings_for(&meta, Some("P"));
-        assert!(only_phone.iter().all(|w| w.starts_with("layer \"Phone\"")), "{only_phone:?}");
+        assert!(found.iter().any(|w| w.contains("caption \"CTA\" is") && w.contains("overlapped by \"Phone\"")), "{found:?}");
+        assert!(
+            layout_warnings_for(&meta, Some("P")).is_empty(),
+            "a picture that covers nothing of its own says nothing"
+        );
     }
 }
