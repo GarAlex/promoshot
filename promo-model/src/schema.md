@@ -919,8 +919,10 @@ camera's `target` says where it looks meanwhile: `"center"` (the
 default), `"ahead"` (along the route), `{ "member": "<layer id>" }` or
 `{ "point": [x, y, z] }`; a target ramps between keyframes like every
 value. A stage whose camera has a route or a target frames the shot
-itself: it draws its whole square and the placement scales the square,
-where an orbiting camera's stage is cut to its bodies' box. A helix that spirals in while looking at the vase is a route
+itself: it draws a frame with the CANVAS's aspect, a real camera's
+picture, and the placement scales that — `"placement": { "mode":
+"fill" }` makes it a full-bleed 3D world — where an orbiting camera's
+stage is a square cut to its bodies' box. A helix that spirals in while looking at the vase is a route
 resource, a camera keyframe with that `motionPath` and `{ "member":
 "<vase>" }`, and nothing else. A project with a route, a camera route or
 a gaze carries `minReaderVersion: 40`.

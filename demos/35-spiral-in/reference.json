@@ -1069,17 +1069,12 @@
      "time": 0,
      "transitionDuration": 0,
      "placement": {
-      "height": 600,
-      "anchor": "center",
-      "offset": [
-       0,
-       -30
-      ]
+      "mode": "fill"
      },
      "camera": {
       "yaw": -160,
       "pitch": 50,
-      "distance": 3.8,
+      "distance": 5.2,
       "fov": 30,
       "target": {
        "point": [
@@ -1100,17 +1095,12 @@
      "time": 7.0,
      "transitionDuration": 7.0,
      "placement": {
-      "height": 600,
-      "anchor": "center",
-      "offset": [
-       0,
-       -30
-      ]
+      "mode": "fill"
      },
      "camera": {
       "yaw": 20,
       "pitch": 6,
-      "distance": 3.1,
+      "distance": 4.4,
       "fov": 30,
       "motionPath": {
        "pathResourceID": "5B482684-06F7-9D7B-B145-45129654D227"
@@ -1135,17 +1125,12 @@
      "time": 9.6,
      "transitionDuration": 2.6,
      "placement": {
-      "height": 600,
-      "anchor": "center",
-      "offset": [
-       0,
-       -30
-      ]
+      "mode": "fill"
      },
      "camera": {
       "yaw": 60,
       "pitch": 10,
-      "distance": 3.4,
+      "distance": 4.8,
       "fov": 30,
       "motionPath": {
        "pathResourceID": "DE9A66E0-604E-DD71-3C96-235DCF5CF75D"
