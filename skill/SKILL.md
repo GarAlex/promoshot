@@ -142,249 +142,119 @@ The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`), and `promo_workspace` names a folder for
 new projects.
 
-## The rules that are not in the schema
+## The rules, and where the rest lives
+
+The schema is the reference; this is the index and the judgment. Ask for
+a feature's own section rather than the whole 67 KB —
+`promo_schema_full {"topics": ["particles", "route"]}` is about 2 KB,
+`"core"` is the format proper.
+
+**The rules that are only here:**
 
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
-  first-class here; the apps mint UUIDs when they adopt the file. The
-  tools speak the same language: pass your own short ids (`id`,
-  `resourceId`; init's background layer is always "bg") and only what
-  you leave unnamed gets a canonical UUID. Never reuse a spelling:
-  validate names the collision.
-- **Stamp `"minReaderVersion": 19`** and think no more about it.
+  fine and are the handles the tools take; the app mints a UUID for each
+  on adoption and keeps the mapping, so re-anchor on what `promo_inspect`
+  lists after a person has opened the project.
+- **Never write `minReaderVersion` by hand.** The tools compute it from
+  what the file uses, and `promo_validate` names the number when a
+  hand-written file declares one that is too low. A literal is a guess
+  that goes stale.
 - **Measure what you place.** A placed image resource wants
-  `pixelWidth`/`pixelHeight` (videos: `videoNaturalWidth`/`Height`) or
-  the rule anchors a square guess — validate says so. `promo_upsert_layer`
-  stamps them for you.
-- **Look before you ship.** The attached thumbnails are the running
-  glance, but a full-size render is the honest check of layout —
-  validation cannot see that a caption sits on top of the subject, and a
-  480px preview can hide small text sitting slightly wrong.
+  `pixelWidth`/`pixelHeight` (a video, `videoNaturalWidth`/`Height`), or
+  a `placement` rule resolves against a SQUARE and lands wrong.
+  `promo_media_probe` answers, and `promo_upsert_layer` stamps them.
+- **Look before you ship.** `promo_render_frames` samples the piece and
+  answers with one contact sheet as an image; the authoring tools and
+  `promo_validate` attach a glance of the moment they touched. A
+  mis-aimed viewport or an invisible caption costs seconds here and
+  minutes in a video.
 - **Two captions never cross-fade**, and cross-dissolving layers need
-  OVERLAP — simultaneous end/start flashes the background.
-- **The file is shared; every writer merges.** A person opening your
-  project in PromoShot does not end your work: the app adopts external
-  edits into the open editor — a clean document simply becomes what disk
-  says, and while the person holds unsaved work their edits win
-  conflicts while your ADDITIONS still land. Adoption mints short ids
-  to STABLE UUIDs (the same spelling in the same project always mints
-  the same one), so re-run `promo_inspect` after a person's turn and
-  re-anchor; its `updated:` line is the turn signal.
-- **ProRes and alpha out.** `promo_render_video` takes `codec:
-  "prores422" | "prores4444"` (give it a `.mov` out path) and `alpha:
-  true` — the project renders over nothing and the frames' alpha lands
-  in a ProRes 4444, the honest hand-off to another editor. Alpha IN
-  works too: a ProRes 4444, WebM-with-alpha or PNG-sequence source
-  composes with its transparency.
-- **A look from a `.cube`.** Copy the file into `Resources/`, declare
-  `{ "kind": "lut", "filename": "look.cube", ... }`, and name it from a
-  layer's adjustments: `"adjustments": { "lutResourceID": "<uuid>",
-  "lutAmount": 0.8 }` — applied after saturation, contrast, brightness
-  and tint, on every host alike. Stamp `minReaderVersion: 23`.
-- **Models.** A `.glb` in `Resources/` as a resource of `"kind":
-  "model"`, shown by a layer of `"kind": "model"`. The layer is a square
-  picture of the model: `zoom` 1 fills the canvas height with it, and
-  `placement` sizes it like an image. Keyframes take `"camera": { "yaw":
-  -25, "pitch": 10, "distance": 4.2, "fov": 30 }` and `"light": { "yaw":
-  40, "pitch": 50 }`, which ramp — a yaw from -60 to 20 over three
-  seconds is a turntable. `"materials": { "Body": "@accent", "Screen": { "resourceID":
-  "<image uuid>" } }` on the resource paints a slot by the name the file
-  exports — a colour, or an image or video resource drawn on that
-  surface (a screen recording plays on the screen). The object form
-  also takes a FINISH over the file's own: `"Body": { "colorHex":
-  "@accent", "metallic": 1, "roughness": 0.12 }` is chrome, `{
-  "metallic": 0, "roughness": 0.85 }` matte (each 0…1; what is left
-  out keeps the file's value), so one `.glb` serves every look. A
-  picture on a slot is a SCREEN by default — unlit, fitted, a finish
-  on it does nothing; `"Body": { "resourceID": "<uuid>", "mode":
-  "surface", "roughness": 0.3, "repeat": [2, 1] }` WEARS it instead:
-  the picture becomes the slot's colour under the light and the
-  finish (a label on a vase, a print on a box, a video on a glossy
-  wall), tiled by `repeat`, shifted by `offset`; where it is
-  transparent the slot's own colour shows. A file with
-  animations lists them under `clips` after import; `"clip":
-  { "name": "Open" }` on a keyframe plays one on layer time, and a
-  `time` scrubs it. Stamp
-  `minReaderVersion: 29`, or `32` when a finish (or a colour in the
-  object form) is written, or `38` when a picture is worn. `promo_inspect` lists the layer; a missing
-  file is named like any other.
-- **Particles.** Confetti, sparks, snow: a resource `{ "kind":
-  "particles", "filename": "", "displayName": "Confetti", "addedAt": 0,
-  "particles": { "anchor": [0.5, 0.1], "extent": [0.6, 0], "burst": 200,
-  "rate": 0, "direction": 270, "spread": 40, "speed": [0.2, 0.5],
-  "gravity": 0.6, "drag": 0.6, "size": [0.01, 0.02], "shape": "square",
-  "colors": ["@accent", "FFFFFF"], "life": [2, 3] } }` played by a
-  DRAWING layer (`"kind": "drawing"`, `resourceID` the recipe) whose
-  start is the burst's instant. Lengths in canvas heights, anchor in unit
-  canvas fractions, direction 0 right / 90 up / 270 down; `rate` per
-  second for a stream (snow: rate 30, direction 270, spread 20, gravity
-  0.2, turbulence 0.02, shape dot, colors white), `burst` for one bang.
-  Deterministic — the same frame every time. Stamp `minReaderVersion:
-  36`.
-- **A route through the stage.** The 3D twin of a motion path: a
-  `{ "kind": "path", "filename": "", "displayName": "Helix", "addedAt":
-  0, "route": { "points": [[x, y, z], …], "curve": "smooth" } }` in
-  stage radii, and `"motionPath": { "pathResourceID": "<uuid>" }` on a
-  stage member's keyframe bends its move into that keyframe along the
-  route (fitted between the two keyframes' `stageOffset`/`depth`, so the
-  route's own size and place do not matter; a closed route orbits at its
-  own size). Inside a keyframe's `camera` the same `motionPath` flies the
-  camera between the two orbit eyes, and `"target"` says where it looks
-  on the way: `"center"`, `"ahead"`, `{ "member": "<layer id>" }` or `{
-  "point": [x, y, z] }`. A spiral in on the vase: a helix route, one
-  camera keyframe with that motionPath and `{ "member": "<vase>" }`.
-  Stamp `minReaderVersion: 40`.
-- **A body bursting into a word.** Particles in a STAGE are a morph:
-  `{ "kind": "particles", "filename": "", "displayName": "Points",
-  "addedAt": 0, "particles": { "colors": ["@accent", "FFFFFF"],
-  "morph": { "from": "<cube uuid>", "to": "<word uuid>", "count":
-  3000, "spread": 1.2 } } }` played by a DRAWING member of the stage
-  both bodies are in, whose keyframes ramp `"progress"` 0 → 1 (with
-  easing): the points sit on the first body at 0, fly out, and settle
-  on the second at 1. The first body DISSOLVES as they leave and the
-  second ASSEMBLES as they land, so both bodies can simply live through
-  the whole piece. For an explosion, key progress as a fast burst
-  (0 → 0.45 in ~0.7 s, easeOut), a short drift (→ 0.6 over ~1 s) and a
-  gather (→ 1 in ~1.5 s), the middle and last keyframes `"easing":
-  "smooth"` so the points never stop between. Stamp `minReaderVersion:
-  39`.
-- **A body from parts.** Anything a product shot needs that is not a
-  device or type — a stand, a plinth, a ring, a puck — is a model
-  resource with a parts recipe, written like an SVG: `{ "kind": "model",
-  "filename": "", "displayName": "Stand", "addedAt": 0, "recipe": {
-  "parts": [ { "slot": "Base", "shape": { "cylinder": { "radius": 0.6,
-  "height": 0.08 } } }, { "slot": "Stem", "shape": { "lathe": {
-  "profile": [[0.1, 0], [0.06, 0.6], [0.16, 0.8]] } } }, { "slot":
-  "Plate", "shape": { "box": { "size": [1.2, 0.05, 0.8], "radius": 0.02
-  } }, "position": [0, 0.82, 0] } ] } }`. Shapes: box (size [w,h,d],
-  radius; `"faces": true` makes six slots, slot/front, /back, /left,
-  /right, /top, /bottom, one picture per side — rung 39), sphere (radius), cylinder (radius, height), torus (radius,
-  tube), lathe (profile of [radius, height] about Y), extrude (a closed
-  [x,y] path pulled `depth` along Z); `position`, `rotation` (degrees
-  X,Y,Z) and `scale` place each; `slot` names take colour and finish
-  bindings. Units are the body's own; place it on a stage beside a
-  device or a vase (positions there are in stage radii). Stamp
-  `minReaderVersion: 37`.
-- **Environment.** Chrome and gloss need something to mirror: put
-  `"environment": { "preset": "studio" }` (or `sunset`, `night`;
-  `intensity`, `rotation` in degrees) in `compositionSettings` for any
-  project with a metal or a glossy finish. Without it metals mirror a
-  synthetic sky and read dark on a dark theme. Stamp `minReaderVersion:
-  35`.
-- **Text as a body.** A title that belongs IN the scene — lit by the
-  stage's light, chrome or matte, turning, standing between devices —
-  is a model resource with a recipe and no file: `{ "kind": "model",
-  "filename": "", "displayName": "Title", "addedAt": 0, "recipe": {
-  "text": { "text": "Hello", "bold": true, "depth": 0.25 } },
-  "materials": { "Face": { "colorHex": "@accent", "metallic": 1,
-  "roughness": 0.15 }, "Side": "@edge" } }`, played by a model layer or a
-  stage member like any body (the text is 1 em tall × `size` world units,
-  default 1; `depth` in em, default 0.25; `fontFamily`, `bold`,
-  `italic` as a caption's). Keep a body to one line; long text is a
-  caption. Stamp `minReaderVersion: 34`. A caption's 2.5D `depth`/tilt is
-  the flat trick and legacy — reach for the body. A DEVICE is a recipe
-  too: `"recipe": { "device": { "kind": "phone" } }` (tablet, laptop),
-  no file to copy — bind the screenshot to its `Screen` slot.
-- **Stages.** Prefer the ONE-LAYER form (rung 33): a layer of `"kind":
-  "stage"` whose keyframes carry the `"camera"`, `"light"` and
-  `"placement"`, and whose `"members"` are the model, image, video,
-  caption or drawing layers inside it, each with its own `"depth"`,
-  `"stageOffset"` and turn (`"camera"` on a member turns that member).
-  One depth: a member is never a stage and names no stage; the stage
-  layer has no `resourceID`. Stamp `minReaderVersion: 33`. The flat form
-  below still reads and draws the same picture, but it is legacy: the app
-  rewrites it as a stage layer on open.
-  Layers naming the same `"stage": "hero"` draw through one
-  camera into one depth buffer: models at their keyframes' `"depth"`
-  (in stage radii, + toward the viewer) and `"stageOffset": [right, up]`
-  in the same radii (two devices side by side; rung 31), images and
-  videos as billboards
-  facing the camera (their `zoom` sizes them against the stage's
-  radius). The first member (lowest `sortIndex`) owns the picture: its
-  `camera`/`light` are the stage's and its placement, opacity and
-  effects apply to the whole stage. A phone at +1, a laptop at -1 and a
-  screenshot between them is the reason; caption and drawing members
-  stand in the scene as billboards at their depth, and a model member
-  that is not first turns in place by its own `camera` yaw/pitch. Stamp `minReaderVersion:
-  30` (31 with `stageOffset`).
-- **Kinetic reveals.** Beside `wipe`, `fade`, `rise` and `scale`, a
-  reveal's `mode` can be `flip` (each unit turns in edge-on, in
-  perspective), `tumble` (rights itself from a lean while rising) or
-  `slide` (in from the right). Stamp `minReaderVersion: 28`. By word,
-  with `"seconds": 1.2`, is the kinetic-type look; by character is
-  busier and wants short text.
-- **Designed type.** A caption's style takes `tracking` (letter spacing
-  in points), `weight` ("ultraLight".."black", winning over `isBold`)
-  and `lineHeight` (a multiple of the size, 1.25 unless said). A weight
-  the family does not have snaps to the nearest one it does. This is
-  the difference between a subtitle and a headline: a small eyebrow
-  line at +6 tracking, a heavy 88pt headline at −1.4 with a 1.05 line
-  height, a medium subtitle under it at 72% opacity. `promo_layer`
-  takes all three by name. Stamp `minReaderVersion: 42`.
-- **A rect is the accent bar and the plate.** A drawing shape's `kind`
-  can be `rect`, with an optional `cornerRadius` (clamped to half the
-  shorter side, so a big one is a pill). Two points, a `fillColorHex`,
-  and it is the 268×8 accent bar under a headline, the rounded window
-  a screenshot sits in, or a mask. Stamp `minReaderVersion: 42`.
-- **No 2.5D.** A caption's `tiltX`/`tiltY` and `captionStyle.depth`
-  (stacked copies) and the device `frame` on a picture are the flat
-  compositor's old tricks: they still render, `promo_validate` names
-  them legacy, and new work does not use them. A title with a side or a
-  lean is a TEXT BODY in a stage (above); a device is a device BODY with
-  the picture on its Screen slot.
-- **Follow the pointer.** A recording made in the Mac app carries
-  `"pointer": { "samples": [[t, x, y], …], "clicks": [[t, x, y], …] }`
-  (source seconds, unit coordinates). Put `"follow": { "zoom": 2,
-  "smoothing": 0.35 }` on the layer that shows it and the viewport
-  follows the pointer — a smooth auto-zoom with click rings — with no
-  keyframes to place. `"clicks": false` drops the rings;
-  `"clickColorHex"` colours them. Stamp `minReaderVersion: 26`.
-- **Ten transition kinds.** `transitionIn`/`transitionOut` on a layer, or
-  `transition` on a swap keyframe: fade, wipe, slide, push, scale, and —
-  stamp `minReaderVersion: 25` — `blurDissolve` (a fade that sharpens
-  as it lands), `zoom` (in from larger and soft; at a swap the old one is
-  pushed out through the zoom), `flash` (through white), `glitch` (torn
-  bands and split channels for the duration), `dip` (through black).
-  `{ "kind": "blurDissolve", "duration": 0.6, "easing": "easeOut" }`.
-- **Image effects on a layer.** `"effects": { "blur": 12, "glow": 0.5,
-  "vignette": 0.4, "grain": 0.15, "sharpen": 0.5 }` on any layer, each
-  optional; `"blurAngle": 45` makes the blur a directional smear, and
-  `glowRadius` / `glowThreshold` / `vignetteSoftness` tune the rest. Put
-  `blur`, `glow` or `vignette` on a KEYFRAME to ramp it — a blur-in
-  headline is `"blur": 20` at 0 and `"blur": 0` a third of a second
-  later. Stamp `minReaderVersion: 24`.
-- **Chroma key on a layer.** `"chromaKey": { "colorHex": "00FF00",
-  "tolerance": 0.3, "softness": 0.1 }` on a video or image layer makes
-  the plate transparent before the grade, border and mask — footage on
-  a green screen composes over anything. Stamp `minReaderVersion: 22`.
-- **Audio effects on a resource.** `"audioEffects": [{ "kind": "normalize",
-  "targetLufs": -16 }, { "kind": "compressor" }, { "kind": "eq",
-  "frequencyHz": 1000, "gainDb": 3 }]` on a video or audio resource runs
-  before the mix, in order, in every render the core makes (the apps'
-  live preview plays the resource dry). Stamp `minReaderVersion: 21`.
-- **Markers and chapters.** `"markers": [{ "id": "<uuid>", "time": 12.5,
-  "name": "Pricing", "kind": "chapter" }]` on the project names moments;
-  `chapter` markers are written into an exported mp4's chapter list,
-  `marker` ones are notes the editors show. Stamp `minReaderVersion: 20`.
-- **Long sources: build proxies once.** `promo_proxy {project}` makes a
-  tier-1 proxy (960 px long edge, every frame a keyframe) for each video
-  resource, in a cache outside the package. Stills, frames and small
-  renders then read proxies by default (`proxy: "auto"`), so an hour-long
-  4K source scrubs and renders like a short one; `proxy: "off"` reads the
-  source, and a full-size render always does.
-- **Reuse a card: make it a composition.** A resource of `kind:
-  "composition"` carries its own `canvasWidth`/`canvasHeight`, an optional
-  `backgroundColorHex` plate (absent = transparent) and ordinary `layers`
-  that reference THIS project's resources by id; give it a `duration` and
-  `pixelWidth`/`pixelHeight` equal to its canvas. Place it with a `video`
-  layer, as many times as you like — placement rules, trims, speed,
-  transitions and fades all apply, and its sound comes along. Edit the
-  card once and every placement follows. A composition may not contain
-  itself, and nests at most eight deep; validate says so.
-- Colours can be palette names (`"@accent"`); an undefined name renders
-  BLACK and validate names it. `@edge` is what a device frame's border
-  reads by default — define it when you frame.
-- For editor autocomplete in hand-written files, point `"$schema"` at
+  overlap: two clips that end and begin at the same instant both sit at
+  zero opacity there and the background flashes through.
+- **The file is shared when a person has it open** — see "Two modes"
+  above. Headless, it is yours.
+- **No 2.5D.** A caption's `tiltX`/`tiltY`, `captionStyle.depth` and the
+  device `frame` on a picture are the flat compositor's old tricks: they
+  still render, `promo_validate` names them legacy, and new work does
+  not use them. A title with a side or a lean is a text body in a stage;
+  a device is a device body with the picture on its Screen slot.
+- **Colours can be palette names** (`"@accent"`); an undefined name
+  renders as the field's default and `promo_inspect` lists it. Name a
+  colour that appears more than once.
+- **For autocomplete in hand-written files**, point `"$schema"` at
   `docs/promo.schema.json` in this repo.
+
+**Two tool arguments worth knowing:** `promo_render_video` takes
+`codec: "prores"` and `alpha: true` for an edit-ready master with
+transparency (h264/hevc cannot carry alpha); `promo_proxy {project}`
+builds a tier-1 proxy per video resource once, and every later render
+reads it — do it before working with long sources.
+
+**The features, by the topic word that fetches them.** Each says what it
+is for; the schema section says how to write it.
+
+- **Models** (`model`) — a `.glb` in `Resources/`, or a recipe with no
+  file at all, shown by a layer of `"kind": "model"`. Camera and light
+  are keyframed and ramp: a yaw from −60 to 20 over three seconds is a
+  turntable. `materials` paints a slot by the name the file exports; a
+  picture bound to a slot is a SCREEN unless `"mode": "surface"` wears
+  it as the slot's own colour under the light.
+- **Devices** (`model`) — no file and no tool: a model resource whose
+  recipe is `{ "device": { "kind": "phone" } }` (tablet, laptop) is
+  built at load with `Body` and `Screen` slots, and a `Deck` on the
+  laptop. The screenshot goes on `Screen`, the accent on `Body`.
+- **Text as a body** (`recipe`) — real type standing in the scene, lit
+  and turning. Reach for it when a title must catch the light or show a
+  side; a flat title is a caption.
+- **Parts** (`parts`) — anything a product shot needs that is not a
+  device or type: a stand, a plinth, a ring, a puck. Box, sphere,
+  cylinder, torus, lathe and extrude, assembled like an SVG, each part a
+  named slot that takes colour and finish.
+- **Stages** (`stage`) — several bodies under ONE camera and ONE light.
+  Prefer the one-layer form: a layer of `"kind": "stage"` with `members`,
+  the camera and light on its own keyframes. The flat form (layers
+  sharing a stage name) is read forever and rewritten on open.
+- **Routes** (`route`) — the 3D twin of a motion path, for a member's
+  move or the camera's flight, with `target` saying where the camera
+  looks on the way. A spiral in on the vase: a helix route, one camera
+  keyframe carrying that `motionPath`, and `"target": { "member":
+  "<vase>" }`.
+- **Particles** (`particles`) — confetti, sparks, snow, played by a
+  DRAWING layer whose start is the burst's instant. Snow is `rate` 30,
+  direction 270, spread 20, gravity 0.2, turbulence 0.02, shape dot,
+  colours white; a bang is `burst` with no rate. Deterministic: the same
+  frame every time, on every host.
+- **Morph** (`morph`) — a body bursting into a word. Particles in a
+  stage with `morph: { from, to }`, ramped by `progress` 0 → 1 on a
+  drawing member; the first body dissolves as they leave and the second
+  assembles as they land. For an explosion: 0 → 0.45 in ~0.7 s
+  (`easeOut`), → 0.6 over ~1 s, → 1 in ~1.5 s, the last two keyframes
+  `"easing": "smooth"` so the points never stop between.
+- **Environment** (`environment`) — what chrome and gloss mirror. A
+  metal with nothing to reflect reads as flat grey.
+- **Kinetic reveals** (`reveal`) — a caption arriving a piece at a time.
+  By word with `"seconds": 1.2` is the kinetic-type look; by character
+  is busier and wants short text.
+- **Designed type** (`tracking`) — a caption's `tracking`, `weight` and
+  `lineHeight`. The numbers that work are under "Design guidance" below.
+- **A rect** (`rect`) — a drawing shape with an optional `cornerRadius`:
+  the accent bar under a headline, the plate behind it, the rounded
+  window a screenshot sits in, or a mask.
+- **Transitions** (`transition`) — ten kinds, on a layer's own edges or
+  at a swap between two resources.
+- **Image effects** (`effects`) — blur, glow, vignette, grain, sharpen,
+  per layer and keyframable.
+- **Chroma key** (`chroma`) — key a green screen on a video or image
+  layer, tolerance and softness per layer.
+- **Audio effects** (`audio`) — normalize, compress, EQ on a resource.
+- **Markers and chapters** (`markers`) — named times that become the
+  mp4's chapter list.
+- **A look from a `.cube`** (`lut`) — a LUT resource, applied per layer
+  with an amount.
+- **Compositions** (`composition`) — build a card once and place it
+  three times; editing it changes all three.
+- **Follow the pointer** (`pointer`) — a Mac recording carries the
+  cursor track, and `follow` on the layer keeps the viewport on it.
 
 ## Design guidance for store work
 
@@ -415,7 +285,7 @@ neighbouring keyframes that keeps the speed, never leaving their two
 values, and holding when they are equal. It shapes keyframed NUMBERS;
 a gradient, a transition or a reveal still ramps linearly under it, and
 on a motion path it means even speed along the curve. Ease only the two
-ends. Stamp `minReaderVersion: 41` when you use it. A body that TURNS is the
+ends. A body that TURNS is the
 exception: spin it in one continuous linear turn (a camera or a member
 yaw of 0 → 360 over the shot) under a light that stays put, so each
 side passes the light; do not chop a spin into moves.

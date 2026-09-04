@@ -1650,10 +1650,18 @@ mod tests {
             let name = tool["name"].as_str().unwrap();
             assert!(skill.contains(name), "the skill never mentions `{name}`");
         }
+        // The stamp is COMPUTED — by `write_metadata` on the way out, and
+        // named by `promo_validate` when a hand-written file declares one
+        // too low. This assertion used to pin the skill to teaching a
+        // literal 19, and went stale while the ladder climbed to 42: a
+        // test can pin the wrong thing as easily as the right one.
         assert!(
-            skill.contains("minReaderVersion\": 19"),
-            "the stamp the skill teaches must be the current one"
+            skill.contains("Never write `minReaderVersion` by hand"),
+            "the skill must teach that the stamp is computed, not a number"
         );
+        for stale in ["minReaderVersion\": 19", "minReaderVersion: 19", "minReaderVersion: 34"] {
+            assert!(!skill.contains(stale), "the skill states a literal stamp: {stale}");
+        }
         assert!(
             !skill.contains("owns the file"),
             "one-way ownership was repealed by SPECS D5 stages 1-3 — \
