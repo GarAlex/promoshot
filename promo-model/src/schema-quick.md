@@ -54,8 +54,10 @@ the transition length — simultaneous end/start flashes the background.
 
 Captions: `captionText` on the layer; `captionStyle` overrides the
 composition's `subtitle*` defaults per caption — `fontSize` (points),
-`alignment`, stroke (`strokeColorHex`/`strokeWidth`) and shadow
-(`shadowOpacity`/`shadowRadius`) for text on footage, and
+`alignment`, `tracking` (letter spacing in points), `weight`
+("ultraLight".."black", winning over `isBold`), `lineHeight` (a multiple
+of the size, 1.25 unless said), stroke (`strokeColorHex`/`strokeWidth`)
+and shadow (`shadowOpacity`/`shadowRadius`) for text on footage, and
 `placement: { "anchor": "bottom", "offset": [0, -60] }` to hang the box on
 the same grid media uses (anchor+offset only; margins then only set wrap
 width). A keyframe `fontSize` animates the size in points. Two captions

@@ -764,7 +764,8 @@ impl ModelPass {
             ..Default::default()
         });
         let white = upload_rgba(ctx, 1, 1, &[255, 255, 255, 255]).create_view(&Default::default());
-        let flat_normal = upload_rgba(ctx, 1, 1, &[128, 128, 255, 255]).create_view(&Default::default());
+        let flat_normal =
+            upload_rgba(ctx, 1, 1, &[128, 128, 255, 255]).create_view(&Default::default());
         let envs = [
             upload_env(ctx, EnvPreset::Studio).create_view(&Default::default()),
             upload_env(ctx, EnvPreset::Sunset).create_view(&Default::default()),
@@ -842,7 +843,8 @@ impl ModelPass {
         }
         let mut gpu_materials = Vec::with_capacity(materials.len());
         for (index, m) in materials.iter().enumerate() {
-            let well_formed = |t: &(u32, u32, &[u8])| t.0 > 0 && t.1 > 0 && t.2.len() == (t.0 * t.1 * 4) as usize;
+            let well_formed =
+                |t: &(u32, u32, &[u8])| t.0 > 0 && t.1 > 0 && t.2.len() == (t.0 * t.1 * 4) as usize;
             let texture = m
                 .texture
                 .filter(well_formed)
@@ -1060,7 +1062,10 @@ impl ModelPass {
             Some((w, h)) if w.max(h) > 64 => Some(self.mipmapped(ctx, view, w, h)),
             _ => None,
         };
-        let chain_view = m.bound_copy.as_ref().map(|t| t.create_view(&Default::default()));
+        let chain_view = m
+            .bound_copy
+            .as_ref()
+            .map(|t| t.create_view(&Default::default()));
         let view = chain_view.as_ref().unwrap_or(view);
         m.textured = if m.worn { 4.0 } else { 2.0 };
         let (has_normal, has_mr) = m.map_flags();
@@ -1115,7 +1120,13 @@ impl ModelPass {
     /// A copy of `view` (`width × height`) with every mip level filled,
     /// each a box filter of the one above — what a bound picture samples
     /// through, so the trilinear sampler has something to minify to.
-    fn mipmapped(&self, ctx: &GpuContext, view: &wgpu::TextureView, width: u32, height: u32) -> wgpu::Texture {
+    fn mipmapped(
+        &self,
+        ctx: &GpuContext,
+        view: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+    ) -> wgpu::Texture {
         let (width, height) = (width.max(1), height.max(1));
         let levels = 32 - width.max(height).leading_zeros();
         let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
@@ -1132,9 +1143,11 @@ impl ModelPass {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("model-picture-mips"),
-        });
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("model-picture-mips"),
+            });
         let level_view = |level: u32| {
             texture.create_view(&wgpu::TextureViewDescriptor {
                 base_mip_level: level,
@@ -1398,7 +1411,9 @@ impl ModelPass {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(self.env_view(view.environment.preset)),
+                    resource: wgpu::BindingResource::TextureView(
+                        self.env_view(view.environment.preset),
+                    ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -1571,7 +1586,9 @@ impl ModelPass {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(self.env_view(view.environment.preset)),
+                    resource: wgpu::BindingResource::TextureView(
+                        self.env_view(view.environment.preset),
+                    ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -1661,12 +1678,20 @@ const ENV_MIPS: u32 = 8;
 /// about the vertical, `el` the elevation, -π/2 at the floor.
 fn env_radiance(preset: EnvPreset, yaw: f32, el: f32) -> [f32; 3] {
     let gauss = |dy: f32, de: f32, sy: f32, se: f32| -> f32 {
-        let dy = (dy + std::f32::consts::PI).rem_euclid(2.0 * std::f32::consts::PI) - std::f32::consts::PI;
+        let dy = (dy + std::f32::consts::PI).rem_euclid(2.0 * std::f32::consts::PI)
+            - std::f32::consts::PI;
         (-(dy * dy) / (2.0 * sy * sy) - (de * de) / (2.0 * se * se)).exp()
     };
     let t = (el / std::f32::consts::FRAC_PI_2).clamp(-1.0, 1.0);
-    let mix3 = |a: [f32; 3], b: [f32; 3], k: f32| [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
-    let add = |a: [f32; 3], b: [f32; 3], k: f32| [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+    let mix3 = |a: [f32; 3], b: [f32; 3], k: f32| {
+        [
+            a[0] + (b[0] - a[0]) * k,
+            a[1] + (b[1] - a[1]) * k,
+            a[2] + (b[2] - a[2]) * k,
+        ]
+    };
+    let add =
+        |a: [f32; 3], b: [f32; 3], k: f32| [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
     match preset {
         EnvPreset::None | EnvPreset::Studio => {
             let base = if t >= 0.0 {
@@ -1677,7 +1702,11 @@ fn env_radiance(preset: EnvPreset, yaw: f32, el: f32) -> [f32; 3] {
             let band = (-(el / 0.12) * (el / 0.12)).exp() * 0.08;
             let key_box = gauss(yaw - 0.3, el - 0.8, 0.9, 0.35) * 2.6;
             let fill_box = gauss(yaw - 2.6, el - 0.35, 0.7, 0.3) * 1.0;
-            add(add(add(base, [1.0, 1.0, 1.0], band), [1.0, 1.0, 1.0], key_box), [1.0, 1.0, 1.0], fill_box)
+            add(
+                add(add(base, [1.0, 1.0, 1.0], band), [1.0, 1.0, 1.0], key_box),
+                [1.0, 1.0, 1.0],
+                fill_box,
+            )
         }
         EnvPreset::Sunset => {
             let base = if t >= 0.0 {
@@ -1697,8 +1726,15 @@ fn env_radiance(preset: EnvPreset, yaw: f32, el: f32) -> [f32; 3] {
             };
             let moon = gauss(yaw + 1.0, el - 1.0, 0.08, 0.08);
             let halo = gauss(yaw + 1.0, el - 1.0, 0.5, 0.4);
-            let city = (gauss(yaw - 0.9, el, 0.15, 0.04) + gauss(yaw - 1.7, el, 0.12, 0.04) + gauss(yaw + 2.2, el, 0.2, 0.04)) * 0.8;
-            add(add(add(base, [2.0, 2.2, 2.8], moon), [0.25, 0.27, 0.35], halo), [1.0, 0.62, 0.3], city)
+            let city = (gauss(yaw - 0.9, el, 0.15, 0.04)
+                + gauss(yaw - 1.7, el, 0.12, 0.04)
+                + gauss(yaw + 2.2, el, 0.2, 0.04))
+                * 0.8;
+            add(
+                add(add(base, [2.0, 2.2, 2.8], moon), [0.25, 0.27, 0.35], halo),
+                [1.0, 0.62, 0.3],
+                city,
+            )
         }
     }
 }
@@ -1740,7 +1776,8 @@ fn upload_env(ctx: &GpuContext, preset: EnvPreset) -> wgpu::Texture {
     for y in 0..h {
         let el = std::f32::consts::FRAC_PI_2 - (y as f32 + 0.5) / h as f32 * std::f32::consts::PI;
         for x in 0..w {
-            let yaw = (x as f32 + 0.5) / w as f32 * 2.0 * std::f32::consts::PI - std::f32::consts::PI;
+            let yaw =
+                (x as f32 + 0.5) / w as f32 * 2.0 * std::f32::consts::PI - std::f32::consts::PI;
             let c = env_radiance(preset, yaw, el);
             level.push([c[0], c[1], c[2], 1.0]);
         }
@@ -2121,7 +2158,11 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
         ],
         rim_rgb: [view.rim_rgb[0], view.rim_rgb[1], view.rim_rgb[2], 1.0],
         env_params: [
-            if view.environment.preset == EnvPreset::None { 0.0 } else { 1.0 },
+            if view.environment.preset == EnvPreset::None {
+                0.0
+            } else {
+                1.0
+            },
             view.environment.intensity.max(0.0),
             deg(view.environment.rotation_deg as f64),
             (ENV_MIPS - 1) as f32,
@@ -2436,7 +2477,11 @@ mod tests {
                 }
             }
             let mean = values.iter().sum::<u32>() / values.len() as u32;
-            let spread = values.iter().map(|v| (*v as i32 - mean as i32).unsigned_abs()).max().unwrap_or(0);
+            let spread = values
+                .iter()
+                .map(|v| (*v as i32 - mean as i32).unsigned_abs())
+                .max()
+                .unwrap_or(0);
             (mean, spread)
         };
         pass.set_texture(&ctx, &mut model, 0, &picture_view, None);
@@ -2556,7 +2601,11 @@ mod tests {
         for _y in 0..h {
             for x in 0..w {
                 // Left half: (0.8, 0, 0.6) — leaning toward +X; right half: straight up.
-                let px: [u8; 4] = if x < w / 2 { [230, 128, 204, 255] } else { [128, 128, 255, 255] };
+                let px: [u8; 4] = if x < w / 2 {
+                    [230, 128, 204, 255]
+                } else {
+                    [128, 128, 255, 255]
+                };
                 map.extend_from_slice(&px);
             }
         }
@@ -2628,7 +2677,11 @@ mod tests {
         let mut map = Vec::with_capacity((w * h * 4) as usize);
         for _y in 0..h {
             for x in 0..w {
-                let px: [u8; 4] = if x < w / 2 { [0, 90, 0, 255] } else { [0, 90, 255, 255] };
+                let px: [u8; 4] = if x < w / 2 {
+                    [0, 90, 0, 255]
+                } else {
+                    [0, 90, 255, 255]
+                };
                 map.extend_from_slice(&px);
             }
         }

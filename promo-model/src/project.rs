@@ -559,7 +559,10 @@ pub struct BodyPart {
 
 impl BodyPart {
     pub fn slot(&self) -> &str {
-        self.slot.as_deref().filter(|s| !s.is_empty()).unwrap_or("Body")
+        self.slot
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Body")
     }
 }
 
@@ -1429,6 +1432,38 @@ strict_enum!(
         (Trailing, "trailing")
     ]
 );
+// The weight of a caption's face. Strict: a misspelt weight should be
+// noticed, not silently drawn regular.
+strict_enum!(
+    SubtitleFontWeight,
+    [
+        (UltraLight, "ultraLight"),
+        (Thin, "thin"),
+        (Light, "light"),
+        (Regular, "regular"),
+        (Medium, "medium"),
+        (Semibold, "semibold"),
+        (Bold, "bold"),
+        (Heavy, "heavy"),
+        (Black, "black")
+    ]
+);
+impl SubtitleFontWeight {
+    /// The usual numeric weight, as every font stack spells it.
+    pub fn value(self) -> u16 {
+        match self {
+            SubtitleFontWeight::UltraLight => 100,
+            SubtitleFontWeight::Thin => 200,
+            SubtitleFontWeight::Light => 300,
+            SubtitleFontWeight::Regular => 400,
+            SubtitleFontWeight::Medium => 500,
+            SubtitleFontWeight::Semibold => 600,
+            SubtitleFontWeight::Bold => 700,
+            SubtitleFontWeight::Heavy => 800,
+            SubtitleFontWeight::Black => 900,
+        }
+    }
+}
 strict_enum!(
     SubtitleFontFamily,
     [
@@ -1453,7 +1488,7 @@ strict_enum!(
 );
 strict_enum!(
     DrawingShapeKind,
-    [(Pen, "pen"), (Line, "line"), (Oval, "oval")]
+    [(Pen, "pen"), (Line, "line"), (Oval, "oval"), (Rect, "rect")]
 );
 
 // `ResourceFrame.Kind` — legacy "phone" folds into Device. Every string this
@@ -1553,6 +1588,20 @@ pub struct SubtitleStyle {
     /// whole, which is what every caption did before this existed — so an
     /// older reader dropping it degrades correctly and no version gate is
     /// needed.
+    /// Letter spacing in points at the caption's own size (rung 42):
+    /// positive opens a wordmark out, negative tightens a big headline.
+    /// Absent is the font's own spacing.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub tracking: Option<f64>,
+    /// The face's weight (rung 42), Apple's own ladder: ultraLight, thin,
+    /// light, regular, medium, semibold, bold, heavy, black. Wins over
+    /// `isBold`, which only ever chose between regular and bold.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub weight: Option<SubtitleFontWeight>,
+    /// Line spacing as a multiple of the font size (rung 42); absent is
+    /// 1.25, which is what every caption used before it could be said.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub line_height: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub reveal: Option<TextReveal>,
     /// Extruded type by stacking (rung 27): `count` copies of the caption
@@ -3147,6 +3196,11 @@ pub struct DrawingShape {
     pub arrow_end: bool,
     #[serde(default, skip_serializing_if = "is_none")]
     pub even_odd_fill: Option<bool>,
+    /// A `rect`'s corner radius in canvas px (rung 42); absent is square
+    /// corners. Clamped to half the shorter side, so a big radius gives a
+    /// pill rather than a knot.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub corner_radius: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none", rename = "groupID")]
     pub group_id: Option<String>,
 }
@@ -4000,14 +4054,34 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 42 is type a designer would ask for and a rectangle: letter
+        // spacing, a weight beyond bold, a line height, and a `rect` shape
+        // with its corner radius. An older reader drops each of them, and
+        // the caption or the plate it draws is a different picture.
+        let styles = crate::nesting::all_layers(self)
+            .iter()
+            .filter_map(|l| l.caption_style.as_ref())
+            .chain(resources.iter().filter_map(|r| r.caption_style.as_ref()))
+            .any(|s| s.tracking.is_some() || s.weight.is_some() || s.line_height.is_some());
+        let rects = resources.iter().any(|r| {
+            r.drawing
+                .iter()
+                .flat_map(|d| d.shapes.iter())
+                .any(|s| s.kind == DrawingShapeKind::Rect || s.corner_radius.is_some())
+        });
+        if styles || rects {
+            return 42;
+        }
+
         // 41 is `smooth` easing. Every other curve merely LOOKS different in
         // an older reader; smooth is the one such a reader rewrites to
         // "linear" on save, turning authored motion into a straight lerp
         // for good — so the rung refuses rather than let that happen.
-        if crate::nesting::all_layers(self)
-            .iter()
-            .any(|l| l.keyframes.iter().any(|k| k.easing.is_some_and(|e| e.is_smooth())))
-        {
+        if crate::nesting::all_layers(self).iter().any(|l| {
+            l.keyframes
+                .iter()
+                .any(|k| k.easing.is_some_and(|e| e.is_smooth()))
+        }) {
             return 41;
         }
 
@@ -4813,6 +4887,99 @@ mod placement_model_tests {
     /// and offset round-trip, the accessors default what is left out,
     /// an unknown mode reads as a screen, and any of the three lifts
     /// the rung.
+    /// Designed type and a rectangle (rung 42): tracking, weight and line
+    /// height round-trip on a caption style, a `rect` shape keeps its
+    /// corner radius, each of them lifts the rung, and a caption with none
+    /// of them does not — an older reader would drop each field and lay
+    /// the caption out to different pixels.
+    #[test]
+    fn designed_type_and_a_rect_are_stamped_forty_two() {
+        let doc = |style: &str, shapes: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Type","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[{{"id":"R","kind":"drawing","filename":"d","displayName":"D",
+                      "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+                      "drawing":{{"shapes":[{shapes}]}}}}],
+                    "layers":[{{"id":"L","name":"L","sortIndex":0,"kind":"caption","isEnabled":true,
+                      "startTime":0,"duration":4,"captionText":"Hi",
+                      "captionStyle":{{{style}}},"keyframes":[]}}]}}"#
+            ))
+            .expect("decodes")
+        };
+        let plain = r#""fontSize":40"#;
+        let square = r#"{"id":"S","kind":"pen","points":[[0,0],[9,9]],
+                         "strokeColorHex":"FFFFFF","strokeWidth":2,
+                         "arrowStart":false,"arrowEnd":false}"#;
+        assert!(
+            doc(plain, square).minimum_reader_version() < 42,
+            "neither lifts it"
+        );
+        for field in [
+            r#""tracking":6"#,
+            r#""weight":"heavy""#,
+            r#""lineHeight":1.05"#,
+        ] {
+            assert_eq!(
+                doc(&format!("{plain},{field}"), square).minimum_reader_version(),
+                42,
+                "{field} lifts the rung"
+            );
+        }
+        let rect = r#"{"id":"S","kind":"rect","points":[[0,0],[9,9]],
+                       "strokeColorHex":"FFFFFF","strokeWidth":2,
+                       "arrowStart":false,"arrowEnd":false,"cornerRadius":4}"#;
+        assert_eq!(
+            doc(plain, rect).minimum_reader_version(),
+            42,
+            "a rect lifts it"
+        );
+
+        let full = doc(
+            &format!("{plain},\"tracking\":6,\"weight\":\"heavy\",\"lineHeight\":1.05"),
+            rect,
+        );
+        let style = full.layers.as_ref().unwrap()[0]
+            .caption_style
+            .clone()
+            .unwrap();
+        assert_eq!(style.tracking, Some(6.0));
+        assert_eq!(style.weight.map(|w| w.value()), Some(800));
+        assert_eq!(style.line_height, Some(1.05));
+        let shape = &full.resources.as_ref().unwrap()[0]
+            .drawing
+            .as_ref()
+            .unwrap()
+            .shapes[0];
+        assert_eq!(shape.kind, DrawingShapeKind::Rect);
+        assert_eq!(shape.corner_radius, Some(4.0));
+        // The whole ladder is monotone: every weight name is a real one and
+        // reads heavier than the one before it.
+        let names = [
+            "ultraLight",
+            "thin",
+            "light",
+            "regular",
+            "medium",
+            "semibold",
+            "bold",
+            "heavy",
+            "black",
+        ];
+        let mut last = 0;
+        for name in names {
+            let w: SubtitleFontWeight = serde_json::from_str(&format!("\"{name}\"")).expect(name);
+            assert!(w.value() > last, "{name} is heavier than the one before");
+            last = w.value();
+        }
+        let json = full.to_json().unwrap();
+        assert!(
+            json.contains(r#""tracking":6"#) && json.contains(r#""cornerRadius":4"#),
+            "{json}"
+        );
+    }
+
     /// `smooth` easing (rung 41): an older reader does not merely render it
     /// differently, it writes "linear" back on save, so the rung refuses.
     #[test]
@@ -4831,8 +4998,14 @@ mod placement_model_tests {
             .expect("decodes")
         };
         assert_eq!(doc("smooth").minimum_reader_version(), 41);
-        assert!(doc("easeInOut").minimum_reader_version() < 41, "the older curves do not lift it");
-        assert!(doc("smooth").to_json().unwrap().contains(r#""easing":"smooth""#));
+        assert!(
+            doc("easeInOut").minimum_reader_version() < 41,
+            "the older curves do not lift it"
+        );
+        assert!(doc("smooth")
+            .to_json()
+            .unwrap()
+            .contains(r#""easing":"smooth""#));
     }
 
     /// A path in the stage (rung 40): a route on a path resource, a camera
@@ -4867,26 +5040,65 @@ mod placement_model_tests {
             r#"{"id":"K","time":2,"camera":{"yaw":40,"motionPath":{"pathResourceID":"R","flipped":true},"target":"ahead"},
                 "transitionDuration":2}"#,
         );
-        assert_eq!(flown.minimum_reader_version(), 40, "a camera route lifts the rung");
-        let cam = flown.layers.as_ref().unwrap()[0].keyframes[0].camera.clone().unwrap();
+        assert_eq!(
+            flown.minimum_reader_version(),
+            40,
+            "a camera route lifts the rung"
+        );
+        let cam = flown.layers.as_ref().unwrap()[0].keyframes[0]
+            .camera
+            .clone()
+            .unwrap();
         assert_eq!(cam.motion_path.as_ref().unwrap().path_resource_id, "R");
         assert_eq!(cam.target.as_ref().and_then(|t| t.name()), Some("ahead"));
         let json = flown.to_json().unwrap();
-        assert!(json.contains(r#""motionPath":{"pathResourceID":"R","flipped":true}"#), "{json}");
+        assert!(
+            json.contains(r#""motionPath":{"pathResourceID":"R","flipped":true}"#),
+            "{json}"
+        );
         assert!(json.contains(r#""target":"ahead""#), "{json}");
 
-        let on_member = doc("", r#"{"id":"K","time":0,"camera":{"target":{"member":"V"}},"transitionDuration":0}"#);
+        let on_member = doc(
+            "",
+            r#"{"id":"K","time":0,"camera":{"target":{"member":"V"}},"transitionDuration":0}"#,
+        );
         assert_eq!(on_member.minimum_reader_version(), 40);
-        let cam = on_member.layers.as_ref().unwrap()[0].keyframes[0].camera.clone().unwrap();
-        assert_eq!(cam.target, Some(CameraTarget::Member { member: "V".into() }));
-        let at_point = doc("", r#"{"id":"K","time":0,"camera":{"target":{"point":[0,1,0]}},"transitionDuration":0}"#);
-        let cam = at_point.layers.as_ref().unwrap()[0].keyframes[0].camera.clone().unwrap();
-        assert_eq!(cam.target, Some(CameraTarget::Point { point: [0.0, 1.0, 0.0] }));
+        let cam = on_member.layers.as_ref().unwrap()[0].keyframes[0]
+            .camera
+            .clone()
+            .unwrap();
+        assert_eq!(
+            cam.target,
+            Some(CameraTarget::Member { member: "V".into() })
+        );
+        let at_point = doc(
+            "",
+            r#"{"id":"K","time":0,"camera":{"target":{"point":[0,1,0]}},"transitionDuration":0}"#,
+        );
+        let cam = at_point.layers.as_ref().unwrap()[0].keyframes[0]
+            .camera
+            .clone()
+            .unwrap();
+        assert_eq!(
+            cam.target,
+            Some(CameraTarget::Point {
+                point: [0.0, 1.0, 0.0]
+            })
+        );
         let back = ProjectMetadata::from_json(&at_point.to_json().unwrap()).unwrap();
-        assert_eq!(back.layers.as_ref().unwrap()[0].keyframes[0].camera, Some(cam));
+        assert_eq!(
+            back.layers.as_ref().unwrap()[0].keyframes[0].camera,
+            Some(cam)
+        );
 
-        let still = doc("", r#"{"id":"K","time":0,"camera":{"yaw":10},"transitionDuration":0}"#);
-        assert!(still.minimum_reader_version() < 40, "a plain camera does not");
+        let still = doc(
+            "",
+            r#"{"id":"K","time":0,"camera":{"yaw":10},"transitionDuration":0}"#,
+        );
+        assert!(
+            still.minimum_reader_version() < 40,
+            "a plain camera does not"
+        );
     }
 
     /// A morph (rung 39): the recipe round-trips with its defaults
@@ -4917,7 +5129,10 @@ mod placement_model_tests {
 
         let morph = doc(&format!("{cube},{word},{points}"), "");
         assert_eq!(morph.minimum_reader_version(), 39);
-        let recipe = morph.resources.as_ref().unwrap()[2].particles.clone().unwrap();
+        let recipe = morph.resources.as_ref().unwrap()[2]
+            .particles
+            .clone()
+            .unwrap();
         let m = recipe.morph.as_ref().expect("a morph");
         assert_eq!(m.from, "C");
         assert_eq!(m.count(), 1500);
@@ -4925,7 +5140,10 @@ mod placement_model_tests {
         assert_eq!(m.size(), 0.02, "defaults fill what the recipe leaves out");
         assert_eq!(m.stagger(), 0.35);
         let json = morph.to_json().unwrap();
-        assert!(json.contains(r#""morph":{"from":"C","to":"W","count":1500,"spread":1.5}"#), "{json}");
+        assert!(
+            json.contains(r#""morph":{"from":"C","to":"W","count":1500,"spread":1.5}"#),
+            "{json}"
+        );
         let back = ProjectMetadata::from_json(&json).unwrap();
         assert_eq!(back.resources.as_ref().unwrap()[2].particles, Some(recipe));
 
@@ -4940,8 +5158,15 @@ mod placement_model_tests {
         let points = &stage.members.as_ref().unwrap()[0];
         assert_eq!(points.keyframes[1].progress, Some(1.0));
         assert!(keyed.to_json().unwrap().contains(r#""progress":1.0"#));
-        let huge = ParticleMorph { count: Some(50_000), ..Default::default() };
-        assert_eq!(huge.count(), ParticleMorph::MAX_COUNT, "the count is capped");
+        let huge = ParticleMorph {
+            count: Some(50_000),
+            ..Default::default()
+        };
+        assert_eq!(
+            huge.count(),
+            ParticleMorph::MAX_COUNT,
+            "the count is capped"
+        );
     }
 
     #[test]
@@ -4966,7 +5191,9 @@ mod placement_model_tests {
         assert_eq!(body(&screen).mode(), SurfaceMode::Screen);
         assert_eq!(screen.minimum_reader_version(), 32);
 
-        let worn = doc(r#"{"resourceID":"S","mode":"surface","roughness":0.3,"repeat":[3,1],"offset":[0.25,0]}"#);
+        let worn = doc(
+            r#"{"resourceID":"S","mode":"surface","roughness":0.3,"repeat":[3,1],"offset":[0.25,0]}"#,
+        );
         let b = body(&worn);
         assert_eq!(b.mode(), SurfaceMode::Surface);
         assert_eq!(b.repeat(), [3.0, 1.0]);
@@ -4979,9 +5206,17 @@ mod placement_model_tests {
         assert_eq!(body(&back), b, "the wear survives the round trip");
 
         let odd = doc(r#"{"resourceID":"S","mode":"glossy"}"#);
-        assert_eq!(body(&odd).mode(), SurfaceMode::Screen, "an unknown mode is a screen");
+        assert_eq!(
+            body(&odd).mode(),
+            SurfaceMode::Screen,
+            "an unknown mode is a screen"
+        );
         assert_eq!(body(&odd).mode_name(), Some("glossy"));
-        assert_eq!(odd.minimum_reader_version(), 38, "but it is still written, so the rung holds");
+        assert_eq!(
+            odd.minimum_reader_version(),
+            38,
+            "but it is still written, so the rung holds"
+        );
         let tiled = doc(r#"{"resourceID":"S","repeat":[2,2]}"#);
         assert_eq!(tiled.minimum_reader_version(), 38);
         assert_eq!(body(&tiled).repeat(), [2.0, 2.0]);
@@ -5269,7 +5504,10 @@ mod placement_model_tests {
         });
         assert_eq!(lit.minimum_reader_version(), 35);
         let json = lit.to_json().expect("encode");
-        assert!(json.contains(r#""environment":{"preset":"studio","intensity":1.2}"#), "{json}");
+        assert!(
+            json.contains(r#""environment":{"preset":"studio","intensity":1.2}"#),
+            "{json}"
+        );
 
         // 36: a particle system, a resource kind.
         let sparks = meta(
@@ -5278,12 +5516,21 @@ mod placement_model_tests {
                  "shape":"square"}}],"layers":[]"#,
         );
         assert_eq!(sparks.minimum_reader_version(), 36);
-        let recipe = sparks.resources.as_ref().unwrap()[0].particles.clone().unwrap();
+        let recipe = sparks.resources.as_ref().unwrap()[0]
+            .particles
+            .clone()
+            .unwrap();
         assert_eq!(recipe.rate(), 80.0);
         assert_eq!(recipe.burst(), 40);
         assert_eq!(recipe.shape(), "square");
-        assert_eq!(recipe.life(), [1.0, 2.0], "defaults fill what the recipe leaves out");
-        assert!(sparks.to_json().unwrap().contains(r#""particles":{"rate":80.0,"burst":40,"colors":["@accent","FFFFFF"],"shape":"square"}"#));
+        assert_eq!(
+            recipe.life(),
+            [1.0, 2.0],
+            "defaults fill what the recipe leaves out"
+        );
+        assert!(sparks.to_json().unwrap().contains(
+            r#""particles":{"rate":80.0,"burst":40,"colors":["@accent","FFFFFF"],"shape":"square"}"#
+        ));
 
         // 37: a parts body, a recipe variant.
         let stand = meta(
@@ -5295,23 +5542,39 @@ mod placement_model_tests {
                  "layers":[]"#,
         );
         assert_eq!(stand.minimum_reader_version(), 37);
-        let Some(BodyRecipe::Parts(parts)) = stand.resources.as_ref().unwrap()[0].recipe.clone() else {
+        let Some(BodyRecipe::Parts(parts)) = stand.resources.as_ref().unwrap()[0].recipe.clone()
+        else {
             panic!("a parts recipe");
         };
         assert_eq!(parts.len(), 3);
         assert_eq!(parts[0].slot(), "Base");
         assert_eq!(parts[1].slot(), "Body", "a part without a slot is the Body");
-        assert!(matches!(parts[1].shape, PartShape::Sphere(SphereShape { segments: Some(24), .. })));
+        assert!(matches!(
+            parts[1].shape,
+            PartShape::Sphere(SphereShape {
+                segments: Some(24),
+                ..
+            })
+        ));
         let json = stand.to_json().unwrap();
-        assert!(json.contains(r#""shape":{"cylinder":{"radius":0.6,"height":0.1}}"#), "{json}");
-        assert!(json.contains(r#""rotation":[0.0,45.0,0.0],"scale":1.5"#), "{json}");
+        assert!(
+            json.contains(r#""shape":{"cylinder":{"radius":0.6,"height":0.1}}"#),
+            "{json}"
+        );
+        assert!(
+            json.contains(r#""rotation":[0.0,45.0,0.0],"scale":1.5"#),
+            "{json}"
+        );
         let back = ProjectMetadata::from_json(&json).expect("decode");
         assert_eq!(
             back.resources.as_ref().unwrap()[0].recipe,
             stand.resources.as_ref().unwrap()[0].recipe,
             "a parts recipe survives the round trip"
         );
-        let body = generated.resources.as_ref().unwrap()[0].recipe.clone().unwrap();
+        let body = generated.resources.as_ref().unwrap()[0]
+            .recipe
+            .clone()
+            .unwrap();
         let BodyRecipe::Text(text) = body else {
             panic!("a text recipe");
         };
@@ -5320,7 +5583,10 @@ mod placement_model_tests {
         assert_eq!(text.depth(), 0.3);
         assert_eq!(text.size(), 1.0);
         let json = generated.to_json().expect("encode");
-        assert!(json.contains(r#""recipe":{"text":{"text":"Hello","bold":true,"depth":0.3}}"#), "{json}");
+        assert!(
+            json.contains(r#""recipe":{"text":{"text":"Hello","bold":true,"depth":0.3}}"#),
+            "{json}"
+        );
 
         // A device recipe: the body `promo device` writes, without the file.
         let device = meta(
@@ -5328,11 +5594,15 @@ mod placement_model_tests {
                  "addedAt":0,"recipe":{"device":{"kind":"phone"}}}],"layers":[]"#,
         );
         assert_eq!(device.minimum_reader_version(), 34);
-        let Some(BodyRecipe::Device(body)) = device.resources.as_ref().unwrap()[0].recipe.clone() else {
+        let Some(BodyRecipe::Device(body)) = device.resources.as_ref().unwrap()[0].recipe.clone()
+        else {
             panic!("a device recipe");
         };
         assert!(body.is_known());
-        assert!(device.to_json().unwrap().contains(r#""recipe":{"device":{"kind":"phone"}}"#));
+        assert!(device
+            .to_json()
+            .unwrap()
+            .contains(r#""recipe":{"device":{"kind":"phone"}}"#));
     }
 
     /// A stage layer lowers to the flat form the renderers walk: the
@@ -5372,7 +5642,11 @@ mod placement_model_tests {
         let flat = doc.lowered();
         let layers = flat.layers.as_deref().unwrap();
         let ids: Vec<&str> = layers.iter().map(|l| l.id.as_str()).collect();
-        assert_eq!(ids, ["B", "S", "L", "R", "T"], "z-order kept, members right behind their stage");
+        assert_eq!(
+            ids,
+            ["B", "S", "L", "R", "T"],
+            "z-order kept, members right behind their stage"
+        );
         let sort: Vec<i64> = layers.iter().map(|l| l.sort_index).collect();
         assert_eq!(sort, [0, 1, 2, 3, 4]);
         let owner = &layers[1];
@@ -5381,19 +5655,33 @@ mod placement_model_tests {
         assert_eq!(owner.stage.as_deref(), Some("S"));
         assert!(owner.members.is_none());
         assert_eq!(owner.fade_in, Some(0.5));
-        assert_eq!(owner.keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(
+            owner.keyframes[0].camera.as_ref().and_then(|c| c.yaw),
+            Some(-14.0)
+        );
         assert_eq!(owner.keyframes[0].light.and_then(|l| l.yaw), Some(-70.0));
         for member in &layers[2..4] {
             assert_eq!(member.stage.as_deref(), Some("S"));
             assert!(member.members.is_none());
         }
-        assert_eq!(layers[3].keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(20.0), "a member keeps its own turn");
+        assert_eq!(
+            layers[3].keyframes[0].camera.as_ref().and_then(|c| c.yaw),
+            Some(20.0),
+            "a member keeps its own turn"
+        );
         // The wire keeps the nested form; the flat form lowers to itself.
         let json = doc.to_json().expect("encode");
-        assert!(json.contains(r#""kind":"stage""#) && json.contains(r#""members":["#), "{json}");
+        assert!(
+            json.contains(r#""kind":"stage""#) && json.contains(r#""members":["#),
+            "{json}"
+        );
         assert_eq!(flat.lowered(), flat);
         assert_eq!(doc.minimum_reader_version(), 33);
-        assert_eq!(flat.minimum_reader_version(), 31, "the flat form is what rung 30/31 readers draw");
+        assert_eq!(
+            flat.minimum_reader_version(),
+            31,
+            "the flat form is what rung 30/31 readers draw"
+        );
     }
 
     /// A flat stage lifts into one stage layer: the first member's id,
@@ -5466,7 +5754,11 @@ mod placement_model_tests {
         let lifted = doc.lifted();
         let layers = lifted.layers.as_deref().unwrap();
         let ids: Vec<&str> = layers.iter().map(|l| l.id.as_str()).collect();
-        assert_eq!(ids, ["B", "L", "T"], "the stage stands where its first member stood, under its id");
+        assert_eq!(
+            ids,
+            ["B", "L", "T"],
+            "the stage stands where its first member stood, under its id"
+        );
         let stage = &layers[1];
         assert_eq!(stage.kind, ProjectLayerKind::Stage);
         assert_eq!(stage.name, "bench");
@@ -5475,9 +5767,15 @@ mod placement_model_tests {
         assert_eq!(stage.fade_in, Some(0.5));
         assert_eq!(stage.keyframes.len(), 1);
         assert_eq!(stage.keyframes[0].id, "K1");
-        assert_eq!(stage.keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(
+            stage.keyframes[0].camera.as_ref().and_then(|c| c.yaw),
+            Some(-14.0)
+        );
         assert!(stage.keyframes[0].placement.is_some());
-        assert_eq!(stage.keyframes[0].stage_offset, None, "the world fields left the stage layer");
+        assert_eq!(
+            stage.keyframes[0].stage_offset, None,
+            "the world fields left the stage layer"
+        );
         let members = stage.members.as_deref().unwrap();
         assert_eq!(members.len(), 2);
         let head = &members[0];
@@ -5489,15 +5787,29 @@ mod placement_model_tests {
         assert_eq!(head.stage, None);
         assert_eq!(head.keyframes.len(), 1);
         assert_eq!(head.keyframes[0].stage_offset, Some([-1.5, 0.0]));
-        assert_eq!(head.keyframes[0].camera, None, "the first member had no turn of its own");
+        assert_eq!(
+            head.keyframes[0].camera, None,
+            "the first member had no turn of its own"
+        );
         assert!(head.keyframes[0].placement.is_none());
         assert_eq!(members[1].id, "R");
-        assert_eq!(members[1].keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(20.0));
+        assert_eq!(
+            members[1].keyframes[0].camera.as_ref().and_then(|c| c.yaw),
+            Some(20.0)
+        );
         assert_eq!(lifted.minimum_reader_version(), 33);
-        assert_eq!(lifted.lifted(), lifted, "the one-layer form lifts to itself");
+        assert_eq!(
+            lifted.lifted(),
+            lifted,
+            "the one-layer form lifts to itself"
+        );
         assert_eq!(doc.lifted(), lifted, "lifting is stable");
         let walk = lifted.lowered();
-        assert_eq!(walk.layers.as_deref().unwrap().len(), 5, "owner + two members + two plain layers");
+        assert_eq!(
+            walk.layers.as_deref().unwrap().len(),
+            5,
+            "owner + two members + two plain layers"
+        );
     }
 
     /// Lower, then lift: the one-layer form comes back with its members and
@@ -5535,13 +5847,19 @@ mod placement_model_tests {
         let stage = &layers[0];
         assert_eq!(stage.id, "S");
         assert_eq!(stage.kind, ProjectLayerKind::Stage);
-        assert_eq!(stage.keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(-14.0));
+        assert_eq!(
+            stage.keyframes[0].camera.as_ref().and_then(|c| c.yaw),
+            Some(-14.0)
+        );
         assert!(stage.keyframes[0].placement.is_some());
         let members = stage.members.as_deref().unwrap();
         let ids: Vec<&str> = members.iter().map(|m| m.id.as_str()).collect();
         assert_eq!(ids, ["L", "R"], "no phantom for the camera row");
         assert_eq!(members[0].keyframes[0].stage_offset, Some([-1.5, 0.0]));
-        assert_eq!(members[1].keyframes[0].camera.as_ref().and_then(|c| c.yaw), Some(20.0));
+        assert_eq!(
+            members[1].keyframes[0].camera.as_ref().and_then(|c| c.yaw),
+            Some(20.0)
+        );
         assert_eq!(layers[1].id, "T");
     }
 
@@ -5565,7 +5883,10 @@ mod placement_model_tests {
                  "layers":[]}"#,
         )
         .expect("fixture");
-        let materials = doc.resources.as_ref().unwrap()[0].materials.clone().unwrap();
+        let materials = doc.resources.as_ref().unwrap()[0]
+            .materials
+            .clone()
+            .unwrap();
         let body = &materials["Body"];
         assert_eq!(body.color_hex(), Some("@accent"));
         assert_eq!(body.resource_id(), None);

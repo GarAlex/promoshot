@@ -283,6 +283,18 @@ new projects.
   `slide` (in from the right). Stamp `minReaderVersion: 28`. By word,
   with `"seconds": 1.2`, is the kinetic-type look; by character is
   busier and wants short text.
+- **Designed type.** A caption's style takes `tracking` (letter spacing
+  in points), `weight` ("ultraLight".."black", winning over `isBold`)
+  and `lineHeight` (a multiple of the size, 1.25 unless said). This is
+  the difference between a subtitle and a headline: a small eyebrow
+  line at +6 tracking, a heavy 88pt headline at −1.4 with a 1.05 line
+  height, a medium subtitle under it at 72% opacity. `promo_layer`
+  takes all three by name. Stamp `minReaderVersion: 42`.
+- **A rect is the accent bar and the plate.** A drawing shape's `kind`
+  can be `rect`, with an optional `cornerRadius` (clamped to half the
+  shorter side, so a big one is a pill). Two points, a `fillColorHex`,
+  and it is the 268×8 accent bar under a headline, the rounded window
+  a screenshot sits in, or a mask. Stamp `minReaderVersion: 42`.
 - **No 2.5D.** A caption's `tiltX`/`tiltY` and `captionStyle.depth`
   (stacked copies) and the device `frame` on a picture are the flat
   compositor's old tricks: they still render, `promo_validate` names
@@ -348,7 +360,14 @@ new projects.
 
 One short headline per shot, above the device; same background and
 typography across the set; the headline must describe what the picture
-shows. Prefer a canvas the source drops into at native size. A set of
+shows. Type carries the set: an eyebrow line in small tracked-out caps
+(+6), the headline heavy and slightly tightened (−1.4) at a 1.05 line
+height, a medium subtitle under it, and a short `rect` accent bar
+between the words and the device. A glow round the device is its
+frame's own shadow in the accent colour — `shadowColorHex` the accent,
+`shadowOpacity` about 0.34, `shadowRadius` wide (~54 at 1080) — with
+`borderColorHex` the same accent at a `borderWidth` of a few px.
+Prefer a canvas the source drops into at native size. A set of
 stills is a slideshow with hard cuts — every frame is then a finished
 screenshot, and the same project doubles as a promo reel.
 

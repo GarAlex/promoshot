@@ -59,6 +59,13 @@ pub struct TextStyle {
     pub vertical_margin: f64,
     /// Line height as a multiple of font size.
     pub line_height: f64,
+    /// Letter spacing in canvas px, added after every glyph but the last on
+    /// a line. Zero is the font's own spacing, and the zero path is exactly
+    /// what it was before this existed.
+    pub tracking: f64,
+    /// The face's numeric weight (100–900). None falls back to `bold`,
+    /// which only ever chose 700 or 400.
+    pub weight: Option<u16>,
     /// Where the box hangs, when a placement rule says so — the same
     /// nine-anchor grid media layers use, only `anchor` and `offset` read
     /// (a caption's size is typography, not a rule). Present, it decides
@@ -127,6 +134,8 @@ impl TextStyle {
             right_margin,
             vertical_margin,
             line_height,
+            tracking,
+            weight,
             stroke_rgba,
             stroke_width,
             shadow_rgba,
@@ -150,6 +159,11 @@ impl TextStyle {
             vertical_margin: vertical_margin * factor,
             // A multiple of the font size, which already scaled.
             line_height: *line_height,
+            // A length: tracking is px at the caption's own size, so a
+            // denser texture must open the letters by the same factor.
+            tracking: tracking * factor,
+            // A weight is not a length.
+            weight: *weight,
             stroke_rgba: *stroke_rgba,
             stroke_width: stroke_width * factor,
             shadow_rgba: *shadow_rgba,
@@ -190,9 +204,21 @@ impl Default for TextStyle {
             right_margin: 60.0,
             vertical_margin: 80.0,
             line_height: 1.25,
+            tracking: 0.0,
+            weight: None,
             placement: None,
             smoothing: None,
         }
+    }
+}
+
+/// The face weight a style asks for: its own number, or the bold flag's
+/// 700/400 — which is every weight anything could say before `weight`.
+fn style_weight(style: &TextStyle) -> Weight {
+    match style.weight {
+        Some(value) => Weight(value.clamp(1, 1000)),
+        None if style.bold => Weight::BOLD,
+        None => Weight::NORMAL,
     }
 }
 
@@ -378,11 +404,7 @@ pub fn reveal_layout(
     };
     let attrs = Attrs::new()
         .family(family)
-        .weight(if style.bold {
-            Weight::BOLD
-        } else {
-            Weight::NORMAL
-        })
+        .weight(style_weight(style))
         .style(if style.italic {
             Style::Italic
         } else {
@@ -395,30 +417,46 @@ pub fn reveal_layout(
     let mut units: Vec<UnitSpan> = Vec::new();
     let mut line_tops: Vec<f64> = Vec::new();
 
+    let tracking = style.tracking;
+    let inner_width = box_.width - padding * 2.0;
     for (line, run) in buffer.layout_runs().enumerate() {
+        // The same step the rasterizer applies, and the same nudge, so a
+        // reveal wipes exactly the letters it is drawing rather than a box
+        // beside them.
+        let run_width = run.line_w as f64 + tracking * (run.glyphs.len().max(1) - 1) as f64;
+        let aligned = match style.align {
+            Align::Leading => 0.0,
+            Align::Center => ((inner_width - run_width) / 2.0).max(0.0),
+            Align::Trailing => (inner_width - run_width).max(0.0),
+        };
+        let shift = |index: usize| tracking * index as f64 + aligned;
         line_tops.push(padding + line as f64 * metrics.line_height as f64);
         match by {
             // One span for the whole line, left edge to right edge.
             RevealBy::Line => units.push(UnitSpan {
                 line: line as u32,
-                start_x: padding,
-                end_x: padding + run.line_w as f64,
+                start_x: padding + aligned,
+                end_x: padding + aligned + run_width,
             }),
             RevealBy::Character => {
                 // By CLUSTER, not byte: a glyph carries the byte range of the
                 // cluster it belongs to, so an emoji or a combining accent is
                 // one tick of the typewriter rather than several.
                 let mut cluster = usize::MAX;
-                for glyph in run.glyphs {
+                for (index, glyph) in run.glyphs.iter().enumerate() {
+                    let (left, right) = (
+                        padding + glyph.x as f64 + shift(index),
+                        padding + (glyph.x + glyph.w) as f64 + shift(index),
+                    );
                     if glyph.start != cluster {
                         cluster = glyph.start;
                         units.push(UnitSpan {
                             line: line as u32,
-                            start_x: padding + glyph.x as f64,
-                            end_x: padding + (glyph.x + glyph.w) as f64,
+                            start_x: left,
+                            end_x: right,
                         });
                     } else if let Some(last) = units.last_mut() {
-                        last.end_x = last.end_x.max(padding + (glyph.x + glyph.w) as f64);
+                        last.end_x = last.end_x.max(right);
                     }
                 }
             }
@@ -428,7 +466,7 @@ pub fn reveal_layout(
                 // range rather than by counting: at a soft wrap the trailing
                 // space is dropped from the run entirely, so counts drift.
                 let mut current: Option<UnitSpan> = None;
-                for glyph in run.glyphs {
+                for (index, glyph) in run.glyphs.iter().enumerate() {
                     let text_of = run.text.get(glyph.start..glyph.end).unwrap_or("");
                     let is_space =
                         !text_of.is_empty() && text_of.chars().all(|c| c.is_whitespace());
@@ -438,8 +476,8 @@ pub fn reveal_layout(
                         }
                         continue;
                     }
-                    let left = padding + glyph.x as f64;
-                    let right = padding + (glyph.x + glyph.w) as f64;
+                    let left = padding + glyph.x as f64 + shift(index);
+                    let right = padding + (glyph.x + glyph.w) as f64 + shift(index);
                     match current.as_mut() {
                         Some(span) => {
                             span.start_x = span.start_x.min(left);
@@ -751,11 +789,16 @@ struct Flattener {
 impl Flattener {
     fn map(&self, x: f32, y: f32) -> [f32; 2] {
         // Font units are y-up; the layout is y-down.
-        [self.origin[0] + x * self.scale, self.origin[1] - y * self.scale]
+        [
+            self.origin[0] + x * self.scale,
+            self.origin[1] - y * self.scale,
+        ]
     }
     fn take(&mut self) {
         if self.current.len() >= 3 {
-            if let (Some(f), Some(l)) = (self.current.first().copied(), self.current.last().copied()) {
+            if let (Some(f), Some(l)) =
+                (self.current.first().copied(), self.current.last().copied())
+            {
                 if (f[0] - l[0]).abs() < 1e-4 && (f[1] - l[1]).abs() < 1e-4 {
                     self.current.pop();
                 }
@@ -798,7 +841,12 @@ impl ttf_parser::OutlineBuilder for Flattener {
         self.last = p;
     }
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        let (a, c1, c2, p) = (self.last, self.map(x1, y1), self.map(x2, y2), self.map(x, y));
+        let (a, c1, c2, p) = (
+            self.last,
+            self.map(x1, y1),
+            self.map(x2, y2),
+            self.map(x, y),
+        );
         for i in 1..=self.segments {
             let t = i as f32 / self.segments as f32;
             let u = 1.0 - t;
@@ -935,8 +983,7 @@ fn rasterize_inner(
         (style.font_size * style.line_height) as f32,
     );
     let mut buffer = Buffer::new(&mut fonts, metrics);
-    let mut buffer = buffer.borrow_with(&mut fonts);
-    buffer.set_size(Some(text_width as f32), None);
+    buffer.set_size(&mut fonts, Some(text_width as f32), None);
 
     let family = match &resolved {
         ResolvedFamily::Named(name) => Family::Name(name),
@@ -946,25 +993,28 @@ fn rasterize_inner(
     };
     let attrs = Attrs::new()
         .family(family)
-        .weight(if style.bold {
-            Weight::BOLD
-        } else {
-            Weight::NORMAL
-        })
+        .weight(style_weight(style))
         .style(if style.italic {
             Style::Italic
         } else {
             Style::Normal
         });
-    buffer.set_text(text, attrs, Shaping::Advanced);
-    buffer.shape_until_scroll(true);
+    buffer.set_text(&mut fonts, text, attrs, Shaping::Advanced);
+    buffer.shape_until_scroll(&mut fonts, true);
+
+    // Letter spacing is not a shaping feature here — cosmic-text has none —
+    // so it is applied when the glyphs are placed: every glyph after the
+    // first on a line moves right by one more step. The width has to know,
+    // or the box would crop the letters it just opened out.
+    let tracking = style.tracking;
+    let opened = |glyphs: usize| tracking * (glyphs.max(1) - 1) as f64;
 
     // Measured, not assumed: the widest run decides the box width, so a short
     // headline gets a snug background instead of a full-width bar.
     let mut measured_width: f32 = 0.0;
     let mut line_count = 0usize;
     for run in buffer.layout_runs() {
-        measured_width = measured_width.max(run.line_w);
+        measured_width = measured_width.max(run.line_w + opened(run.glyphs.len()) as f32);
         line_count += 1;
     }
     let line_height = metrics.line_height as f64;
@@ -1051,7 +1101,21 @@ fn rasterize_inner(
     // Horizontal alignment inside the box: the box is already sized to the
     // text, so runs are nudged by the difference for multi-line blocks.
     let inner_width = bg_width - style.padding * 2.0;
-    buffer.draw(&mut cache, color, |gx, gy, gw, gh, gcolor| {
+    // ALIGNMENT INSIDE THE BOX. The box is shrink-wrapped to the widest
+    // line, so a shorter line has to be nudged within it — otherwise a
+    // "center" two-line headline draws its short first line flush left
+    // while the app's own canvas centres it, and the two disagree on the
+    // picture. cosmic-text lays every run out from the left; this is the
+    // only place that can put it right.
+    let nudge = |run: &cosmic_text::LayoutRun| -> f64 {
+        let run_width = run.line_w as f64 + opened(run.glyphs.len());
+        match style.align {
+            Align::Leading => 0.0,
+            Align::Center => ((inner_width - run_width) / 2.0).max(0.0),
+            Align::Trailing => (inner_width - run_width).max(0.0),
+        }
+    };
+    let mut draw_pixel = |gx: i32, gy: i32, gw: u32, gh: u32, gcolor: cosmic_text::Color| {
         let raw = gcolor.a() as f64 / 255.0;
         if raw <= 0.0 {
             return;
@@ -1064,7 +1128,6 @@ fn rasterize_inner(
                 let py = gy + dy as i32;
                 let x = px as f64 + style.padding;
                 let y = py as f64 + style.padding;
-                let _ = inner_width;
                 if x < 0.0 || y < 0.0 || x >= width as f64 || y >= height as f64 {
                     continue;
                 }
@@ -1089,7 +1152,17 @@ fn rasterize_inner(
                 );
             }
         }
-    });
+    };
+    for run in buffer.layout_runs() {
+        let shift = nudge(&run);
+        for (index, glyph) in run.glyphs.iter().enumerate() {
+            let physical = glyph.physical(((tracking * index as f64 + shift) as f32, 0.0), 1.0);
+            let glyph_color = glyph.color_opt.unwrap_or(color);
+            cache.with_pixels(&mut fonts, physical.cache_key, glyph_color, |x, y, c| {
+                draw_pixel(physical.x + x, run.line_y as i32 + physical.y + y, 1, 1, c);
+            });
+        }
+    }
 
     // Shadow, then outline, then the letters — the order they must be read
     // in. Each is derived from the one mask above.
@@ -1294,6 +1367,203 @@ mod tests {
     fn empty_text_is_nothing_to_draw() {
         assert!(rasterize("", 1920.0, 1080.0, &TextStyle::default()).is_none());
         assert!(rasterize("   ", 1920.0, 1080.0, &TextStyle::default()).is_none());
+    }
+
+    /// Letter spacing is real ink, not a number the style carries: the box
+    /// grows by exactly one step per gap, the last letter moves right by
+    /// the same amount, and negative tracking tightens the same way. The
+    /// untracked picture is unchanged, which is what lets this ship without
+    /// re-rendering every caption ever authored.
+    #[test]
+    fn tracking_opens_the_letters_and_the_box() {
+        let plain = TextStyle {
+            font_size: 64.0,
+            background_rgba: [0, 0, 0, 0],
+            padding: 0.0,
+            ..TextStyle::default()
+        };
+        let tracked = TextStyle {
+            tracking: 12.0,
+            ..plain.clone()
+        };
+        let tight = TextStyle {
+            tracking: -3.0,
+            ..plain.clone()
+        };
+        let text = "WIDE";
+        let (a, b, c) = (
+            rasterize(text, 1920.0, 1080.0, &plain).expect("plain"),
+            rasterize(text, 1920.0, 1080.0, &tracked).expect("tracked"),
+            rasterize(text, 1920.0, 1080.0, &tight).expect("tight"),
+        );
+        // Four letters, three gaps, twelve points each.
+        let grew = b.width as i64 - a.width as i64;
+        assert!(
+            (grew - 36).abs() <= 2,
+            "the box grew by three steps: {grew}"
+        );
+        let shrank = a.width as i64 - c.width as i64;
+        assert!((shrank - 9).abs() <= 2, "and tightens: {shrank}");
+
+        // The ink moved, not just the box: the rightmost lit column sits a
+        // full three steps further right.
+        let right_edge = |out: &RasterizedText| -> i64 {
+            let mut edge = 0i64;
+            for y in 0..out.height {
+                for x in 0..out.width {
+                    let index = ((y * out.width + x) * 4 + 3) as usize;
+                    if out.rgba[index] > 8 {
+                        edge = edge.max(x as i64);
+                    }
+                }
+            }
+            edge
+        };
+        let moved = right_edge(&b) - right_edge(&a);
+        assert!((moved - 36).abs() <= 3, "the last letter moved: {moved}");
+        // The first letter did not: tracking opens the gaps, it does not
+        // indent the line.
+        let first_column = |out: &RasterizedText| -> i64 {
+            for x in 0..out.width {
+                for y in 0..out.height {
+                    let index = ((y * out.width + x) * 4 + 3) as usize;
+                    if out.rgba[index] > 8 {
+                        return x as i64;
+                    }
+                }
+            }
+            -1
+        };
+        assert_eq!(
+            first_column(&a),
+            first_column(&b),
+            "the line does not indent"
+        );
+    }
+
+    /// A centred two-line caption centres BOTH lines inside its box. The
+    /// box is shrink-wrapped to the widest line, so the short one has to be
+    /// nudged; without that it drew flush left while the app's own canvas
+    /// centred it, and a two-line store headline came out lopsided.
+    #[test]
+    fn lines_align_inside_the_box() {
+        let at = |align: Align| {
+            let style = TextStyle {
+                font_size: 60.0,
+                align,
+                padding: 0.0,
+                background_rgba: [0, 0, 0, 0],
+                ..TextStyle::default()
+            };
+            let out = rasterize("Touch Typing\nMeets Arcade Action", 1920.0, 1080.0, &style)
+                .expect("rasterized");
+            // The lit span of the FIRST line only — the short one.
+            let (mut left, mut right) = (out.width as i64, 0i64);
+            let half = (out.height / 2) as u32;
+            for y in 0..half {
+                for x in 0..out.width {
+                    if out.rgba[((y * out.width + x) * 4 + 3) as usize] > 8 {
+                        left = left.min(x as i64);
+                        right = right.max(x as i64);
+                    }
+                }
+            }
+            (left, right, out.width as i64)
+        };
+        let (l, r, w) = at(Align::Center);
+        let (gap_left, gap_right) = (l, w - 1 - r);
+        assert!(
+            (gap_left - gap_right).abs() <= 4,
+            "centred: {gap_left} px left vs {gap_right} px right of a {w}px box"
+        );
+        let (l, _, _) = at(Align::Leading);
+        assert!(l <= 4, "leading keeps the short line flush left: {l}");
+        let (_, r, w) = at(Align::Trailing);
+        assert!(w - 1 - r <= 4, "trailing pushes it right: {}", w - 1 - r);
+    }
+
+    /// A weight is chosen by number, and the flag keeps its old meaning
+    /// when nothing says otherwise — so every caption written before this
+    /// existed still asks for exactly the face it used to.
+    #[test]
+    fn weight_beats_the_bold_flag() {
+        let bold = TextStyle {
+            bold: true,
+            weight: None,
+            ..TextStyle::default()
+        };
+        let plain = TextStyle {
+            bold: false,
+            ..bold.clone()
+        };
+        assert_eq!(style_weight(&bold), Weight::BOLD);
+        assert_eq!(style_weight(&plain), Weight::NORMAL);
+        assert_eq!(
+            style_weight(&TextStyle {
+                weight: Some(300),
+                ..bold.clone()
+            }),
+            Weight(300),
+            "the number wins over the flag"
+        );
+        // Out-of-range numbers are clamped rather than wrapped: fontdb
+        // matches on distance, and a zero would match the lightest face.
+        assert_eq!(
+            style_weight(&TextStyle {
+                weight: Some(0),
+                ..bold.clone()
+            }),
+            Weight(1)
+        );
+    }
+
+    /// Line height is the caption's to set: two lines at 1.0 sit exactly
+    /// one font size apart, and the box is that much shorter than at 2.0.
+    #[test]
+    fn line_height_spaces_the_lines() {
+        let at = |multiple: f64| TextStyle {
+            font_size: 50.0,
+            line_height: multiple,
+            padding: 0.0,
+            background_rgba: [0, 0, 0, 0],
+            ..TextStyle::default()
+        };
+        let tight = rasterize("one\ntwo", 1920.0, 1080.0, &at(1.0)).expect("tight");
+        let loose = rasterize("one\ntwo", 1920.0, 1080.0, &at(2.0)).expect("loose");
+        assert_eq!(tight.lines, 2);
+        let grew = loose.height as i64 - tight.height as i64;
+        assert!(
+            (grew - 100).abs() <= 2,
+            "two lines, one extra font size each: {grew}"
+        );
+    }
+
+    /// And the number reaches real faces: across the ladder the same word
+    /// puts down strictly more ink each step, so "medium" and "heavy" are
+    /// two different pictures rather than two spellings of bold.
+    #[test]
+    fn heavier_weights_put_down_more_ink() {
+        let ink = |weight: u16| -> u64 {
+            let style = TextStyle {
+                font_size: 90.0,
+                bold: false,
+                weight: Some(weight),
+                padding: 0.0,
+                background_rgba: [0, 0, 0, 0],
+                ..TextStyle::default()
+            };
+            let out = rasterize("Weight", 1920.0, 1080.0, &style).expect("rasterized");
+            out.rgba.chunks_exact(4).map(|px| px[3] as u64).sum()
+        };
+        let mut last = 0;
+        for weight in [100u16, 400, 700, 900] {
+            let now = ink(weight);
+            assert!(
+                now > last,
+                "{weight} is heavier than the step before: {now} vs {last}"
+            );
+            last = now;
+        }
     }
 
     #[test]

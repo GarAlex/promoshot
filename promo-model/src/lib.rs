@@ -280,6 +280,9 @@ mod schema_doc_tests {
 
     fn full_caption_style() -> SubtitleStyle {
         SubtitleStyle {
+            tracking: Some(6.0),
+            weight: Some(SubtitleFontWeight::Heavy),
+            line_height: Some(1.05),
             placement: Some(Placement {
                 height: None,
                 width: None,
@@ -550,6 +553,7 @@ mod schema_doc_tests {
                 shapes: vec![DrawingShape {
                     id: "S".into(),
                     kind: DrawingShapeKind::Oval,
+                    corner_radius: Some(18.0),
                     points: vec![Point(0.0, 0.0), Point(100.0, 100.0)],
                     stroke_color_hex: "FFFFFF".into(),
                     stroke_width: 1.0,
@@ -609,10 +613,7 @@ mod schema_doc_tests {
             materials: Some(
                 [
                     ("Body".to_string(), MaterialBinding::Color("@accent".into())),
-                    (
-                        "Screen".to_string(),
-                        MaterialBinding::resource("shot"),
-                    ),
+                    ("Screen".to_string(), MaterialBinding::resource("shot")),
                 ]
                 .into_iter()
                 .collect(),

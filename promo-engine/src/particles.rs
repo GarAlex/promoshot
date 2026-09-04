@@ -50,6 +50,7 @@ pub fn particle_shapes(
         arrow_start: false,
         arrow_end: false,
         even_odd_fill: false,
+        corner_radius: 0.0,
     };
     let mut out = vec![frame];
     if time < 0.0 {
@@ -73,8 +74,17 @@ pub fn particle_shapes(
     let (anchor, extent) = (recipe.anchor(), recipe.extent());
     let (speed, size, spin) = (recipe.speed(), recipe.size(), recipe.spin());
     let (direction, spread) = (recipe.direction(), recipe.spread());
-    let (gravity, wind, drag, turbulence) = (recipe.gravity(), recipe.wind(), recipe.drag(), recipe.turbulence());
-    let (size_curve, opacity_curve, shape) = (recipe.size_over_life(), recipe.opacity_over_life(), recipe.shape());
+    let (gravity, wind, drag, turbulence) = (
+        recipe.gravity(),
+        recipe.wind(),
+        recipe.drag(),
+        recipe.turbulence(),
+    );
+    let (size_curve, opacity_curve, shape) = (
+        recipe.size_over_life(),
+        recipe.opacity_over_life(),
+        recipe.shape(),
+    );
     let mut budget = BUDGET;
 
     let emit = |index: u64, born: f64, out: &mut Vec<VectorShape>, budget: &mut usize| {
@@ -120,8 +130,10 @@ pub fn particle_shapes(
         let (px, py) = if turbulence > 0.0 {
             let t = turbulence * h;
             (
-                px + t * ((age * 2.1 + phases[0]).sin() * 0.6 + (age * 5.3 + phases[1]).sin() * 0.4),
-                py + t * ((age * 1.7 + phases[2]).sin() * 0.6 + (age * 4.3 + phases[3]).sin() * 0.4),
+                px + t
+                    * ((age * 2.1 + phases[0]).sin() * 0.6 + (age * 5.3 + phases[1]).sin() * 0.4),
+                py + t
+                    * ((age * 1.7 + phases[2]).sin() * 0.6 + (age * 4.3 + phases[3]).sin() * 0.4),
             )
         } else {
             (px, py)
@@ -164,6 +176,7 @@ pub fn particle_shapes(
                     arrow_start: false,
                     arrow_end: false,
                     even_odd_fill: false,
+                    corner_radius: 0.0,
                 }
             }
             "streak" => {
@@ -179,6 +192,7 @@ pub fn particle_shapes(
                     arrow_start: false,
                     arrow_end: false,
                     even_odd_fill: false,
+                    corner_radius: 0.0,
                 }
             }
             _ => VectorShape {
@@ -190,6 +204,7 @@ pub fn particle_shapes(
                 arrow_start: false,
                 arrow_end: false,
                 even_odd_fill: false,
+                corner_radius: 0.0,
             },
         };
         out.push(shape);
@@ -234,9 +249,16 @@ mod tests {
         let a = particle_shapes(&recipe(), 0.7, 1920.0, 1080.0, &settings);
         let b = particle_shapes(&recipe(), 0.7, 1920.0, 1080.0, &settings);
         assert_eq!(a.len(), b.len());
-        assert!(a.iter().zip(&b).all(|(x, y)| x.points == y.points && x.fill_rgba == y.fill_rgba));
+        assert!(a
+            .iter()
+            .zip(&b)
+            .all(|(x, y)| x.points == y.points && x.fill_rgba == y.fill_rgba));
         let c = particle_shapes(&recipe(), 1.4, 1920.0, 1080.0, &settings);
-        assert!(a.len() > 20, "a burst and a second of emission: {}", a.len());
+        assert!(
+            a.len() > 20,
+            "a burst and a second of emission: {}",
+            a.len()
+        );
         assert!(a.iter().zip(&c).any(|(x, y)| x.points != y.points));
     }
 
@@ -270,6 +292,10 @@ mod tests {
         };
         let at = |t: f64| particle_shapes(&calm, t, 1000.0, 1000.0, &settings)[1].points[0].1;
         assert!(at(1.0) > at(0.5), "{} vs {}", at(1.0), at(0.5));
-        assert!((at(1.0) - at(0.0) - 500.0).abs() < 1.0, "½·g·t² with g one canvas height: {}", at(1.0) - at(0.0));
+        assert!(
+            (at(1.0) - at(0.0) - 500.0).abs() < 1.0,
+            "½·g·t² with g one canvas height: {}",
+            at(1.0) - at(0.0)
+        );
     }
 }

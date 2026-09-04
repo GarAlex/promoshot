@@ -14,7 +14,10 @@ pub struct Transform {
     pub horizontal_shift: f64,
 }
 
-pub(crate) fn sorted_by_time<F>(keyframes: &[ProjectLayerKeyframe], has_field: F) -> Vec<&ProjectLayerKeyframe>
+pub(crate) fn sorted_by_time<F>(
+    keyframes: &[ProjectLayerKeyframe],
+    has_field: F,
+) -> Vec<&ProjectLayerKeyframe>
 where
     F: Fn(&ProjectLayerKeyframe) -> bool,
 {
@@ -410,7 +413,9 @@ where
         return av + (bv - av) * progress;
     };
     let gap = (b.time - a.time).max(1e-9);
-    let slope = |p: &ProjectLayerKeyframe, q: &ProjectLayerKeyframe| (value(q) - value(p)) / (q.time - p.time).max(1e-9);
+    let slope = |p: &ProjectLayerKeyframe, q: &ProjectLayerKeyframe| {
+        (value(q) - value(p)) / (q.time - p.time).max(1e-9)
+    };
     let ma = match ia.checked_sub(1).and_then(|i| sorted.get(i)) {
         Some(prev) => slope(prev, b),
         None => slope(a, b),
@@ -442,7 +447,12 @@ where
     let d = ramp_seconds(b, gap).max(1e-9);
     let p = progress.clamp(0.0, 1.0);
     let (p2, p3) = (p * p, p * p * p);
-    let (h00, h10, h01, h11) = (2.0 * p3 - 3.0 * p2 + 1.0, p3 - 2.0 * p2 + p, -2.0 * p3 + 3.0 * p2, p3 - p2);
+    let (h00, h10, h01, h11) = (
+        2.0 * p3 - 3.0 * p2 + 1.0,
+        p3 - 2.0 * p2 + p,
+        -2.0 * p3 + 3.0 * p2,
+        p3 - p2,
+    );
     h00 * av + h10 * d * ma + h01 * bv + h11 * d * mb
 }
 
@@ -1586,7 +1596,10 @@ mod tests {
         }
         for t in [0.25, 0.5, 0.75, 3.25, 3.5, 3.75] {
             let v = at(t);
-            assert!((1.0..=2.0).contains(&v), "stays between its keyframes at {t}: {v}");
+            assert!(
+                (1.0..=2.0).contains(&v),
+                "stays between its keyframes at {t}: {v}"
+            );
         }
     }
 
@@ -1609,10 +1622,16 @@ mod tests {
                {"id":"C","time":2,"zoom":3,"transitionDuration":1,"easing":"smooth"}"#,
         );
         let at = |t: f64| layer_interpolated_scalar(&smooth, t, |k| k.zoom).unwrap();
-        assert!((at(1.0) - 1.0).abs() < 1e-9 && (at(2.0) - 3.0).abs() < 1e-9, "through the keyframes");
+        assert!(
+            (at(1.0) - 1.0).abs() < 1e-9 && (at(2.0) - 3.0).abs() < 1e-9,
+            "through the keyframes"
+        );
         let before = (at(1.0) - at(0.98)) / 0.02;
         let after = (at(1.02) - at(1.0)) / 0.02;
-        assert!((before - after).abs() < 0.05, "no stop at the middle keyframe: {before} vs {after}");
+        assert!(
+            (before - after).abs() < 0.05,
+            "no stop at the middle keyframe: {before} vs {after}"
+        );
         assert!(before > 1.0, "already moving at the keyframe: {before}");
 
         let stops = make(
@@ -1630,7 +1649,10 @@ mod tests {
                {"id":"C","time":2,"zoom":2,"transitionDuration":1,"easing":"smooth"}"#,
         );
         let at_l = |t: f64| layer_interpolated_scalar(&line, t, |k| k.zoom).unwrap();
-        assert!((at_l(0.5) - 0.5).abs() < 1e-9 && (at_l(1.5) - 1.5).abs() < 1e-9, "linear data stays a line");
+        assert!(
+            (at_l(0.5) - 0.5).abs() < 1e-9 && (at_l(1.5) - 1.5).abs() < 1e-9,
+            "linear data stays a line"
+        );
     }
 
     /// A hold has no chord for a motion path to fit onto, so the path only

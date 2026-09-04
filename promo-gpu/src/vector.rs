@@ -26,6 +26,7 @@ pub enum VectorShapeKind {
     Pen,
     Line,
     Oval,
+    Rect,
 }
 
 /// One drawing shape in drawing-space coordinates.
@@ -41,6 +42,11 @@ pub struct VectorShape {
     pub arrow_start: bool,
     pub arrow_end: bool,
     pub even_odd_fill: bool,
+    /// A `Rect`'s corner radius in drawing units; zero is square corners,
+    /// and anything larger than half the shorter side is clamped to it, so
+    /// a big radius gives a pill rather than a knot. Ignored by every
+    /// other kind.
+    pub corner_radius: f64,
 }
 
 /// The bounding box of every shape's points — the drawing's natural size.
@@ -476,6 +482,60 @@ fn shape_path(shape: &VectorShape, scale: f64, dx: f64, dy: f64) -> Option<Path>
                 arrow_head(&mut builder, a, b, head as f32);
             }
         }
+        VectorShapeKind::Rect => {
+            if shape.points.len() < 2 {
+                return None;
+            }
+            let (a, b) = (shape.points[0], shape.points[1]);
+            let min_x = a.0.min(b.0) * scale + dx;
+            let min_y = a.1.min(b.1) * scale + dy;
+            let w = (b.0 - a.0).abs() * scale;
+            let h = (b.1 - a.1).abs() * scale;
+            let (max_x, max_y) = (min_x + w, min_y + h);
+            let p = |x: f64, y: f64| point(x as f32, y as f32);
+            // Half the shorter side is the largest radius that still means
+            // something: past it the two corners of a side would overlap.
+            let r = (shape.corner_radius * scale).clamp(0.0, w.min(h) / 2.0);
+            if r <= 0.0 {
+                builder.begin(p(min_x, min_y));
+                builder.line_to(p(max_x, min_y));
+                builder.line_to(p(max_x, max_y));
+                builder.line_to(p(min_x, max_y));
+                builder.end(true);
+            } else {
+                // The same kappa quarter-arcs CGPath's rounded rect uses,
+                // so a plate drawn here and one drawn by the app's own
+                // Core Graphics path are the same curve.
+                const KAPPA: f64 = 0.552_284_749_830_793_4;
+                let o = r * KAPPA;
+                builder.begin(p(min_x + r, min_y));
+                builder.line_to(p(max_x - r, min_y));
+                builder.cubic_bezier_to(
+                    p(max_x - r + o, min_y),
+                    p(max_x, min_y + r - o),
+                    p(max_x, min_y + r),
+                );
+                builder.line_to(p(max_x, max_y - r));
+                builder.cubic_bezier_to(
+                    p(max_x, max_y - r + o),
+                    p(max_x - r + o, max_y),
+                    p(max_x - r, max_y),
+                );
+                builder.line_to(p(min_x + r, max_y));
+                builder.cubic_bezier_to(
+                    p(min_x + r - o, max_y),
+                    p(min_x, max_y - r + o),
+                    p(min_x, max_y - r),
+                );
+                builder.line_to(p(min_x, min_y + r));
+                builder.cubic_bezier_to(
+                    p(min_x, min_y + r - o),
+                    p(min_x + r - o, min_y),
+                    p(min_x + r, min_y),
+                );
+                builder.end(true);
+            }
+        }
         VectorShapeKind::Oval => {
             if shape.points.len() < 2 {
                 return None;
@@ -592,6 +652,7 @@ mod tests {
             arrow_start: false,
             arrow_end: false,
             even_odd_fill: false,
+            corner_radius: 0.0,
         }
     }
 
@@ -637,6 +698,64 @@ mod tests {
         assert!(mesh.indices.is_empty());
     }
 
+    /// A rectangle is a real shape, not a four-point pen stroke: the fill
+    /// covers exactly the rect, and a corner radius takes off exactly the
+    /// area four quarter-circles leave behind — (4 − π)r², measured from
+    /// the tessellated triangles rather than assumed.
+    #[test]
+    fn a_rect_fills_its_bounds_and_rounds_its_corners() {
+        let rect = |radius: f64| VectorShape {
+            kind: VectorShapeKind::Rect,
+            points: vec![(10.0, 20.0), (210.0, 140.0)],
+            stroke_rgba: [1.0, 1.0, 1.0, 1.0],
+            stroke_width: 0.0,
+            fill_rgba: Some([0.0, 0.0, 1.0, 1.0]),
+            arrow_start: false,
+            arrow_end: false,
+            even_odd_fill: false,
+            corner_radius: radius,
+        };
+        let area = |mesh: &VertexBuffers<MeshVertex, u32>| -> f64 {
+            mesh.indices
+                .chunks_exact(3)
+                .map(|t| {
+                    let p = |i: u32| mesh.vertices[i as usize].pos;
+                    let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
+                    (((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) as f64).abs()
+                        / 2.0
+                })
+                .sum()
+        };
+        let square = tessellate(&[rect(0.0)], 1.0, 0.0, 0.0);
+        assert!((area(&square) - 200.0 * 120.0).abs() < 1.0, "{}", area(&square));
+        let bounds = |mesh: &VertexBuffers<MeshVertex, u32>| {
+            let xs: Vec<f32> = mesh.vertices.iter().map(|v| v.pos[0]).collect();
+            let ys: Vec<f32> = mesh.vertices.iter().map(|v| v.pos[1]).collect();
+            (
+                xs.iter().cloned().fold(f32::MAX, f32::min),
+                ys.iter().cloned().fold(f32::MAX, f32::min),
+                xs.iter().cloned().fold(f32::MIN, f32::max),
+                ys.iter().cloned().fold(f32::MIN, f32::max),
+            )
+        };
+        assert_eq!(bounds(&square), (10.0, 20.0, 210.0, 140.0));
+
+        let rounded = tessellate(&[rect(30.0)], 1.0, 0.0, 0.0);
+        let corners = (4.0 - std::f64::consts::PI) * 30.0 * 30.0;
+        let lost = area(&square) - area(&rounded);
+        assert!((lost - corners).abs() < corners * 0.02, "four quarter-circles: {lost} vs {corners}");
+        // Still exactly as wide and tall — a radius rounds the corners, it
+        // does not inset the shape.
+        assert_eq!(bounds(&rounded), (10.0, 20.0, 210.0, 140.0));
+
+        // Half the shorter side is the most a radius can mean: 200 on a
+        // 120-tall rect is clamped to 60, which is a stadium, not a knot.
+        let pill = tessellate(&[rect(200.0)], 1.0, 0.0, 0.0);
+        let stadium = 200.0 * 120.0 - (4.0 - std::f64::consts::PI) * 60.0 * 60.0;
+        assert!((area(&pill) - stadium).abs() < stadium * 0.02, "clamped: {}", area(&pill));
+        assert_eq!(bounds(&pill), (10.0, 20.0, 210.0, 140.0));
+    }
+
     #[test]
     fn arrowheads_add_geometry() {
         let mut line = VectorShape {
@@ -648,6 +767,7 @@ mod tests {
             arrow_start: false,
             arrow_end: false,
             even_odd_fill: false,
+            corner_radius: 0.0,
         };
         let plain = tessellate(std::slice::from_ref(&line), 1.0, 0.0, 0.0);
         line.arrow_end = true;

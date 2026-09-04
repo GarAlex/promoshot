@@ -27,6 +27,11 @@ use std::path::{Path, PathBuf};
 use promo_model::{Placement, ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource};
 use serde_json::{json, Value};
 
+/// Named once: the same list the schema documents, so a typo is answered
+/// with the choices rather than a decode error.
+const WEIGHT_NAMES: &str = "weight: one of ultraLight, thin, light, regular, medium, \
+                            semibold, bold, heavy, black";
+
 fn mint() -> String {
     uuid::Uuid::new_v4().to_string().to_uppercase()
 }
@@ -355,13 +360,28 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
                 if let Some(words) = args.get("captionText").and_then(Value::as_str) {
                     layers[i].caption_text = Some(words.to_string());
                 }
-                if placement.is_some() || args.get("fontSize").is_some() {
+                let typography = ["fontSize", "tracking", "weight", "lineHeight"]
+                    .iter()
+                    .any(|key| args.get(*key).is_some());
+                if placement.is_some() || typography {
                     let mut style = layers[i].caption_style.take().unwrap_or_default();
                     if let Some(rule) = &placement {
                         style.placement = Some(rule.clone());
                     }
                     if let Some(size) = args.get("fontSize").and_then(Value::as_f64) {
                         style.font_size = Some(size);
+                    }
+                    if let Some(step) = args.get("tracking").and_then(Value::as_f64) {
+                        style.tracking = Some(step);
+                    }
+                    if let Some(multiple) = args.get("lineHeight").and_then(Value::as_f64) {
+                        style.line_height = Some(multiple);
+                    }
+                    if let Some(weight) = args.get("weight") {
+                        style.weight = Some(
+                            serde_json::from_value(weight.clone())
+                                .map_err(|_| WEIGHT_NAMES.to_string())?,
+                        );
                     }
                     layers[i].caption_style = Some(style);
                 }
@@ -419,6 +439,21 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
                 }
                 if let Some(size) = args.get("fontSize").and_then(Value::as_f64) {
                     style["fontSize"] = json!(size);
+                }
+                if let Some(step) = args.get("tracking").and_then(Value::as_f64) {
+                    style["tracking"] = json!(step);
+                }
+                if let Some(multiple) = args.get("lineHeight").and_then(Value::as_f64) {
+                    style["lineHeight"] = json!(multiple);
+                }
+                if let Some(weight) = args.get("weight") {
+                    // Decoded here rather than left to the layer template, so a
+                    // misspelt weight is named instead of failing as "layer
+                    // template rejected by the format".
+                    let parsed: promo_model::SubtitleFontWeight =
+                        serde_json::from_value(weight.clone())
+                            .map_err(|_| WEIGHT_NAMES.to_string())?;
+                    style["weight"] = serde_json::to_value(parsed).map_err(|e| e.to_string())?;
                 }
                 record["captionStyle"] = style;
             } else if let Some(rule) = &placement {
@@ -1223,6 +1258,75 @@ mod tests {
     fn read(dir: &Path) -> ProjectMetadata {
         let text = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
         ProjectMetadata::from_json(&text).unwrap()
+    }
+
+    /// The layer tool speaks the whole caption's typography: tracking, a
+    /// weight beyond bold and a line height arrive as fields on the style,
+    /// survive a second update, and lift the project's stamp. A misspelt
+    /// weight is answered with the list of names rather than a decode
+    /// error from three layers down.
+    #[test]
+    fn the_layer_tool_sets_a_captions_type() {
+        let root = scratch();
+        let dir = root.join("Type.promo");
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1920x1080"}),
+            Some(&root),
+        )
+        .unwrap();
+        upsert_layer(
+            &json!({
+                "project": dir.to_string_lossy(), "id": "head",
+                "kind": "caption", "captionText": "TYPING BLASTER",
+                "fontSize": 88.0, "tracking": 6.0, "weight": "heavy", "lineHeight": 1.05
+            }),
+            Some(&root),
+            &measured,
+        )
+        .unwrap();
+        let meta = read(&dir);
+        let style = |m: &ProjectMetadata| {
+            m.layers
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|l| l.id == "head")
+                .expect("the caption")
+                .caption_style
+                .clone()
+                .expect("a style")
+        };
+        let first = style(&meta);
+        assert_eq!(first.tracking, Some(6.0));
+        assert_eq!(first.weight.map(|w| w.value()), Some(800));
+        assert_eq!(first.line_height, Some(1.05));
+        assert_eq!(meta.minimum_reader_version(), 42, "and the file says so");
+
+        // An update touches only what it names.
+        upsert_layer(
+            &json!({
+                "project": dir.to_string_lossy(), "id": "head", "kind": "caption",
+                "tracking": -1.4
+            }),
+            Some(&root),
+            &measured,
+        )
+        .unwrap();
+        let second = style(&read(&dir));
+        assert_eq!(second.tracking, Some(-1.4), "the new value");
+        assert_eq!(second.weight.map(|w| w.value()), Some(800), "the old weight");
+        assert_eq!(second.font_size, Some(88.0), "and the old size");
+
+        let refused = upsert_layer(
+            &json!({
+                "project": dir.to_string_lossy(), "id": "head", "kind": "caption",
+                "weight": "extraBold"
+            }),
+            Some(&root),
+            &measured,
+        )
+        .expect_err("an unknown weight is refused");
+        assert!(refused.contains("heavy"), "and names the real ones: {refused}");
     }
 
     /// init → two upserts → a project that decodes, validates with ZERO

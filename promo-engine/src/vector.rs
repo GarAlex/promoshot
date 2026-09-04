@@ -26,6 +26,7 @@ pub fn vector_shapes(
                     DrawingShapeKind::Pen => VectorShapeKind::Pen,
                     DrawingShapeKind::Line => VectorShapeKind::Line,
                     DrawingShapeKind::Oval => VectorShapeKind::Oval,
+                    DrawingShapeKind::Rect => VectorShapeKind::Rect,
                 },
                 points: s.points.iter().map(|p| (p.x(), p.y())).collect(),
                 stroke_rgba: rgba_from_hex(settings.resolve_color(&s.stroke_color_hex))
@@ -41,6 +42,7 @@ pub fn vector_shapes(
                 arrow_start: s.arrow_start,
                 arrow_end: s.arrow_end,
                 even_odd_fill: s.even_odd_fill.unwrap_or(false),
+                corner_radius: s.corner_radius.unwrap_or(0.0),
             }
         })
         .collect()

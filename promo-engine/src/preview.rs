@@ -179,7 +179,12 @@ fn cloud_model(
             -forward[1] + right[1] * lean * 0.6,
             -forward[2] + right[2] * lean * 0.6,
         ];
-        for (sx, sy, uv) in [(-1.0, -1.0, [0.0, 1.0]), (1.0, -1.0, [1.0, 1.0]), (1.0, 1.0, [1.0, 0.0]), (-1.0, 1.0, [0.0, 0.0])] {
+        for (sx, sy, uv) in [
+            (-1.0, -1.0, [0.0, 1.0]),
+            (1.0, -1.0, [1.0, 1.0]),
+            (1.0, 1.0, [1.0, 0.0]),
+            (-1.0, 1.0, [0.0, 0.0]),
+        ] {
             positions[c].push([
                 p.position[0] + (right[0] * sx + up[0] * sy) * s,
                 p.position[1] + (right[1] * sx + up[1] * sy) * s,
@@ -247,10 +252,22 @@ mod stage_frame_tests {
     #[test]
     fn a_flown_stage_takes_the_canvas_aspect() {
         let wide = Size::new(1440.0, 900.0);
-        assert_eq!(stage_frame_size(900, wide, false), (900, 900), "an orbit stays square");
-        assert_eq!(stage_frame_size(900, wide, true), (1440, 900), "flown: as wide as the canvas");
+        assert_eq!(
+            stage_frame_size(900, wide, false),
+            (900, 900),
+            "an orbit stays square"
+        );
+        assert_eq!(
+            stage_frame_size(900, wide, true),
+            (1440, 900),
+            "flown: as wide as the canvas"
+        );
         let tall = Size::new(1080.0, 1920.0);
-        assert_eq!(stage_frame_size(1080, tall, true), (1080, 1920), "and as tall on a portrait canvas");
+        assert_eq!(
+            stage_frame_size(1080, tall, true),
+            (1080, 1920),
+            "and as tall on a portrait canvas"
+        );
         let square = Size::new(800.0, 800.0);
         assert_eq!(stage_frame_size(800, square, true), (800, 800));
         // The cap holds, so a huge canvas cannot ask for an oversized target.
@@ -259,7 +276,9 @@ mod stage_frame_tests {
     }
 }
 
-fn environment_view(settings: &promo_model::CompositionSettings) -> promo_gpu::model_pass::EnvironmentView {
+fn environment_view(
+    settings: &promo_model::CompositionSettings,
+) -> promo_gpu::model_pass::EnvironmentView {
     use promo_gpu::model_pass::{EnvPreset, EnvironmentView};
     settings
         .environment
@@ -2788,9 +2807,11 @@ impl PreviewEngine {
             }
             let built = match &recipe {
                 promo_model::BodyRecipe::Text(body) => crate::model::text_glb(body),
-                promo_model::BodyRecipe::Device(device) => crate::model::DeviceKind::parse(&device.kind)
-                    .map(crate::model::device_glb)
-                    .ok_or_else(|| format!("unknown device kind {}", device.kind)),
+                promo_model::BodyRecipe::Device(device) => {
+                    crate::model::DeviceKind::parse(&device.kind)
+                        .map(crate::model::device_glb)
+                        .ok_or_else(|| format!("unknown device kind {}", device.kind))
+                }
                 promo_model::BodyRecipe::Parts(parts) => crate::model::parts_glb(parts),
             };
             if let Ok(bytes) = built {
@@ -3024,7 +3045,12 @@ impl PreviewEngine {
 
     /// A body's surface samples for a morph — `count` points by `seed`,
     /// taken once and kept until the body's bytes change.
-    fn morph_samples_for(&mut self, id: &str, count: usize, seed: u64) -> Option<Vec<crate::morph::Sample>> {
+    fn morph_samples_for(
+        &mut self,
+        id: &str,
+        count: usize,
+        seed: u64,
+    ) -> Option<Vec<crate::morph::Sample>> {
         let key = format!("{id}\u{1f}{count}\u{1f}{seed}");
         if let Some(hit) = self.morph_samples.get(&key) {
             return Some(hit.clone());
@@ -3142,7 +3168,8 @@ impl PreviewEngine {
                 if let Some(loaded) = self.models.get(id) {
                     // The viewport reaches where the points fly, not just
                     // where the bodies stand.
-                    radius = radius.max(loaded.model.bounds_radius * (1.0 + morph.spread() as f32 * 1.5));
+                    radius = radius
+                        .max(loaded.model.bounds_radius * (1.0 + morph.spread() as f32 * 1.5));
                 }
             }
         }
@@ -3283,7 +3310,11 @@ impl PreviewEngine {
                     .find(|l| l.stage.as_deref() == Some(stage) && l.id == id)?;
                 let local = tl::layer_local_time(layer, time);
                 let p = tl::route::member_position(layer, local, &resources)?;
-                Some([p[0] as f32 * radius, p[1] as f32 * radius, p[2] as f32 * radius])
+                Some([
+                    p[0] as f32 * radius,
+                    p[1] as f32 * radius,
+                    p[2] as f32 * radius,
+                ])
             };
             let eye_of = |c: &promo_model::Camera| -> [f64; 3] {
                 let (y, p) = (c.yaw().to_radians(), c.pitch().to_radians());
@@ -3316,8 +3347,16 @@ impl PreviewEngine {
                 .iter()
                 .any(|k| k.camera.as_ref().is_some_and(|c| c.target.is_some()));
             let track: Vec<&promo_model::ProjectLayerKeyframe> = {
-                let mut t: Vec<_> = first.keyframes.iter().filter(|k| k.camera.is_some()).collect();
-                t.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+                let mut t: Vec<_> = first
+                    .keyframes
+                    .iter()
+                    .filter(|k| k.camera.is_some())
+                    .collect();
+                t.sort_by(|a, b| {
+                    a.time
+                        .partial_cmp(&b.time)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 t
             };
             let window = tl::route::camera_window(&track, local);
@@ -3327,7 +3366,8 @@ impl PreviewEngine {
                 if !std::ptr::eq(a, b) {
                     if let Some(path) = b.camera.as_ref().and_then(|c| c.motion_path.as_ref()) {
                         if let Some(route) = tl::route::route_of(&resources, path) {
-                            let (from, to) = (eye_of(&camera_at(a.time)), eye_of(&camera_at(b.time)));
+                            let (from, to) =
+                                (eye_of(&camera_at(a.time)), eye_of(&camera_at(b.time)));
                             let args = (
                                 path.flipped.unwrap_or(false),
                                 path.start_at.unwrap_or(0.0),
@@ -3338,12 +3378,16 @@ impl PreviewEngine {
                                 &route, from, to, args.0, args.1, args.2, progress, own,
                             );
                             eye = Some([p[0] as f32, p[1] as f32, p[2] as f32]);
-                            tangent = Some(tl::route::tangent_along3(&route, from, to, args.0, args.1, args.2, progress));
+                            tangent = Some(tl::route::tangent_along3(
+                                &route, from, to, args.0, args.1, args.2, progress,
+                            ));
                         }
                     }
                 }
             }
-            let target_of = |k: &promo_model::ProjectLayerKeyframe, eye: Option<[f32; 3]>| -> Option<[f32; 3]> {
+            let target_of = |k: &promo_model::ProjectLayerKeyframe,
+                             eye: Option<[f32; 3]>|
+             -> Option<[f32; 3]> {
                 let target = k.camera.as_ref()?.target.as_ref()?;
                 match target {
                     promo_model::CameraTarget::Named(n) if n == "ahead" => {
@@ -3521,7 +3565,8 @@ impl PreviewEngine {
                 continue;
             };
             let member = &members[item.index];
-            let Some((res, morph)) = morph_of(tl::layer_resource_id(member, time, &resources)) else {
+            let Some((res, morph)) = morph_of(tl::layer_resource_id(member, time, &resources))
+            else {
                 continue;
             };
             let Some(recipe) = res.particles.as_ref() else {
@@ -3715,7 +3760,11 @@ impl PreviewEngine {
         // so the cut holds still from the first body through the flight to
         // the second — and what spills past them (the points in flight)
         // is drawn too, beyond the placed rect, never cut off.
-        for (item, (points, _)) in prepared.iter().filter(|i| i.morph.is_some()).zip(&cloud_points) {
+        for (item, (points, _)) in prepared
+            .iter()
+            .filter(|i| i.morph.is_some())
+            .zip(&cloud_points)
+        {
             let member = &members[item.index];
             let centre = [
                 item.across[0] * radius,
@@ -3736,9 +3785,21 @@ impl PreviewEngine {
                             .unwrap_or(promo_gpu::model_pass::IDENTITY);
                         for p in &mesh.positions {
                             let w = [
-                                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0] + centre[0],
-                                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1] + centre[1],
-                                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2] + centre[2],
+                                m[0][0] * p[0]
+                                    + m[1][0] * p[1]
+                                    + m[2][0] * p[2]
+                                    + m[3][0]
+                                    + centre[0],
+                                m[0][1] * p[0]
+                                    + m[1][1] * p[1]
+                                    + m[2][1] * p[2]
+                                    + m[3][1]
+                                    + centre[1],
+                                m[0][2] * p[0]
+                                    + m[1][2] * p[1]
+                                    + m[2][2] * p[2]
+                                    + m[3][2]
+                                    + centre[2],
                             ];
                             for k in 0..3 {
                                 min[k] = min[k].min(w[k]);
@@ -3750,11 +3811,14 @@ impl PreviewEngine {
             }
             if min[0] <= max[0] {
                 for corner in 0..8 {
-                    boxes.take(&view, [
-                        if corner & 1 == 0 { min[0] } else { max[0] },
-                        if corner & 2 == 0 { min[1] } else { max[1] },
-                        if corner & 4 == 0 { min[2] } else { max[2] },
-                    ]);
+                    boxes.take(
+                        &view,
+                        [
+                            if corner & 1 == 0 { min[0] } else { max[0] },
+                            if corner & 2 == 0 { min[1] } else { max[1] },
+                            if corner & 4 == 0 { min[2] } else { max[2] },
+                        ],
+                    );
                 }
             }
             let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -3766,11 +3830,14 @@ impl PreviewEngine {
             }
             if min[0] <= max[0] {
                 for corner in 0..8 {
-                    boxes.spill(&view, [
-                        if corner & 1 == 0 { min[0] } else { max[0] },
-                        if corner & 2 == 0 { min[1] } else { max[1] },
-                        if corner & 4 == 0 { min[2] } else { max[2] },
-                    ]);
+                    boxes.spill(
+                        &view,
+                        [
+                            if corner & 1 == 0 { min[0] } else { max[0] },
+                            if corner & 2 == 0 { min[1] } else { max[1] },
+                            if corner & 4 == 0 { min[2] } else { max[2] },
+                        ],
+                    );
                 }
             }
         }
@@ -3809,11 +3876,14 @@ impl PreviewEngine {
                                 if corner & 2 == 0 { min[1] } else { max[1] },
                                 if corner & 4 == 0 { min[2] } else { max[2] },
                             ];
-                            boxes.take(&view, [
-                                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
-                                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
-                                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
-                            ]);
+                            boxes.take(
+                                &view,
+                                [
+                                    m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                                    m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+                                    m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+                                ],
+                            );
                         }
                     }
                 }
@@ -3847,11 +3917,14 @@ impl PreviewEngine {
                         item.depth * radius,
                     ];
                     for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-                        boxes.take(&view, [
-                            c[0] + right[0] * sx * hw + up[0] * sy * hh,
-                            c[1] + right[1] * sx * hw + up[1] * sy * hh,
-                            c[2] + right[2] * sx * hw + up[2] * sy * hh,
-                        ]);
+                        boxes.take(
+                            &view,
+                            [
+                                c[0] + right[0] * sx * hw + up[0] * sy * hh,
+                                c[1] + right[1] * sx * hw + up[1] * sy * hh,
+                                c[2] + right[2] * sx * hw + up[2] * sy * hh,
+                            ],
+                        );
                     }
                 }
                 _ => {}
@@ -3888,7 +3961,10 @@ impl PreviewEngine {
             // the cut is what the placement measures.
             let spilled = blo[0] < bhi[0]
                 && blo[1] < bhi[1]
-                && (blo[0] > lo[0] + 1e-4 || blo[1] > lo[1] + 1e-4 || bhi[0] < hi[0] - 1e-4 || bhi[1] < hi[1] - 1e-4);
+                && (blo[0] > lo[0] + 1e-4
+                    || blo[1] > lo[1] + 1e-4
+                    || bhi[0] < hi[0] - 1e-4
+                    || bhi[1] < hi[1] - 1e-4);
             if spilled {
                 let bx0 = (px(blo[0]) - 1.0).clamp(x0 as f32, x1 as f32 - 2.0) as u32;
                 let by0 = (px(blo[1]) - 1.0).clamp(y0 as f32, y1 as f32 - 2.0) as u32;
@@ -3957,17 +4033,13 @@ impl PreviewEngine {
         // A slot bound to a VIDEO makes the picture move with time, like a
         // keyed camera does.
         let all_resources = self.meta.resources.clone().unwrap_or_default();
-        let video_bound = resource
-            .materials
-            .iter()
-            .flat_map(|m| m.values())
-            .any(|b| {
-                b.resource_id().is_some_and(|id| {
-                    all_resources
-                        .iter()
-                        .any(|r| r.id == id && r.kind == promo_model::ProjectResourceKind::Video)
-                })
-            });
+        let video_bound = resource.materials.iter().flat_map(|m| m.values()).any(|b| {
+            b.resource_id().is_some_and(|id| {
+                all_resources
+                    .iter()
+                    .any(|r| r.id == id && r.kind == promo_model::ProjectResourceKind::Video)
+            })
+        });
         let animated = video_bound
             || layer
                 .keyframes
@@ -6613,6 +6685,125 @@ mod tests {
 
         // And it grows: a quarter in shows less than half.
         assert!(lit(0.5) < half, "{} at 25% vs {half} at 50%", lit(0.5));
+    }
+
+    /// The three type fields reach the pixels, not just the document:
+    /// tracking widens the word without moving its first letter, a heavier
+    /// weight puts down more ink, and a line height spreads two lines
+    /// apart. Rendered through the engine, so a break anywhere between the
+    /// wire and the rasterizer shows up here.
+    #[test]
+    fn designed_type_reaches_the_frame() {
+        let fixture = |style: &str, text: &str| {
+            let json = format!(
+                r#"{{
+                "id": "AAAAAAAA-0000-0000-0000-000000000042",
+                "name": "type", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                "compositionSettings": {{
+                    "canvasWidth": 512, "canvasHeight": 256,
+                    "backgroundColorHex": "000000",
+                    "subtitleFontSize": 40, "subtitleColorHex": "FFFFFF",
+                    "subtitleVerticalMargin": 20,
+                    "subtitleLeftMargin": 10, "subtitleRightMargin": 10,
+                    "subtitleBackgroundOpacity": 0
+                }},
+                "layers": [
+                    {{"id": "CAP", "name": "words", "sortIndex": 0, "kind": "caption",
+                     "isEnabled": true, "startTime": 0, "duration": 10,
+                     "captionText": "{text}", "captionStyle": {{{style}}}, "keyframes": []}}
+                ]}}"#
+            );
+            let meta = ProjectMetadata::from_json(&json).expect("caption fixture");
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            let out = OwnedIoSurface::new_bgra(512, 256).unwrap();
+            engine.render(1.0, out.raw(), 512, 256).expect("render");
+            out.read_pixels().unwrap()
+        };
+        // Lit columns and rows, and total ink, over the whole frame.
+        let lit = |px: &[u8]| -> (usize, usize, usize, usize, u64) {
+            let (mut x0, mut x1, mut y0, mut y1) = (usize::MAX, 0usize, usize::MAX, 0usize);
+            let mut ink = 0u64;
+            for y in 0..256usize {
+                for x in 0..512usize {
+                    let v = px[(y * 512 + x) * 4 + 1] as u64;
+                    if v > 64 {
+                        x0 = x0.min(x);
+                        x1 = x1.max(x);
+                        y0 = y0.min(y);
+                        y1 = y1.max(y);
+                    }
+                    ink += v;
+                }
+            }
+            (x0, x1, y0, y1, ink)
+        };
+        let plain = lit(&fixture(r#""alignment":"leading""#, "WIDE"));
+        let tracked = lit(&fixture(r#""alignment":"leading","tracking":14"#, "WIDE"));
+        assert!(plain.4 > 0, "the caption rendered at all");
+        assert_eq!(plain.0, tracked.0, "the first letter did not move");
+        let grew = (tracked.1 - plain.1) as i64;
+        assert!((grew - 42).abs() <= 4, "three gaps of 14: {grew}");
+
+        let light = lit(&fixture(r#""weight":"ultraLight""#, "WIDE"));
+        let black = lit(&fixture(r#""weight":"black""#, "WIDE"));
+        assert!(black.4 > light.4 * 2, "black is heavier: {} vs {}", black.4, light.4);
+
+        let tight = lit(&fixture(r#""lineHeight":1.0"#, "one\\ntwo"));
+        let loose = lit(&fixture(r#""lineHeight":2.0"#, "one\\ntwo"));
+        let spread = (loose.3 - loose.2) as i64 - (tight.3 - tight.2) as i64;
+        assert!((spread - 40).abs() <= 4, "one extra font size between them: {spread}");
+    }
+
+    /// A rectangle is a drawing shape the engine can draw: a filled plate
+    /// covers its own bounds, and a corner radius takes the corners off
+    /// while leaving the middle of every edge alone.
+    #[test]
+    fn a_rect_drawing_renders_as_a_plate() {
+        let render = |radius: f64| -> Vec<u8> {
+            let mut meta = tests_support::fixture_meta(64.0);
+            meta.layers = Some(vec![]);
+            let mut resources = meta.resources.clone().unwrap_or_default();
+            resources.push(
+                serde_json::from_value(serde_json::json!({
+                    "id": "PLATE", "kind": "drawing", "filename": "d.json",
+                    "displayName": "Plate", "addedAt": 0,
+                    "drawing": {"shapes": [{
+                        "id": "S1", "kind": "rect",
+                        "points": [[0.0, 0.0], [128.0, 128.0]],
+                        "strokeColorHex": "FF0000", "strokeWidth": 0.0,
+                        "fillColorHex": "FF0000",
+                        "cornerRadius": radius,
+                        "arrowStart": false, "arrowEnd": false
+                    }]}
+                }))
+                .unwrap(),
+            );
+            meta.resources = Some(resources);
+            meta.layers = Some(vec![serde_json::from_value(serde_json::json!({
+                "id": "PLATEL", "name": "Plate", "sortIndex": 9, "kind": "drawing",
+                "isEnabled": true, "startTime": 0.0, "duration": 100.0,
+                "resourceID": "PLATE", "keyframes": []
+            }))
+            .unwrap()]);
+            let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+            let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+            engine.render(1.0, out.raw(), 128, 128).expect("render");
+            out.read_pixels().unwrap()
+        };
+        // The drawing fills the canvas, so its corners are the frame's.
+        let red = |px: &[u8], x: usize, y: usize| px[(y * 128 + x) * 4 + 2] > 128;
+        let square = render(0.0);
+        for (x, y) in [(2usize, 2usize), (125, 2), (2, 125), (125, 125), (64, 64)] {
+            assert!(red(&square, x, y), "square plate covers ({x},{y})");
+        }
+        let rounded = render(40.0);
+        for (x, y) in [(2usize, 2usize), (125, 2), (2, 125), (125, 125)] {
+            assert!(!red(&rounded, x, y), "the radius took corner ({x},{y}) off");
+        }
+        for (x, y) in [(64usize, 2usize), (64, 125), (2, 64), (125, 64), (64, 64)] {
+            assert!(red(&rounded, x, y), "but kept the edge at ({x},{y})");
+        }
     }
 
     #[test]

@@ -758,15 +758,26 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 }
                 for (i, part) in parts.iter().enumerate() {
                     let bad = match &part.shape {
-                        PartShape::Box(b) => b.size.iter().any(|s| *s <= 0.0).then_some("a box needs a positive size"),
-                        PartShape::Sphere(s) => (s.radius <= 0.0).then_some("a sphere needs a positive radius"),
+                        PartShape::Box(b) => b
+                            .size
+                            .iter()
+                            .any(|s| *s <= 0.0)
+                            .then_some("a box needs a positive size"),
+                        PartShape::Sphere(s) => {
+                            (s.radius <= 0.0).then_some("a sphere needs a positive radius")
+                        }
                         PartShape::Cylinder(c) => (c.radius <= 0.0 || c.height <= 0.0)
                             .then_some("a cylinder needs a positive radius and height"),
-                        PartShape::Torus(t) => (t.radius <= 0.0 || t.tube <= 0.0 || t.tube >= t.radius)
-                            .then_some("a torus needs a positive radius and a tube smaller than it"),
-                        PartShape::Lathe(l) => (l.profile.len() < 2).then_some("a lathe needs at least two profile points"),
-                        PartShape::Extrude(e) => (e.path.len() < 3 || e.depth <= 0.0)
-                            .then_some("an extrude needs at least three path points and a positive depth"),
+                        PartShape::Torus(t) => {
+                            (t.radius <= 0.0 || t.tube <= 0.0 || t.tube >= t.radius).then_some(
+                                "a torus needs a positive radius and a tube smaller than it",
+                            )
+                        }
+                        PartShape::Lathe(l) => (l.profile.len() < 2)
+                            .then_some("a lathe needs at least two profile points"),
+                        PartShape::Extrude(e) => (e.path.len() < 3 || e.depth <= 0.0).then_some(
+                            "an extrude needs at least three path points and a positive depth",
+                        ),
                     };
                     if let Some(why) = bad {
                         out.push(format!(
@@ -862,17 +873,22 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                          have ({id})",
                         resource.display_name
                     )),
-                    Some(r) if r.kind != promo_model::ProjectResourceKind::Model => out.push(format!(
+                    Some(r) if r.kind != promo_model::ProjectResourceKind::Model => {
+                        out.push(format!(
                         "resource \"{}\": morph `{which}` names \"{}\", a {} resource; a morph \
                          flies between two BODIES (model resources)",
                         resource.display_name,
                         r.display_name,
                         r.kind.as_str()
-                    )),
+                    ))
+                    }
                     Some(_) => {}
                 }
             }
-            if morph.count.is_some_and(|c| c > promo_model::ParticleMorph::MAX_COUNT) {
+            if morph
+                .count
+                .is_some_and(|c| c > promo_model::ParticleMorph::MAX_COUNT)
+            {
                 out.push(format!(
                     "resource \"{}\": morph count {} is above the most a morph draws ({}); it is \
                      clamped",
@@ -1050,7 +1066,9 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 }
             }
             match camera.target.as_ref() {
-                Some(promo_model::CameraTarget::Named(n)) if !promo_model::CameraTarget::NAMES.contains(&n.as_str()) => {
+                Some(promo_model::CameraTarget::Named(n))
+                    if !promo_model::CameraTarget::NAMES.contains(&n.as_str()) =>
+                {
                     out.push(format!(
                         "stage \"{}\": camera target \"{n}\" is not one — center, ahead, a \
                          member or a point; the centre is used",
@@ -1113,7 +1131,11 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         }
     }
     for layer in promo_model::nesting::all_layers(meta) {
-        let keyed = layer.keyframes.iter().filter_map(|k| k.progress).collect::<Vec<_>>();
+        let keyed = layer
+            .keyframes
+            .iter()
+            .filter_map(|k| k.progress)
+            .collect::<Vec<_>>();
         if keyed.is_empty() {
             continue;
         }
@@ -1125,7 +1147,10 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 layer.name
             ));
         }
-        if keyed.iter().any(|p| !p.is_finite() || !(0.0..=1.0).contains(p)) {
+        if keyed
+            .iter()
+            .any(|p| !p.is_finite() || !(0.0..=1.0).contains(p))
+        {
             out.push(format!(
                 "layer \"{}\" keys a progress outside 0…1; it is clamped",
                 layer.name
@@ -1458,7 +1483,10 @@ mod tests {
         );
         let warnings = warnings(&meta);
         let has = |needle: &str| warnings.iter().any(|w| w.contains(needle));
-        assert!(has("layer \"Sphere\" carries \"materials\""), "{warnings:?}");
+        assert!(
+            has("layer \"Sphere\" carries \"materials\""),
+            "{warnings:?}"
+        );
         assert!(has("resources[].materials"), "{warnings:?}");
         assert!(has("carries \"camera\" at the layer level"), "{warnings:?}");
         assert!(has("resource \"Sphere\" carries \"light\""), "{warnings:?}");
@@ -1826,7 +1854,10 @@ mod tests {
         let has = |needle: &str| warnings.iter().any(|w| w.contains(needle));
         assert!(has("slot \"Body\" has metallic 1.4"), "{warnings:?}");
         assert!(has("0 dielectric … 1 metal"), "{warnings:?}");
-        assert!(has("slot \"Screen\" shows a picture AND carries a finish"), "{warnings:?}");
+        assert!(
+            has("slot \"Screen\" shows a picture AND carries a finish"),
+            "{warnings:?}"
+        );
         assert!(!has("slot \"Base\""), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 32);
     }
@@ -1857,12 +1888,21 @@ mod tests {
         );
         let found = warnings(&meta);
         let has = |needle: &str| found.iter().any(|w| w.contains(needle));
-        assert!(has("resource \"Dot\": a route needs at least two points"), "{found:?}");
+        assert!(
+            has("resource \"Dot\": a route needs at least two points"),
+            "{found:?}"
+        );
         assert!(has("route curve \"wavy\" is not one"), "{found:?}");
-        assert!(has("member \"Cube\" of stage \"Stage\" names a motionPath (FLAT)"), "{found:?}");
+        assert!(
+            has("member \"Cube\" of stage \"Stage\" names a motionPath (FLAT)"),
+            "{found:?}"
+        );
         assert!(has("looks at member GHOST"), "{found:?}");
         assert!(has("camera target \"sideways\" is not one"), "{found:?}");
-        assert!(!has("motionPath (H)"), "a real route says nothing: {found:?}");
+        assert!(
+            !has("motionPath (H)"),
+            "a real route says nothing: {found:?}"
+        );
         assert_eq!(meta.minimum_reader_version(), 40);
     }
 
@@ -1891,13 +1931,25 @@ mod tests {
         );
         let found = warnings(&meta);
         let has = |needle: &str| found.iter().any(|w| w.contains(needle));
-        assert!(has("layer \"Loose\" plays a morph on the canvas"), "{found:?}");
+        assert!(
+            has("layer \"Loose\" plays a morph on the canvas"),
+            "{found:?}"
+        );
         assert!(has("layer \"Cap\" keys `progress`"), "{found:?}");
-        assert!(has("layer \"Points\" keys a progress outside 0…1"), "{found:?}");
+        assert!(
+            has("layer \"Points\" keys a progress outside 0…1"),
+            "{found:?}"
+        );
         assert!(!has("layer \"Points\" keys `progress`"), "{found:?}");
-        assert!(has("morph `to` names \"Shot\", a image resource"), "{found:?}");
+        assert!(
+            has("morph `to` names \"Shot\", a image resource"),
+            "{found:?}"
+        );
         assert!(has("morph count 9000 is above"), "{found:?}");
-        assert!(!has("rate 0 and no burst"), "a morph has no emitter: {found:?}");
+        assert!(
+            !has("rate 0 and no burst"),
+            "a morph has no emitter: {found:?}"
+        );
         assert_eq!(meta.minimum_reader_version(), 39);
     }
 
@@ -1918,7 +1970,10 @@ mod tests {
         );
         let found = warnings(&meta);
         let has = |needle: &str| found.iter().any(|w| w.contains(needle));
-        assert!(!has("slot \"Body\""), "a worn picture wears its finish: {found:?}");
+        assert!(
+            !has("slot \"Body\""),
+            "a worn picture wears its finish: {found:?}"
+        );
         assert!(has("slot \"Lid\" has mode \"glossy\""), "{found:?}");
         assert!(has("slot \"Base\" has repeat [0, 1]"), "{found:?}");
         assert!(has("slot \"Foot\" says how a picture is worn"), "{found:?}");
@@ -1950,12 +2005,27 @@ mod tests {
         );
         let warnings = warnings(&meta);
         let has = |needle: &str| warnings.iter().any(|w| w.contains(needle));
-        assert!(has("stage layer \"bench\" names a resource"), "{warnings:?}");
-        assert!(has("member \"Inner\" of stage \"bench\" is itself a stage"), "{warnings:?}");
-        assert!(has("member \"Named\" of stage \"bench\" names a stage"), "{warnings:?}");
-        assert!(has("member \"Sound\" of stage \"bench\" is a layer of kind audio"), "{warnings:?}");
+        assert!(
+            has("stage layer \"bench\" names a resource"),
+            "{warnings:?}"
+        );
+        assert!(
+            has("member \"Inner\" of stage \"bench\" is itself a stage"),
+            "{warnings:?}"
+        );
+        assert!(
+            has("member \"Named\" of stage \"bench\" names a stage"),
+            "{warnings:?}"
+        );
+        assert!(
+            has("member \"Sound\" of stage \"bench\" is a layer of kind audio"),
+            "{warnings:?}"
+        );
         assert!(has("stage layer \"Empty\" has no members"), "{warnings:?}");
-        assert!(has("layer \"Plain\" carries `members` but is not a stage layer"), "{warnings:?}");
+        assert!(
+            has("layer \"Plain\" carries `members` but is not a stage layer"),
+            "{warnings:?}"
+        );
         assert_eq!(meta.minimum_reader_version(), 33);
     }
 
@@ -1972,7 +2042,9 @@ mod tests {
         );
         let flat_warnings = warnings(&flat);
         assert!(
-            flat_warnings.iter().any(|w| w.contains("stage \"bench\" is written in the flat form")),
+            flat_warnings
+                .iter()
+                .any(|w| w.contains("stage \"bench\" is written in the flat form")),
             "{flat_warnings:?}"
         );
         let nested = project(
@@ -1986,10 +2058,15 @@ mod tests {
         );
         let nested_warnings = warnings(&nested);
         assert!(
-            nested_warnings.iter().any(|w| w.contains("member \"Left\" of stage \"bench\" keys a placement")),
+            nested_warnings
+                .iter()
+                .any(|w| w.contains("member \"Left\" of stage \"bench\" keys a placement")),
             "{nested_warnings:?}"
         );
-        assert!(!nested_warnings.iter().any(|w| w.contains("flat form")), "{nested_warnings:?}");
+        assert!(
+            !nested_warnings.iter().any(|w| w.contains("flat form")),
+            "{nested_warnings:?}"
+        );
     }
     /// A text body's recipe is checked: empty text, a depth or size at zero,
     /// a recipe beside a filename, and an over-long line are each named; a
@@ -2006,10 +2083,16 @@ mod tests {
         );
         let found = warnings(&bad);
         let has = |needle: &str| found.iter().any(|w| w.contains(needle));
-        assert!(has("\"Empty\" carries both a recipe and a filename"), "{found:?}");
+        assert!(
+            has("\"Empty\" carries both a recipe and a filename"),
+            "{found:?}"
+        );
         assert!(has("\"Empty\": the text body's text is empty"), "{found:?}");
         assert!(has("\"Empty\": the text body's depth is 0"), "{found:?}");
-        assert!(has("\"Long\": 83 characters make a heavy body"), "{found:?}");
+        assert!(
+            has("\"Long\": 83 characters make a heavy body"),
+            "{found:?}"
+        );
         assert!(has("\"Long\": the text body's size is 0"), "{found:?}");
         let good = project(
             "",
@@ -2025,7 +2108,12 @@ mod tests {
                  "recipe":{"device":{"kind":"watch"}}}]"#,
         );
         let found = warnings(&odd);
-        assert!(found.iter().any(|w| w.contains("device recipe kind \"watch\" is not a body")), "{found:?}");
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("device recipe kind \"watch\" is not a body")),
+            "{found:?}"
+        );
         let parts = project(
             "",
             r#","resources":[{"id":"S","kind":"model","filename":"","displayName":"Stand","addedAt":0,
@@ -2034,8 +2122,18 @@ mod tests {
                                     {"shape":{"box":{"size":[1,0.2,0.5]}}}]}}]"#,
         );
         let found = warnings(&parts);
-        assert!(found.iter().any(|w| w.contains("part 1 (Body): a cylinder needs")), "{found:?}");
-        assert!(found.iter().any(|w| w.contains("part 2 (Ring): a torus needs")), "{found:?}");
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("part 1 (Body): a cylinder needs")),
+            "{found:?}"
+        );
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("part 2 (Ring): a torus needs")),
+            "{found:?}"
+        );
         assert!(!found.iter().any(|w| w.contains("part 3")), "{found:?}");
         assert_eq!(parts.minimum_reader_version(), 37);
     }
@@ -2070,8 +2168,16 @@ mod tests {
             rotation: None,
         });
         let found = warnings(&odd);
-        assert!(found.iter().any(|w| w.contains("names preset \"cathedral\"")), "{found:?}");
-        assert!(found.iter().any(|w| w.contains("has intensity 0")), "{found:?}");
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("names preset \"cathedral\"")),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|w| w.contains("has intensity 0")),
+            "{found:?}"
+        );
         let mut fine = project("", "");
         fine.composition_settings.environment = Some(promo_model::SceneEnvironment {
             preset: "studio".into(),
@@ -2079,7 +2185,10 @@ mod tests {
             rotation: Some(90.0),
         });
         let quiet = warnings(&fine);
-        assert!(!quiet.iter().any(|w| w.contains("environment")), "{quiet:?}");
+        assert!(
+            !quiet.iter().any(|w| w.contains("environment")),
+            "{quiet:?}"
+        );
         assert_eq!(fine.minimum_reader_version(), 35);
     }
     /// A particle recipe is checked: a rate of zero with no burst, a bad
@@ -2095,10 +2204,16 @@ mod tests {
         );
         let found = warnings(&odd);
         let has = |needle: &str| found.iter().any(|w| w.contains(needle));
-        assert!(has("\"Sparks\": rate 0 and no burst emit nothing"), "{found:?}");
+        assert!(
+            has("\"Sparks\": rate 0 and no burst emit nothing"),
+            "{found:?}"
+        );
         assert!(has("\"Sparks\": life [2.0, 1.0]"), "{found:?}");
         assert!(has("shape \"star\" is not one"), "{found:?}");
-        assert!(has("layer \"Sparks\" plays a particles resource but is a image layer"), "{found:?}");
+        assert!(
+            has("layer \"Sparks\" plays a particles resource but is a image layer"),
+            "{found:?}"
+        );
         let fine = project(
             r#"{"id":"L","name":"Confetti","sortIndex":0,"kind":"drawing","isEnabled":true,
                 "startTime":1,"duration":3,"resourceID":"P","keyframes":[]}"#,

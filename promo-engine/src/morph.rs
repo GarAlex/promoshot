@@ -136,7 +136,11 @@ pub fn sample_surface(model: &Model, rest: &[Mat4], count: usize, seed: u64) -> 
             // The file's own normal where it has one, the face's otherwise.
             // A normal goes through the inverse TRANSPOSE of the placement,
             // or a node scaled unevenly points its samples the wrong way.
-            let vn = match (mesh.normals.get(ia), mesh.normals.get(ib), mesh.normals.get(ic)) {
+            let vn = match (
+                mesh.normals.get(ia),
+                mesh.normals.get(ib),
+                mesh.normals.get(ic),
+            ) {
                 (Some(na), Some(nb), Some(nc)) => normal_direction(
                     m,
                     [
@@ -198,7 +202,8 @@ pub fn sample_surface(model: &Model, rest: &[Mat4], count: usize, seed: u64) -> 
         let bq = ((q.position[1] - lo) / span * bands).floor() as i32;
         let ap = p.position[2].atan2(p.position[0]);
         let aq = q.position[2].atan2(q.position[0]);
-        bp.cmp(&bq).then(ap.partial_cmp(&aq).unwrap_or(std::cmp::Ordering::Equal))
+        bp.cmp(&bq)
+            .then(ap.partial_cmp(&aq).unwrap_or(std::cmp::Ordering::Equal))
     });
     out
 }
@@ -257,16 +262,28 @@ pub fn morph_points(
         // The way out: halfway between where it was and where it goes,
         // flung along the first body's surface direction.
         let mid = [
-            (a.position[0] + b.position[0]) * 0.5 + (a.normal[0] * fling + jitter[0] * 0.5) * spread,
-            (a.position[1] + b.position[1]) * 0.5 + (a.normal[1] * fling + jitter[1] * 0.5) * spread,
-            (a.position[2] + b.position[2]) * 0.5 + (a.normal[2] * fling + jitter[2] * 0.5) * spread,
+            (a.position[0] + b.position[0]) * 0.5
+                + (a.normal[0] * fling + jitter[0] * 0.5) * spread,
+            (a.position[1] + b.position[1]) * 0.5
+                + (a.normal[1] * fling + jitter[1] * 0.5) * spread,
+            (a.position[2] + b.position[2]) * 0.5
+                + (a.normal[2] * fling + jitter[2] * 0.5) * spread,
         ];
         let (w0, w1, w2) = ((1.0 - e) * (1.0 - e), 2.0 * (1.0 - e) * e, e * e);
         let wobble = (PI * e).sin() * turbulence * spread;
         let position = [
-            a.position[0] * w0 + mid[0] * w1 + b.position[0] * w2 + (phase + e * 6.0).sin() * wobble,
-            a.position[1] * w0 + mid[1] * w1 + b.position[1] * w2 + (phase * 1.3 + e * 5.0).cos() * wobble,
-            a.position[2] * w0 + mid[2] * w1 + b.position[2] * w2 + (phase * 0.7 + e * 7.0).sin() * wobble,
+            a.position[0] * w0
+                + mid[0] * w1
+                + b.position[0] * w2
+                + (phase + e * 6.0).sin() * wobble,
+            a.position[1] * w0
+                + mid[1] * w1
+                + b.position[1] * w2
+                + (phase * 1.3 + e * 5.0).cos() * wobble,
+            a.position[2] * w0
+                + mid[2] * w1
+                + b.position[2] * w2
+                + (phase * 0.7 + e * 7.0).sin() * wobble,
         ];
         out.push(Point {
             position,
@@ -283,8 +300,12 @@ mod tests {
     use crate::model::Model;
 
     fn cube() -> Model {
-        Model::from_glb(&crate::model::sample_cube_glb_with(0.5, "Body", [0.7, 0.7, 0.7, 1.0]))
-            .expect("cube")
+        Model::from_glb(&crate::model::sample_cube_glb_with(
+            0.5,
+            "Body",
+            [0.7, 0.7, 0.7, 1.0],
+        ))
+        .expect("cube")
     }
 
     /// Samples lie on the body: every point of a unit cube sits on one of
@@ -299,7 +320,11 @@ mod tests {
         assert_eq!(a, b, "the same seed samples the same points");
         for s in &a {
             let on_face = (0..3).any(|k| (s.position[k].abs() - 0.5).abs() < 1e-4);
-            assert!(on_face, "{:?} is not on a face of the half-unit cube", s.position);
+            assert!(
+                on_face,
+                "{:?} is not on a face of the half-unit cube",
+                s.position
+            );
             let inside = (0..3).all(|k| s.position[k].abs() <= 0.5 + 1e-4);
             assert!(inside, "{:?} lies outside the cube", s.position);
         }
@@ -328,14 +353,28 @@ mod tests {
         let mid = at(0.5);
         let close = |a: [f32; 3], b: [f32; 3]| (0..3).all(|k| (a[k] - b[k]).abs() < 1e-4);
         for (i, p) in start.iter().enumerate() {
-            assert!(close(p.position, from[i].position), "at 0 every point is on the first body: {:?} vs {:?}", p.position, from[i].position);
+            assert!(
+                close(p.position, from[i].position),
+                "at 0 every point is on the first body: {:?} vs {:?}",
+                p.position,
+                from[i].position
+            );
         }
         for (i, p) in end.iter().enumerate() {
-            assert!(close(p.position, to[i].position), "at 1 every point is on the second body: {:?} vs {:?}", p.position, to[i].position);
+            assert!(
+                close(p.position, to[i].position),
+                "at 1 every point is on the second body: {:?} vs {:?}",
+                p.position,
+                to[i].position
+            );
         }
         let radius = |pts: &[Point]| -> f32 {
             let c = pts.iter().fold([0.0f32; 3], |c, p| {
-                [c[0] + p.position[0], c[1] + p.position[1], c[2] + p.position[2]]
+                [
+                    c[0] + p.position[0],
+                    c[1] + p.position[1],
+                    c[2] + p.position[2],
+                ]
             });
             let n = pts.len() as f32;
             let c = [c[0] / n, c[1] / n, c[2] / n];
@@ -354,9 +393,14 @@ mod tests {
             radius(&start)
         );
         assert!(mid.iter().all(|p| p.size > 0.02), "points swell on the way");
-        assert!(start.iter().all(|p| p.size == 0.0) && end.iter().all(|p| p.size == 0.0),
-                "at rest on a body there is nothing to see");
-        assert!(at(0.03).iter().all(|p| p.size > 0.0), "the points grow out of the first surface");
+        assert!(
+            start.iter().all(|p| p.size == 0.0) && end.iter().all(|p| p.size == 0.0),
+            "at rest on a body there is nothing to see"
+        );
+        assert!(
+            at(0.03).iter().all(|p| p.size > 0.0),
+            "the points grow out of the first surface"
+        );
         assert_eq!(at(0.5), mid, "the same instant is the same cloud");
     }
 
@@ -386,6 +430,9 @@ mod tests {
             }
             p += 0.07;
         }
-        assert!(slowest > 1e-4, "every point keeps moving; the slowest step was {slowest}");
+        assert!(
+            slowest > 1e-4,
+            "every point keeps moving; the slowest step was {slowest}"
+        );
     }
 }

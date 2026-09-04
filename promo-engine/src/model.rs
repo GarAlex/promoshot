@@ -998,12 +998,18 @@ pub fn text_glb(body: &promo_model::TextBody) -> Result<Vec<u8>, String> {
         }
     }
     let Some(outlines) = chosen else {
-        return Err("the text is too long for one body — shorten it, or make one body a line".into());
+        return Err(
+            "the text is too long for one body — shorten it, or make one body a line".into(),
+        );
     };
     text_body_glb(&outlines, size, depth)
 }
 
-fn text_body_glb(outlines: &promo_text::TextOutlines, size: f32, depth: f32) -> Result<Vec<u8>, String> {
+fn text_body_glb(
+    outlines: &promo_text::TextOutlines,
+    size: f32,
+    depth: f32,
+) -> Result<Vec<u8>, String> {
     let contours: Vec<Vec<[f32; 2]>> = outlines
         .contours
         .iter()
@@ -1052,7 +1058,9 @@ fn extrude_contours(
 ) -> Result<([f32; 3], [f32; 3]), String> {
     use lyon_tessellation::geom::point;
     use lyon_tessellation::path::Path;
-    use lyon_tessellation::{BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers};
+    use lyon_tessellation::{
+        BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers,
+    };
 
     let contours: Vec<&Vec<[f32; 2]>> = contours.iter().filter(|c| c.len() >= 3).collect();
     if contours.is_empty() {
@@ -1103,7 +1111,11 @@ fn extrude_contours(
             .collect();
         for tri in buffers.indices.chunks(3) {
             let (a, b, c) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
-            let (pa, pb, pc) = (buffers.vertices[a], buffers.vertices[b], buffers.vertices[c]);
+            let (pa, pb, pc) = (
+                buffers.vertices[a],
+                buffers.vertices[b],
+                buffers.vertices[c],
+            );
             let cross = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
             if (cross > 0.0) == (nz > 0.0) {
                 faces.extend_from_slice(&[base[a], base[b], base[c]]);
@@ -1155,7 +1167,8 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
         };
         let mut idx: Vec<u16> = Vec::new();
         let mut faced = false;
-        let segments = |n: Option<u32>, default: usize| n.map(|n| n.max(3) as usize).unwrap_or(default);
+        let segments =
+            |n: Option<u32>, default: usize| n.map(|n| n.max(3) as usize).unwrap_or(default);
         match &part.shape {
             PartShape::Box(b) => {
                 let [w, h, d] = [b.size[0] as f32, b.size[1] as f32, b.size[2] as f32];
@@ -1188,7 +1201,14 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
                 // Top to bottom, as the lathe winds; the rim points twice,
                 // so the smoothed normals stay flat on the caps and outward
                 // on the wall.
-                let profile = [[0.0, h / 2.0], [r, h / 2.0], [r, h / 2.0], [r, -h / 2.0], [r, -h / 2.0], [0.0, -h / 2.0]];
+                let profile = [
+                    [0.0, h / 2.0],
+                    [r, h / 2.0],
+                    [r, h / 2.0],
+                    [r, -h / 2.0],
+                    [r, -h / 2.0],
+                    [0.0, -h / 2.0],
+                ];
                 local.lathe(&profile, segments(c.segments, 48), &mut idx);
             }
             PartShape::Torus(t) => {
@@ -1206,7 +1226,11 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
                 // The lathe winds outward for a profile running top to
                 // bottom; a profile written bottom-up (the natural way to
                 // list [radius, height]) is turned round first.
-                let mut profile: Vec<[f32; 2]> = l.profile.iter().map(|p| [p[0].max(0.0) as f32, p[1] as f32]).collect();
+                let mut profile: Vec<[f32; 2]> = l
+                    .profile
+                    .iter()
+                    .map(|p| [p[0].max(0.0) as f32, p[1] as f32])
+                    .collect();
                 if profile.first().map(|p| p[1]) < profile.last().map(|p| p[1]) {
                     profile.reverse();
                 }
@@ -1214,12 +1238,22 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
             }
             PartShape::Extrude(e) => {
                 if e.path.len() < 3 || e.depth <= 0.0 {
-                    return Err("an extrude needs a path of at least three points and a positive depth".into());
+                    return Err(
+                        "an extrude needs a path of at least three points and a positive depth"
+                            .into(),
+                    );
                 }
-                let contour: Vec<[f32; 2]> = e.path.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
+                let contour: Vec<[f32; 2]> =
+                    e.path.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
                 let mut faces = Vec::new();
                 let mut walls = Vec::new();
-                extrude_contours(&[contour], e.depth as f32, &mut local, &mut faces, &mut walls)?;
+                extrude_contours(
+                    &[contour],
+                    e.depth as f32,
+                    &mut local,
+                    &mut faces,
+                    &mut walls,
+                )?;
                 idx.extend(faces);
                 idx.extend(walls);
             }
@@ -1228,7 +1262,11 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
         // in the part's own axes — so every side can wear its own picture.
         let groups: Vec<(String, Vec<u16>)> = if faced {
             let half = match &part.shape {
-                PartShape::Box(b) => [b.size[0] as f32 / 2.0, b.size[1] as f32 / 2.0, b.size[2] as f32 / 2.0],
+                PartShape::Box(b) => [
+                    b.size[0] as f32 / 2.0,
+                    b.size[1] as f32 / 2.0,
+                    b.size[2] as f32 / 2.0,
+                ],
                 _ => [1.0, 1.0, 1.0],
             };
             split_by_face(&mut local, &idx, part.slot(), half)
@@ -1255,13 +1293,27 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
         let at = part.position.unwrap_or([0.0; 3]);
         let base = g.positions.len() / 3;
         if base + local.positions.len() / 3 > 60_000 {
-            return Err("the parts body has too many vertices — fewer segments, or fewer parts".into());
+            return Err(
+                "the parts body has too many vertices — fewer segments, or fewer parts".into(),
+            );
         }
         for i in 0..local.positions.len() / 3 {
-            let p = [local.positions[i * 3] * scale, local.positions[i * 3 + 1] * scale, local.positions[i * 3 + 2] * scale];
+            let p = [
+                local.positions[i * 3] * scale,
+                local.positions[i * 3 + 1] * scale,
+                local.positions[i * 3 + 2] * scale,
+            ];
             let p = turn(p);
-            let p = [p[0] + at[0] as f32, p[1] + at[1] as f32, p[2] + at[2] as f32];
-            let n = turn([local.normals[i * 3], local.normals[i * 3 + 1], local.normals[i * 3 + 2]]);
+            let p = [
+                p[0] + at[0] as f32,
+                p[1] + at[1] as f32,
+                p[2] + at[2] as f32,
+            ];
+            let n = turn([
+                local.normals[i * 3],
+                local.normals[i * 3 + 1],
+                local.normals[i * 3 + 2],
+            ]);
             for k in 0..3 {
                 min[k] = min[k].min(p[k]);
                 max[k] = max[k].max(p[k]);
@@ -1299,7 +1351,12 @@ pub fn parts_glb(parts: &[promo_model::BodyPart]) -> Result<Vec<u8>, String> {
 /// on it stands upright as seen from OUTSIDE: the front reads as it is,
 /// the back is mirrored to read from behind, the sides turn with the
 /// box, the top has the front at its foot.
-fn split_by_face(local: &mut GlbGeometry, idx: &[u16], slot: &str, half: [f32; 3]) -> Vec<(String, Vec<u16>)> {
+fn split_by_face(
+    local: &mut GlbGeometry,
+    idx: &[u16],
+    slot: &str,
+    half: [f32; 3],
+) -> Vec<(String, Vec<u16>)> {
     const NAMES: [&str; 6] = ["right", "left", "top", "bottom", "front", "back"];
     let mut groups: Vec<Vec<u16>> = vec![Vec::new(); 6];
     for t in idx.chunks_exact(3) {
@@ -1313,7 +1370,11 @@ fn split_by_face(local: &mut GlbGeometry, idx: &[u16], slot: &str, half: [f32; 3
             }
         }
         let axis = (0..3)
-            .max_by(|&a, &b| n[a].abs().partial_cmp(&n[b].abs()).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|&a, &b| {
+                n[a].abs()
+                    .partial_cmp(&n[b].abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .unwrap_or(2);
         let face = axis * 2 + if n[axis] >= 0.0 { 0 } else { 1 };
         groups[face].extend_from_slice(t);

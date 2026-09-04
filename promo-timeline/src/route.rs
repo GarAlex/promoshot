@@ -62,14 +62,20 @@ impl Route3 {
         }
         let mut cleaned: Vec<V3> = Vec::with_capacity(points.len() + 1);
         for p in points {
-            if cleaned.last().is_some_and(|q| length(sub(p, *q)) < MIN_SEGMENT) {
+            if cleaned
+                .last()
+                .is_some_and(|q| length(sub(p, *q)) < MIN_SEGMENT)
+            {
                 continue;
             }
             cleaned.push(p);
         }
         if closed {
             if let Some(first) = cleaned.first().copied() {
-                if cleaned.last().is_some_and(|q| length(sub(first, *q)) >= MIN_SEGMENT) {
+                if cleaned
+                    .last()
+                    .is_some_and(|q| length(sub(first, *q)) >= MIN_SEGMENT)
+                {
                     cleaned.push(first);
                 }
             }
@@ -186,7 +192,11 @@ impl Route3 {
         };
         let (before, after) = (self.points[index - 1], self.points[index]);
         let (l0, l1) = (self.lengths[index - 1], self.lengths[index]);
-        let t = if l1 > l0 { (target - l0) / (l1 - l0) } else { 0.0 };
+        let t = if l1 > l0 {
+            (target - l0) / (l1 - l0)
+        } else {
+            0.0
+        };
         lerp(before, after, t)
     }
 
@@ -388,8 +398,24 @@ pub fn tangent_along3(
     progress: f64,
 ) -> V3 {
     let h = 0.004;
-    let a = point_along3(route, from, to, flipped, start_at, end_at, (progress - h).max(0.0));
-    let b = point_along3(route, from, to, flipped, start_at, end_at, (progress + h).min(1.0));
+    let a = point_along3(
+        route,
+        from,
+        to,
+        flipped,
+        start_at,
+        end_at,
+        (progress - h).max(0.0),
+    );
+    let b = point_along3(
+        route,
+        from,
+        to,
+        flipped,
+        start_at,
+        end_at,
+        (progress + h).min(1.0),
+    );
     let d = sub(b, a);
     let l = length(d);
     if l < MIN_SEGMENT {
@@ -404,7 +430,11 @@ pub fn tangent_along3(
 pub fn camera_window<'a>(
     track: &[&'a promo_model::ProjectLayerKeyframe],
     local_time: f64,
-) -> Option<(&'a promo_model::ProjectLayerKeyframe, &'a promo_model::ProjectLayerKeyframe, f64)> {
+) -> Option<(
+    &'a promo_model::ProjectLayerKeyframe,
+    &'a promo_model::ProjectLayerKeyframe,
+    f64,
+)> {
     track_window(track, local_time)
 }
 
@@ -412,7 +442,11 @@ pub fn camera_window<'a>(
 /// stage's radii — from its `stageOffset` and `depth` keyframes, the move
 /// into a keyframe bent along its `motionPath` when that names a route.
 /// `None` when no keyframe places it.
-pub fn member_position(layer: &ProjectLayer, local_time: f64, resources: &[ProjectResource]) -> Option<V3> {
+pub fn member_position(
+    layer: &ProjectLayer,
+    local_time: f64,
+    resources: &[ProjectResource],
+) -> Option<V3> {
     // Each coordinate keeps its OWN keyframe track, exactly as three
     // independent scalars did before routes existed: a keyframe that states
     // only `stageOffset` leaves `depth` held by the last keyframe that set
@@ -422,7 +456,9 @@ pub fn member_position(layer: &ProjectLayer, local_time: f64, resources: &[Proje
     let across_x = |t: f64| scalar(layer, t, |k| k.stage_offset.map(|o| o[0]));
     let across_y = |t: f64| scalar(layer, t, |k| k.stage_offset.map(|o| o[1]));
     let depth_at = |t: f64| scalar(layer, t, |k| k.depth);
-    let track = sorted_by_time(&layer.keyframes, |k| k.stage_offset.is_some() || k.depth.is_some());
+    let track = sorted_by_time(&layer.keyframes, |k| {
+        k.stage_offset.is_some() || k.depth.is_some()
+    });
     let (a, b, progress) = track_window(&track, local_time)?;
     // Only a ROUTE moves the three together: the fit needs one point at each
     // end of the move, so an absent field takes the value its own track
@@ -437,8 +473,14 @@ pub fn member_position(layer: &ProjectLayer, local_time: f64, resources: &[Proje
     }
     let place = |k: &promo_model::ProjectLayerKeyframe| -> V3 {
         [
-            k.stage_offset.map(|o| o[0]).or_else(|| across_x(k.time)).unwrap_or(0.0),
-            k.stage_offset.map(|o| o[1]).or_else(|| across_y(k.time)).unwrap_or(0.0),
+            k.stage_offset
+                .map(|o| o[0])
+                .or_else(|| across_x(k.time))
+                .unwrap_or(0.0),
+            k.stage_offset
+                .map(|o| o[1])
+                .or_else(|| across_y(k.time))
+                .unwrap_or(0.0),
             k.depth.or_else(|| depth_at(k.time)).unwrap_or(0.0),
         ]
     };
@@ -466,7 +508,11 @@ mod tests {
     use super::*;
 
     fn bend() -> Route3 {
-        Route3::new(vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [10.0, 10.0, 0.0]], false).unwrap()
+        Route3::new(
+            vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [10.0, 10.0, 0.0]],
+            false,
+        )
+        .unwrap()
     }
 
     fn close(a: V3, b: V3) -> bool {
@@ -489,7 +535,10 @@ mod tests {
     fn a_route_is_fitted_between_the_keyframes() {
         let r = bend();
         let (from, to) = ([1.0, 2.0, 3.0], [1.0, 2.0, 9.0]);
-        assert!(close(point_along3(&r, from, to, false, 0.0, 1.0, 0.0), from));
+        assert!(close(
+            point_along3(&r, from, to, false, 0.0, 1.0, 0.0),
+            from
+        ));
         assert!(close(point_along3(&r, from, to, false, 0.0, 1.0, 1.0), to));
         let mid = point_along3(&r, from, to, false, 0.0, 1.0, 0.5);
         // The corner sits 7.07 off the route's own chord (half the chord's
@@ -501,7 +550,10 @@ mod tests {
             let d = sub(mid, from);
             length(sub(d, scale(u, dot(d, u))))
         };
-        assert!((off_chord - 3.0).abs() < 1e-3, "off the chord by {off_chord}");
+        assert!(
+            (off_chord - 3.0).abs() < 1e-3,
+            "off the chord by {off_chord}"
+        );
         // Flipped mirrors it across the chord: same distance, other side.
         let flipped = point_along3(&r, from, to, true, 0.0, 1.0, 0.5);
         assert!((length(sub(flipped, from)) - length(sub(mid, from))).abs() < 1e-6);
@@ -521,20 +573,32 @@ mod tests {
         )
         .expect("layer");
         let at = |t: f64| member_position(&layer, t, &[]).expect("placed");
-        assert!((at(2.0)[0] - 1.0).abs() < 1e-9, "across arrives: {:?}", at(2.0));
+        assert!(
+            (at(2.0)[0] - 1.0).abs() < 1e-9,
+            "across arrives: {:?}",
+            at(2.0)
+        );
         assert!(
             (at(2.0)[2] - 1.5).abs() < 1e-9,
             "depth holds where no later keyframe states it: {:?}",
             at(2.0)
         );
-        assert!((at(1.0)[2] - 1.5).abs() < 1e-9, "and holds mid-ramp: {:?}", at(1.0));
+        assert!(
+            (at(1.0)[2] - 1.5).abs() < 1e-9,
+            "and holds mid-ramp: {:?}",
+            at(1.0)
+        );
     }
 
     /// An arc drawn bulging upward bulges upward in the stage whichever way
     /// the move runs: the fit's roll about the chord follows world up.
     #[test]
     fn a_route_keeps_its_up_toward_world_up() {
-        let arc = Route3::new(vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]], false).unwrap();
+        let arc = Route3::new(
+            vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]],
+            false,
+        )
+        .unwrap();
         for (from, to) in [
             ([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]),
             ([0.0, 0.0, 0.0], [0.0, 0.0, -4.0]),
@@ -543,7 +607,10 @@ mod tests {
         ] {
             let mid = point_along3(&arc, from, to, false, 0.0, 1.0, 0.5);
             let centre = lerp(from, to, 0.5);
-            assert!(mid[1] > centre[1] + 1.0, "bulges upward for {from:?} → {to:?}: {mid:?}");
+            assert!(
+                mid[1] > centre[1] + 1.0,
+                "bulges upward for {from:?} → {to:?}: {mid:?}"
+            );
         }
     }
 
@@ -561,7 +628,10 @@ mod tests {
         let r = Route3::new(circle, false).unwrap();
         assert!(r.is_closed(), "the shape is the fact, not the flag");
         let mid = point_along3(&r, [0.0; 3], [2.0, 0.0, 0.0], false, 0.0, 1.0, 0.5);
-        assert!(length(mid) < 4.0, "it plays at its drawn size, not flung: {mid:?}");
+        assert!(
+            length(mid) < 4.0,
+            "it plays at its drawn size, not flung: {mid:?}"
+        );
     }
 
     /// `flipped` mirrors a loop about the loop's own plane. Negating Y —
@@ -590,7 +660,11 @@ mod tests {
     /// straight up must land the arc in nearly the same place.
     #[test]
     fn the_fit_does_not_flip_through_vertical() {
-        let arc = Route3::new(vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]], false).unwrap();
+        let arc = Route3::new(
+            vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]],
+            false,
+        )
+        .unwrap();
         let at = |to: V3| point_along3(&arc, [0.0; 3], to, false, 0.0, 1.0, 0.5);
         let eps = 1e-3;
         let left = at([-eps, 4.0, 0.0]);
@@ -605,7 +679,12 @@ mod tests {
     #[test]
     fn a_repeated_first_point_does_not_grow_a_hook() {
         let ring = |repeat: bool| {
-            let mut pts = vec![[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, 0.0, -1.0]];
+            let mut pts = vec![
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [-1.0, 0.0, 0.0],
+                [0.0, 0.0, -1.0],
+            ];
             if repeat {
                 pts.push([1.0, 0.0, 0.0]);
             }
@@ -648,7 +727,12 @@ mod tests {
     #[test]
     fn a_smooth_route_passes_through_its_points() {
         let route = Route {
-            points: vec![[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0], [3.0, 1.0, 1.0]],
+            points: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [3.0, 1.0, 1.0],
+            ],
             curve: None,
             closed: None,
         };

@@ -7,19 +7,19 @@
 //! parity harness diffs them fixture-by-fixture.
 
 pub mod attachment;
-pub mod caption;
-pub mod layout_check;
 pub mod audio;
+pub mod caption;
 pub mod follow;
 pub mod frame;
 pub mod gradient;
 pub mod interpolation;
 pub mod layout;
+pub mod layout_check;
 pub mod mapping;
 pub mod motion;
-pub mod route;
 pub mod plan;
 pub mod reveal;
+pub mod route;
 pub mod sprite;
 pub mod transition;
 pub mod validate;

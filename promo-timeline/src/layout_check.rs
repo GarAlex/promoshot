@@ -147,7 +147,10 @@ fn caption_checks(
                 continue;
             }
             // Something switched off, not yet on, or faded out covers nothing.
-            if !other.is_enabled || !ip::layer_is_visible(other, t) || ip::layer_opacity(other, t) < 0.5 {
+            if !other.is_enabled
+                || !ip::layer_is_visible(other, t)
+                || ip::layer_opacity(other, t) < 0.5
+            {
                 continue;
             }
             let Some(r) = layer_rect(other, t, settings, resources, canvas) else {
@@ -226,13 +229,24 @@ fn layer_rect(
     let tr = layer_transform_along_paths(layer, t, settings, resources);
     // A drawing lays out by its own rule, which is what the renderer uses.
     let rect = if layer.kind == ProjectLayerKind::Drawing {
-        crate::drawing_rect(source, canvas, tr.zoom, tr.horizontal_shift, tr.vertical_shift)
+        crate::drawing_rect(
+            source,
+            canvas,
+            tr.zoom,
+            tr.horizontal_shift,
+            tr.vertical_shift,
+        )
     } else {
-        media_rect(source, canvas, tr.zoom, tr.horizontal_shift, tr.vertical_shift)
+        media_rect(
+            source,
+            canvas,
+            tr.zoom,
+            tr.horizontal_shift,
+            tr.vertical_shift,
+        )
     };
     Some([rect.x(), rect.y(), rect.width(), rect.height()])
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -277,7 +291,9 @@ mod tests {
         );
         let found = layout_warnings(&flush);
         assert!(
-            found.iter().any(|w| w.contains("caption \"Hook\" sits") && w.contains("left edge") && w.contains("safe ≥ 54")),
+            found.iter().any(|w| w.contains("caption \"Hook\" sits")
+                && w.contains("left edge")
+                && w.contains("safe ≥ 54")),
             "{found:?}"
         );
         let roomy = project(
@@ -286,7 +302,11 @@ mod tests {
                 "captionStyle":{"alignment":"leading","leftMargin":200},"keyframes":[]}"#,
             "",
         );
-        assert!(layout_warnings(&roomy).is_empty(), "{:?}", layout_warnings(&roomy));
+        assert!(
+            layout_warnings(&roomy).is_empty(),
+            "{:?}",
+            layout_warnings(&roomy)
+        );
     }
 
     /// A caption under a picture that draws above it is named with the
@@ -306,7 +326,12 @@ mod tests {
             r#"{"id":"S","kind":"image","filename":"s.png","displayName":"Shot","addedAt":0,"pixelWidth":1200,"pixelHeight":900}"#,
         );
         let found = layout_warnings(&meta);
-        assert!(found.iter().any(|w| w.contains("caption \"CTA\" is") && w.contains("overlapped by \"Phone\"")), "{found:?}");
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("caption \"CTA\" is") && w.contains("overlapped by \"Phone\"")),
+            "{found:?}"
+        );
         assert!(
             layout_warnings_for(&meta, Some("P")).is_empty(),
             "a picture that covers nothing of its own says nothing"

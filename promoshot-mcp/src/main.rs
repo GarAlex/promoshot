@@ -516,6 +516,17 @@ fn tool_descriptors() -> Value {
                          palette when you frame" },
                     "captionText": { "type": "string" },
                     "fontSize": { "type": "number", "description": "Caption points" },
+                    "tracking": { "type": "number", "description":
+                        "Letter spacing in points — open a small eyebrow out (+6), \
+                         tighten a big headline (-1.4)" },
+                    "weight": { "type": "string", "description":
+                        "The face's weight; heavier than bold is where a store \
+                         headline lives",
+                        "enum": ["ultraLight", "thin", "light", "regular", "medium",
+                                 "semibold", "bold", "heavy", "black"] },
+                    "lineHeight": { "type": "number", "description":
+                        "Line spacing as a multiple of font size (default 1.25); \
+                         ~1.05 for a stacked headline" },
                     "placement": { "type": "object", "description":
                         "{height|width|mode, anchor, offset} — media sizes too; a \
                          caption takes anchor and offset only" },

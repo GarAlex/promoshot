@@ -166,6 +166,20 @@ Semantics worth knowing:
   carries `minReaderVersion: 27`. LEGACY: this is the flat compositor's
   2.5D; a title with a real side is a text body (rung 34, see Models),
   and `promo_validate` says so.
+- `tracking`, `weight` and `lineHeight` are the three controls a
+  designed headline needs, per caption (there is no composition-wide
+  default for them, and a caption that says nothing is laid out
+  exactly as it always was). `tracking` is letter spacing in points at
+  the caption's own size — open a small eyebrow line out (+6) and
+  tighten a big headline (−1.4); the gaps between the letters grow,
+  and the box grows with them. `weight` picks the face outright:
+  "ultraLight", "thin", "light", "regular", "medium", "semibold",
+  "bold", "heavy", "black" — it wins over `isBold`, which only ever
+  chose between regular and bold, and "heavy" is where a store
+  headline usually lives. `lineHeight` is line spacing as a multiple
+  of the font size, 1.25 unless said; ~1.05 keeps a two-line headline
+  reading as one block. A project using any of the three carries
+  `minReaderVersion: 42`.
 - `strokeColorHex` / `strokeWidth` put an OUTLINE round the glyphs, and
   `shadowColorHex` / `shadowOpacity` / `shadowRadius` / `shadowOffset` a
   soft shadow under them. This is what lets a caption sit straight on
@@ -552,8 +566,14 @@ Semantics worth knowing:
         "points": [[0, 0], [100, 100]], "strokeColorHex": "FFFFFF",
         "strokeWidth": 1, "fillColorHex": "FFFFFF",
         "arrowStart": false, "arrowEnd": false } ] } }
-  Shape `kind` is pen, line or oval; `fillOpacity` / `strokeOpacity`
-  are optional 0..1.
+  Shape `kind` is pen, line, oval or rect; `fillOpacity` /
+  `strokeOpacity` are optional 0..1. A `rect` takes the same two
+  corner points and an optional `cornerRadius` (canvas px, clamped to
+  half the shorter side, so a large one gives a pill) — this is the
+  accent bar, the plate behind a headline and the rounded window a
+  screenshot sits in, and as a MASK it is the rounded rect itself. A
+  project using a rect or a corner radius carries
+  `minReaderVersion: 42`.
 - `tiltX` / `tiltY` (degrees) on an image layer's keyframes tilt a
   device-framed screenshot in 2.5D. They animate like any other
   track; leaving them out keeps the frame's own static tilt. The same
@@ -703,10 +723,13 @@ Semantics worth knowing:
   "inherit" value. The pairs, per-caption first: `fontSize`
   (`subtitleFontSize` — one caption can be far larger than the
   composition default), `fontFamily` (`subtitleFontFamily`),
-  `isBold` / `isItalic` (`subtitleBold` / `subtitleItalic`),
+  `isBold` / `isItalic` (`subtitleBold` / `subtitleItalic` — and
+  `weight` above wins over both `isBold` and `subtitleBold`),
   `textColorHex` (`subtitleColorHex`), `alignment`
   (`subtitleAlignment`) — "leading" / "center" / "trailing",
-  defaulting to center; `backgroundColorHex` / `backgroundOpacity` /
+  defaulting to center, and it aligns the LINES inside the caption's
+  box as well as the box inside the margins, so a two-line headline
+  centres both of its lines; `backgroundColorHex` / `backgroundOpacity` /
   `padding` / `cornerRadius` (`subtitleBackgroundColorHex`,
   `subtitleBackgroundOpacity`, `subtitleBackgroundPadding`,
   `subtitleBackgroundCornerRadius`), `leftMargin` / `rightMargin` /

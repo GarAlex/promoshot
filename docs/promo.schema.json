@@ -953,6 +953,13 @@
         "arrowStart": {
           "type": "boolean"
         },
+        "cornerRadius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "evenOddFill": {
           "type": [
             "boolean",
@@ -1020,7 +1027,8 @@
       "enum": [
         "pen",
         "line",
-        "oval"
+        "oval",
+        "rect"
       ],
       "type": "string"
     },
@@ -3371,6 +3379,20 @@
       ],
       "type": "string"
     },
+    "SubtitleFontWeight": {
+      "enum": [
+        "ultraLight",
+        "thin",
+        "light",
+        "regular",
+        "medium",
+        "semibold",
+        "bold",
+        "heavy",
+        "black"
+      ],
+      "type": "string"
+    },
     "SubtitleStyle": {
       "properties": {
         "alignment": {
@@ -3443,6 +3465,13 @@
           ]
         },
         "leftMargin": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lineHeight": {
           "format": "double",
           "type": [
             "number",
@@ -3534,11 +3563,28 @@
             "null"
           ]
         },
+        "tracking": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "verticalMargin": {
           "format": "double",
           "type": [
             "number",
             "null"
+          ]
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleFontWeight"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       },

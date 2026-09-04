@@ -5,7 +5,10 @@
 use promo_model::{CompositionSettings, SubtitleStyle};
 
 /// The style a caption is drawn and measured with.
-pub fn caption_style(style: Option<&SubtitleStyle>, settings: &CompositionSettings) -> promo_text::TextStyle {
+pub fn caption_style(
+    style: Option<&SubtitleStyle>,
+    settings: &CompositionSettings,
+) -> promo_text::TextStyle {
     let get = |pick: fn(&SubtitleStyle) -> Option<f64>, fallback: f64| -> f64 {
         style.and_then(pick).unwrap_or(fallback)
     };
@@ -98,7 +101,14 @@ pub fn caption_style(style: Option<&SubtitleStyle>, settings: &CompositionSettin
         // statement of where captions live, and a placement is one caption
         // saying otherwise.
         placement: style.and_then(|s| s.placement.clone()),
-        line_height: 1.25,
+        // The three type controls a designed caption needs, per caption
+        // only: there is no composition-wide default for them, so a
+        // caption that says nothing is laid out exactly as it was before
+        // they existed — 1.25 lines, the font's own spacing, and `isBold`
+        // choosing between regular and bold.
+        line_height: style.and_then(|s| s.line_height).unwrap_or(1.25),
+        tracking: style.and_then(|s| s.tracking).unwrap_or(0.0),
+        weight: style.and_then(|s| s.weight).map(|w| w.value()),
         // Let promo-text choose from the text colour.
         smoothing: None,
     }
