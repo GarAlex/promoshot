@@ -29,6 +29,16 @@ impl Voice {
     }
 }
 
+/// Can this provider's roster be answered without the person's key?
+///
+/// OpenAI's is a fixed list compiled into this binary — there is no
+/// listing endpoint — so asking for a key first refused a question the
+/// binary could already answer. It was the only tool in 600 logged calls
+/// that failed every time it was called.
+pub fn roster_needs_key(provider: &str) -> bool {
+    provider != "openai"
+}
+
 /// OpenAI's fixed roster (no listing endpoint).
 pub fn openai_roster() -> Vec<Voice> {
     [

@@ -65,8 +65,8 @@ must never cross-fade; give each a life clear of both dissolves.
 
 A device is a BODY, and the easiest body is a RECIPE — a model resource
 with no file: `"recipe": { "device": { "kind": "phone" } }` (tablet,
-laptop too; `promo_device_model` returns exactly this resource) is a
-model with `Body` and `Screen` slots the engine builds at load. Or from
+laptop too) is a model with `Body` and `Screen` slots the engine builds
+at load — a laptop has a `Deck` as well. Or from
 a file: `promo device phone --out phone.glb`. A model RESOURCE names the
 recipe or the file and binds the slots — `"materials": { "Body": "@edge",
 "Screen": { "resourceID": "<shot>" } }` puts the screenshot on the
@@ -236,4 +236,11 @@ duration rules, waits, gradients, tiled plates, palette roles — is in
 parser's own structs — fill a structured object against it instead of
 freehanding, and put
 `"$schema": "https://raw.githubusercontent.com/GarAlex/promoshot/main/docs/promo.schema.json"`
+
+The rest of the format — nested compositions, markers, audio effects,
+chroma key, pointer follow, image effects, LUTs, models, particles,
+routes, morphs, parts, recipes, environments, stages — is
+`promo_schema_full`. It answers whole (67 KB) or by topic: pass
+`{"topics": ["particles", "route"]}` and get those sections alone,
+`"core"` for the format proper.
 in a metadata.json for editor autocomplete.

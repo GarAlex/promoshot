@@ -84,12 +84,23 @@ pub fn distill_probe(raw: &Value) -> Value {
             "video" => {
                 entry["width"] = stream.get("width").cloned().unwrap_or(Value::Null);
                 entry["height"] = stream.get("height").cloned().unwrap_or(Value::Null);
-                if let Some(fps) = stream
-                    .get("r_frame_rate")
-                    .and_then(Value::as_str)
-                    .and_then(parse_fraction)
-                {
-                    entry["fps"] = json!((fps * 100.0).round() / 100.0);
+                // A STILL has no frame rate. ffprobe answers 25/1 for a PNG
+                // or JPEG pipe — its own default for a single-image demuxer,
+                // not a fact about the file — and an agent that reads it
+                // sets a project's fps from a screenshot. The app's probe
+                // reports none for a still; this one now agrees.
+                let still = matches!(
+                    stream.get("codec_name").and_then(Value::as_str),
+                    Some("png" | "mjpeg" | "jpeg" | "bmp" | "gif" | "webp" | "tiff")
+                ) || container.ends_with("_pipe");
+                if !still {
+                    if let Some(fps) = stream
+                        .get("r_frame_rate")
+                        .and_then(Value::as_str)
+                        .and_then(parse_fraction)
+                    {
+                        entry["fps"] = json!((fps * 100.0).round() / 100.0);
+                    }
                 }
                 // A quarter-turned capture STORES landscape and displays
                 // portrait; the display matrix is where that truth lives,
@@ -515,6 +526,33 @@ mod tests {
         assert_eq!(facts["streams"][0]["rotation"], -90.0);
         assert_eq!(facts["streams"][1]["channels"], 2);
         assert_eq!(facts["streams"][1]["sampleRate"], 48000);
+    }
+
+    /// A still has no frame rate. ffprobe answers 25/1 for a PNG pipe — its
+    /// own default for a single-image demuxer — and an agent reading it set
+    /// a project's fps from a screenshot. The app's probe reports none.
+    #[test]
+    fn a_still_reports_no_frame_rate() {
+        let raw = serde_json::json!({
+            "format": { "format_name": "png_pipe", "duration": null },
+            "streams": [{
+                "codec_type": "video", "codec_name": "png",
+                "width": 2064, "height": 2752, "r_frame_rate": "25/1"
+            }]
+        });
+        let facts = distill_probe(&raw);
+        assert_eq!(facts["streams"][0]["width"], 2064);
+        assert_eq!(facts["streams"][0]["fps"], Value::Null, "{facts}");
+
+        // A real clip keeps its rate.
+        let clip = serde_json::json!({
+            "format": { "format_name": "mov,mp4,m4a", "duration": "6.0" },
+            "streams": [{
+                "codec_type": "video", "codec_name": "h264",
+                "width": 1920, "height": 1080, "r_frame_rate": "30000/1001"
+            }]
+        });
+        assert_eq!(distill_probe(&clip)["streams"][0]["fps"], 29.97);
     }
 
     /// The silence distiller: spans parsed, an unterminated silence runs to

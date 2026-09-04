@@ -1001,7 +1001,8 @@ A model may also be GENERATED (rung 34): a `recipe` in place of a
 "text": "Hello", "bold": true, "depth": 0.25, "size": 1 } } }` — and the
 engine builds the body at load. `{ "device": { "kind": "phone" } }`
 (tablet, laptop) is the built-in device body without its file — the
-same `Body` and `Screen` slots `promo device` writes. Text is the other:
+same `Body` and `Screen` slots `promo device` writes, and a `Deck` on
+the laptop. Text is the other:
 real type
 standing in the 3D world, 1 em tall × `size` world units, extruded
 `depth` em, centred on its box and facing +Z, with a "Face" slot (front

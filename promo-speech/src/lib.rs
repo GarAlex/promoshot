@@ -26,7 +26,7 @@ pub use keys::{
     SERVICE,
 };
 pub use stress::{google_input, marking_stress};
-pub use voices::{voices_with_key, Voice};
+pub use voices::{roster_needs_key, voices_with_key, Voice};
 
 /// sha256("provider|voiceID|text"), lowercase hex — the Swift
 /// `SpeechSpec.fingerprint`, exactly. A receipt written by either side

@@ -145,9 +145,12 @@ pub fn init(args: &Value, root: Option<&Path>) -> Result<String, String> {
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(mint);
+    // The stamp is COMPUTED from what the file uses, never written as a
+    // literal. Two writers here carried an 18 from the day they were
+    // written; the ladder is at 42, `promo_validate` names the number a
+    // file actually needs, and a literal is one more thing to forget.
     let document = json!({
         "id": project_id, "name": name, "createdAt": 0, "state": "recorded",
-        "minReaderVersion": 18,
         "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
         "compositionSettings": settings,
         "resources": [],
@@ -848,7 +851,7 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
     let authored = promo_editor::author::author(&spec)?;
     let mut meta = ProjectMetadata::from_json(&authored)
         .map_err(|e| format!("the show the wizard wrote no longer parses: {e}"))?;
-    meta.min_reader_version = Some(18);
+    // (the stamp is computed by `write_metadata`)
     write_metadata(&meta, &meta_path)?;
     Ok(format!(
         "authored a {kind} show at {}: {} slide(s), {:.1}s — refine with the tools, or open it",
@@ -1202,8 +1205,17 @@ fn copy_into_resources(project: &Path, source: &Path) -> Result<String, String> 
     Ok(target.file_name().unwrap().to_string_lossy().into_owned())
 }
 
+/// Every write these tools make goes through here, and the reader stamp is
+/// COMPUTED on the way out.
+///
+/// It used to be a literal 18 in two writers, written the day they were
+/// written and never moved; the ladder is at 42 now. Computing it here
+/// means a scaffolded project is stamped by what it actually uses, at
+/// every step, and no writer has to remember.
 fn write_metadata(meta: &ProjectMetadata, path: &Path) -> Result<(), String> {
-    let json = meta.to_json().map_err(|e| e.to_string())?;
+    let mut stamped = meta.clone();
+    stamped.min_reader_version = Some(stamped.minimum_reader_version());
+    let json = stamped.to_json().map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| format!("write: {e}"))
 }
 
@@ -1263,6 +1275,60 @@ mod tests {
     fn read(dir: &Path) -> ProjectMetadata {
         let text = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
         ProjectMetadata::from_json(&text).unwrap()
+    }
+
+    /// The reader stamp is what the file USES, at every step, with no
+    /// literal anywhere in the writers. Two of them carried an 18 from the
+    /// day they were written while the ladder climbed to 42, and a project
+    /// scaffolded by the tools then warned in its own validator.
+    #[test]
+    fn the_stamp_follows_what_the_project_uses() {
+        let root = scratch();
+        let dir = root.join("Stamped.promo");
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1920x1080"}),
+            Some(&root),
+        )
+        .unwrap();
+        let empty = read(&dir);
+        assert_eq!(
+            empty.min_reader_version,
+            Some(empty.minimum_reader_version()),
+            "an empty project is stamped by its own ladder"
+        );
+
+        // A rung-42 caption lifts it, through the ordinary tool path.
+        upsert_layer(
+            &json!({
+                "project": dir.to_string_lossy(), "id": "head", "kind": "caption",
+                "captionText": "TYPING BLASTER", "tracking": 6.0
+            }),
+            Some(&root),
+            &measured,
+        )
+        .unwrap();
+        let meta = read(&dir);
+        assert_eq!(
+            meta.min_reader_version,
+            Some(42),
+            "computed, not remembered"
+        );
+        assert!(
+            promo_timeline::validate::warnings(&meta).is_empty(),
+            "and the validator has nothing to say about the stamp"
+        );
+        // No writer states a version by hand — any number, not just the 18
+        // this replaced. Written so the guard does not trip over its own
+        // source: it looks for a DIGIT after the assignment.
+        let source = include_str!("lib.rs");
+        let assignment = "min_reader_version = Some(";
+        for (at, _) in source.match_indices(assignment) {
+            let next = source[at + assignment.len()..].chars().next();
+            assert!(
+                !next.is_some_and(|c| c.is_ascii_digit()),
+                "a literal stamp is back in the writers at byte {at}"
+            );
+        }
     }
 
     /// The layer tool speaks the whole caption's typography: tracking, a
@@ -1387,7 +1453,8 @@ mod tests {
         .unwrap();
 
         let meta = read(&dir);
-        assert_eq!(meta.min_reader_version, Some(18));
+        // COMPUTED, not a literal: what the file uses decides it.
+        assert_eq!(meta.min_reader_version, Some(meta.minimum_reader_version()));
         let warnings = promo_timeline::validate::warnings(&meta);
         assert!(warnings.is_empty(), "{warnings:?}");
 
@@ -1897,7 +1964,7 @@ mod tests {
             1,
             "issue #7: a classic slide's caption is a layer"
         );
-        assert_eq!(meta.min_reader_version, Some(18));
+        assert_eq!(meta.min_reader_version, Some(meta.minimum_reader_version()));
         assert!(dir.join("Resources/a.png").exists() && dir.join("Resources/b.png").exists());
         let warnings = promo_timeline::validate::warnings(&meta);
         assert!(warnings.is_empty(), "{warnings:?}");

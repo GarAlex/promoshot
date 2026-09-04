@@ -135,9 +135,16 @@ pub fn voices(args: &Value, keys: &dyn promo_speech::KeyStore) -> Result<String,
         .get("provider")
         .and_then(Value::as_str)
         .unwrap_or("openai");
-    let (key, _) = keys
-        .key(provider)
-        .ok_or_else(|| promo_speech::keys::missing_key_message(provider))?;
+    // A key only where the roster is a network call. OpenAI's is compiled
+    // in, and demanding a key for it refused a question this binary could
+    // already answer.
+    let key = match keys.key(provider) {
+        Some((key, _)) => key,
+        None if promo_speech::roster_needs_key(provider) => {
+            return Err(promo_speech::keys::missing_key_message(provider))
+        }
+        None => String::new(),
+    };
     let voices = promo_speech::voices_with_key(provider, &key)?;
     if voices.is_empty() {
         return Ok(format!("{provider}: no voices listed"));

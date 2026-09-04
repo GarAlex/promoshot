@@ -216,6 +216,90 @@ where
     })
 }
 
+/// The format's prose, whole or by topic.
+///
+/// The whole document is 67 KB, and nearly every session pulled all of it
+/// — most of which is the format proper, but 17 KB is feature sections a
+/// given piece may never touch. Naming topics takes those instead: "core"
+/// is the format itself, and a feature word takes the paragraph that
+/// introduces it. No argument still answers with everything, so nothing
+/// that worked stops working.
+fn schema_sliced(topics: &[String]) -> String {
+    if topics.is_empty() {
+        return promo_model::SCHEMA.to_string();
+    }
+    let (core, sections) = schema_split();
+    let mut out = String::new();
+    let mut missed: Vec<&str> = Vec::new();
+    for topic in topics {
+        if topic == "core" || topic == "format" {
+            out.push_str(core);
+            out.push('\n');
+            continue;
+        }
+        let mut found = false;
+        for section in &sections {
+            let heading = section
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if heading.contains(topic.as_str()) {
+                out.push_str(section);
+                out.push_str("\n\n");
+                found = true;
+            }
+        }
+        if !found {
+            missed.push(topic.as_str());
+        }
+    }
+    if !missed.is_empty() {
+        let names: Vec<String> = sections
+            .iter()
+            .filter_map(|s| s.lines().next())
+            .map(|line| line.split(" (rung").next().unwrap_or(line).to_string())
+            .collect();
+        out.push_str(&format!(
+            "\n(no section for {}; the topics are \"core\" plus: {})\n",
+            missed.join(", "),
+            names.join(", ")
+        ));
+    }
+    out
+}
+
+/// The format proper, and the feature sections after it.
+///
+/// A section starts at an unindented sentence naming its rung — the shape
+/// the document already has — and runs to the next one. Splitting on blank
+/// lines instead missed every section glued to the paragraph above it,
+/// which is most of them.
+fn schema_split() -> (&'static str, Vec<&'static str>) {
+    let text = promo_model::SCHEMA;
+    let mut starts: Vec<usize> = Vec::new();
+    let mut at = 0usize;
+    for line in text.split_inclusive('\n') {
+        let head = line.trim_end();
+        if head.contains("(rung ") && head.starts_with(|c: char| c.is_ascii_uppercase()) {
+            starts.push(at);
+        }
+        at += line.len();
+    }
+    let Some(&first) = starts.first() else {
+        return (text, Vec::new());
+    };
+    let sections: Vec<&'static str> = starts
+        .iter()
+        .enumerate()
+        .map(|(i, &start)| {
+            let end = starts.get(i + 1).copied().unwrap_or(text.len());
+            text[start..end].trim_end()
+        })
+        .collect();
+    (&text[..first], sections)
+}
+
 /// Every `$ref` in a schema replaced by a named placeholder.
 ///
 /// `#/$defs/ProjectLayer` becomes "a ProjectLayer — its shape is in
@@ -250,6 +334,26 @@ fn without_type_graph(node: Value) -> Value {
     }
 }
 
+/// What a client is told at the handshake.
+///
+/// The skill (skill/SKILL.md) teaches this properly, and every demo run
+/// had it. But the registry and Docker installs hand a client 27 tools and
+/// nothing else — the loop is the one thing a server can say for itself,
+/// and `instructions` is where the protocol puts it.
+const INSTRUCTIONS: &str = "\
+PromoShot renders .promo projects — App Store shots, promo reels, product videos — headlessly.
+
+A project is a FOLDER named <Name>.promo holding `metadata.json` (the composition) and `Resources/` (the media, referenced by filename). You write metadata.json yourself; these tools scaffold it, check it and turn it into pixels.
+
+The loop:
+1. `promo_schema` once — the format's authority, with complete recipes. `promo_schema_full` when you need a feature it does not cover.
+2. `promo_workspace` — where new projects may be created on this machine.
+3. Write `metadata.json`. Every id is a UUID. Sizes and positions are in canvas pixels; prefer a `placement` rule over raw shifts.
+4. `promo_validate` — the renderer's own parser. `ok` means it will render.
+5. `promo_render_frames` — LOOK. It samples the piece and answers with one contact sheet as an image. Fix what you see, then `promo_render_video`.
+
+Renders land in the project's `Exports/` and return paths, never bytes.";
+
 fn initialize(request: &Value) -> Value {
     // Answer in the client's protocol dialect when it names one; this server
     // uses nothing that has changed across revisions.
@@ -263,7 +367,8 @@ fn initialize(request: &Value) -> Value {
         "serverInfo": {
             "name": "promoshot-mcp",
             "version": env!("CARGO_PKG_VERSION"),
-        }
+        },
+        "instructions": INSTRUCTIONS,
     })
 }
 
@@ -295,7 +400,7 @@ fn tool_descriptors() -> Value {
         map.remove("$defs");
     }
     let command_items = without_type_graph(command_items);
-    json!([
+    let mut descriptors = json!([
         {
             "name": "promo_validate",
             "description": "Decode a project with the renderer's own parser and report \
@@ -331,8 +436,18 @@ fn tool_descriptors() -> Value {
             "name": "promo_schema_full",
             "description": "The whole .promo format, from the same single file the \
                 engine compiles in — sprites, masks, motion paths, duration rules, \
-                waits, gradients, palette roles and all.",
-            "inputSchema": { "type": "object", "properties": {} }
+                waits, gradients, palette roles and all. 67 KB whole: pass `topics` \
+                to take only what this piece needs.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "topics": { "type": "array", "items": { "type": "string" },
+                        "description":
+                            "\"core\" for the format proper, and a feature word for its \
+                             section: composition, markers, audio, chroma, pointer, \
+                             effects, lut, model, particles, route, morph, parts, \
+                             recipe, environment, stage. Omit for everything." }
+                },
+                "required": [] }
         },
         {
             "name": "promo_render_still",
@@ -443,17 +558,6 @@ fn tool_descriptors() -> Value {
             "inputSchema": { "type": "object",
                 "properties": { "file": { "type": "string" } },
                 "required": ["file"] }
-        },
-        {
-            "name": "promo_device_model",
-            "description": "A built-in device body — phone, tablet or laptop — written into the \
-                project's Resources/ as a .glb with Body and Screen slots (the laptop a Deck too), \
-                and the resource entry to add, with its boundsRadius. Bind an image or video to \
-                Screen and the palette's accent to Body; key the camera to turn it.",
-            "inputSchema": { "type": "object",
-                "properties": { "project": { "type": "string" },
-                                "kind": { "type": "string", "enum": ["phone", "tablet", "laptop"] } },
-                "required": ["project", "kind"] }
         },
         {
             "name": "promo_media_turntable",
@@ -767,7 +871,63 @@ fn tool_descriptors() -> Value {
                          or nothing to do. With no project, the keys alone." } },
                 "required": [] }
         }
-    ])
+    ]);
+    if let Some(tools) = descriptors.as_array_mut() {
+        for tool in tools {
+            let name = tool["name"].as_str().unwrap_or_default().to_string();
+            tool["annotations"] = annotations_for(&name);
+        }
+    }
+    descriptors
+}
+
+/// What a tool does to the world, in the protocol's own vocabulary.
+///
+/// A host that gates on `readOnlyHint` — a planning mode, an approval
+/// prompt — has to assume the worst without these, so asking this server
+/// for the format's own schema looked exactly like asking it to render a
+/// video over someone's file. Read-only here means it writes nothing a
+/// person would miss: a probe's scratch file in the system temp directory
+/// does not count, a PNG in the project's Exports does.
+fn annotations_for(name: &str) -> Value {
+    // (title, read only, destructive, idempotent, reaches the network)
+    let (title, read_only, destructive, idempotent, open_world) = match name {
+        "promo_schema" => ("The format, in brief", true, false, true, false),
+        "promo_schema_types" => ("The format's machine schema", true, false, true, false),
+        "promo_schema_full" => ("The format, in full", true, false, true, false),
+        "promo_validate" => ("Check a project", false, false, true, false),
+        "promo_inspect" => ("What is in a project", true, false, true, false),
+        "promo_explain" => ("Why a layer looks like that", true, false, true, false),
+        "promo_diff" => ("What changed since a copy", true, false, true, false),
+        "promo_workspace" => ("Where new projects go", false, false, true, false),
+        "promo_media_probe" => ("Facts about a media file", true, false, true, false),
+        "promo_media_silences" => ("Where a recording goes quiet", true, false, true, false),
+        "promo_media_scenes" => ("Where a clip cuts", true, false, true, false),
+        "promo_transcribe" => ("Words from a recording", true, false, true, false),
+        "promo_voices" => ("A provider's voices", true, false, true, true),
+        "promo_media_filmstrip" => ("A contact sheet of a clip", false, false, true, false),
+        "promo_media_turntable" => ("A model from every side", false, false, true, false),
+        "promo_render_still" => ("One frame", false, false, true, false),
+        "promo_render_frames" => ("Look at the composition", false, false, true, false),
+        "promo_render_video" => ("The mp4", false, false, true, false),
+        "promo_render_gif" => ("The looping preview", false, false, true, false),
+        "promo_proxy" => ("Build proxies for long sources", false, false, true, false),
+        "promo_init" => ("Start a project", false, false, false, false),
+        "promo_upsert_layer" => ("Add or change a layer", false, false, false, false),
+        "promo_upsert_keyframe" => ("Add or change a keyframe", false, false, false, false),
+        "promo_slideshow" => ("Author a whole show", false, false, false, false),
+        // The one door that can DELETE: a layer, a resource, a keyframe.
+        "promo_apply" => ("Apply editor commands", false, true, false, false),
+        "promo_speak" => ("Synthesize the narration", false, false, false, true),
+        _ => (name, false, false, false, false),
+    };
+    json!({
+        "title": title,
+        "readOnlyHint": read_only,
+        "destructiveHint": destructive,
+        "idempotentHint": idempotent,
+        "openWorldHint": open_world,
+    })
 }
 
 fn call<R>(request: &Value, config: &Config, run: &R) -> Value
@@ -845,51 +1005,6 @@ where
                 media::probe(args)
             }
         }
-        "promo_device_model" => {
-            let project = fenced_project(args, config)?;
-            let kind = args
-                .get("kind")
-                .and_then(Value::as_str)
-                .ok_or("promo_device_model: `kind` is phone, tablet or laptop")?
-                .to_string();
-            let resources = Path::new(&project).join("Resources");
-            std::fs::create_dir_all(&resources)
-                .map_err(|e| format!("could not create {}: {e}", resources.display()))?;
-            let filename = format!("device-{kind}.glb");
-            let out = resources.join(&filename).display().to_string();
-            let written = run(
-                config,
-                &[
-                    "device".to_string(),
-                    kind.clone(),
-                    "--out".into(),
-                    out.clone(),
-                    "--json".into(),
-                ],
-            )?;
-            let probe: Value = serde_json::from_str(&written).unwrap_or(Value::Null);
-            let id = uuid::Uuid::new_v4().to_string().to_uppercase();
-            // The resource is a RECIPE: the engine builds the body at load,
-            // so the project needs no file — the glb at `wrote` is for hand
-            // use (a viewer, another tool).
-            let resource = serde_json::json!({
-                "id": id, "kind": "model", "filename": "",
-                "displayName": match kind.as_str() { "phone" => "Phone", "tablet" => "Tablet", _ => "Laptop" },
-                "addedAt": 0,
-                "imageCuts": [], "disabledAudioTrackIndices": [],
-                "boundsRadius": probe.get("boundsRadius").cloned().unwrap_or(Value::Null),
-                "clips": [],
-                "recipe": { "device": { "kind": kind } },
-                "materials": { "Body": "@accent" }
-            });
-            Ok(serde_json::json!({
-                "wrote": out,
-                "slots": probe.get("slots").cloned().unwrap_or(Value::Null),
-                "resource": resource,
-                "note": "append `resource` to `resources` and point a model layer at its id; bind Screen to an image or video resource. It is a recipe — no file needs copying; stamp minReaderVersion 34 or above"
-            })
-            .to_string())
-        }
         "promo_media_turntable" => {
             let file = args
                 .get("file")
@@ -939,7 +1054,19 @@ where
         "promo_slideshow" => {
             promo_author::slideshow(args, config.root.as_deref(), &media::host_probe)
         }
-        "promo_schema_full" => Ok(promo_model::SCHEMA.to_string()),
+        "promo_schema_full" => {
+            let topics: Vec<String> = args
+                .get("topics")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(|t| t.to_ascii_lowercase())
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(schema_sliced(&topics))
+        }
         "promo_schema_types" => {
             serde_json::to_string_pretty(&promo_model::wire_schema()).map_err(|e| e.to_string())
         }
@@ -1194,7 +1321,6 @@ mod tests {
                 "promo_proxy",
                 "promo_workspace",
                 "promo_media_probe",
-                "promo_device_model",
                 "promo_media_turntable",
                 "promo_media_filmstrip",
                 "promo_media_silences",
@@ -1212,6 +1338,140 @@ mod tests {
             ],
             "everything the app offers except promo_open, which needs a window"
         );
+    }
+
+    /// Every tool says what it does to the world. A host that gates on
+    /// `readOnlyHint` has to assume the worst without them — asking for the
+    /// format's schema looked like asking for a video render — and the
+    /// answers have to be TRUE: nothing that writes into a project may
+    /// claim to be read-only.
+    #[test]
+    fn every_tool_says_what_it_does_to_the_world() {
+        let tools = tool_descriptors();
+        let tools = tools.as_array().unwrap();
+        for tool in tools {
+            let name = tool["name"].as_str().unwrap();
+            let a = &tool["annotations"];
+            assert!(a.is_object(), "{name} carries no annotations");
+            for hint in [
+                "readOnlyHint",
+                "destructiveHint",
+                "idempotentHint",
+                "openWorldHint",
+            ] {
+                assert!(a[hint].is_boolean(), "{name}.{hint}");
+            }
+            assert!(
+                a["title"]
+                    .as_str()
+                    .is_some_and(|t| !t.is_empty() && t != name),
+                "{name} has a human title"
+            );
+        }
+        let read_only = |name: &str| {
+            tools
+                .iter()
+                .find(|t| t["name"] == name)
+                .map(|t| t["annotations"]["readOnlyHint"] == true)
+                .unwrap()
+        };
+        assert!(read_only("promo_schema") && read_only("promo_inspect"));
+        // These write: a render into Exports, a scaffold into metadata.json,
+        // and validate's own glance at Exports/preview.png.
+        for writer in [
+            "promo_validate",
+            "promo_render_still",
+            "promo_render_frames",
+            "promo_render_video",
+            "promo_init",
+            "promo_upsert_layer",
+            "promo_apply",
+            "promo_speak",
+        ] {
+            assert!(
+                !read_only(writer),
+                "{writer} writes and must not claim otherwise"
+            );
+        }
+        let apply = tools.iter().find(|t| t["name"] == "promo_apply").unwrap();
+        assert_eq!(
+            apply["annotations"]["destructiveHint"], true,
+            "the one door that deletes says so"
+        );
+        let voices = tools.iter().find(|t| t["name"] == "promo_voices").unwrap();
+        assert_eq!(
+            voices["annotations"]["openWorldHint"], true,
+            "it calls a provider"
+        );
+    }
+
+    /// The format's prose by topic. The whole document is 67 KB and nearly
+    /// every session pulled all of it; a piece that uses particles can have
+    /// the particles instead. No argument still answers with everything.
+    #[test]
+    fn the_format_can_be_asked_for_by_topic() {
+        assert_eq!(
+            schema_sliced(&[]),
+            promo_model::SCHEMA,
+            "everything, as before"
+        );
+
+        let core = schema_sliced(&["core".into()]);
+        assert!(core.starts_with("A PromoShot project is a FOLDER"));
+        assert!(
+            core.len() < promo_model::SCHEMA.len() * 4 / 5,
+            "{} bytes",
+            core.len()
+        );
+        assert!(
+            !core.contains("(rung 36)"),
+            "the feature sections are not in it"
+        );
+
+        let particles = schema_sliced(&["particles".into()]);
+        assert!(particles.contains("Particles (rung 36)"));
+        assert!(
+            particles.contains("MORPH (rung 39)"),
+            "both particle sections"
+        );
+        assert!(
+            !particles.contains("Chroma key (rung 22)"),
+            "and nothing else"
+        );
+        assert!(particles.len() < 4_000, "{} bytes", particles.len());
+
+        // An unknown topic answers with the ones that exist rather than
+        // with silence.
+        let missed = schema_sliced(&["confetti".into()]);
+        assert!(missed.contains("no section for confetti"), "{missed}");
+        assert!(
+            missed.contains("Particles") && missed.contains("Stages"),
+            "{missed}"
+        );
+    }
+
+    /// The handshake says how to use the server. A registry or Docker
+    /// install has no skill beside it — 27 tools and no loop — and
+    /// `instructions` is the one place the protocol lets a server say it.
+    #[test]
+    fn the_handshake_teaches_the_loop() {
+        let req = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": { "protocolVersion": "2025-06-18" } });
+        let answer = handle(&req, &config(), &never).expect("initialize answers");
+        let text = answer
+            .pointer("/result/instructions")
+            .and_then(Value::as_str)
+            .expect("instructions are offered");
+        for step in [
+            "promo_schema",
+            "promo_workspace",
+            "promo_validate",
+            "promo_render_frames",
+            "metadata.json",
+        ] {
+            assert!(text.contains(step), "the loop names {step}");
+        }
+        assert!(text.len() < 1_400, "and stays short: {} bytes", text.len());
     }
 
     #[test]
@@ -1288,7 +1548,7 @@ mod tests {
         // And the ceiling is not met by dropping tools or their prose.
         let tools = tool_descriptors();
         let tools = tools.as_array().unwrap();
-        assert_eq!(tools.len(), 27);
+        assert_eq!(tools.len(), 26);
         assert!(
             tools
                 .iter()

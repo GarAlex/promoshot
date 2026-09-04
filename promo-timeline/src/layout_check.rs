@@ -134,6 +134,16 @@ fn caption_checks(
             if std::ptr::eq(other, layer) || other.sort_index <= layer.sort_index {
                 continue;
             }
+            // A particle system covers nothing. It is a drawing layer by
+            // kind, but it is sparse by construction — confetti, dust, a
+            // burst — and modelling it as a rect made the checker tell an
+            // agent to move a caption out from under a shower of dots. It
+            // fired on this repo's own 31-confetti reference.
+            let showing = crate::layer_resource_id(other, t, resources);
+            let other_resource = resources.iter().find(|r| Some(r.id.as_str()) == showing);
+            if other_resource.is_some_and(|r| r.particles.is_some()) {
+                continue;
+            }
             let opaque_rect = matches!(
                 other.kind,
                 ProjectLayerKind::Image | ProjectLayerKind::Video
@@ -192,6 +202,26 @@ fn caption_checks(
 /// Where a picture, clip, body, stage or drawing sits on the canvas at
 /// `t`: the same layout the renderer uses, with a square source standing
 /// in for a body or a stage (their frames are made at render time).
+/// A drawing document's natural size: the bounds of its shapes' points,
+/// and the same 1080x1920 fallback `promo_gpu::vector::content_bounds`
+/// uses, so the checker measures the rect the renderer draws.
+fn drawing_bounds(doc: &promo_model::DrawingDocument) -> Size {
+    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
+    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for shape in &doc.shapes {
+        for point in &shape.points {
+            min_x = min_x.min(point.x());
+            min_y = min_y.min(point.y());
+            max_x = max_x.max(point.x());
+            max_y = max_y.max(point.y());
+        }
+    }
+    if max_x <= min_x || max_y <= min_y {
+        return Size::new(1080.0, 1920.0);
+    }
+    Size::new(max_x - min_x, max_y - min_y)
+}
+
 fn layer_rect(
     layer: &ProjectLayer,
     t: f64,
@@ -202,7 +232,16 @@ fn layer_rect(
     let showing = crate::layer_resource_id(layer, t, resources);
     let resource = resources.iter().find(|r| Some(r.id.as_str()) == showing);
     let source = match layer.kind {
-        ProjectLayerKind::Image | ProjectLayerKind::Video | ProjectLayerKind::Drawing => {
+        // A drawing is sized by its own SHAPES, exactly as the engine sizes
+        // it (`content_bounds`). Reading `pixelWidth` here — which a
+        // hand-written drawing resource does not carry — fell through to a
+        // canvas-height square, so a two-inch rule read as covering half
+        // the canvas.
+        ProjectLayerKind::Drawing => match resource.and_then(|r| r.drawing.as_ref()) {
+            Some(doc) => drawing_bounds(doc),
+            None => Size::new(canvas.height(), canvas.height()),
+        },
+        ProjectLayerKind::Image | ProjectLayerKind::Video => {
             let r = resource?;
             let (rw, rh) = match r.kind {
                 ProjectResourceKind::Video => (r.video_natural_width, r.video_natural_height),
@@ -335,6 +374,76 @@ mod tests {
         assert!(
             layout_warnings_for(&meta, Some("P")).is_empty(),
             "a picture that covers nothing of its own says nothing"
+        );
+    }
+
+    /// Two shapes that cover nothing: a particle system, which is sparse by
+    /// construction, and a drawing sized by its own SHAPES rather than by a
+    /// `pixelWidth` a hand-written resource does not carry.
+    ///
+    /// Both used to fall through to a canvas-height square and read as
+    /// covering the caption — the confetti one fired on this repo's own
+    /// 31-confetti reference, which scores 10/10. A checker that tells an
+    /// agent to break a good project teaches it to ignore the checker.
+    #[test]
+    fn confetti_and_a_small_drawing_cover_nothing() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let caption = r#"{"id":"C","name":"Title","sortIndex":0,"kind":"caption","isEnabled":true,
+                "startTime":0,"duration":4,"captionText":"Get it now",
+                "captionStyle":{"alignment":"center","verticalMargin":500},"keyframes":[]}"#;
+        let confetti = project(
+            &format!(
+                r#"{caption},
+                {{"id":"F","name":"Confetti","sortIndex":1,"kind":"drawing","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"PT","keyframes":[]}}"#
+            ),
+            r#"{"id":"PT","kind":"particles","filename":"","displayName":"Confetti","addedAt":0,
+                "particles":{"count":300,"colors":["FFFFFF"]}}"#,
+        );
+        assert!(
+            layout_warnings(&confetti).is_empty(),
+            "{:?}",
+            layout_warnings(&confetti)
+        );
+
+        // A 260x8 rule drawn near the top covers nothing at 500px down.
+        let rule = project(
+            &format!(
+                r#"{caption},
+                {{"id":"R","name":"Rule","sortIndex":1,"kind":"drawing","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"D","keyframes":[]}}"#
+            ),
+            r#"{"id":"D","kind":"drawing","filename":"","displayName":"Rule","addedAt":0,
+                "drawing":{"shapes":[{"id":"S","kind":"line","points":[[0,0],[260,8]],
+                  "strokeColorHex":"FFFFFF","strokeWidth":8,"arrowStart":false,"arrowEnd":false}]}}"#,
+        );
+        assert!(
+            layout_warnings(&rule).is_empty(),
+            "{:?}",
+            layout_warnings(&rule)
+        );
+
+        // And a drawing that really does cover the caption still says so.
+        let over = project(
+            &format!(
+                r#"{caption},
+                {{"id":"R","name":"Slab","sortIndex":1,"kind":"drawing","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"D","keyframes":[]}}"#
+            ),
+            r#"{"id":"D","kind":"drawing","filename":"","displayName":"Slab","addedAt":0,
+                "drawing":{"shapes":[{"id":"S","kind":"rect","points":[[0,0],[1920,1080]],
+                  "strokeColorHex":"FFFFFF","strokeWidth":4,"fillColorHex":"FFFFFF",
+                  "arrowStart":false,"arrowEnd":false}]}}"#,
+        );
+        assert!(
+            layout_warnings(&over)
+                .iter()
+                .any(|w| w.contains("overlapped by \"Slab\"")),
+            "{:?}",
+            layout_warnings(&over)
         );
     }
 }
