@@ -555,9 +555,10 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
 }
 
-/// A model's `materials` may bind a slot to a resource: an image or a
-/// video is drawn on that surface; anything else — or a missing id — is a
-/// mistake worth naming before it reads as "the screen stayed dark". A
+/// A model's `materials` may bind a slot to a resource: an image, a video
+/// or a composition (a screen that plays a document, rung 43) is drawn on
+/// that surface; anything else — or a missing id — is a mistake worth
+/// naming before it reads as "the screen stayed dark". A
 /// finish outside 0…1, or one on a slot that shows a picture (a picture
 /// is drawn unlit, so the finish does nothing), is named the same way.
 fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
@@ -632,10 +633,11 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                         r.kind,
                         promo_model::ProjectResourceKind::Image
                             | promo_model::ProjectResourceKind::Video
+                            | promo_model::ProjectResourceKind::Composition
                     ) => {}
                 Some(r) => out.push(format!(
-                    "model \"{}\": slot \"{slot}\" is bound to a {} resource; an image \
-                     or a video is drawn on a surface",
+                    "model \"{}\": slot \"{slot}\" is bound to a {} resource; an image, \
+                     a video or a composition is drawn on a surface",
                     model.display_name,
                     r.kind.as_str()
                 )),

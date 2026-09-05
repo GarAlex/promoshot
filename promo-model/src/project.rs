@@ -4062,6 +4062,25 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 43 is a composition on a slot — a screen that plays a document.
+        // An older reader binds nothing there and shows the file's own
+        // screen: the reel is gone, silently.
+        let reel = resources.iter().any(|r| {
+            r.kind == ProjectResourceKind::Model
+                && r.materials
+                    .iter()
+                    .flat_map(|m| m.values())
+                    .filter_map(|b| b.resource_id())
+                    .any(|id| {
+                        resources
+                            .iter()
+                            .any(|c| c.id == id && c.kind == ProjectResourceKind::Composition)
+                    })
+        });
+        if reel {
+            return 43;
+        }
+
         // 42 is type a designer would ask for and a rectangle: letter
         // spacing, a weight beyond bold, a line height, and a `rect` shape
         // with its corner radius. An older reader drops each of them, and

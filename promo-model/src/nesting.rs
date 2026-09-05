@@ -136,21 +136,42 @@ fn walk<'a>(
             ));
             continue;
         };
-        if shown.kind != ProjectResourceKind::Composition {
-            continue;
+        for next in leads_to(shown, resources) {
+            if trail.contains(&next.id.as_str()) {
+                out.push(format!(
+                    "composition {} contains itself ({} > {})",
+                    next.display_name,
+                    trail.join(" > "),
+                    next.id
+                ));
+                continue;
+            }
+            trail.push(next.id.as_str());
+            walk(next, resources, trail, out);
+            trail.pop();
         }
-        if trail.contains(&shown.id.as_str()) {
-            out.push(format!(
-                "composition {} contains itself ({} > {})",
-                shown.display_name,
-                trail.join(" > "),
-                shown.id
-            ));
-            continue;
-        }
-        trail.push(shown.id.as_str());
-        walk(shown, resources, trail, out);
-        trail.pop();
+    }
+}
+
+/// The compositions a layer's resource leads INTO: the resource itself
+/// when it is one, and — for a model — every composition a slot binds
+/// (rung 43: a screen that plays a document). Both are ways a document
+/// can end up containing itself, and the reader has to refuse either.
+fn leads_to<'a>(
+    shown: &'a ProjectResource,
+    resources: &'a [ProjectResource],
+) -> Vec<&'a ProjectResource> {
+    match shown.kind {
+        ProjectResourceKind::Composition => vec![shown],
+        ProjectResourceKind::Model => shown
+            .materials
+            .iter()
+            .flat_map(|m| m.values())
+            .filter_map(|b| b.resource_id())
+            .filter_map(|id| resources.iter().find(|r| r.id == id))
+            .filter(|r| r.kind == ProjectResourceKind::Composition)
+            .collect(),
+        _ => Vec::new(),
     }
 }
 

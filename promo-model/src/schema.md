@@ -915,6 +915,14 @@ video binding runs on the layer's clock as it does on a screen. `"mode":
 "screen"` (the default) is the display it always was: unlit, fitted
 inside the surface with its own proportions. A project wearing a
 picture carries `minReaderVersion: 38`.
+A slot may also show a COMPOSITION (rung 43): `"Screen": {
+"resourceID": "<composition id>" }` and the screen plays that document
+on the layer's clock, the way a video-kind layer shows one — a device
+whose screen runs a reel of screenshots with its own transitions, a
+television in a scene. A composition may no more lead back to itself
+through a screen than through a layer, and the reader refuses one that
+does. A project with a composition on a slot carries `minReaderVersion:
+43`.
 `clips` (name and duration) and `boundsRadius` are written at import
 and re-derived on every open.
 Particles (rung 36). A resource of `"kind": "particles"` carries a

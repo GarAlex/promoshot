@@ -567,7 +567,23 @@ impl PreviewEngine {
             };
             let before = old_resources.iter().find(|r| &r.id == rid);
             let after = new_resources.iter().find(|r| &r.id == rid);
-            before != after
+            if before != after {
+                return true;
+            }
+            // A model's picture also changes when a resource its slots BIND
+            // changes — the composition on its screen edited, the picture
+            // on its body replaced — and the model resource itself is
+            // untouched by that.
+            after.is_some_and(|r| {
+                r.materials
+                    .iter()
+                    .flat_map(|m| m.values())
+                    .filter_map(|b| b.resource_id())
+                    .any(|id| {
+                        old_resources.iter().find(|r| r.id == id)
+                            != new_resources.iter().find(|r| r.id == id)
+                    })
+            })
         };
         let mut stale: Vec<String> = Vec::new();
         for layer in &old {
@@ -2544,7 +2560,9 @@ impl PreviewEngine {
             // A composition draws itself: rendered by recursion into a
             // texture that then stands where a host frame would.
             let composed = if let Some(stage) = staged.as_deref() {
-                match self.stage_frame(layer, stage, &settings, canvas, centre, tier, &used) {
+                match self.stage_frame(
+                    layer, stage, &settings, canvas, centre, tier, doc.depth, &used,
+                ) {
                     Some(id) => Some(id),
                     None => continue,
                 }
@@ -2560,7 +2578,9 @@ impl PreviewEngine {
                     Some(resource) if resource.kind == promo_model::ProjectResourceKind::Model => {
                         // A model draws itself through the model pass; the
                         // picture then rides the media path like a still.
-                        match self.model_frame(layer, resource, &settings, centre, tier, &used) {
+                        match self
+                            .model_frame(layer, resource, &settings, centre, tier, doc.depth, &used)
+                        {
                             Some(id) => Some(id),
                             None => continue,
                         }
@@ -2945,6 +2965,7 @@ impl PreviewEngine {
         tier: i32,
         pinned: &[u64],
         video_time: Option<(&ProjectLayer, f64)>,
+        depth: u32,
     ) {
         let linear = |rgba: [f32; 4]| -> [f32; 3] {
             let f = |c: f32| {
@@ -3007,6 +3028,25 @@ impl PreviewEngine {
                         Some(t) => t,
                         None => continue,
                     }
+                }
+                // A COMPOSITION on a slot (rung 43): a screen that plays a
+                // document. It runs on the layer's clock exactly as a video
+                // does, but it is drawn by recursion rather than decoded, so
+                // it takes the composition's own frame path — the picture
+                // it makes is then bound like any other.
+                Some(res) if res.kind == promo_model::ProjectResourceKind::Composition => {
+                    let Some((layer, time)) = video_time else {
+                        continue;
+                    };
+                    let local = tl::layer_local_time(layer, time);
+                    let view = tl::resource_for_cut(res, None);
+                    let Some(t) = tl::source_time_for_layer(&view, local, layer.beyond_end) else {
+                        continue;
+                    };
+                    if let Some(id) = self.composition_frame(layer, res, t, tier, depth, pinned) {
+                        bound_frames.push((index, id));
+                    }
+                    continue;
                 }
                 _ => -1.0,
             };
@@ -3133,6 +3173,7 @@ impl PreviewEngine {
     /// into one depth buffer, on a square the canvas's height, cached per
     /// time under the stage's name.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn stage_frame(
         &mut self,
         first: &ProjectLayer,
@@ -3141,6 +3182,7 @@ impl PreviewEngine {
         canvas: Size,
         time: f64,
         tier: i32,
+        depth: u32,
         pinned: &[u64],
     ) -> Option<u64> {
         let transient = self.export_mode;
@@ -3523,7 +3565,7 @@ impl PreviewEngine {
             let Some(res) = resources.iter().find(|r| r.id == rid).cloned() else {
                 continue;
             };
-            self.apply_bindings_at(&res, settings, tier, pinned, Some((member, time)));
+            self.apply_bindings_at(&res, settings, tier, pinned, Some((member, time)), depth);
         }
 
         // Matrices for the model members: their pose, shifted to their depth.
@@ -4052,6 +4094,7 @@ impl PreviewEngine {
     /// height with the model's bounding sphere), cached like a composition
     /// frame — per time when a camera, light or clip is keyed, once
     /// otherwise.
+    #[allow(clippy::too_many_arguments)]
     fn model_frame(
         &mut self,
         layer: &ProjectLayer,
@@ -4059,19 +4102,25 @@ impl PreviewEngine {
         settings: &promo_model::CompositionSettings,
         time: f64,
         tier: i32,
+        depth: u32,
         pinned: &[u64],
     ) -> Option<u64> {
         if !self.models.contains_key(&resource.id) {
             return None;
         }
-        // A slot bound to a VIDEO makes the picture move with time, like a
-        // keyed camera does.
+        // A slot bound to a VIDEO or a COMPOSITION makes the picture move
+        // with time, like a keyed camera does.
         let all_resources = self.meta.resources.clone().unwrap_or_default();
         let video_bound = resource.materials.iter().flat_map(|m| m.values()).any(|b| {
             b.resource_id().is_some_and(|id| {
-                all_resources
-                    .iter()
-                    .any(|r| r.id == id && r.kind == promo_model::ProjectResourceKind::Video)
+                all_resources.iter().any(|r| {
+                    r.id == id
+                        && matches!(
+                            r.kind,
+                            promo_model::ProjectResourceKind::Video
+                                | promo_model::ProjectResourceKind::Composition
+                        )
+                })
             })
         });
         let animated = video_bound
@@ -4166,7 +4215,7 @@ impl PreviewEngine {
             [c[0] * 0.8 + 0.1, c[1] * 0.8 + 0.1, c[2] * 0.8 + 0.1]
         };
 
-        self.apply_bindings_at(resource, settings, tier, pinned, Some((layer, time)));
+        self.apply_bindings_at(resource, settings, tier, pinned, Some((layer, time)), depth);
         let pass = self.model_pass.as_ref()?;
         let loaded = self.models.get_mut(&resource.id)?;
         let view = ModelView {
@@ -5424,6 +5473,102 @@ mod tests {
             yaw = yaw,
         );
         ProjectMetadata::from_json(&json).expect("model fixture")
+    }
+
+    /// A laptop whose screen plays a two-shot reel: a composition on the
+    /// Screen slot, red for two seconds then green, on a canvas the
+    /// screen's shape.
+    fn reel_fixture() -> ProjectMetadata {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000003",
+            "name": "reel", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4,
+            "subtitles": [],
+            "compositionSettings": {
+                "canvasWidth": 128, "canvasHeight": 128,
+                "backgroundColorHex": "003300"
+            },
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "BODY", "name": "laptop", "sortIndex": 1, "kind": "model",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC02",
+                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
+                   "placement": {"height": 100, "anchor": "center"},
+                   "camera": {"yaw": -20, "pitch": 12, "distance": 3.6, "fov": 30}}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000CC02", "kind": "model",
+                 "filename": "", "displayName": "Laptop", "addedAt": 0,
+                 "recipe": {"device": {"kind": "laptop"}},
+                 "materials": {"Screen": {"resourceID": "AAAAAAAA-0000-0000-0000-00000000EE01"}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000EE01", "kind": "composition",
+                 "filename": "", "displayName": "Reel", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 400, "pixelHeight": 250,
+                 "composition": {"canvasWidth": 400, "canvasHeight": 250, "layers": [
+                   {"id": "N1", "name": "first", "sortIndex": 0, "kind": "image",
+                    "isEnabled": true, "startTime": 0, "duration": 2,
+                    "resourceID": "AAAAAAAA-0000-0000-0000-00000000DD01",
+                    "keyframes": [{"id": "K1", "time": 0, "zoom": 1.6, "verticalShift": 0,
+                                   "horizontalShift": 0, "transitionDuration": 0}]},
+                   {"id": "N2", "name": "second", "sortIndex": 1, "kind": "image",
+                    "isEnabled": true, "startTime": 2, "duration": 2,
+                    "resourceID": "AAAAAAAA-0000-0000-0000-00000000DD02",
+                    "keyframes": [{"id": "K2", "time": 0, "zoom": 1.6, "verticalShift": 0,
+                                   "horizontalShift": 0, "transitionDuration": 0}]}
+                 ]},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000DD01", "kind": "image",
+                 "filename": "a.png", "displayName": "a", "addedAt": 0,
+                 "pixelWidth": 32, "pixelHeight": 32,
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000DD02", "kind": "image",
+                 "filename": "b.png", "displayName": "b", "addedAt": 0,
+                 "pixelWidth": 32, "pixelHeight": 32,
+                 "imageCuts": [], "disabledAudioTrackIndices": []}
+            ]}"#;
+        ProjectMetadata::from_json(json).expect("reel fixture")
+    }
+
+    /// A screen plays a composition (rung 43): the slot shows the document
+    /// on the layer's clock, so the picture on the laptop changes when the
+    /// reel's shot changes — and nothing else on the canvas does.
+    #[test]
+    fn a_screen_plays_a_composition() {
+        let (mut engine, _state) = make_engine(
+            reel_fixture(),
+            vec![
+                ("N1".into(), [0, 0, 255, 255], 32),
+                ("N2".into(), [0, 255, 0, 255], 32),
+            ],
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+        engine.render(1.0, out.raw(), 128, 128).unwrap();
+        let first = out.read_pixels().unwrap();
+        engine.render(3.0, out.raw(), 128, 128).unwrap();
+        let second = out.read_pixels().unwrap();
+        let has = |px: &[u8], want: [usize; 2]| {
+            px.chunks(4)
+                .any(|p| p[want[0]] > 150 && p[want[1]] < 80 && p[3] == 255)
+        };
+        // BGRA: the first shot is the red channel, the second the green.
+        assert!(
+            has(&first, [2, 1]),
+            "the first shot is on the screen at 1 s"
+        );
+        assert!(!has(&first, [1, 2]), "and the second is not yet");
+        assert!(
+            has(&second, [1, 2]),
+            "the second shot is on the screen at 3 s"
+        );
+        assert!(!has(&second, [2, 1]), "and the first has gone");
+        assert!(
+            engine.stats().misses >= 2,
+            "two different pictures were drawn"
+        );
     }
 
     /// A close camera keeps the whole body. The square the body is drawn
