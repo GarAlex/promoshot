@@ -187,14 +187,16 @@ pub fn google_voices(answer: &Value) -> Vec<Voice> {
                 attributes.insert("Class".into(), parts[2..parts.len() - 1].join(" "));
             } else {
                 // A voice named alone is a Gemini voice: served by a
-                // Gemini TTS model through Vertex AI, which the Google
-                // project has to have enabled — a 403 otherwise. The same
+                // Gemini TTS model through Vertex AI, whose predict
+                // permission is an IAM grant — an API key has no principal
+                // to grant it to, so with the key PromoShot holds the
+                // request is a 403 even with Vertex AI enabled. The same
                 // voice is also listed as `<locale>-Chirp3-HD-<Name>`,
-                // which the Text-to-Speech API serves on its own; an agent
-                // reading the roster should know which it is picking.
+                // which the Text-to-Speech API serves with the key; an
+                // agent reading the roster should pick that one.
                 attributes.insert(
                     "Class".into(),
-                    "Gemini TTS (needs Vertex AI enabled)".into(),
+                    "Gemini TTS (Vertex AI, OAuth only — use the Chirp3-HD form)".into(),
                 );
             }
             let detail: Vec<&str> = ["Class", "Languages"]
@@ -299,7 +301,7 @@ mod tests {
         assert_eq!(voices[2].id, "Aoede");
         assert_eq!(
             voices[2].detail.as_deref(),
-            Some("Gemini TTS (needs Vertex AI enabled), English, German")
+            Some("Gemini TTS (Vertex AI, OAuth only — use the Chirp3-HD form), English, German")
         );
         assert_eq!(openai_roster().len(), 9);
         assert!(voices_with_key("nope", "k").is_err());
