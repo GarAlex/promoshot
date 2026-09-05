@@ -185,6 +185,17 @@ pub fn google_voices(answer: &Value) -> Vec<Voice> {
             let parts: Vec<&str> = name.split('-').collect();
             if parts.len() >= 3 {
                 attributes.insert("Class".into(), parts[2..parts.len() - 1].join(" "));
+            } else {
+                // A voice named alone is a Gemini voice: served by a
+                // Gemini TTS model through Vertex AI, which the Google
+                // project has to have enabled — a 403 otherwise. The same
+                // voice is also listed as `<locale>-Chirp3-HD-<Name>`,
+                // which the Text-to-Speech API serves on its own; an agent
+                // reading the roster should know which it is picking.
+                attributes.insert(
+                    "Class".into(),
+                    "Gemini TTS (needs Vertex AI enabled)".into(),
+                );
             }
             let detail: Vec<&str> = ["Class", "Languages"]
                 .iter()
@@ -261,7 +272,8 @@ mod tests {
     fn a_google_voice_names_its_locale_class_and_gender() {
         let answer = json!({ "voices": [
             { "name": "ru-RU-Wavenet-A", "languageCodes": ["ru-RU"], "ssmlGender": "FEMALE" },
-            { "name": "en-US-Chirp3-HD-Aoede", "languageCodes": ["en-US"], "ssmlGender": "SSML_VOICE_GENDER_UNSPECIFIED" }
+            { "name": "en-US-Chirp3-HD-Aoede", "languageCodes": ["en-US"], "ssmlGender": "SSML_VOICE_GENDER_UNSPECIFIED" },
+            { "name": "Aoede", "languageCodes": ["en-US", "de-DE"], "ssmlGender": "FEMALE" }
         ] });
         let voices = google_voices(&answer);
         assert_eq!(voices[0].id, "ru-RU-Wavenet-A");
@@ -283,6 +295,12 @@ mod tests {
             Some("Chirp3 HD")
         );
         assert!(!voices[1].attributes.contains_key("Gender"));
+        // The bare name is the Gemini form of the same voice, and says so.
+        assert_eq!(voices[2].id, "Aoede");
+        assert_eq!(
+            voices[2].detail.as_deref(),
+            Some("Gemini TTS (needs Vertex AI enabled), English, German")
+        );
         assert_eq!(openai_roster().len(), 9);
         assert!(voices_with_key("nope", "k").is_err());
     }

@@ -93,10 +93,16 @@ pub fn synthesize_with_key(
             )
         }
         "google" => {
-            let locale: String = voice.split('-').take(2).collect::<Vec<_>>().join("-");
+            let mut spoken = json!({
+                "languageCode": google_locale(voice),
+                "name": google_voice_name(voice),
+            });
+            if let Some(model) = google_model(voice) {
+                spoken["modelName"] = json!(model);
+            }
             let body = json!({
                 "input": google_input(&text),
-                "voice": { "languageCode": locale, "name": voice },
+                "voice": spoken,
                 "audioConfig": { "audioEncoding": "MP3" },
             });
             let answer = post_bytes(
@@ -113,6 +119,55 @@ pub fn synthesize_with_key(
         }
         other => Err(format!("provider `{other}` — openai, elevenlabs or google")),
     }
+}
+
+/// The `languageCode` a Google voice is asked for in.
+///
+/// Google's classic voices carry their locale in the name —
+/// `en-US-Neural2-A`, `fr-FR-Wavenet-B` — and the first two segments are
+/// it. Its Gemini voices are named alone (`Achernar`, `Kore`): they
+/// speak any language, and the request still has to name one. Taking
+/// "the first two segments" of a bare name handed the voice name over
+/// as the language, which Google refuses ("Requested language code
+/// 'Achernar' is not supported for Gemini voices"). A name with no
+/// locale prefix is asked for in `en-US`, the roster's own default. A
+/// voice may also state its locale explicitly as `Achernar@de-DE`.
+pub fn google_locale(voice: &str) -> String {
+    if let Some((_, locale)) = voice.split_once('@') {
+        return locale.to_string();
+    }
+    let parts: Vec<&str> = voice.split('-').collect();
+    let looks_like_locale = parts.len() >= 3
+        && (2..=3).contains(&parts[0].len())
+        && parts[0].chars().all(|c| c.is_ascii_lowercase())
+        && (2..=3).contains(&parts[1].len())
+        && parts[1]
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    if looks_like_locale {
+        format!("{}-{}", parts[0], parts[1])
+    } else {
+        "en-US".to_string()
+    }
+}
+
+/// The model a Google voice is spoken by, where one has to be named.
+///
+/// A Gemini voice — one named alone, with no locale prefix — is served
+/// by a Gemini TTS model and Google refuses the request without one
+/// ("This voice requires a model name to be specified"). The classic
+/// voices carry their model in the name (`Neural2`, `Wavenet`) and take
+/// none. Flash is the one named here: the same voices as Pro, a fraction
+/// of the price, and the difference is not what a narration track shows.
+pub fn google_model(voice: &str) -> Option<&'static str> {
+    let name = google_voice_name(voice);
+    (google_locale(name) == "en-US" && !name.contains('-')).then_some("gemini-2.5-flash-tts")
+}
+
+/// The voice NAME Google is sent: the id with any explicit locale
+/// suffix removed.
+pub fn google_voice_name(voice: &str) -> &str {
+    voice.split_once('@').map_or(voice, |(name, _)| name)
 }
 
 /// POSTs JSON, answers the body bytes. The error names the endpoint and
@@ -485,6 +540,26 @@ pub fn language_name(code: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_google_voice_is_asked_for_in_its_own_locale_or_english() {
+        assert_eq!(google_locale("en-US-Neural2-A"), "en-US");
+        assert_eq!(google_locale("fr-FR-Wavenet-B"), "fr-FR");
+        assert_eq!(google_locale("cmn-CN-Standard-A"), "cmn-CN");
+        // A Gemini voice is named alone and speaks any language: the
+        // request names one rather than handing the voice name over.
+        assert_eq!(google_locale("Achernar"), "en-US");
+        assert_eq!(google_locale("Kore"), "en-US");
+        assert_eq!(google_locale("Achernar@de-DE"), "de-DE");
+        assert_eq!(google_voice_name("Achernar@de-DE"), "Achernar");
+        assert_eq!(google_voice_name("en-US-Neural2-A"), "en-US-Neural2-A");
+        // …and is served by a Gemini model, which the request must name;
+        // a classic voice names its own in its name and takes none.
+        assert_eq!(google_model("Achernar"), Some("gemini-2.5-flash-tts"));
+        assert_eq!(google_model("Achernar@de-DE"), Some("gemini-2.5-flash-tts"));
+        assert_eq!(google_model("en-US-Neural2-A"), None);
+        assert_eq!(google_model("cmn-CN-Standard-A"), None);
+    }
+
     use super::*;
 
     /// The receipt hash must be the Swift one, byte for byte — receipts
