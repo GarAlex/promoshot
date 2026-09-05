@@ -582,8 +582,18 @@ impl PreviewEngine {
         if settings_changed {
             stale = old.iter().map(|l| l.id.clone()).collect();
         }
+        // A stage is drawn as ONE picture keyed by its name, so a change to
+        // any member has to drop that picture as well as the member's own.
+        let stages: Vec<String> = old
+            .iter()
+            .filter(|l| stale.contains(&l.id))
+            .filter_map(|l| l.stage.clone())
+            .collect();
         for id in stale {
             self.evict_layer(&id);
+        }
+        for stage in stages {
+            self.evict_prefix(&format!("stage\u{1f}{stage}"));
         }
         // Mask rasters are keyed `mask:{resource}:…`, per RESOURCE on purpose
         // so two layers wearing the same mask share one texture — which puts
@@ -600,6 +610,23 @@ impl PreviewEngine {
             }
         }
         self.meta = meta;
+    }
+
+    /// Drops every cached frame whose key starts with `prefix`.
+    fn evict_prefix(&mut self, prefix: &str) {
+        let victims: Vec<u64> = self
+            .id_of
+            .iter()
+            .filter(|(_, (id, _, _))| id.starts_with(prefix))
+            .map(|(entry, _)| *entry)
+            .collect();
+        for entry in victims {
+            if let Some(key) = self.id_of.remove(&entry) {
+                self.key_of.remove(&key);
+            }
+            self.governor.remove(entry);
+            self.cache.remove(&entry);
+        }
     }
 
     /// Drops the cached rasters of a mask DRAWING, keyed `mask:{resource}:…`.
@@ -625,21 +652,29 @@ impl PreviewEngine {
     }
 
     /// Drops every cached frame belonging to `layer_id` — media frames keyed
-    /// `{id}\u{1f}{resource}` AND caption rasters keyed `caption:{id}:…`.
+    /// `{id}\u{1f}{resource}`, caption rasters keyed `caption:{id}:…`, and
+    /// the kinds that put their own name first: a model's picture
+    /// `model\u{1f}{id}\u{1f}{resource}`, a nested composition's frame
+    /// `comp\u{1f}{id}\u{1f}{resource}`, a LUT `lut\u{1f}{id}`.
     ///
-    /// Both suffixes have caught this function out. A bare-id match once
-    /// skipped the captions, so stale text survived every edit; then the
-    /// media key gained a resource suffix (a keyframe can swap what a layer
-    /// shows) and the same exact match stopped finding those too. Anything
-    /// keyed by a layer has to be matched as a PREFIX.
+    /// Every one of these shapes has caught this function out. A bare-id
+    /// match once skipped the captions, so stale text survived every edit;
+    /// then the media key gained a resource suffix (a keyframe can swap
+    /// what a layer shows) and the same exact match stopped finding those;
+    /// then the model key put "model" FIRST and a prefix match stopped
+    /// finding it — a camera nudge changed the file and the canvas kept
+    /// showing the old body, because placement is applied when the cached
+    /// picture is composited and the camera is baked into it. A layer's
+    /// id is matched as ANY segment of the key now.
     fn evict_layer(&mut self, layer_id: &str) {
         let caption_prefix = format!("caption:{layer_id}:");
-        let media_prefix = format!("{layer_id}\u{1f}");
         let victims: Vec<u64> = self
             .id_of
             .iter()
             .filter(|(_, (id, _, _))| {
-                id == layer_id || id.starts_with(&media_prefix) || id.starts_with(&caption_prefix)
+                id == layer_id
+                    || id.starts_with(&caption_prefix)
+                    || id.split('\u{1f}').any(|segment| segment == layer_id)
             })
             .map(|(entry, _)| *entry)
             .collect();
@@ -5323,6 +5358,64 @@ mod tests {
             [0, 51, 0, 255],
             "background still visible"
         );
+    }
+
+    /// A model layer standing a generated phone, looked at from `yaw`.
+    fn model_fixture(yaw: f64) -> ProjectMetadata {
+        let json = format!(
+            r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-000000000002",
+            "name": "body", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 3, "videoDuration": 3,
+            "subtitles": [],
+            "compositionSettings": {{
+                "canvasWidth": 96, "canvasHeight": 96,
+                "backgroundColorHex": "003300"
+            }},
+            "layers": [
+                {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                  "isEnabled": true, "startTime": 0, "keyframes": []}},
+                {{"id": "BODY", "name": "phone", "sortIndex": 1, "kind": "model",
+                  "isEnabled": true, "startTime": 0, "duration": 3,
+                  "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC01",
+                  "keyframes": [{{"id": "K", "time": 0, "transitionDuration": 0,
+                    "placement": {{"height": 70, "anchor": "center"}},
+                    "camera": {{"yaw": {yaw}, "pitch": 10, "distance": 4.2, "fov": 30}},
+                    "light": {{"yaw": 40, "pitch": 50, "intensity": 1}}}}]}}
+            ],
+            "resources": [
+                {{"id": "AAAAAAAA-0000-0000-0000-00000000CC01", "kind": "model",
+                  "filename": "", "displayName": "Phone", "addedAt": 0,
+                  "recipe": {{"device": {{"kind": "phone"}}}},
+                  "imageCuts": [], "disabledAudioTrackIndices": []}}
+            ]}}"#,
+            yaw = yaw,
+        );
+        ProjectMetadata::from_json(&json).expect("model fixture")
+    }
+
+    /// A camera change on a model layer's ONLY keyframe reaches the
+    /// canvas. The model's picture is cached under a key that starts with
+    /// "model", and `evict_layer` matched cached ids by the layer id as a
+    /// PREFIX — so replacing the project left the old render in the cache,
+    /// and the app's canvas kept showing it while the inspector's numbers
+    /// moved. Placement edits repainted (the cached picture is placed at
+    /// composite time), which is what made the stale camera look like a
+    /// dead button.
+    #[test]
+    fn a_camera_edit_on_a_model_layer_repaints() {
+        let (mut engine, _state) = make_engine(model_fixture(-35.0), vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let before = out.read_pixels().unwrap();
+        assert!(
+            before.chunks(4).any(|p| p != [0, 51, 0, 255]),
+            "the body is on the canvas to begin with"
+        );
+        engine.set_project(model_fixture(-145.0));
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let after = out.read_pixels().unwrap();
+        assert_ne!(before, after, "the turned body is a different picture");
     }
 
     #[test]
