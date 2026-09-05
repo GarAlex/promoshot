@@ -4193,6 +4193,14 @@ impl PreviewEngine {
             }
             _ => loaded.rest.clone(),
         };
+        // The square holds the bounding sphere at the DEFAULT distance and
+        // no nearer: a closer preset, a Nearer click, a pitch that brought
+        // a laptop's deck into view, and the body ran past the square's
+        // edge and was cut while the canvas round it stayed empty. So the
+        // square grows to hold the sphere — a wider field over more pixels
+        // at the same scale — and the box cut from it is the picture the
+        // small square would have held, whole.
+        let (view, side) = frame_that_holds_the_sphere(view, side);
         let texture = pass
             .render_to_texture(self.ctx, &loaded.gpu, &view, &matrices, side, side)
             .ok()?;
@@ -5000,6 +5008,30 @@ mod tests_support {
     }
 }
 
+/// The off-screen square a model is drawn on, grown so the body's bounding
+/// sphere fits it at THIS camera. The pixel scale is kept — the field of
+/// view widens by the same factor as the side — so the box cut from the
+/// square is the same size as before; only nothing is cut off it any more.
+/// Capped where the projection's own fov ceiling (120°) would bend the
+/// scale, and at 4096 px, past which a close-up is cropped as it always
+/// was rather than asking for a texture some GPUs refuse.
+fn frame_that_holds_the_sphere(mut view: ModelView, side: u32) -> (ModelView, u32) {
+    let half_fov = (view.fov.clamp(5.0, 120.0) / 2.0).to_radians();
+    let distance = view.distance.max(1.05);
+    // The sphere's angular radius from the eye, with a hair of margin for
+    // the anti-aliased edge.
+    let needed = (1.0 / distance).asin().tan() * 1.04;
+    let ceiling = 60f64.to_radians().tan() / half_fov.tan();
+    let k = (needed / half_fov.tan()).clamp(1.0, ceiling.max(1.0));
+    if k <= 1.0 + 1e-6 {
+        return (view, side);
+    }
+    let grown = ((side as f64 * k).ceil() as u32).min(4096).max(side);
+    let k = grown as f64 / side as f64;
+    view.fov = 2.0 * (half_fov.tan() * k).atan().to_degrees();
+    (view, grown)
+}
+
 // The IOSurface suite: still the reference for the Apple path.
 #[cfg(all(test, any(target_os = "macos", target_os = "ios")))]
 mod tests {
@@ -5392,6 +5424,63 @@ mod tests {
             yaw = yaw,
         );
         ProjectMetadata::from_json(&json).expect("model fixture")
+    }
+
+    /// A close camera keeps the whole body. The square the body is drawn
+    /// on used to hold the bounding sphere at the default distance only,
+    /// so nearer than that the body was cut at the square's edge while the
+    /// canvas round it stayed empty. The square grows to hold the sphere
+    /// at the camera in force, and the box cut from it is the body's own.
+    #[test]
+    fn a_close_camera_keeps_the_whole_body() {
+        let mut meta = model_fixture(0.0);
+        if let Some(layers) = meta.layers.as_mut() {
+            let key = &mut layers[1].keyframes[0];
+            let mut camera = key.camera.clone().unwrap();
+            camera.distance = Some(2.0);
+            camera.pitch = Some(0.0);
+            key.camera = Some(camera);
+        }
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let (_, entry) = engine
+            .id_of
+            .iter()
+            .find(|(_, (key, _, _))| key.starts_with("model"))
+            .map(|(entry, key)| (key.clone(), *entry))
+            .expect("the body's picture is cached");
+        let frame = &engine.cache[&entry].frame;
+        // The square a 96-canvas asks for is 96 px; at distance 2 the
+        // phone stands taller than that. Cut at the old square it came
+        // back 96 tall; whole, it is taller — and not the grown square
+        // itself, which would mean it was cut at the new edge instead.
+        assert!(
+            frame.height > 96,
+            "the body is drawn whole: {} px tall",
+            frame.height
+        );
+        assert!(
+            frame.width < frame.height,
+            "a phone is taller than it is wide"
+        );
+        let (_, grown) = frame_that_holds_the_sphere(
+            ModelView {
+                distance: 2.0,
+                fov: 30.0,
+                ..ModelView::default()
+            },
+            96,
+        );
+        assert!(
+            grown > 96 && frame.height < grown,
+            "{} of {grown}",
+            frame.height
+        );
+        // And a body already at the default distance is left alone.
+        let (same, side) = frame_that_holds_the_sphere(ModelView::default(), 96);
+        assert_eq!(side, 96);
+        assert_eq!(same.fov, ModelView::default().fov);
     }
 
     /// A camera change on a model layer's ONLY keyframe reaches the

@@ -25,7 +25,7 @@ members = [
 chunks_exact_to_as_chunks = "allow"
 
 [workspace.package]
-version = "0.2.62"
+version = "0.2.63"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Alex"]
