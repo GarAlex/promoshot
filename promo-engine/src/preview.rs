@@ -235,7 +235,7 @@ fn stage_frame_size(side: u32, canvas: Size, framed_by_camera: bool) -> (u32, u3
         return (side, side);
     }
     let (cw, ch) = (canvas.width().max(1.0), canvas.height().max(1.0));
-    let scaled = |v: f64| ((side as f64 * v).round() as u32).clamp(8, 2048);
+    let scaled = |v: f64| ((side as f64 * v).round() as u32).clamp(8, 4096);
     if cw >= ch {
         (scaled(cw / ch), side)
     } else {
@@ -273,7 +273,7 @@ mod stage_frame_tests {
         assert_eq!(stage_frame_size(800, square, true), (800, 800));
         // The cap holds, so a huge canvas cannot ask for an oversized target.
         let (w, h) = stage_frame_size(2048, Size::new(4000.0, 900.0), true);
-        assert!(w <= 2048 && h == 2048, "clamped: {w}x{h}");
+        assert!(w <= 4096 && h == 2048, "clamped: {w}x{h}");
     }
 }
 
@@ -4185,11 +4185,39 @@ impl PreviewEngine {
                 }
             });
         let Boxes { lo, hi, blo, bhi } = boxes;
+        // The bodies' box is what the placement measures (the cut itself,
+        // when nothing spills past them), so the bodies are what must
+        // carry the pixels: the canvas's height — or the placed height,
+        // when a placement draws the stage TALLER than the canvas (a zoom
+        // into a device's screen), which would otherwise scale a
+        // canvas-height picture up and go soft exactly where the picture
+        // matters most. Capped where a texture would be refused.
+        let placed = tl::interpolation::layer_interpolated_scalar(
+            first,
+            tl::layer_local_time(first, time),
+            |k| k.placement.as_ref().and_then(|p| p.height),
+        )
+        .unwrap_or(0.0);
+        let need = canvas_h.max(placed) * scale;
+        let cap: u32 = if placed > canvas_h || floor.is_some() {
+            4096
+        } else {
+            2048
+        };
+        let bodies_extent = |blo: [f32; 2], bhi: [f32; 2], lo: [f32; 2], hi: [f32; 2]| -> f64 {
+            let bodies = (bhi[0] - blo[0]).max(bhi[1] - blo[1]);
+            let drawn = (hi[0] - lo[0]).max(hi[1] - lo[1]);
+            (if bodies > 0.0 { bodies } else { drawn }) as f64
+        };
         // A floor's shadow and mirror reach below the bodies, past the
         // square an orbit camera frames. Widen the camera's field of view
         // — the eye stays, so the bodies' own perspective does not change,
         // only more of the scene comes in — and rescale the boxes with
-        // it, so the cut holds the floor as well as the bodies.
+        // it, so the cut holds the floor as well as the bodies. The
+        // widening never costs the bodies their pixels: where the frame
+        // that keeps them sharp would pass the cap, the field widens only
+        // as far as the cap allows and the spill is cut at the frame's
+        // edge instead — a shadow's tail goes short, never the body soft.
         let (mut view, mut lo, mut hi, mut blo, mut bhi) = (view, lo, hi, blo, bhi);
         if floor.is_some() && view.eye.is_none() && view.target.is_none() && lo[0] <= hi[0] {
             let reach = [0.5 - lo[0], hi[0] - 0.5, 0.5 - lo[1], hi[1] - 0.5]
@@ -4198,8 +4226,12 @@ impl PreviewEngine {
             if reach > 0.5 {
                 let half = (view.fov.clamp(5.0, 120.0).to_radians() / 2.0).tan();
                 // The projection clamps the field at 120°, so widen no
-                // further than that.
-                let widen = ((reach / 0.5) as f64 * 1.03).min(60f64.to_radians().tan() / half);
+                // further than that — nor further than leaves the bodies'
+                // share of a frame at the cap carrying what they need.
+                let covered = bodies_extent(blo, bhi, lo, hi).clamp(0.05, 1.0);
+                let widen = ((reach / 0.5) as f64 * 1.03)
+                    .min(60f64.to_radians().tan() / half)
+                    .min((cap as f64 * covered / need).max(1.0));
                 if widen > 1.0 {
                     view.fov = (2.0 * (half * widen).atan()).to_degrees();
                     let k = widen as f32;
@@ -4210,13 +4242,14 @@ impl PreviewEngine {
                 }
             }
         }
-        // The stage renders large enough that its cut, scaled to the
-        // placement, is never upsampled: a scene filling a quarter of the
-        // square gets a square four times the canvas height, to the cap.
+        // The stage renders large enough that the bodies' box, scaled to
+        // the placement, is never upsampled: bodies filling a quarter of
+        // the square get a square four times the height they need, to the
+        // cap.
         let side = {
-            let covered = ((hi[0] - lo[0]).max(hi[1] - lo[1])).clamp(0.2, 1.0);
-            let wanted = (canvas_h * scale / covered as f64).round() as u32;
-            wanted.clamp(side, 2048)
+            let covered = bodies_extent(blo, bhi, lo, hi).clamp(0.05, 1.0);
+            let wanted = (need / covered).round() as u32;
+            wanted.clamp(side, cap)
         };
         // A flown camera, or one with a gaze, frames the shot itself, so it
         // sees a frame with the CANVAS's aspect — a real camera's picture —
@@ -5785,6 +5818,82 @@ mod tests {
         assert!(
             engine.stats().misses >= 2,
             "two different pictures were drawn"
+        );
+    }
+
+    /// A stage on a floor: the shadow and the mirror image spill past the
+    /// bodies, so the frame widens to hold them — and the bodies still
+    /// carry the pixels the placement asks for. Sized for the whole spill,
+    /// they came out at a third of the canvas's height and were scaled up
+    /// soft; sized for the bodies' box, the box is canvas-height at zoom
+    /// 1 and follows a placement taller than the canvas, as a model does.
+    #[test]
+    fn a_floored_stage_keeps_its_bodies_pixels() {
+        fn floored(placed: u32) -> ProjectMetadata {
+            let json = format!(
+                r#"{{
+                "id": "AAAAAAAA-0000-0000-0000-000000000005",
+                "name": "floored", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 3, "videoDuration": 3, "subtitles": [],
+                "compositionSettings": {{"canvasWidth": 96, "canvasHeight": 96,
+                                        "backgroundColorHex": "003300"}},
+                "layers": [
+                    {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                      "isEnabled": true, "startTime": 0, "keyframes": []}},
+                    {{"id": "STAGE", "name": "Bench", "sortIndex": 1, "kind": "stage",
+                      "floor": "glossy", "isEnabled": true, "startTime": 0, "duration": 3,
+                      "keyframes": [{{"id": "SK", "time": 0, "transitionDuration": 0,
+                        "placement": {{"height": {placed}, "anchor": "center"}},
+                        "camera": {{"yaw": -20, "pitch": 10, "distance": 4.2, "fov": 30}},
+                        "light": {{"yaw": 40, "pitch": 50, "intensity": 1}}}}],
+                      "members": [
+                        {{"id": "M1", "name": "phone", "sortIndex": 0, "kind": "model",
+                          "isEnabled": true, "startTime": 0, "duration": 3,
+                          "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC03",
+                          "keyframes": [{{"id": "MK", "time": 0, "transitionDuration": 0}}]}}
+                      ]}}
+                ],
+                "resources": [
+                    {{"id": "AAAAAAAA-0000-0000-0000-00000000CC03", "kind": "model",
+                      "filename": "", "displayName": "Phone", "addedAt": 0,
+                      "recipe": {{"device": {{"kind": "phone"}}}},
+                      "imageCuts": [], "disabledAudioTrackIndices": []}}
+                ]}}"#,
+                placed = placed,
+            );
+            ProjectMetadata::from_json(&json).expect("floored stage fixture")
+        }
+        // (frame width, frame height, the bodies' box height) of the
+        // stage's cached picture.
+        let drawn = |placed: u32| -> (u32, u32, u32) {
+            let (mut engine, _state) = make_engine(floored(placed), vec![], 64 << 20);
+            let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+            engine.render(1.0, out.raw(), 96, 96).unwrap();
+            let (_, entry) = engine
+                .id_of
+                .iter()
+                .find(|(_, (key, _, _))| key.starts_with("stage"))
+                .map(|(entry, key)| (key.clone(), *entry))
+                .expect("the stage's picture is cached");
+            let cached = &engine.cache[&entry];
+            let (_, _, _, bodies) = cached
+                .content_box
+                .expect("the floor's mirror and shadow spill past the phone");
+            (cached.frame.width, cached.frame.height, bodies)
+        };
+        let (fw, fh, body) = drawn(70);
+        assert!(
+            body >= 85,
+            "at zoom 1 the phone's box is the canvas's height: {body} px in a {fw}x{fh} frame"
+        );
+        assert!(
+            fh > body,
+            "the mirror below the phone is drawn too: {fh} tall for a {body} px body"
+        );
+        let (_, _, tall) = drawn(300);
+        assert!(
+            tall > 250,
+            "placed 300 px tall the phone carries that many: {tall} px"
         );
     }
 
