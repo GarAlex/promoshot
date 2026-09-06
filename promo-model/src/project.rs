@@ -2047,13 +2047,19 @@ fn default_black() -> String {
 /// built-in ENVIRONMENT the model pass mirrors in metals and sheens on
 /// glossy dielectrics — `studio` (a soft box over neutral grey), `sunset`
 /// (a low warm sun under a cool sky) or `night` (a cold moon over a dark
-/// floor). `intensity` scales it (default 1); `rotation` turns it about
-/// the vertical, in degrees (default 0). Absent, the pass keeps its
-/// synthetic sky and ground.
+/// floor) — or, rung 46, a PICTURE of the world: `resourceID` names an
+/// image resource, an equirectangular panorama twice as wide as tall,
+/// and the bodies mirror that picture instead (the preset, if any, is
+/// what shows while the picture cannot be read). `intensity` scales it
+/// (default 1); `rotation` turns it about the vertical, in degrees
+/// (default 0). Absent, the pass keeps its synthetic sky and ground.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneEnvironment {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub preset: String,
+    #[serde(default, skip_serializing_if = "is_none", rename = "resourceID")]
+    pub resource_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub intensity: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -2068,8 +2074,15 @@ impl SceneEnvironment {
     pub fn rotation(&self) -> f64 {
         self.rotation.unwrap_or(0.0)
     }
+    /// Names something the pass can show: a built-in preset, or a
+    /// picture (whose preset, if written, must also be one).
     pub fn is_known(&self) -> bool {
         Self::PRESETS.contains(&self.preset.as_str())
+            || (self.resource_id.is_some() && self.preset.is_empty())
+    }
+    /// A picture of the world names the environment (rung 46).
+    pub fn needs_rung_46(&self) -> bool {
+        self.resource_id.is_some()
     }
 }
 
@@ -4359,6 +4372,18 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 46 is a PICTURE of the world as the environment. An older
+        // reader drops `resourceID` on save and the bodies mirror the
+        // preset, or the synthetic sky, instead: a different picture.
+        if self
+            .composition_settings
+            .environment
+            .as_ref()
+            .is_some_and(|e| e.needs_rung_46())
+        {
+            return 46;
+        }
+
         // 45 is a FLOOR word on a stage — what the bodies stand on: a
         // shadow, a contact, a mirror. An older reader drops the key on
         // save and the bodies float again, silently.
@@ -5965,6 +5990,28 @@ mod placement_model_tests {
             model(r#"{"Screen":{"resourceID":"S","finish":"glass"}}"#).minimum_reader_version(),
             44
         );
+        // 46: a picture of the world as the environment.
+        let mut pictured = meta(
+            r#""resources":[{"id":"PANO","kind":"image","filename":"room.jpg","displayName":"Room","addedAt":0,
+                "pixelWidth":2048,"pixelHeight":1024}],"layers":[]"#,
+        );
+        pictured.composition_settings.environment = Some(SceneEnvironment {
+            preset: String::new(),
+            resource_id: Some("PANO".into()),
+            intensity: Some(1.2),
+            rotation: None,
+        });
+        assert_eq!(pictured.minimum_reader_version(), 46);
+        let env = pictured.composition_settings.environment.as_ref().unwrap();
+        assert_eq!(env.resource_id.as_deref(), Some("PANO"));
+        assert!(env.preset.is_empty());
+        assert!(env.is_known(), "a picture alone is an environment");
+        let json = pictured.to_json().unwrap();
+        assert!(
+            json.contains(r#""environment":{"resourceID":"PANO","intensity":1.2}"#),
+            "{json}"
+        );
+
         // 45: a floor WORD on a stage layer.
         let floored = meta(
             r#""layers":[{"id":"S","name":"bench","sortIndex":0,"kind":"stage","floor":"glossy",
@@ -5991,6 +6038,7 @@ mod placement_model_tests {
         let mut lit = meta(r#""resources":[],"layers":[]"#);
         lit.composition_settings.environment = Some(SceneEnvironment {
             preset: "studio".into(),
+            resource_id: None,
             intensity: Some(1.2),
             rotation: None,
         });

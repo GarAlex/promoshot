@@ -399,7 +399,9 @@ each expanded by the engine into the numbers, the coat, the grain and
 the transmission it stands for, so nobody levels a reflection by hand;
 on a screen the word is the coat over the picture. Lighting defaults come
 from the theme; a scene `environment` (studio, sunset, night; rung
-35) is what metals mirror; a file's normal map and metallic-roughness
+35 — or, rung 46, a `resourceID` naming a panorama in the project, a
+picture of the world the bodies mirror) is what metals mirror; a file's
+normal map and metallic-roughness
 texture are honoured. Rung 29. Built-in device bodies
 (phone, tablet, laptop; `promo device`) ship as generated `.glb` files
 with `Body` and `Screen` slots, so the device shot is a model too. A

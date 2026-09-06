@@ -3268,6 +3268,12 @@
         "preset": {
           "type": "string"
         },
+        "resourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "rotation": {
           "format": "double",
           "type": [
@@ -3276,9 +3282,6 @@
           ]
         }
       },
-      "required": [
-        "preset"
-      ],
       "type": "object"
     },
     "Size": {

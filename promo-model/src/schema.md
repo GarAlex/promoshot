@@ -1059,6 +1059,16 @@ A file's own normal map and metallic-roughness texture are honoured
 (glTF's layout: roughness in G, metallic in B, multiplied into the
 factors), so a scanned or generated asset reads as its surface, not its
 triangles.
+A PICTURE of the world (rung 46): `"environment": { "resourceID":
+"<uuid>" }` names an image resource — an equirectangular panorama,
+twice as wide as tall — and the bodies mirror that picture instead of
+a preset, prefiltered per roughness like the presets are; `intensity`
+and `rotation` apply as before, and a preset written beside it is what
+shows while the picture cannot be read. An 8-bit panorama gives the
+room; `promo_validate` names a picture the project lacks, one that is
+not an image, and one far from twice as wide as tall (it is stretched
+to fit). A project with a picture of the world carries
+`minReaderVersion: 46`.
 
 Stages (rung 30). Layers naming the same `"stage": "hero"` are drawn
 together through ONE camera into ONE depth buffer: model members turn

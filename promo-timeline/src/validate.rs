@@ -1020,6 +1020,33 @@ fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             env.intensity()
         ));
     }
+    // A picture of the world (rung 46): an image the project has, best a
+    // panorama twice as wide as tall.
+    if let Some(id) = env.resource_id.as_deref() {
+        let resources = meta.resources.as_deref().unwrap_or(&[]);
+        match resources.iter().find(|r| r.id == id) {
+            None => out.push(format!(
+                "compositionSettings.environment names a picture the project does not have \
+                 ({id}); the preset, or the synthetic sky, is mirrored instead"
+            )),
+            Some(r) if r.kind != promo_model::ProjectResourceKind::Image => out.push(format!(
+                "compositionSettings.environment names \"{}\", which is not an image; a \
+                 picture of the world is an image resource — an equirectangular panorama",
+                r.display_name
+            )),
+            Some(r) => {
+                if let (Some(w), Some(h)) = (r.pixel_width, r.pixel_height) {
+                    if h > 0.0 && !(1.6..=2.4).contains(&(w / h)) {
+                        out.push(format!(
+                            "compositionSettings.environment picture \"{}\" is {}×{}; a panorama \
+                             is twice as wide as tall, and this one is stretched to fit",
+                            r.display_name, w, h
+                        ));
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// A route (rung 40) is a path resource's 3D points; a stage member's or
@@ -2304,6 +2331,7 @@ mod tests {
         let mut odd = project("", "");
         odd.composition_settings.environment = Some(promo_model::SceneEnvironment {
             preset: "cathedral".into(),
+            resource_id: None,
             intensity: Some(0.0),
             rotation: None,
         });
@@ -2321,6 +2349,7 @@ mod tests {
         let mut fine = project("", "");
         fine.composition_settings.environment = Some(promo_model::SceneEnvironment {
             preset: "studio".into(),
+            resource_id: None,
             intensity: None,
             rotation: Some(90.0),
         });
@@ -2330,6 +2359,43 @@ mod tests {
             "{quiet:?}"
         );
         assert_eq!(fine.minimum_reader_version(), 35);
+
+        // A picture of the world (rung 46): a panorama the project has says
+        // nothing; a missing one, a non-image, and a square one are named.
+        let mut room = project(
+            "",
+            r#","resources":[
+                {"id":"PANO","kind":"image","filename":"room.jpg","displayName":"Room","addedAt":0,
+                 "pixelWidth":2048,"pixelHeight":1024},
+                {"id":"SQ","kind":"image","filename":"sq.jpg","displayName":"Square","addedAt":0,
+                 "pixelWidth":1024,"pixelHeight":1024},
+                {"id":"V","kind":"video","filename":"v.mp4","displayName":"Clip","addedAt":0}]"#,
+        );
+        let picture = |id: &str| promo_model::SceneEnvironment {
+            preset: String::new(),
+            resource_id: Some(id.into()),
+            intensity: None,
+            rotation: None,
+        };
+        room.composition_settings.environment = Some(picture("PANO"));
+        let quiet = warnings(&room);
+        assert!(
+            !quiet.iter().any(|w| w.contains("environment")),
+            "{quiet:?}"
+        );
+        assert_eq!(room.minimum_reader_version(), 46);
+        room.composition_settings.environment = Some(picture("GHOST"));
+        assert!(warnings(&room)
+            .iter()
+            .any(|w| w.contains("does not have (GHOST)")));
+        room.composition_settings.environment = Some(picture("V"));
+        assert!(warnings(&room)
+            .iter()
+            .any(|w| w.contains("which is not an image")));
+        room.composition_settings.environment = Some(picture("SQ"));
+        assert!(warnings(&room)
+            .iter()
+            .any(|w| w.contains("twice as wide as tall")));
     }
     /// A particle recipe is checked: a rate of zero with no burst, a bad
     /// life, an unknown shape, and the wrong layer kind are each named; a

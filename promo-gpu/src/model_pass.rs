@@ -173,6 +173,9 @@ pub enum EnvPreset {
     Studio,
     Sunset,
     Night,
+    /// A PICTURE of the world (rung 46), bound with
+    /// [`ModelPass::set_environment_picture`]; never parsed from a name.
+    Picture,
 }
 
 impl EnvPreset {
@@ -1071,6 +1074,9 @@ pub struct ModelPass {
     /// The built-in environments (studio, sunset, night), generated once.
     envs: [wgpu::TextureView; 3],
     env_sampler: wgpu::Sampler,
+    /// A picture of the world (rung 46), prefiltered like a preset and
+    /// kept until the picture changes.
+    picture_env: std::cell::RefCell<Option<PictureEnv>>,
     placement_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     white: wgpu::TextureView,
@@ -1456,6 +1462,7 @@ impl ModelPass {
             mirror_sampler,
             frame_layout,
             material_layout,
+            picture_env: std::cell::RefCell::new(None),
             blit_pipeline,
             blit_layout,
             blit_sampler,
@@ -1817,7 +1824,9 @@ impl ModelPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: OUTPUT_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let mut encoder = ctx
@@ -2499,6 +2508,89 @@ impl ModelPass {
 }
 
 impl ModelPass {
+    /// A picture of the world (rung 46) as the environment: `source` is
+    /// the picture's texture as the host imported it (BGRA, sRGB-encoded),
+    /// an equirectangular panorama. It is read back once, resampled to
+    /// the environment's size, prefiltered per mip like a preset, and
+    /// kept under `key` + `frame_id` — the same picture is not rebuilt
+    /// frame after frame. Returns whether an environment is now bound.
+    pub fn set_environment_picture(
+        &self,
+        ctx: &GpuContext,
+        key: &str,
+        frame_id: u64,
+        source: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        if let Some(have) = self.picture_env.borrow().as_ref() {
+            if have.key == key && have.frame_id == frame_id {
+                return true;
+            }
+        }
+        let (width, height) = (width.max(1), height.max(1));
+        // Through the blit into a readable copy: an imported frame need
+        // not be a copy source, and this one is.
+        let copy = self.mipmapped(ctx, source, width, height);
+        let Ok(px) = read_texture(ctx, &copy, width, height) else {
+            return false;
+        };
+        let (w, h) = (PICTURE_ENV_WIDTH as usize, PICTURE_ENV_HEIGHT as usize);
+        let decode = |c: u8| {
+            let c = c as f32 / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        // BGRA, resampled bilinearly onto the environment's grid; the
+        // panorama wraps in x and clamps in y.
+        let sample = |fx: f32, fy: f32| -> [f32; 3] {
+            let x0 = fx.floor();
+            let y0 = fy.floor();
+            let (tx, ty) = (fx - x0, fy - y0);
+            let at = |x: i64, y: i64| -> [f32; 3] {
+                let xi = x.rem_euclid(width as i64) as usize;
+                let yi = y.clamp(0, height as i64 - 1) as usize;
+                let i = (yi * width as usize + xi) * 4;
+                [decode(px[i + 2]), decode(px[i + 1]), decode(px[i])]
+            };
+            let (x0, y0) = (x0 as i64, y0 as i64);
+            let (a, b, c, d) = (
+                at(x0, y0),
+                at(x0 + 1, y0),
+                at(x0, y0 + 1),
+                at(x0 + 1, y0 + 1),
+            );
+            let mut out = [0.0f32; 3];
+            for (k, o) in out.iter_mut().enumerate() {
+                let top = a[k] + (b[k] - a[k]) * tx;
+                let bottom = c[k] + (d[k] - c[k]) * tx;
+                *o = top + (bottom - top) * ty;
+            }
+            out
+        };
+        let mut base: Vec<[f32; 4]> = Vec::with_capacity(w * h);
+        for y in 0..h {
+            let fy = (y as f32 + 0.5) / h as f32 * height as f32 - 0.5;
+            for x in 0..w {
+                let fx = (x as f32 + 0.5) / w as f32 * width as f32 - 0.5;
+                let c = sample(fx, fy);
+                base.push([c[0], c[1], c[2], 1.0]);
+            }
+        }
+        let texture = upload_env_levels(ctx, base, PICTURE_ENV_WIDTH, PICTURE_ENV_HEIGHT);
+        let view = texture.create_view(&Default::default());
+        *self.picture_env.borrow_mut() = Some(PictureEnv {
+            key: key.to_string(),
+            frame_id,
+            view,
+            _texture: texture,
+        });
+        true
+    }
+
     /// Group 0 for one frame: the uniform, the environment, and the
     /// shadow map and mirror (their one-texel stand-ins when absent).
     fn frame_bind_group(
@@ -2518,6 +2610,13 @@ impl ModelPass {
                 contents: as_bytes(frame),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
+        // A picture of the world when one is bound and asked for, else the
+        // preset's own texture; the borrow outlives the bind group's making.
+        let picture = self.picture_env.borrow();
+        let env: &wgpu::TextureView = match (preset, picture.as_ref()) {
+            (EnvPreset::Picture, Some(p)) => &p.view,
+            _ => self.env_view(preset),
+        };
         ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(label),
             layout: &self.frame_layout,
@@ -2528,7 +2627,7 @@ impl ModelPass {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(self.env_view(preset)),
+                    resource: wgpu::BindingResource::TextureView(env),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -2562,12 +2661,25 @@ impl ModelPass {
     /// the shader ignores when `env_params.x` is 0.
     fn env_view(&self, preset: EnvPreset) -> &wgpu::TextureView {
         match preset {
-            EnvPreset::None | EnvPreset::Studio => &self.envs[0],
+            EnvPreset::None | EnvPreset::Picture | EnvPreset::Studio => &self.envs[0],
             EnvPreset::Sunset => &self.envs[1],
             EnvPreset::Night => &self.envs[2],
         }
     }
 }
+
+/// A picture of the world, prefiltered and bound (rung 46).
+struct PictureEnv {
+    key: String,
+    frame_id: u64,
+    view: wgpu::TextureView,
+    _texture: wgpu::Texture,
+}
+
+/// A picture's environment is resampled to this grid — twice a preset's,
+/// since a photograph holds more than a gradient does.
+const PICTURE_ENV_WIDTH: u32 = 512;
+const PICTURE_ENV_HEIGHT: u32 = 256;
 
 /// Equirectangular size of a generated environment and its mip count
 /// (256 × 128 down to 1 × 1). Level i is the sphere seen through a GGX
@@ -2597,7 +2709,7 @@ fn env_radiance(preset: EnvPreset, yaw: f32, el: f32) -> [f32; 3] {
     let add =
         |a: [f32; 3], b: [f32; 3], k: f32| [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
     match preset {
-        EnvPreset::None | EnvPreset::Studio => {
+        EnvPreset::None | EnvPreset::Studio | EnvPreset::Picture => {
             let base = if t >= 0.0 {
                 mix3([0.42, 0.42, 0.44], [0.9, 0.9, 0.95], t.powf(0.8))
             } else {
@@ -2795,11 +2907,25 @@ fn upload_env(ctx: &GpuContext, preset: EnvPreset) -> wgpu::Texture {
             level.push([c[0], c[1], c[2], 1.0]);
         }
     }
+    upload_env_levels(ctx, level, ENV_WIDTH, ENV_HEIGHT)
+}
+
+/// An equirectangular radiance grid as an Rgba16Float texture with a
+/// full mip chain, each level prefiltered for the roughness it stands
+/// for — the presets and a picture of the world share it.
+fn upload_env_levels(
+    ctx: &GpuContext,
+    base: Vec<[f32; 4]>,
+    width: u32,
+    height: u32,
+) -> wgpu::Texture {
+    let (w, h) = (width as usize, height as usize);
+    let mut level = base;
     let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("model-environment"),
         size: wgpu::Extent3d {
-            width: ENV_WIDTH,
-            height: ENV_HEIGHT,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
         mip_level_count: ENV_MIPS,
@@ -3746,6 +3872,101 @@ mod tests {
                 "the body is the body: {face:?} vs {face_floored:?}"
             );
         }
+    }
+
+    /// A picture of the world (rung 46): a panorama red on one side and
+    /// blue on the other, bound as the environment, is what a chrome
+    /// body mirrors — and turning the world half round swaps the colour.
+    #[test]
+    fn a_picture_of_the_world_is_mirrored() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (w, h) = (64u32, 32u32);
+        let mut pano = Vec::with_capacity((w * h * 4) as usize);
+        for _y in 0..h {
+            for x in 0..w {
+                // BGRA as a host imports it: the left half red, the right blue.
+                let px: [u8; 4] = if x < w / 2 {
+                    [20, 20, 230, 255]
+                } else {
+                    [230, 20, 20, 255]
+                };
+                pano.extend_from_slice(&px);
+            }
+        }
+        let picture = upload_rgba(&ctx, w, h, &pano);
+        let bound = pass.set_environment_picture(
+            &ctx,
+            "pano",
+            7,
+            &picture.create_view(&Default::default()),
+            w,
+            h,
+        );
+        assert!(bound, "the picture becomes the environment");
+        let (p, n, uv, idx) = cube();
+        let model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.9, 0.9, 0.9, 1.0],
+                    metallic: 1.0,
+                    roughness: 0.08,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload");
+        let render = |rotation: f32| -> (u64, u64) {
+            let view = ModelView {
+                yaw: 25.0,
+                pitch: 15.0,
+                distance: 3.0,
+                light_intensity: 0.0,
+                environment: EnvironmentView {
+                    preset: EnvPreset::Picture,
+                    intensity: 1.0,
+                    rotation_deg: rotation,
+                },
+                ..ModelView::default()
+            };
+            let px = pass
+                .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+                .expect("render");
+            let (mut r, mut b) = (0u64, 0u64);
+            for y in 30..66 {
+                for x in 30..66 {
+                    let i = (y * 96 + x) * 4;
+                    b += px[i] as u64;
+                    r += px[i + 2] as u64;
+                }
+            }
+            (r, b)
+        };
+        let (r0, b0) = render(0.0);
+        let (r180, b180) = render(180.0);
+        assert!(
+            (r0 > b0 * 3 / 2) != (r180 > b180 * 3 / 2),
+            "half a turn swaps what the chrome mirrors: {r0}/{b0} vs {r180}/{b180}"
+        );
+        assert!(
+            r0 + b0 > 0 && r180 + b180 > 0,
+            "the picture lights the body"
+        );
     }
 
     /// A dissolving body loses its surface in cells as the amount rises:

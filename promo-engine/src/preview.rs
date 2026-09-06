@@ -277,6 +277,9 @@ mod stage_frame_tests {
     }
 }
 
+/// The scene's environment as the pass takes it: the preset the settings
+/// name — or none — with its intensity and turn. A picture of the world
+/// (rung 46) is bound by [`Preview::environment_for`], which starts here.
 fn environment_view(
     settings: &promo_model::CompositionSettings,
 ) -> promo_gpu::model_pass::EnvironmentView {
@@ -284,12 +287,10 @@ fn environment_view(
     settings
         .environment
         .as_ref()
-        .and_then(|e| {
-            EnvPreset::parse(&e.preset).map(|preset| EnvironmentView {
-                preset,
-                intensity: e.intensity().max(0.0) as f32,
-                rotation_deg: e.rotation() as f32,
-            })
+        .map(|e| EnvironmentView {
+            preset: EnvPreset::parse(&e.preset).unwrap_or_default(),
+            intensity: e.intensity().max(0.0) as f32,
+            rotation_deg: e.rotation() as f32,
         })
         .unwrap_or_default()
 }
@@ -807,6 +808,53 @@ impl PreviewEngine {
     /// Fetches (or serves from cache) the frame for `layer` at `source_time`.
     /// `pinned`: ids the in-flight scene already holds — they must survive
     /// this admit's eviction or the scene would point at freed frames.
+    /// The environment for this frame: the preset, or — when the settings
+    /// name a picture of the world (rung 46) — that picture, fetched like
+    /// any image and handed to the pass to prefilter once; while the
+    /// picture cannot be read the preset, or the synthetic sky, stands in.
+    fn environment_for(
+        &mut self,
+        settings: &promo_model::CompositionSettings,
+        tier: i32,
+        pinned: &[u64],
+    ) -> promo_gpu::model_pass::EnvironmentView {
+        let mut view = environment_view(settings);
+        let Some(id) = settings
+            .environment
+            .as_ref()
+            .and_then(|e| e.resource_id.clone())
+        else {
+            return view;
+        };
+        // Asked for under a synthetic layer, the way a slot's picture and
+        // a LUT's strip are, so a host serves it by the resource alone.
+        let key = format!("environment\u{1f}{id}");
+        let Some(frame_id) = self.frame(&key, &id, -1.0, tier, pinned) else {
+            return view;
+        };
+        let Some(entry) = self
+            .cache
+            .get(&frame_id)
+            .or_else(|| self.scratch.get(&frame_id))
+        else {
+            return view;
+        };
+        let Some(pass) = self.model_pass.as_ref() else {
+            return view;
+        };
+        if pass.set_environment_picture(
+            self.ctx,
+            &id,
+            frame_id,
+            entry.frame.texture.view(),
+            entry.frame.width,
+            entry.frame.height,
+        ) {
+            view.preset = promo_gpu::model_pass::EnvPreset::Picture;
+        }
+        view
+    }
+
     fn frame(
         &mut self,
         layer_id: &str,
@@ -3568,6 +3616,7 @@ impl PreviewEngine {
             let c = linear(rgba_from_hex(accent));
             [c[0] * 0.8 + 0.1, c[1] * 0.8 + 0.1, c[2] * 0.8 + 0.1]
         };
+        let scene_environment = self.environment_for(settings, tier, pinned);
         let view = ModelView {
             yaw: camera.yaw(),
             pitch: camera.pitch(),
@@ -3587,7 +3636,7 @@ impl PreviewEngine {
                 background[2] * 0.45 + 0.08,
             ],
             rim_rgb: rim,
-            environment: environment_view(settings),
+            environment: scene_environment,
             eye: flown_eye,
             target: gaze,
         };
@@ -4382,6 +4431,7 @@ impl PreviewEngine {
         };
 
         self.apply_bindings_at(resource, settings, tier, pinned, Some((layer, time)), depth);
+        let scene_environment = self.environment_for(settings, tier, pinned);
         let pass = self.model_pass.as_ref()?;
         let loaded = self.models.get_mut(&resource.id)?;
         let view = ModelView {
@@ -4398,7 +4448,7 @@ impl PreviewEngine {
             key_rgb: [1.0, 1.0, 1.0],
             ambient_rgb: ambient,
             rim_rgb: rim,
-            environment: environment_view(settings),
+            environment: scene_environment,
             eye: None,
             target: None,
         };

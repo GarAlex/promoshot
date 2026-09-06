@@ -374,6 +374,30 @@ impl Renderer {
             let (pixels, width, height) = lut.strip_bgra8();
             frames.insert(resource.id.clone(), (pixels, width, height, 0));
         }
+        // A picture of the world (rung 46): the environment's panorama is
+        // an image no layer shows, so it is decoded here for the engine to
+        // ask for by id, the way a LUT's strip is.
+        if let Some(id) = project
+            .meta
+            .composition_settings
+            .environment
+            .as_ref()
+            .and_then(|e| e.resource_id.clone())
+        {
+            if let Some(resource) = project
+                .resource(&id)
+                .filter(|r| r.kind == promo_model::ProjectResourceKind::Image)
+            {
+                if let Some(path) = project.resource_path(resource) {
+                    if !frames.contains_key(&id) {
+                        frames.insert(
+                            id.clone(),
+                            Self::baked(Self::decode_premultiplied(&path)?, None),
+                        );
+                    }
+                }
+            }
+        }
         for layer in promo_model::nesting::all_layers(&project.meta) {
             if project.unsupported(layer).is_some() {
                 continue;
@@ -3162,6 +3186,81 @@ mod tests {
                 "the body is the body: {a:?} vs {b:?}"
             );
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A picture of the world (rung 46) through the whole path: a PNG
+    /// panorama, red on the left and blue on the right, named by the
+    /// environment; a chrome cube mirrors it, half a turn of the world
+    /// swaps the colour, and the studio preset reads differently again.
+    #[test]
+    fn a_picture_of_the_world_lights_a_stage() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-pano-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let (w, h) = (256u32, 128u32);
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for _y in 0..h {
+            for x in 0..w {
+                let px: [u8; 4] = if x < w / 2 {
+                    [230, 20, 20, 255]
+                } else {
+                    [20, 20, 230, 255]
+                };
+                rgba.extend_from_slice(&px);
+            }
+        }
+        write_png(&dir.join("Resources").join("pano.png"), &rgba, w, h).unwrap();
+        let doc = |environment: &str| {
+            format!(
+                r#"{{"id":"P","name":"Pano","createdAt":0,"state":"recorded","minReaderVersion":46,
+                "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"202020",
+                    "environment":{environment}}},
+                "resources":[
+                  {{"id":"PANO","kind":"image","filename":"pano.png","displayName":"Pano","addedAt":0,
+                    "pixelWidth":256,"pixelHeight":128}},
+                  {{"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+                    "recipe":{{"parts":[{{"slot":"Cube","shape":{{"box":{{"size":[0.8,0.8,0.8]}}}}}}]}},
+                    "materials":{{"Cube":{{"colorHex":"E0E0E0","finish":"chrome"}}}}}}],
+                "layers":[{{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":25,"pitch":15,"distance":3.0}},
+                    "light":{{"yaw":40,"pitch":50,"intensity":0}},"placement":{{"height":220,"anchor":"center"}},"transitionDuration":0}}],
+                  "members":[
+                    {{"id":"C","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"CUBE",
+                     "keyframes":[{{"id":"M0","time":0,"stageOffset":[0,0],"transitionDuration":0}}]}}]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> (u64, u64) {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(1.0).expect("frame");
+            let (mut r, mut b) = (0u64, 0u64);
+            for y in 110..210 {
+                for x in 110..210 {
+                    let i = (y * 320 + x) * 4;
+                    b += frame[i] as u64;
+                    r += frame[i + 2] as u64;
+                }
+            }
+            (r, b)
+        };
+        let (r0, b0) = render(&doc(r#"{"resourceID":"PANO"}"#));
+        let (r180, b180) = render(&doc(r#"{"resourceID":"PANO","rotation":180}"#));
+        assert!(
+            (r0 > b0 * 3 / 2) != (r180 > b180 * 3 / 2),
+            "half a turn of the world swaps what the chrome mirrors: {r0}/{b0} vs {r180}/{b180}"
+        );
+        let (rs, bs) = render(&doc(r#"{"preset":"studio"}"#));
+        assert!(
+            (rs as i64 - bs as i64).abs() * 4 < (r0 as i64 - b0 as i64).abs().max(1) * 4
+                || (rs as i64 - bs as i64).abs() < (r0 + b0) as i64 / 40,
+            "the studio is grey where the picture is coloured: {rs}/{bs} vs {r0}/{b0}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

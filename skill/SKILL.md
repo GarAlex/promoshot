@@ -242,7 +242,10 @@ is for; the schema section says how to write it.
   (`easeOut`), → 0.6 over ~1 s, → 1 in ~1.5 s, the last two keyframes
   `"easing": "smooth"` so the points never stop between.
 - **Environment** (`environment`) — what chrome and gloss mirror. A
-  metal with nothing to reflect reads as flat grey.
+  metal with nothing to reflect reads as flat grey. A preset (studio,
+  sunset, night) or a PICTURE of the world: `{ "resourceID": "<uuid>" }`
+  naming an image in the project, a panorama twice as wide as tall, for
+  a room the bodies really stand in.
 - **Kinetic reveals** (`reveal`) — a caption arriving a piece at a time.
   By word with `"seconds": 1.2` is the kinetic-type look; by character
   is busier and wants short text.

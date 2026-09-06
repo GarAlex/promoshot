@@ -679,6 +679,7 @@ mod schema_doc_tests {
             subtitle_reveal: Some(full_reveal()),
             environment: Some(SceneEnvironment {
                 preset: "studio".into(),
+                resource_id: None,
                 intensity: Some(1.2),
                 rotation: Some(45.0),
             }),
