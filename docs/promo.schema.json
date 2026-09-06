@@ -2250,6 +2250,12 @@
             "null"
           ]
         },
+        "floor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "follow": {
           "anyOf": [
             {

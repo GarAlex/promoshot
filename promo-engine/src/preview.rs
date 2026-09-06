@@ -14,7 +14,8 @@
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
 use promo_gpu::model_pass::{
-    GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView, StageItem, SurfaceFinish,
+    FloorView, Footprint, GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView,
+    StageItem, SurfaceFinish,
 };
 use promo_gpu::{GpuSurface, ImportedFrame};
 // Only the Apple-typed render entries name this; the provider no longer does.
@@ -3956,6 +3957,9 @@ impl PreviewEngine {
                 }
             }
         }
+        // Every model member's box in the WORLD (rung 45): where the
+        // floor lies (under the lowest) and each body's footprint on it.
+        let mut world_boxes: Vec<([f32; 3], [f32; 3])> = Vec::new();
         for item in &prepared {
             let member = &members[item.index];
             match member.kind {
@@ -3970,6 +3974,7 @@ impl PreviewEngine {
                     else {
                         continue;
                     };
+                    let (mut wmin, mut wmax) = ([f32::MAX; 3], [f32::MIN; 3]);
                     for mesh in &loaded.model.meshes {
                         let m = matrices
                             .get(mesh.node)
@@ -3991,15 +3996,20 @@ impl PreviewEngine {
                                 if corner & 2 == 0 { min[1] } else { max[1] },
                                 if corner & 4 == 0 { min[2] } else { max[2] },
                             ];
-                            boxes.take(
-                                &view,
-                                [
-                                    m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
-                                    m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
-                                    m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
-                                ],
-                            );
+                            let w = [
+                                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+                                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+                            ];
+                            for k in 0..3 {
+                                wmin[k] = wmin[k].min(w[k]);
+                                wmax[k] = wmax[k].max(w[k]);
+                            }
+                            boxes.take(&view, w);
                         }
+                    }
+                    if wmin[0] <= wmax[0] {
+                        world_boxes.push((wmin, wmax));
                     }
                 }
                 ProjectLayerKind::Image
@@ -4045,7 +4055,111 @@ impl PreviewEngine {
                 _ => {}
             }
         }
+        // The floor (rung 45): the stage's word, read off its first member
+        // (where lowering leaves it), the plane under the lowest body, and
+        // what the cut must reach — the shadow the key light throws and
+        // the bodies' mirror image below the plane.
+        let floor: Option<FloorView> = first
+            .floor
+            .as_deref()
+            .and_then(promo_model::Floor::parse)
+            .filter(|f| *f != promo_model::Floor::None && !world_boxes.is_empty())
+            .map(|word| {
+                let recipe = word.recipe();
+                let y = world_boxes
+                    .iter()
+                    .map(|(min, _)| min[1])
+                    .fold(f32::MAX, f32::min);
+                let footprints: Vec<Footprint> = world_boxes
+                    .iter()
+                    .map(|(min, max)| Footprint {
+                        center_xz: [(min[0] + max[0]) / 2.0, (min[2] + max[2]) / 2.0],
+                        half_xz: [(max[0] - min[0]) / 2.0, (max[2] - min[2]) / 2.0],
+                        bottom: min[1] - y,
+                        top: max[1] - y,
+                    })
+                    .collect();
+                // A small hot source casts a hard edge, big soft boxes a
+                // soft one — from the environment word, never a slider.
+                let softness = match settings.environment.as_ref().map(|e| e.preset.as_str()) {
+                    Some("sunset") => 1.5,
+                    Some("night") => 3.0,
+                    Some("studio") => 6.0,
+                    _ => 5.0,
+                };
+                let l = {
+                    let (yaw, pitch) = (light.yaw().to_radians(), light.pitch().to_radians());
+                    [
+                        (pitch.cos() * yaw.sin()) as f32,
+                        pitch.sin() as f32,
+                        (pitch.cos() * yaw.cos()) as f32,
+                    ]
+                };
+                for (min, max) in &world_boxes {
+                    let (hx, hz) = ((max[0] - min[0]) / 2.0, (max[2] - min[2]) / 2.0);
+                    let (cx, cz) = ((min[0] + max[0]) / 2.0, (min[2] + max[2]) / 2.0);
+                    let reach = hx.max(hz) * 1.8 + (max[1] - y) * 0.4;
+                    // The contact and the mirror's fade, around the body.
+                    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                        boxes.spill(&view, [cx + sx * (hx + reach), y, cz + sz * (hz + reach)]);
+                    }
+                    // The shadow of the body's top, thrown along the light.
+                    if recipe.shadow > 0.0 && l[1] > 0.05 {
+                        let t = (max[1] - y) / l[1];
+                        for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                            boxes.spill(
+                                &view,
+                                [cx + sx * hx - l[0] * t, y, cz + sz * hz - l[2] * t],
+                            );
+                        }
+                    }
+                    // The mirror image: the box reflected in the plane.
+                    if recipe.reflection > 0.0 {
+                        for corner in 0..8 {
+                            let p = [
+                                if corner & 1 == 0 { min[0] } else { max[0] },
+                                if corner & 2 == 0 { min[1] } else { max[1] },
+                                if corner & 4 == 0 { min[2] } else { max[2] },
+                            ];
+                            boxes.spill(&view, [p[0], 2.0 * y - p[1], p[2]]);
+                        }
+                    }
+                }
+                FloorView {
+                    y,
+                    shadow: recipe.shadow,
+                    softness,
+                    reflection: recipe.reflection,
+                    blur: recipe.blur,
+                    footprints,
+                }
+            });
         let Boxes { lo, hi, blo, bhi } = boxes;
+        // A floor's shadow and mirror reach below the bodies, past the
+        // square an orbit camera frames. Widen the camera's field of view
+        // — the eye stays, so the bodies' own perspective does not change,
+        // only more of the scene comes in — and rescale the boxes with
+        // it, so the cut holds the floor as well as the bodies.
+        let (mut view, mut lo, mut hi, mut blo, mut bhi) = (view, lo, hi, blo, bhi);
+        if floor.is_some() && view.eye.is_none() && view.target.is_none() && lo[0] <= hi[0] {
+            let reach = [0.5 - lo[0], hi[0] - 0.5, 0.5 - lo[1], hi[1] - 0.5]
+                .into_iter()
+                .fold(0.0f32, f32::max);
+            if reach > 0.5 {
+                let half = (view.fov.clamp(5.0, 120.0).to_radians() / 2.0).tan();
+                // The projection clamps the field at 120°, so widen no
+                // further than that.
+                let widen = ((reach / 0.5) as f64 * 1.03).min(60f64.to_radians().tan() / half);
+                if widen > 1.0 {
+                    view.fov = (2.0 * (half * widen).atan()).to_degrees();
+                    let k = widen as f32;
+                    for q in [&mut lo, &mut hi, &mut blo, &mut bhi] {
+                        q[0] = 0.5 + (q[0] - 0.5) / k;
+                        q[1] = 0.5 + (q[1] - 0.5) / k;
+                    }
+                }
+            }
+        }
         // The stage renders large enough that its cut, scaled to the
         // placement, is never upsampled: a scene filling a quarter of the
         // square gets a square four times the canvas height, to the cap.
@@ -4061,7 +4175,7 @@ impl PreviewEngine {
         let framed_by_camera = view.eye.is_some() || view.target.is_some();
         let (render_w, render_h) = stage_frame_size(side, canvas, framed_by_camera);
         let texture = pass
-            .render_scene(self.ctx, &items, &view, render_w, render_h)
+            .render_scene_with_floor(self.ctx, &items, &view, render_w, render_h, floor.as_ref())
             .ok()?;
         drop(items);
         let mut content_box: Option<(u32, u32, u32, u32)> = None;

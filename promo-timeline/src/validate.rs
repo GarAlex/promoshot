@@ -412,6 +412,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     }
 
     wrong_level_warnings(meta, &mut out);
+    floor_warnings(meta, &mut out);
     let required = meta.minimum_reader_version();
     match meta.min_reader_version {
         Some(declared) if declared >= required => {}
@@ -428,6 +429,31 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         None => {}
     }
     out
+}
+
+/// A floor word (rung 45) the vocabulary lacks is named with the words
+/// that exist; a floor on a layer that is neither a stage layer nor a
+/// flat stage's member does nothing, and is named so.
+fn floor_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    for layer in promo_model::nesting::all_layers(meta) {
+        let Some(word) = layer.floor.as_deref() else {
+            continue;
+        };
+        if promo_model::Floor::parse(word).is_none() {
+            out.push(format!(
+                "layer \"{}\" has floor \"{word}\", which is not one — {}; none is used",
+                layer.name,
+                promo_model::Floor::NAMES.join(", ")
+            ));
+        }
+        if layer.kind != promo_model::ProjectLayerKind::Stage && layer.stage.is_none() {
+            out.push(format!(
+                "layer \"{}\" has a floor but is not a stage; a floor is what a stage's \
+                 bodies stand on and does nothing here",
+                layer.name
+            ));
+        }
+    }
 }
 
 /// A field written at the wrong level is not an error to the parser — it
@@ -1945,6 +1971,35 @@ mod tests {
         assert!(has("slot \"Base\" has finish \"chrom\""), "{found:?}");
         assert!(has("chrome, brushed, anodized"), "{found:?}");
         assert_eq!(meta.minimum_reader_version(), 44);
+    }
+
+    /// A floor word (rung 45): a known one on a stage says nothing; an
+    /// unknown one is named with the words that exist; one on a plain
+    /// layer is named as doing nothing.
+    #[test]
+    fn a_floor_is_checked() {
+        let meta = project(
+            r#"{"id":"S","name":"bench","sortIndex":0,"kind":"stage","floor":"glossy","isEnabled":true,
+                "startTime":0,"duration":4,"members":[],"keyframes":[]},
+               {"id":"T","name":"table","sortIndex":1,"kind":"stage","floor":"wood","isEnabled":true,
+                "startTime":0,"duration":4,"members":[],"keyframes":[]},
+               {"id":"C","name":"cap","sortIndex":2,"kind":"caption","floor":"matte","isEnabled":true,
+                "startTime":0,"duration":4,"captionText":"Hi","keyframes":[]}"#,
+            "",
+        );
+        let found = super::warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(
+            !has("\"bench\" has floor") && !has("\"bench\" has a floor"),
+            "{found:?}"
+        );
+        assert!(has("layer \"table\" has floor \"wood\""), "{found:?}");
+        assert!(has("none, matte, satin, glossy, mirror"), "{found:?}");
+        assert!(
+            has("layer \"cap\" has a floor but is not a stage"),
+            "{found:?}"
+        );
+        assert_eq!(meta.minimum_reader_version(), 45);
     }
 
     /// A route (rung 40): a good one says nothing; a route with one point,

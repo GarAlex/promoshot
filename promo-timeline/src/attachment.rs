@@ -898,6 +898,7 @@ mod tests {
             follow: None,
             stage: None,
             members: None,
+            floor: None,
             mask_resource_id: None,
             mask_inverted: None,
             start_time: start,

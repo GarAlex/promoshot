@@ -612,6 +612,89 @@ impl Finish {
     }
 }
 
+/// What a stage's bodies stand on (rung 45), by name. The floor is a
+/// plane under the lowest body that CATCHES: a shadow from the key
+/// light, the darkening where a body touches, and — from `satin` up —
+/// the stage mirrored in it. What shows through is whatever lies beneath
+/// the stage layer, so the table is the project's own background. The
+/// light moves; the floor does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Floor {
+    /// Nothing under the bodies — every stage before the words.
+    None,
+    /// A shadow and a contact, no mirror.
+    Matte,
+    /// A faint, very blurred mirror.
+    Satin,
+    /// A clear enough mirror, softened — a polished table.
+    Glossy,
+    /// The stage mirrored whole.
+    Mirror,
+}
+
+/// A floor word in numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FloorRecipe {
+    /// How dark the key light's shadow falls: 0 none … 1 black.
+    pub shadow: f32,
+    /// How much of the mirrored stage shows: 0 none … 1 whole.
+    pub reflection: f32,
+    /// How blurred the mirror is, in mip levels of the reflection.
+    pub blur: f32,
+}
+
+impl Floor {
+    pub const NAMES: [&'static str; 5] = ["none", "matte", "satin", "glossy", "mirror"];
+    pub const ALL: [Floor; 5] = [
+        Floor::None,
+        Floor::Matte,
+        Floor::Satin,
+        Floor::Glossy,
+        Floor::Mirror,
+    ];
+    pub fn parse(name: &str) -> Option<Floor> {
+        Floor::ALL.iter().copied().find(|f| f.name() == name)
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Floor::None => "none",
+            Floor::Matte => "matte",
+            Floor::Satin => "satin",
+            Floor::Glossy => "glossy",
+            Floor::Mirror => "mirror",
+        }
+    }
+    pub fn recipe(self) -> FloorRecipe {
+        match self {
+            Floor::None => FloorRecipe {
+                shadow: 0.0,
+                reflection: 0.0,
+                blur: 0.0,
+            },
+            Floor::Matte => FloorRecipe {
+                shadow: 0.55,
+                reflection: 0.0,
+                blur: 0.0,
+            },
+            Floor::Satin => FloorRecipe {
+                shadow: 0.5,
+                reflection: 0.3,
+                blur: 3.0,
+            },
+            Floor::Glossy => FloorRecipe {
+                shadow: 0.45,
+                reflection: 0.6,
+                blur: 1.5,
+            },
+            Floor::Mirror => FloorRecipe {
+                shadow: 0.35,
+                reflection: 1.0,
+                blur: 0.0,
+            },
+        }
+    }
+}
+
 impl MaterialBinding {
     /// A picture on the slot: `{ "resourceID": id }`.
     pub fn resource(id: impl Into<String>) -> Self {
@@ -3082,6 +3165,16 @@ pub struct ProjectLayer {
     /// see `ProjectMetadata::lowered`.
     #[serde(default, skip_serializing_if = "is_none")]
     pub members: Option<Vec<ProjectLayer>>,
+    /// What this stage's bodies stand on (rung 45), by name — one of
+    /// [`Floor::NAMES`]: `none` (nothing, as before), `matte` (the key
+    /// light's shadow and the darkening where a body touches), `satin`,
+    /// `glossy`, `mirror` (the same, plus the stage mirrored in the
+    /// floor, blurred less and less). The floor is the plane under the
+    /// lowest body; what shows through it is whatever lies beneath the
+    /// stage layer. Static: the light moves, the floor does not. On a
+    /// stage layer — and, lowered, on the stage's first member.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub floor: Option<String>,
     /// The drawing whose ink is this layer's WINDOW: rasterized and
     /// stretched over the layer's rect, the layer only shows where the
     /// drawing has ink. Absent means the whole rect, as always. A static
@@ -4107,6 +4200,7 @@ fn lift_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
         head.follow = None;
         head.mask_resource_id = None;
         head.mask_inverted = None;
+        head.floor = None;
         head.duration_rule = None;
         head.timing = None;
         head.releases = Vec::new();
@@ -4264,6 +4358,16 @@ impl ProjectMetadata {
         let any_keyframe = |pick: fn(&ProjectLayerKeyframe) -> bool| {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
+
+        // 45 is a FLOOR word on a stage — what the bodies stand on: a
+        // shadow, a contact, a mirror. An older reader drops the key on
+        // save and the bodies float again, silently.
+        if crate::nesting::all_layers(self)
+            .iter()
+            .any(|l| l.floor.is_some())
+        {
+            return 45;
+        }
 
         // 44 is a finish WORD on a slot — what a surface is, named. An
         // older reader drops the key on save and the body goes back to
@@ -5517,6 +5621,21 @@ mod placement_model_tests {
         assert!(Finish::Glass.recipe().transmission > 0.9);
         assert!(Finish::Frosted.recipe().roughness > Finish::Glass.recipe().roughness);
         assert!(Finish::Rubber.recipe().specular < Finish::Gloss.recipe().specular);
+
+        // The floor words (rung 45): each parses to itself, none catches
+        // nothing, and from satin up the mirror grows clearer.
+        for (name, floor) in Floor::NAMES.iter().zip(Floor::ALL) {
+            assert_eq!(Floor::parse(name), Some(floor), "{name}");
+            assert_eq!(floor.name(), *name);
+        }
+        assert_eq!(Floor::parse("table"), None);
+        assert_eq!(Floor::None.recipe().shadow, 0.0);
+        assert_eq!(Floor::Matte.recipe().reflection, 0.0);
+        assert!(Floor::Matte.recipe().shadow > 0.0);
+        assert!(Floor::Satin.recipe().reflection < Floor::Glossy.recipe().reflection);
+        assert!(Floor::Glossy.recipe().reflection < Floor::Mirror.recipe().reflection);
+        assert!(Floor::Satin.recipe().blur > Floor::Glossy.recipe().blur);
+        assert_eq!(Floor::Mirror.recipe().blur, 0.0);
         assert!(json.contains(r#""repeat":[3.0,1.0]"#), "{json}");
         let back = ProjectMetadata::from_json(&json).unwrap();
         assert_eq!(body(&back), b, "the wear survives the round trip");
@@ -5537,6 +5656,48 @@ mod placement_model_tests {
         assert_eq!(tiled.minimum_reader_version(), 38);
         assert_eq!(body(&tiled).repeat(), [2.0, 2.0]);
         assert_eq!(body(&screen).repeat(), [1.0, 1.0]);
+    }
+
+    /// A floor word (rung 45) rides the stage through lowering — on the
+    /// first member the renderers read — and comes back on the stage
+    /// layer alone when lifted; the head member never carries it.
+    #[test]
+    fn a_floor_rides_the_stage_through_lowering() {
+        let meta = ProjectMetadata::from_json(
+            r#"{"id":"P","name":"Floor","createdAt":0,"state":"recorded",
+                "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{"canvasWidth":320,"canvasHeight":320},
+                "resources":[{"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+                    "recipe":{"parts":[{"slot":"Cube","shape":{"box":{"size":[0.6,0.6,0.6]}}}]}}],
+                "layers":[{"id":"S","name":"bench","sortIndex":0,"kind":"stage","floor":"glossy",
+                    "isEnabled":true,"startTime":0,"duration":4,"keyframes":[],
+                    "members":[{"id":"C","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,
+                        "startTime":0,"duration":4,"resourceID":"CUBE","keyframes":[]}]}]}"#,
+        )
+        .expect("decodes");
+        assert_eq!(meta.minimum_reader_version(), 45);
+        let lowered = meta.lowered();
+        let flat = lowered.layers.as_deref().unwrap();
+        assert_eq!(flat.len(), 2);
+        assert_eq!(
+            flat[0].floor.as_deref(),
+            Some("glossy"),
+            "the first member carries the floor"
+        );
+        assert_eq!(flat[0].stage.as_deref(), Some("S"));
+        assert_eq!(flat[1].floor, None, "a member does not");
+        let lifted = lowered.lifted();
+        let layers = lifted.layers.as_deref().unwrap();
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0].kind, ProjectLayerKind::Stage);
+        assert_eq!(layers[0].floor.as_deref(), Some("glossy"));
+        let members = layers[0].members.as_deref().unwrap();
+        assert!(
+            members.iter().all(|m| m.floor.is_none()),
+            "the head never carries the floor"
+        );
+        let json = lifted.to_json().unwrap();
+        assert!(json.contains(r#""floor":"glossy""#), "{json}");
     }
 
     #[test]
@@ -5804,6 +5965,12 @@ mod placement_model_tests {
             model(r#"{"Screen":{"resourceID":"S","finish":"glass"}}"#).minimum_reader_version(),
             44
         );
+        // 45: a floor WORD on a stage layer.
+        let floored = meta(
+            r#""layers":[{"id":"S","name":"bench","sortIndex":0,"kind":"stage","floor":"glossy",
+                 "isEnabled":true,"startTime":0,"duration":4,"members":[],"keyframes":[]}]"#,
+        );
+        assert_eq!(floored.minimum_reader_version(), 45);
 
         // 33: a stage as one layer, a kind.
         let staged = meta(

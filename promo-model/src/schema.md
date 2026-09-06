@@ -1094,3 +1094,14 @@ falling to whichever member sorts first. This is the canonical form: the
 flat form above is read forever but written no more — the app and
 `promo_apply` lift it into a stage layer on open, and `promo_validate`
 says so. A project with a stage layer carries `minReaderVersion: 33`.
+A stage may name what its bodies stand on (rung 45): `"floor": "matte"`
+on the stage layer — `none` (the default: nothing, as before), `matte`
+(the key light's shadow on the floor and the darkening where a body
+touches), `satin`, `glossy`, `mirror` (the same, plus the stage
+mirrored in the floor, blurred less and less). The floor is the plane
+under the lowest body and shows nothing of its own: what lies beneath
+the stage layer shows through, so the table is the project's own
+background. The light moves — its `light` keyframes swing the shadow
+and the highlights together — and the floor does not; a `sunset` casts
+a hard edge, the `studio` a soft one. A project with a floor carries
+`minReaderVersion: 45`.

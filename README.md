@@ -414,7 +414,12 @@ buffer, models at their `depth` and pictures as billboards, the first
 member's placement carrying the whole scene (rung 30). A stage can also
 be one layer of kind `stage` holding its `members`, the camera and light
 on its own keyframes (rung 33) — the same picture, with the stage's
-ownership written down.
+ownership written down. A stage's `floor` word (rung 45) — `matte`,
+`satin`, `glossy`, `mirror` — puts a plane under the lowest body that
+catches the key light's shadow, the darkening where a body touches, and
+the stage mirrored in it, blurred less and less; whatever lies beneath
+the stage layer shows through, so the table is the project's own
+background. The light's keyframes move the shadow; the floor stays.
 
 ## A picture worn by a body
 

@@ -3029,6 +3029,142 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A floor (rung 45) through the whole path: with no floor, or
+    /// `none`, the frame under the cube is the background alone and the
+    /// two render identically; on a `glossy` floor the cut reaches below
+    /// the cube and holds a shadow and the cube's mirror image there,
+    /// while the cube itself still reads as the cube.
+    #[test]
+    fn a_floor_shows_under_a_stage() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-floor-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = |floor: &str| {
+            format!(
+                r#"{{"id":"P","name":"Floor","createdAt":0,"state":"recorded","minReaderVersion":45,
+                "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"1030A0",
+                    "environment":{{"preset":"studio"}}}},
+                "resources":[
+                  {{"id":"CUBE","kind":"model","filename":"","displayName":"Cube","addedAt":0,
+                    "recipe":{{"parts":[{{"slot":"Cube","shape":{{"box":{{"size":[0.8,0.8,0.8]}}}}}}]}},
+                    "materials":{{"Cube":"E04030"}}}}],
+                "layers":[{{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4{floor},
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":25,"pitch":22,"distance":3.2}},
+                    "light":{{"yaw":205,"pitch":45}},"placement":{{"height":220,"anchor":"center"}},"transitionDuration":0}}],
+                  "members":[
+                    {{"id":"C","name":"Cube","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"CUBE",
+                     "keyframes":[{{"id":"M0","time":0,"stageOffset":[0,0],"transitionDuration":0}}]}}]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> Vec<u8> {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            renderer.frame_bgra(1.0).expect("frame")
+        };
+        let bare = render(&doc(""));
+        let none = render(&doc(r#","floor":"none""#));
+        let glossy = render(&doc(r#","floor":"glossy""#));
+        let matte = render(&doc(r#","floor":"matte""#));
+        let mirror = render(&doc(r#","floor":"mirror""#));
+        if let Ok(out) = std::env::var("PROMO_FLOOR_DUMP") {
+            for (name, px) in [
+                ("none", &none),
+                ("matte", &matte),
+                ("glossy", &glossy),
+                ("mirror", &mirror),
+            ] {
+                std::fs::write(format!("{out}/{name}.bgra"), px).unwrap();
+            }
+        }
+        assert_eq!(bare, none, "none is no floor at all");
+        // Under the cube: the rows below its base, the middle third across.
+        let background = [0xA0u8, 0x30, 0x10];
+        let off_background = |px: &[u8], y0: usize, y1: usize| -> usize {
+            (y0..y1)
+                .flat_map(|y| (110..210).map(move |x| (x, y)))
+                .filter(|(x, y)| {
+                    let i = (y * 320 + x) * 4;
+                    (0..3).any(|k| (px[i + k] as i32 - background[k] as i32).abs() > 12)
+                })
+                .count()
+        };
+        // Where the cube's base lands: the lowest row with the cube's red.
+        let base = (0..320)
+            .rev()
+            .find(|&y| {
+                (110..210).any(|x| {
+                    let i = (y * 320 + x) * 4;
+                    none[i + 2] > 150 && none[i] < 100
+                })
+            })
+            .expect("the cube is drawn");
+        let (y0, y1) = ((base + 4).min(319), (base + 70).min(320));
+        let under_none = off_background(&none, y0, y1);
+        let under_matte = off_background(&matte, y0, y1);
+        assert!(
+            under_none < 50,
+            "no floor: background under the cube ({under_none})"
+        );
+        assert!(
+            under_matte > 300,
+            "matte: a shadow under the cube ({under_matte} vs {under_none})"
+        );
+        // The mirror is COLOUR under the cube — the cube's red where a
+        // matte floor only darkens the blue — clearer from glossy to mirror.
+        let red_under = |px: &[u8]| -> usize {
+            (y0..y1)
+                .flat_map(|y| (110..210).map(move |x| (x, y)))
+                .filter(|(x, y)| {
+                    let i = (y * 320 + x) * 4;
+                    px[i + 2] > 60 && px[i + 2] > px[i] + 20
+                })
+                .count()
+        };
+        let (red_matte, red_glossy, red_mirror) =
+            (red_under(&matte), red_under(&glossy), red_under(&mirror));
+        assert!(
+            red_matte < 30,
+            "matte: no image, only darkening ({red_matte})"
+        );
+        assert!(
+            red_glossy > 100,
+            "glossy: the cube's image below it ({red_glossy})"
+        );
+        assert!(
+            red_mirror > red_glossy,
+            "mirror: clearer still ({red_mirror} vs {red_glossy})"
+        );
+        // The cube's own top: same colour either way (no floor changes a body).
+        let top_row = base.saturating_sub(60);
+        let mean = |px: &[u8]| -> [u64; 3] {
+            let mut sum = [0u64; 3];
+            let mut n = 0u64;
+            for y in top_row..top_row + 8 {
+                for x in 150..170 {
+                    let i = (y * 320 + x) * 4;
+                    for k in 0..3 {
+                        sum[k] += px[i + k] as u64;
+                    }
+                    n += 1;
+                }
+            }
+            [sum[0] / n, sum[1] / n, sum[2] / n]
+        };
+        let (a, b) = (mean(&none), mean(&mirror));
+        for k in 0..3 {
+            assert!(
+                (a[k] as i64 - b[k] as i64).abs() < 30,
+                "the body is the body: {a:?} vs {b:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A route (rung 40) through the whole path: a member flown into its
     /// keyframe along an arc is somewhere else mid-move than the same
     /// member moving straight, a camera flown along a route with its gaze

@@ -71,6 +71,39 @@ impl SurfaceFinish {
     }
 }
 
+/// One body's footprint on a stage's floor (rung 45): where it stands,
+/// in world x/z, and how high it reaches above the floor — what the
+/// contact darkening and the mirror's reach are measured from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Footprint {
+    pub center_xz: [f32; 2],
+    pub half_xz: [f32; 2],
+    /// The body's lowest and highest point, above the floor.
+    pub bottom: f32,
+    pub top: f32,
+}
+
+/// A stage's floor (rung 45): the plane its bodies stand on, drawn as a
+/// CATCHER — invisible itself, it darkens by the key light's shadow and
+/// where a body touches, and shows the stage mirrored in it; what lies
+/// beneath the stage layer shows through everywhere else. The light
+/// moves; the floor does not.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FloorView {
+    /// The plane's height, world units.
+    pub y: f32,
+    /// How dark the shadow falls: 0 none … 1 black.
+    pub shadow: f32,
+    /// The shadow's edge, in shadow-map texels: a small hot source (a
+    /// sunset) casts a hard one, big soft boxes (the studio) a soft one.
+    pub softness: f32,
+    /// How much of the mirrored stage shows: 0 none … 1 whole.
+    pub reflection: f32,
+    /// How blurred the mirror is, in mip levels.
+    pub blur: f32,
+    pub footprints: Vec<Footprint>,
+}
+
 /// A material's factors and, if any, its textures: base colour (RGBA8
 /// sRGB), a tangent-space normal map and a metallic-roughness map (both
 /// RGBA8 linear, glTF's layout: roughness in G, metallic in B).
@@ -261,6 +294,23 @@ struct Frame {
     // x = 1 when an environment is bound, y = its intensity, z = its
     // rotation (radians), w = the blurriest mip level.
     env_params: vec4<f32>,
+    // The key light's own camera (orthographic) — what the shadow map
+    // was drawn through — and the camera mirrored in the floor, whose
+    // picture the floor shows.
+    light_view_proj: mat4x4<f32>,
+    mirror_view_proj: mat4x4<f32>,
+    // The floor: x = its height, y = how dark the shadow, z = the
+    // shadow's edge in shadow-map texels, w = how much of the mirror.
+    floor: vec4<f32>,
+    // x = the mirror's blur (mip levels), y = the scene's radius, z = 1
+    // in the mirror pass (nothing under the floor is drawn), w = 1 when a
+    // shadow map is bound.
+    floor2: vec4<f32>,
+    // The bodies' footprints (x, z centre; x, z half size) and their
+    // lowest and highest point above the floor; `counts.x` says how many.
+    footprints: array<vec4<f32>, 8>,
+    lifts: array<vec4<f32>, 8>,
+    counts: vec4<f32>,
 };
 struct Material {
     base_color: vec4<f32>,
@@ -286,6 +336,10 @@ struct Material {
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var env_tex: texture_2d<f32>;
 @group(0) @binding(2) var env_samp: sampler;
+@group(0) @binding(3) var shadow_tex: texture_depth_2d;
+@group(0) @binding(4) var shadow_samp: sampler_comparison;
+@group(0) @binding(5) var refl_tex: texture_2d<f32>;
+@group(0) @binding(6) var refl_samp: sampler;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(2) var base_samp: sampler;
@@ -309,6 +363,14 @@ struct VsOut {
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
 };
+
+// The shadow pass: the same geometry through the light's camera, depth
+// only.
+@vertex
+fn vs_shadow(v: VsIn) -> @builtin(position) vec4<f32> {
+    let world = placement.model * vec4<f32>(v.pos, 1.0);
+    return frame.light_view_proj * world;
+}
 
 @vertex
 fn vs_main(v: VsIn) -> VsOut {
@@ -440,6 +502,78 @@ fn world_light(dir: vec3<f32>, roughness: f32) -> vec3<f32> {
     let env = mix(ground, sky, up);
     return env * (0.7 + 0.3 * smoothstep(0.0, 0.25, abs(dir.y)));
 }
+// How much of the key light reaches a point: the shadow map read with
+// a 4×4 grid of compared taps over the floor's softness, so the edge is
+// soft. Points outside the map, or with no map bound, are lit.
+fn shadow_at(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    if (frame.floor2.w < 0.5) {
+        return 1.0;
+    }
+    let l = normalize(frame.light_dir.xyz);
+    let ndl = max(dot(n, l), 0.0);
+    let offset = p + n * frame.floor2.y * 0.004 * (1.0 - ndl * 0.5);
+    let c = frame.light_view_proj * vec4<f32>(offset, 1.0);
+    if (abs(c.w) < 1e-6) {
+        return 1.0;
+    }
+    let ndc = c.xyz / c.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z > 1.0 || ndc.z < 0.0) {
+        return 1.0;
+    }
+    let depth = ndc.z - 0.0008 - 0.002 * (1.0 - ndl);
+    let texel = 1.0 / f32(textureDimensions(shadow_tex).x);
+    let r = max(frame.floor.z, 0.5) * texel;
+    var sum = 0.0;
+    for (var y: i32 = 0; y < 4; y = y + 1) {
+        for (var x: i32 = 0; x < 4; x = x + 1) {
+            let o = vec2<f32>((f32(x) - 1.5) / 1.5, (f32(y) - 1.5) / 1.5) * r;
+            sum = sum + textureSampleCompareLevel(shadow_tex, shadow_samp, uv + o, depth);
+        }
+    }
+    return sum / 16.0;
+}
+// The darkening where a body touches the floor: 1 open … 0 fully
+// occluded, from each footprint, strongest under a body that stands on
+// the floor and gone once it is lifted a footprint's width above it.
+fn contact_at(p: vec3<f32>) -> f32 {
+    var open = 1.0;
+    let n = i32(frame.counts.x);
+    for (var i: i32 = 0; i < 8; i = i + 1) {
+        if (i >= n) {
+            break;
+        }
+        let f = frame.footprints[i];
+        let spread = max(max(f.z, f.w) * 0.6, 0.02);
+        let d = vec2<f32>(abs(p.x - f.x) - f.z, abs(p.z - f.y) - f.w);
+        let outside = length(max(d, vec2<f32>(0.0)));
+        let near = 1.0 - smoothstep(0.0, spread, outside);
+        let touching = clamp(1.0 - frame.lifts[i].x / spread, 0.0, 1.0);
+        open = open * (1.0 - near * touching * 0.7);
+    }
+    return open;
+}
+// How much the floor catches at a point: 1 among the bodies, fading to
+// 0 a few footprints away, further for a tall body whose mirror image
+// reaches further.
+fn floor_fade(p: vec3<f32>) -> f32 {
+    var fade = 0.0;
+    let n = i32(frame.counts.x);
+    for (var i: i32 = 0; i < 8; i = i + 1) {
+        if (i >= n) {
+            break;
+        }
+        let f = frame.footprints[i];
+        // Whole within half the reach — a body's mirror image lies about
+        // its own height along the floor — then off to nothing.
+        let reach = max(max(f.z, f.w), 0.02) * 3.0 + frame.lifts[i].y * 1.5;
+        let d = vec2<f32>(abs(p.x - f.x) - f.z, abs(p.z - f.y) - f.w);
+        let outside = length(max(d, vec2<f32>(0.0)));
+        fade = max(fade, 1.0 - smoothstep(reach * 0.5, reach, outside));
+    }
+    return fade;
+}
+
 // A clear coat's own light: the key through a narrow GGX lobe and the
 // world at the coat's roughness, both at glass's F0 — added over a body
 // or over a screen alike.
@@ -458,6 +592,43 @@ fn coat_light(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, key: vec3<f32>, cc: f32,
 
 @fragment
 fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
+    // The mirror pass: nothing under the floor exists.
+    if (frame.floor2.z > 0.5 && in.world.y < frame.floor.x - 0.0005) {
+        discard;
+    }
+    // The floor itself, a catcher: invisible but for the shadow, the
+    // contact and the mirror it holds, fading away from the bodies.
+    if (material.factors.z > 4.5) {
+        let p = in.world;
+        let up = vec3<f32>(0.0, 1.0, 0.0);
+        let fade = floor_fade(p);
+        if (fade <= 0.001) {
+            discard;
+        }
+        let visible = shadow_at(p, up);
+        let shadow_dark = frame.floor.y * (1.0 - visible) * fade;
+        let contact_dark = (1.0 - contact_at(p)) * fade;
+        let occlusion = 1.0 - (1.0 - shadow_dark) * (1.0 - contact_dark);
+        var mirror = vec4<f32>(0.0);
+        if (frame.floor.w > 0.0) {
+            let c = frame.mirror_view_proj * vec4<f32>(p, 1.0);
+            if (c.w > 1e-5) {
+                let ndc = c.xyz / c.w;
+                let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+                if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
+                    let v = normalize(frame.camera_pos.xyz - p);
+                    let grazing = pow(1.0 - max(dot(up, v), 0.0), 3.0);
+                    let w = frame.floor.w * fade * (0.75 + 0.25 * grazing);
+                    mirror = textureSampleLevel(refl_tex, refl_samp, uv, frame.floor2.x) * w;
+                }
+            }
+        }
+        // The mirror's picture is the pass's own output — encoded and
+        // premultiplied already; the darkening adds no colour, only
+        // alpha, and the mirror covers by its own.
+        let alpha = 1.0 - (1.0 - occlusion) * (1.0 - mirror.a);
+        return vec4<f32>(mirror.rgb, alpha);
+    }
     // A dissolving body: cells of its surface go in a fixed random order
     // as the amount rises — the order a morph's points leave in.
     if (material.extra.x > 0.0) {
@@ -579,8 +750,11 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     // receives, as it always was here; the BRDF times π keeps that.
     let key = frame.key_rgb.rgb * frame.light_dir.w;
     let kd = (vec3<f32>(1.0) - f) * (1.0 - metallic);
-    var body = kd * albedo.rgb * ndl * key;
-    var spec = d * smith_vis(ndv, ndl, a) * f * PI * ndl * key;
+    // A stage with a floor casts real shadows: the key is what the
+    // shadow map lets through.
+    let lit_by_key = shadow_at(in.world, n);
+    var body = kd * albedo.rgb * ndl * key * lit_by_key;
+    var spec = d * smith_vis(ndv, ndl, a) * f * PI * ndl * key * lit_by_key;
     let ambient = albedo.rgb * (1.0 - metallic) * frame.ambient_rgb.rgb;
     let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6 * (1.0 - metallic * 0.5);
     // The world: the reflection through the prefiltered environment
@@ -622,6 +796,95 @@ struct FrameRaw {
     ambient_rgb: [f32; 4],
     rim_rgb: [f32; 4],
     env_params: [f32; 4],
+    light_view_proj: [[f32; 4]; 4],
+    mirror_view_proj: [[f32; 4]; 4],
+    floor: [f32; 4],
+    floor2: [f32; 4],
+    footprints: [[f32; 4]; 8],
+    lifts: [[f32; 4]; 8],
+    counts: [f32; 4],
+}
+
+impl FrameRaw {
+    /// The floor's rows: its plane, the light's camera for the shadow
+    /// map, the mirrored camera for the reflection, and the bodies'
+    /// footprints. `shadow_bound` says the map exists; `mirror_pass`
+    /// marks the frame drawn from under the floor.
+    fn with_floor(
+        mut self,
+        view: &ModelView,
+        floor: &FloorView,
+        aspect: f32,
+        shadow_bound: bool,
+        mirror_pass: bool,
+    ) -> FrameRaw {
+        self.light_view_proj = light_view_proj(view);
+        self.mirror_view_proj = frame_uniforms(&mirrored_view(view, floor.y), aspect).view_proj;
+        self.floor = [
+            floor.y,
+            floor.shadow.clamp(0.0, 1.0),
+            floor.softness.max(0.0),
+            floor.reflection.clamp(0.0, 1.0),
+        ];
+        self.floor2 = [
+            floor.blur.max(0.0),
+            view.bounds_radius.max(1e-6),
+            if mirror_pass { 1.0 } else { 0.0 },
+            if shadow_bound { 1.0 } else { 0.0 },
+        ];
+        for (i, f) in floor.footprints.iter().take(8).enumerate() {
+            self.footprints[i] = [f.center_xz[0], f.center_xz[1], f.half_xz[0], f.half_xz[1]];
+            self.lifts[i] = [f.bottom.max(0.0), f.top.max(0.0), 0.0, 0.0];
+        }
+        self.counts = [floor.footprints.len().min(8) as f32, 0.0, 0.0, 0.0];
+        self
+    }
+}
+
+/// The key light's own camera: orthographic, looking along the light at
+/// the bounds centre, wide enough for the bounds sphere — what the
+/// shadow map is drawn through.
+fn light_view_proj(view: &ModelView) -> Mat4 {
+    let r = view.bounds_radius.max(1e-6) * 1.25;
+    let c = view.bounds_center;
+    let l = norm(direction(view.light_yaw, view.light_pitch));
+    let eye = [
+        c[0] + l[0] * r * 2.0,
+        c[1] + l[1] * r * 2.0,
+        c[2] + l[2] * r * 2.0,
+    ];
+    let forward = norm(sub(c, eye));
+    let mut up = [0.0, 1.0, 0.0];
+    if dot(forward, up).abs() > 0.99 {
+        up = [1.0, 0.0, 0.0];
+    }
+    let right = norm(cross(forward, up));
+    let up = cross(right, forward);
+    let view_m = [
+        [right[0], up[0], -forward[0], 0.0],
+        [right[1], up[1], -forward[1], 0.0],
+        [right[2], up[2], -forward[2], 0.0],
+        [-dot(right, eye), -dot(up, eye), dot(forward, eye), 1.0],
+    ];
+    let (near, far) = (0.01f32, r * 4.0);
+    let proj = [
+        [1.0 / r, 0.0, 0.0, 0.0],
+        [0.0, 1.0 / r, 0.0, 0.0],
+        [0.0, 0.0, 1.0 / (near - far), 0.0],
+        [0.0, 0.0, near / (near - far), 1.0],
+    ];
+    mul(&proj, &view_m)
+}
+
+/// The camera mirrored in the floor: what a floor point shows is what
+/// this camera sees through the same point.
+fn mirrored_view(view: &ModelView, floor_y: f32) -> ModelView {
+    let (eye, center) = eye_and_center(view);
+    let mut mirrored = *view;
+    mirrored.eye = Some([eye[0], 2.0 * floor_y - eye[1], eye[2]]);
+    mirrored.target = Some([center[0], 2.0 * floor_y - center[1], center[2]]);
+    mirrored.roll = -view.roll;
+    mirrored
 }
 
 #[repr(C)]
@@ -792,6 +1055,12 @@ impl GpuModel {
 /// The pass itself: one pipeline, shared across every model layer.
 pub struct ModelPass {
     pipeline: wgpu::RenderPipeline,
+    /// Depth only, through the key light's camera (rung 45).
+    shadow_pipeline: wgpu::RenderPipeline,
+    shadow_sampler: wgpu::Sampler,
+    dummy_shadow: wgpu::TextureView,
+    dummy_mirror: wgpu::TextureView,
+    mirror_sampler: wgpu::Sampler,
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
     /// Copies a picture level by level into a mip chain, so a bound
@@ -841,6 +1110,38 @@ impl ModelPass {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 6,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
@@ -963,6 +1264,99 @@ impl ModelPass {
             multiview: None,
             cache: None,
         });
+        // The shadow pass: depth only, through the light's camera, with a
+        // slope-scaled bias so a lit face does not shadow itself.
+        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("model-shadow"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_shadow"),
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 32,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                }],
+            },
+            fragment: None,
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("model-shadow"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        // With no floor, a one-texel map that shadows nothing and a
+        // one-texel mirror that shows nothing are bound in their place.
+        let dummy_shadow = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("model-shadow-none"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let dummy_shadow_view = dummy_shadow.create_view(&Default::default());
+        {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("model-shadow-none"),
+            });
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("model-shadow-none"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &dummy_shadow_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            ctx.queue.submit(Some(encoder.finish()));
+        }
+        let dummy_mirror = upload_rgba(ctx, 1, 1, &[0, 0, 0, 0]).create_view(&Default::default());
+        let mirror_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("model-mirror"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            ..Default::default()
+        });
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("model-blit"),
             source: wgpu::ShaderSource::Wgsl(BLIT_SHADER.into()),
@@ -1055,6 +1449,11 @@ impl ModelPass {
         });
         Ok(ModelPass {
             pipeline,
+            shadow_pipeline,
+            shadow_sampler,
+            dummy_shadow: dummy_shadow_view,
+            dummy_mirror,
+            mirror_sampler,
             frame_layout,
             material_layout,
             blit_pipeline,
@@ -1529,11 +1928,26 @@ impl ModelPass {
         width: u32,
         height: u32,
     ) -> Result<wgpu::Texture, GpuError> {
-        use wgpu::util::DeviceExt;
+        self.render_scene_with_floor(ctx, items, view, width, height, None)
+    }
+
+    /// `render_scene` on a floor (rung 45): first the shadow map through
+    /// the key light, then — when the floor mirrors — the stage from
+    /// under the floor into a mirror with a mip chain, then the stage
+    /// itself with the floor drawn as a catcher between the bodies.
+    pub fn render_scene_with_floor(
+        &self,
+        ctx: &GpuContext,
+        items: &[StageItem<'_>],
+        view: &ModelView,
+        width: u32,
+        height: u32,
+        floor: Option<&FloorView>,
+    ) -> Result<wgpu::Texture, GpuError> {
         let (width, height) = (width.max(1), height.max(1));
         let device = &ctx.device;
         let aspect = width as f32 / height as f32;
-        let frame = frame_uniforms(view, aspect);
+        let plain = frame_uniforms(view, aspect);
         let (right, up, forward) = camera_basis(view);
 
         // Billboards become one-quad models for this frame.
@@ -1596,6 +2010,212 @@ impl ModelPass {
             }
         }
 
+        // The floor's catcher: a quad on the plane, wide beyond the
+        // bodies, with the material mode the shader reads as "the floor".
+        let catcher: Option<GpuModel> = match floor {
+            Some(f) if !f.footprints.is_empty() => {
+                let reach = view.bounds_radius.max(1e-3) * 6.0;
+                let c = view.bounds_center;
+                let positions = [
+                    [c[0] - reach, f.y, c[2] - reach],
+                    [c[0] + reach, f.y, c[2] - reach],
+                    [c[0] + reach, f.y, c[2] + reach],
+                    [c[0] - reach, f.y, c[2] + reach],
+                ];
+                let normals = [[0.0, 1.0, 0.0]; 4];
+                let uvs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+                let indices = [0u32, 2, 1, 0, 3, 2];
+                let mut model = self.upload(
+                    ctx,
+                    &[MeshInput {
+                        positions: &positions,
+                        normals: &normals,
+                        uvs: &uvs,
+                        indices: &indices,
+                        material: 0,
+                        node: 0,
+                    }],
+                    &[MaterialInput {
+                        base_color: [0.0, 0.0, 0.0, 1.0],
+                        metallic: 0.0,
+                        roughness: 1.0,
+                        double_sided: true,
+                        texture: None,
+                        normal: None,
+                        metal_rough: None,
+                    }],
+                )?;
+                if let Some(m) = model.materials.get_mut(0) {
+                    m.textured = 5.0;
+                    m.double_sided = true;
+                    ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
+                }
+                Some(model)
+            }
+            _ => None,
+        };
+
+        // The shadow map: every body (not the pictures, not the floor)
+        // through the light's camera, depth only.
+        let shadow_view: Option<wgpu::TextureView> = match floor {
+            Some(f) if catcher.is_some() && f.shadow > 0.0 => {
+                let side = 2048u32;
+                let map = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("stage-shadow"),
+                    size: wgpu::Extent3d {
+                        width: side,
+                        height: side,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: DEPTH_FORMAT,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                });
+                let map_view = map.create_view(&Default::default());
+                let frame = plain.with_floor(view, f, aspect, false, false);
+                let bind = self.frame_bind_group(
+                    ctx,
+                    "stage-shadow",
+                    &frame,
+                    view.environment.preset,
+                    None,
+                    None,
+                );
+                for item in items {
+                    if let StageItem::Model { model, matrices } = item {
+                        for mesh in &model.meshes {
+                            let m = matrices.get(mesh.node).copied().unwrap_or(IDENTITY);
+                            ctx.queue.write_buffer(
+                                &mesh.placement,
+                                0,
+                                as_bytes(&PlacementRaw {
+                                    model: m,
+                                    normal: normal_matrix(&m),
+                                }),
+                            );
+                        }
+                    }
+                }
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("stage-shadow"),
+                });
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("stage-shadow"),
+                        color_attachments: &[],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &map_view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(1.0),
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    pass.set_pipeline(&self.shadow_pipeline);
+                    pass.set_bind_group(0, &bind, &[]);
+                    for item in items {
+                        let StageItem::Model { model, .. } = item else {
+                            continue;
+                        };
+                        for mesh in &model.meshes {
+                            let Some(material) = model.materials.get(mesh.material) else {
+                                continue;
+                            };
+                            if material.transmissive() {
+                                continue;
+                            }
+                            pass.set_bind_group(1, &material.bind, &[]);
+                            pass.set_bind_group(2, &mesh.placement_bind, &[]);
+                            pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                            pass.set_index_buffer(
+                                mesh.indices.slice(..),
+                                wgpu::IndexFormat::Uint32,
+                            );
+                            pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                        }
+                    }
+                }
+                ctx.queue.submit(Some(encoder.finish()));
+                Some(map_view)
+            }
+            _ => None,
+        };
+
+        // The mirror: the stage from under the floor, into a picture with
+        // a mip chain so a satin floor reads it blurred.
+        let mirror_chain: Option<wgpu::Texture> = match floor {
+            Some(f) if catcher.is_some() && f.reflection > 0.0 => {
+                let mirrored = mirrored_view(view, f.y);
+                let frame = frame_uniforms(&mirrored, aspect).with_floor(
+                    view,
+                    f,
+                    aspect,
+                    shadow_view.is_some(),
+                    true,
+                );
+                let bind = self.frame_bind_group(
+                    ctx,
+                    "stage-mirror",
+                    &frame,
+                    view.environment.preset,
+                    shadow_view.as_ref(),
+                    None,
+                );
+                let picture =
+                    self.draw_scene(ctx, items, &billboards, None, &bind, (width, height))?;
+                let view_of = picture.create_view(&Default::default());
+                Some(self.mipmapped(ctx, &view_of, width, height))
+            }
+            _ => None,
+        };
+        let mirror_view = mirror_chain
+            .as_ref()
+            .map(|t| t.create_view(&Default::default()));
+
+        let frame = match floor {
+            Some(f) if catcher.is_some() => {
+                plain.with_floor(view, f, aspect, shadow_view.is_some(), false)
+            }
+            _ => plain,
+        };
+        let frame_bind = self.frame_bind_group(
+            ctx,
+            "stage-frame",
+            &frame,
+            view.environment.preset,
+            shadow_view.as_ref(),
+            mirror_view.as_ref(),
+        );
+        self.draw_scene(
+            ctx,
+            items,
+            &billboards,
+            catcher.as_ref(),
+            &frame_bind,
+            (width, height),
+        )
+    }
+
+    /// One picture of the stage: the models and the billboards (and the
+    /// floor's catcher, when there is one) through `frame_bind`, opaque
+    /// first, then what light passes through.
+    fn draw_scene(
+        &self,
+        ctx: &GpuContext,
+        items: &[StageItem<'_>],
+        billboards: &[GpuModel],
+        catcher: Option<&GpuModel>,
+        frame_bind: &wgpu::BindGroup,
+        (width, height): (u32, u32),
+    ) -> Result<wgpu::Texture, GpuError> {
+        let device = &ctx.device;
         let size = wgpu::Extent3d {
             width,
             height,
@@ -1632,31 +2252,6 @@ impl ModelPass {
             format: DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
-        });
-        let frame_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("stage-frame"),
-            contents: as_bytes(&frame),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let frame_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("stage-frame"),
-            layout: &self.frame_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: frame_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(
-                        self.env_view(view.environment.preset),
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.env_sampler),
-                },
-            ],
         });
         for item in items {
             if let StageItem::Model { model, matrices } = item {
@@ -1702,7 +2297,21 @@ impl ModelPass {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &frame_bind, &[]);
+            pass.set_bind_group(0, frame_bind, &[]);
+            // The floor first, so the bodies overwrite it where they stand
+            // and a pane of glass blends over it.
+            if let Some(model) = catcher {
+                for mesh in &model.meshes {
+                    let Some(material) = model.materials.get(mesh.material) else {
+                        continue;
+                    };
+                    pass.set_bind_group(1, &material.bind, &[]);
+                    pass.set_bind_group(2, &mesh.placement_bind, &[]);
+                    pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                }
+            }
             // The opaque meshes of every member first, then the ones light
             // passes through, so what stands behind a pane is there when
             // the pane blends over it.
@@ -1763,7 +2372,6 @@ impl ModelPass {
         width: u32,
         height: u32,
     ) -> Result<wgpu::Texture, GpuError> {
-        use wgpu::util::DeviceExt;
         let (width, height) = (width.max(1), height.max(1));
         let device = &ctx.device;
         for mesh in &model.meshes {
@@ -1816,31 +2424,14 @@ impl ModelPass {
             view_formats: &[],
         });
         let frame = frame_uniforms(view, width as f32 / height as f32);
-        let frame_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("model-frame"),
-            contents: as_bytes(&frame),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let frame_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model-frame"),
-            layout: &self.frame_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: frame_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(
-                        self.env_view(view.environment.preset),
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.env_sampler),
-                },
-            ],
-        });
+        let frame_bind = self.frame_bind_group(
+            ctx,
+            "model-frame",
+            &frame,
+            view.environment.preset,
+            None,
+            None,
+        );
         let output_view = output.create_view(&Default::default());
         let msaa_view = msaa.create_view(&Default::default());
         let depth_view = depth.create_view(&Default::default());
@@ -1908,6 +2499,65 @@ impl ModelPass {
 }
 
 impl ModelPass {
+    /// Group 0 for one frame: the uniform, the environment, and the
+    /// shadow map and mirror (their one-texel stand-ins when absent).
+    fn frame_bind_group(
+        &self,
+        ctx: &GpuContext,
+        label: &str,
+        frame: &FrameRaw,
+        preset: EnvPreset,
+        shadow: Option<&wgpu::TextureView>,
+        mirror: Option<&wgpu::TextureView>,
+    ) -> wgpu::BindGroup {
+        use wgpu::util::DeviceExt;
+        let frame_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: as_bytes(frame),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &self.frame_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(self.env_view(preset)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.env_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(
+                        shadow.unwrap_or(&self.dummy_shadow),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.shadow_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(
+                        mirror.unwrap_or(&self.dummy_mirror),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::Sampler(&self.mirror_sampler),
+                },
+            ],
+        })
+    }
+
     /// The bound environment for a preset; `None` binds the studio, which
     /// the shader ignores when `env_params.x` is 0.
     fn env_view(&self, preset: EnvPreset) -> &wgpu::TextureView {
@@ -2488,6 +3138,13 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
     let view_proj = mul(&proj, &view_m);
     let light = direction(view.light_yaw, view.light_pitch);
     FrameRaw {
+        light_view_proj: IDENTITY,
+        mirror_view_proj: IDENTITY,
+        floor: [0.0; 4],
+        floor2: [0.0; 4],
+        footprints: [[0.0; 4]; 8],
+        lifts: [[0.0; 4]; 8],
+        counts: [0.0; 4],
         view_proj,
         camera_pos: [eye[0], eye[1], eye[2], 1.0],
         light_dir: [
@@ -2953,6 +3610,141 @@ mod tests {
                 mean(&base)
             );
             last_peak = p;
+        }
+    }
+
+    /// A cube on a floor (rung 45): with `none` the floor region is
+    /// empty; `matte` darkens where the key light's shadow falls and
+    /// leaves the mirror empty; `mirror` shows the cube's image below it.
+    /// The cube itself still reads the same in all three.
+    #[test]
+    fn a_floor_catches_the_shadow_and_the_mirror() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.85, 0.3, 0.2, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.5,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload");
+        let view = ModelView {
+            yaw: 25.0,
+            pitch: 22.0,
+            distance: 4.0,
+            bounds_radius: 1.4,
+            // The key from behind the cube, so its shadow falls toward the
+            // camera where the floor is in view.
+            light_yaw: 205.0,
+            light_pitch: 45.0,
+            environment: EnvironmentView {
+                preset: EnvPreset::Studio,
+                intensity: 1.0,
+                rotation_deg: 0.0,
+            },
+            ..ModelView::default()
+        };
+        let side = 160u32;
+        let floor = |shadow: f32, reflection: f32, blur: f32| FloorView {
+            y: -0.5,
+            shadow,
+            softness: 4.0,
+            reflection,
+            blur,
+            footprints: vec![Footprint {
+                center_xz: [0.0, 0.0],
+                half_xz: [0.5, 0.5],
+                bottom: 0.0,
+                top: 1.0,
+            }],
+        };
+        let render = |floor: Option<&FloorView>| -> Vec<u8> {
+            let items = [StageItem::Model {
+                model: &model,
+                matrices: &[IDENTITY],
+            }];
+            let texture = pass
+                .render_scene_with_floor(&ctx, &items, &view, side, side, floor)
+                .expect("render");
+            read_texture(&ctx, &texture, side, side).expect("read")
+        };
+        let none = render(None);
+        let matte = render(Some(&floor(0.55, 0.0, 0.0)));
+        let mirror = render(Some(&floor(0.35, 0.9, 0.0)));
+        let at = |px: &[u8], world: [f32; 3]| -> [u8; 4] {
+            let q = project_point(&view, 1.0, world).expect("in front");
+            let x = ((q[0] * side as f32) as usize).min(side as usize - 1);
+            let y = ((q[1] * side as f32) as usize).min(side as usize - 1);
+            let i = (y * side as usize + x) * 4;
+            [px[i], px[i + 1], px[i + 2], px[i + 3]]
+        };
+        // Where the top's shadow lands on the floor along the light.
+        let l = direction(view.light_yaw, view.light_pitch);
+        let top = [0.0f32, 0.5, 0.0];
+        let t = (top[1] - -0.5) / l[1];
+        let shadow_spot = [top[0] - l[0] * t, -0.5, top[2] - l[2] * t];
+        // The floor point where the mirror of the cube's top shows: the
+        // same point the mirrored camera sees the real top through.
+        let mirrored = mirrored_view(&view, -0.5);
+        let (eye, _) = eye_and_center(&mirrored);
+        let s = (eye[1] - -0.5) / (eye[1] - top[1]);
+        let mirror_spot = [
+            eye[0] + (top[0] - eye[0]) * s,
+            -0.5,
+            eye[2] + (top[2] - eye[2]) * s,
+        ];
+        assert_eq!(
+            at(&none, shadow_spot)[3],
+            0,
+            "no floor, nothing under the cube"
+        );
+        assert_eq!(at(&none, mirror_spot)[3], 0);
+        let shadow_px = at(&matte, shadow_spot);
+        assert!(
+            shadow_px[3] > 40 && shadow_px[0] < 40 && shadow_px[2] < 40,
+            "matte darkens where the shadow falls: {shadow_px:?}"
+        );
+        // The shadow may fall across the mirror spot too, so what tells a
+        // matte floor from a mirror is COLOUR: darkening has none, the
+        // cube's image is red (BGRA: red is index 2).
+        let matte_px = at(&matte, mirror_spot);
+        assert!(
+            matte_px[0] < 30 && matte_px[2] < 30,
+            "matte shows no mirror, only darkening: {matte_px:?}"
+        );
+        let mirror_px = at(&mirror, mirror_spot);
+        assert!(
+            mirror_px[3] > 40 && mirror_px[2] > 40 && mirror_px[2] > mirror_px[0] + 20,
+            "the mirror shows the red cube's image: {mirror_px:?}"
+        );
+        // The cube's own top face reads the same with or without a floor.
+        let face = at(&none, [0.0, 0.5, 0.0]);
+        let face_floored = at(&mirror, [0.0, 0.5, 0.0]);
+        for k in 0..3 {
+            assert!(
+                (face[k] as i32 - face_floored[k] as i32).abs() < 24,
+                "the body is the body: {face:?} vs {face_floored:?}"
+            );
         }
     }
 

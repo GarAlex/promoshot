@@ -220,7 +220,10 @@ is for; the schema section says how to write it.
   named slot that takes a colour and a finish word.
 - **Stages** (`stage`) — several bodies under ONE camera and ONE light.
   Prefer the one-layer form: a layer of `"kind": "stage"` with `members`,
-  the camera and light on its own keyframes. The flat form (layers
+  the camera and light on its own keyframes. Give it a `floor` word —
+  `matte` for a shadow on the table, `glossy` or `mirror` for a polished
+  one — and the bodies stand on something; the project's background is
+  the table, and a keyed light swings the shadow. The flat form (layers
   sharing a stage name) is read forever and rewritten on open.
 - **Routes** (`route`) — the 3D twin of a motion path, for a member's
   move or the camera's flight, with `target` saying where the camera
