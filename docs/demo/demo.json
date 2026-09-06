@@ -7026,5 +7026,50 @@
    "thumb": "docs/demo/c8-scene/thumb.png"
   },
   "page": "docs/demo/democ8.md"
+ },
+ {
+  "id": "c9",
+  "slug": "c9-infinite-screens",
+  "title": "Infinite screens",
+  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them \u2014 every screen plays the next scene, each cut lands on the picture already on the screen.",
+  "kind": "showcase",
+  "canvas": [
+   1440,
+   900
+  ],
+  "duration": [
+   29,
+   36
+  ],
+  "prompt": "Make a piece of about thirty seconds on a 1440\u00d7900 canvas that flies\nforward through screens in one movement. A laptop from the shared\nlibrary stands on a floor under a slowly panning patterned background;\nits screen shows a tablet on another floor, whose screen shows a phone\non a third, whose screen shows the first frame of the cube piece. From\nthe first frame the camera flies toward the laptop's screen at one\nsteady rate \u2014 the body growing and straightening, the background growing\nand panning with it \u2014 until the picture on the screen is the canvas,\nand the piece cuts to that scene already flying at the same rate; then\nthe tablet's, then the phone's. Nothing pauses. The last cut lands on\nthe cube piece (34 Cube To Word), which then plays whole, as authored.",
+  "resources": [],
+  "result": {
+   "films": [
+    {
+     "film": "laptop-first",
+     "title": "Laptop first",
+     "blurb": "A laptop on a table whose screen shows a tablet, whose screen shows a phone, whose screen shows the cube piece; one continuous flight through all three, the backgrounds scrolling at every depth.",
+     "video": "docs/demo/c9-infinite-screens/laptop-first.mp4",
+     "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-laptop-first.mp4",
+     "video_hd_bytes": 7241310,
+     "contact": "docs/demo/c9-infinite-screens/laptop-first-sheet.png",
+     "metadata": "docs/demo/c9-infinite-screens/laptop-first-metadata.json",
+     "seconds": 32.3
+    },
+    {
+     "film": "phone-first",
+     "title": "Phone first",
+     "blurb": "The other way up \u2014 a phone, a tablet, a laptop, the cube \u2014 with a headline per scene, each screen playing a scene built to its own shape, and the laptop typing PROMOSHOT on its keyboard before the last flight.",
+     "video": "docs/demo/c9-infinite-screens/phone-first.mp4",
+     "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-phone-first.mp4",
+     "video_hd_bytes": 7583292,
+     "contact": "docs/demo/c9-infinite-screens/phone-first-sheet.png",
+     "metadata": "docs/demo/c9-infinite-screens/phone-first-metadata.json",
+     "seconds": 35.1
+    }
+   ],
+   "thumb": "docs/demo/c9-infinite-screens/thumb.png"
+  },
+  "page": "docs/demo/democ9.md"
  }
 ]

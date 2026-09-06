@@ -1,11 +1,17 @@
 """Publish the demos: `demo.md` at the repository root and `docs/demo/`
 (assets plus `demo.json` for the website), from each demo's latest scored
 run — the resources, the prompt as typed, and what the fresh agent made,
-beside the hand-built reference at the same moments.
+beside the hand-built reference at the same moments. A SHOWCASE demo
+(`showcase` in its rubric: films a build script wrote) is published from
+its build outputs instead, on its own page and in its own table.
 
-    python3 demos/publish.py
+    python3 demos/publish.py [--only <demo> ...]
+
+--only rebuilds the named demos' assets and pages and takes every other
+demo's entry from the existing docs/demo/demo.json, so one new piece
+does not re-encode forty videos.
 """
-import json, os, shutil, subprocess
+import json, os, shutil, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORE = os.path.dirname(HERE)
 ASSETS = os.path.join(CORE, 'docs', 'demo')
@@ -94,17 +100,151 @@ def thumb(video, out):
                     '-vf', 'scale=320:-2', out], check=False)
     return os.path.exists(out)
 
+def small_copy(src, dst):
+    """The video, small on purpose: 640 wide, a page's bitrate, so the
+    repository does not carry a screening copy."""
+    subprocess.run([FFMPEG, '-v', 'error', '-y', '-i', src, '-vf', 'scale=640:-2',
+                    '-c:v', 'libx264', '-crf', '30', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+                    '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', dst], check=False)
+    return os.path.exists(dst)
+
+def hd_copy(src, dst):
+    """The real one: 1280 wide, a viewing bitrate, kept off main
+    (docs/demo-media is git-ignored there) and published to the
+    demo-media branch by publish_media.sh."""
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    subprocess.run([FFMPEG, '-v', 'error', '-y', '-i', src, '-vf', 'scale=1280:-2',
+                    '-c:v', 'libx264', '-crf', '22', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+                    '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', dst], check=False)
+    return os.path.exists(dst)
+
+def index_row(name, template, blurb, result, creative):
+    """One row of demo.md's tables, from what the manifest keeps."""
+    if result:
+        st = result.get('run') or {}
+        tk = st.get('tokens', {})
+        total_in = tk.get('input', 0) + tk.get('cache_read', 0) + tk.get('cache_write', 0)
+        status = f"**{result['score']}%** · {st.get('turns', '?')} turns · {fmt_secs(st.get('wall_s', 0))} · ${st.get('cost_usd', 0):.2f} · {fmt_tokens(total_in)} in / {fmt_tokens(tk.get('output', 0))} out"
+        if st.get('mcp'):
+            status += f" · MCP {fmt_secs(round(st['mcp']['ms'] / 1000))} in {st['mcp']['calls']} calls"
+        if 'video_hd' in result:
+            status = f"[▶ watch]({result['video_hd']}) · " + status
+        pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
+    else:
+        status, pic = "not run yet", ""
+    return f"| {pic} | [{template}](docs/demo/demo{name[:2]}.md) | {blurb} | {status} |"
+
+def showcase_row(name, template, blurb, result):
+    films = " · ".join(f"[▶ {f['title'].lower()}]({f['video_hd']})" for f in result['films'] if 'video_hd' in f)
+    pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
+    return f"| {pic} | [{template}](docs/demo/demo{name[:2]}.md) | {blurb} | {films} |"
+
 BLURBS = json.load(open(os.path.join(HERE, 'blurbs.json'))) if os.path.exists(os.path.join(HERE, 'blurbs.json')) else {}
+
+def publish_showcase(name, demo, rubric, srows):
+    """A built showcase: each film's video (small on main, 1280 wide on
+    the demo-media branch), its contact sheet and the project the script
+    wrote, on one page; the rubric's checks listed as what the piece is
+    built to do, unscored."""
+    out = os.path.join(ASSETS, name)
+    shutil.rmtree(out, ignore_errors=True)
+    os.makedirs(out)
+    prompt = open(os.path.join(demo, 'prompt.md')).read().strip()
+    open(os.path.join(out, 'prompt.md'), 'w').write(prompt + "\n")
+    blurb = rubric.get('blurb') or prompt.split('.')[0].strip() + '.'
+    result = {"films": []}
+    for film in rubric['showcase']:
+        base = os.path.join(demo, 'runs', film['out'])
+        src = os.path.join(base, film['video'])
+        if not os.path.exists(src):
+            continue
+        slug = film['film']
+        entry = {"film": slug, "title": film['title'], "blurb": film.get('blurb', '')}
+        if small_copy(src, os.path.join(out, f"{slug}.mp4")):
+            entry['video'] = f"docs/demo/{name}/{slug}.mp4"
+        hd = os.path.join(MEDIA, f"{name}-{slug}.mp4")
+        if hd_copy(src, hd):
+            entry['video_hd'] = f"{MEDIA_URL}/{name}-{slug}.mp4"
+            entry['video_hd_bytes'] = os.path.getsize(hd)
+        sheet = os.path.join(base, 'sheet.png')
+        if os.path.exists(sheet):
+            shutil.copy2(sheet, os.path.join(out, f"{slug}-sheet.png"))
+            entry['contact'] = f"docs/demo/{name}/{slug}-sheet.png"
+        meta = os.path.join(base, film['project'], 'metadata.json')
+        if os.path.exists(meta):
+            shutil.copy2(meta, os.path.join(out, f"{slug}-metadata.json"))
+            entry['metadata'] = f"docs/demo/{name}/{slug}-metadata.json"
+            try:
+                entry['seconds'] = round(json.load(open(meta))['videoDuration'], 1)
+            except Exception:
+                pass
+        result['films'].append(entry)
+    if result['films'] and 'video' in result['films'][0]:
+        if thumb(os.path.join(CORE, result['films'][0]['video']), os.path.join(out, 'thumb.png')):
+            result['thumb'] = f"docs/demo/{name}/thumb.png"
+    rel = lambda path: path[len('docs/demo/'):] if path.startswith('docs/demo/') else '../../' + path
+    pg = [f"# {rubric['template']}", "", blurb, "",
+          f"*{rubric['canvas'][0]}×{rubric['canvas'][1]}, {rubric['duration'][0]} to {rubric['duration'][1]} s.* "
+          f"A **built showcase**, not an agent run: [`demos/{name}/build.py`](../../demos/{name}/build.py) writes the "
+          f"project straight from the format, and its resources are in [`demos/{name}/resources/`](../../demos/{name}/resources). "
+          "Part of [the demos](../../demo.md).", "",
+          "## The brief", "", "> " + prompt.replace("\n", "\n> "), ""]
+    for f in result['films']:
+        pg += [f"## {f['title']}", ""]
+        if f.get('blurb'):
+            pg += [f['blurb'], ""]
+        if 'contact' in f:
+            pg += [f'<img src="{rel(f["contact"])}" width="800" alt="moments of {f["title"].lower()}">', ""]
+        links = []
+        if 'video_hd' in f:
+            links.append(f"**[▶ Watch the video]({f['video_hd']})** (1280 wide, {f['video_hd_bytes'] / 1_000_000:.1f} MB"
+                         + (f", {f['seconds']:.0f} s" if 'seconds' in f else "") + ")")
+        if 'video' in f:
+            links.append(f"[small copy]({rel(f['video'])})")
+        if 'metadata' in f:
+            links.append(f"[the project]({rel(f['metadata'])})")
+        if links:
+            pg += [" · ".join(links), ""]
+    if rubric.get('checks'):
+        pg += ["## What the piece is built to do", ""]
+        for c in rubric['checks']:
+            pg.append(f"- **{c['name']}** — {c['assert']}")
+        pg.append("")
+    pg += ["---", "", "[← all demos](../../demo.md) · [how the suite works](../../demos/README.md)", ""]
+    open(os.path.join(ASSETS, f"demo{name[:2]}.md"), 'w').write("\n".join(pg))
+    srows.append(showcase_row(name, rubric['template'], blurb, result))
+    return {"id": name[:2], "slug": name, "title": rubric['template'][3:], "blurb": blurb, "kind": "showcase",
+            "canvas": rubric.get('canvas'), "duration": rubric['duration'], "prompt": prompt,
+            "resources": [], "result": result, "page": f"docs/demo/demo{name[:2]}.md"}
 
 def main():
     os.makedirs(ASSETS, exist_ok=True)
-    manifest, rows, crows, pages = [], [], [], []
+    only = set(sys.argv[sys.argv.index('--only') + 1:]) if '--only' in sys.argv else None
+    previous = {}
+    if only:
+        try:
+            previous = {m['slug']: m for m in json.load(open(os.path.join(ASSETS, 'demo.json')))}
+        except Exception:
+            previous = {}
+    manifest, rows, crows, srows, pages = [], [], [], [], []
     for name in sorted(os.listdir(HERE)):
         demo = os.path.join(HERE, name)
         creative = name[:1] == 'c' and name[1:2].isdigit()
         if not (os.path.isdir(demo) and (name[:2].isdigit() or creative) and os.path.exists(os.path.join(demo, 'rubric.json'))):
             continue
         rubric = json.load(open(os.path.join(demo, 'rubric.json')))
+        if only and name not in only and name in previous:
+            # Untouched: the entry, the page and the assets stand as published.
+            m = previous[name]; manifest.append(m)
+            template = f"{m['id'].upper()} {m['title']}"
+            if m.get('kind') == 'showcase':
+                srows.append(showcase_row(name, template, m['blurb'], m['result']))
+            else:
+                (crows if creative else rows).append(index_row(name, template, m['blurb'], m['result'], creative))
+            continue
+        if rubric.get('showcase'):
+            manifest.append(publish_showcase(name, demo, rubric, srows))
+            continue
         prompt = open(os.path.join(demo, 'prompt.md')).read().strip()
         user_prompt = prompt.split('\nUse the PromoShot skill')[0].strip()
         out = os.path.join(ASSETS, name)
@@ -154,21 +294,10 @@ def main():
             # the repository does not carry a screening copy.
             src = os.path.join(run, 'agent.mp4')
             if os.path.exists(src):
-                dst = os.path.join(out, 'result.mp4')
-                subprocess.run([FFMPEG, '-v', 'error', '-y', '-i', src, '-vf', 'scale=640:-2',
-                                '-c:v', 'libx264', '-crf', '30', '-preset', 'slow', '-pix_fmt', 'yuv420p',
-                                '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', dst], check=False)
-                if os.path.exists(dst):
+                if small_copy(src, os.path.join(out, 'result.mp4')):
                     result['video'] = f"docs/demo/{name}/result.mp4"
-                # The real one: 1280 wide, a viewing bitrate, kept off main
-                # (docs/demo-media is git-ignored there) and published to the
-                # demo-media branch by publish_media.sh.
-                os.makedirs(MEDIA, exist_ok=True)
                 hd = os.path.join(MEDIA, f"{name}.mp4")
-                subprocess.run([FFMPEG, '-v', 'error', '-y', '-i', src, '-vf', 'scale=1280:-2',
-                                '-c:v', 'libx264', '-crf', '22', '-preset', 'slow', '-pix_fmt', 'yuv420p',
-                                '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', hd], check=False)
-                if os.path.exists(hd):
+                if hd_copy(src, hd):
                     result['video_hd'] = f"{MEDIA_URL}/{name}.mp4"
                     result['video_hd_bytes'] = os.path.getsize(hd)
             project = os.path.join(run, 'ws', 'out.promo')
@@ -265,20 +394,7 @@ def main():
         open(os.path.join(ASSETS, f"demo{name[:2]}.md"), 'w').write("\n".join(pg))
 
         # --- the index row ---
-        if result:
-            st = result.get('run') or {}
-            tk = st.get('tokens', {})
-            total_in = tk.get('input', 0) + tk.get('cache_read', 0) + tk.get('cache_write', 0)
-            status = f"**{result['score']}%** · {st.get('turns', '?')} turns · {fmt_secs(st.get('wall_s', 0))} · ${st.get('cost_usd', 0):.2f} · {fmt_tokens(total_in)} in / {fmt_tokens(tk.get('output', 0))} out"
-            if st.get('mcp'):
-                status += f" · MCP {fmt_secs(round(st['mcp']['ms'] / 1000))} in {st['mcp']['calls']} calls"
-            if 'video_hd' in result:
-                status = f"[▶ watch]({result['video_hd']}) · " + status
-            pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
-        else:
-            status, pic = "not run yet", ""
-        page_id = name[:2] if not creative else name[:2]
-        (crows if creative else rows).append(f"| {pic} | [{rubric['template']}](docs/demo/demo{page_id}.md) | {blurb} | {status} |")
+        (crows if creative else rows).append(index_row(name, rubric['template'], blurb, result, creative))
 
     head = """# Demos — prompt in, video out
 
@@ -324,7 +440,21 @@ notes on its page are the answer.
 | | run | the brief | result · the agent's work |
 |---|---|---|---|
 """
-    open(os.path.join(CORE, 'demo.md'), 'w').write(head + "\n".join(rows) + "\n" + creative_head + "\n".join(crows) + "\n")
+    showcase_head = """
+
+## Showcases — built from the format, by hand
+
+Not agent runs. A script in the demo's folder writes the project straight
+from the format, to show what it can carry; the page links each film and
+the project it built.
+
+| | piece | what it shows | films |
+|---|---|---|---|
+"""
+    index = head + "\n".join(rows) + "\n" + creative_head + "\n".join(crows) + "\n"
+    if srows:
+        index += showcase_head + "\n".join(srows) + "\n"
+    open(os.path.join(CORE, 'demo.md'), 'w').write(index)
     json.dump(manifest, open(os.path.join(ASSETS, 'demo.json'), 'w'), indent=1)
     done = sum(1 for m in manifest if m['result'])
     print(f"demo.md: {len(manifest)} demos, {done} with results; pages and assets in docs/demo")

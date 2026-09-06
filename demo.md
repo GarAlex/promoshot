@@ -83,3 +83,14 @@ notes on its page are the answer.
 | <a href="docs/demo/democ6.md"><img src="docs/demo/c6-title-card/thumb.png" width="160"></a> | [C6 Title card](docs/demo/democ6.md) | One line and no media: does a fresh agent reach for solid, dimensional, moving type on its own? | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c6-title-card.mp4) · **100%** · 59 turns · 11 min 31 s · $3.32 · 3.0M in / 35k out · MCP 2 min 39 s in 13 calls |
 | <a href="docs/demo/democ7.md"><img src="docs/demo/c7-product-spin/thumb.png" width="160"></a> | [C7 Product spin](docs/demo/democ7.md) | A tablet model and three screenshots, no instructions: does a fresh agent look at the model, put the app on its screen and move the camera like a product film? | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c7-product-spin.mp4) · **100%** · 72 turns · 10 min 34 s · $4.41 · 4.3M in / 47k out · MCP 7 s in 18 calls |
 | <a href="docs/demo/democ8.md"><img src="docs/demo/c8-scene/thumb.png" width="160"></a> | [C8 A scene, not a shot](docs/demo/democ8.md) | Two device bodies, three screenshots, one sentence asking for a scene: does a fresh agent build a stage with both devices, the app on each screen and a camera move through it? | [▶ watch](https://github.com/garalex/promoshot/raw/demo-media/c8-scene.mp4) · **88%** · 114 turns · 17 min 23 s · $9.43 · 12.6M in / 68k out · MCP 8 s in 26 calls |
+
+
+## Showcases — built from the format, by hand
+
+Not agent runs. A script in the demo's folder writes the project straight
+from the format, to show what it can carry; the page links each film and
+the project it built.
+
+| | piece | what it shows | films |
+|---|---|---|---|
+| <a href="docs/demo/democ9.md"><img src="docs/demo/c9-infinite-screens/thumb.png" width="160"></a> | [C9 Infinite screens](docs/demo/democ9.md) | A built showcase, not an agent run: a script writes four compositions from the format and flies through them — every screen plays the next scene, each cut lands on the picture already on the screen. | [▶ laptop first](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-laptop-first.mp4) · [▶ phone first](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-phone-first.mp4) |

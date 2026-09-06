@@ -24,7 +24,7 @@ demos/
   import_templates.py, prompts.json, task.md   the importer from a template library
 ```
 
-## Two kinds of demo
+## Two kinds of demo, and a showcase
 
 `NN-slug/` is a **conformance** run: the prompt names the technique, and
 the rubric — derived from a hand-built reference — asks whether the
@@ -34,6 +34,13 @@ is only the floor — valid, rendered, the asked length, the given
 material used, a few features reached for, words on screen — and the
 page shows the piece beside the agent's own notes, which is the answer.
 
+A **showcase** is not an agent run: a `build.py` in the folder writes the
+project straight from the format, and the rubric carries `showcase`, a
+list of films (`film`, `title`, `blurb`, the `out` folder under `runs/`,
+the `video` and the `project` in it) and `retired`, so `run_all.sh`
+skips it. `publish.py` puts it in a table of its own, unscored, with the
+rubric's checks listed as what the piece is built to do.
+
 ## Running
 
 ```
@@ -41,6 +48,7 @@ cargo build --release -p promoshot-mcp -p promo-cli
 demos/run.sh demos/23-soft-focus            # one; add a model name to override
 demos/run_all.sh --skip-done                # the set, skipping demos already scored
 python3 demos/publish.py                    # demo.md, docs/demo/, docs/demo-media/
+python3 demos/publish.py --only c9-infinite-screens   # one demo's assets; the rest as published
 demos/publish_media.sh                      # the videos, to the demo-media branch
 ```
 
