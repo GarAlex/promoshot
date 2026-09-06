@@ -96,7 +96,12 @@ def layer(name, sort, kind, start, dur, **f):
     d = {"id": U(), "name": name, "sortIndex": sort, "kind": kind, "isEnabled": True,
          "startTime": start, "duration": dur, "keyframes": []}; d.update(f); return d
 
-FINISH = {'laptop': ("2B2B2E", 1, 0.40), 'tablet': ("D8DADC", 1, 0.35), 'phone': ("9B978F", 1, 0.45)}
+# What each body IS, by word (rung 44): anodized metal in the device's
+# colour; every screen wears glass over the scene it plays, and the
+# stage each body stands on has a glossy floor (rung 45) that mirrors
+# it and takes its shadow from the key light.
+FINISH = {'laptop': "2B2B2E", 'tablet': "D8DADC", 'phone': "9B978F"}
+BODY_FINISH, SCREEN_FINISH, FLOOR = "anodized", "glass", "glossy"
 DEVICES = [('laptop', 'DeviceLaptop.glb', 1.095, dict(yaw=-30, pitch=16), 520, 40, 'bg_laptop.png'),
            ('tablet', 'DeviceTablet.glb', 0.864, dict(yaw=-26, pitch=12), 480, 30, 'bg_tablet.png'),
            ('phone',  'DevicePhone.glb',  0.395, dict(yaw=-24, pitch=10), 700, 20, 'bg_phone.png')]
@@ -154,14 +159,13 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
     # background keeps panning).
     prologue = typing_prologue(typing) if typing else 0.0
     rest = rest + prologue
-    hexv, met, rough = FINISH[name]
+    hexv = FINISH[name]
     layers = []
     bgres = res("image", bg, f"Background {name}", pixelWidth=4096, pixelHeight=2700)
-    screen = {"resourceID": next_comp["id"]}
+    screen = {"resourceID": next_comp["id"], "finish": SCREEN_FINISH}
+    paint = {"colorHex": hexv, "finish": BODY_FINISH}
     body = res("model", glb, name.capitalize(), boundsRadius=radius, clips=[],
-               materials={"Screen": screen,
-                          "Body": {"colorHex": hexv, "metallic": met, "roughness": rough},
-                          "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough}})
+               materials={"Screen": screen, "Body": dict(paint), "Deck": dict(paint)})
     resources = [bgres, body]
     # The lit bodies: the same laptop with one letter's key in the
     # highlight colour, one resource per letter, each on its own short
@@ -170,10 +174,8 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
     if typing:
         for L in sorted(set(typing['word'])):
             lit[L] = res("model", glb, f"{name.capitalize()} {L} lit", boundsRadius=radius, clips=[],
-                         materials={"Screen": screen,
-                                    "Body": {"colorHex": hexv, "metallic": met, "roughness": rough},
-                                    "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough},
-                                    f"Key {L}": {"colorHex": typing['color'], "metallic": 0, "roughness": 0.35}})
+                         materials={"Screen": screen, "Body": dict(paint), "Deck": dict(paint),
+                                    f"Key {L}": {"colorHex": typing['color'], "finish": "gloss"}})
             resources.append(lit[L])
     steps = exp_steps(rest, rest + dur, grow)
     # The background SCROLLS, plainly: a placement far wider than the canvas
@@ -200,16 +202,13 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
                       placement={"width": 1700 * g, "anchor": "bottom", "offset": [0, (g - 1) * 260 - below]})
                    for j, (t, g) in enumerate(steps)]
     layers.append(layer(f"Floor {name}", 1 + up, "image", 0, total, resourceID=floor["id"], keyframes=floor_keys))
-    sh_y = off0 + h0 / 2 - 16
-    shadow_keys = [kf(0, placement={"height": 120, "anchor": "center", "offset": [0, sh_y + band_dy]}, opacity=0.9)]
-    shadow_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
-                       placement={"height": 120 * g, "anchor": "center", "offset": [0, sh_y * g + band_dy]},
-                       opacity=max(0.0, 0.9 - 1.6 * ((t - rest) / dur)))
-                    for j, (t, g) in enumerate(steps)]
-    layers.append(layer(f"Shadow {name}", 2 + up, "image", 0, total, resourceID=shadow["id"], keyframes=shadow_keys))
-    light = dict(yaw=15, pitch=50, intensity=1.0)
+    # The key light: from the front-right at rest, swinging left and lower
+    # through the flight, so the highlight crosses the screen's glass and
+    # the shadow on the floor turns with it — only the light moves.
+    def light(f=0.0):
+        return dict(yaw=15 - 50 * f, pitch=50 - 12 * f, intensity=1.05)
     cam0 = dict(yaw=start_pose['yaw'], pitch=start_pose['pitch'], roll=0, distance=4.2, fov=30)
-    at_rest = dict(placement={"height": h0, "anchor": "center", "offset": [0, off0 + band_dy]}, camera=cam0, light=light)
+    at_rest = dict(placement={"height": h0, "anchor": "center", "offset": [0, off0 + band_dy]}, camera=cam0, light=light())
     body_keys = [kf(0, **at_rest)]
     if typing:
         # In to the keyboard (eased), hold while the word is typed, back
@@ -219,7 +218,7 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
         start = rest - prologue
         close = dict(placement=dict(keyboard_placement(band_dy=band_dy), anchor="center"),
                      camera=dict(yaw=KEYBOARD['pose']['yaw'], pitch=KEYBOARD['pose']['pitch'], roll=0, distance=4.2, fov=30),
-                     light=light)
+                     light=light())
         body_keys.append(kf(start + move, ramp=move, easing="easeInOut", **close))
         typed = start + move + (len(word) + 1) * beat
         body_keys.append(kf(typed + move, ramp=move, easing="easeInOut", **at_rest))
@@ -234,8 +233,16 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
         body_keys.append(kf(t, ramp=(t - (steps[j-1][0] if j else (rest - typing['pause'] if typing else 0))), easing="linear",
                             placement={"height": h0 * g, "anchor": "center",
                                        "offset": [end['offset'][0] * f, off0 * g * (1 - f) + end['offset'][1] * f + band_dy]},
-                            camera=cam, light=light))
-    layers.append(layer(name.capitalize(), 3 + up, "model", 0, total, resourceID=body["id"], keyframes=body_keys))
+                            camera=cam, light=light(f)))
+    # The body stands in a STAGE of its own (rung 33) on a glossy floor
+    # (rung 45): the placement, camera and light ride the stage's
+    # keyframes; the member stays at the stage's centre. The floor
+    # mirrors the body and takes the key light's shadow, and the layers
+    # beneath — the table's picture — show through it.
+    member = layer(name.capitalize(), 0, "model", 0, total, resourceID=body["id"],
+                   keyframes=[kf(0, depth=0, stageOffset=[0, 0])])
+    layers.append(layer(f"{name.capitalize()} on the table", 3 + up, "stage", 0, total, floor=FLOOR,
+                        members=[member], keyframes=body_keys))
     comp = res("composition", "", f"Scene {name}", duration=total, pixelWidth=W, pixelHeight=ch,
                composition={"canvasWidth": W, "canvasHeight": ch, "backgroundColorHex": "0B0D12", "layers": layers})
     return comp, resources, dur
@@ -283,10 +290,12 @@ def build(film):
                + (round(d[4] * distance),) + d[5:] for d in (DEVICE[n] for n in order)]
     prologues = [typing_prologue(typing) if typing and n == typing['scene'] else 0.0 for n in order]
     cube = json.load(open(CUBE_REF))
-    settings = dict(cube['compositionSettings']); settings.update({"canvasWidth": W, "canvasHeight": H})
+    settings = dict(cube['compositionSettings'])
+    settings.update({"canvasWidth": W, "canvasHeight": H,
+                     "environment": {"preset": "studio", "intensity": 1.1}})
     resources = list(cube['resources'])
     floor = res("image", "floor.png", "Floor", pixelWidth=4096, pixelHeight=900); resources.append(floor)
-    shadow = res("image", "shadow.png", "Shadow", pixelWidth=1600, pixelHeight=500); resources.append(shadow)
+    shadow = None   # the floor's own shadow and contact (rung 45) replaced the painted blob
     table = None
     if film.get('screen_shaped'):
         table = res("image", "table.png", "Table front", pixelWidth=4096, pixelHeight=64); resources.append(table)
@@ -340,7 +349,7 @@ def build(film):
                             fadeIn=0.35, fadeOut=0.35, captionStyle=dict(CAPTION_STYLE)))
     return {"id": U(), "name": film['name'], "createdAt": 0, "state": "recorded",
             "trimStart": 0, "trimEnd": total, "videoDuration": total, "subtitles": [],
-            "minReaderVersion": 43, "compositionSettings": settings, "resources": resources, "layers": layers,
+            "minReaderVersion": 45, "compositionSettings": settings, "resources": resources, "layers": layers,
             "_scenes": list(zip(order, starts, durs))}
 
 def materialize(meta, pkg):
