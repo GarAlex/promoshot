@@ -199,9 +199,12 @@ is for; the schema section says how to write it.
 - **Models** (`model`) — a `.glb` in `Resources/`, or a recipe with no
   file at all, shown by a layer of `"kind": "model"`. Camera and light
   are keyframed and ramp: a yaw from −60 to 20 over three seconds is a
-  turntable. `materials` paints a slot by the name the file exports; a
-  picture bound to a slot is a SCREEN unless `"mode": "surface"` wears
-  it as the slot's own colour under the light. Say what a surface IS
+  turntable. `materials` paints a slot by the name the file exports, and
+  ANY slot can show a picture — an image, a video, or a whole
+  COMPOSITION playing in place on the layer's clock — as a screen, or
+  wear it as the slot's own colour under the light with `"mode":
+  "surface"`. A surface is whatever document you bind to it: a device's
+  screen, a cube's face, a label on a vase. Say what a surface IS
   with a `finish` word — `chrome`, `brushed`, `anodized`, `gloss`,
   `satin`, `matte`, `rubber`, `ceramic`, `lacquer`, `paper`, `glass`,
   `frosted` — and the engine owns the physics; `glass` on a `Screen`
@@ -210,7 +213,10 @@ is for; the schema section says how to write it.
 - **Devices** (`model`) — no file and no tool: a model resource whose
   recipe is `{ "device": { "kind": "phone" } }` (tablet, laptop) is
   built at load with `Body` and `Screen` slots, and a `Deck` on the
-  laptop. The screenshot goes on `Screen`, the accent on `Body`.
+  laptop. The picture goes on `Screen` — an image, a video or a
+  composition — and the accent on `Body`. Build a screen's picture to
+  its shape: the phone's is tall (about 9:19.5), the tablet's 4:3, the
+  laptop's 3:2.
 - **Text as a body** (`recipe`) — real type standing in the scene, lit
   and turning. Reach for it when a title must catch the light or show a
   side; a flat title is a caption.
@@ -265,8 +271,19 @@ is for; the schema section says how to write it.
   mp4's chapter list.
 - **A look from a `.cube`** (`lut`) — a LUT resource, applied per layer
   with an amount.
-- **Compositions** (`composition`) — build a card once and place it
-  three times; editing it changes all three.
+- **Compositions** (`composition`) — a whole document inside the
+  project: a resource of `"kind": "composition"` with its own canvas
+  and `layers`. Place it by a layer like any picture — build a card
+  once and place it three times; editing it changes all three — or
+  bind it to any surface's slot, where it plays in place on the
+  layer's clock: a reel on a screen, an app flow, a film on a wall, the
+  next scene of the piece on a device. A flight INTO a screen is that
+  binding and a cut: grow the body until the screen's picture fills the
+  canvas, then cut to the composition placed whole (`"placement": {
+  "mode": "fill" }`) and running since the same frame the screen began
+  showing it, so the cut lands on the picture already there. Bring the
+  key light away from the screen before the cut: the screen's glass
+  goes with it.
 - **Follow the pointer** (`pointer`) — a Mac recording carries the
   cursor track, and `follow` on the layer keeps the viewport on it.
 
