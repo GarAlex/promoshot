@@ -147,6 +147,43 @@ impl Default for ModelView {
     }
 }
 
+/// Which position axis a surface's u runs along, and which its v: the
+/// axis whose coordinate moves most with u (and with v), by covariance
+/// over the surface's vertices. None when there are no uvs to ask, or the
+/// uvs do not follow any axis.
+fn uv_axes(samples: &[([f32; 3], [f32; 2])]) -> Option<(usize, usize)> {
+    if samples.len() < 3 {
+        return None;
+    }
+    let n = samples.len() as f32;
+    let mut mean_p = [0.0f32; 3];
+    let mut mean_uv = [0.0f32; 2];
+    for (p, uv) in samples {
+        for k in 0..3 {
+            mean_p[k] += p[k] / n;
+        }
+        mean_uv[0] += uv[0] / n;
+        mean_uv[1] += uv[1] / n;
+    }
+    let mut cov = [[0.0f32; 3]; 2];
+    for (p, uv) in samples {
+        for (t, c) in cov.iter_mut().enumerate() {
+            for k in 0..3 {
+                c[k] += (p[k] - mean_p[k]) * (uv[t] - mean_uv[t]);
+            }
+        }
+    }
+    let pick = |c: &[f32; 3]| -> Option<usize> {
+        let (best, value) = c
+            .iter()
+            .enumerate()
+            .map(|(k, v)| (k, v.abs()))
+            .fold((0, 0.0f32), |a, b| if b.1 > a.1 { b } else { a });
+        (value > 1e-9).then_some(best)
+    };
+    Some((pick(&cov[0])?, pick(&cov[1])?))
+}
+
 /// Where the camera stands and what it looks at: the orbit the view
 /// describes unless a flown eye or a gaze replaces them.
 fn eye_and_center(view: &ModelView) -> ([f32; 3], [f32; 3]) {
@@ -516,6 +553,14 @@ pub struct GpuModel {
     materials: Vec<GpuMaterial>,
 }
 
+impl GpuModel {
+    /// The aspect a slot's picture is fitted against — width over height
+    /// of the surface its uvs span.
+    pub fn slot_aspect(&self, index: usize) -> Option<f32> {
+        self.materials.get(index).map(|m| m.aspect)
+    }
+}
+
 /// The pass itself: one pipeline, shared across every model layer.
 pub struct ModelPass {
     pipeline: wgpu::RenderPipeline,
@@ -805,15 +850,22 @@ impl ModelPass {
     ) -> Result<GpuModel, GpuError> {
         use wgpu::util::DeviceExt;
         let device = &ctx.device;
-        // Each slot's surface aspect: the two largest extents of the
-        // vertices its primitives index. A flat screen gives width over
-        // height; a box gives its two longest sides, which is as good as a
-        // wrapped picture can be placed.
+        // Each slot's surface aspect: width over height of the surface its
+        // uvs span. The uvs say which way is which — u runs across the
+        // width, v down the height — so the extent along the axis u
+        // follows is the width and along the axis v follows the height,
+        // whatever plane the mesh lies in and however its node stands it
+        // up. "The two longest extents" was the rule before, and a plate
+        // lying in XZ with a rotation standing it up gave a phone's LONG
+        // side as its width: every portrait screen fitted its picture
+        // squeezed. A mesh without uvs keeps that rule, which is as good
+        // as a wrapped picture on a box can be placed.
         let mut aspects = vec![1.0f32; materials.len()];
         for (index, aspect) in aspects.iter_mut().enumerate() {
             let mut min = [f32::MAX; 3];
             let mut max = [f32::MIN; 3];
             let mut any = false;
+            let mut samples: Vec<([f32; 3], [f32; 2])> = Vec::new();
             for mesh in meshes.iter().filter(|m| m.material == index) {
                 for &i in mesh.indices {
                     if let Some(p) = mesh.positions.get(i as usize) {
@@ -822,23 +874,30 @@ impl ModelPass {
                             min[k] = min[k].min(p[k]);
                             max[k] = max[k].max(p[k]);
                         }
+                        if let Some(uv) = mesh.uvs.get(i as usize) {
+                            samples.push((*p, *uv));
+                        }
                     }
                 }
             }
-            if any {
-                let mut extents = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
-                // Width is the horizontal extent, height the vertical one,
-                // when the surface faces the viewer; otherwise the longest
-                // two axes in that order.
-                let (w, h) = if extents[2] <= extents[0].min(extents[1]) {
-                    (extents[0], extents[1])
-                } else {
-                    extents.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-                    (extents[0], extents[1])
-                };
-                if w > 1e-6 && h > 1e-6 {
-                    *aspect = w / h;
+            if !any {
+                continue;
+            }
+            let extents = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+            let (w, h) = match uv_axes(&samples) {
+                Some((across, down)) if across != down => (extents[across], extents[down]),
+                _ => {
+                    let mut sorted = extents;
+                    sorted.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+                    if extents[2] <= extents[0].min(extents[1]) {
+                        (extents[0], extents[1])
+                    } else {
+                        (sorted[0], sorted[1])
+                    }
                 }
+            };
+            if w > 1e-6 && h > 1e-6 {
+                *aspect = w / h;
             }
         }
         let mut gpu_materials = Vec::with_capacity(materials.len());

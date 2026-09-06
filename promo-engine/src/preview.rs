@@ -4148,7 +4148,20 @@ impl PreviewEngine {
 
         let canvas_h = settings.canvas_height.max(1.0);
         let scale = if tier > 0 { 0.5 } else { 1.0 };
-        let side = ((canvas_h * scale).round() as u32).clamp(8, 2048);
+        // The square is the canvas's height by default — a model at zoom 1.
+        // A placement that draws the model TALLER than the canvas (a zoom
+        // into a device's screen) would scale that square up and go soft
+        // exactly where the picture matters most; so the square follows
+        // the placed height, with room for the body being a share of the
+        // sphere the square holds, capped where a texture would be refused.
+        let placed = tl::interpolation::layer_interpolated_scalar(
+            layer,
+            tl::layer_local_time(layer, time),
+            |k| k.placement.as_ref().and_then(|p| p.height),
+        )
+        .unwrap_or(0.0);
+        let wanted = canvas_h.max(placed / 0.6) * scale;
+        let side = (wanted.round() as u32).clamp(8, if placed > canvas_h { 4096 } else { 2048 });
 
         // The camera and the light, each field on the keyframe clock with
         // the model's own defaults where nothing is keyed.
@@ -5568,6 +5581,88 @@ mod tests {
         assert!(
             engine.stats().misses >= 2,
             "two different pictures were drawn"
+        );
+    }
+
+    /// A standing screen keeps its own proportions: the slot's aspect is
+    /// width over height of the surface its uvs span, whatever plane the
+    /// mesh lies in. The two-longest-extents rule read a phone's long side
+    /// as its width, and every portrait screen fitted its picture squeezed
+    /// — the wizard's iPhone and iPad reels included.
+    #[test]
+    fn a_standing_screen_keeps_its_own_proportions() {
+        let (mut engine, _state) = make_engine(model_fixture(0.0), vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let phone = engine.models.values().next().expect("the phone is loaded");
+        let screen = phone
+            .model
+            .materials
+            .iter()
+            .position(|m| m.name == "Screen")
+            .expect("a phone has a Screen");
+        let aspect = phone
+            .gpu
+            .slot_aspect(screen)
+            .expect("the slot has an aspect");
+        assert!(
+            aspect < 0.6,
+            "a phone's screen is taller than it is wide: {aspect}"
+        );
+
+        let (mut engine, _state) = make_engine(reel_fixture(), vec![], 64 << 20);
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let laptop = engine
+            .models
+            .values()
+            .find(|m| m.model.materials.iter().any(|m| m.name == "Deck"))
+            .expect("the laptop is loaded");
+        let screen = laptop
+            .model
+            .materials
+            .iter()
+            .position(|m| m.name == "Screen")
+            .unwrap();
+        let aspect = laptop.gpu.slot_aspect(screen).unwrap();
+        assert!(
+            (1.3..1.8).contains(&aspect),
+            "a laptop's screen is wider than tall: {aspect}"
+        );
+    }
+
+    /// A model placed taller than the canvas is rendered at that size: the
+    /// square it is drawn on follows the placed height rather than the
+    /// canvas's, so a zoom into a device's screen stays sharp to the cut
+    /// instead of scaling a canvas-height picture up.
+    #[test]
+    fn a_model_placed_taller_than_the_canvas_is_drawn_at_that_size() {
+        let mut meta = model_fixture(0.0);
+        if let Some(layers) = meta.layers.as_mut() {
+            layers[1].keyframes[0].placement = Some(promo_model::Placement {
+                height: Some(300.0),
+                width: None,
+                mode: None,
+                anchor: None,
+                offset: None,
+            });
+        }
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let (_, entry) = engine
+            .id_of
+            .iter()
+            .find(|(_, (key, _, _))| key.starts_with("model"))
+            .map(|(entry, key)| (key.clone(), *entry))
+            .expect("the body's picture is cached");
+        let frame = &engine.cache[&entry].frame;
+        // The phone stands ~0.6 of its sphere; placed 300 px tall on a 96
+        // canvas its picture must carry the pixels the placement asks for,
+        // not the canvas's 96 scaled up three times.
+        assert!(
+            frame.height > 200,
+            "drawn at the placed size: {} px",
+            frame.height
         );
     }
 
