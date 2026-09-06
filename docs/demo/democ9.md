@@ -1,6 +1,6 @@
 # C9 Infinite screens
 
-A built showcase, not an agent run: a script writes four compositions from the format and flies through them — every screen plays the next scene, each cut lands on the picture already on the screen.
+A built showcase, not an agent run: a script writes four compositions from the format and flies through them — every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight.
 
 *1440×900, 29 to 36 s.* A **built showcase**, not an agent run: [`demos/c9-infinite-screens/build.py`](../../demos/c9-infinite-screens/build.py) writes the project straight from the format, and its resources are in [`demos/c9-infinite-screens/resources/`](../../demos/c9-infinite-screens/resources). Part of [the demos](../../demo.md).
 
@@ -20,19 +20,19 @@ A built showcase, not an agent run: a script writes four compositions from the f
 
 ## Laptop first
 
-A laptop on a table whose screen shows a tablet, whose screen shows a phone, whose screen shows the cube piece; one continuous flight through all three, the backgrounds scrolling at every depth.
+A laptop on a table whose screen shows a tablet, whose screen shows a phone, whose screen shows the cube piece; one continuous flight through all three, the backgrounds scrolling at every depth, every body on a glossy floor that mirrors it.
 
 <img src="c9-infinite-screens/laptop-first-sheet.png" width="800" alt="moments of laptop first">
 
-**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-laptop-first.mp4)** (1280 wide, 7.2 MB, 32 s) · [small copy](c9-infinite-screens/laptop-first.mp4) · [the project](c9-infinite-screens/laptop-first-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-laptop-first.mp4)** (1280 wide, 7.3 MB, 32 s) · [small copy](c9-infinite-screens/laptop-first.mp4) · [the project](c9-infinite-screens/laptop-first-metadata.json)
 
 ## Phone first
 
-The other way up — a phone, a tablet, a laptop, the cube — with a headline per scene, each screen playing a scene built to its own shape, and the laptop typing PROMOSHOT on its keyboard before the last flight.
+The other way up — a phone, a tablet, a laptop, the cube — with a headline per scene, each screen playing a scene built to its own shape, glass over every screen, the laptop typing PROMOSHOT on its keyboard before the last flight.
 
 <img src="c9-infinite-screens/phone-first-sheet.png" width="800" alt="moments of phone first">
 
-**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-phone-first.mp4)** (1280 wide, 7.6 MB, 35 s) · [small copy](c9-infinite-screens/phone-first.mp4) · [the project](c9-infinite-screens/phone-first-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-phone-first.mp4)** (1280 wide, 7.9 MB, 35 s) · [small copy](c9-infinite-screens/phone-first.mp4) · [the project](c9-infinite-screens/phone-first-metadata.json)
 
 ## What the piece is built to do
 
