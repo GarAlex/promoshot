@@ -1,5 +1,5 @@
 {
- "id": "A76D055C-E669-4722-A02A-B752537B4DAF",
+ "id": "64A877A1-D091-4E5A-A47F-AEF51FC74FFB",
  "name": "Infinite screens",
  "createdAt": 0,
  "state": "recorded",
@@ -255,7 +255,7 @@
    }
   },
   {
-   "id": "BE40C43D-28DF-429C-9B92-BD4C1A712C22",
+   "id": "A79E91EF-D56B-4DA6-B5DE-494007260049",
    "kind": "image",
    "filename": "floor.png",
    "displayName": "Floor",
@@ -266,7 +266,7 @@
    "pixelHeight": 900
   },
   {
-   "id": "72108FF4-1DF5-4FDE-9CC0-F9EB3D395F11",
+   "id": "6A462A57-CE71-416F-8825-2B352EA577EB",
    "kind": "image",
    "filename": "shadow.png",
    "displayName": "Shadow",
@@ -277,7 +277,7 @@
    "pixelHeight": 500
   },
   {
-   "id": "9067B59B-5C3C-4B15-BA34-5E238CEEEA86",
+   "id": "2D340677-023B-4DE7-BFC0-DC1614F46266",
    "kind": "image",
    "filename": "bg_phone.png",
    "displayName": "Background phone",
@@ -288,7 +288,7 @@
    "pixelHeight": 2700
   },
   {
-   "id": "0741A434-6787-4FF6-8671-39BD1D899C97",
+   "id": "01A2EE2B-AE67-48F9-8C86-74CC51876DC2",
    "kind": "model",
    "filename": "DevicePhone.glb",
    "displayName": "Phone",
@@ -299,7 +299,7 @@
    "clips": [],
    "materials": {
     "Screen": {
-     "resourceID": "C1C00824-B492-422E-9E38-C2FFC7740FF8"
+     "resourceID": "53F9A637-9F7C-470F-B2FC-D0D82F8AFB92"
     },
     "Body": {
      "colorHex": "9B978F",
@@ -314,7 +314,7 @@
    }
   },
   {
-   "id": "807642C9-BE29-471D-B707-78C36E60B997",
+   "id": "BD132B63-AF01-4C33-8F64-F3F329EB3474",
    "kind": "image",
    "filename": "bg_tablet.png",
    "displayName": "Background tablet",
@@ -325,7 +325,7 @@
    "pixelHeight": 2700
   },
   {
-   "id": "8C0BC914-B570-4607-A74E-B02A4AA11685",
+   "id": "8CA9D892-4620-4567-A5B1-5C0FA761168C",
    "kind": "model",
    "filename": "DeviceTablet.glb",
    "displayName": "Tablet",
@@ -336,7 +336,7 @@
    "clips": [],
    "materials": {
     "Screen": {
-     "resourceID": "839D8C00-689B-4A9B-8B1A-588AA93A9EB3"
+     "resourceID": "A0B82221-2421-4C44-AE20-2AADFBA45755"
     },
     "Body": {
      "colorHex": "D8DADC",
@@ -351,7 +351,7 @@
    }
   },
   {
-   "id": "E2CA2212-E58E-4A08-B379-408BCE73C508",
+   "id": "D93F7415-942E-4712-8A62-B9BE78E63BED",
    "kind": "image",
    "filename": "bg_laptop.png",
    "displayName": "Background laptop",
@@ -362,7 +362,7 @@
    "pixelHeight": 2700
   },
   {
-   "id": "3A6A73D2-B41F-4874-BB10-ED0E12A5BC20",
+   "id": "D52BD3AB-5F87-44EF-82A9-32C573FF1E96",
    "kind": "model",
    "filename": "DeviceLaptop.glb",
    "displayName": "Laptop",
@@ -373,7 +373,7 @@
    "clips": [],
    "materials": {
     "Screen": {
-     "resourceID": "F1651DF5-F8AA-4241-A7DB-87815D8E2EEF"
+     "resourceID": "AD4CD73E-1A7B-4B1A-8816-F68DAEC468EB"
     },
     "Body": {
      "colorHex": "2B2B2E",
@@ -388,7 +388,7 @@
    }
   },
   {
-   "id": "193E357A-F6BE-49BB-A5DA-4ABDB03597A0",
+   "id": "11667158-0953-4595-86F1-252EB2326249",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene laptop",
@@ -404,7 +404,7 @@
     "backgroundColorHex": "0B0D12",
     "layers": [
      {
-      "id": "83282A32-A8B5-442B-A2D0-A1C07FBE6CB8",
+      "id": "1B5C80F5-48B1-428E-B23F-FE0315B95740",
       "name": "Background laptop",
       "sortIndex": 0,
       "kind": "image",
@@ -413,109 +413,109 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "4D249FDF-9690-415D-9B7C-F3933CB9CFCE",
+        "id": "2D9C4B46-48FF-4DFA-9406-303EBC1AA5A7",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
-         "height": 1150,
+         "width": 5600,
          "anchor": "center",
          "offset": [
-          -160.0,
+          324.4342893868047,
           0
          ]
         }
        },
        {
-        "id": "C2691896-D19B-4DDF-8DD2-BC4DFEC36607",
+        "id": "FB7DD552-93CB-4E0D-9405-38B75F9256B9",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
         "placement": {
-         "height": 1150.0,
+         "width": 5600.0,
          "anchor": "center",
          "offset": [
-          -160.0,
+          324.4342893868047,
           0
          ]
         }
        },
        {
-        "id": "A265DE78-7956-4C6C-B189-380FE0D2C790",
+        "id": "EA3328CC-35D4-4863-95A0-2EB124A95529",
         "time": 0.45060317970389546,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
         "placement": {
-         "height": 1226.5412262479872,
+         "width": 5972.722493033677,
          "anchor": "center",
          "offset": [
-          -142.20767840556374,
+          288.35654430535203,
           0
          ]
         }
        },
        {
-        "id": "B2654341-7CB7-4410-9FC4-5508B2D6A281",
+        "id": "CD5B8055-214A-43AD-8E0B-415B41EFE21E",
         "time": 0.9012063594077909,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
         "placement": {
-         "height": 1308.1768519007965,
+         "width": 6370.252496212574,
          "anchor": "center",
          "offset": [
-          -121.33814278500142,
+          246.0390883122911,
           0
          ]
         }
        },
        {
-        "id": "82F04589-5D74-477A-AD76-314A638BAF8D",
+        "id": "CAE6465D-BC27-4992-9E0D-593014272E89",
         "time": 1.3518095391116864,
         "transitionDuration": 0.4506031797038955,
         "easing": "linear",
         "placement": {
-         "height": 1395.2459478953344,
+         "width": 6794.241137577281,
          "anchor": "center",
          "offset": [
-          -97.06058767967545,
+          196.8111424457572,
           0
          ]
         }
        },
        {
-        "id": "5B8E2CDC-5FE1-44B6-B9F1-B95C09D2A309",
+        "id": "6EC3A16B-5073-4ED5-8CCF-E1BD33F41E56",
         "time": 1.8024127188155818,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 1488.1101529122423,
+         "width": 7246.44944026831,
          "anchor": "center",
          "offset": [
-          -69.01380419303155,
+          139.94027825778917,
           0
          ]
         }
        },
        {
-        "id": "85CDA265-4E3E-4D89-A299-AD512A4DC6DD",
+        "id": "A81CC1CE-F374-4690-9855-787A3E8295F7",
         "time": 2.2530158985194775,
         "transitionDuration": 0.45060317970389563,
         "easing": "linear",
         "placement": {
-         "height": 1587.1551754304883,
+         "width": 7728.755636878899,
          "anchor": "center",
          "offset": [
-          -36.803598270851886,
+          74.62718282425791,
           0
          ]
         }
        },
        {
-        "id": "226D2C2C-D9C7-418E-AD5B-AAD232564363",
+        "id": "828F2369-0D87-4CDD-B5B9-39337EBC10C6",
         "time": 2.703619078223373,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 1692.7923957550872,
+         "width": 8243.162970633468,
          "anchor": "center",
          "offset": [
           0.0,
@@ -524,94 +524,94 @@
         }
        },
        {
-        "id": "37AA3773-6EE6-4712-8C72-99133EE15502",
+        "id": "8A8BB5A8-F5B8-4A0C-8D4B-9283F2E85441",
         "time": 3.1542222579272683,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 1805.4605746719242,
+         "width": 8791.808015793718,
          "anchor": "center",
          "offset": [
-          41.86575245616059,
+          -84.8917852984896,
           0
          ]
         }
        },
        {
-        "id": "37A38ADF-C555-4972-AC0F-A24752A750A6",
+        "id": "FD62CC2F-8BDE-46A2-A84A-081666102037",
         "time": 3.6048254376311637,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 1925.6276758265194,
+         "width": 9376.969551850878,
          "anchor": "center",
          "offset": [
-          89.30447192238928,
+          -181.08395554502647,
           0
          ]
         }
        },
        {
-        "id": "78F36929-A138-425C-8F86-2BE176CE2944",
+        "id": "93AF1060-D1C0-4448-9A24-7787E8D11893",
         "time": 4.0554286173350595,
         "transitionDuration": 0.45060317970389585,
         "easing": "linear",
         "placement": {
-         "height": 2053.792809395931,
+         "width": 10001.078028362794,
          "anchor": "center",
          "offset": [
-          142.87254326232562,
+          -289.7047002887384,
           0
          ]
         }
        },
        {
-        "id": "949B87BB-AB87-429D-A9F9-DE26DB2B80EC",
+        "id": "71C1FBE8-0A04-412E-9675-EB5414BF9780",
         "time": 4.506031797038955,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 2190.488305126769,
+         "width": 10666.725659747743,
          "anchor": "center",
          "offset": [
-          203.175726852338,
+          -411.98232851241136,
           0
          ]
         }
        },
        {
-        "id": "A106C484-5EF2-43A2-8B55-7A27B0BE86DF",
+        "id": "B514382C-5262-46CF-8C8B-D4E5D3637473",
         "time": 4.95663497674285,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 2336.2819233496193,
+         "width": 11376.677191963363,
          "anchor": "center",
          "offset": [
-          270.87326647531813,
+          -549.2535982675155,
           0
          ]
         }
        },
        {
-        "id": "63C8C538-C66B-4E7E-9D69-D31792967FAC",
+        "id": "C83A073C-E064-44CE-8EAF-83794CCE43FB",
         "time": 5.407238156446746,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
         "placement": {
-         "height": 2491.7792131532588,
+         "width": 12133.881385789782,
          "anchor": "center",
          "offset": [
-          346.6823253082795,
+          -702.9727115897296,
           0
          ]
         }
        }
       ],
-      "resourceID": "E2CA2212-E58E-4A08-B379-408BCE73C508"
+      "resourceID": "D93F7415-942E-4712-8A62-B9BE78E63BED"
      },
      {
-      "id": "069EEC9F-1BBB-498B-BDB5-C2E9F373EC9A",
+      "id": "F5D08004-0F7A-494C-9E64-C0DC0A766315",
       "name": "Floor laptop",
       "sortIndex": 1,
       "kind": "image",
@@ -620,7 +620,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "6F8DC92C-9830-4581-AA62-1A822C6C566D",
+        "id": "E0487729-299E-4B8E-BAFE-84D6FD10904B",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -629,7 +629,7 @@
         }
        },
        {
-        "id": "057DCD83-3E6F-474F-8569-D1BAF9312BEA",
+        "id": "603298DD-440B-45F2-B469-650D7149E8E4",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -643,7 +643,7 @@
         }
        },
        {
-        "id": "BAA7553B-AEBE-4F20-9103-9AFE8DF44EBB",
+        "id": "0DD989AC-3483-4232-83CB-FA031BFF7426",
         "time": 0.45060317970389546,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
@@ -657,7 +657,7 @@
         }
        },
        {
-        "id": "F8473229-785B-40F5-9C7D-2FB37CD539FD",
+        "id": "7CC89893-D280-408B-BB32-D005E613DDE3",
         "time": 0.9012063594077909,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
@@ -671,7 +671,7 @@
         }
        },
        {
-        "id": "3B623B7E-29A5-40AC-A058-0289A6A52364",
+        "id": "5F1267E2-6EC8-4670-A40F-2878EA2DA2E4",
         "time": 1.3518095391116864,
         "transitionDuration": 0.4506031797038955,
         "easing": "linear",
@@ -685,7 +685,7 @@
         }
        },
        {
-        "id": "973853B9-C7A1-46CA-A293-5DE19536FCC1",
+        "id": "28512DF8-BE32-4337-9F8B-4B10136D9F0B",
         "time": 1.8024127188155818,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -699,7 +699,7 @@
         }
        },
        {
-        "id": "7D2F4BA0-10CC-418E-ACAD-B740D12696E1",
+        "id": "ED315EBA-37BB-4688-B8A3-006CD6EC7FD2",
         "time": 2.2530158985194775,
         "transitionDuration": 0.45060317970389563,
         "easing": "linear",
@@ -713,7 +713,7 @@
         }
        },
        {
-        "id": "3B52274D-7450-4E7B-AC49-13518A5D8EE2",
+        "id": "1CD9F0F7-E2EB-4513-80EF-58D66D09E7EF",
         "time": 2.703619078223373,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -727,7 +727,7 @@
         }
        },
        {
-        "id": "2D58ADF2-807D-422A-BAFF-454B3225BE4B",
+        "id": "112B258D-3D00-4609-880F-E98847E02C8E",
         "time": 3.1542222579272683,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -741,7 +741,7 @@
         }
        },
        {
-        "id": "C658B48F-33D9-4BCF-B4C8-5A910A4B2F32",
+        "id": "EDB120AF-E9D9-4DD2-B459-14E7364D8898",
         "time": 3.6048254376311637,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -755,7 +755,7 @@
         }
        },
        {
-        "id": "CD99978D-F7F0-4A20-BF98-EBD4B7A1FFBA",
+        "id": "890BBD2C-6ACF-43CA-8EAA-9B2C53A9BAD3",
         "time": 4.0554286173350595,
         "transitionDuration": 0.45060317970389585,
         "easing": "linear",
@@ -769,7 +769,7 @@
         }
        },
        {
-        "id": "7C71B412-5FEA-4F02-A91A-2AB48FD0B138",
+        "id": "0B33078D-DDA0-4790-B88C-F5D6073E0A9D",
         "time": 4.506031797038955,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -783,7 +783,7 @@
         }
        },
        {
-        "id": "83B128C3-CF22-455A-B704-C0D4054C105B",
+        "id": "23F41AB7-068D-4EA4-8D9E-F571C25D1512",
         "time": 4.95663497674285,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -797,7 +797,7 @@
         }
        },
        {
-        "id": "01C08291-53C2-4B93-99C3-33A24A5D3DE6",
+        "id": "8CD6A59B-D720-451B-969D-77304727B3BF",
         "time": 5.407238156446746,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -811,10 +811,10 @@
         }
        }
       ],
-      "resourceID": "BE40C43D-28DF-429C-9B92-BD4C1A712C22"
+      "resourceID": "A79E91EF-D56B-4DA6-B5DE-494007260049"
      },
      {
-      "id": "1738FBB9-212A-4587-923B-2B0D2F5FF97A",
+      "id": "96B18BC5-6783-461A-ABE3-3AEE2F5983A7",
       "name": "Shadow laptop",
       "sortIndex": 2,
       "kind": "image",
@@ -823,7 +823,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "29D2F775-2D76-4FC2-BD2A-91A0342BA1F6",
+        "id": "991F5529-CB6C-434A-9DE7-7AF12D6E3E4B",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -837,7 +837,7 @@
         "opacity": 0.9
        },
        {
-        "id": "726856EF-F357-4A07-B4F8-9C47BB9C8421",
+        "id": "CBEF9A2B-3D5D-43E8-8260-FCFFE68B6724",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -852,7 +852,7 @@
         "opacity": 0.9
        },
        {
-        "id": "0D2C306B-9523-4635-BA03-9213122CAD2B",
+        "id": "459E2F5B-8E33-43FB-88E4-C901CA3ED8E8",
         "time": 0.45060317970389546,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
@@ -867,7 +867,7 @@
         "opacity": 0.7666666666666667
        },
        {
-        "id": "E9B7D6E8-D819-401E-A097-51CC7D566354",
+        "id": "9192519D-6F5D-40A5-AAAC-E19F838044F7",
         "time": 0.9012063594077909,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
@@ -882,7 +882,7 @@
         "opacity": 0.6333333333333333
        },
        {
-        "id": "3A17299D-F281-4E41-9E02-4C83277182A4",
+        "id": "AC5E4ED6-F34E-4AFA-902B-B74083E16EF6",
         "time": 1.3518095391116864,
         "transitionDuration": 0.4506031797038955,
         "easing": "linear",
@@ -897,7 +897,7 @@
         "opacity": 0.5
        },
        {
-        "id": "E4AFE96D-4222-4334-88CD-C6BF30BC4A8D",
+        "id": "CCAB7253-F87C-4DDD-BC7F-672BF4E1BDF5",
         "time": 1.8024127188155818,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -912,7 +912,7 @@
         "opacity": 0.3666666666666667
        },
        {
-        "id": "F3F3DB69-F24C-4CD8-AA0B-18CCB67D3D1D",
+        "id": "E642AC36-19FF-4E0E-8AD4-561ED7973DEA",
         "time": 2.2530158985194775,
         "transitionDuration": 0.45060317970389563,
         "easing": "linear",
@@ -927,7 +927,7 @@
         "opacity": 0.23333333333333328
        },
        {
-        "id": "D0BBEB04-B4C8-4AB4-9BB5-AA412B42CB99",
+        "id": "B3D59FCD-66BD-4819-9764-263F0092656F",
         "time": 2.703619078223373,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -942,7 +942,7 @@
         "opacity": 0.09999999999999998
        },
        {
-        "id": "29B15C6E-D85D-4F8C-94C2-47B89714CC2F",
+        "id": "A2789C6F-C9EA-4FFA-9ED0-F01C6281F9B7",
         "time": 3.1542222579272683,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -957,7 +957,7 @@
         "opacity": 0.0
        },
        {
-        "id": "CFD21DD8-9598-4C6D-8341-C3F9BCE8F35F",
+        "id": "FCE53389-0165-403D-8586-DD459572097F",
         "time": 3.6048254376311637,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -972,7 +972,7 @@
         "opacity": 0.0
        },
        {
-        "id": "9049748F-6C79-4069-85A1-E64213E4EF7C",
+        "id": "2F492E98-E515-4EBF-B86F-1751EE016A0D",
         "time": 4.0554286173350595,
         "transitionDuration": 0.45060317970389585,
         "easing": "linear",
@@ -987,7 +987,7 @@
         "opacity": 0.0
        },
        {
-        "id": "FD473CF3-DCDE-4303-8AE1-3521A7021869",
+        "id": "3826657E-779B-4177-89BA-C629EA362B32",
         "time": 4.506031797038955,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1002,7 +1002,7 @@
         "opacity": 0.0
        },
        {
-        "id": "BBE5DDA4-15D0-4C42-A89A-12A3A794F8D6",
+        "id": "48817B0D-1454-4B65-A8F0-4014D01384D9",
         "time": 4.95663497674285,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1017,7 +1017,7 @@
         "opacity": 0.0
        },
        {
-        "id": "0C9E49B2-7E38-47C4-B747-E9DEE69F4020",
+        "id": "65415B88-87B9-4BAA-99B0-2C1504DA72B0",
         "time": 5.407238156446746,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1032,10 +1032,10 @@
         "opacity": 0.0
        }
       ],
-      "resourceID": "72108FF4-1DF5-4FDE-9CC0-F9EB3D395F11"
+      "resourceID": "6A462A57-CE71-416F-8825-2B352EA577EB"
      },
      {
-      "id": "38261804-DECB-4538-A02A-0C5906245018",
+      "id": "93D3ADF6-C777-4067-A859-AC517036F245",
       "name": "Laptop",
       "sortIndex": 3,
       "kind": "model",
@@ -1044,7 +1044,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "BE8A1FCB-AC7C-432F-91B6-1C3A330F60E4",
+        "id": "A3CE21F9-A43D-4200-AD49-5B720221A029",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1069,7 +1069,7 @@
         }
        },
        {
-        "id": "18417169-DE4D-48E8-8A88-E50B8772DF03",
+        "id": "550E3F47-C2F0-4928-B1B2-EFB40C3F5E83",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -1095,7 +1095,7 @@
         }
        },
        {
-        "id": "38284CF0-DCE9-45B4-8715-7230B9D29623",
+        "id": "D6870F45-C77A-4DD0-851E-D24A5A9EBFF6",
         "time": 0.45060317970389546,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
@@ -1121,7 +1121,7 @@
         }
        },
        {
-        "id": "5D7CC3B7-F08E-4BAD-8A79-F012B27AA6C9",
+        "id": "8F7E4BCE-C4B3-43DE-A3FF-A8CA426A2D7E",
         "time": 0.9012063594077909,
         "transitionDuration": 0.45060317970389546,
         "easing": "linear",
@@ -1147,7 +1147,7 @@
         }
        },
        {
-        "id": "8B1836E1-4AB8-450E-BCFE-A235D451F827",
+        "id": "7E773EC4-1046-40FF-AFB7-781715541C11",
         "time": 1.3518095391116864,
         "transitionDuration": 0.4506031797038955,
         "easing": "linear",
@@ -1173,7 +1173,7 @@
         }
        },
        {
-        "id": "795ACCB2-C194-49DF-A336-51CB04A212C4",
+        "id": "DB426CD1-32BE-4E5B-9792-18C35B911647",
         "time": 1.8024127188155818,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1199,7 +1199,7 @@
         }
        },
        {
-        "id": "5CFE55E1-E7DD-4532-902A-7BF46B8EDA57",
+        "id": "6F25F6F3-D615-4E4D-B6C0-20022079F158",
         "time": 2.2530158985194775,
         "transitionDuration": 0.45060317970389563,
         "easing": "linear",
@@ -1225,7 +1225,7 @@
         }
        },
        {
-        "id": "D16F4D9D-20C2-4209-ADC3-EE3CF1DF5245",
+        "id": "616A1EAD-B8EC-47AA-8C51-CDB3C0762AEC",
         "time": 2.703619078223373,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1251,7 +1251,7 @@
         }
        },
        {
-        "id": "E0C8751B-C39D-4851-BC17-F0DADB3E17AF",
+        "id": "0A5FFFF0-1CF1-411F-9FEF-D9FCC3268DC8",
         "time": 3.1542222579272683,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1277,7 +1277,7 @@
         }
        },
        {
-        "id": "FFD1C720-DFEE-48AE-A3D1-3210D56872E2",
+        "id": "A93ED32B-4068-418E-820E-8FE69E1EEFBA",
         "time": 3.6048254376311637,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1303,7 +1303,7 @@
         }
        },
        {
-        "id": "657B0A27-C71D-4A63-AE7A-8077F4188011",
+        "id": "9E8F312C-1745-4DED-B67E-D4C0FE08178A",
         "time": 4.0554286173350595,
         "transitionDuration": 0.45060317970389585,
         "easing": "linear",
@@ -1329,7 +1329,7 @@
         }
        },
        {
-        "id": "B99688F0-2318-4AB3-8832-6D296C4C3A12",
+        "id": "BE0D2D23-A471-42A0-9B84-57BC1373D9AC",
         "time": 4.506031797038955,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1355,7 +1355,7 @@
         }
        },
        {
-        "id": "7D88EC60-2E0A-4D20-9C3F-A38598244BAD",
+        "id": "DD480C8B-E9D2-4559-BDAE-B8686C1E4ECC",
         "time": 4.95663497674285,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1381,7 +1381,7 @@
         }
        },
        {
-        "id": "F10502E9-5C6B-4070-92A3-0177650E5107",
+        "id": "F4B103BD-8101-43C1-966A-986B3FA6D081",
         "time": 5.407238156446746,
         "transitionDuration": 0.4506031797038954,
         "easing": "linear",
@@ -1407,13 +1407,13 @@
         }
        }
       ],
-      "resourceID": "3A6A73D2-B41F-4874-BB10-ED0E12A5BC20"
+      "resourceID": "D52BD3AB-5F87-44EF-82A9-32C573FF1E96"
      }
     ]
    }
   },
   {
-   "id": "F1651DF5-F8AA-4241-A7DB-87815D8E2EEF",
+   "id": "AD4CD73E-1A7B-4B1A-8816-F68DAEC468EB",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene tablet",
@@ -1429,7 +1429,7 @@
     "backgroundColorHex": "0B0D12",
     "layers": [
      {
-      "id": "7369546A-9F92-489A-B803-9AD98BD8E0B4",
+      "id": "FFC3A515-9C69-4C45-BED3-BD211F13798A",
       "name": "Background tablet",
       "sortIndex": 0,
       "kind": "image",
@@ -1438,205 +1438,205 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "F7454957-2C73-49F3-A2D6-2D128F03C368",
+        "id": "363AFF7F-6882-4C1D-A0AE-F071FCDAD3E6",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
-         "height": 1150,
+         "width": 5600,
          "anchor": "center",
          "offset": [
-          -160.0,
+          -707.7564027894952,
           0
          ]
         }
        },
        {
-        "id": "EC6C28C7-973F-431A-AA02-2B59FC8A807A",
+        "id": "3D8FB6F5-7580-4750-AF53-36F9970A386A",
         "time": 5.407238156446746,
         "transitionDuration": 5.407238156446746,
         "easing": "linear",
         "placement": {
-         "height": 1150.0,
+         "width": 5600.0,
          "anchor": "center",
          "offset": [
-          -13.312563200285268,
+          -58.88782401588571,
           0
          ]
         }
        },
        {
-        "id": "8BE88691-FA0A-4F72-AB8C-F2A1DB1AD071",
+        "id": "72327AFA-854C-4744-BC56-EA22B897CC34",
         "time": 5.939629980617149,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 1240.97079590187,
+         "width": 6042.988223522149,
          "anchor": "center",
          "offset": [
-          1.2195509922194059,
+          5.3946563954472575,
           0
          ]
         }
        },
        {
-        "id": "476200BE-A897-4670-BD59-B3D59A8E7BE3",
+        "id": "F6DBA20B-E269-407C-AFE6-9C0F4D9B3120",
         "time": 6.472021804787552,
         "transitionDuration": 0.5323918241704026,
         "easing": "linear",
         "placement": {
-         "height": 1339.1378402446267,
+         "width": 6521.019048147747,
          "anchor": "center",
          "offset": [
-          18.13409692440429,
+          80.21577004407777,
           0
          ]
         }
        },
        {
-        "id": "3F4930A2-0E33-49B4-B1AE-26A359FD464C",
+        "id": "B7E51C82-3796-418B-A8F9-25251074B535",
         "time": 7.0044136289579555,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 1445.0703925484224,
+         "width": 7036.864520235796,
          "anchor": "center",
          "offset": [
-          37.71706304755695,
+          166.84058041452167,
           0
          ]
         }
        },
        {
-        "id": "8741A1C4-2673-4F66-8250-772A2938D5E4",
+        "id": "CE9775F7-CB58-4F0A-98DD-01672DC93FF9",
         "time": 7.536805453128359,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 1559.3827436304723,
+         "width": 7593.51596898317,
          "anchor": "center",
          "offset": [
-          60.28477574633211,
+          266.6683501574714,
           0
          ]
         }
        },
        {
-        "id": "039F4DFE-50F8-45D8-86DD-2FE231DCD567",
+        "id": "D4444F5E-B900-4B4B-B5AB-5C69F0B326A1",
         "time": 8.069197277298763,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 1682.737777807608,
+         "width": 8194.201352802264,
          "anchor": "center",
          "offset": [
-          86.1869095021802,
+          381.24585648004256,
           0
          ]
         }
        },
        {
-        "id": "EE0EE060-BC13-47F6-8115-67EE8BC84305",
+        "id": "24130C4E-076D-4320-B7CA-009A6142A2FD",
         "time": 8.601589101469166,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 1815.850816887001,
+         "width": 8842.403977884527,
          "anchor": "center",
          "offset": [
-          115.8097834520967,
+          512.2819733992898,
           0
          ]
         }
        },
        {
-        "id": "599400AB-608E-4573-939C-2F6864946520",
+        "id": "8BA3BE51-485F-41B2-97FE-BD7A0CB2972D",
         "time": 9.13398092563957,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 1959.4937682359325,
+         "width": 9541.882697496714,
          "anchor": "center",
          "offset": [
-          149.57997081689967,
+          661.6636379670408,
           0
          ]
         }
        },
        {
-        "id": "5D9C260D-38AE-44D4-8349-994FAEC11299",
+        "id": "6B08101E-49D1-456F-A1FC-112E8B635077",
         "time": 9.666372749809973,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 2114.4996009847823,
+         "width": 10296.693709143288,
          "anchor": "center",
          "offset": [
-          187.96825006957758,
+          831.4733281742532,
           0
          ]
         }
        },
        {
-        "id": "5FFB4A35-CD39-4AC1-A93F-87943BB4ACA6",
+        "id": "4F2BD5FB-00A3-4604-82F3-DD002F31852A",
         "time": 10.198764573980377,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 2281.767176320236,
+         "width": 11111.214075994194,
          "anchor": "center",
          "offset": [
-          231.4939293240465,
+          1024.0081917874547,
           0
          ]
         }
        },
        {
-        "id": "E17C6C74-A07F-4B91-B13D-DC0D6CF1C67A",
+        "id": "BA4612D5-B02A-4BFF-A12C-59CA41121F2B",
         "time": 10.731156398150778,
         "transitionDuration": 0.5323918241704018,
         "easing": "linear",
         "placement": {
-         "height": 2462.2664598790316,
+         "width": 11990.167108976155,
          "anchor": "center",
          "offset": [
-          280.7295782666874,
+          1241.800977941517,
           0
          ]
         }
        },
        {
-        "id": "68A2F504-37CF-4173-A4EB-353E6677929B",
+        "id": "6877A3FD-1840-4BB2-8A79-CD31D3C5A2AA",
         "time": 11.263548222321182,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 2657.0441464683145,
+         "width": 12938.649756715271,
          "anchor": "center",
          "offset": [
-          336.30620504771196,
+          1487.6429370022186,
           0
          ]
         }
        },
        {
-        "id": "6ED5E9E8-5C49-4FC3-A409-0C44C71ABDE0",
+        "id": "EBF89111-2E11-4BC5-86B8-9F94D3835F92",
         "time": 11.795940046491586,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
         "placement": {
-         "height": 2867.2297297297296,
+         "width": 13962.16216216216,
          "anchor": "center",
          "offset": [
-          398.91891891891885,
+          1764.6088691170519,
           0
          ]
         }
        }
       ],
-      "resourceID": "807642C9-BE29-471D-B707-78C36E60B997"
+      "resourceID": "BD132B63-AF01-4C33-8F64-F3F329EB3474"
      },
      {
-      "id": "13B57F81-0FF6-45DE-9F79-19EC496ED6F9",
+      "id": "134B36A1-5E13-4479-BE59-C3D44F31B76C",
       "name": "Floor tablet",
       "sortIndex": 1,
       "kind": "image",
@@ -1645,7 +1645,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "FB5440DC-2471-46DD-814F-7ED7B8A0EB44",
+        "id": "6B85A7BD-5B28-4DEE-A1A5-DF1856F6D4A2",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1654,7 +1654,7 @@
         }
        },
        {
-        "id": "5610128B-78E3-4035-9230-C44530A65676",
+        "id": "635791B8-F135-4E65-AF03-D02D865977D3",
         "time": 5.407238156446746,
         "transitionDuration": 5.407238156446746,
         "easing": "linear",
@@ -1668,7 +1668,7 @@
         }
        },
        {
-        "id": "48E0F0C4-6162-4FFF-9CFA-68A7DB4EFDFC",
+        "id": "D8600127-B271-47BE-BF9F-B9F61DE2D645",
         "time": 5.939629980617149,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1682,7 +1682,7 @@
         }
        },
        {
-        "id": "84631067-5E55-4484-BEEE-EC2EF45E3582",
+        "id": "8B9D3211-0044-4C28-B757-1FF631B5FC87",
         "time": 6.472021804787552,
         "transitionDuration": 0.5323918241704026,
         "easing": "linear",
@@ -1696,7 +1696,7 @@
         }
        },
        {
-        "id": "82FCDF5C-EA18-4C08-9328-7671C830718F",
+        "id": "9E53874B-2BA6-4615-B55D-BF012795BA50",
         "time": 7.0044136289579555,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1710,7 +1710,7 @@
         }
        },
        {
-        "id": "B5652C89-66D9-44D3-ABB8-CBD016B6627D",
+        "id": "9B349A26-0DD5-48ED-A5C9-BD05A8E0DA4A",
         "time": 7.536805453128359,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1724,7 +1724,7 @@
         }
        },
        {
-        "id": "86128755-CE29-4319-8EFC-3522D3A0E04A",
+        "id": "4A7ED218-68B8-45A8-A4CE-E8EEFB154FB0",
         "time": 8.069197277298763,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1738,7 +1738,7 @@
         }
        },
        {
-        "id": "5E9EC780-18F0-4FFC-A1C6-C6B586B13351",
+        "id": "748DC90D-BC70-48FC-9D8B-48ACE0742FDF",
         "time": 8.601589101469166,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1752,7 +1752,7 @@
         }
        },
        {
-        "id": "60AC8A8A-619B-4922-BF20-BA3ECC38F92F",
+        "id": "1B56DCA6-79B4-4CD7-AD1C-A60A77429BF7",
         "time": 9.13398092563957,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1766,7 +1766,7 @@
         }
        },
        {
-        "id": "2F35098A-4541-434E-B29F-912351084B9E",
+        "id": "7E1263EC-70F2-494E-BD21-D5F1FAF5E97D",
         "time": 9.666372749809973,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1780,7 +1780,7 @@
         }
        },
        {
-        "id": "FE55ED8B-940A-4BF0-B0C1-2C4BB847C43C",
+        "id": "FBBD627C-6580-4132-BC1A-AE57F03F26C3",
         "time": 10.198764573980377,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1794,7 +1794,7 @@
         }
        },
        {
-        "id": "9603BDBC-804B-4BB6-9C9A-EB32260BBAF6",
+        "id": "19FD060E-708F-4C60-8046-C28CDF6C6802",
         "time": 10.731156398150778,
         "transitionDuration": 0.5323918241704018,
         "easing": "linear",
@@ -1808,7 +1808,7 @@
         }
        },
        {
-        "id": "AF7938EB-16F8-4595-93B7-339834ABD655",
+        "id": "BC04233D-1EC6-4B97-AEE4-19A421912948",
         "time": 11.263548222321182,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1822,7 +1822,7 @@
         }
        },
        {
-        "id": "E0291463-6D8B-43B4-BF03-7F53739EE385",
+        "id": "7B729639-AD50-47A3-871B-1AA08EEB93E4",
         "time": 11.795940046491586,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1836,10 +1836,10 @@
         }
        }
       ],
-      "resourceID": "BE40C43D-28DF-429C-9B92-BD4C1A712C22"
+      "resourceID": "A79E91EF-D56B-4DA6-B5DE-494007260049"
      },
      {
-      "id": "C0741E29-2540-4B1E-A843-EC8AE08CA63B",
+      "id": "C308076F-D007-4885-88F0-BB18F2CB3A74",
       "name": "Shadow tablet",
       "sortIndex": 2,
       "kind": "image",
@@ -1848,7 +1848,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "EE3EF1CA-04C5-4957-9005-2AC69CDA7291",
+        "id": "E092D704-6E07-45A9-8C84-DC270EF1509C",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1862,7 +1862,7 @@
         "opacity": 0.9
        },
        {
-        "id": "B0F10A41-C5E7-4D53-BBA9-5778A9D3B2EE",
+        "id": "F81272D3-7B08-40B8-B9ED-CB5769213801",
         "time": 5.407238156446746,
         "transitionDuration": 5.407238156446746,
         "easing": "linear",
@@ -1877,7 +1877,7 @@
         "opacity": 0.9
        },
        {
-        "id": "8E4888BB-FAC3-4C8C-8F12-D39898795429",
+        "id": "F40968D2-E683-41E5-BB33-B2C3A333C712",
         "time": 5.939629980617149,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1892,7 +1892,7 @@
         "opacity": 0.7666666666666666
        },
        {
-        "id": "71E50C46-E74D-4C62-9794-742F2CABC174",
+        "id": "864EEE71-A784-45A4-855C-803D33C4F110",
         "time": 6.472021804787552,
         "transitionDuration": 0.5323918241704026,
         "easing": "linear",
@@ -1907,7 +1907,7 @@
         "opacity": 0.6333333333333335
        },
        {
-        "id": "0F69FD6A-A172-4AB6-9FFE-9AE6186C356C",
+        "id": "64363C66-6CAC-4034-B207-90792D8E9538",
         "time": 7.0044136289579555,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1922,7 +1922,7 @@
         "opacity": 0.5
        },
        {
-        "id": "A170CADE-84A8-42D6-953E-6C8E0B34A78C",
+        "id": "2FA3C551-304C-4E05-82AE-911000D40B7A",
         "time": 7.536805453128359,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1937,7 +1937,7 @@
         "opacity": 0.3666666666666667
        },
        {
-        "id": "5DD75914-57B2-4F18-A906-B45E0FB609CD",
+        "id": "F494A8DC-5471-4FF1-973F-1EC10DAA95AD",
         "time": 8.069197277298763,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1952,7 +1952,7 @@
         "opacity": 0.23333333333333328
        },
        {
-        "id": "23CCD0DD-106F-4711-9F4A-FC883F861B42",
+        "id": "8AB2956B-8789-42D0-AABF-E0F13B56649D",
         "time": 8.601589101469166,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1967,7 +1967,7 @@
         "opacity": 0.09999999999999976
        },
        {
-        "id": "D9CA1D0A-8152-493D-A7D6-13DA2B2E50BB",
+        "id": "677764B4-7EB4-459D-8547-607A21CA3BBD",
         "time": 9.13398092563957,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1982,7 +1982,7 @@
         "opacity": 0.0
        },
        {
-        "id": "75D5AD05-4935-4FDD-B98B-01366658F4FB",
+        "id": "27929731-95F7-4E39-90D2-E1917A38397C",
         "time": 9.666372749809973,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -1997,7 +1997,7 @@
         "opacity": 0.0
        },
        {
-        "id": "A2DD065D-1029-4986-BE2A-EA7E7C5394EA",
+        "id": "D30D9250-9D0D-4AAF-90B8-68E163C83C82",
         "time": 10.198764573980377,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2012,7 +2012,7 @@
         "opacity": 0.0
        },
        {
-        "id": "60B0F64F-C5AF-4EAF-9525-D4CCC493BB16",
+        "id": "FFB37FE0-7914-46D6-9DB4-7CE5497A6144",
         "time": 10.731156398150778,
         "transitionDuration": 0.5323918241704018,
         "easing": "linear",
@@ -2027,7 +2027,7 @@
         "opacity": 0.0
        },
        {
-        "id": "A1DA68B6-ADBB-40CB-8EB8-E41145127A16",
+        "id": "1AC44C3B-F78A-41D6-937D-B3E11B0A7A12",
         "time": 11.263548222321182,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2042,7 +2042,7 @@
         "opacity": 0.0
        },
        {
-        "id": "73203D11-3F8B-4330-8616-6E62618752EB",
+        "id": "63281DE9-92A8-4634-81C6-FAA0A847D907",
         "time": 11.795940046491586,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2057,10 +2057,10 @@
         "opacity": 0.0
        }
       ],
-      "resourceID": "72108FF4-1DF5-4FDE-9CC0-F9EB3D395F11"
+      "resourceID": "6A462A57-CE71-416F-8825-2B352EA577EB"
      },
      {
-      "id": "7D384109-46BB-4619-A4A2-FEA924A125EE",
+      "id": "41D4653D-EE2A-4288-88A8-178599E83FDE",
       "name": "Tablet",
       "sortIndex": 3,
       "kind": "model",
@@ -2069,7 +2069,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "E55B42DB-49E1-49FA-B0F9-7A763DB601AD",
+        "id": "6847A4FE-72BB-4FAD-A39C-834A2B4208EF",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2094,7 +2094,7 @@
         }
        },
        {
-        "id": "5EA89E43-76A0-4ABA-AC2D-A326B35737D6",
+        "id": "55A1D1D5-37CC-4328-B9E0-7839797430C9",
         "time": 5.407238156446746,
         "transitionDuration": 5.407238156446746,
         "easing": "linear",
@@ -2120,7 +2120,7 @@
         }
        },
        {
-        "id": "2B97607F-C9F7-4F16-BBFA-E01800034050",
+        "id": "3211C862-1005-4575-ADAF-EC5C5B6E6277",
         "time": 5.939629980617149,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2146,7 +2146,7 @@
         }
        },
        {
-        "id": "47B767AB-52DC-4486-97A2-3DEE9D090D7B",
+        "id": "62F00F7C-09E5-4894-BA4C-4E4AB10ABD1E",
         "time": 6.472021804787552,
         "transitionDuration": 0.5323918241704026,
         "easing": "linear",
@@ -2172,7 +2172,7 @@
         }
        },
        {
-        "id": "AFF0F66D-51BC-452F-B286-E066BAC8CD44",
+        "id": "443DD649-9A3E-43A6-8721-BCA4CAF2CE8B",
         "time": 7.0044136289579555,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2198,7 +2198,7 @@
         }
        },
        {
-        "id": "46824601-9051-489C-9246-2EDED9EB746A",
+        "id": "7208F863-3F97-4239-AC66-6BABE82C4AE0",
         "time": 7.536805453128359,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2224,7 +2224,7 @@
         }
        },
        {
-        "id": "7DC2FD87-AE5C-4100-BE52-C14AC51160AD",
+        "id": "6D96AF05-418F-4438-9F26-A8F0854863EA",
         "time": 8.069197277298763,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2250,7 +2250,7 @@
         }
        },
        {
-        "id": "1B6EE57D-455E-4FD4-B535-4C10C1A32471",
+        "id": "B0F130D0-C0F0-4026-8092-DB1DAC61E0BC",
         "time": 8.601589101469166,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2276,7 +2276,7 @@
         }
        },
        {
-        "id": "8F82930C-C4BA-428E-9BB6-989BE9D3801C",
+        "id": "FA62FC2D-7ADA-47C7-872B-A4AB2782B9BB",
         "time": 9.13398092563957,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2302,7 +2302,7 @@
         }
        },
        {
-        "id": "D1193FBE-1085-4D36-BA94-1F9BAD101D01",
+        "id": "4DE8EE6B-0AF8-4921-8AFF-C0229A460361",
         "time": 9.666372749809973,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2328,7 +2328,7 @@
         }
        },
        {
-        "id": "04ABB93E-5DE4-4BC8-BF7B-ED3B59CD2361",
+        "id": "18E8E239-29A0-4B00-9188-5E9E3FEBBC9F",
         "time": 10.198764573980377,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2354,7 +2354,7 @@
         }
        },
        {
-        "id": "B063B1E8-5C18-4DC3-90B3-0356F4DE3123",
+        "id": "862F3F55-FD44-487B-843B-3F8D32E75C1C",
         "time": 10.731156398150778,
         "transitionDuration": 0.5323918241704018,
         "easing": "linear",
@@ -2380,7 +2380,7 @@
         }
        },
        {
-        "id": "D665C6A9-C2BD-4681-A36F-DA4EBB565E17",
+        "id": "8BFA4090-4BA7-4067-A006-0F1369CEE6BA",
         "time": 11.263548222321182,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2406,7 +2406,7 @@
         }
        },
        {
-        "id": "20AB2890-43A5-4718-A2F0-DAAA061C5E3A",
+        "id": "95A15DC3-9D4E-4898-A3A3-577D1686AF0C",
         "time": 11.795940046491586,
         "transitionDuration": 0.5323918241704035,
         "easing": "linear",
@@ -2432,13 +2432,13 @@
         }
        }
       ],
-      "resourceID": "8C0BC914-B570-4607-A74E-B02A4AA11685"
+      "resourceID": "8CA9D892-4620-4567-A5B1-5C0FA761168C"
      }
     ]
    }
   },
   {
-   "id": "839D8C00-689B-4A9B-8B1A-588AA93A9EB3",
+   "id": "A0B82221-2421-4C44-AE20-2AADFBA45755",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene phone",
@@ -2454,7 +2454,7 @@
     "backgroundColorHex": "0B0D12",
     "layers": [
      {
-      "id": "EB5F78C6-4F6E-4A35-B068-902BEF64DEC6",
+      "id": "025AEA80-E81D-4FFA-B83A-6CD89F052047",
       "name": "Background phone",
       "sortIndex": 0,
       "kind": "image",
@@ -2463,205 +2463,205 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "F42A2582-E43D-4FC4-AB20-12F59D9B7519",
+        "id": "3A0B7198-7A4B-446A-9035-419EB2E98611",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
-         "height": 1150,
+         "width": 5600,
          "anchor": "center",
          "offset": [
-          -160.0,
+          1362.0685775663317,
           0
          ]
         }
        },
        {
-        "id": "A1128188-94D4-4F31-BF74-1890CFBC2733",
+        "id": "5E1D5D93-1C5D-489F-9E99-2A6CFCDAC8BD",
         "time": 11.795940046491586,
         "transitionDuration": 11.795940046491586,
         "easing": "linear",
         "placement": {
-         "height": 1150.0,
+         "width": 5600.0,
          "anchor": "center",
          "offset": [
-          6.278007306580662,
+          -53.44422801265864,
           0
          ]
         }
        },
        {
-        "id": "F9B45191-882C-4DD6-99A3-BBD5300B6AE9",
+        "id": "4013E1ED-57F4-48A9-A690-AC9038DB1F55",
         "time": 12.704706955903859,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
         "placement": {
-         "height": 1309.5919634630066,
+         "width": 6377.143474254641,
          "anchor": "center",
          "offset": [
-          21.737146465358116,
+          -185.04677604013335,
           0
          ]
         }
        },
        {
-        "id": "84114664-565D-4431-876A-6E30A7871BBE",
+        "id": "D7E8D48B-D890-410C-A6ED-DE12D060088D",
         "time": 13.61347386531613,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
         "placement": {
-         "height": 1491.3314006668636,
+         "width": 7262.135516290815,
          "anchor": "center",
          "offset": [
-          41.36608279076769,
+          -352.1465096644501,
           0
          ]
         }
        },
        {
-        "id": "C5B03F4E-1950-4CC6-8793-E1C3869E6E36",
+        "id": "41990189-6B11-4BBA-852D-76642D92E34D",
         "time": 14.522240774728404,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
         "placement": {
-         "height": 1698.291841020308,
+         "width": 8269.942878011934,
          "anchor": "center",
          "offset": [
-          66.02442615720538,
+          -562.0612263786128,
           0
          ]
         }
        },
        {
-        "id": "6B20071D-8EDB-4676-92E3-72F5C2543F59",
+        "id": "EDC9C2DF-6BDE-4156-AD12-171B63999288",
         "time": 15.431007684140678,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
         "placement": {
-         "height": 1933.9733448825996,
+         "width": 9417.609331602223,
          "anchor": "center",
          "offset": [
-          96.73006746696412,
+          -823.456158766395,
           0
          ]
         }
        },
        {
-        "id": "F2BAC687-5D4C-43A9-8E52-EF41E82F4C46",
+        "id": "2AC80893-E75C-4671-93F7-3F1CBA483D71",
         "time": 16.33977459355295,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
         "placement": {
-         "height": 2202.361695660802,
+         "width": 10724.543909304775,
          "anchor": "center",
          "offset": [
-          134.68655480060033,
+          -1146.5770257160216,
           0
          ]
         }
        },
        {
-        "id": "F8585773-BF28-4646-A198-E3794976B731",
+        "id": "F5F1EAAD-D22C-4BC7-9088-C02057389BDF",
         "time": 17.248541502965224,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
         "placement": {
-         "height": 2507.995806327084,
+         "width": 12212.849143853628,
          "anchor": "center",
          "offset": [
-          181.3150195692733,
+          -1543.5218174758234,
           0
          ]
         }
        },
        {
-        "id": "4510530E-2E8C-4E6E-B56A-3CBD58A03439",
+        "id": "3614059D-DD6B-4959-A062-F240B6B7F31F",
         "time": 18.157308412377496,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
         "placement": {
-         "height": 2856.0444803172813,
+         "width": 13907.694860675458,
          "anchor": "center",
          "offset": [
-          238.29138829942832,
+          -2028.5575769206796,
           0
          ]
         }
        },
        {
-        "id": "9D9A6D13-D3B8-446B-B9A0-6CB15286E1CF",
+        "id": "3433132B-27C6-4BA3-9432-98E2A8DCCC84",
         "time": 19.066075321789768,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
         "placement": {
-         "height": 3252.3938249707744,
+         "width": 15837.743843335946,
          "anchor": "center",
          "offset": [
-          307.58973222831645,
+          -2618.48943156395,
           0
          ]
         }
        },
        {
-        "id": "EA650D56-DD8F-4D23-8B61-31AA74E2E195",
+        "id": "D4ADCB8F-AFA0-494C-842D-BEF86FCCAB3F",
         "time": 19.974842231202043,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
         "placement": {
-         "height": 3703.746795824726,
+         "width": 18035.63657097258,
          "anchor": "center",
          "offset": [
-          391.53274161777836,
+          -3333.090277787335,
           0
          ]
         }
        },
        {
-        "id": "716E468E-9B40-4A47-AD4A-0248BDDF104B",
+        "id": "9A8C03C8-E57C-49A9-88B7-347191777952",
         "time": 20.883609140614315,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
         "placement": {
-         "height": 4217.736555229499,
+         "width": 20538.543225465382,
          "anchor": "center",
          "offset": [
-          492.8504674050089,
+          -4195.600844320264,
           0
          ]
         }
        },
        {
-        "id": "CFDEEF85-E70A-498B-B827-6277FB949091",
+        "id": "0733BBB4-64C6-417D-B65E-9DEB2511ECFE",
         "time": 21.79237605002659,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
         "placement": {
-         "height": 4803.055562376258,
+         "width": 23388.792303745257,
          "anchor": "center",
          "offset": [
-          614.7486527316468,
+          -5233.311393668832,
           0
          ]
         }
        },
        {
-        "id": "3B27C629-E772-4622-B799-7E6DFBC44F19",
+        "id": "B7324080-31CA-4023-8984-992FB05FF6EF",
         "time": 22.70114295943886,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
         "placement": {
-         "height": 5469.6025778732555,
+         "width": 26634.586466165416,
          "anchor": "center",
          "offset": [
-          760.9881847475833,
+          -6478.238089649535,
           0
          ]
         }
        }
       ],
-      "resourceID": "9067B59B-5C3C-4B15-BA34-5E238CEEEA86"
+      "resourceID": "2D340677-023B-4DE7-BFC0-DC1614F46266"
      },
      {
-      "id": "1307BBD2-9F6B-42A7-8D72-A39FACAB4D4E",
+      "id": "27D55B9B-8228-4A59-8197-A4D3E6166FBB",
       "name": "Floor phone",
       "sortIndex": 1,
       "kind": "image",
@@ -2670,7 +2670,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "0BA3B7EA-34CB-4515-87D1-6717146352D7",
+        "id": "0A50F452-E23E-48F1-82A6-F084FC296386",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2679,7 +2679,7 @@
         }
        },
        {
-        "id": "C099AD92-A190-48A5-9F56-46791A5D6378",
+        "id": "B4EA6767-B2BC-43FC-B706-687B660DE33A",
         "time": 11.795940046491586,
         "transitionDuration": 11.795940046491586,
         "easing": "linear",
@@ -2693,7 +2693,7 @@
         }
        },
        {
-        "id": "8B53EE1C-E54B-462B-9092-5224CE84B6BB",
+        "id": "3C121AF2-9945-448F-907B-24942FB8058A",
         "time": 12.704706955903859,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -2707,7 +2707,7 @@
         }
        },
        {
-        "id": "6E872A53-8F39-45E5-A805-942A32437001",
+        "id": "1E7296F1-E40C-4A37-94FD-DAE48CE07DF3",
         "time": 13.61347386531613,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2721,7 +2721,7 @@
         }
        },
        {
-        "id": "EF2DC5F2-0607-4A2B-B2CC-F16CC130DE9D",
+        "id": "4B1ABBF8-ABEA-4FBE-9978-A4C8D9D5EE5C",
         "time": 14.522240774728404,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -2735,7 +2735,7 @@
         }
        },
        {
-        "id": "96102D39-C279-47DE-BFBF-F334609D7CC4",
+        "id": "235C6DD6-47BC-4A28-AD68-053C7EFAB334",
         "time": 15.431007684140678,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -2749,7 +2749,7 @@
         }
        },
        {
-        "id": "DC4F2AAF-08F3-47D7-93FC-7EF57C5BBC11",
+        "id": "26C17DB7-E6B2-49AB-B683-373967D6D215",
         "time": 16.33977459355295,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2763,7 +2763,7 @@
         }
        },
        {
-        "id": "58400EBD-5347-46A2-B731-7CB66C3A6E21",
+        "id": "905E261A-2D19-4D06-832B-B6FDD3E9B0FC",
         "time": 17.248541502965224,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -2777,7 +2777,7 @@
         }
        },
        {
-        "id": "402AF143-8C4F-4385-A2E0-DF3583FD4EE3",
+        "id": "0841BCEB-210D-460C-A578-8B015E9CBFCF",
         "time": 18.157308412377496,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2791,7 +2791,7 @@
         }
        },
        {
-        "id": "EE636050-A62C-451C-A8D8-D4243E0E0671",
+        "id": "8DDA80CC-8E7B-4280-80EF-CE820D3A0E0C",
         "time": 19.066075321789768,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2805,7 +2805,7 @@
         }
        },
        {
-        "id": "0610500E-4A19-41C0-B8FC-8A724F64448A",
+        "id": "603E26BB-64EE-479C-B762-D53BCB7D89C5",
         "time": 19.974842231202043,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -2819,7 +2819,7 @@
         }
        },
        {
-        "id": "2D360F41-BEB9-4CB1-ABD3-264469F55715",
+        "id": "BF750176-8717-4BA9-8E6E-A2965018AE0D",
         "time": 20.883609140614315,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2833,7 +2833,7 @@
         }
        },
        {
-        "id": "F7D6C12B-B665-4F73-84ED-86A9C5491DF9",
+        "id": "ABA17FDE-A044-40ED-A535-B9CE4E96B79F",
         "time": 21.79237605002659,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -2847,7 +2847,7 @@
         }
        },
        {
-        "id": "78B12B90-7CD1-4021-ABE1-FA9686094C95",
+        "id": "3FADDBB6-ADBA-4C44-B0FC-720B975D685F",
         "time": 22.70114295943886,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2861,10 +2861,10 @@
         }
        }
       ],
-      "resourceID": "BE40C43D-28DF-429C-9B92-BD4C1A712C22"
+      "resourceID": "A79E91EF-D56B-4DA6-B5DE-494007260049"
      },
      {
-      "id": "10AB96AE-32BC-4EBA-9A24-804F495E9403",
+      "id": "A44BF76F-0888-45EB-9550-2A1F0BB0B0FC",
       "name": "Shadow phone",
       "sortIndex": 2,
       "kind": "image",
@@ -2873,7 +2873,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "6A447CCD-BA8F-47CE-8E76-58D693818917",
+        "id": "9878C7C7-A03D-4A16-ACDF-E2AFD63BD11B",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2887,7 +2887,7 @@
         "opacity": 0.9
        },
        {
-        "id": "19AE3D16-ABB3-4905-888E-1E3963AAD964",
+        "id": "3445356C-A2F8-4AE8-91A0-D4B1E9006D5B",
         "time": 11.795940046491586,
         "transitionDuration": 11.795940046491586,
         "easing": "linear",
@@ -2902,7 +2902,7 @@
         "opacity": 0.9
        },
        {
-        "id": "95817A38-48C6-4414-A3F0-DCD1C60BF34E",
+        "id": "54D08565-1408-4CA8-B0D5-B70E689EF143",
         "time": 12.704706955903859,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -2917,7 +2917,7 @@
         "opacity": 0.7666666666666666
        },
        {
-        "id": "1C2BD4D4-4937-49DA-8C51-7584AB17E450",
+        "id": "9172C138-3099-4AED-85BC-085B5A117558",
         "time": 13.61347386531613,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2932,7 +2932,7 @@
         "opacity": 0.6333333333333335
        },
        {
-        "id": "3225B99D-E434-4A1F-9EC9-74C77E86171F",
+        "id": "794D2346-A108-49B5-B307-FCBCB33A3EB4",
         "time": 14.522240774728404,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -2947,7 +2947,7 @@
         "opacity": 0.5
        },
        {
-        "id": "5B484975-BC77-4253-8AB5-1A7577036019",
+        "id": "D1F6FA96-B048-417D-BEEC-3634FBD92D18",
         "time": 15.431007684140678,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -2962,7 +2962,7 @@
         "opacity": 0.3666666666666667
        },
        {
-        "id": "11B7D974-FA9C-43D0-B810-7BF5157B657A",
+        "id": "0CB1AA0F-0FD1-48EC-95AF-F2C73556A8EE",
         "time": 16.33977459355295,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -2977,7 +2977,7 @@
         "opacity": 0.2333333333333335
        },
        {
-        "id": "7E31A9AA-0B19-4A54-A285-1D6576BF6717",
+        "id": "ADEE2864-422F-4DC4-A0C3-AB8C52C53C81",
         "time": 17.248541502965224,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -2992,7 +2992,7 @@
         "opacity": 0.09999999999999976
        },
        {
-        "id": "165A716E-8D75-41AE-A0FF-125224ED5D2E",
+        "id": "361F9052-9F2D-496E-9B92-FB91E5F225D1",
         "time": 18.157308412377496,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3007,7 +3007,7 @@
         "opacity": 0.0
        },
        {
-        "id": "FA038538-4CD0-4100-AAE8-4A528AD56107",
+        "id": "4C21A99E-C2FE-4D26-8040-EB3557325FF1",
         "time": 19.066075321789768,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3022,7 +3022,7 @@
         "opacity": 0.0
        },
        {
-        "id": "519FF850-32D5-45AC-8C86-639B3CD5172B",
+        "id": "0F9CE983-32C3-4194-AC0F-C18E758BDDE0",
         "time": 19.974842231202043,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -3037,7 +3037,7 @@
         "opacity": 0.0
        },
        {
-        "id": "E08B175E-F69B-44E8-B601-FAA5378513EA",
+        "id": "4F8A6B45-8ED3-49CF-AE69-35A3933CEED3",
         "time": 20.883609140614315,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3052,7 +3052,7 @@
         "opacity": 0.0
        },
        {
-        "id": "348D36C0-FADA-4D3B-B30B-DE5613A6A819",
+        "id": "6D7B23ED-EBD8-4DC3-9AD9-812BC06E9529",
         "time": 21.79237605002659,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -3067,7 +3067,7 @@
         "opacity": 0.0
        },
        {
-        "id": "307BE83F-F1E1-40AA-9F3E-760405C09C46",
+        "id": "64B19994-6871-4E2B-BAC3-2AAFFB6D87EC",
         "time": 22.70114295943886,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3082,10 +3082,10 @@
         "opacity": 0.0
        }
       ],
-      "resourceID": "72108FF4-1DF5-4FDE-9CC0-F9EB3D395F11"
+      "resourceID": "6A462A57-CE71-416F-8825-2B352EA577EB"
      },
      {
-      "id": "1885D1AE-918C-4434-953C-FA1E1FD7DD4B",
+      "id": "4D530DF5-523D-478C-B3BF-E2FBFB3DDE40",
       "name": "Phone",
       "sortIndex": 3,
       "kind": "model",
@@ -3094,7 +3094,7 @@
       "duration": 32.25114295943886,
       "keyframes": [
        {
-        "id": "0E986E6B-FA4E-42D8-BAF5-6D8569BBB6E8",
+        "id": "D5834D19-7DFB-480C-A9C9-9A5490C3CE1C",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -3119,7 +3119,7 @@
         }
        },
        {
-        "id": "A881E671-F118-4D2D-BB2D-39AF4236A42B",
+        "id": "FD45A443-85F2-4B3F-8996-731DDACD5FFD",
         "time": 11.795940046491586,
         "transitionDuration": 11.795940046491586,
         "easing": "linear",
@@ -3145,7 +3145,7 @@
         }
        },
        {
-        "id": "26AF43C9-59AC-424E-BB17-36A3A5B383EB",
+        "id": "2F533AFC-046C-4B14-BFCA-1144424240BB",
         "time": 12.704706955903859,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -3171,7 +3171,7 @@
         }
        },
        {
-        "id": "BBDF9812-6A15-4C04-8AC4-991879BE2242",
+        "id": "3617B6FE-324D-4284-A972-A5C1B0AAC588",
         "time": 13.61347386531613,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3197,7 +3197,7 @@
         }
        },
        {
-        "id": "FF16E821-12DB-491E-9B38-13EE0470D786",
+        "id": "5937AABB-45CF-44E5-A76B-BAA88E1BF152",
         "time": 14.522240774728404,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -3223,7 +3223,7 @@
         }
        },
        {
-        "id": "F0CF0E70-1455-4DBD-A01A-649054FE78E9",
+        "id": "F4AEFFB4-50F9-49F6-A609-E2DBC834CF2B",
         "time": 15.431007684140678,
         "transitionDuration": 0.9087669094122734,
         "easing": "linear",
@@ -3249,7 +3249,7 @@
         }
        },
        {
-        "id": "DA612247-ADF7-4AD8-A020-9E3B65B91E65",
+        "id": "B3F34DD7-9738-4AF4-8F89-BD2BA640141A",
         "time": 16.33977459355295,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3275,7 +3275,7 @@
         }
        },
        {
-        "id": "D28F0FDF-7780-43B0-804A-B5AB95150950",
+        "id": "4C882F75-215B-4201-ABA4-998E7DFFB8F1",
         "time": 17.248541502965224,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -3301,7 +3301,7 @@
         }
        },
        {
-        "id": "D3182EDA-54B7-433F-8046-C64BC69894D7",
+        "id": "F9C02D07-9B2F-4B61-88F9-8F8EEBC8B357",
         "time": 18.157308412377496,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3327,7 +3327,7 @@
         }
        },
        {
-        "id": "9FB322E0-0205-494B-A2F1-F2962493C493",
+        "id": "38C94716-8D49-4D40-A266-1942269461BF",
         "time": 19.066075321789768,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3353,7 +3353,7 @@
         }
        },
        {
-        "id": "2570491D-5676-4D70-AE8C-B2D4C5904A44",
+        "id": "06C1D7FC-BB52-42C1-84E1-C14D27C2C7D3",
         "time": 19.974842231202043,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -3379,7 +3379,7 @@
         }
        },
        {
-        "id": "E1F797C9-5BA6-4BDA-830D-83D8CE1A6AC9",
+        "id": "6B4196A2-41A8-44BE-B883-ED060448FCAA",
         "time": 20.883609140614315,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3405,7 +3405,7 @@
         }
        },
        {
-        "id": "6AF30748-64A3-433E-89D2-1E63117EA27B",
+        "id": "5BD782B2-EA49-4A56-B17F-0974797EC263",
         "time": 21.79237605002659,
         "transitionDuration": 0.9087669094122752,
         "easing": "linear",
@@ -3431,7 +3431,7 @@
         }
        },
        {
-        "id": "31DC8A50-9700-4234-9349-23A5FB9D76B8",
+        "id": "EE3697FF-BE21-4577-BDB5-6E52BBE3B17D",
         "time": 22.70114295943886,
         "transitionDuration": 0.9087669094122717,
         "easing": "linear",
@@ -3457,13 +3457,13 @@
         }
        }
       ],
-      "resourceID": "0741A434-6787-4FF6-8671-39BD1D899C97"
+      "resourceID": "01A2EE2B-AE67-48F9-8C86-74CC51876DC2"
      }
     ]
    }
   },
   {
-   "id": "C1C00824-B492-422E-9E38-C2FFC7740FF8",
+   "id": "53F9A637-9F7C-470F-B2FC-D0D82F8AFB92",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene cube",
@@ -3488,7 +3488,7 @@
       "duration": 32.251142959438866,
       "keyframes": [
        {
-        "id": "C83F95FA-D807-493F-AA50-5C8AEE2D7BED",
+        "id": "C3B37E8A-EA93-4779-9597-7DC9FA891F10",
         "time": 0,
         "transitionDuration": 0,
         "gradient": {
@@ -3653,7 +3653,7 @@
       "fadeIn": 0.4,
       "keyframes": [
        {
-        "id": "7BA518DC-7D87-4F9B-B48F-5A724C6AB547",
+        "id": "1772FE7A-9261-4D03-94FA-A36823255D00",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -3763,7 +3763,7 @@
         "resourceID": "4AB32ED1-8949-9FDF-A4C5-719DB0839925",
         "keyframes": [
          {
-          "id": "FB022AB7-E300-4981-8181-5B49022842E0",
+          "id": "26E9A7A2-FF06-461A-9008-60FE99AB48AA",
           "time": 0,
           "transitionDuration": 0,
           "camera": {
@@ -3801,7 +3801,7 @@
         "resourceID": "41CE4F6C-795B-F985-92E3-EE68634B65D4",
         "keyframes": [
          {
-          "id": "4A249277-49C4-45F6-A480-DAFD53AF0A3E",
+          "id": "B2442983-89B3-423B-9E1E-3497825FEBA5",
           "time": 0,
           "transitionDuration": 0,
           "progress": 0.0
@@ -3852,7 +3852,7 @@
         "resourceID": "B91B6322-5656-A667-0246-717CA9B915F8",
         "keyframes": [
          {
-          "id": "EFADF036-5856-4585-94EC-E7EBA1CD2492",
+          "id": "DFF25B8C-7959-4AC5-8B62-2A6C0FAC6EE4",
           "time": 0,
           "transitionDuration": 0,
           "camera": {
@@ -3888,7 +3888,7 @@
  ],
  "layers": [
   {
-   "id": "69F0E6E1-5D49-424B-B98B-6345EA1A2152",
+   "id": "B2B87428-F2F8-4B82-A483-7142F033128B",
    "name": "Scene laptop",
    "sortIndex": 3,
    "kind": "video",
@@ -3897,7 +3897,7 @@
    "duration": 5.657238156446746,
    "keyframes": [
     {
-     "id": "9D0F6D8A-8D5A-4D45-A77D-F6311EB953E0",
+     "id": "2404B834-0C5F-4BDC-AC2A-9536E54B012E",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -3906,14 +3906,14 @@
      }
     }
    ],
-   "resourceID": "193E357A-F6BE-49BB-A5DA-4ABDB03597A0",
+   "resourceID": "11667158-0953-4595-86F1-252EB2326249",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.25
    }
   },
   {
-   "id": "9EAD64AF-1451-4598-A5CC-9328987AD4DF",
+   "id": "83FFEC54-8640-41B4-B6E6-58A5E6CAA84E",
    "name": "Scene tablet",
    "sortIndex": 2,
    "kind": "video",
@@ -3922,7 +3922,7 @@
    "duration": 12.045940046491586,
    "keyframes": [
     {
-     "id": "2674D41A-C34E-418D-8758-8C60BF075EF8",
+     "id": "1887A9AE-586B-4F59-9C42-12F05EB77D4F",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -3931,14 +3931,14 @@
      }
     }
    ],
-   "resourceID": "F1651DF5-F8AA-4241-A7DB-87815D8E2EEF",
+   "resourceID": "AD4CD73E-1A7B-4B1A-8816-F68DAEC468EB",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.25
    }
   },
   {
-   "id": "D08DB646-F939-4E2D-88AC-151203024289",
+   "id": "0DD8E11F-29B0-4F8E-83BD-AB9D577EB801",
    "name": "Scene phone",
    "sortIndex": 1,
    "kind": "video",
@@ -3947,7 +3947,7 @@
    "duration": 22.95114295943886,
    "keyframes": [
     {
-     "id": "A46E9AE4-E678-4865-A225-3CED86758AD4",
+     "id": "A396C78A-7DDE-4DBE-8FEC-4C0B33E64C96",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -3956,14 +3956,14 @@
      }
     }
    ],
-   "resourceID": "839D8C00-689B-4A9B-8B1A-588AA93A9EB3",
+   "resourceID": "A0B82221-2421-4C44-AE20-2AADFBA45755",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.25
    }
   },
   {
-   "id": "6D2141C2-4319-4202-BBD0-F03898947EA7",
+   "id": "0EDD8A81-9BAA-461C-842F-483741D1B217",
    "name": "Scene cube",
    "sortIndex": 0,
    "kind": "video",
@@ -3972,7 +3972,7 @@
    "duration": 32.25114295943886,
    "keyframes": [
     {
-     "id": "DB117859-A47F-4808-907B-B7B496D2EAB7",
+     "id": "5C90BA13-D2C4-46EC-8509-68B5122C5397",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -3981,7 +3981,7 @@
      }
     }
    ],
-   "resourceID": "C1C00824-B492-422E-9E38-C2FFC7740FF8"
+   "resourceID": "53F9A637-9F7C-470F-B2FC-D0D82F8AFB92"
   }
  ]
 }

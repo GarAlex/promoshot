@@ -26,6 +26,8 @@ FADE = 0.25               # the cut: the same document seen through the screen, 
 RATE = 0.143              # the flight: ln(scale) per second — doubling every 4.8 s
 OVERSHOOT = 1.025         # the picture a hair larger than the canvas at the cut
 CUBE_SKIP = 0.45          # land inside the cube piece's own fade-in, where the cube is there
+PAN_SPEED = 120           # the background's scroll, px/s at its own scale
+BG_WIDTH = 5600           # the background placed far wider than the canvas: room to scroll
 CUBE_REF = os.path.join(HERE, '..', '34-cube-to-word', 'reference.json')
 
 # --- measured at placement height 600 on a 1000-square canvas at the pose
@@ -84,11 +86,17 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
                           "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough}})
     resources = [bgres, body]
     steps = exp_steps(rest, rest + dur, grow)
-    pan = lambda t: -160 + 320 * (t / (rest + dur))
-    # The pan runs from the film's first frame; the growth from `rest`.
-    bg_keys = [kf(0, placement={"height": 1150, "anchor": "center", "offset": [pan(0), 0]})]
+    # The background SCROLLS, plainly: a placement far wider than the canvas
+    # panned at about PAN_SPEED px/s of its own scale for the whole film,
+    # alternating direction scene to scene. It has to read through a
+    # screen, and through a screen on a screen — a drift of a few px/s
+    # did not. The pan runs from the film's first frame; the growth from
+    # `rest`, and the pan scales with it.
+    direction = 1 if name in ('laptop', 'phone') else -1
+    pan = lambda t: direction * (PAN_SPEED * (rest + dur) / 2 - PAN_SPEED * t)
+    bg_keys = [kf(0, placement={"width": BG_WIDTH, "anchor": "center", "offset": [pan(0), 0]})]
     bg_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
-                   placement={"height": 1150 * g, "anchor": "center", "offset": [pan(t) * g, 0]})
+                   placement={"width": BG_WIDTH * g, "anchor": "center", "offset": [pan(t) * g, 0]})
                 for j, (t, g) in enumerate(steps)]
     layers.append(layer(f"Background {name}", 0, "image", 0, total, resourceID=bgres["id"], keyframes=bg_keys))
     floor_keys = [kf(0, placement={"width": 1700, "anchor": "bottom"})]
