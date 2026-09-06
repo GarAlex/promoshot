@@ -360,9 +360,16 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
             Some(why) => skipped.push((layer.name.as_str(), why)),
         }
     }
-    // Nested compositions: what each holds, and who places it.
-    let compositions: Vec<serde_json::Value> = project
-        .resources()
+    // Nested compositions: what each holds, and who places it — the
+    // layers naming it, and the material slots a body binds it to (rung
+    // 43: a screen that plays a document). A composition on a device's
+    // Screen is named by no layer, and "placed by 0" read as an unused
+    // resource to the agent that authored the three-devices demo.
+    // Bindings sit on the project's own resources — a nested composition
+    // carries layers, not resources — so one walk over them sees a slot
+    // on a body that a stage member or a nested layer places.
+    let resources = project.resources();
+    let compositions: Vec<serde_json::Value> = resources
         .iter()
         .filter(|r| r.kind == promo_model::ProjectResourceKind::Composition)
         .map(|r| {
@@ -372,9 +379,21 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
                 .filter(|l| l.resource_id.as_deref() == Some(r.id.as_str()))
                 .map(|l| l.id.clone())
                 .collect();
+            let bound_to: Vec<serde_json::Value> = resources
+                .iter()
+                .flat_map(|body| {
+                    body.materials
+                        .iter()
+                        .flat_map(|slots| slots.iter())
+                        .filter(|(_, binding)| binding.resource_id() == Some(r.id.as_str()))
+                        .map(move |(slot, _)| {
+                            serde_json::json!({ "resource": body.id, "slot": slot })
+                        })
+                })
+                .collect();
             serde_json::json!({
                 "id": r.id, "name": r.display_name, "duration": r.duration,
-                "layers": nested, "placedBy": placed_by,
+                "layers": nested, "placedBy": placed_by, "boundTo": bound_to,
             })
         })
         .collect();
@@ -392,7 +411,7 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
                     "startTime": l.start_time, "duration": l.duration,
                 }))
                 .collect::<Vec<_>>(),
-            "resources": project.resources().len(),
+            "resources": resources.len(),
             "renderable": renderable,
             "markers": project.meta.markers.as_deref().unwrap_or(&[]).iter().map(|m| serde_json::json!({
                 "id": m.id, "time": m.time, "name": m.name, "kind": m.kind,
@@ -433,17 +452,43 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
             layer.id, layer.start_time, layer.name
         ));
     }
-    out.push_str(&format!("resources: {}\n", project.resources().len()));
+    out.push_str(&format!("resources: {}\n", resources.len()));
     if !compositions.is_empty() {
         out.push_str(&format!("compositions: {}\n", compositions.len()));
         for c in &compositions {
+            let layers = c["placedBy"].as_array().map(|p| p.len()).unwrap_or(0);
+            let mut placed = format!("placed by {layers} layer{}", plural(layers));
+            // A slot use said apart from a layer's — the body and the slot
+            // — so "0 layers" on a device's screen does not read as unused.
+            let slots: Vec<String> = c["boundTo"]
+                .as_array()
+                .map(|bindings| {
+                    bindings
+                        .iter()
+                        .map(|b| {
+                            format!(
+                                "{} {}",
+                                b["resource"].as_str().unwrap_or(""),
+                                b["slot"].as_str().unwrap_or("")
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !slots.is_empty() {
+                placed.push_str(&format!(
+                    ", on {} slot{} ({})",
+                    slots.len(),
+                    plural(slots.len()),
+                    slots.join(", ")
+                ));
+            }
             out.push_str(&format!(
-                "  {}  \"{}\"  {:.2}s  {} layers  placed by {}\n",
+                "  {}  \"{}\"  {:.2}s  {} layers  {placed}\n",
                 c["id"].as_str().unwrap_or(""),
                 c["name"].as_str().unwrap_or(""),
                 c["duration"].as_f64().unwrap_or(0.0),
                 c["layers"],
-                c["placedBy"].as_array().map(|p| p.len()).unwrap_or(0)
             ));
         }
     }
@@ -471,6 +516,15 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
         );
     }
     Ok(out)
+}
+
+/// "1 layer", "0 layers": the suffix a count takes.
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
 }
 
 /// What a `.glb` holds, for the decision to place it: bounds, the material
@@ -1119,9 +1173,58 @@ mod tests {
         assert_eq!(json["renderable"], 1);
         assert_eq!(json["compositions"][0]["layers"], 1);
         assert_eq!(json["compositions"][0]["placedBy"][0], "P1");
+        assert_eq!(json["compositions"][0]["boundTo"], serde_json::json!([]));
         let text = inspect(&project, &Options::parse(&[]).unwrap()).unwrap();
         assert!(
-            text.contains("compositions: 1") && text.contains("placed by 1"),
+            text.contains("compositions: 1") && text.contains("placed by 1 layer\n"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A composition on a device's Screen slot is placed — the body shows
+    /// it — though no layer names it. Inspect used to say "placed by 0",
+    /// which the agent authoring the three-devices demo read as an unused
+    /// resource; the slot is counted, and named apart from the layers.
+    #[test]
+    fn inspect_counts_a_composition_bound_to_a_slot_as_placed() {
+        let dir = std::env::temp_dir().join(format!("promo-slot-inspect-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Device","createdAt":0,"state":"recorded","minReaderVersion":44,
+            "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+            "compositionSettings":{"canvasWidth":1280,"canvasHeight":720},
+            "resources":[{"id":"cap","kind":"caption","filename":"","displayName":"Words","addedAt":0,
+               "captionText":"hi","imageCuts":[]},
+              {"id":"scr","kind":"composition","filename":"","displayName":"Phone screen","addedAt":0,
+               "duration":4,"pixelWidth":1170,"pixelHeight":2532,"imageCuts":[],
+               "composition":{"canvasWidth":1170,"canvasHeight":2532,"layers":[
+                 {"id":"L","name":"inner","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"cap","keyframes":[]}]}},
+              {"id":"dev","kind":"model","filename":"","displayName":"Phone","addedAt":0,"imageCuts":[],
+               "recipe":{"device":{"kind":"phone"}},
+               "materials":{"Screen":{"resourceID":"scr","finish":"glass"},"Body":"2B2C30"}}],
+            "layers":[{"id":"bench","name":"Bench","sortIndex":0,"kind":"stage","isEnabled":true,
+              "startTime":0,"duration":4,"keyframes":[],
+              "members":[{"id":"m","name":"Phone","sortIndex":0,"kind":"model","isEnabled":true,
+                "startTime":0,"duration":4,"resourceID":"dev","keyframes":[]}]}]}"#,
+        )
+        .unwrap();
+        let project = Project::open(&dir).expect("opens");
+        let out = inspect(&project, &Options::parse(&["--json".into()]).unwrap()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let composition = &json["compositions"][0];
+        assert_eq!(composition["id"], "scr");
+        assert_eq!(composition["placedBy"], serde_json::json!([]));
+        assert_eq!(
+            composition["boundTo"],
+            serde_json::json!([{ "resource": "dev", "slot": "Screen" }]),
+            "{out}"
+        );
+        let text = inspect(&project, &Options::parse(&[]).unwrap()).unwrap();
+        assert!(
+            text.contains("placed by 0 layers, on 1 slot (dev Screen)"),
             "{text}"
         );
         let _ = std::fs::remove_dir_all(&dir);
