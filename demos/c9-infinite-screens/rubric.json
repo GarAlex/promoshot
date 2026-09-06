@@ -8,7 +8,7 @@
     29,
     36
   ],
-  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them — every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight.",
+  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them \u2014 every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight. What a fresh agent makes of the same scene from a two-line brief and no media is C10.",
   "media": [],
   "retired": "a built showcase (build.py writes the four compositions and the flight); not an agent task yet",
   "showcase": [
@@ -23,7 +23,7 @@
     {
       "film": "phone-first",
       "title": "Phone first",
-      "blurb": "The other way up — a phone, a tablet, a laptop, the cube — with a headline per scene, each screen playing a scene built to its own shape, glass over every screen, the laptop typing PROMOSHOT on its keyboard before the last flight.",
+      "blurb": "The other way up \u2014 a phone, a tablet, a laptop, the cube \u2014 with a headline per scene, each screen playing a scene built to its own shape, glass over every screen, the laptop typing PROMOSHOT on its keyboard before the last flight.",
       "out": "phone-first",
       "video": "infinite-screens-phone-first.mp4",
       "project": "Infinite screens, phone first.promo"

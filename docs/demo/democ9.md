@@ -1,6 +1,6 @@
 # C9 Infinite screens
 
-A built showcase, not an agent run: a script writes four compositions from the format and flies through them — every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight.
+A built showcase, not an agent run: a script writes four compositions from the format and flies through them — every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight. What a fresh agent makes of the same scene from a two-line brief and no media is C10.
 
 *1440×900, 29 to 36 s.* A **built showcase**, not an agent run: [`demos/c9-infinite-screens/build.py`](../../demos/c9-infinite-screens/build.py) writes the project straight from the format, and its resources are in [`demos/c9-infinite-screens/resources/`](../../demos/c9-infinite-screens/resources). Part of [the demos](../../demo.md).
 

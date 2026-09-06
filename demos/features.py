@@ -40,6 +40,11 @@ def features(meta):
         "materials": any(r.get('materials') for r in res),
         "finish": any(isinstance(b, dict) and (b.get('metallic') is not None or b.get('roughness') is not None)
                       for r in res for b in (r.get('materials') or {}).values()),
+        "finishWord": any(isinstance(b, dict) and isinstance(b.get('finish'), str)
+                          for r in res for b in (r.get('materials') or {}).values()),
+        "floor": any(l.get('floor') for l in layers),
+        "device": any(isinstance(r.get('recipe'), dict) and 'device' in r['recipe'] for r in res),
+        "light": any(k.get('light') for k in kf),
         "morph": any(isinstance(r.get('particles'), dict) and r['particles'].get('morph') for r in res),
         "route": any(isinstance(r.get('route'), dict) for r in res),
         "cameraRoute": any(isinstance(k.get('camera'), dict) and k['camera'].get('motionPath')

@@ -22,6 +22,14 @@ FFMPEG = '/opt/homebrew/bin/ffmpeg'
 IMAGE = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
 VIDEO = ('.mp4', '.mov', '.webm')
 
+def ident(name):
+    """A demo's id: what precedes the first dash — `01`, `c8`, `c10`."""
+    return name.split('-', 1)[0]
+
+def title_of(rubric):
+    """The template's title without its id."""
+    return rubric['template'].split(' ', 1)[1] if ' ' in rubric['template'] else rubric['template']
+
 def latest_run(demo):
     runs = os.path.join(demo, 'runs')
     if not os.path.isdir(runs):
@@ -129,15 +137,15 @@ def index_row(name, template, blurb, result, creative):
             status += f" · MCP {fmt_secs(round(st['mcp']['ms'] / 1000))} in {st['mcp']['calls']} calls"
         if 'video_hd' in result:
             status = f"[▶ watch]({result['video_hd']}) · " + status
-        pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
+        pic = f'<a href="docs/demo/demo{ident(name)}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
     else:
         status, pic = "not run yet", ""
-    return f"| {pic} | [{template}](docs/demo/demo{name[:2]}.md) | {blurb} | {status} |"
+    return f"| {pic} | [{template}](docs/demo/demo{ident(name)}.md) | {blurb} | {status} |"
 
 def showcase_row(name, template, blurb, result):
     films = " · ".join(f"[▶ {f['title'].lower()}]({f['video_hd']})" for f in result['films'] if 'video_hd' in f)
-    pic = f'<a href="docs/demo/demo{name[:2]}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
-    return f"| {pic} | [{template}](docs/demo/demo{name[:2]}.md) | {blurb} | {films} |"
+    pic = f'<a href="docs/demo/demo{ident(name)}.md"><img src="{result["thumb"]}" width="160"></a>' if 'thumb' in result else ""
+    return f"| {pic} | [{template}](docs/demo/demo{ident(name)}.md) | {blurb} | {films} |"
 
 BLURBS = json.load(open(os.path.join(HERE, 'blurbs.json'))) if os.path.exists(os.path.join(HERE, 'blurbs.json')) else {}
 
@@ -211,11 +219,11 @@ def publish_showcase(name, demo, rubric, srows):
             pg.append(f"- **{c['name']}** — {c['assert']}")
         pg.append("")
     pg += ["---", "", "[← all demos](../../demo.md) · [how the suite works](../../demos/README.md)", ""]
-    open(os.path.join(ASSETS, f"demo{name[:2]}.md"), 'w').write("\n".join(pg))
+    open(os.path.join(ASSETS, f"demo{ident(name)}.md"), 'w').write("\n".join(pg))
     srows.append(showcase_row(name, rubric['template'], blurb, result))
-    return {"id": name[:2], "slug": name, "title": rubric['template'][3:], "blurb": blurb, "kind": "showcase",
+    return {"id": ident(name), "slug": name, "title": title_of(rubric), "blurb": blurb, "kind": "showcase",
             "canvas": rubric.get('canvas'), "duration": rubric['duration'], "prompt": prompt,
-            "resources": [], "result": result, "page": f"docs/demo/demo{name[:2]}.md"}
+            "resources": [], "result": result, "page": f"docs/demo/demo{ident(name)}.md"}
 
 def main():
     os.makedirs(ASSETS, exist_ok=True)
@@ -230,7 +238,7 @@ def main():
     for name in sorted(os.listdir(HERE)):
         demo = os.path.join(HERE, name)
         creative = name[:1] == 'c' and name[1:2].isdigit()
-        if not (os.path.isdir(demo) and (name[:2].isdigit() or creative) and os.path.exists(os.path.join(demo, 'rubric.json'))):
+        if not (os.path.isdir(demo) and (ident(name).isdigit() or creative) and os.path.exists(os.path.join(demo, 'rubric.json'))):
             continue
         rubric = json.load(open(os.path.join(demo, 'rubric.json')))
         if only and name not in only and name in previous:
@@ -310,12 +318,12 @@ def main():
             t = os.path.join(out, 'thumb.png')
             if thumb(os.path.join(CORE, result['video']), t):
                 result['thumb'] = f"docs/demo/{name}/thumb.png"
-        blurb = BLURBS.get(name[:2], user_prompt.split('.')[0].strip() + '.')
-        manifest.append({"id": name[:2], "slug": name, "title": rubric['template'][3:], "blurb": blurb,
+        blurb = BLURBS.get(ident(name), user_prompt.split('.')[0].strip() + '.')
+        manifest.append({"id": ident(name), "slug": name, "title": title_of(rubric), "blurb": blurb,
                          "kind": "creative" if creative else "conformance",
                          "canvas": rubric.get('canvas'), "duration": rubric['duration'],
                          "prompt": user_prompt, "resources": resources, "result": result,
-                         "page": f"docs/demo/demo{name[:2]}.md"})
+                         "page": f"docs/demo/demo{ident(name)}.md"})
 
         # --- the demo's own page (links relative to docs/demo/) ---
         rel = lambda path: path[len('docs/demo/'):] if path.startswith('docs/demo/') else '../../' + path
@@ -391,7 +399,7 @@ def main():
         else:
             pg += ["## What the agent made", "", "*Not run yet.*", ""]
         pg += ["---", "", "[← all demos](../../demo.md) · [how the suite works](../../demos/README.md)", ""]
-        open(os.path.join(ASSETS, f"demo{name[:2]}.md"), 'w').write("\n".join(pg))
+        open(os.path.join(ASSETS, f"demo{ident(name)}.md"), 'w').write("\n".join(pg))
 
         # --- the index row ---
         (crows if creative else rows).append(index_row(name, rubric['template'], blurb, result, creative))

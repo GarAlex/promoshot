@@ -5816,6 +5816,167 @@
   "page": "docs/demo/democ1.md"
  },
  {
+  "id": "c10",
+  "slug": "c10-three-devices",
+  "title": "Three devices, no files",
+  "blurb": "The three-device scene of C9 from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light \u2014 and make its own screens?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   9,
+   16
+  ],
+  "prompt": "No media. Three devices \u2014 a phone, a tablet and a laptop \u2014 together on a polished table under studio light, glass on every screen and something of your own showing on each, one camera move through the scene, ten to fifteen seconds, landscape. Make it look real: the table reflects them, they cast shadows, the light catches the glass. Whatever you need beyond what the format gives you, make yourself.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "13.0s, asked 9\u201316s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "13 features: composition, effects, gradient, stage, stageLayer, model, camera, materials, finishWord, floor, device, light, environment"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "16 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "3 layers"
+    }
+   ],
+   "summary": "turns=77 cost=$5.59 secs=783",
+   "run": {
+    "turns": 77,
+    "wall_s": 782,
+    "api_s": 762,
+    "cost_usd": 5.59,
+    "tokens": {
+     "input": 86,
+     "cache_read": 5439252,
+     "cache_write": 149575,
+     "output": 54882,
+     "thinking": 28490
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 5588913,
+      "output": 54882,
+      "cost_usd": 5.59
+     }
+    ],
+    "mcp": {
+     "calls": 18,
+     "ms": 17194,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 14858,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 4,
+       "ms": 1271,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 6,
+       "ms": 948,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 109,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 2,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "composition",
+    "effects",
+    "gradient",
+    "stage",
+    "stageLayer",
+    "model",
+    "camera",
+    "materials",
+    "finishWord",
+    "floor",
+    "device",
+    "light",
+    "environment"
+   ],
+   "captions": [
+    "PROMOSHOT",
+    "STORYBOARD",
+    "PROMOSHOT STUDIO",
+    "Ready\nfor the\nshot.",
+    "Three frames,\none move.",
+    "c10 \u00b7 three devices",
+    "3 devices \u00b7 one key light \u00b7 13 s",
+    "01   Open on the table",
+    "1920 \u00d7 1080 \u00b7 30 fps \u00b7 one camera move",
+    "Render",
+    "02   Cross the glass",
+    "00:00:00:00      \u25b8      00:00:13:00",
+    "03   Land on the laptop",
+    "RENDER",
+    "13.0 s \u00b7 landscape",
+    "Three screens. One take."
+   ],
+   "notes": "Done \u2014 `out.promo` is written, validated, inspected, and rendered.\n\n**`Exports/export.mp4`** \u2014 1920\u00d71080, 390 frames @ 30 fps (13.0 s), landscape.\n\n**What's in it.** `resources/` was empty, so nothing in the shot is imported media \u2014 the whole scene is built out of the format:\n\n- **The three devices** are generated model bodies (`recipe: {\"device\": {\"kind\": \"phone\" | \"tablet\" | \"laptop\"}}`), standing together in one `stage` layer through one camera and one depth buffer, arranged by `stageOffset`/`depth` \u2014 tablet left, laptop centre-back, phone front-right.\n- **The screens** are three nested `composition` resources bound to each body's `Screen` slot, so each device is genuinely showing something of its own: a phone app screen, a landscape storyboard, and an editor window. They're built from background gradients and captions (the plated captions do the chips and buttons), and they play on the layer's clock.\n- **Glass** is `\"finish\": \"glass\"` on every `Screen` slot, `\"anodized\"` on the bodies, under a `studio` environment \u2014 that's what puts the key light's glance across each screen.\n- **The table** is `\"floor\": \"mirror\"` on the stage \u2014 it gives the reflections and the contact shadows \u2014 over a background layer whose vertical gradient paints the warm horizon the light pools on, with a vignette and a little grain.\n- **One camera move**: four keyframes with `smooth` easing so the speed carries through rather than stopping at each one \u2014 yaw \u221218\u00b0 \u2192 +10\u00b0, pitch 21\u00b0 \u2192 8\u00b0, dolly 4.9 \u2192 4.2 radii \u2014 while the key light swings the opposite way, so the highlight travels across the glass as the camera crosses it. One title lands at 8.4 s and clears before the end.\n\n**What I changed after looking.** Three passes on the contact sheets fixed real problems: the tablet body is landscape and my",
+   "contact": "docs/demo/c10-three-devices/contact-result.png",
+   "video": "docs/demo/c10-three-devices/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c10-three-devices.mp4",
+   "video_hd_bytes": 1371890,
+   "metadata": "docs/demo/c10-three-devices/result-metadata.json",
+   "gif": "docs/demo/c10-three-devices/result.gif",
+   "thumb": "docs/demo/c10-three-devices/thumb.png"
+  },
+  "page": "docs/demo/democ10.md"
+ },
+ {
   "id": "c2",
   "slug": "c2-social-teaser",
   "title": "Social teaser",
@@ -7031,7 +7192,7 @@
   "id": "c9",
   "slug": "c9-infinite-screens",
   "title": "Infinite screens",
-  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them \u2014 every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight.",
+  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them \u2014 every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight. What a fresh agent makes of the same scene from a two-line brief and no media is C10.",
   "kind": "showcase",
   "canvas": [
    1440,

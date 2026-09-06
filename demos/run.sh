@@ -10,7 +10,7 @@ set -e
 DEMO="${1:A}"; MODEL="${2:-}"
 [ -f "$DEMO/prompt.md" ] || { echo "no prompt.md in $DEMO"; exit 2 }
 HERE="${0:A:h}"; CORE="${HERE:h}"
-CLI="${CLAUDE_BIN:-$HOME/Library/Application Support/Claude/claude-code/2.1.255/claude.app/Contents/MacOS/claude}"
+CLI="${CLAUDE_BIN:-$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1)}"
 MCP="$CORE/target/release/promoshot-mcp"; PROMO="$CORE/target/release/promo"
 [ -x "$MCP" ] && [ -x "$PROMO" ] || { echo "build first: cargo build --release -p promoshot-mcp -p promo-cli"; exit 2 }
 export PATH=/opt/homebrew/bin:$PATH

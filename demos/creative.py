@@ -44,6 +44,9 @@ SETS = [
   "goal": "Two device models (tablet.glb and phone.glb — look at them first) and three screenshots of Lumen, an analytics app. Make a 12-to-18-second landscape piece that is a SCENE rather than a product shot: both devices in one space, the app on both screens, one camera move through it, and a line of type that belongs in the scene. Everything else is yours.",
   "media": {"26-stage": ["tablet.glb", "phone.glb"], "01-app-store-hero": ["ui_lumen_1.png", "ui_lumen_2.png", "ui_lumen_5.png"]},
   "duration": [11, 19], "must_use": ["tablet.glb", "phone.glb"]},
+ {"id": "c10", "slug": "three-devices", "title": "Three devices, no files",
+  "goal": "No media. Three devices — a phone, a tablet and a laptop — together on a polished table under studio light, glass on every screen and something of your own showing on each, one camera move through the scene, ten to fifteen seconds, landscape. Make it look real: the table reflects them, they cast shadows, the light catches the glass. Whatever you need beyond what the format gives you, make yourself.",
+  "media": {}, "duration": [9, 16], "must_use": []},
 ]
 
 def main():

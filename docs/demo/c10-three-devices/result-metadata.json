@@ -1,0 +1,460 @@
+{
+  "id": "c10-three-devices",
+  "name": "Three devices",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 45,
+  "trimStart": 0,
+  "trimEnd": 13,
+  "videoDuration": 13,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "backgroundColorHex": "@canvas",
+    "subtitleColorHex": "@text",
+    "subtitleFontSize": 60,
+    "subtitleBackgroundOpacity": 0,
+    "subtitleBackgroundColorHex": "@text-bg",
+    "subtitleStrokeColorHex": "@caption-outline",
+    "subtitleShadowColorHex": "@caption-shadow",
+    "subtitleLeftMargin": 140,
+    "subtitleRightMargin": 140,
+    "palette": [
+      { "name": "canvas",          "colorHex": "08080A" },
+      { "name": "text",            "colorHex": "F2EFE9" },
+      { "name": "text-bg",         "colorHex": "FFFFFF" },
+      { "name": "edge",            "colorHex": "2A2E38" },
+      { "name": "caption-outline", "colorHex": "0A0A0C" },
+      { "name": "caption-shadow",  "colorHex": "000000" },
+      { "name": "media-shadow",    "colorHex": "000000" },
+      { "name": "highlight",       "colorHex": "FFB25E" },
+      { "name": "accent",          "colorHex": "5B8CFF" },
+      { "name": "accent2",         "colorHex": "FF9A5B" },
+      { "name": "ink",             "colorHex": "15161A" },
+      { "name": "paper",           "colorHex": "F4F1EA" }
+    ],
+    "environment": { "preset": "studio", "intensity": 0.9 }
+  },
+
+  "resources": [
+
+    {
+      "id": "scr-phone",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Phone screen",
+      "addedAt": 0,
+      "duration": 13,
+      "pixelWidth": 1170,
+      "pixelHeight": 2532,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1170,
+        "canvasHeight": 2532,
+        "backgroundColorHex": "0B1020",
+        "layers": [
+          {
+            "id": "p-bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "keyframes": [
+              { "id": "p-bg-k0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "linear", "start": [0.15, 0], "end": [0.85, 1],
+                  "stops": [
+                    { "colorHex": "16213F", "at": 0 },
+                    { "colorHex": "0E1730", "at": 0.55 },
+                    { "colorHex": "090D1B", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "p-eyebrow", "name": "Eyebrow", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "PROMOSHOT",
+            "captionStyle": {
+              "fontSize": 58, "weight": "semibold", "tracking": 14,
+              "textColorHex": "@accent", "alignment": "center",
+              "placement": { "anchor": "top", "offset": [0, 320] } },
+            "keyframes": []
+          },
+          {
+            "id": "p-title", "name": "Title", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "Ready\nfor the\nshot.",
+            "captionStyle": {
+              "fontSize": 196, "weight": "heavy", "lineHeight": 1.02, "tracking": -3,
+              "textColorHex": "@text", "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, -150] } },
+            "keyframes": []
+          },
+          {
+            "id": "p-sub", "name": "Sub", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "3 devices · one key light · 13 s",
+            "captionStyle": {
+              "fontSize": 56, "weight": "medium",
+              "textColorHex": "8A93AD", "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, 260] } },
+            "keyframes": []
+          },
+          {
+            "id": "p-btn", "name": "Button", "sortIndex": 4, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "Render",
+            "captionStyle": {
+              "fontSize": 74, "weight": "bold",
+              "textColorHex": "0A1020",
+              "backgroundColorHex": "@accent", "backgroundOpacity": 1,
+              "padding": 46, "cornerRadius": 74, "alignment": "center",
+              "placement": { "anchor": "bottom", "offset": [0, -380] } },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "scr-tab",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Tablet screen",
+      "addedAt": 0,
+      "duration": 13,
+      "pixelWidth": 2360,
+      "pixelHeight": 1640,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 2360,
+        "canvasHeight": 1640,
+        "backgroundColorHex": "F4F1EA",
+        "layers": [
+          {
+            "id": "t-bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "keyframes": [
+              { "id": "t-bg-k0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "linear", "start": [0, 0], "end": [0, 1],
+                  "stops": [
+                    { "colorHex": "FAF8F3", "at": 0 },
+                    { "colorHex": "EFEADE", "at": 0.62 },
+                    { "colorHex": "E2DBCB", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "t-eyebrow", "name": "Eyebrow", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "STORYBOARD",
+            "captionStyle": {
+              "fontSize": 50, "weight": "semibold", "tracking": 12,
+              "textColorHex": "A2947C", "alignment": "center",
+              "placement": { "anchor": "top", "offset": [0, 150] } },
+            "keyframes": []
+          },
+          {
+            "id": "t-title", "name": "Title", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "Three frames,\none move.",
+            "captionStyle": {
+              "fontSize": 148, "weight": "heavy", "lineHeight": 1.04, "tracking": -2,
+              "textColorHex": "@ink", "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, -330] } },
+            "keyframes": []
+          },
+          {
+            "id": "t-c1", "name": "Chip 1", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "01   Open on the table",
+            "captionStyle": {
+              "fontSize": 62, "weight": "medium", "alignment": "leading",
+              "textColorHex": "@ink",
+              "backgroundColorHex": "FFFFFF", "backgroundOpacity": 1,
+              "padding": 34, "cornerRadius": 26,
+              "placement": { "anchor": "center", "offset": [0, -50] } },
+            "keyframes": []
+          },
+          {
+            "id": "t-c2", "name": "Chip 2", "sortIndex": 4, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "02   Cross the glass",
+            "captionStyle": {
+              "fontSize": 62, "weight": "medium", "alignment": "leading",
+              "textColorHex": "@ink",
+              "backgroundColorHex": "FFFFFF", "backgroundOpacity": 1,
+              "padding": 34, "cornerRadius": 26,
+              "placement": { "anchor": "center", "offset": [0, 105] } },
+            "keyframes": []
+          },
+          {
+            "id": "t-c3", "name": "Chip 3", "sortIndex": 5, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "03   Land on the laptop",
+            "captionStyle": {
+              "fontSize": 62, "weight": "medium", "alignment": "leading",
+              "textColorHex": "FFFFFF",
+              "backgroundColorHex": "@accent", "backgroundOpacity": 1,
+              "padding": 34, "cornerRadius": 26,
+              "placement": { "anchor": "center", "offset": [0, 260] } },
+            "keyframes": []
+          },
+          {
+            "id": "t-foot", "name": "Foot", "sortIndex": 6, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "13.0 s · landscape",
+            "captionStyle": {
+              "fontSize": 44, "weight": "medium",
+              "textColorHex": "A2947C", "alignment": "center",
+              "placement": { "anchor": "bottom", "offset": [0, -130] } },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "scr-lap",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Laptop screen",
+      "addedAt": 0,
+      "duration": 13,
+      "pixelWidth": 1728,
+      "pixelHeight": 1080,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1728,
+        "canvasHeight": 1080,
+        "backgroundColorHex": "0C0D11",
+        "layers": [
+          {
+            "id": "l-bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "keyframes": [
+              { "id": "l-bg-k0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "radial", "start": [0.5, 0.42], "end": [1.25, 1.15],
+                  "stops": [
+                    { "colorHex": "121729", "at": 0 },
+                    { "colorHex": "0A0C15", "at": 0.55 },
+                    { "colorHex": "05060A", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "l-eyebrow", "name": "Eyebrow", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "PROMOSHOT STUDIO",
+            "captionStyle": {
+              "fontSize": 38, "weight": "semibold", "tracking": 9,
+              "textColorHex": "6E7891", "alignment": "leading",
+              "placement": { "anchor": "topLeft", "offset": [80, 70] } },
+            "keyframes": []
+          },
+          {
+            "id": "l-title", "name": "Title", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "c10 · three devices",
+            "captionStyle": {
+              "fontSize": 118, "weight": "heavy", "tracking": -2,
+              "textColorHex": "@text", "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, -40] } },
+            "keyframes": []
+          },
+          {
+            "id": "l-sub", "name": "Sub", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "1920 × 1080 · 30 fps · one camera move",
+            "captionStyle": {
+              "fontSize": 50, "weight": "medium",
+              "textColorHex": "7C879E", "alignment": "center",
+              "placement": { "anchor": "center", "offset": [0, 90] } },
+            "keyframes": []
+          },
+          {
+            "id": "l-tc", "name": "Timecode", "sortIndex": 4, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "00:00:00:00      ▸      00:00:13:00",
+            "captionStyle": {
+              "fontSize": 42, "fontFamily": "monospaced", "weight": "medium",
+              "textColorHex": "5B6479", "alignment": "center",
+              "placement": { "anchor": "bottom", "offset": [0, -80] } },
+            "keyframes": []
+          },
+          {
+            "id": "l-chip", "name": "Chip", "sortIndex": 5, "kind": "caption",
+            "isEnabled": true, "startTime": 0, "duration": 13,
+            "captionText": "RENDER",
+            "captionStyle": {
+              "fontSize": 40, "weight": "bold", "tracking": 4,
+              "textColorHex": "0A1020",
+              "backgroundColorHex": "@accent", "backgroundOpacity": 1,
+              "padding": 26, "cornerRadius": 44, "alignment": "center",
+              "placement": { "anchor": "topRight", "offset": [-80, 62] } },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "dev-phone",
+      "kind": "model",
+      "filename": "",
+      "displayName": "Phone",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "recipe": { "device": { "kind": "phone" } },
+      "materials": {
+        "Screen": { "resourceID": "scr-phone", "finish": "glass" },
+        "Body":   { "colorHex": "2B2C30", "finish": "anodized" },
+        "Deck":   { "colorHex": "2B2C30", "finish": "anodized" }
+      }
+    },
+
+    {
+      "id": "dev-tab",
+      "kind": "model",
+      "filename": "",
+      "displayName": "Tablet",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "recipe": { "device": { "kind": "tablet" } },
+      "materials": {
+        "Screen": { "resourceID": "scr-tab", "finish": "glass" },
+        "Body":   { "colorHex": "D6D8DA", "finish": "anodized" },
+        "Deck":   { "colorHex": "D6D8DA", "finish": "anodized" }
+      }
+    },
+
+    {
+      "id": "dev-lap",
+      "kind": "model",
+      "filename": "",
+      "displayName": "Laptop",
+      "addedAt": 0,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "clips": [],
+      "recipe": { "device": { "kind": "laptop" } },
+      "materials": {
+        "Screen": { "resourceID": "scr-lap", "finish": "glass" },
+        "Body":   { "colorHex": "3C3E44", "finish": "anodized" },
+        "Deck":   { "colorHex": "3C3E44", "finish": "anodized" }
+      }
+    }
+  ],
+
+  "layers": [
+
+    {
+      "id": "room",
+      "name": "Table under the key light",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13,
+      "effects": { "vignette": 0.34, "vignetteSoftness": 0.7, "grain": 0.05 },
+      "keyframes": [
+        { "id": "room-k0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "linear", "start": [0.5, 0], "end": [0.5, 1],
+            "stops": [
+              { "colorHex": "0F1013", "at": 0 },
+              { "colorHex": "191A1E", "at": 0.45 },
+              { "colorHex": "322D28", "at": 0.72 },
+              { "colorHex": "6B5B45", "at": 0.83 },
+              { "colorHex": "3B322A", "at": 0.90 },
+              { "colorHex": "161314", "at": 1 } ] } },
+        { "id": "room-k1", "time": 13, "transitionPercent": 100, "easing": "easeInOut",
+          "gradient": { "kind": "linear", "start": [0.5, 0], "end": [0.5, 1],
+            "stops": [
+              { "colorHex": "111216", "at": 0 },
+              { "colorHex": "1C1D22", "at": 0.42 },
+              { "colorHex": "37312A", "at": 0.66 },
+              { "colorHex": "77644B", "at": 0.77 },
+              { "colorHex": "40362C", "at": 0.86 },
+              { "colorHex": "171415", "at": 1 } ] } }
+      ]
+    },
+
+    {
+      "id": "bench",
+      "name": "Three devices on the table",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13,
+      "floor": "mirror",
+      "keyframes": [
+        { "id": "cam0", "time": 0, "transitionDuration": 0,
+          "placement": { "height": 620, "anchor": "center", "offset": [0, 40] },
+          "camera": { "yaw": -18, "pitch": 21, "roll": 0, "distance": 4.9, "fov": 32 },
+          "light":  { "yaw": 58, "pitch": 55, "intensity": 1.05 } },
+        { "id": "cam1", "time": 4.5, "transitionPercent": 100, "easing": "smooth",
+          "placement": { "height": 650, "anchor": "center", "offset": [0, 38] },
+          "camera": { "yaw": -10, "pitch": 16.5, "roll": 0, "distance": 4.65, "fov": 32 },
+          "light":  { "yaw": 26, "pitch": 41, "intensity": 1.15 } },
+        { "id": "cam2", "time": 9, "transitionPercent": 100, "easing": "smooth",
+          "placement": { "height": 664, "anchor": "center", "offset": [0, 34] },
+          "camera": { "yaw": -1, "pitch": 12, "roll": 0, "distance": 4.4, "fov": 32 },
+          "light":  { "yaw": -8, "pitch": 35, "intensity": 1.2 } },
+        { "id": "cam3", "time": 13, "transitionPercent": 100, "easing": "smooth",
+          "placement": { "height": 686, "anchor": "center", "offset": [0, 28] },
+          "camera": { "yaw": 10, "pitch": 8, "roll": 0, "distance": 4.2, "fov": 32 },
+          "light":  { "yaw": -34, "pitch": 50, "intensity": 1.05 } }
+      ],
+      "members": [
+        {
+          "id": "m-lap", "name": "Laptop", "sortIndex": 0, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 13, "resourceID": "dev-lap",
+          "keyframes": [
+            { "id": "m-lap-k0", "time": 0, "transitionDuration": 0,
+              "depth": -0.34, "stageOffset": [0.10, 0] }
+          ]
+        },
+        {
+          "id": "m-tab", "name": "Tablet", "sortIndex": 1, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 13, "resourceID": "dev-tab",
+          "keyframes": [
+            { "id": "m-tab-k0", "time": 0, "transitionDuration": 0,
+              "depth": -0.10, "stageOffset": [-1.30, -0.04] }
+          ]
+        },
+        {
+          "id": "m-phone", "name": "Phone", "sortIndex": 2, "kind": "model",
+          "isEnabled": true, "startTime": 0, "duration": 13, "resourceID": "dev-phone",
+          "keyframes": [
+            { "id": "m-phone-k0", "time": 0, "transitionDuration": 0,
+              "depth": 0.40, "stageOffset": [1.05, -0.12] }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "title",
+      "name": "Title",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 8.4,
+      "duration": 4.3,
+      "fadeIn": 0.5,
+      "fadeOut": 0.8,
+      "captionText": "Three screens. One take.",
+      "captionStyle": {
+        "fontSize": 62, "weight": "semibold", "tracking": 2,
+        "textColorHex": "@text", "alignment": "center",
+        "strokeColorHex": "@caption-outline", "strokeWidth": 4,
+        "shadowOpacity": 0.55, "shadowRadius": 14, "padding": 22,
+        "placement": { "anchor": "top", "offset": [0, 68] } },
+      "keyframes": []
+    }
+  ]
+}
