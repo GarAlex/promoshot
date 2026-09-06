@@ -3264,6 +3264,69 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Glass through the whole path: a `glass` sphere in front of a red
+    /// box shows the box through itself — red at its centre — where a
+    /// `gloss` sphere hides it.
+    #[test]
+    fn a_glass_body_shows_the_body_behind_it() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-glass-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = |finish: &str| {
+            format!(
+                r#"{{"id":"P","name":"Glass","createdAt":0,"state":"recorded","minReaderVersion":44,
+                "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":320,"backgroundColorHex":"202020",
+                    "environment":{{"preset":"studio"}}}},
+                "resources":[
+                  {{"id":"BOX","kind":"model","filename":"","displayName":"Box","addedAt":0,
+                    "recipe":{{"parts":[{{"slot":"Box","shape":{{"box":{{"size":[1.2,1.2,0.4]}}}}}}]}},
+                    "materials":{{"Box":{{"colorHex":"E02020","finish":"matte"}}}}}},
+                  {{"id":"BALL","kind":"model","filename":"","displayName":"Ball","addedAt":0,
+                    "recipe":{{"parts":[{{"slot":"Ball","shape":{{"sphere":{{"radius":0.45}}}}}}]}},
+                    "materials":{{"Ball":{{"colorHex":"F0F0F0","finish":"{finish}"}}}}}}],
+                "layers":[{{"id":"S","name":"Stage","sortIndex":0,"kind":"stage","isEnabled":true,"startTime":0,"duration":4,
+                  "keyframes":[{{"id":"K0","time":0,"camera":{{"yaw":0,"pitch":5,"distance":3.4}},
+                    "light":{{"yaw":40,"pitch":50}},"placement":{{"height":260,"anchor":"center"}},"transitionDuration":0}}],
+                  "members":[
+                    {{"id":"B","name":"Box","sortIndex":0,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"BOX",
+                     "keyframes":[{{"id":"M0","time":0,"depth":-0.9,"transitionDuration":0}}]}},
+                    {{"id":"G","name":"Ball","sortIndex":1,"kind":"model","isEnabled":true,"startTime":0,"duration":4,"resourceID":"BALL",
+                     "keyframes":[{{"id":"M1","time":0,"depth":0.5,"transitionDuration":0}}]}}]}}]}}"#
+            )
+        };
+        let render = |json: &str| -> (u64, u64, usize) {
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
+            let frame = renderer.frame_bgra(1.0).expect("frame");
+            // The middle of the frame: the ball's face, the box behind it.
+            let (mut r, mut b, mut red) = (0u64, 0u64, 0usize);
+            for y in 135..185 {
+                for x in 135..185 {
+                    let i = (y * 320 + x) * 4;
+                    b += frame[i] as u64;
+                    r += frame[i + 2] as u64;
+                    if frame[i + 2] as i32 > frame[i] as i32 + 40 {
+                        red += 1;
+                    }
+                }
+            }
+            (r, b, red)
+        };
+        let (rg, bg, red_glass) = render(&doc("glass"));
+        let (_rs, _bs, red_gloss) = render(&doc("gloss"));
+        assert!(
+            red_glass > red_gloss + 200,
+            "the box shows through the glass, not through the gloss: {red_glass} vs {red_gloss}"
+        );
+        assert!(rg > bg, "red through the glass: {rg} vs {bg}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A route (rung 40) through the whole path: a member flown into its
     /// keyframe along an arc is somewhere else mid-move than the same
     /// member moving straight, a camera flown along a route with its gaze

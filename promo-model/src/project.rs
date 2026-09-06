@@ -490,6 +490,9 @@ pub struct FinishRecipe {
     pub specular: f32,
     /// How much light passes through a thin body: 0 opaque … 1 clear.
     pub transmission: f32,
+    /// How much the body bends what stands behind it on a stage: the
+    /// index of refraction, 1 for none, 1.5 for glass.
+    pub ior: f32,
 }
 
 impl Finish {
@@ -544,6 +547,7 @@ impl Finish {
             anisotropy: 0.0,
             specular: 0.04,
             transmission: 0.0,
+            ior: 1.0,
         };
         match self {
             Finish::Chrome => FinishRecipe {
@@ -601,11 +605,13 @@ impl Finish {
             Finish::Glass => FinishRecipe {
                 roughness: 0.05,
                 transmission: 0.92,
+                ior: 1.5,
                 ..plain
             },
             Finish::Frosted => FinishRecipe {
                 roughness: 0.45,
                 transmission: 0.75,
+                ior: 1.5,
                 ..plain
             },
         }
@@ -5637,6 +5643,7 @@ mod placement_model_tests {
             ] {
                 assert!((0.0..=1.0).contains(&v), "{name}: {v}");
             }
+            assert!((1.0..=2.5).contains(&r.ior), "{name}: ior {}", r.ior);
         }
         assert_eq!(Finish::Chrome.recipe().metallic, 1.0);
         assert!(Finish::Chrome.recipe().roughness < Finish::Brushed.recipe().roughness);
@@ -5645,6 +5652,7 @@ mod placement_model_tests {
         assert!(Finish::Lacquer.recipe().clearcoat > 0.9);
         assert!(Finish::Glass.recipe().transmission > 0.9);
         assert!(Finish::Frosted.recipe().roughness > Finish::Glass.recipe().roughness);
+        assert!(Finish::Glass.recipe().ior > 1.0 && Finish::Chrome.recipe().ior == 1.0);
         assert!(Finish::Rubber.recipe().specular < Finish::Gloss.recipe().specular);
 
         // The floor words (rung 45): each parses to itself, none catches

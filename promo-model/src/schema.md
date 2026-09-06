@@ -909,8 +909,9 @@ Prefer the WORD (rung 44): `"Body": { "colorHex": "@accent", "finish":
 `chrome` (polished metal), `brushed` (metal with a grain), `anodized`
 (satin metal, a phone's frame), `gloss`, `satin`, `matte` (plastics),
 `rubber`, `ceramic` (glazed), `lacquer` (a clear coat over a deep
-colour), `paper`, `glass` (thin and clear: what is behind shows
-through, the colour tints it), `frosted`. `metallic` / `roughness`
+colour), `paper`, `glass` (clear: what is behind shows through, the
+colour tints it, and on a stage the bodies behind it are refracted —
+bent, tinted, blurred by `frosted`), `frosted`. `metallic` / `roughness`
 beside a word override its two numbers; the colour, the picture and its
 tiling stay yours, so a label sits under the lacquer. On a `screen`
 slot the word is the coat over the picture — `"Screen": { "resourceID":

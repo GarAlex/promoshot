@@ -3081,6 +3081,7 @@ impl PreviewEngine {
                         anisotropy: r.anisotropy,
                         specular: r.specular,
                         transmission: r.transmission,
+                        ior: r.ior,
                     }),
                     wear: binding.needs_rung_38().then(|| {
                         let (repeat, offset) = (binding.repeat(), binding.offset());

@@ -42,6 +42,9 @@ pub struct SurfaceFinish {
     pub anisotropy: f32,
     pub specular: f32,
     pub transmission: f32,
+    /// The index of refraction: how much a body on a stage bends what
+    /// stands behind it. 1 bends nothing; glass is 1.5.
+    pub ior: f32,
 }
 
 impl Default for SurfaceFinish {
@@ -52,6 +55,7 @@ impl Default for SurfaceFinish {
             anisotropy: 0.0,
             specular: 0.04,
             transmission: 0.0,
+            ior: 1.0,
         }
     }
 }
@@ -66,7 +70,12 @@ impl SurfaceFinish {
                 self.anisotropy.clamp(0.0, 1.0),
                 self.specular.clamp(0.0, 1.0),
             ],
-            [self.transmission.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
+            [
+                self.transmission.clamp(0.0, 1.0),
+                self.ior.clamp(1.0, 2.5),
+                0.0,
+                0.0,
+            ],
         )
     }
 }
@@ -102,6 +111,15 @@ pub struct FloorView {
     /// How blurred the mirror is, in mip levels.
     pub blur: f32,
     pub footprints: Vec<Footprint>,
+}
+
+/// What a stage's sweeps bind at group 0: the frame, its environment,
+/// and the shadow map and mirror when a floor made them.
+struct SceneBinds<'a> {
+    frame: &'a FrameRaw,
+    preset: EnvPreset,
+    shadow: Option<&'a wgpu::TextureView>,
+    mirror: Option<&'a wgpu::TextureView>,
 }
 
 /// A material's factors and, if any, its textures: base colour (RGBA8
@@ -333,7 +351,8 @@ struct Material {
     // y = the coat's roughness, z = anisotropy (a grain), w = the
     // dielectric's reflectance straight on (F0; 0.04 plastic and glass).
     finish: vec4<f32>,
-    // x = transmission through a thin body (0 opaque … 1 clear).
+    // x = transmission through a thin body (0 opaque … 1 clear), y = the
+    // index of refraction (1 bends nothing, 1.5 glass).
     finish2: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -343,6 +362,9 @@ struct Material {
 @group(0) @binding(4) var shadow_samp: sampler_comparison;
 @group(0) @binding(5) var refl_tex: texture_2d<f32>;
 @group(0) @binding(6) var refl_samp: sampler;
+// What the stage has drawn so far, behind a pane of glass — bound for
+// the second sweep only (`counts.y` says so).
+@group(0) @binding(7) var behind_tex: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(2) var base_samp: sampler;
@@ -778,14 +800,35 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         spec = spec * under;
         spec_env = spec_env * under + coat_light(n, v, l, key, cc, cc_rough);
     }
-    // Thin glass: the body's weight drops with what passes through, the
-    // reflections stay, and the alpha carries what stands behind — more
-    // straight on, less at a grazing angle where glass turns to mirror.
+    // Glass: the body's weight drops with what passes through, the
+    // reflections stay, and what stands behind shows — more straight on,
+    // less at a grazing angle where glass turns to mirror. On a stage the
+    // second sweep sees what the first drew: the bodies behind the pane,
+    // bent by the index of refraction, blurred by the roughness, tinted
+    // by the glass's own colour. Where nothing was drawn behind it the
+    // alpha carries the layers beneath, as thin glass always did.
     let fv = f0_dielectric.x + (1.0 - f0_dielectric.x) * pow(1.0 - ndv, 5.0);
     let through = transmission * (1.0 - fv);
-    let lit = compress_highlights(body * (1.0 - transmission) + spec + spec_env);
+    var seen = vec4<f32>(0.0);
+    if (transmission > 0.0 && frame.counts.y > 0.5) {
+        let ior = max(material.finish2.y, 1.0);
+        let bent = refract(-v, n, 1.0 / ior);
+        // Where the bent ray leaves a body a share of the scene's radius
+        // thick — what the picture behind is read at.
+        let exit = in.world + bent * frame.floor2.y * 0.12;
+        let c = frame.view_proj * vec4<f32>(exit, 1.0);
+        if (c.w > 1e-5) {
+            let uv = clamp(vec2<f32>(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5), vec2<f32>(0.0), vec2<f32>(1.0));
+            let picture = textureSampleLevel(behind_tex, refl_samp, uv, roughness * 5.0);
+            // The picture is the pass's own output: encoded, premultiplied.
+            let straight = srgb_to_linear(picture.rgb / max(picture.a, 0.001));
+            let tint = pow(albedo.rgb, vec3<f32>(1.5));
+            seen = vec4<f32>(straight * tint * picture.a, picture.a);
+        }
+    }
+    let lit = compress_highlights(body * (1.0 - transmission) + spec + spec_env + seen.rgb * through);
     let encoded = linear_to_srgb(clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0)));
-    return vec4<f32>(encoded * albedo.a, albedo.a * (1.0 - through));
+    return vec4<f32>(encoded * albedo.a, albedo.a * (1.0 - through * (1.0 - seen.a)));
 }
 "#;
 
@@ -1150,6 +1193,16 @@ impl ModelPass {
                     binding: 6,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
                     count: None,
                 },
             ],
@@ -2169,16 +2222,14 @@ impl ModelPass {
                     shadow_view.is_some(),
                     true,
                 );
-                let bind = self.frame_bind_group(
-                    ctx,
-                    "stage-mirror",
-                    &frame,
-                    view.environment.preset,
-                    shadow_view.as_ref(),
-                    None,
-                );
+                let binds = SceneBinds {
+                    frame: &frame,
+                    preset: view.environment.preset,
+                    shadow: shadow_view.as_ref(),
+                    mirror: None,
+                };
                 let picture =
-                    self.draw_scene(ctx, items, &billboards, None, &bind, (width, height))?;
+                    self.draw_scene(ctx, items, &billboards, None, &binds, (width, height))?;
                 let view_of = picture.create_view(&Default::default());
                 Some(self.mipmapped(ctx, &view_of, width, height))
             }
@@ -2194,37 +2245,50 @@ impl ModelPass {
             }
             _ => plain,
         };
-        let frame_bind = self.frame_bind_group(
-            ctx,
-            "stage-frame",
-            &frame,
-            view.environment.preset,
-            shadow_view.as_ref(),
-            mirror_view.as_ref(),
-        );
+        let binds = SceneBinds {
+            frame: &frame,
+            preset: view.environment.preset,
+            shadow: shadow_view.as_ref(),
+            mirror: mirror_view.as_ref(),
+        };
         self.draw_scene(
             ctx,
             items,
             &billboards,
             catcher.as_ref(),
-            &frame_bind,
+            &binds,
             (width, height),
         )
     }
 
     /// One picture of the stage: the models and the billboards (and the
-    /// floor's catcher, when there is one) through `frame_bind`, opaque
-    /// first, then what light passes through.
+    /// floor's catcher, when there is one), the opaque meshes in a first
+    /// sweep, then — with that picture bound as what stands behind — the
+    /// meshes light passes through, so a pane of glass refracts the
+    /// bodies behind it.
     fn draw_scene(
         &self,
         ctx: &GpuContext,
         items: &[StageItem<'_>],
         billboards: &[GpuModel],
         catcher: Option<&GpuModel>,
-        frame_bind: &wgpu::BindGroup,
+        binds: &SceneBinds<'_>,
         (width, height): (u32, u32),
     ) -> Result<wgpu::Texture, GpuError> {
         let device = &ctx.device;
+        let frame_bind = self.frame_bind_group(
+            ctx,
+            "stage-frame",
+            binds.frame,
+            binds.preset,
+            binds.shadow,
+            binds.mirror,
+        );
+        let frame_bind = &frame_bind;
+        let any_through = items.iter().any(|item| match item {
+            StageItem::Model { model, .. } => model.materials.iter().any(|m| m.transmissive()),
+            StageItem::Billboard { .. } => false,
+        });
         let size = wgpu::Extent3d {
             width,
             height,
@@ -2298,7 +2362,11 @@ impl ModelPass {
                     view: &depth_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Discard,
+                        store: if any_through {
+                            wgpu::StoreOp::Store
+                        } else {
+                            wgpu::StoreOp::Discard
+                        },
                     }),
                     stencil_ops: None,
                 }),
@@ -2321,37 +2389,91 @@ impl ModelPass {
                     pass.draw_indexed(0..mesh.index_count, 0, 0..1);
                 }
             }
-            // The opaque meshes of every member first, then the ones light
-            // passes through, so what stands behind a pane is there when
-            // the pane blends over it.
-            for through in [false, true] {
-                let mut next_billboard = billboards.iter();
-                for item in items {
-                    let model: &GpuModel = match item {
-                        StageItem::Model { model, .. } => model,
-                        StageItem::Billboard { .. } => match next_billboard.next() {
-                            Some(b) => b,
-                            None => continue,
-                        },
-                    };
-                    for mesh in &model.meshes {
-                        let Some(material) = model.materials.get(mesh.material) else {
-                            continue;
-                        };
-                        if material.transmissive() != through {
-                            continue;
-                        }
-                        pass.set_bind_group(1, &material.bind, &[]);
-                        pass.set_bind_group(2, &mesh.placement_bind, &[]);
-                        pass.set_vertex_buffer(0, mesh.vertices.slice(..));
-                        pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-                        pass.draw_indexed(0..mesh.index_count, 0, 0..1);
-                    }
-                }
-            }
+            // The opaque meshes of every member.
+            Self::sweep(&mut pass, items, billboards, false);
+        }
+        ctx.queue.submit(Some(encoder.finish()));
+        if !any_through {
+            return Ok(output);
+        }
+        // What stands behind a pane: the first sweep's picture with a mip
+        // chain, so a rough pane reads it blurred. Then the meshes light
+        // passes through, over the same colour and depth.
+        let behind = self.mipmapped(ctx, &output_view, width, height);
+        let behind_view = behind.create_view(&Default::default());
+        let mut frame_b = *binds.frame;
+        frame_b.counts[1] = 1.0;
+        let bind_b = self.frame_bind_group_behind(
+            ctx,
+            "stage-through",
+            &frame_b,
+            binds.preset,
+            (binds.shadow, binds.mirror, Some(&behind_view)),
+        );
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("stage-through"),
+        });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("stage-through"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &msaa_view,
+                    resolve_target: Some(&output_view),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bind_b, &[]);
+            Self::sweep(&mut pass, items, billboards, true);
         }
         ctx.queue.submit(Some(encoder.finish()));
         Ok(output)
+    }
+
+    /// One sweep over the stage's meshes: the opaque ones, or the ones
+    /// light passes through.
+    fn sweep<'p>(
+        pass: &mut wgpu::RenderPass<'p>,
+        items: &'p [StageItem<'p>],
+        billboards: &'p [GpuModel],
+        through: bool,
+    ) {
+        let mut next_billboard = billboards.iter();
+        for item in items {
+            let model: &GpuModel = match item {
+                StageItem::Model { model, .. } => model,
+                StageItem::Billboard { .. } => match next_billboard.next() {
+                    Some(b) => b,
+                    None => continue,
+                },
+            };
+            for mesh in &model.meshes {
+                let Some(material) = model.materials.get(mesh.material) else {
+                    continue;
+                };
+                if material.transmissive() != through {
+                    continue;
+                }
+                pass.set_bind_group(1, &material.bind, &[]);
+                pass.set_bind_group(2, &mesh.placement_bind, &[]);
+                pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+            }
+        }
     }
 
     /// Render the model at `width × height` and hand the texture over.
@@ -2602,6 +2724,24 @@ impl ModelPass {
         shadow: Option<&wgpu::TextureView>,
         mirror: Option<&wgpu::TextureView>,
     ) -> wgpu::BindGroup {
+        self.frame_bind_group_behind(ctx, label, frame, preset, (shadow, mirror, None))
+    }
+
+    /// `frame_bind_group` with what the stage has drawn so far bound for
+    /// a second sweep — what a pane of glass refracts. The textures are
+    /// the shadow map, the mirror and the picture behind, each optional.
+    fn frame_bind_group_behind(
+        &self,
+        ctx: &GpuContext,
+        label: &str,
+        frame: &FrameRaw,
+        preset: EnvPreset,
+        (shadow, mirror, behind): (
+            Option<&wgpu::TextureView>,
+            Option<&wgpu::TextureView>,
+            Option<&wgpu::TextureView>,
+        ),
+    ) -> wgpu::BindGroup {
         use wgpu::util::DeviceExt;
         let frame_buffer = ctx
             .device
@@ -2652,6 +2792,12 @@ impl ModelPass {
                 wgpu::BindGroupEntry {
                     binding: 6,
                     resource: wgpu::BindingResource::Sampler(&self.mirror_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::TextureView(
+                        behind.unwrap_or(&self.dummy_mirror),
+                    ),
                 },
             ],
         })
@@ -3267,7 +3413,9 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
         light_view_proj: IDENTITY,
         mirror_view_proj: IDENTITY,
         floor: [0.0; 4],
-        floor2: [0.0; 4],
+        // The scene's radius rides in floor2.y for every frame — the
+        // shadow's normal offset and a pane's thickness are shares of it.
+        floor2: [0.0, view.bounds_radius.max(1e-6), 0.0, 0.0],
         footprints: [[0.0; 4]; 8],
         lifts: [[0.0; 4]; 8],
         counts: [0.0; 4],
@@ -3966,6 +4114,123 @@ mod tests {
         assert!(
             r0 + b0 > 0 && r180 + b180 > 0,
             "the picture lights the body"
+        );
+    }
+
+    /// Glass on a stage refracts what stands behind it: a red body seen
+    /// through a pane of glass reads red and opaque where the body is,
+    /// stays open where nothing is, and moves when the index of
+    /// refraction changes.
+    #[test]
+    fn glass_on_a_stage_refracts_the_body_behind_it() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let upload = |color: [f32; 4], metallic: f32, roughness: f32| {
+            pass.upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: color,
+                    metallic,
+                    roughness,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload")
+        };
+        let red = upload([0.85, 0.1, 0.1, 1.0], 0.0, 0.8);
+        let translate = |z: f32| -> Mat4 {
+            let mut m = IDENTITY;
+            m[3][2] = z;
+            m
+        };
+        let behind = [translate(-1.3)];
+        let front = [translate(0.5)];
+        let view = ModelView {
+            yaw: 0.0,
+            pitch: 6.0,
+            distance: 3.6,
+            bounds_radius: 1.6,
+            environment: EnvironmentView {
+                preset: EnvPreset::Studio,
+                intensity: 1.0,
+                rotation_deg: 0.0,
+            },
+            ..ModelView::default()
+        };
+        let side = 128u32;
+        let render = |ior: f32| -> Vec<u8> {
+            let mut glass = upload([0.95, 0.95, 0.95, 1.0], 0.0, 0.05);
+            pass.set_finish(
+                &ctx,
+                &mut glass,
+                0,
+                SurfaceFinish {
+                    transmission: 0.92,
+                    ior,
+                    ..SurfaceFinish::default()
+                },
+            );
+            let items = [
+                StageItem::Model {
+                    model: &red,
+                    matrices: &behind,
+                },
+                StageItem::Model {
+                    model: &glass,
+                    matrices: &front,
+                },
+            ];
+            let texture = pass
+                .render_scene_with_floor(&ctx, &items, &view, side, side, None)
+                .expect("render");
+            read_texture(&ctx, &texture, side, side).expect("read")
+        };
+        let bent = render(1.5);
+        let flat = render(1.0);
+        let at = |px: &[u8], world: [f32; 3]| -> [u8; 4] {
+            let q = project_point(&view, 1.0, world).expect("in front");
+            let x = ((q[0] * side as f32) as usize).min(side as usize - 1);
+            let y = ((q[1] * side as f32) as usize).min(side as usize - 1);
+            let i = (y * side as usize + x) * 4;
+            [px[i], px[i + 1], px[i + 2], px[i + 3]]
+        };
+        // The glass's front face centre: the red body stands behind it.
+        let centre = at(&bent, [0.0, 0.0, 1.0]);
+        assert_eq!(centre[3], 255, "opaque over the body behind: {centre:?}");
+        assert!(
+            centre[2] > centre[0] + 30,
+            "and red through the glass: {centre:?}"
+        );
+        // A corner of the pane: the smaller, farther body is not behind it.
+        let corner = at(&bent, [0.44, 0.44, 1.0]);
+        assert!(
+            corner[3] < 200,
+            "open where nothing stands behind: {corner:?}"
+        );
+        let moved = bent
+            .chunks_exact(4)
+            .zip(flat.chunks_exact(4))
+            .filter(|(a, b)| (0..3).any(|k| (a[k] as i32 - b[k] as i32).abs() > 10))
+            .count();
+        assert!(
+            moved > 40,
+            "the index of refraction moves the picture behind: {moved}"
         );
     }
 
