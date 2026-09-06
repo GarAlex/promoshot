@@ -207,6 +207,26 @@ impl EnvPreset {
     }
 }
 
+impl EnvPreset {
+    /// The key light's size, as what it adds to the GGX lobe (roughness
+    /// squared) of every direct highlight. A light is a thing with a
+    /// size, and the environment word says which: the studio's soft box
+    /// spreads its glance over flat glass and gloss where a point's
+    /// mirror image is a pinpoint; the sunset's sun is that point; a
+    /// night's lamp and the theme's own light sit between. It changes
+    /// the highlight's spread, never its energy — the lobe stays
+    /// normalized — so nothing else about a body moves.
+    pub fn key_lobe(self) -> f32 {
+        match self {
+            EnvPreset::Studio => 0.12,
+            EnvPreset::Picture => 0.06,
+            EnvPreset::None => 0.05,
+            EnvPreset::Night => 0.03,
+            EnvPreset::Sunset => 0.004,
+        }
+    }
+}
+
 /// Which environment a frame mirrors, how strongly, and turned how far
 /// about the vertical (degrees).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -329,6 +349,9 @@ struct Frame {
     floor2: vec4<f32>,
     // The bodies' footprints (x, z centre; x, z half size) and their
     // lowest and highest point above the floor; `counts.x` says how many.
+    // `counts.y` = 1 in the sweep over what stands behind; `counts.z` =
+    // the key light's SIZE — what it adds to the GGX lobe of every direct
+    // highlight: the studio's soft box wide, the sunset's sun a point.
     footprints: array<vec4<f32>, 8>,
     lifts: array<vec4<f32>, 8>,
     counts: vec4<f32>,
@@ -608,7 +631,9 @@ fn coat_light(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, key: vec3<f32>, cc: f32,
     let ndh = max(dot(n, h), 0.0);
     let ndv = max(dot(n, v), 1e-3);
     let vdh = max(dot(v, h), 0.0);
-    let a = max(cc_rough * cc_rough, 0.001);
+    // The key through a lobe the light's own size widens: a soft box's
+    // glance spreads over flat glass where a point's is a pinpoint.
+    let a = min(max(cc_rough * cc_rough, 0.001) + frame.counts.z, 1.0);
     let fc = 0.04 + 0.96 * pow(1.0 - vdh, 5.0);
     let direct = ggx_d(ndh, a) * smith_vis(ndv, ndl, a) * fc * PI * ndl * key;
     let world = world_light(reflect(-v, n), cc_rough) * env_brdf_approx(vec3<f32>(0.04), cc_rough, ndv);
@@ -749,6 +774,9 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     let ndv = max(dot(n, v), 1e-3);
     let vdh = max(dot(v, h), 0.0);
     let a = max(roughness * roughness, 0.002);
+    // The key's lobe, widened by the light's own size (the environment
+    // word's): the world's reflection keeps the surface's roughness.
+    let ak = min(a + frame.counts.z, 1.0);
     // A metal's reflectance is its colour; a dielectric's is its F0, and
     // its diffuse is what Fresnel leaves.
     let f0 = mix(f0_dielectric, albedo.rgb, metallic);
@@ -761,15 +789,15 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     if (aniso > 0.001) {
         let t = tangent_of(n, in.world, in.uv);
         let b = cross(n, t);
-        let at = max(a * (1.0 + aniso), 0.002);
-        let ab = max(a * (1.0 - aniso), 0.002);
+        let at = max(ak * (1.0 + aniso), 0.002);
+        let ab = max(ak * (1.0 - aniso), 0.002);
         d = ggx_d_aniso(ndh, dot(t, h), dot(b, h), at, ab);
         let grain_tangent = cross(b, v);
         let grain_normal = cross(grain_tangent, b);
         let bent = normalize(mix(n, grain_normal, aniso));
         refl = reflect(-v, bent);
     } else {
-        d = ggx_d(ndh, a);
+        d = ggx_d(ndh, ak);
     }
     // The key's strength is the irradiance a facing Lambert surface
     // receives, as it always was here; the BRDF times π keeps that.
@@ -779,7 +807,7 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     // shadow map lets through.
     let lit_by_key = shadow_at(in.world, n);
     var body = kd * albedo.rgb * ndl * key * lit_by_key;
-    var spec = d * smith_vis(ndv, ndl, a) * f * PI * ndl * key * lit_by_key;
+    var spec = d * smith_vis(ndv, ndl, ak) * f * PI * ndl * key * lit_by_key;
     let ambient = albedo.rgb * (1.0 - metallic) * frame.ambient_rgb.rgb;
     let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6 * (1.0 - metallic * 0.5);
     // The world: the reflection through the prefiltered environment
@@ -882,7 +910,7 @@ impl FrameRaw {
             self.footprints[i] = [f.center_xz[0], f.center_xz[1], f.half_xz[0], f.half_xz[1]];
             self.lifts[i] = [f.bottom.max(0.0), f.top.max(0.0), 0.0, 0.0];
         }
-        self.counts = [floor.footprints.len().min(8) as f32, 0.0, 0.0, 0.0];
+        self.counts[0] = floor.footprints.len().min(8) as f32;
         self
     }
 }
@@ -3418,7 +3446,7 @@ fn frame_uniforms(view: &ModelView, aspect: f32) -> FrameRaw {
         floor2: [0.0, view.bounds_radius.max(1e-6), 0.0, 0.0],
         footprints: [[0.0; 4]; 8],
         lifts: [[0.0; 4]; 8],
-        counts: [0.0; 4],
+        counts: [0.0, 0.0, view.environment.preset.key_lobe(), 0.0],
         view_proj,
         camera_pos: [eye[0], eye[1], eye[2], 1.0],
         light_dir: [
@@ -3745,6 +3773,100 @@ mod tests {
         let g = centre(&glass);
         assert!(g < 100, "glass lets the background through: alpha {g}");
         assert!(g > 0, "glass still stands there");
+    }
+
+    /// The key light has a size the environment word sets: through the
+    /// studio's soft box its glance on glass spreads wide; the sunset's
+    /// sun is a point, a pinpoint on the same pane. A coated face turned
+    /// to the camera with the key mirrored straight into it: the pixels
+    /// the key lifts (its intensity 1 against 0) are many under the
+    /// studio and few under the sunset. The face is black metal — no
+    /// diffuse, no reflectance of its own — so the coat's glance is all
+    /// the key lifts.
+    #[test]
+    fn a_soft_source_widens_the_keys_glance() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let render = |preset: EnvPreset, intensity: f64| -> Vec<u8> {
+            let mut model = pass
+                .upload(
+                    &ctx,
+                    &[MeshInput {
+                        positions: &p,
+                        normals: &n,
+                        uvs: &uv,
+                        indices: &idx,
+                        material: 0,
+                        node: 0,
+                    }],
+                    &[MaterialInput {
+                        base_color: [0.0, 0.0, 0.0, 1.0],
+                        metallic: 1.0,
+                        roughness: 0.5,
+                        double_sided: false,
+                        texture: None,
+                        normal: None,
+                        metal_rough: None,
+                    }],
+                )
+                .expect("upload");
+            pass.set_finish(
+                &ctx,
+                &mut model,
+                0,
+                SurfaceFinish {
+                    clearcoat: 1.0,
+                    clearcoat_roughness: 0.05,
+                    ..SurfaceFinish::default()
+                },
+            );
+            // Close enough that the face spans a wide angle: GGX's long
+            // tail keeps even the sun's glint a few degrees wide.
+            let view = ModelView {
+                yaw: 0.0,
+                pitch: 0.0,
+                distance: 2.0,
+                light_yaw: 0.0,
+                light_pitch: 0.0,
+                light_intensity: intensity,
+                environment: EnvironmentView {
+                    preset,
+                    intensity: 1.0,
+                    rotation_deg: 0.0,
+                },
+                ..ModelView::default()
+            };
+            pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+                .expect("render")
+        };
+        let lifted = |preset: EnvPreset| -> usize {
+            let lit = render(preset, 1.0);
+            let dark = render(preset, 0.0);
+            lit.chunks_exact(4)
+                .zip(dark.chunks_exact(4))
+                .filter(|(a, b)| {
+                    a[3] > 0
+                        && (a[0] as i32 - b[0] as i32)
+                            + (a[1] as i32 - b[1] as i32)
+                            + (a[2] as i32 - b[2] as i32)
+                            > 60
+                })
+                .count()
+        };
+        let (studio, sunset) = (lifted(EnvPreset::Studio), lifted(EnvPreset::Sunset));
+        assert!(
+            sunset >= 1,
+            "the sun still glints on the pane: {sunset} pixels"
+        );
+        assert!(
+            studio > sunset * 3 && studio > 1000,
+            "the soft box's glance spreads over the pane: {studio} pixels lifted against the sun's {sunset}"
+        );
     }
 
     /// Glass over a screen: the same bound picture reads brighter where

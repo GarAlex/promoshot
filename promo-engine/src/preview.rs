@@ -3075,13 +3075,41 @@ impl PreviewEngine {
                         .roughness()
                         .map(|v| v as f32)
                         .or(recipe.map(|r| r.roughness)),
-                    finish: recipe.map(|r| SurfaceFinish {
-                        clearcoat: r.clearcoat,
-                        clearcoat_roughness: r.clearcoat_roughness,
-                        anisotropy: r.anisotropy,
-                        specular: r.specular,
-                        transmission: r.transmission,
-                        ior: r.ior,
+                    // On a picture slot — a screen — the word is the
+                    // COAT over the picture: its own coat where the word
+                    // has one (ceramic, lacquer), else its roughness as
+                    // the coat's, so `glass` mirrors the key and the world
+                    // in the screen, `frosted` blurs them and `matte` is
+                    // an anti-glare sheen. The picture is a display, not a
+                    // pane: nothing passes through it. A picture WORN by
+                    // its slot is the slot's own colour, and the word is
+                    // what the body is.
+                    finish: recipe.map(|r| {
+                        let shown = binding.resource_id().is_some()
+                            && binding.mode() != promo_model::SurfaceMode::Surface;
+                        if shown {
+                            SurfaceFinish {
+                                clearcoat: 1.0,
+                                clearcoat_roughness: if r.clearcoat > 0.0 {
+                                    r.clearcoat_roughness
+                                } else {
+                                    r.roughness
+                                },
+                                anisotropy: r.anisotropy,
+                                specular: r.specular,
+                                transmission: 0.0,
+                                ior: 1.0,
+                            }
+                        } else {
+                            SurfaceFinish {
+                                clearcoat: r.clearcoat,
+                                clearcoat_roughness: r.clearcoat_roughness,
+                                anisotropy: r.anisotropy,
+                                specular: r.specular,
+                                transmission: r.transmission,
+                                ior: r.ior,
+                            }
+                        }
                     }),
                     wear: binding.needs_rung_38().then(|| {
                         let (repeat, offset) = (binding.repeat(), binding.offset());
@@ -5819,6 +5847,55 @@ mod tests {
             engine.stats().misses >= 2,
             "two different pictures were drawn"
         );
+    }
+
+    /// A finish word on a screen is the coat over the picture (rung 44):
+    /// `glass` on the laptop's Screen dims the reel a little where the
+    /// coat turns to mirror and lays the key's glance and the world over
+    /// it — so the frame differs from the bare screen's, on the screen
+    /// alone, with every alpha the same. It did not: `glass` has no clear
+    /// coat of its own in the recipe table, and the word mapped to a coat
+    /// of nothing.
+    #[test]
+    fn a_glass_word_on_a_screen_is_the_coat() {
+        let bare = reel_fixture().to_json().expect("json");
+        let anchor = r#""resourceID":"AAAAAAAA-0000-0000-0000-00000000EE01""#;
+        assert_eq!(
+            bare.matches(anchor).count(),
+            1,
+            "the Screen binding: {bare}"
+        );
+        let glass = bare.replace(anchor, &format!(r#"{anchor},"finish":"glass""#));
+        let render = |json: &str| -> Vec<u8> {
+            let meta = ProjectMetadata::from_json(json).expect("reel with a word");
+            let (mut engine, _state) = make_engine(
+                meta,
+                vec![
+                    ("N1".into(), [0, 0, 255, 255], 32),
+                    ("N2".into(), [0, 255, 0, 255], 32),
+                ],
+                64 << 20,
+            );
+            let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
+            engine.render(1.0, out.raw(), 128, 128).unwrap();
+            out.read_pixels().unwrap()
+        };
+        let (plain, coated) = (render(&bare), render(&glass));
+        let differing = plain
+            .chunks_exact(4)
+            .zip(coated.chunks_exact(4))
+            .filter(|(a, b)| (0..3).any(|c| (a[c] as i32 - b[c] as i32).abs() > 3))
+            .count();
+        assert!(
+            differing > 20,
+            "glass over the screen changes its picture: {differing} pixels differ"
+        );
+        let alpha_moved = plain
+            .chunks_exact(4)
+            .zip(coated.chunks_exact(4))
+            .filter(|(a, b)| a[3] != b[3])
+            .count();
+        assert_eq!(alpha_moved, 0, "a coat over a screen changes no alpha");
     }
 
     /// A stage on a floor: the shadow and the mirror image spill past the

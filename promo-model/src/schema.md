@@ -915,7 +915,9 @@ bent, tinted, blurred by `frosted`), `frosted`. `metallic` / `roughness`
 beside a word override its two numbers; the colour, the picture and its
 tiling stay yours, so a label sits under the lacquer. On a `screen`
 slot the word is the coat over the picture — `"Screen": { "resourceID":
-"<uuid>", "finish": "glass" }` is what makes a phone read as a phone.
+"<uuid>", "finish": "glass" }` is what makes a phone read as a phone:
+`glass` mirrors the key light and the world in the screen, `frosted`
+blurs them, `matte` is an anti-glare sheen.
 A word the vocabulary lacks is named by `promo_validate` and the file's
 own finish is used. A project with a finish word carries
 `minReaderVersion: 44`.
@@ -1114,5 +1116,6 @@ under the lowest body and shows nothing of its own: what lies beneath
 the stage layer shows through, so the table is the project's own
 background. The light moves — its `light` keyframes swing the shadow
 and the highlights together — and the floor does not; a `sunset` casts
-a hard edge, the `studio` a soft one. A project with a floor carries
-`minReaderVersion: 45`.
+a hard edge, the `studio` a soft one — and the same size shapes the
+key's glance on glass and gloss: a soft box's spread, the sun's point. A
+project with a floor carries `minReaderVersion: 45`.
