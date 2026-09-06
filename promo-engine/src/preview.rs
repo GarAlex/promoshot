@@ -2452,11 +2452,11 @@ impl PreviewEngine {
             // stage's picture.
             let staged = layer.stage.clone();
             if let Some(stage) = staged.as_deref() {
-                let first = self
-                    .meta
+                // The first member is the lowest of the stage's members in
+                // THIS document — a nested composition's stage has its
+                // members in the composition, not in the project.
+                let first = doc
                     .layers
-                    .as_deref()
-                    .unwrap_or(&[])
                     .iter()
                     .filter(|l| l.stage.as_deref() == Some(stage))
                     .min_by_key(|l| l.sort_index)
@@ -2561,7 +2561,15 @@ impl PreviewEngine {
             // texture that then stands where a host frame would.
             let composed = if let Some(stage) = staged.as_deref() {
                 match self.stage_frame(
-                    layer, stage, &settings, canvas, centre, tier, doc.depth, &used,
+                    layer,
+                    stage,
+                    &settings,
+                    canvas,
+                    centre,
+                    tier,
+                    doc.depth,
+                    &used,
+                    &doc.layers,
                 ) {
                     Some(id) => Some(id),
                     None => continue,
@@ -3184,6 +3192,7 @@ impl PreviewEngine {
         tier: i32,
         depth: u32,
         pinned: &[u64],
+        document: &[ProjectLayer],
     ) -> Option<u64> {
         let transient = self.export_mode;
         let key = (format!("stage\u{1f}{stage}"), quantize(time), tier);
@@ -3198,12 +3207,12 @@ impl PreviewEngine {
             return Some(id);
         }
 
+        // The members are the layers naming this stage in the DOCUMENT the
+        // stage is in — the project's, or a nested composition's. Reading
+        // the project's layers here drew a composition's stage empty:
+        // its members live in the composition, and were never found.
         let members: Vec<ProjectLayer> = {
-            let mut m: Vec<ProjectLayer> = self
-                .meta
-                .layers
-                .as_deref()
-                .unwrap_or(&[])
+            let mut m: Vec<ProjectLayer> = document
                 .iter()
                 .filter(|l| l.stage.as_deref() == Some(stage) && tl::layer_is_visible(l, time))
                 .cloned()
@@ -3377,11 +3386,7 @@ impl PreviewEngine {
                 // end, or switched off — but a camera may still be looking
                 // where it stands, and the framing must not flip frame to
                 // frame because of that.
-                let layer = self
-                    .meta
-                    .layers
-                    .as_deref()
-                    .unwrap_or(&[])
+                let layer = document
                     .iter()
                     .find(|l| l.stage.as_deref() == Some(stage) && l.id == id)?;
                 let local = tl::layer_local_time(layer, time);
@@ -5581,6 +5586,69 @@ mod tests {
         assert!(
             engine.stats().misses >= 2,
             "two different pictures were drawn"
+        );
+    }
+
+    /// A stage inside a nested composition draws: its members are the
+    /// composition's layers naming it, not the project's. The engine read
+    /// the project's layers for them and drew every nested stage empty —
+    /// a composition of the cube piece was a gradient and nothing else.
+    #[test]
+    fn a_stage_inside_a_composition_draws_its_members() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000004",
+            "name": "nested stage", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
+                                    "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE02",
+                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
+                                "placement": {"mode": "fill"}}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000CC03", "kind": "model",
+                 "filename": "", "displayName": "Phone", "addedAt": 0,
+                 "recipe": {"device": {"kind": "phone"}},
+                 "materials": {"Body": {"colorHex": "FF00FF", "metallic": 0, "roughness": 0.5}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000EE02", "kind": "composition",
+                 "filename": "", "displayName": "Inner", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 96, "pixelHeight": 96,
+                 "composition": {"canvasWidth": 96, "canvasHeight": 96,
+                   "backgroundColorHex": "003300", "layers": [
+                     {"id": "STAGE", "name": "Bench", "sortIndex": 0, "kind": "stage",
+                      "isEnabled": true, "startTime": 0, "duration": 4,
+                      "keyframes": [{"id": "SK", "time": 0, "transitionDuration": 0,
+                        "placement": {"height": 80, "anchor": "center"},
+                        "camera": {"yaw": -20, "pitch": 10, "distance": 4.2, "fov": 30},
+                        "light": {"yaw": 40, "pitch": 50, "intensity": 1}}],
+                      "members": [
+                        {"id": "M1", "name": "phone", "sortIndex": 0, "kind": "model",
+                         "isEnabled": true, "startTime": 0, "duration": 4,
+                         "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC03",
+                         "keyframes": [{"id": "MK", "time": 0, "transitionDuration": 0,
+                                        "camera": {"yaw": 0}}]}
+                      ]}
+                 ]},
+                 "imageCuts": [], "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("nested stage fixture");
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let px = out.read_pixels().unwrap();
+        let magenta = px
+            .chunks(4)
+            .filter(|p| p[0] > 120 && p[2] > 120 && p[1] < 100)
+            .count();
+        assert!(
+            magenta > 20,
+            "the stage's phone is on the canvas: {magenta} magenta pixels"
         );
     }
 
