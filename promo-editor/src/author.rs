@@ -365,7 +365,13 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
                 "disabledAudioTrackIndices": [],
                 "clips": [],
                 "recipe": {"device": {"kind": device_kind}},
-                "materials": {"Body": body_hex, "Screen": {"resourceID": resource_id}},
+                // What the body IS, by word (rung 44): a phone's frame is
+                // anodized metal and its screen is glass — the coat that
+                // makes a phone read as a phone under the light.
+                "materials": {
+                    "Body": {"colorHex": body_hex, "finish": "anodized"},
+                    "Screen": {"resourceID": resource_id, "finish": "glass"},
+                },
             }));
             Some(id)
         } else {
