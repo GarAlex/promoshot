@@ -4,12 +4,13 @@ table whose screen shows a phone on a table whose screen shows a cube
 turning under confetti. Four scenes, one zoom each into the device's
 screen, a cut onto the next scene.
 
-The seam is the trick: each screen shows a STILL of the next scene's
-first frame, fitted; the zoom ends with that picture filling the canvas,
-and the cut to the live scene is onto the same picture. So the stills
-are derived — this script writes the project with blank stills, renders
-each later scene's first frame in reverse order, binds it to the earlier
-device's Screen, and writes reference.json.
+Every scene is a COMPOSITION, and each device's Screen slot binds the
+next scene's composition (rung 43) — the screen is the live next scene,
+its background already scrolling long before the flight reaches it.
+All four compositions start on the film's first frame: the one on a
+screen and the one that later fills the canvas are the same document on
+the same clock, so the cut changes nothing. The top-level layers show
+the four compositions stacked, each revealed as the one above ends.
 
     python3 demos/c9-infinite-screens/build.py [--render]
 
@@ -21,11 +22,9 @@ HERE = os.path.dirname(os.path.abspath(__file__)); CORE = os.path.abspath(os.pat
 CLI = os.path.join(CORE, 'target', 'release', 'promo'); RES = os.path.join(HERE, 'resources')
 U = lambda: str(uuid.uuid4()).upper()
 W, H = 1440, 900          # the cube piece's own canvas, so it plays as authored
-FADE = 0.25               # the cut: two pictures moving at one rate, blended briefly
+FADE = 0.25               # the cut: the same document seen through the screen, then whole
 RATE = 0.143              # the flight: ln(scale) per second — doubling every 4.8 s
-OVERSHOOT = 1.025         # the picture a hair larger than the canvas at the cut: perspective
-                          # makes a screen a trapezoid, and a sliver of bezel in a corner is
-                          # worse than a 2.5 % size step under the blend
+OVERSHOOT = 1.025         # the picture a hair larger than the canvas at the cut
 CUBE_SKIP = 0.45          # land inside the cube piece's own fade-in, where the cube is there
 CUBE_REF = os.path.join(HERE, '..', '34-cube-to-word', 'reference.json')
 
@@ -41,11 +40,10 @@ ASPECT = W / H
 def end_placement(name):
     sx0, sy0, sx1, sy1 = MEASURED[name]['screen']
     sw, sh = sx1 - sx0 + 1, sy1 - sy0 + 1
-    if sw / sh > ASPECT: pw, ph = sh * ASPECT, sh    # bars at the sides: the picture is the screen's height
-    else: pw, ph = sw, sw / ASPECT                    # bars top and bottom: the picture is the screen's width
+    if sw / sh > ASPECT: pw, ph = sh * ASPECT, sh
+    else: pw, ph = sw, sw / ASPECT
     pcx, pcy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
-    s = H / ph
-    s *= OVERSHOOT
+    s = H / ph * OVERSHOOT
     return dict(height=600 * s, offset=[-(pcx - 499.5) * s, -(pcy - 499.0) * s])
 
 def kf(time, **f):
@@ -63,135 +61,144 @@ DEVICES = [('laptop', 'DeviceLaptop.glb', 1.095, dict(yaw=-30, pitch=16), 520, 4
            ('phone',  'DevicePhone.glb',  0.395, dict(yaw=-24, pitch=10), 700, 20, 'bg_phone.png')]
 
 def flight(h0, h1):
-    """How long a dive from h0 to h1 takes at the one rate."""
     import math
     return math.log(h1 / h0) / RATE
 
-def exp_ramp(t_end, value0, value1, steps=12, mapper=lambda v: v):
-    """Keyframes along an exponential from value0 to value1 over t_end,
-    linear between — a zoom at one rate, which is what flying forward
-    looks like. `mapper` turns the scalar into the keyframe's fields."""
+def exp_steps(t0, t1, grow, steps=12):
+    """(time, growth) along an exponential from 1 to grow over t0..t1."""
     import math
-    out = []
-    for i in range(steps + 1):
-        f = i / steps
-        v = value0 * math.exp(math.log(value1 / value0) * f)
-        out.append((t_end * f, v))
-    return out
+    return [(t0 + (t1 - t0) * i / steps, math.exp(math.log(grow) * i / steps)) for i in range(steps + 1)]
 
-def build(stills, fades=True):
-    resources, layers = [], []
+def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp, rest, total):
+    """One scene's composition: at rest (background panning) until `rest`,
+    then the flight to the screen, then holding for whatever is left."""
+    end = end_placement(name); pose = MEASURED[name]['pose']
+    dur = flight(h0, end['height']); grow = end['height'] / h0
+    hexv, met, rough = FINISH[name]
+    layers = []
+    bgres = res("image", bg, f"Background {name}", pixelWidth=4096, pixelHeight=2700)
+    screen = {"resourceID": next_comp["id"]}
+    body = res("model", glb, name.capitalize(), boundsRadius=radius, clips=[],
+               materials={"Screen": screen,
+                          "Body": {"colorHex": hexv, "metallic": met, "roughness": rough},
+                          "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough}})
+    resources = [bgres, body]
+    steps = exp_steps(rest, rest + dur, grow)
+    pan = lambda t: -160 + 320 * (t / (rest + dur))
+    # The pan runs from the film's first frame; the growth from `rest`.
+    bg_keys = [kf(0, placement={"height": 1150, "anchor": "center", "offset": [pan(0), 0]})]
+    bg_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
+                   placement={"height": 1150 * g, "anchor": "center", "offset": [pan(t) * g, 0]})
+                for j, (t, g) in enumerate(steps)]
+    layers.append(layer(f"Background {name}", 0, "image", 0, total, resourceID=bgres["id"], keyframes=bg_keys))
+    floor_keys = [kf(0, placement={"width": 1700, "anchor": "bottom"})]
+    floor_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
+                      placement={"width": 1700 * g, "anchor": "bottom", "offset": [0, (g - 1) * 260]})
+                   for j, (t, g) in enumerate(steps)]
+    layers.append(layer(f"Floor {name}", 1, "image", 0, total, resourceID=floor["id"], keyframes=floor_keys))
+    sh_y = off0 + h0 / 2 - 16
+    shadow_keys = [kf(0, placement={"height": 120, "anchor": "center", "offset": [0, sh_y]}, opacity=0.9)]
+    shadow_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
+                       placement={"height": 120 * g, "anchor": "center", "offset": [0, sh_y * g]},
+                       opacity=max(0.0, 0.9 - 1.6 * ((t - rest) / dur)))
+                    for j, (t, g) in enumerate(steps)]
+    layers.append(layer(f"Shadow {name}", 2, "image", 0, total, resourceID=shadow["id"], keyframes=shadow_keys))
+    light = dict(yaw=15, pitch=50, intensity=1.0)
+    cam0 = dict(yaw=start_pose['yaw'], pitch=start_pose['pitch'], roll=0, distance=4.2, fov=30)
+    body_keys = [kf(0, placement={"height": h0, "anchor": "center", "offset": [0, off0]}, camera=cam0, light=light)]
+    for j, (t, g) in enumerate(steps):
+        f = (t - rest) / dur
+        cam = dict(yaw=start_pose['yaw'] + (pose['yaw'] - start_pose['yaw']) * f,
+                   pitch=start_pose['pitch'] + (pose['pitch'] - start_pose['pitch']) * f,
+                   roll=0, distance=4.2, fov=30)
+        body_keys.append(kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
+                            placement={"height": h0 * g, "anchor": "center",
+                                       "offset": [end['offset'][0] * f, off0 * g * (1 - f) + end['offset'][1] * f]},
+                            camera=cam, light=light))
+    layers.append(layer(name.capitalize(), 3, "model", 0, total, resourceID=body["id"], keyframes=body_keys))
+    comp = res("composition", "", f"Scene {name}", duration=total, pixelWidth=W, pixelHeight=H,
+               composition={"canvasWidth": W, "canvasHeight": H, "backgroundColorHex": "0B0D12", "layers": layers})
+    return comp, resources, dur
+
+def cube_scene(cube, pre, total):
+    """The cube piece as a composition that starts `pre` seconds before the
+    piece does: the cube already turning at its own rate, everything else
+    holding its first pose, so the phone's screen shows a living cube and
+    the cut lands inside the piece as authored."""
+    import copy
+    layers = []
+    for l in cube['layers']:
+        moved = copy.deepcopy(l); moved['startTime'] = l['startTime'] + pre
+        if l['kind'] in ('background', 'stage'):
+            moved['startTime'] = 0; moved['duration'] = l['duration'] + pre
+            for k in moved['keyframes']: k['time'] += pre
+            first = copy.deepcopy(moved['keyframes'][0]); first['time'] = 0; first['transitionDuration'] = 0
+            first.pop('easing', None); first['id'] = U()
+            moved['keyframes'][0]['transitionDuration'] = 0
+            moved['keyframes'].insert(0, first)
+            for member in moved.get('members', []):
+                member['startTime'] = 0; member['duration'] = member['duration'] + pre
+                for k in member['keyframes']: k['time'] += pre
+                first = copy.deepcopy(member['keyframes'][0]); first['time'] = 0; first['transitionDuration'] = 0
+                first.pop('easing', None); first['id'] = U()
+                if member['name'] == 'Cube':
+                    # the turn continues backwards at the piece's own rate
+                    rate = 380.0 / 5.2
+                    first['camera'] = {"yaw": -rate * pre}
+                    member['keyframes'][0]['transitionDuration'] = pre
+                    member['keyframes'][0]['easing'] = 'linear'
+                else:
+                    member['keyframes'][0]['transitionDuration'] = 0
+                member['keyframes'].insert(0, first)
+        layers.append(moved)
+    return res("composition", "", "Scene cube", duration=total, pixelWidth=W, pixelHeight=H,
+               composition={"canvasWidth": W, "canvasHeight": H, "backgroundColorHex": "0B0D12", "layers": layers})
+
+def build():
     cube = json.load(open(CUBE_REF))
-    settings = dict(cube['compositionSettings'])
-    settings.update({"canvasWidth": W, "canvasHeight": H})
+    settings = dict(cube['compositionSettings']); settings.update({"canvasWidth": W, "canvasHeight": H})
+    resources = list(cube['resources'])
     floor = res("image", "floor.png", "Floor", pixelWidth=4096, pixelHeight=900); resources.append(floor)
     shadow = res("image", "shadow.png", "Shadow", pixelWidth=1600, pixelHeight=500); resources.append(shadow)
-    sort = 0; t0 = 0.0; scenes = []
-    for i, (name, glb, radius, start_pose, h0, off0, bg) in enumerate(DEVICES):
-        end = end_placement(name); pose = MEASURED[name]['pose']
-        dur = flight(h0, end['height']); grow = end['height'] / h0
-        scenes.append((name, t0, dur))
-        fade = FADE if (i > 0 and fades) else None
-        bgres = res("image", bg, f"Background {i+1}", pixelWidth=4096, pixelHeight=2700); resources.append(bgres)
-        still = res("image", stills[i], f"Screen {i+1}", pixelWidth=W, pixelHeight=H); resources.append(still)
-        hexv, met, rough = FINISH[name]
-        body = res("model", glb, name.capitalize(), boundsRadius=radius, clips=[],
-                   materials={"Screen": {"resourceID": still["id"]},
-                              "Body": {"colorHex": hexv, "metallic": met, "roughness": rough},
-                              "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough}})
-        resources.append(body)
-        tail = dur + (FADE if fades else 0)
-        # The whole scene flies: background, floor, shadow and body all
-        # grow at the one rate — exactly what the still on the previous
-        # screen was doing — while the background also pans slowly.
-        steps = exp_ramp(dur, 1.0, grow)
-        bg_keys = []
-        for j, (t, g) in enumerate(steps):
-            pan = -160 + 320 * (t / dur)
-            bg_keys.append(kf(t, ramp=(t - steps[j-1][0]) if j else 0, easing="linear",
-                              placement={"height": 1150 * g, "anchor": "center", "offset": [pan * g, 0]}))
-        layers.append(layer(f"Background {i+1}", sort, "image", t0, tail, resourceID=bgres["id"],
-                            **({"fadeIn": fade} if fade else {}), keyframes=bg_keys)); sort += 1
-        floor_keys = [kf(t, ramp=(t - steps[j-1][0]) if j else 0, easing="linear",
-                         placement={"width": 1700 * g, "anchor": "bottom", "offset": [0, (g - 1) * 260]})
-                      for j, (t, g) in enumerate(steps)]
-        layers.append(layer(f"Floor {i+1}", sort, "image", t0, tail, resourceID=floor["id"],
-                            **({"fadeIn": fade} if fade else {}), keyframes=floor_keys)); sort += 1
-        sh_y = off0 + h0 / 2 - 16
-        shadow_keys = [kf(t, ramp=(t - steps[j-1][0]) if j else 0, easing="linear",
-                          placement={"height": 120 * g, "anchor": "center", "offset": [0, sh_y * g]},
-                          opacity=max(0.0, 0.9 - 1.6 * (t / dur)))
-                       for j, (t, g) in enumerate(steps)]
-        layers.append(layer(f"Shadow {i+1}", sort, "image", t0, tail, resourceID=shadow["id"],
-                            **({"fadeIn": fade} if fade else {}), keyframes=shadow_keys)); sort += 1
-        light = dict(yaw=15, pitch=50, intensity=1.0)
-        body_keys = []
-        for j, (t, g) in enumerate(steps):
-            f = t / dur
-            cam = dict(yaw=start_pose['yaw'] + (pose['yaw'] - start_pose['yaw']) * f,
-                       pitch=start_pose['pitch'] + (pose['pitch'] - start_pose['pitch']) * f,
-                       roll=0, distance=4.2, fov=30)
-            # the body's centre slides from its opening spot to where the
-            # screen's picture is centred on the canvas, as it grows
-            ox = end['offset'][0] * f
-            oy = off0 * g * (1 - f) + end['offset'][1] * f
-            body_keys.append(kf(t, ramp=(t - steps[j-1][0]) if j else 0, easing="linear",
-                                placement={"height": h0 * g, "anchor": "center", "offset": [ox, oy]},
-                                camera=cam, light=light))
-        layers.append(layer(name.capitalize(), sort, "model", t0, tail, resourceID=body["id"],
-                            **({"fadeIn": fade} if fade else {}), keyframes=body_keys)); sort += 1
-        t0 += dur
-    # --- the final scene: the cube piece as it was authored, joined at
-    # CUBE_SKIP so the cut lands with the cube already there (its own
-    # fade-in would have the flight arrive into an empty gradient). A
-    # stage's members carry their own times, so they move with it.
-    shift = t0 - CUBE_SKIP
-    for r in cube['resources']:
-        resources.append(r)
-    for l in cube['layers']:
-        moved = json.loads(json.dumps(l)); moved['startTime'] = l['startTime'] + shift
-        moved['sortIndex'] = sort; sort += 1
-        for member in moved.get('members', []):
-            member['startTime'] = member.get('startTime', 0) + shift
-        layers.append(moved)
-    total = t0 + cube['videoDuration'] - CUBE_SKIP
+    # the flight's timing first, so every composition knows the film's length
+    durs = [flight(h0, end_placement(n)['height']) for (n, _, _, _, h0, _, _) in DEVICES]
+    starts = [sum(durs[:i]) for i in range(3)]
+    t3 = sum(durs); total = t3 + cube['videoDuration'] - CUBE_SKIP
+    comps = [None] * 4
+    comps[3] = cube_scene(cube, t3 - CUBE_SKIP, total)
+    for i in (2, 1, 0):
+        name, glb, radius, pose0, h0, off0, bg = DEVICES[i]
+        comp, extra, _ = scene(name, glb, radius, pose0, h0, off0, bg, floor, shadow, comps[i + 1], starts[i], total)
+        comps[i] = comp; resources += extra
+    resources += comps
+    layers = []
+    ends = starts[1:] + [t3]
+    for i, comp in enumerate(comps):
+        dur = total if i == 3 else ends[i] + FADE
+        layers.append(layer(comp["displayName"], 3 - i, "video", 0, dur, resourceID=comp["id"],
+                            **({"transitionOut": {"kind": "fade", "duration": FADE}} if i < 3 else {}),
+                            keyframes=[kf(0, placement={"mode": "fill", "anchor": "center"})]))
     return {"id": U(), "name": "Infinite screens", "createdAt": 0, "state": "recorded",
             "trimStart": 0, "trimEnd": total, "videoDuration": total, "subtitles": [],
-            "minReaderVersion": 42, "compositionSettings": settings, "resources": resources, "layers": layers,
-            "_scenes": scenes}
+            "minReaderVersion": 43, "compositionSettings": settings, "resources": resources, "layers": layers,
+            "_scenes": list(zip([d[0] for d in DEVICES], starts, durs))}
 
 def materialize(meta, pkg):
     shutil.rmtree(pkg, ignore_errors=True); os.makedirs(pkg + '/Resources')
-    for f in os.listdir(RES): shutil.copy(os.path.join(RES, f), pkg + '/Resources/' + f)
+    for f in os.listdir(RES):
+        if not f.startswith('still_'): shutil.copy(os.path.join(RES, f), pkg + '/Resources/' + f)
     json.dump(meta, open(pkg + '/metadata.json', 'w'), indent=1)
 
-def still(pkg, t, out):
-    r = subprocess.run([CLI, 'still', pkg, '--out', out, '--time', str(t), '--size', f'{W}x{H}'], capture_output=True, text=True)
-    if r.returncode: sys.exit(f'still failed at {t}: {r.stderr[-400:]}')
-
 if __name__ == '__main__':
-    from PIL import Image
     work = os.path.join(HERE, 'runs', 'build'); os.makedirs(work, exist_ok=True)
     pkg = os.path.join(work, 'Infinite screens.promo')
-    names = ['still_s2.png', 'still_s3.png', 'still_s4.png']
-    for n in names:  # blank stand-ins so the first pass decodes
-        Image.new('RGB', (W, H), (11, 13, 18)).save(os.path.join(RES, n))
-    # The stills come from a build WITHOUT the cut fades — a scene's true
-    # first frame — in reverse order, so the tablet's screen already shows
-    # the phone when the laptop's still is taken.
-    for scene, name in ((4, 'still_s4.png'), (3, 'still_s3.png'), (2, 'still_s2.png')):
-        meta = build(names, fades=False); scenes = meta.pop('_scenes')
-        materialize(meta, pkg)
-        at = scenes[scene - 1][1] if scene - 1 < len(scenes) else scenes[-1][1] + scenes[-1][2]
-        still(pkg, at + 0.02, os.path.join(RES, name))
-        print('rendered', name, 'at', round(at + 0.02, 2))
-    meta = build(names); scenes = meta.pop('_scenes'); materialize(meta, pkg)
+    meta = build(); scenes = meta.pop('_scenes'); materialize(meta, pkg)
     json.dump(meta, open(os.path.join(HERE, 'reference.json'), 'w'), indent=1)
     print('scenes:', [(n, round(t, 2), round(d, 2)) for n, t, d in scenes], 'total', round(meta['videoDuration'], 2))
-    v = subprocess.run([CLI, 'validate', pkg], capture_output=True, text=True); print(v.stdout.strip()[:600])
+    v = subprocess.run([CLI, 'validate', pkg], capture_output=True, text=True); print(v.stdout.strip()[:800])
     if '--render' in sys.argv:
         cuts = [t for _, t, _ in scenes[1:]] + [scenes[-1][1] + scenes[-1][2]]
-        times = [1.0] + [x for c in cuts for x in (c - 0.1, c + 0.3)] + [meta['videoDuration'] - 5, meta['videoDuration'] - 1.5]
+        times = [1.0, 3.0] + [x for c in cuts for x in (c - 0.1, c + 0.3)] + [meta['videoDuration'] - 5, meta['videoDuration'] - 1.5]
         subprocess.run([CLI, 'frames', pkg, '--out', os.path.join(work, 'frames'), '--times',
                         ','.join(f'{t:.2f}' for t in times), '--size', '720x450',
                         '--sheet', os.path.join(work, 'sheet.png')], check=False)

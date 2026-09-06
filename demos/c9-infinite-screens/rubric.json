@@ -1,6 +1,6 @@
 {
   "media": [],
-  "retired": "a built showcase (build.py derives the screen stills from the scenes themselves); not an agent task yet",
+  "retired": "a built showcase (build.py writes the four compositions and the flight); not an agent task yet",
   "checks": [
     {
       "name": "four scenes",
@@ -8,7 +8,11 @@
     },
     {
       "name": "the screens show the next scene",
-      "assert": "each device's Screen slot binds an image whose pixels are the next scene's first frame"
+      "assert": "each device's Screen slot binds the next scene's composition, whose clock starts on the film's first frame"
+    },
+    {
+      "name": "screens move",
+      "assert": "frames of a device's screen two seconds apart differ: the next scene's background is scrolling on it"
     },
     {
       "name": "one rate",
