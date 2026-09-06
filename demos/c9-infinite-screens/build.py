@@ -202,11 +202,15 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
                       placement={"width": 1700 * g, "anchor": "bottom", "offset": [0, (g - 1) * 260 - below]})
                    for j, (t, g) in enumerate(steps)]
     layers.append(layer(f"Floor {name}", 1 + up, "image", 0, total, resourceID=floor["id"], keyframes=floor_keys))
-    # The key light: from the front-right at rest, swinging left and lower
-    # through the flight, so the highlight crosses the screen's glass and
-    # the shadow on the floor turns with it — only the light moves.
+    # The key light: high on the front-right at rest, dipping low and to
+    # the front through the middle of the flight — where the screen's glass
+    # mirrors it into the camera and its glance crosses the picture — and
+    # climbing away to the left before the cut, so the screen the cut lands
+    # on is the plain picture again; the shadow on the floor turns with it.
+    # Only the light moves.
     def light(f=0.0):
-        return dict(yaw=15 - 50 * f, pitch=50 - 12 * f, intensity=1.05)
+        import math
+        return dict(yaw=35 - 70 * f, pitch=45 - 27 * math.sin(math.pi * f), intensity=1.05)
     cam0 = dict(yaw=start_pose['yaw'], pitch=start_pose['pitch'], roll=0, distance=4.2, fov=30)
     at_rest = dict(placement={"height": h0, "anchor": "center", "offset": [0, off0 + band_dy]}, camera=cam0, light=light())
     body_keys = [kf(0, **at_rest)]

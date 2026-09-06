@@ -24,7 +24,7 @@ A laptop on a table whose screen shows a tablet, whose screen shows a phone, who
 
 <img src="c9-infinite-screens/laptop-first-sheet.png" width="800" alt="moments of laptop first">
 
-**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-laptop-first.mp4)** (1280 wide, 7.3 MB, 32 s) · [small copy](c9-infinite-screens/laptop-first.mp4) · [the project](c9-infinite-screens/laptop-first-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-laptop-first.mp4)** (1280 wide, 7.6 MB, 32 s) · [small copy](c9-infinite-screens/laptop-first.mp4) · [the project](c9-infinite-screens/laptop-first-metadata.json)
 
 ## Phone first
 
@@ -32,7 +32,7 @@ The other way up — a phone, a tablet, a laptop, the cube — with a headline p
 
 <img src="c9-infinite-screens/phone-first-sheet.png" width="800" alt="moments of phone first">
 
-**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-phone-first.mp4)** (1280 wide, 7.9 MB, 35 s) · [small copy](c9-infinite-screens/phone-first.mp4) · [the project](c9-infinite-screens/phone-first-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/c9-infinite-screens-phone-first.mp4)** (1280 wide, 8.1 MB, 35 s) · [small copy](c9-infinite-screens/phone-first.mp4) · [the project](c9-infinite-screens/phone-first-metadata.json)
 
 ## What the piece is built to do
 
