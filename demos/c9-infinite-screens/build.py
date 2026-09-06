@@ -30,7 +30,7 @@ CLI = os.path.join(CORE, 'target', 'release', 'promo'); RES = os.path.join(HERE,
 U = lambda: str(uuid.uuid4()).upper()
 W, H = 1440, 900          # the cube piece's own canvas, so it plays as authored
 FADE = 0.25               # the cut: the same document seen through the screen, then whole
-RATE = 0.143              # the flight: ln(scale) per second — doubling every 4.8 s
+RATE = 0.143              # the flight: ln(scale) per second — doubling every 4.8 s (a film may set its own)
 OVERSHOOT = 1.025         # the picture a hair larger than the canvas at the cut
 CUBE_SKIP = 0.45          # land inside the cube piece's own fade-in, where the cube is there
 PAN_SPEED = 120           # the background's scroll, px/s at its own scale
@@ -93,6 +93,10 @@ FILMS = {
     'phone-first': dict(name='Infinite screens, phone first', order=('phone', 'tablet', 'laptop'),
                         captions=('One project, four compositions', 'Every screen plays the next scene',
                                   'Zoom all the way in'), screen_shaped=True,
+                        # farther away at the start and a faster flight — doubling every
+                        # 3.5 s rather than 4.8 — for a more dynamic film of about the
+                        # same length
+                        distance=0.8, rate=0.2,
                         out='phone-first', reference='reference-phone-first.json',
                         video='infinite-screens-phone-first.mp4'),
 }
@@ -100,9 +104,9 @@ CAPTION_STYLE = {"alignment": "center", "fontSize": 52, "isBold": True, "textCol
                  "placement": {"anchor": "top", "offset": [0, 40]}, "padding": 16,
                  "shadowColorHex": "000000", "shadowOpacity": 0.6, "shadowRadius": 12}
 
-def flight(h0, h1):
+def flight(h0, h1, rate=RATE):
     import math
-    return math.log(h1 / h0) / RATE
+    return math.log(h1 / h0) / rate
 
 def exp_steps(t0, t1, grow, steps=12):
     """(time, growth) along an exponential from 1 to grow over t0..t1."""
@@ -110,7 +114,7 @@ def exp_steps(t0, t1, grow, steps=12):
     return [(t0 + (t1 - t0) * i / steps, math.exp(math.log(grow) * i / steps)) for i in range(steps + 1)]
 
 def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp, rest, total,
-          canvas=(H, 0.5), next_band_v=0.5, table=None):
+          canvas=(H, 0.5), next_band_v=0.5, table=None, rate=RATE):
     """One scene's composition: at rest (background panning) until `rest`,
     then the flight to the screen, then holding for whatever is left.
     `canvas` is (height, band centre): the scene lives in a W×H BAND of
@@ -121,7 +125,7 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
     band_dy = int(round((band_v - 0.5) * ch))     # the band's centre below the canvas centre
     below = ch - (ch // 2 + band_dy + H // 2)     # canvas rows under the band: the table's front
     end = end_placement(name, next_band_v); pose = MEASURED[name]['pose']
-    dur = flight(h0, end['height']); grow = end['height'] / h0
+    dur = flight(h0, end['height'], rate); grow = end['height'] / h0
     hexv, met, rough = FINISH[name]
     layers = []
     bgres = res("image", bg, f"Background {name}", pixelWidth=4096, pixelHeight=2700)
@@ -216,7 +220,9 @@ def cube_scene(cube, pre, total):
 
 def build(film):
     order, captions = film['order'], film['captions']
-    devices = [DEVICE[n] for n in order]
+    rate, distance = film.get('rate', RATE), film.get('distance', 1.0)
+    # `distance` < 1 starts every body that much smaller — farther away
+    devices = [d[:4] + (round(d[4] * distance),) + d[5:] for d in (DEVICE[n] for n in order)]
     cube = json.load(open(CUBE_REF))
     settings = dict(cube['compositionSettings']); settings.update({"canvasWidth": W, "canvasHeight": H})
     resources = list(cube['resources'])
@@ -232,7 +238,7 @@ def build(film):
     canvases = [(H, 0.5)] + [screen_canvas(SCREEN_ASPECT[order[i - 1]]) if film.get('screen_shaped') else (H, 0.5)
                              for i in (1, 2)] + [(H, 0.5)]
     # the flight's timing first, so every composition knows the film's length
-    durs = [flight(h0, end_placement(n)['height']) for (n, _, _, _, h0, _, _) in devices]
+    durs = [flight(h0, end_placement(n)['height'], rate) for (n, _, _, _, h0, _, _) in devices]
     starts = [sum(durs[:i]) for i in range(3)]
     t3 = sum(durs); total = t3 + cube['videoDuration'] - CUBE_SKIP
     comps = [None] * 4
@@ -240,7 +246,7 @@ def build(film):
     for i in (2, 1, 0):
         name, glb, radius, pose0, h0, off0, bg = devices[i]
         comp, extra, _ = scene(name, glb, radius, pose0, h0, off0, bg, floor, shadow, comps[i + 1], starts[i], total,
-                               canvas=canvases[i], next_band_v=canvases[i + 1][1], table=table)
+                               canvas=canvases[i], next_band_v=canvases[i + 1][1], table=table, rate=rate)
         comps[i] = comp; resources += extra
     resources += comps
     layers = []
