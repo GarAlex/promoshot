@@ -17,8 +17,12 @@ the four compositions stacked, each revealed as the one above ends.
 Two films from the same scenes. `laptop-first` (the default) is the one
 above. `phone-first` runs the other way — a phone, a tablet, a laptop,
 the cube — so the sizes climb towards the finale, and carries one
-headline caption per device scene. Needs the release CLI. --render also
-writes a contact sheet and the mp4 into the demo's runs/ for a look.
+headline caption per device scene. Its scenes are SCREEN-SHAPED: a
+scene that plays on a screen is built to that screen's proportions (a
+phone's is tall), so it fills the screen top to bottom with no bars,
+while a W×H band of it — the part the flight lands on — is what the top
+level shows. Needs the release CLI. --render also writes a contact
+sheet and the mp4 into the demo's runs/ for a look.
 """
 import json, os, shutil, subprocess, sys, uuid
 HERE = os.path.dirname(os.path.abspath(__file__)); CORE = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -42,14 +46,32 @@ MEASURED = {
     'phone':  dict(screen=(367, 210, 632, 789), pose=dict(yaw=0, pitch=0)),
 }
 ASPECT = W / H
-def end_placement(name):
+def end_placement(name, band_v=0.5):
+    """Where the flight lands: the placement that puts the W×H picture
+    on this device's screen exactly over the canvas. `band_v` is where
+    that picture's centre sits down the screen — the middle of a fitted
+    landscape picture, or the band of a screen-shaped scene."""
     sx0, sy0, sx1, sy1 = MEASURED[name]['screen']
     sw, sh = sx1 - sx0 + 1, sy1 - sy0 + 1
     if sw / sh > ASPECT: pw, ph = sh * ASPECT, sh
     else: pw, ph = sw, sw / ASPECT
-    pcx, pcy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
+    pcx, pcy = (sx0 + sx1) / 2, sy0 + band_v * (sy1 - sy0)
     s = H / ph * OVERSHOOT
     return dict(height=600 * s, offset=[-(pcx - 499.5) * s, -(pcy - 499.0) * s])
+
+# The screens' shapes, from the Screen plates in the app's
+# Scripts/make-device-models.py (a slot's aspect follows its uvs). A
+# scene built to the shape of the screen it plays on fills that screen.
+SCREEN_ASPECT = {'phone': 66.5 / 144.6, 'tablet': 267.6 / 201.5, 'laptop': 301.6 / 198.2}
+
+def screen_canvas(aspect):
+    """A canvas W wide in a screen's shape: (height, the centre of its
+    W×H band as a fraction of the height). A tall canvas keeps the band
+    below the middle — wall above the table, less table below. Even
+    padding keeps the band on whole pixels."""
+    ch = max(H, int(round(W / aspect)))
+    if (ch - H) % 2: ch += 1
+    return ch, (0.62 if ch > 1.5 * H else 0.5)
 
 def kf(time, **f):
     d = {"id": U(), "time": time, "transitionDuration": f.pop('ramp', 0)}; d.update(f); return d
@@ -70,7 +92,7 @@ FILMS = {
                          out='build', reference='reference.json', video='infinite-screens.mp4'),
     'phone-first': dict(name='Infinite screens, phone first', order=('phone', 'tablet', 'laptop'),
                         captions=('One project, four compositions', 'Every screen plays the next scene',
-                                  'Zoom all the way in'),
+                                  'Zoom all the way in'), screen_shaped=True,
                         out='phone-first', reference='reference-phone-first.json',
                         video='infinite-screens-phone-first.mp4'),
 }
@@ -87,10 +109,18 @@ def exp_steps(t0, t1, grow, steps=12):
     import math
     return [(t0 + (t1 - t0) * i / steps, math.exp(math.log(grow) * i / steps)) for i in range(steps + 1)]
 
-def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp, rest, total):
+def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp, rest, total,
+          canvas=(H, 0.5), next_band_v=0.5, table=None):
     """One scene's composition: at rest (background panning) until `rest`,
-    then the flight to the screen, then holding for whatever is left."""
-    end = end_placement(name); pose = MEASURED[name]['pose']
+    then the flight to the screen, then holding for whatever is left.
+    `canvas` is (height, band centre): the scene lives in a W×H BAND of
+    a canvas W wide — the whole canvas when it is H tall, else the band
+    the top level shows of a screen-shaped scene; everything is placed
+    about the band's centre, and the flight grows about it."""
+    ch, band_v = canvas
+    band_dy = int(round((band_v - 0.5) * ch))     # the band's centre below the canvas centre
+    below = ch - (ch // 2 + band_dy + H // 2)     # canvas rows under the band: the table's front
+    end = end_placement(name, next_band_v); pose = MEASURED[name]['pose']
     dur = flight(h0, end['height']); grow = end['height'] / h0
     hexv, met, rough = FINISH[name]
     layers = []
@@ -110,26 +140,32 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
     # `rest`, and the pan scales with it.
     direction = 1 if name in ('laptop', 'phone') else -1
     pan = lambda t: direction * (PAN_SPEED * (rest + dur) / 2 - PAN_SPEED * t)
-    bg_keys = [kf(0, placement={"width": BG_WIDTH, "anchor": "center", "offset": [pan(0), 0]})]
+    bg_keys = [kf(0, placement={"width": BG_WIDTH, "anchor": "center", "offset": [pan(0), band_dy]})]
     bg_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
-                   placement={"width": BG_WIDTH * g, "anchor": "center", "offset": [pan(t) * g, 0]})
+                   placement={"width": BG_WIDTH * g, "anchor": "center", "offset": [pan(t) * g, band_dy]})
                 for j, (t, g) in enumerate(steps)]
     layers.append(layer(f"Background {name}", 0, "image", 0, total, resourceID=bgres["id"], keyframes=bg_keys))
-    floor_keys = [kf(0, placement={"width": 1700, "anchor": "bottom"})]
+    up = 1 if below else 0                        # a table front takes a row of the z-order
+    if below:
+        # The table's front: the floor's own dark from under its opaque
+        # part to the canvas bottom, seen only through a screen.
+        layers.append(layer(f"Table {name}", 1, "image", 0, total, resourceID=table["id"],
+                            keyframes=[kf(0, placement={"height": below + 180, "anchor": "bottom"})]))
+    floor_keys = [kf(0, placement={"width": 1700, "anchor": "bottom", **({"offset": [0, -below]} if below else {})})]
     floor_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
-                      placement={"width": 1700 * g, "anchor": "bottom", "offset": [0, (g - 1) * 260]})
+                      placement={"width": 1700 * g, "anchor": "bottom", "offset": [0, (g - 1) * 260 - below]})
                    for j, (t, g) in enumerate(steps)]
-    layers.append(layer(f"Floor {name}", 1, "image", 0, total, resourceID=floor["id"], keyframes=floor_keys))
+    layers.append(layer(f"Floor {name}", 1 + up, "image", 0, total, resourceID=floor["id"], keyframes=floor_keys))
     sh_y = off0 + h0 / 2 - 16
-    shadow_keys = [kf(0, placement={"height": 120, "anchor": "center", "offset": [0, sh_y]}, opacity=0.9)]
+    shadow_keys = [kf(0, placement={"height": 120, "anchor": "center", "offset": [0, sh_y + band_dy]}, opacity=0.9)]
     shadow_keys += [kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
-                       placement={"height": 120 * g, "anchor": "center", "offset": [0, sh_y * g]},
+                       placement={"height": 120 * g, "anchor": "center", "offset": [0, sh_y * g + band_dy]},
                        opacity=max(0.0, 0.9 - 1.6 * ((t - rest) / dur)))
                     for j, (t, g) in enumerate(steps)]
-    layers.append(layer(f"Shadow {name}", 2, "image", 0, total, resourceID=shadow["id"], keyframes=shadow_keys))
+    layers.append(layer(f"Shadow {name}", 2 + up, "image", 0, total, resourceID=shadow["id"], keyframes=shadow_keys))
     light = dict(yaw=15, pitch=50, intensity=1.0)
     cam0 = dict(yaw=start_pose['yaw'], pitch=start_pose['pitch'], roll=0, distance=4.2, fov=30)
-    body_keys = [kf(0, placement={"height": h0, "anchor": "center", "offset": [0, off0]}, camera=cam0, light=light)]
+    body_keys = [kf(0, placement={"height": h0, "anchor": "center", "offset": [0, off0 + band_dy]}, camera=cam0, light=light)]
     for j, (t, g) in enumerate(steps):
         f = (t - rest) / dur
         cam = dict(yaw=start_pose['yaw'] + (pose['yaw'] - start_pose['yaw']) * f,
@@ -137,11 +173,11 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
                    roll=0, distance=4.2, fov=30)
         body_keys.append(kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
                             placement={"height": h0 * g, "anchor": "center",
-                                       "offset": [end['offset'][0] * f, off0 * g * (1 - f) + end['offset'][1] * f]},
+                                       "offset": [end['offset'][0] * f, off0 * g * (1 - f) + end['offset'][1] * f + band_dy]},
                             camera=cam, light=light))
-    layers.append(layer(name.capitalize(), 3, "model", 0, total, resourceID=body["id"], keyframes=body_keys))
-    comp = res("composition", "", f"Scene {name}", duration=total, pixelWidth=W, pixelHeight=H,
-               composition={"canvasWidth": W, "canvasHeight": H, "backgroundColorHex": "0B0D12", "layers": layers})
+    layers.append(layer(name.capitalize(), 3 + up, "model", 0, total, resourceID=body["id"], keyframes=body_keys))
+    comp = res("composition", "", f"Scene {name}", duration=total, pixelWidth=W, pixelHeight=ch,
+               composition={"canvasWidth": W, "canvasHeight": ch, "backgroundColorHex": "0B0D12", "layers": layers})
     return comp, resources, dur
 
 def cube_scene(cube, pre, total):
@@ -186,6 +222,15 @@ def build(film):
     resources = list(cube['resources'])
     floor = res("image", "floor.png", "Floor", pixelWidth=4096, pixelHeight=900); resources.append(floor)
     shadow = res("image", "shadow.png", "Shadow", pixelWidth=1600, pixelHeight=500); resources.append(shadow)
+    table = None
+    if film.get('screen_shaped'):
+        table = res("image", "table.png", "Table front", pixelWidth=4096, pixelHeight=64); resources.append(table)
+    # Each scene's canvas: the first is seen only at the top level; each
+    # later one plays on the previous device's screen, and takes that
+    # screen's shape when the film is screen-shaped. The cube piece stays
+    # its own 1440×900 (a laptop's screen is within 5% of that).
+    canvases = [(H, 0.5)] + [screen_canvas(SCREEN_ASPECT[order[i - 1]]) if film.get('screen_shaped') else (H, 0.5)
+                             for i in (1, 2)] + [(H, 0.5)]
     # the flight's timing first, so every composition knows the film's length
     durs = [flight(h0, end_placement(n)['height']) for (n, _, _, _, h0, _, _) in devices]
     starts = [sum(durs[:i]) for i in range(3)]
@@ -194,16 +239,21 @@ def build(film):
     comps[3] = cube_scene(cube, t3 - CUBE_SKIP, total)
     for i in (2, 1, 0):
         name, glb, radius, pose0, h0, off0, bg = devices[i]
-        comp, extra, _ = scene(name, glb, radius, pose0, h0, off0, bg, floor, shadow, comps[i + 1], starts[i], total)
+        comp, extra, _ = scene(name, glb, radius, pose0, h0, off0, bg, floor, shadow, comps[i + 1], starts[i], total,
+                               canvas=canvases[i], next_band_v=canvases[i + 1][1], table=table)
         comps[i] = comp; resources += extra
     resources += comps
     layers = []
     ends = starts[1:] + [t3]
     for i, comp in enumerate(comps):
         dur = total if i == 3 else ends[i] + FADE
+        ch, band_v = canvases[i]
+        # a screen-shaped scene at its own scale, its band over the canvas
+        shown = ({"mode": "fill", "anchor": "center"} if ch == H else
+                 {"height": ch, "anchor": "center", "offset": [0, -int(round((band_v - 0.5) * ch))]})
         layers.append(layer(comp["displayName"], 3 - i, "video", 0, dur, resourceID=comp["id"],
                             **({"transitionOut": {"kind": "fade", "duration": FADE}} if i < 3 else {}),
-                            keyframes=[kf(0, placement={"mode": "fill", "anchor": "center"})]))
+                            keyframes=[kf(0, placement=shown)]))
     # One headline per device scene, at the top, over the flight's first
     # part: in after the cut has settled, out well before the next one,
     # so no two captions ever share a frame — and the cube piece keeps

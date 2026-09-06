@@ -44,4 +44,8 @@ if __name__ == '__main__':
     vignette(stripes((62, 86, 150), (96, 128, 205))).save(os.path.join(R, 'bg_laptop.png'), optimize=True)
     vignette(dots((118, 72, 46), (196, 132, 84))).save(os.path.join(R, 'bg_tablet.png'), optimize=True)
     vignette(hexes((36, 96, 78), (70, 158, 124))).save(os.path.join(R, 'bg_phone.png'), optimize=True)
-    print({f: os.path.getsize(os.path.join(R, f)) // 1024 for f in ('bg_laptop.png', 'bg_tablet.png', 'bg_phone.png')})
+    # The table's front: the floor's own dark, for the part of a
+    # screen-shaped scene that lies below the table's edge. Very wide,
+    # because it is placed by HEIGHT and must still span any canvas.
+    Image.new('RGB', (4096, 64), (8, 9, 12)).save(os.path.join(R, 'table.png'), optimize=True)
+    print({f: os.path.getsize(os.path.join(R, f)) // 1024 for f in ('bg_laptop.png', 'bg_tablet.png', 'bg_phone.png', 'table.png')})
