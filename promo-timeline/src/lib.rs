@@ -716,15 +716,24 @@ mod tests {
         assert!((r.height() - 1920.0).abs() < 1e-9);
         assert_eq!(r.x(), 50.0);
         assert_eq!(r.y(), -30.0);
-        // Zoom floors at 0.3.
+        // Zoom floors at 1%: a layer never vanishes, and a small box on a
+        // large canvas is drawn at its own size rather than a third of it.
         let tiny = media_rect(
             Size::new(100.0, 100.0),
             Size::new(1000.0, 1000.0),
-            0.01,
+            0.001,
             0.0,
             0.0,
         );
-        assert!((tiny.height() - 300.0).abs() < 1e-9);
+        assert!((tiny.height() - 10.0).abs() < 1e-9);
+        let small = media_rect(
+            Size::new(100.0, 100.0),
+            Size::new(1000.0, 1000.0),
+            0.1,
+            0.0,
+            0.0,
+        );
+        assert!((small.height() - 100.0).abs() < 1e-9);
     }
 
     #[test]

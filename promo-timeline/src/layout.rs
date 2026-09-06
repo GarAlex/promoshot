@@ -4,10 +4,14 @@
 
 use promo_model::{Rect, Size};
 
-/// Swift `LayerLayout.clampedZoom` — floored so a layer never collapses past
-/// 30% of its base size.
+/// Swift `LayerLayout.clampedZoom` — floored at 1% so a layer never
+/// collapses to nothing. The floor was 30% for years, a guard from the days
+/// of a zoom slider on a small canvas; a placement RULE resolves its own
+/// zoom against the canvas, and on a tall or a 4K one a modest box is well
+/// under 30% — a 300 px body on a phone-shaped 3132 px canvas is 9.6% — so
+/// the old floor quietly drew every such layer three times too large.
 pub fn clamped_zoom(zoom: f64) -> f64 {
-    zoom.max(0.3)
+    zoom.max(0.01)
 }
 
 /// Swift `LayerLayout.mediaRect` — rect for a video/image layer scaled to the
@@ -207,6 +211,25 @@ mod placement_tests {
             placement_zoom(&placement(r#"{"mode": "fit"}"#), tall, canvas).unwrap(),
             1.0
         );
+    }
+
+    /// A box well under a third of the canvas is drawn at its own size. The
+    /// zoom floor was 30% — a placement of 300 px on a phone-shaped 3132 px
+    /// canvas resolves to 9.6%, and the floor drew it 940 px tall while the
+    /// anchor put its top where a 300 px box belongs.
+    #[test]
+    fn a_box_under_a_third_of_the_canvas_is_drawn_at_its_size() {
+        let canvas = Size::new(1440.0, 3132.0);
+        let zoom = placement_zoom(&placement(r#"{"height": 300}"#), 1.0, canvas).unwrap();
+        assert!((zoom - 300.0 / 3132.0).abs() < 1e-12);
+        let rect = media_rect(Size::new(1000.0, 1000.0), canvas, zoom, 0.0, 0.0);
+        assert!(
+            (rect.height() - 300.0).abs() < 1e-9,
+            "drawn {} tall",
+            rect.height()
+        );
+        // The floor still keeps a layer from vanishing.
+        assert_eq!(clamped_zoom(0.0), 0.01);
     }
 
     #[test]

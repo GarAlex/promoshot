@@ -2107,8 +2107,16 @@ impl PreviewEngine {
                 self.scratch_key.clear();
             }
         }
-        let settings = self.meta.composition_settings.clone();
+        // The look is the project's; the CANVAS is this document's. A
+        // nested composition can be any size — a phone-shaped reel on a
+        // phone's screen — and every rule that reads the canvas (a
+        // placement's height, an anchor, a caption's margins, a model's
+        // render square) must read the composition's, or the layers are
+        // laid out for one frame and drawn in another.
+        let mut settings = self.meta.composition_settings.clone();
         let canvas = doc.canvas;
+        settings.canvas_width = canvas.width();
+        settings.canvas_height = canvas.height();
 
         let mut layers: Vec<ProjectLayer> = doc.layers.clone();
         layers.sort_by_key(|l| l.sort_index);
@@ -5649,6 +5657,77 @@ mod tests {
         assert!(
             magenta > 20,
             "the stage's phone is on the canvas: {magenta} magenta pixels"
+        );
+    }
+
+    /// A nested composition is laid out on ITS OWN canvas. The scene
+    /// builder took the project's settings for every level, so a
+    /// composition of another size had its placements resolved against
+    /// the project's canvas and drawn in its own frame — a phone-shaped
+    /// scene three times the project's height came out three times too
+    /// large, its centred body up near the top.
+    #[test]
+    fn a_nested_composition_is_laid_out_on_its_own_canvas() {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000005",
+            "name": "tall nested", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
+                                    "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE03",
+                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
+                                "placement": {"mode": "fit"}}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000CC04", "kind": "model",
+                 "filename": "", "displayName": "Phone", "addedAt": 0,
+                 "recipe": {"device": {"kind": "phone"}},
+                 "materials": {"Body": {"colorHex": "FF00FF", "metallic": 0, "roughness": 0.5}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000EE03", "kind": "composition",
+                 "filename": "", "displayName": "Tall", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 96, "pixelHeight": 288,
+                 "composition": {"canvasWidth": 96, "canvasHeight": 288,
+                   "backgroundColorHex": "003300", "layers": [
+                     {"id": "BODY", "name": "phone", "sortIndex": 0, "kind": "model",
+                      "isEnabled": true, "startTime": 0, "duration": 4,
+                      "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC04",
+                      "keyframes": [{"id": "MK", "time": 0, "transitionDuration": 0,
+                        "placement": {"height": 60, "anchor": "center"},
+                        "camera": {"yaw": 0, "pitch": 0, "distance": 4.2, "fov": 30},
+                        "light": {"yaw": 40, "pitch": 50, "intensity": 1}}]}
+                 ]},
+                 "imageCuts": [], "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("tall nested fixture");
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let px = out.read_pixels().unwrap();
+        // The 96×288 composition fits the square as a 32×96 strip, and a
+        // body 60 tall on that canvas is 20 tall in the strip, centred.
+        let rows: Vec<usize> = px
+            .chunks(4)
+            .enumerate()
+            .filter(|(_, p)| p[0] > 120 && p[2] > 120 && p[1] < 100)
+            .map(|(i, _)| i / 96)
+            .collect();
+        assert!(!rows.is_empty(), "the body is on the canvas");
+        let (top, bottom) = (*rows.iter().min().unwrap(), *rows.iter().max().unwrap());
+        let height = bottom - top + 1;
+        let centre = (top + bottom) as f64 / 2.0;
+        assert!(
+            (14..=26).contains(&height),
+            "a body 60 tall on a 288 canvas is 20 tall once fitted, not {height} (rows {top}..={bottom})"
+        );
+        assert!(
+            (centre - 47.5).abs() <= 4.0,
+            "a centred body sits at the strip's middle, not row {centre}"
         );
     }
 
