@@ -64,6 +64,20 @@ def end_placement(name, band_v=0.5):
 # scene built to the shape of the screen it plays on fills that screen.
 SCREEN_ASPECT = {'phone': 66.5 / 144.6, 'tablet': 267.6 / 201.5, 'laptop': 301.6 / 198.2}
 
+# The keyboard, measured like the screens: the keys' box at placement
+# height 600 on a 1000-square, the laptop seen from above (yaw 0, pitch
+# 62). DeviceLaptopKeys.glb gives the letters of PROMOSHOT their own
+# slots (Key P …), built by the app's Scripts/make-device-models.py with
+# the kind `laptopkeys`.
+KEYBOARD = dict(box=(231, 430, 768, 629), pose=dict(yaw=0, pitch=62))
+
+def keyboard_placement(share=0.86, band_dy=0):
+    """The placement that lays the keyboard across `share` of the canvas
+    width, centred — every key in view."""
+    kx0, ky0, kx1, ky1 = KEYBOARD['box']
+    s = share * W / (kx1 - kx0 + 1)
+    return dict(height=600 * s, offset=[-((kx0 + kx1) / 2 - 499.5) * s, -((ky0 + ky1) / 2 - 499.0) * s + band_dy])
+
 def screen_canvas(aspect):
     """A canvas W wide in a screen's shape: (height, the centre of its
     W×H band as a fraction of the height). A tall canvas keeps the band
@@ -97,6 +111,10 @@ FILMS = {
                         # 3.5 s rather than 4.8 — for a more dynamic film of about the
                         # same length
                         distance=0.8, rate=0.2,
+                        # the laptop scene types PROMOSHOT before its flight: a close-up
+                        # on the keyboard, one key lit per beat, back out, a pause
+                        typing=dict(scene='laptop', glb='DeviceLaptopKeys.glb', word='PROMOSHOT',
+                                    beat=0.3, move=1.0, pause=1.0, color='FFB020'),
                         out='phone-first', reference='reference-phone-first.json',
                         video='infinite-screens-phone-first.mp4'),
 }
@@ -113,8 +131,13 @@ def exp_steps(t0, t1, grow, steps=12):
     import math
     return [(t0 + (t1 - t0) * i / steps, math.exp(math.log(grow) * i / steps)) for i in range(steps + 1)]
 
+def typing_prologue(typing):
+    """How long the typing takes before the flight: in to the keys, the
+    word plus a beat's hold, back out, and the pause."""
+    return 2 * typing['move'] + (len(typing['word']) + 1) * typing['beat'] + typing['pause']
+
 def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp, rest, total,
-          canvas=(H, 0.5), next_band_v=0.5, table=None, rate=RATE):
+          canvas=(H, 0.5), next_band_v=0.5, table=None, rate=RATE, typing=None):
     """One scene's composition: at rest (background panning) until `rest`,
     then the flight to the screen, then holding for whatever is left.
     `canvas` is (height, band centre): the scene lives in a W×H BAND of
@@ -126,6 +149,11 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
     below = ch - (ch // 2 + band_dy + H // 2)     # canvas rows under the band: the table's front
     end = end_placement(name, next_band_v); pose = MEASURED[name]['pose']
     dur = flight(h0, end['height'], rate); grow = end['height'] / h0
+    # A typing prologue delays the flight: the body flies from `rest`
+    # plus the prologue, and everything else holds through it (the
+    # background keeps panning).
+    prologue = typing_prologue(typing) if typing else 0.0
+    rest = rest + prologue
     hexv, met, rough = FINISH[name]
     layers = []
     bgres = res("image", bg, f"Background {name}", pixelWidth=4096, pixelHeight=2700)
@@ -135,6 +163,18 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
                           "Body": {"colorHex": hexv, "metallic": met, "roughness": rough},
                           "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough}})
     resources = [bgres, body]
+    # The lit bodies: the same laptop with one letter's key in the
+    # highlight colour, one resource per letter, each on its own short
+    # layer over the base while its key is "pressed".
+    lit = {}
+    if typing:
+        for L in sorted(set(typing['word'])):
+            lit[L] = res("model", glb, f"{name.capitalize()} {L} lit", boundsRadius=radius, clips=[],
+                         materials={"Screen": screen,
+                                    "Body": {"colorHex": hexv, "metallic": met, "roughness": rough},
+                                    "Deck": {"colorHex": hexv, "metallic": met, "roughness": rough},
+                                    f"Key {L}": {"colorHex": typing['color'], "metallic": 0, "roughness": 0.35}})
+            resources.append(lit[L])
     steps = exp_steps(rest, rest + dur, grow)
     # The background SCROLLS, plainly: a placement far wider than the canvas
     # panned at about PAN_SPEED px/s of its own scale for the whole film,
@@ -169,13 +209,29 @@ def scene(name, glb, radius, start_pose, h0, off0, bg, floor, shadow, next_comp,
     layers.append(layer(f"Shadow {name}", 2 + up, "image", 0, total, resourceID=shadow["id"], keyframes=shadow_keys))
     light = dict(yaw=15, pitch=50, intensity=1.0)
     cam0 = dict(yaw=start_pose['yaw'], pitch=start_pose['pitch'], roll=0, distance=4.2, fov=30)
-    body_keys = [kf(0, placement={"height": h0, "anchor": "center", "offset": [0, off0 + band_dy]}, camera=cam0, light=light)]
+    at_rest = dict(placement={"height": h0, "anchor": "center", "offset": [0, off0 + band_dy]}, camera=cam0, light=light)
+    body_keys = [kf(0, **at_rest)]
+    if typing:
+        # In to the keyboard (eased), hold while the word is typed, back
+        # out (eased), and the pause: the flight's first step then ramps
+        # from the rest pose to itself over the pause, a hold.
+        move, beat, word = typing['move'], typing['beat'], typing['word']
+        start = rest - prologue
+        close = dict(placement=dict(keyboard_placement(band_dy=band_dy), anchor="center"),
+                     camera=dict(yaw=KEYBOARD['pose']['yaw'], pitch=KEYBOARD['pose']['pitch'], roll=0, distance=4.2, fov=30),
+                     light=light)
+        body_keys.append(kf(start + move, ramp=move, easing="easeInOut", **close))
+        typed = start + move + (len(word) + 1) * beat
+        body_keys.append(kf(typed + move, ramp=move, easing="easeInOut", **at_rest))
+        for k, L in enumerate(word):
+            layers.append(layer(f"Key {k + 1} {L}", 5 + up + k, "model", start + move + k * beat, beat,
+                                resourceID=lit[L]["id"], keyframes=[kf(0, **close)]))
     for j, (t, g) in enumerate(steps):
         f = (t - rest) / dur
         cam = dict(yaw=start_pose['yaw'] + (pose['yaw'] - start_pose['yaw']) * f,
                    pitch=start_pose['pitch'] + (pose['pitch'] - start_pose['pitch']) * f,
                    roll=0, distance=4.2, fov=30)
-        body_keys.append(kf(t, ramp=(t - (steps[j-1][0] if j else 0)), easing="linear",
+        body_keys.append(kf(t, ramp=(t - (steps[j-1][0] if j else (rest - typing['pause'] if typing else 0))), easing="linear",
                             placement={"height": h0 * g, "anchor": "center",
                                        "offset": [end['offset'][0] * f, off0 * g * (1 - f) + end['offset'][1] * f + band_dy]},
                             camera=cam, light=light))
@@ -220,9 +276,12 @@ def cube_scene(cube, pre, total):
 
 def build(film):
     order, captions = film['order'], film['captions']
-    rate, distance = film.get('rate', RATE), film.get('distance', 1.0)
-    # `distance` < 1 starts every body that much smaller — farther away
-    devices = [d[:4] + (round(d[4] * distance),) + d[5:] for d in (DEVICE[n] for n in order)]
+    rate, distance, typing = film.get('rate', RATE), film.get('distance', 1.0), film.get('typing')
+    # `distance` < 1 starts every body that much smaller — farther away;
+    # the typing scene's body is the lettered one
+    devices = [d[:1] + ((typing['glb'],) if typing and d[0] == typing['scene'] else d[1:2]) + d[2:4]
+               + (round(d[4] * distance),) + d[5:] for d in (DEVICE[n] for n in order)]
+    prologues = [typing_prologue(typing) if typing and n == typing['scene'] else 0.0 for n in order]
     cube = json.load(open(CUBE_REF))
     settings = dict(cube['compositionSettings']); settings.update({"canvasWidth": W, "canvasHeight": H})
     resources = list(cube['resources'])
@@ -238,7 +297,7 @@ def build(film):
     canvases = [(H, 0.5)] + [screen_canvas(SCREEN_ASPECT[order[i - 1]]) if film.get('screen_shaped') else (H, 0.5)
                              for i in (1, 2)] + [(H, 0.5)]
     # the flight's timing first, so every composition knows the film's length
-    durs = [flight(h0, end_placement(n)['height'], rate) for (n, _, _, _, h0, _, _) in devices]
+    durs = [flight(h0, end_placement(n)['height'], rate) + pro for (n, _, _, _, h0, _, _), pro in zip(devices, prologues)]
     starts = [sum(durs[:i]) for i in range(3)]
     t3 = sum(durs); total = t3 + cube['videoDuration'] - CUBE_SKIP
     comps = [None] * 4
@@ -246,7 +305,8 @@ def build(film):
     for i in (2, 1, 0):
         name, glb, radius, pose0, h0, off0, bg = devices[i]
         comp, extra, _ = scene(name, glb, radius, pose0, h0, off0, bg, floor, shadow, comps[i + 1], starts[i], total,
-                               canvas=canvases[i], next_band_v=canvases[i + 1][1], table=table, rate=rate)
+                               canvas=canvases[i], next_band_v=canvases[i + 1][1], table=table, rate=rate,
+                               typing=(typing if typing and name == typing['scene'] else None))
         comps[i] = comp; resources += extra
     resources += comps
     layers = []
@@ -265,6 +325,16 @@ def build(film):
     # so no two captions ever share a frame — and the cube piece keeps
     # its own title.
     for i, text in enumerate(captions or ()):
+        if typing and order[i] == typing['scene']:
+            # The typed word, a typewriter in step with the keys: one
+            # character per beat from the first key, held through the way
+            # back and the pause, gone as the flight begins.
+            start = starts[i] + typing['move']; end = starts[i] + prologues[i] + 0.3
+            style = dict(CAPTION_STYLE, fontSize=64,
+                         reveal={"by": "character", "mode": "wipe", "secondsPer": typing['beat']})
+            layers.append(layer(f"Caption {order[i]}", 10 + i, "caption", start, end - start,
+                                captionText=typing['word'], fadeOut=0.35, captionStyle=style))
+            continue
         start = starts[i] + (0.3 if i == 0 else FADE + 0.15); end = starts[i] + 0.62 * durs[i]
         layers.append(layer(f"Caption {order[i]}", 10 + i, "caption", start, end - start, captionText=text,
                             fadeIn=0.35, fadeOut=0.35, captionStyle=dict(CAPTION_STYLE)))

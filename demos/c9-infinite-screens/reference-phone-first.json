@@ -1,11 +1,11 @@
 {
- "id": "19520FF9-F965-49B8-BE66-4DFBC2BD3BA5",
+ "id": "D4A5226B-4F65-4D4D-B9D3-D5CAF9C73F6E",
  "name": "Infinite screens, phone first",
  "createdAt": 0,
  "state": "recorded",
  "trimStart": 0,
- "trimEnd": 29.12847048571193,
- "videoDuration": 29.12847048571193,
+ "trimEnd": 35.12847048571193,
+ "videoDuration": 35.12847048571193,
  "subtitles": [],
  "minReaderVersion": 43,
  "compositionSettings": {
@@ -255,7 +255,7 @@
    }
   },
   {
-   "id": "0A5D2C12-44B1-4852-9CE2-A62359D2508A",
+   "id": "416D00CD-ED31-4003-80E6-B4C3F82F8E1F",
    "kind": "image",
    "filename": "floor.png",
    "displayName": "Floor",
@@ -266,7 +266,7 @@
    "pixelHeight": 900
   },
   {
-   "id": "C3AD6798-0592-4ACC-A4C6-E4FDD47538B8",
+   "id": "02FB1BB4-0D65-41F9-BE69-6F99D1A250B2",
    "kind": "image",
    "filename": "shadow.png",
    "displayName": "Shadow",
@@ -277,7 +277,7 @@
    "pixelHeight": 500
   },
   {
-   "id": "B0054C50-7CEC-4E03-9A54-74CC0B394E74",
+   "id": "A68F2668-B00B-444A-A101-73E05F1FE726",
    "kind": "image",
    "filename": "table.png",
    "displayName": "Table front",
@@ -288,7 +288,7 @@
    "pixelHeight": 64
   },
   {
-   "id": "98C3DADD-C4DC-41D4-8114-23A9B6CD28B0",
+   "id": "84C5D493-A683-463A-9BC0-2303F171EF76",
    "kind": "image",
    "filename": "bg_laptop.png",
    "displayName": "Background laptop",
@@ -299,9 +299,9 @@
    "pixelHeight": 2700
   },
   {
-   "id": "A3EA082F-8109-49AA-BB8D-5648EB09E7A5",
+   "id": "F2740FB6-9935-4F5D-804F-79679AAD5BDE",
    "kind": "model",
-   "filename": "DeviceLaptop.glb",
+   "filename": "DeviceLaptopKeys.glb",
    "displayName": "Laptop",
    "addedAt": 0,
    "imageCuts": [],
@@ -310,7 +310,7 @@
    "clips": [],
    "materials": {
     "Screen": {
-     "resourceID": "A29F956B-43A7-46DD-9E25-912B8C82E711"
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
     },
     "Body": {
      "colorHex": "2B2B2E",
@@ -325,7 +325,224 @@
    }
   },
   {
-   "id": "438E03EC-8CC0-4F7E-9A43-934B123608AA",
+   "id": "0CE0F9A2-AB4D-40C5-AA6B-E9BECD907A5F",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop H lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key H": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "60170654-B38F-4DBA-B687-C4730A34878F",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop M lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key M": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "DF3A6A49-FA5F-4229-B5B6-EFF388CC8760",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop O lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key O": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "B72EED41-53DC-4307-8E3F-BBD2539B4BC1",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop P lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key P": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "76603E13-DE73-44C3-A39E-72FC24544491",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop R lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key R": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "A38A3CB0-F084-4520-88DA-296D3B68134E",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop S lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key S": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "D7DC7709-6807-4FD9-A600-AA8528A91218",
+   "kind": "model",
+   "filename": "DeviceLaptopKeys.glb",
+   "displayName": "Laptop T lit",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "boundsRadius": 1.095,
+   "clips": [],
+   "materials": {
+    "Screen": {
+     "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
+    },
+    "Body": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "metallic": 1,
+     "roughness": 0.4
+    },
+    "Key T": {
+     "colorHex": "FFB020",
+     "metallic": 0,
+     "roughness": 0.35
+    }
+   }
+  },
+  {
+   "id": "00C70FC1-0830-4940-BC4C-DE1541712F21",
    "kind": "image",
    "filename": "bg_tablet.png",
    "displayName": "Background tablet",
@@ -336,7 +553,7 @@
    "pixelHeight": 2700
   },
   {
-   "id": "689E40F2-BBBB-4545-8327-AE012D834D42",
+   "id": "B14324E7-196C-4091-B8DB-FEB98FA45484",
    "kind": "model",
    "filename": "DeviceTablet.glb",
    "displayName": "Tablet",
@@ -347,7 +564,7 @@
    "clips": [],
    "materials": {
     "Screen": {
-     "resourceID": "4965D4B8-5DF6-4ADA-91B3-A7AA1C8157D6"
+     "resourceID": "49F6C5B8-B0ED-49FB-ADD7-0B4E74A737D0"
     },
     "Body": {
      "colorHex": "D8DADC",
@@ -362,7 +579,7 @@
    }
   },
   {
-   "id": "7D8EE4E7-B9D4-4574-B6CA-E67311E8AB34",
+   "id": "BFBA69FC-3BD9-47DE-8894-1BA094660210",
    "kind": "image",
    "filename": "bg_phone.png",
    "displayName": "Background phone",
@@ -373,7 +590,7 @@
    "pixelHeight": 2700
   },
   {
-   "id": "592CD239-083B-4396-9A7F-F473B05B1EB2",
+   "id": "43389FB5-B316-4592-B7B9-54F5BD708A4B",
    "kind": "model",
    "filename": "DevicePhone.glb",
    "displayName": "Phone",
@@ -384,7 +601,7 @@
    "clips": [],
    "materials": {
     "Screen": {
-     "resourceID": "727E0C8B-626D-42A4-B842-18E6F8574D42"
+     "resourceID": "59FE9F6A-DC7C-420B-AD41-20D17FFCE1CE"
     },
     "Body": {
      "colorHex": "9B978F",
@@ -399,14 +616,14 @@
    }
   },
   {
-   "id": "30E91D37-DBDD-4D80-9880-8BD8AAF7C1CF",
+   "id": "E4461FAC-8CA2-4319-ADA4-B1E60D33046B",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene phone",
    "addedAt": 0,
    "imageCuts": [],
    "disabledAudioTrackIndices": [],
-   "duration": 29.12847048571193,
+   "duration": 35.12847048571193,
    "pixelWidth": 1440,
    "pixelHeight": 900,
    "composition": {
@@ -415,16 +632,16 @@
     "backgroundColorHex": "0B0D12",
     "layers": [
      {
-      "id": "76266946-24AD-4DE2-A812-19062C8312B7",
+      "id": "1C18AD03-3E94-4893-9054-D3E1F85DFD3E",
       "name": "Background phone",
       "sortIndex": 0,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "8B21C0BC-C130-4AC6-997E-1A8800E227C1",
+        "id": "CB476880-BCED-4BEE-9E78-1A18045E3686",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -437,7 +654,7 @@
         }
        },
        {
-        "id": "C87BF6A3-EA9E-4F08-AA59-8DE057ACCB4C",
+        "id": "A9E7D644-DCBD-4AFC-81D0-BBA448297DB9",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -451,7 +668,7 @@
         }
        },
        {
-        "id": "3A9172D4-B87D-437B-AEBC-9BC9D3F4E4F8",
+        "id": "FE87275B-5277-46B5-A409-E59144CFED33",
         "time": 0.7427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -465,7 +682,7 @@
         }
        },
        {
-        "id": "A06832F1-0E88-4D4B-888C-B1D4FC8A74B6",
+        "id": "2DD0BD90-EAEB-464D-B29B-14A6DA60B5C8",
         "time": 1.4854896398880584,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -479,7 +696,7 @@
         }
        },
        {
-        "id": "9B4F6A46-35D2-48A0-978C-EC231AC748D5",
+        "id": "AA02B58E-21AB-4BD5-8C93-F16334A964A6",
         "time": 2.2282344598320876,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -493,7 +710,7 @@
         }
        },
        {
-        "id": "17082B4F-8B3E-4957-A9B4-EA966980F2CB",
+        "id": "B0DC0523-B51F-4262-B029-3FECF32F2168",
         "time": 2.9709792797761168,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -507,7 +724,7 @@
         }
        },
        {
-        "id": "B5BFB0B8-AFEA-4F5C-B592-DF9119739C8A",
+        "id": "9CC09F53-E55B-41FC-ADC0-B1050D0E12E7",
         "time": 3.713724099720146,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -521,7 +738,7 @@
         }
        },
        {
-        "id": "976D164C-DF1F-40AA-A661-36B04312E5D8",
+        "id": "D36EACFF-816D-4E89-BCAF-3D3B4271A86B",
         "time": 4.456468919664175,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -535,7 +752,7 @@
         }
        },
        {
-        "id": "BA3EE452-5718-4ECA-A013-4F598B2874F5",
+        "id": "1688D463-F997-462F-B75F-40332DC6FA18",
         "time": 5.199213739608204,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -549,7 +766,7 @@
         }
        },
        {
-        "id": "46713F10-FA7B-4B33-8324-F0C4B884E9C8",
+        "id": "1AFD1D88-F828-4BC1-9DC2-006CA1212C9C",
         "time": 5.9419585595522335,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -563,7 +780,7 @@
         }
        },
        {
-        "id": "6EC112D8-7832-4E67-8ACD-3AEFA97DDEFB",
+        "id": "03689203-6D80-4BAA-A41F-B59C6A19C7E9",
         "time": 6.684703379496263,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -577,7 +794,7 @@
         }
        },
        {
-        "id": "9F77AE1F-0212-4E61-9265-082D2224CA7D",
+        "id": "4F56FD79-63F9-48E9-BC3E-92FE3C7CAEE2",
         "time": 7.427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -591,7 +808,7 @@
         }
        },
        {
-        "id": "8E71E9F7-CA0D-4391-9596-FD749DD06FB4",
+        "id": "EE567532-FBD6-4B7F-9112-38588F688C20",
         "time": 8.170193019384321,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -605,7 +822,7 @@
         }
        },
        {
-        "id": "BE6A36A5-1F47-4C78-AF04-820E4D7F991A",
+        "id": "BD1AA32C-7A59-431B-9821-94B7A9A50A6B",
         "time": 8.91293783932835,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -619,19 +836,19 @@
         }
        }
       ],
-      "resourceID": "7D8EE4E7-B9D4-4574-B6CA-E67311E8AB34"
+      "resourceID": "BFBA69FC-3BD9-47DE-8894-1BA094660210"
      },
      {
-      "id": "4EEB311F-62D3-4C9D-B7A2-FCC0DF52C2EF",
+      "id": "233F812E-C063-4A9F-92EF-3B5FF30D592C",
       "name": "Floor phone",
       "sortIndex": 1,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "C1516B5E-D240-403E-A061-662B4AFAE882",
+        "id": "BB8BA365-AB61-4ABE-B609-72423D105593",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -640,7 +857,7 @@
         }
        },
        {
-        "id": "6BAA2869-8F21-43A3-B8E5-212CC1395980",
+        "id": "37352FA8-9CAC-4D2C-86CB-A527F752AA7B",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -654,7 +871,7 @@
         }
        },
        {
-        "id": "A9231890-2A73-4EDF-9C04-5FBA6B616612",
+        "id": "AE8715A3-D03F-43F9-8D2C-B869FE4A71B5",
         "time": 0.7427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -668,7 +885,7 @@
         }
        },
        {
-        "id": "C651B520-E198-49F4-9185-4B50DDEC9BFA",
+        "id": "7AE568ED-01D8-474D-8868-F1466FCABC05",
         "time": 1.4854896398880584,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -682,7 +899,7 @@
         }
        },
        {
-        "id": "26988548-242A-4EBF-B057-2A0A8EEA0C12",
+        "id": "6D46C0EA-7447-492D-88A4-7EC79B4FB998",
         "time": 2.2282344598320876,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -696,7 +913,7 @@
         }
        },
        {
-        "id": "F6EE893E-8678-4104-AC23-C96A5CF2119D",
+        "id": "BB6FC4CE-1964-42BA-AE6F-245810B33061",
         "time": 2.9709792797761168,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -710,7 +927,7 @@
         }
        },
        {
-        "id": "BAE9CD3F-6F67-489A-AE5F-3A186155352E",
+        "id": "BAADB074-3828-47E7-ABDD-DFC5E8E3AC13",
         "time": 3.713724099720146,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -724,7 +941,7 @@
         }
        },
        {
-        "id": "C5C6232B-0E7F-4354-9BEE-93DBF3F33F94",
+        "id": "CF9D6322-8E8A-49D2-A0E1-210B374BDC48",
         "time": 4.456468919664175,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -738,7 +955,7 @@
         }
        },
        {
-        "id": "5984B85C-9AF0-474A-8B9C-0B9DCA5891F9",
+        "id": "919C0202-7520-4BC1-BFA5-7B4E6C3E1E12",
         "time": 5.199213739608204,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -752,7 +969,7 @@
         }
        },
        {
-        "id": "211FBC7E-12C0-4C33-BDC5-529D284C796B",
+        "id": "FC3BF002-76D8-4106-BE5B-0FBE9A7165D6",
         "time": 5.9419585595522335,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -766,7 +983,7 @@
         }
        },
        {
-        "id": "B66BA434-A0C2-4A35-84D1-BDBC27FC1547",
+        "id": "CC8846AF-C0E3-431A-8B97-3FD9D3A85592",
         "time": 6.684703379496263,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -780,7 +997,7 @@
         }
        },
        {
-        "id": "13303BA6-1EC6-439B-936E-6E7CC2461267",
+        "id": "E9A74C47-81C2-469C-8480-54BE82BAE3D2",
         "time": 7.427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -794,7 +1011,7 @@
         }
        },
        {
-        "id": "B4813B4E-497E-4B19-8E1E-382B0029264A",
+        "id": "CCB0BE21-40AE-4943-9AAD-EA7B75347549",
         "time": 8.170193019384321,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -808,7 +1025,7 @@
         }
        },
        {
-        "id": "09FEA2BE-4486-4DDD-9D27-93652A27397D",
+        "id": "4918A26D-C1FC-45BB-AE7D-9686C80A7823",
         "time": 8.91293783932835,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -822,19 +1039,19 @@
         }
        }
       ],
-      "resourceID": "0A5D2C12-44B1-4852-9CE2-A62359D2508A"
+      "resourceID": "416D00CD-ED31-4003-80E6-B4C3F82F8E1F"
      },
      {
-      "id": "7C4FDA11-D184-4867-A3D7-77DB645B288F",
+      "id": "855459A4-C35B-455D-B7FA-EBC2256EF844",
       "name": "Shadow phone",
       "sortIndex": 2,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "0C313917-03DC-45AF-B38D-E673D3A0562F",
+        "id": "A506366B-AF4E-48EC-A3D3-4D625155BA8E",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -848,7 +1065,7 @@
         "opacity": 0.9
        },
        {
-        "id": "76DB8A5D-A963-4728-ABA3-8038470D6897",
+        "id": "BFA67B0F-2639-49F5-B0F1-9A3A855F2938",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -863,7 +1080,7 @@
         "opacity": 0.9
        },
        {
-        "id": "5285BAF9-124C-42D9-BF7D-949B1A3FFC8F",
+        "id": "E8F70CB4-7A6B-43D9-BCB2-8F8C9FEB2E3E",
         "time": 0.7427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -878,7 +1095,7 @@
         "opacity": 0.7666666666666667
        },
        {
-        "id": "C2D63A25-1AF8-4CD9-9416-81A3C9B677EA",
+        "id": "5BD128D1-1C48-4377-83B7-C9F6A5C00E1F",
         "time": 1.4854896398880584,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -893,7 +1110,7 @@
         "opacity": 0.6333333333333333
        },
        {
-        "id": "BAF63A24-2F72-447F-B0B2-2ED85B4BF1EA",
+        "id": "CD55FD0B-18E1-4C6D-ABCD-274C40D99582",
         "time": 2.2282344598320876,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -908,7 +1125,7 @@
         "opacity": 0.5
        },
        {
-        "id": "AD31DA74-4B74-4419-9828-C5A03897C304",
+        "id": "28E88C35-526B-4CB3-AD67-F4D6C8595616",
         "time": 2.9709792797761168,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -923,7 +1140,7 @@
         "opacity": 0.3666666666666667
        },
        {
-        "id": "62520534-7F47-4534-8B7F-5DC57B0C1A89",
+        "id": "324FFA29-3810-48A9-8588-098DB0271F4D",
         "time": 3.713724099720146,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -938,7 +1155,7 @@
         "opacity": 0.23333333333333328
        },
        {
-        "id": "1B3169E1-1AF6-4C11-A183-550A5AAA2DEA",
+        "id": "981FBBFF-E208-4B96-9266-912B06444A68",
         "time": 4.456468919664175,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -953,7 +1170,7 @@
         "opacity": 0.09999999999999998
        },
        {
-        "id": "00060326-E961-490F-92A5-62799A0C80AA",
+        "id": "EB7CD465-BDD3-4AE7-A907-47F3AE7155CA",
         "time": 5.199213739608204,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -968,7 +1185,7 @@
         "opacity": 0.0
        },
        {
-        "id": "A81B9DBB-4EBE-4333-AE77-7C5AC0876030",
+        "id": "8E8E7468-B183-4538-846F-8DF429CB543A",
         "time": 5.9419585595522335,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -983,7 +1200,7 @@
         "opacity": 0.0
        },
        {
-        "id": "4776341F-7CEC-43DD-8138-2C2014073B08",
+        "id": "D12252B2-3695-41F6-A2F1-32B97A7031AA",
         "time": 6.684703379496263,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -998,7 +1215,7 @@
         "opacity": 0.0
        },
        {
-        "id": "12C404D9-75B3-4D4C-BD8E-574E4C03C809",
+        "id": "295C34E2-8DB0-4AE4-9BDD-016AB4C1041A",
         "time": 7.427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1013,7 +1230,7 @@
         "opacity": 0.0
        },
        {
-        "id": "C9C48496-0299-4C13-800A-4C60ADCCA84E",
+        "id": "921D2DD7-BB34-4918-8FBB-6BBF7B036276",
         "time": 8.170193019384321,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1028,7 +1245,7 @@
         "opacity": 0.0
        },
        {
-        "id": "341CBD23-7817-41DF-9A27-805D68CFE7F1",
+        "id": "F6AEBE3A-4952-46DC-BC8E-C6707BCD3F5A",
         "time": 8.91293783932835,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1043,19 +1260,19 @@
         "opacity": 0.0
        }
       ],
-      "resourceID": "C3AD6798-0592-4ACC-A4C6-E4FDD47538B8"
+      "resourceID": "02FB1BB4-0D65-41F9-BE69-6F99D1A250B2"
      },
      {
-      "id": "728DAF9B-6D22-4612-8F07-BDE4F661831C",
+      "id": "595BBEAF-1EC6-4DE9-BE8B-993D134D727B",
       "name": "Phone",
       "sortIndex": 3,
       "kind": "model",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "36271CE8-7671-417A-BDEB-EBAB01DF93DE",
+        "id": "5FC0DAB4-EF5A-441C-BF6E-E6246C488EF3",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1080,7 +1297,7 @@
         }
        },
        {
-        "id": "FE67CC5D-3AD3-4C22-B6F0-B92600D2C468",
+        "id": "B5138568-028B-4A60-8094-22CB153B2A6E",
         "time": 0.0,
         "transitionDuration": 0.0,
         "easing": "linear",
@@ -1106,7 +1323,7 @@
         }
        },
        {
-        "id": "6DB4D5C1-A0D2-4237-A024-EBE2397DBBB0",
+        "id": "E2D62F2E-5B17-448C-BD81-7235B4BFDB89",
         "time": 0.7427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1132,7 +1349,7 @@
         }
        },
        {
-        "id": "5F292339-5695-4B5B-A08B-0F54628F660E",
+        "id": "CF2A8C4F-5D8B-44C1-A2A5-87E3481315D1",
         "time": 1.4854896398880584,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1158,7 +1375,7 @@
         }
        },
        {
-        "id": "2CB1E702-EE2F-4C95-98AC-9860B5C9A6A4",
+        "id": "E88977B9-D58D-452B-B525-1804FF5A767E",
         "time": 2.2282344598320876,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1184,7 +1401,7 @@
         }
        },
        {
-        "id": "E0C0CD04-0C23-4389-A7DB-7D92C0C1D8C4",
+        "id": "D3402FE6-BDF0-491C-A75D-8CAD4B512318",
         "time": 2.9709792797761168,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1210,7 +1427,7 @@
         }
        },
        {
-        "id": "FA2248CF-6621-45DA-B013-CA35F895A57D",
+        "id": "B6D70341-73B6-4C4C-87C7-D0526A8098AC",
         "time": 3.713724099720146,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1236,7 +1453,7 @@
         }
        },
        {
-        "id": "435A75D8-8EBE-4DCB-87C1-550C8DD34BC9",
+        "id": "8D117F1C-9E2D-4774-A024-FDE7933610E6",
         "time": 4.456468919664175,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1262,7 +1479,7 @@
         }
        },
        {
-        "id": "9747A924-CDA6-42F1-AA69-A1D9ED4D9ACB",
+        "id": "FC68FE3F-0F02-493C-9FFA-885DF746EC05",
         "time": 5.199213739608204,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1288,7 +1505,7 @@
         }
        },
        {
-        "id": "92393A54-B8C2-4E02-954B-19F86DF1F068",
+        "id": "D8A9A3C8-8C55-4467-B336-926CCC2AD9A5",
         "time": 5.9419585595522335,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1314,7 +1531,7 @@
         }
        },
        {
-        "id": "81C74C74-3DA4-410E-9480-E2A613CED059",
+        "id": "189F208D-9D25-4620-BF75-EAD8FDE3A23C",
         "time": 6.684703379496263,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1340,7 +1557,7 @@
         }
        },
        {
-        "id": "6050471E-E77D-4F9B-9CCB-7722D5206075",
+        "id": "5294181D-3460-48DD-8698-5CB010450829",
         "time": 7.427448199440292,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1366,7 +1583,7 @@
         }
        },
        {
-        "id": "2C6D1B8E-2678-498D-AF7C-3E0D13803046",
+        "id": "A78B2404-5746-48F0-AEAF-2BEEBBD317B1",
         "time": 8.170193019384321,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1392,7 +1609,7 @@
         }
        },
        {
-        "id": "6F6C469F-B638-498E-8024-77CA0E06AA6B",
+        "id": "8849035B-D19B-438E-A8B4-144400D5EBDB",
         "time": 8.91293783932835,
         "transitionDuration": 0.7427448199440292,
         "easing": "linear",
@@ -1418,20 +1635,20 @@
         }
        }
       ],
-      "resourceID": "592CD239-083B-4396-9A7F-F473B05B1EB2"
+      "resourceID": "43389FB5-B316-4592-B7B9-54F5BD708A4B"
      }
     ]
    }
   },
   {
-   "id": "727E0C8B-626D-42A4-B842-18E6F8574D42",
+   "id": "59FE9F6A-DC7C-420B-AD41-20D17FFCE1CE",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene tablet",
    "addedAt": 0,
    "imageCuts": [],
    "disabledAudioTrackIndices": [],
-   "duration": 29.12847048571193,
+   "duration": 35.12847048571193,
    "pixelWidth": 1440,
    "pixelHeight": 3132,
    "composition": {
@@ -1440,16 +1657,16 @@
     "backgroundColorHex": "0B0D12",
     "layers": [
      {
-      "id": "63BB7888-38A3-456F-9C0B-FC7F56E94DD3",
+      "id": "77E0B2B7-3046-4789-BA0F-E4FF07CD0054",
       "name": "Background tablet",
       "sortIndex": 0,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "273C01F1-8834-4932-84FE-FB18CFA0087F",
+        "id": "8E9B0C3A-3D39-4B31-BE1A-3993A692AEEA",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1462,7 +1679,7 @@
         }
        },
        {
-        "id": "36CB820C-E0FB-4DD0-ACFF-CB6164360818",
+        "id": "B27C0AA8-0028-4B98-9714-40BD7D2F024B",
         "time": 8.91293783932835,
         "transitionDuration": 8.91293783932835,
         "easing": "linear",
@@ -1476,7 +1693,7 @@
         }
        },
        {
-        "id": "C1B56923-EA2E-4251-8AC5-82BD77AB0B95",
+        "id": "707ECD33-54C8-4C50-8E94-87B1C041F3E1",
         "time": 9.386574473324442,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1490,7 +1707,7 @@
         }
        },
        {
-        "id": "099C20F2-406D-4AEC-8221-F81005D0F800",
+        "id": "F0281F68-FADF-4E5E-81F7-01C7849E8269",
         "time": 9.860211107320534,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1504,7 +1721,7 @@
         }
        },
        {
-        "id": "08DF09F6-FDA2-4A45-B3A2-A3DF05881DD5",
+        "id": "85DAD072-7FD5-4090-AB20-DFB0BF9B79B2",
         "time": 10.333847741316628,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1518,7 +1735,7 @@
         }
        },
        {
-        "id": "919844F3-94A4-4638-9EA1-5C6DB7A1F522",
+        "id": "3C948036-277E-4245-8DF6-7E64BA7BA3EB",
         "time": 10.80748437531272,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1532,7 +1749,7 @@
         }
        },
        {
-        "id": "7EF8F95E-1465-4E47-8D60-A14CEAABF733",
+        "id": "F0846FAF-7701-42FB-BEDC-AB84E7462F32",
         "time": 11.281121009308812,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1546,7 +1763,7 @@
         }
        },
        {
-        "id": "1153E5DB-9A9F-4312-AB68-4F4D810A0DD6",
+        "id": "80C399DF-1960-490F-A86F-B5D5300EB43A",
         "time": 11.754757643304904,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1560,7 +1777,7 @@
         }
        },
        {
-        "id": "BC255E33-5EF7-4D0F-8DA0-4C9967474E1D",
+        "id": "48746F80-E759-4882-B181-6D15E68FAE77",
         "time": 12.228394277300996,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1574,7 +1791,7 @@
         }
        },
        {
-        "id": "E34CC592-72B8-4DC4-ACFA-90960252E05E",
+        "id": "0DC54AAE-F784-4482-B453-59B8CC93AD3E",
         "time": 12.702030911297088,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1588,7 +1805,7 @@
         }
        },
        {
-        "id": "CA6614B9-4BCB-4CDA-A780-C61FF70DBEDB",
+        "id": "5C02D602-C377-4A81-9BF7-9FA6A70994B9",
         "time": 13.17566754529318,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1602,7 +1819,7 @@
         }
        },
        {
-        "id": "F1621D38-7543-424D-83A6-737C74D2FB08",
+        "id": "B4DA7CB4-0B83-4597-B998-2AD6C5167BBA",
         "time": 13.649304179289274,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1616,7 +1833,7 @@
         }
        },
        {
-        "id": "F221E02C-B146-4215-8C26-C8BD4F2F3E9B",
+        "id": "F0086CD4-FCE6-4548-B88F-07B88BE2E80F",
         "time": 14.122940813285364,
         "transitionDuration": 0.47363663399609024,
         "easing": "linear",
@@ -1630,7 +1847,7 @@
         }
        },
        {
-        "id": "9E18F7E8-C596-49B4-BA38-5ECC692A68BD",
+        "id": "59A123C4-78C3-4591-8D18-4047EFBB3A1C",
         "time": 14.596577447281458,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1644,19 +1861,19 @@
         }
        }
       ],
-      "resourceID": "438E03EC-8CC0-4F7E-9A43-934B123608AA"
+      "resourceID": "00C70FC1-0830-4940-BC4C-DE1541712F21"
      },
      {
-      "id": "95568EFF-6503-460B-B1B1-0F6E29533F85",
+      "id": "66060FEE-35C4-44AB-B312-97FBBD93014B",
       "name": "Table tablet",
       "sortIndex": 1,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "EE80097C-0E20-4D9E-988D-661DCACDB87C",
+        "id": "0108B52A-FB11-4921-BE01-F64BF869F1A8",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1665,19 +1882,19 @@
         }
        }
       ],
-      "resourceID": "B0054C50-7CEC-4E03-9A54-74CC0B394E74"
+      "resourceID": "A68F2668-B00B-444A-A101-73E05F1FE726"
      },
      {
-      "id": "A212902C-BED2-4E08-84CB-3A99B1A1E9F1",
+      "id": "73263270-F40B-49E1-924F-32A6FD6A23EE",
       "name": "Floor tablet",
       "sortIndex": 2,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "DEBAB80F-0087-42DC-AF42-A43A6C89314C",
+        "id": "C2832C08-4000-4284-B939-BE5A4597279C",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1690,7 +1907,7 @@
         }
        },
        {
-        "id": "C3BBCF54-A371-47C5-9129-89E020C7778B",
+        "id": "08442C87-DCA3-4CB5-8D7E-CAFCEBB786D5",
         "time": 8.91293783932835,
         "transitionDuration": 8.91293783932835,
         "easing": "linear",
@@ -1704,7 +1921,7 @@
         }
        },
        {
-        "id": "53DB3BAE-B62C-4BF8-8009-1D80EFC4D8FB",
+        "id": "C38A345E-1E0F-40C2-919D-6508F366D5FB",
         "time": 9.386574473324442,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1718,7 +1935,7 @@
         }
        },
        {
-        "id": "CB95DF7C-8084-4AAF-B28D-D01482F93EDC",
+        "id": "EC92422B-8131-4565-B796-2D620299D999",
         "time": 9.860211107320534,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1732,7 +1949,7 @@
         }
        },
        {
-        "id": "09CA8B64-A4BC-4420-9D3A-F31E3C54F25A",
+        "id": "13244EC8-2773-4FB5-BD5A-C6E422CCF620",
         "time": 10.333847741316628,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1746,7 +1963,7 @@
         }
        },
        {
-        "id": "101FCE0A-8CAF-4C38-95B2-B0CB90B9D54C",
+        "id": "DB0CDB99-F464-4534-8475-637FB19F2A6B",
         "time": 10.80748437531272,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1760,7 +1977,7 @@
         }
        },
        {
-        "id": "4A2BBD6D-0DE1-4651-9089-BC2E7BAB6252",
+        "id": "FD75F745-24AA-4DDA-89CF-0AA3FDAA567C",
         "time": 11.281121009308812,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1774,7 +1991,7 @@
         }
        },
        {
-        "id": "F80B217C-2699-4AE1-8CEC-08FF0DCE9755",
+        "id": "DBFD7AEB-BF3B-479D-A9A7-0715A9495805",
         "time": 11.754757643304904,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1788,7 +2005,7 @@
         }
        },
        {
-        "id": "3DD64DC8-D17D-45C3-9B0C-2C2E5D70DB89",
+        "id": "6C1A404E-C844-4933-97C6-7C0EC891AF87",
         "time": 12.228394277300996,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1802,7 +2019,7 @@
         }
        },
        {
-        "id": "AD93251D-6A58-427F-9BDF-ABEDDF7BC938",
+        "id": "9B101C89-6CE3-4C55-A3BA-E2A3C8E554D4",
         "time": 12.702030911297088,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1816,7 +2033,7 @@
         }
        },
        {
-        "id": "DD2F7D53-86AB-430A-A64C-D04AC243A546",
+        "id": "FF7D8988-B67C-431E-BC83-B04D5F99869E",
         "time": 13.17566754529318,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1830,7 +2047,7 @@
         }
        },
        {
-        "id": "DAAA7BC8-12B7-4FC2-ADD1-D3DD993D7CC5",
+        "id": "5B0517AA-1A33-459C-BEF1-CBD06553FCA9",
         "time": 13.649304179289274,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1844,7 +2061,7 @@
         }
        },
        {
-        "id": "5C049C17-9CCB-4E68-87EC-D37E72CF1D8A",
+        "id": "079DA8C1-3130-412A-A870-80C24FE4D77A",
         "time": 14.122940813285364,
         "transitionDuration": 0.47363663399609024,
         "easing": "linear",
@@ -1858,7 +2075,7 @@
         }
        },
        {
-        "id": "365F092F-2777-4B66-8683-DBFE20A3AAAC",
+        "id": "04A25692-586A-4565-B662-79A7C51AA5B4",
         "time": 14.596577447281458,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1872,19 +2089,19 @@
         }
        }
       ],
-      "resourceID": "0A5D2C12-44B1-4852-9CE2-A62359D2508A"
+      "resourceID": "416D00CD-ED31-4003-80E6-B4C3F82F8E1F"
      },
      {
-      "id": "35E61100-5C34-4C76-80D0-68FBF34481F2",
+      "id": "F9A76DF6-6209-4625-AB68-A4497A17D298",
       "name": "Shadow tablet",
       "sortIndex": 3,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "295DE4D7-FD0A-42C3-9DA0-BB9F65FEDDF1",
+        "id": "C7A543D9-BD40-4A34-8E87-250B4C3DFACA",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -1898,7 +2115,7 @@
         "opacity": 0.9
        },
        {
-        "id": "F04088E9-E2C6-435C-BC90-08974DD9FE0E",
+        "id": "163CE29F-F551-4637-A2F4-170ABD3697D1",
         "time": 8.91293783932835,
         "transitionDuration": 8.91293783932835,
         "easing": "linear",
@@ -1913,7 +2130,7 @@
         "opacity": 0.9
        },
        {
-        "id": "9D0ED751-2DAE-4AA3-B221-2CE2645AE0CD",
+        "id": "3FA02D31-F212-4F69-BAC0-5AA744BF9B67",
         "time": 9.386574473324442,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1928,7 +2145,7 @@
         "opacity": 0.7666666666666668
        },
        {
-        "id": "AD0158F1-32E1-46A3-81E1-CC754ED6D7E0",
+        "id": "C572CFCA-3F5D-4D6C-B609-C28DAB77E9F7",
         "time": 9.860211107320534,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1943,7 +2160,7 @@
         "opacity": 0.6333333333333335
        },
        {
-        "id": "0711FAC2-389A-401A-8B67-1C5B2A026FF1",
+        "id": "1B856E70-7513-4F56-AFEC-A583F13A1711",
         "time": 10.333847741316628,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -1958,7 +2175,7 @@
         "opacity": 0.49999999999999983
        },
        {
-        "id": "11B26AE6-C561-4D0E-A66C-99096F719C1F",
+        "id": "8589C9E9-0D19-477A-A073-D81F2F887213",
         "time": 10.80748437531272,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1973,7 +2190,7 @@
         "opacity": 0.3666666666666666
        },
        {
-        "id": "705E9726-7ABA-46DF-8151-8637D40C72EC",
+        "id": "E096A49A-E4F3-47FC-A0D0-D9A5AD304310",
         "time": 11.281121009308812,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -1988,7 +2205,7 @@
         "opacity": 0.2333333333333334
        },
        {
-        "id": "17E73A88-3764-4985-AB7A-AAB0798F27F4",
+        "id": "95B22391-FC64-4CF6-8262-F8B2C37A73FA",
         "time": 11.754757643304904,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2003,7 +2220,7 @@
         "opacity": 0.10000000000000009
        },
        {
-        "id": "BAEA76E1-49DA-4CB0-9EEE-7666CC511FFF",
+        "id": "0D0D691A-3C46-4587-A4C6-F3299605E75A",
         "time": 12.228394277300996,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2018,7 +2235,7 @@
         "opacity": 0.0
        },
        {
-        "id": "D9C6B0A4-7B0E-4546-A65A-0DE13194B8F2",
+        "id": "EF5EB5C5-4A58-463F-841D-7D14E3B686F8",
         "time": 12.702030911297088,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2033,7 +2250,7 @@
         "opacity": 0.0
        },
        {
-        "id": "E1328CF6-9ECE-435F-8E89-8CE7A7ACF553",
+        "id": "256ACE72-06C5-4DD1-A68F-09A206541EBB",
         "time": 13.17566754529318,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2048,7 +2265,7 @@
         "opacity": 0.0
        },
        {
-        "id": "6DB1A301-D50F-4B52-BC17-E4514C69E322",
+        "id": "7C52AA8C-B915-458A-AA1B-F2782C74BD33",
         "time": 13.649304179289274,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -2063,7 +2280,7 @@
         "opacity": 0.0
        },
        {
-        "id": "F8E6FE1B-270A-40F5-AE8E-AAE7CA9B010D",
+        "id": "7B141E8A-5795-4E05-8BE0-BC0280BC6867",
         "time": 14.122940813285364,
         "transitionDuration": 0.47363663399609024,
         "easing": "linear",
@@ -2078,7 +2295,7 @@
         "opacity": 0.0
        },
        {
-        "id": "4ADD4076-2E0C-4087-ADAD-6A0A8BD7941F",
+        "id": "3D913224-573F-4828-ABB2-7EA9536D9742",
         "time": 14.596577447281458,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -2093,19 +2310,19 @@
         "opacity": 0.0
        }
       ],
-      "resourceID": "C3AD6798-0592-4ACC-A4C6-E4FDD47538B8"
+      "resourceID": "02FB1BB4-0D65-41F9-BE69-6F99D1A250B2"
      },
      {
-      "id": "1A2A50D2-F52A-4BE4-AB21-FA1F215F2F6D",
+      "id": "2044D497-B5FC-41F7-9353-704B756CF829",
       "name": "Tablet",
       "sortIndex": 4,
       "kind": "model",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "26D821C4-15E5-455D-A176-EB2963D9878F",
+        "id": "045EC70E-C569-4839-B7D4-AA9FDA9DFE32",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2130,7 +2347,7 @@
         }
        },
        {
-        "id": "044F9178-BA74-435D-AFCB-755E73FBD9FD",
+        "id": "C6FDF78B-CEEF-428A-A848-3AF6E5BBFA4B",
         "time": 8.91293783932835,
         "transitionDuration": 8.91293783932835,
         "easing": "linear",
@@ -2156,7 +2373,7 @@
         }
        },
        {
-        "id": "CABF4AFA-CB47-461D-A0EA-A6ABD03464F6",
+        "id": "92CA94F8-7E99-408B-972A-C51099683430",
         "time": 9.386574473324442,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2182,7 +2399,7 @@
         }
        },
        {
-        "id": "6BE47883-21DD-4D5F-8637-7B2590BAB98B",
+        "id": "078D9A8E-BC4D-4165-822F-42CE6C062BA1",
         "time": 9.860211107320534,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2208,7 +2425,7 @@
         }
        },
        {
-        "id": "36EB7F74-8549-4AA7-9DEE-8BCBB430C8C3",
+        "id": "C8251682-1A0C-47A5-921E-68DF149F5F73",
         "time": 10.333847741316628,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -2234,7 +2451,7 @@
         }
        },
        {
-        "id": "CFEDE8B8-7758-4BB5-BCA8-045CF3BE1CC1",
+        "id": "2E7261E8-A532-427C-9BE4-54C61BDBC958",
         "time": 10.80748437531272,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2260,7 +2477,7 @@
         }
        },
        {
-        "id": "DF41FC59-3BF4-4453-8E2C-B4A79FBFA731",
+        "id": "603A407B-3205-45FA-BFF4-1B973390A4A0",
         "time": 11.281121009308812,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2286,7 +2503,7 @@
         }
        },
        {
-        "id": "E6876B22-CA9C-462C-A78D-A141FC1A6663",
+        "id": "CBF8DB33-FD8D-4892-A580-5A1A4945F3A7",
         "time": 11.754757643304904,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2312,7 +2529,7 @@
         }
        },
        {
-        "id": "E98B466E-423B-4197-B5F6-8FE5678A9A24",
+        "id": "28D44CF6-7035-477F-9BCA-84795F0952A8",
         "time": 12.228394277300996,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2338,7 +2555,7 @@
         }
        },
        {
-        "id": "416878F7-C325-4920-A564-CB94A8BEFC30",
+        "id": "6E86CE41-EF8D-446F-ADD0-6A93F8B51E0E",
         "time": 12.702030911297088,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2364,7 +2581,7 @@
         }
        },
        {
-        "id": "4C9B2030-8BF0-4C3A-ADA2-050936FA59E9",
+        "id": "4E34D836-213E-485E-9EEC-061EFC994719",
         "time": 13.17566754529318,
         "transitionDuration": 0.473636633996092,
         "easing": "linear",
@@ -2390,7 +2607,7 @@
         }
        },
        {
-        "id": "84767FD0-AC24-447F-B457-E4C1036688E6",
+        "id": "269DD431-14B7-463E-AC89-A2E4977858A0",
         "time": 13.649304179289274,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -2416,7 +2633,7 @@
         }
        },
        {
-        "id": "DB40622D-B25F-4466-ADFB-A695121F3AC1",
+        "id": "AE6EEBEF-2E2A-403B-84C4-34976CECF9F5",
         "time": 14.122940813285364,
         "transitionDuration": 0.47363663399609024,
         "easing": "linear",
@@ -2442,7 +2659,7 @@
         }
        },
        {
-        "id": "31EBE6D7-FF4D-41C8-A67E-534157A54A65",
+        "id": "7A9ED5EA-1512-42EE-8395-6A02C17433BF",
         "time": 14.596577447281458,
         "transitionDuration": 0.4736366339960938,
         "easing": "linear",
@@ -2468,20 +2685,20 @@
         }
        }
       ],
-      "resourceID": "689E40F2-BBBB-4545-8327-AE012D834D42"
+      "resourceID": "B14324E7-196C-4091-B8DB-FEB98FA45484"
      }
     ]
    }
   },
   {
-   "id": "4965D4B8-5DF6-4ADA-91B3-A7AA1C8157D6",
+   "id": "49F6C5B8-B0ED-49FB-ADD7-0B4E74A737D0",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene laptop",
    "addedAt": 0,
    "imageCuts": [],
    "disabledAudioTrackIndices": [],
-   "duration": 29.12847048571193,
+   "duration": 35.12847048571193,
    "pixelWidth": 1440,
    "pixelHeight": 1084,
    "composition": {
@@ -2490,223 +2707,223 @@
     "backgroundColorHex": "0B0D12",
     "layers": [
      {
-      "id": "6CB305FC-8738-49C1-B57D-DA58D6A5C522",
+      "id": "990B5A23-0AFB-4F94-AA40-394DB0C99693",
       "name": "Background laptop",
       "sortIndex": 0,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "6CA40206-4161-4657-B4A3-D6F0FD73CE59",
+        "id": "F4145AF0-60B8-4DBC-9E12-CB4662BFD423",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
          "width": 5600,
          "anchor": "center",
          "offset": [
-          1174.7082291427157,
+          1534.7082291427157,
           0
          ]
         }
        },
        {
-        "id": "599382D3-AB9D-4A44-A371-5219F25427E7",
-        "time": 14.596577447281458,
-        "transitionDuration": 14.596577447281458,
+        "id": "1F80F3A8-FBDB-4787-8072-F586B8617AF0",
+        "time": 20.596577447281458,
+        "transitionDuration": 20.596577447281458,
         "easing": "linear",
         "placement": {
          "width": 5600.0,
          "anchor": "center",
          "offset": [
-          -576.8810645310593,
+          -936.8810645310593,
           0
          ]
         }
        },
        {
-        "id": "F279DC05-B999-4A82-B224-5B32AA0245CA",
-        "time": 15.011735200483997,
+        "id": "17764BE5-8C0A-4922-80A3-E37FEA6932E1",
+        "time": 21.011735200483997,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 6084.826105002608,
          "anchor": "center",
          "offset": [
-          -680.9572301903586,
+          -1072.124622654812,
           0
          ]
         }
        },
        {
-        "id": "033CC4FD-D440-4108-B3E9-C69AA09748F4",
-        "time": 15.426892953686536,
+        "id": "55A8B5CC-5BB8-42AE-9AC3-359A6477766B",
+        "time": 21.426892953686536,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 6611.626558593073,
          "anchor": "center",
          "offset": [
-          -798.7304453396665,
+          -1223.7635812492213,
           0
          ]
         }
        },
        {
-        "id": "0F328117-87F6-4449-B5C7-8C6E85F3AEE6",
-        "time": 15.842050706889076,
+        "id": "21CA3796-1577-4AFF-9AAE-2A472B786174",
+        "time": 21.842050706889076,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 7184.035335759945,
          "anchor": "center",
          "offset": [
-          -931.7922894524594,
+          -1393.6231324655985,
           0
          ]
         }
        },
        {
-        "id": "E4F2E7BC-2FE6-4A24-BE0C-4A2C2C5586E0",
-        "time": 16.257208460091615,
+        "id": "9B47555B-25D3-4AFE-B92B-DFFFFB60823C",
+        "time": 22.257208460091615,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 7806.0010268380875,
          "anchor": "center",
          "offset": [
-          -1081.9072623279158,
+          -1583.7216140532216,
           0
          ]
         }
        },
        {
-        "id": "1483D7E9-E047-45D5-AA9A-9A67D78B842D",
-        "time": 16.672366213294154,
+        "id": "DE9CE27D-182D-413B-9093-6262782D493B",
+        "time": 22.672366213294154,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 8481.814075675278,
          "anchor": "center",
          "offset": [
-          -1251.0307960666946,
+          -1796.2902723601053,
           0
          ]
         }
        },
        {
-        "id": "6512A883-7CA1-4161-83B2-997218572EBD",
-        "time": 17.087523966496693,
+        "id": "C352B327-E401-441F-8C1A-5E730566E0D4",
+        "time": 23.087523966496693,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 9216.136375972768,
          "anchor": "center",
          "offset": [
-          -1441.3290897492257,
+          -2033.7949996331893,
           0
          ]
         }
        },
        {
-        "id": "158A3ED5-A639-4CFD-8E1B-8BBE90D7D600",
-        "time": 17.502681719699233,
+        "id": "D0A6AFFD-BC19-4321-86E7-9FE263560F5B",
+        "time": 23.502681719699233,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 10014.033429961291,
          "anchor": "center",
          "offset": [
-          -1655.2009474141207,
+          -2298.9602393402038,
           0
          ]
         }
        },
        {
-        "id": "D91CAA11-1BC3-4DB8-850B-C65AA3BF81BC",
-        "time": 17.917839472901772,
+        "id": "F7BE9DBC-B1D7-4EA5-833D-74D799616D95",
+        "time": 23.917839472901772,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 10881.009291249513,
          "anchor": "center",
          "offset": [
-          -1895.301817543254,
+          -2594.7952719807226,
           0
          ]
         }
        },
        {
-        "id": "45E74A95-1483-43A9-B521-94BC68480A4E",
-        "time": 18.33299722610431,
+        "id": "1A8B11E0-A0CA-4A84-A238-51F02BEFBDB8",
+        "time": 24.33299722610431,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 11823.044532887672,
          "anchor": "center",
          "offset": [
-          -2164.570251564383,
+          -2924.6231143928762,
           0
          ]
         }
        },
        {
-        "id": "0C46F86F-0712-430B-B59B-94FBF7997D7B",
-        "time": 18.74815497930685,
+        "id": "CC645B48-7693-48C0-9379-29B218515F8B",
+        "time": 24.74815497930685,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 12846.637502557727,
          "anchor": "center",
          "offset": [
-          -2466.2570200434548,
+          -3292.1122880650228,
           0
          ]
         }
        },
        {
-        "id": "8DF17859-9FD3-4553-A9CA-14720CED35E8",
-        "time": 19.16331273250939,
+        "id": "4E9EE335-2305-421C-AE35-7A52D0E7886B",
+        "time": 25.16331273250939,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 13958.849149476568,
          "anchor": "center",
          "offset": [
-          -2803.957148433775,
+          -3701.311736614411,
           0
          ]
         }
        },
        {
-        "id": "21895CD0-7335-4640-92A1-8A4168AFD4D5",
-        "time": 19.57847048571193,
+        "id": "ECA7E9E4-8DB4-4D12-8E6B-7FA7754E22EC",
+        "time": 25.57847048571193,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
          "width": 15167.351732237226,
          "anchor": "center",
          "offset": [
-          -3181.645159671624,
+          -4156.68919960116,
           0
          ]
         }
        }
       ],
-      "resourceID": "98C3DADD-C4DC-41D4-8114-23A9B6CD28B0"
+      "resourceID": "84C5D493-A683-463A-9BC0-2303F171EF76"
      },
      {
-      "id": "78F46F33-E810-465D-AD5C-AE141C0CC9A2",
+      "id": "804EABD5-A737-4DAE-BF68-B5083B411A8D",
       "name": "Table laptop",
       "sortIndex": 1,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "61A5B039-B49D-4E07-88D6-61FF5CFAEB22",
+        "id": "B677161A-E585-4517-8F87-6B478C43599F",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2715,19 +2932,19 @@
         }
        }
       ],
-      "resourceID": "B0054C50-7CEC-4E03-9A54-74CC0B394E74"
+      "resourceID": "A68F2668-B00B-444A-A101-73E05F1FE726"
      },
      {
-      "id": "6DFD1151-0103-47C9-8F86-66C8C1A4E027",
+      "id": "CD4A4B3E-546E-4B38-8782-46FF89F3B387",
       "name": "Floor laptop",
       "sortIndex": 2,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "F865B0CE-BF67-432E-8029-450E4B9F739E",
+        "id": "E5D401E1-F26B-46AB-8284-960ED76D9E9B",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2740,9 +2957,9 @@
         }
        },
        {
-        "id": "A025F06B-1B82-4F52-B63E-5C26634AB388",
-        "time": 14.596577447281458,
-        "transitionDuration": 14.596577447281458,
+        "id": "5D92E341-CF61-4046-8DC3-3005933F66C1",
+        "time": 20.596577447281458,
+        "transitionDuration": 20.596577447281458,
         "easing": "linear",
         "placement": {
          "width": 1700.0,
@@ -2754,8 +2971,8 @@
         }
        },
        {
-        "id": "790BE11D-C3AF-4B78-8036-D0A585E70BDC",
-        "time": 15.011735200483997,
+        "id": "4638D915-00A8-47BC-9056-8E33AC269387",
+        "time": 21.011735200483997,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2768,8 +2985,8 @@
         }
        },
        {
-        "id": "A3990029-DCE6-4154-83F4-24EA4E517F27",
-        "time": 15.426892953686536,
+        "id": "27989FAB-F00C-4A24-870F-C77EF04479A2",
+        "time": 21.426892953686536,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2782,8 +2999,8 @@
         }
        },
        {
-        "id": "D76510A3-E095-44CA-BBC8-E92AC470F5BD",
-        "time": 15.842050706889076,
+        "id": "C5C28015-81A4-4E29-8630-645E1F7E583E",
+        "time": 21.842050706889076,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2796,8 +3013,8 @@
         }
        },
        {
-        "id": "FBBEFDCC-4B62-46EC-BA7D-23B5ED39624F",
-        "time": 16.257208460091615,
+        "id": "5135BEAD-D99A-4DB7-A293-D954CFF9A97A",
+        "time": 22.257208460091615,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2810,8 +3027,8 @@
         }
        },
        {
-        "id": "9E0FD33F-08C3-474F-B257-CFD63146EEBC",
-        "time": 16.672366213294154,
+        "id": "D0762936-0205-4F92-BECE-FD3CB1077208",
+        "time": 22.672366213294154,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2824,8 +3041,8 @@
         }
        },
        {
-        "id": "48B6AA8D-FFDD-46A5-A776-EE1F074BC2C9",
-        "time": 17.087523966496693,
+        "id": "5FDDE543-01C1-4E9A-BE60-C026CF7E734C",
+        "time": 23.087523966496693,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2838,8 +3055,8 @@
         }
        },
        {
-        "id": "0C968A87-9D09-4FE4-9770-1E1ACDE34E44",
-        "time": 17.502681719699233,
+        "id": "6CA8CA63-A0A4-481C-A6F1-CE0ED1D51C07",
+        "time": 23.502681719699233,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2852,8 +3069,8 @@
         }
        },
        {
-        "id": "F1B115DA-C0F0-4790-9F4A-2CA3B71C4E24",
-        "time": 17.917839472901772,
+        "id": "9FD5675B-FD8F-48AE-A495-6ABFBF3FC51A",
+        "time": 23.917839472901772,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2866,8 +3083,8 @@
         }
        },
        {
-        "id": "10BE2AC1-DE63-42C7-A4F1-F63719BB1A01",
-        "time": 18.33299722610431,
+        "id": "DDAB1A2D-9EDD-4B89-A3AF-ADBB15490D1C",
+        "time": 24.33299722610431,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2880,8 +3097,8 @@
         }
        },
        {
-        "id": "D9B91113-AEE5-4F5A-8612-C6EB5DA9CE0C",
-        "time": 18.74815497930685,
+        "id": "3B49EDFD-68D4-4AAE-99EC-10014D2BD2ED",
+        "time": 24.74815497930685,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2894,8 +3111,8 @@
         }
        },
        {
-        "id": "90F06E8D-D722-41C3-BC5C-158C6AD5A404",
-        "time": 19.16331273250939,
+        "id": "7440F52F-0611-4E20-8DB1-9768D1178F8C",
+        "time": 25.16331273250939,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2908,8 +3125,8 @@
         }
        },
        {
-        "id": "B90FFFD7-747D-4E2D-AA9A-3D4E60152350",
-        "time": 19.57847048571193,
+        "id": "19A9859C-6948-425A-9494-151B3DD86DB5",
+        "time": 25.57847048571193,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2922,19 +3139,19 @@
         }
        }
       ],
-      "resourceID": "0A5D2C12-44B1-4852-9CE2-A62359D2508A"
+      "resourceID": "416D00CD-ED31-4003-80E6-B4C3F82F8E1F"
      },
      {
-      "id": "FFD84667-C530-40C1-A9D0-2AF26E15AFF9",
+      "id": "CA385DA1-CE25-46E0-8D77-D9D98CA37540",
       "name": "Shadow laptop",
       "sortIndex": 3,
       "kind": "image",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "7F9A9392-1EA6-469F-8703-FF97889EC68D",
+        "id": "5715CEA5-3B3C-4842-8E95-A1B9D325027D",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -2948,9 +3165,9 @@
         "opacity": 0.9
        },
        {
-        "id": "90BAA9EC-8ABC-4879-8AB9-13FDF9584D1F",
-        "time": 14.596577447281458,
-        "transitionDuration": 14.596577447281458,
+        "id": "0C995ECA-0E3A-4A2B-828B-2FBFDE162412",
+        "time": 20.596577447281458,
+        "transitionDuration": 20.596577447281458,
         "easing": "linear",
         "placement": {
          "height": 120.0,
@@ -2963,8 +3180,8 @@
         "opacity": 0.9
        },
        {
-        "id": "D55ECC48-32CC-4DB0-A8C8-9ABB80C9ADBF",
-        "time": 15.011735200483997,
+        "id": "38EDEF87-3AC1-46A0-9EB5-26DDA2137C34",
+        "time": 21.011735200483997,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2978,8 +3195,8 @@
         "opacity": 0.7666666666666667
        },
        {
-        "id": "15DF6DDA-F2DA-4D95-A9E8-2808781663AD",
-        "time": 15.426892953686536,
+        "id": "E65A79F8-706C-4D2C-B8F2-409CDFF463C4",
+        "time": 21.426892953686536,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -2993,8 +3210,8 @@
         "opacity": 0.6333333333333333
        },
        {
-        "id": "FDC284A8-EB07-4CD6-97BF-F0E06E01A597",
-        "time": 15.842050706889076,
+        "id": "A402BF0F-DF17-440F-B198-462C35FA818E",
+        "time": 21.842050706889076,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3008,8 +3225,8 @@
         "opacity": 0.5
        },
        {
-        "id": "2A5BC653-041E-4D34-B304-A710AB4372D2",
-        "time": 16.257208460091615,
+        "id": "E63C3EA6-293D-406F-8C0A-87DD08208FB3",
+        "time": 22.257208460091615,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3023,8 +3240,8 @@
         "opacity": 0.3666666666666667
        },
        {
-        "id": "369681F0-C076-4E4F-9AFD-BE243CB2A998",
-        "time": 16.672366213294154,
+        "id": "84A0600D-2DE6-46D9-8170-E69CA8DD73E1",
+        "time": 22.672366213294154,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3038,8 +3255,8 @@
         "opacity": 0.23333333333333328
        },
        {
-        "id": "B06B1CDA-BFB2-40AE-96D3-EB7C269ED50D",
-        "time": 17.087523966496693,
+        "id": "F028F243-45C5-47D9-A894-09D6884F7FA0",
+        "time": 23.087523966496693,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3053,8 +3270,8 @@
         "opacity": 0.09999999999999998
        },
        {
-        "id": "19FA9EB8-C2C5-4670-8758-F3FE2101882D",
-        "time": 17.502681719699233,
+        "id": "29BDC3A0-705C-497B-86B2-00151BD33B1A",
+        "time": 23.502681719699233,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3068,8 +3285,8 @@
         "opacity": 0.0
        },
        {
-        "id": "6596F9C4-5375-4A87-B023-FCD5D6B23D48",
-        "time": 17.917839472901772,
+        "id": "B549340A-CA7E-460F-B32F-4868ACB1E5D7",
+        "time": 23.917839472901772,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3083,8 +3300,8 @@
         "opacity": 0.0
        },
        {
-        "id": "173C492C-8DFA-4DB3-A4E8-7DC64AB876B9",
-        "time": 18.33299722610431,
+        "id": "66F01E66-91E9-401B-998C-8CA12F8E7508",
+        "time": 24.33299722610431,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3098,8 +3315,8 @@
         "opacity": 0.0
        },
        {
-        "id": "994CE07F-5B2E-478B-A311-E49BC4BED6D5",
-        "time": 18.74815497930685,
+        "id": "65C6FC2A-162E-42F0-B40D-A85F4F81E79B",
+        "time": 24.74815497930685,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3113,8 +3330,8 @@
         "opacity": 0.0
        },
        {
-        "id": "C547122E-709E-4225-A004-F67A492186C2",
-        "time": 19.16331273250939,
+        "id": "39FA651A-1616-402B-91E9-3B6C4B5B6C93",
+        "time": 25.16331273250939,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3128,8 +3345,8 @@
         "opacity": 0.0
        },
        {
-        "id": "6F5C85D8-65B0-48D8-A075-21FAE512EA84",
-        "time": 19.57847048571193,
+        "id": "33B9D1AC-A1CF-4076-9889-F6749B540240",
+        "time": 25.57847048571193,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3143,19 +3360,352 @@
         "opacity": 0.0
        }
       ],
-      "resourceID": "C3AD6798-0592-4ACC-A4C6-E4FDD47538B8"
+      "resourceID": "02FB1BB4-0D65-41F9-BE69-6F99D1A250B2"
      },
      {
-      "id": "FCEF5F32-B433-4EED-B82B-605725E45C52",
+      "id": "B4E3E655-AFAA-4EE4-9044-AEB3CC62B970",
+      "name": "Key 1 P",
+      "sortIndex": 6,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 15.596577447281458,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "762B38DF-1B59-4A8F-802A-4BC0E1DEF2B6",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "B72EED41-53DC-4307-8E3F-BBD2539B4BC1"
+     },
+     {
+      "id": "E6E1525B-12DA-4436-86E7-9E96B1566666",
+      "name": "Key 2 R",
+      "sortIndex": 7,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 15.896577447281459,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "9C79D75C-9A39-44BB-A98E-FD8A69D30125",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "76603E13-DE73-44C3-A39E-72FC24544491"
+     },
+     {
+      "id": "DF7F5D5F-BB01-4FAC-A090-37D94298DFE6",
+      "name": "Key 3 O",
+      "sortIndex": 8,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 16.19657744728146,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "707664CF-3A16-4A92-985E-447D71F3D2DA",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "DF3A6A49-FA5F-4229-B5B6-EFF388CC8760"
+     },
+     {
+      "id": "07737BFB-CC0B-4558-83B0-0D83FF0B62D1",
+      "name": "Key 4 M",
+      "sortIndex": 9,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 16.496577447281457,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "0059E502-5B50-4228-8834-556E086A9B38",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "60170654-B38F-4DBA-B687-C4730A34878F"
+     },
+     {
+      "id": "02A5960A-C3CD-4741-8ED9-B1754E6E8E74",
+      "name": "Key 5 O",
+      "sortIndex": 10,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 16.796577447281457,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "A6200009-DA42-402F-A470-BA0F36552763",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "DF3A6A49-FA5F-4229-B5B6-EFF388CC8760"
+     },
+     {
+      "id": "3ABB4458-F2E6-4E0A-BB15-5801D1A3B65C",
+      "name": "Key 6 S",
+      "sortIndex": 11,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 17.096577447281458,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "2E998F47-26B5-4B4A-BE58-29F97A943B2E",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "A38A3CB0-F084-4520-88DA-296D3B68134E"
+     },
+     {
+      "id": "B12FAEF6-E014-45E4-A51F-B0BBF2A7C6B2",
+      "name": "Key 7 H",
+      "sortIndex": 12,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 17.39657744728146,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "5FFA1EEC-47D8-438B-AB80-A92ED6BFF212",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "0CE0F9A2-AB4D-40C5-AA6B-E9BECD907A5F"
+     },
+     {
+      "id": "7B3AE71C-0EB6-4684-83A4-18DBC274DDC3",
+      "name": "Key 8 O",
+      "sortIndex": 13,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 17.69657744728146,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "22656985-731D-4BDE-BECA-E12D5FC3FF12",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "DF3A6A49-FA5F-4229-B5B6-EFF388CC8760"
+     },
+     {
+      "id": "123DFE25-3C09-40DA-8823-5AE7813E9124",
+      "name": "Key 9 T",
+      "sortIndex": 14,
+      "kind": "model",
+      "isEnabled": true,
+      "startTime": 17.996577447281457,
+      "duration": 0.3,
+      "keyframes": [
+       {
+        "id": "5DEF5473-04AD-49ED-9EA6-1D38DE5D9131",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       }
+      ],
+      "resourceID": "D7DC7709-6807-4FD9-A600-AA8528A91218"
+     },
+     {
+      "id": "DEEC271F-29F2-4E84-A8AE-660D7CCEC4D6",
       "name": "Laptop",
       "sortIndex": 4,
       "kind": "model",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "04666753-3D31-4F24-A5D8-8ACC369C8EF1",
+        "id": "D7E73EB9-19C1-4F1A-8155-571499DB1B38",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -3180,9 +3730,61 @@
         }
        },
        {
-        "id": "FBAF049C-D762-4902-9EF6-B2778EB29F3D",
-        "time": 14.596577447281458,
-        "transitionDuration": 14.596577447281458,
+        "id": "836CD13A-A573-4B4D-8F97-2CC1BD16A6AF",
+        "time": 15.596577447281458,
+        "transitionDuration": 1.0,
+        "easing": "easeInOut",
+        "placement": {
+         "height": 1381.1152416356879,
+         "offset": [
+          -0.0,
+          -70.20669144981413
+         ],
+         "anchor": "center"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 62,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       },
+       {
+        "id": "EE45231D-5198-433B-908D-CFED9AB0BC4E",
+        "time": 19.596577447281458,
+        "transitionDuration": 1.0,
+        "easing": "easeInOut",
+        "placement": {
+         "height": 416,
+         "anchor": "center",
+         "offset": [
+          0,
+          40
+         ]
+        },
+        "camera": {
+         "yaw": -30,
+         "pitch": 16,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30
+        },
+        "light": {
+         "yaw": 15,
+         "pitch": 50,
+         "intensity": 1.0
+        }
+       },
+       {
+        "id": "E2C7FAE1-8F69-4428-AA21-CC5AEE1B7F14",
+        "time": 20.596577447281458,
+        "transitionDuration": 1.0,
         "easing": "linear",
         "placement": {
          "height": 416.0,
@@ -3206,8 +3808,8 @@
         }
        },
        {
-        "id": "BD5248B5-825A-4216-9D23-441DD535B76D",
-        "time": 15.011735200483997,
+        "id": "EEBD0D7A-9D5B-4790-ABAF-B59261AAF9EF",
+        "time": 21.011735200483997,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3232,8 +3834,8 @@
         }
        },
        {
-        "id": "127071AE-6DAB-4BC8-89A9-BE19C69317D5",
-        "time": 15.426892953686536,
+        "id": "27A927BB-5210-4AB1-BA5A-A3DCB7E93C30",
+        "time": 21.426892953686536,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3258,8 +3860,8 @@
         }
        },
        {
-        "id": "B3B948DB-F81D-4C01-9A79-DF06800D4B05",
-        "time": 15.842050706889076,
+        "id": "566BB9DE-16F5-4CF9-B0F3-D2AE0BFED3A0",
+        "time": 21.842050706889076,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3284,8 +3886,8 @@
         }
        },
        {
-        "id": "82929A70-C948-4EC3-85C3-B8F853E809D1",
-        "time": 16.257208460091615,
+        "id": "62FBF5FD-8DB4-44A5-BFC4-17D0E411CCDF",
+        "time": 22.257208460091615,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3310,8 +3912,8 @@
         }
        },
        {
-        "id": "F1BD1BBA-29C3-4A1A-BA72-4A4936E47A34",
-        "time": 16.672366213294154,
+        "id": "78E3A67A-3C1F-4803-91B9-AB5AA3248979",
+        "time": 22.672366213294154,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3336,8 +3938,8 @@
         }
        },
        {
-        "id": "D6F86D4F-03B7-4183-9F3B-AFFB450EAFA5",
-        "time": 17.087523966496693,
+        "id": "2643C46B-C3FD-4F9F-A8A3-B21B2F284903",
+        "time": 23.087523966496693,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3362,8 +3964,8 @@
         }
        },
        {
-        "id": "735334B2-FFC7-4C80-8955-26108DCA6239",
-        "time": 17.502681719699233,
+        "id": "77913BE8-A071-4478-B8D5-4DC632D9851D",
+        "time": 23.502681719699233,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3388,8 +3990,8 @@
         }
        },
        {
-        "id": "634ABCD5-DE81-4969-AEA8-BE7C207B0931",
-        "time": 17.917839472901772,
+        "id": "568EC91E-A7BD-485F-BEF9-7691526AD8D1",
+        "time": 23.917839472901772,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3414,8 +4016,8 @@
         }
        },
        {
-        "id": "95903A88-971D-4E50-907B-792018932758",
-        "time": 18.33299722610431,
+        "id": "3453826B-FC50-4A23-9C3D-5908D65867F9",
+        "time": 24.33299722610431,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3440,8 +4042,8 @@
         }
        },
        {
-        "id": "D3481FFF-CAC7-406A-83F2-60A45901DD78",
-        "time": 18.74815497930685,
+        "id": "A36B685D-402A-429D-AEDB-D6317478693C",
+        "time": 24.74815497930685,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3466,8 +4068,8 @@
         }
        },
        {
-        "id": "4DDD1520-3E0C-4792-8AFF-37EB0AE87BD9",
-        "time": 19.16331273250939,
+        "id": "5ED5B3C8-A2D9-4707-9B9A-58435C71C6F8",
+        "time": 25.16331273250939,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3492,8 +4094,8 @@
         }
        },
        {
-        "id": "49634AFF-E9B6-4AEF-898B-6E389AD69C4A",
-        "time": 19.57847048571193,
+        "id": "3C4890FF-5869-4572-BFA6-564002531528",
+        "time": 25.57847048571193,
         "transitionDuration": 0.4151577532025392,
         "easing": "linear",
         "placement": {
@@ -3518,20 +4120,20 @@
         }
        }
       ],
-      "resourceID": "A3EA082F-8109-49AA-BB8D-5648EB09E7A5"
+      "resourceID": "F2740FB6-9935-4F5D-804F-79679AAD5BDE"
      }
     ]
    }
   },
   {
-   "id": "A29F956B-43A7-46DD-9E25-912B8C82E711",
+   "id": "4565E3B5-60C5-4201-90C0-4477C527B10D",
    "kind": "composition",
    "filename": "",
    "displayName": "Scene cube",
    "addedAt": 0,
    "imageCuts": [],
    "disabledAudioTrackIndices": [],
-   "duration": 29.12847048571193,
+   "duration": 35.12847048571193,
    "pixelWidth": 1440,
    "pixelHeight": 900,
    "composition": {
@@ -3546,10 +4148,10 @@
       "kind": "background",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "keyframes": [
        {
-        "id": "3F921241-383C-4E7C-BF3C-520CCA2F2F56",
+        "id": "FA2585CF-111B-41B6-AF25-E92E47862394",
         "time": 0,
         "transitionDuration": 0,
         "gradient": {
@@ -3580,7 +4182,7 @@
        },
        {
         "id": "55967892-62AC-9BAD-C384-E613688152DC",
-        "time": 19.12847048571193,
+        "time": 25.12847048571193,
         "transitionDuration": 0,
         "gradient": {
          "kind": "linear",
@@ -3610,7 +4212,7 @@
        },
        {
         "id": "4D62EEE2-156D-5806-6ABB-6C201DB48D62",
-        "time": 24.028470485711928,
+        "time": 30.028470485711928,
         "transitionDuration": 4.9,
         "gradient": {
          "kind": "linear",
@@ -3641,7 +4243,7 @@
        },
        {
         "id": "31160990-3FBE-0439-01C6-CE27F9DEF479",
-        "time": 25.32847048571193,
+        "time": 31.32847048571193,
         "transitionDuration": 1.2999999999999998,
         "gradient": {
          "kind": "linear",
@@ -3672,7 +4274,7 @@
        },
        {
         "id": "56E8ACEA-3EB2-7A23-4424-8CBBA066EF24",
-        "time": 29.12847048571193,
+        "time": 35.12847048571193,
         "transitionDuration": 3.8,
         "gradient": {
          "kind": "linear",
@@ -3710,11 +4312,11 @@
       "kind": "stage",
       "isEnabled": true,
       "startTime": 0,
-      "duration": 29.12847048571193,
+      "duration": 35.12847048571193,
       "fadeIn": 0.4,
       "keyframes": [
        {
-        "id": "71CAFBE2-09D1-460A-901B-70BC6CBDE28A",
+        "id": "945165A4-4660-4977-BD0E-715849489D32",
         "time": 0,
         "transitionDuration": 0,
         "placement": {
@@ -3739,7 +4341,7 @@
        },
        {
         "id": "79F0610C-EA49-9FD5-5DEB-ED7B5DFE4D8D",
-        "time": 19.12847048571193,
+        "time": 25.12847048571193,
         "transitionDuration": 0,
         "placement": {
          "height": 640,
@@ -3763,7 +4365,7 @@
        },
        {
         "id": "B1B9331A-5F41-3FCB-4888-368F88319F09",
-        "time": 24.028470485711928,
+        "time": 30.028470485711928,
         "transitionDuration": 4.9,
         "placement": {
          "height": 640,
@@ -3788,7 +4390,7 @@
        },
        {
         "id": "067B571C-846C-2BB3-121F-9D7D67587DF1",
-        "time": 27.72847048571193,
+        "time": 33.72847048571193,
         "transitionDuration": 3.7,
         "placement": {
          "height": 640,
@@ -3820,21 +4422,21 @@
         "kind": "model",
         "isEnabled": true,
         "startTime": 0,
-        "duration": 29.12847048571193,
+        "duration": 35.12847048571193,
         "resourceID": "4AB32ED1-8949-9FDF-A4C5-719DB0839925",
         "keyframes": [
          {
-          "id": "1FB2D5AD-DDCC-498D-A117-D93BD781EABD",
+          "id": "87885B8A-8FB6-4119-9B97-9F098DB82F0A",
           "time": 0,
           "transitionDuration": 0,
           "camera": {
-           "yaw": -1397.849766263564
+           "yaw": -1836.3113047251027
           }
          },
          {
           "id": "56059501-5296-0F51-FF3D-6A42D3FEF454",
-          "time": 19.12847048571193,
-          "transitionDuration": 19.12847048571193,
+          "time": 25.12847048571193,
+          "transitionDuration": 25.12847048571193,
           "camera": {
            "yaw": 0
           },
@@ -3842,7 +4444,7 @@
          },
          {
           "id": "CFA13A02-6843-872E-9C98-9AD0F481D72A",
-          "time": 24.32847048571193,
+          "time": 30.32847048571193,
           "transitionDuration": 5.2,
           "camera": {
            "yaw": 380
@@ -3858,44 +4460,44 @@
         "kind": "drawing",
         "isEnabled": true,
         "startTime": 0,
-        "duration": 29.12847048571193,
+        "duration": 35.12847048571193,
         "resourceID": "41CE4F6C-795B-F985-92E3-EE68634B65D4",
         "keyframes": [
          {
-          "id": "91C36780-8D33-4269-B187-430C12F5B440",
+          "id": "3CA2B8B9-5D06-46D7-8E5F-B281307BAD43",
           "time": 0,
           "transitionDuration": 0,
           "progress": 0.0
          },
          {
           "id": "F5C29AF1-114E-51CB-8C0C-8852E693B926",
-          "time": 19.12847048571193,
+          "time": 25.12847048571193,
           "transitionDuration": 0,
           "progress": 0.0
          },
          {
           "id": "C5AC11E2-D70B-D90E-2D3E-C51541C6AF0F",
-          "time": 24.028470485711928,
+          "time": 30.028470485711928,
           "transitionDuration": 0,
           "progress": 0.0
          },
          {
           "id": "E4C3E978-0709-33BF-7EE8-CC8838226814",
-          "time": 24.72847048571193,
+          "time": 30.72847048571193,
           "transitionDuration": 0.7,
           "progress": 0.45,
           "easing": "smooth"
          },
          {
           "id": "CF52BC99-CE17-C2CB-C9C7-D74C25DBEDBF",
-          "time": 25.62847048571193,
+          "time": 31.62847048571193,
           "transitionDuration": 0.9,
           "progress": 0.62,
           "easing": "smooth"
          },
          {
           "id": "2091B2DC-D881-A4D2-1E6D-76FCF6274954",
-          "time": 27.32847048571193,
+          "time": 33.32847048571193,
           "transitionDuration": 1.7,
           "progress": 1.0,
           "easing": "smooth"
@@ -3909,11 +4511,11 @@
         "kind": "model",
         "isEnabled": true,
         "startTime": 0,
-        "duration": 29.12847048571193,
+        "duration": 35.12847048571193,
         "resourceID": "B91B6322-5656-A667-0246-717CA9B915F8",
         "keyframes": [
          {
-          "id": "566C673F-015A-4AB3-9336-996E4EAD0AB4",
+          "id": "41B9ADD8-0D9A-40D1-892B-EEE14E83B8B8",
           "time": 0,
           "transitionDuration": 0,
           "camera": {
@@ -3922,7 +4524,7 @@
          },
          {
           "id": "5BCFF6C9-3C44-D9C8-88B7-A9BCCF55942D",
-          "time": 19.12847048571193,
+          "time": 25.12847048571193,
           "transitionDuration": 0,
           "camera": {
            "yaw": 0
@@ -3938,7 +4540,7 @@
       "sortIndex": 2,
       "kind": "caption",
       "isEnabled": true,
-      "startTime": 27.62847048571193,
+      "startTime": 33.62847048571193,
       "duration": 1.5,
       "resourceID": "026A0616-3079-16DB-9DC8-278B7E5FC86C",
       "keyframes": []
@@ -3949,7 +4551,7 @@
  ],
  "layers": [
   {
-   "id": "A26400F2-73F9-4C52-911A-B387AD8D40FD",
+   "id": "276C468C-9448-40CB-8D75-46CE3C2D84C0",
    "name": "Scene phone",
    "sortIndex": 3,
    "kind": "video",
@@ -3958,7 +4560,7 @@
    "duration": 9.16293783932835,
    "keyframes": [
     {
-     "id": "34D59D86-B5C3-49A1-81C0-650AAE79A6AE",
+     "id": "4B7A14B4-1806-4B88-84A0-5846FCBDEFA3",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -3967,14 +4569,14 @@
      }
     }
    ],
-   "resourceID": "30E91D37-DBDD-4D80-9880-8BD8AAF7C1CF",
+   "resourceID": "E4461FAC-8CA2-4319-ADA4-B1E60D33046B",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.25
    }
   },
   {
-   "id": "830E17CC-B5C8-4643-9801-05FE42ABCFB1",
+   "id": "254DF0B5-6123-4208-A08B-7EDE152AF496",
    "name": "Scene tablet",
    "sortIndex": 2,
    "kind": "video",
@@ -3983,7 +4585,7 @@
    "duration": 14.846577447281458,
    "keyframes": [
     {
-     "id": "113759B5-A4E5-473F-8B2C-CEAB874D2162",
+     "id": "3A74B8B3-5A59-4125-8381-5CE66493FC6A",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -3996,23 +4598,23 @@
      }
     }
    ],
-   "resourceID": "727E0C8B-626D-42A4-B842-18E6F8574D42",
+   "resourceID": "59FE9F6A-DC7C-420B-AD41-20D17FFCE1CE",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.25
    }
   },
   {
-   "id": "FBD059F8-068C-4681-8185-69D38DF2EBAD",
+   "id": "4655D468-BACC-4E9E-8855-4CF3A578BA09",
    "name": "Scene laptop",
    "sortIndex": 1,
    "kind": "video",
    "isEnabled": true,
    "startTime": 0,
-   "duration": 19.82847048571193,
+   "duration": 25.82847048571193,
    "keyframes": [
     {
-     "id": "ED5ABB52-6F2C-4BDA-B713-9D228D391390",
+     "id": "01D98124-153F-43F3-879A-DB850FC1E471",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -4025,23 +4627,23 @@
      }
     }
    ],
-   "resourceID": "4965D4B8-5DF6-4ADA-91B3-A7AA1C8157D6",
+   "resourceID": "49F6C5B8-B0ED-49FB-ADD7-0B4E74A737D0",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.25
    }
   },
   {
-   "id": "E00DD5ED-51DA-4BCE-A597-A673C99B8F80",
+   "id": "ECF840A9-3403-462E-953C-2D2957FAA703",
    "name": "Scene cube",
    "sortIndex": 0,
    "kind": "video",
    "isEnabled": true,
    "startTime": 0,
-   "duration": 29.12847048571193,
+   "duration": 35.12847048571193,
    "keyframes": [
     {
-     "id": "23A6DC4D-0253-4129-8329-5ADB0EE3FAE3",
+     "id": "C470AAE2-BF87-45EB-99AC-A49B3A33196C",
      "time": 0,
      "transitionDuration": 0,
      "placement": {
@@ -4050,10 +4652,10 @@
      }
     }
    ],
-   "resourceID": "A29F956B-43A7-46DD-9E25-912B8C82E711"
+   "resourceID": "4565E3B5-60C5-4201-90C0-4477C527B10D"
   },
   {
-   "id": "A79F11B6-E84E-4F66-AD56-76C725628E71",
+   "id": "31974DD5-D98E-4063-B626-06BC70F1AAEE",
    "name": "Caption phone",
    "sortIndex": 10,
    "kind": "caption",
@@ -4083,7 +4685,7 @@
    }
   },
   {
-   "id": "BEA82962-FF02-401E-827B-2210AA9CFF05",
+   "id": "4C1C6821-35F5-4852-9575-198889CCD994",
    "name": "Caption tablet",
    "sortIndex": 11,
    "kind": "caption",
@@ -4113,20 +4715,19 @@
    }
   },
   {
-   "id": "BDEBE803-0DF3-4BE0-AB0C-27D6CE5C78CB",
+   "id": "0BE96EAC-5781-4235-B9D1-480272D61189",
    "name": "Caption laptop",
    "sortIndex": 12,
    "kind": "caption",
    "isEnabled": true,
-   "startTime": 14.996577447281458,
-   "duration": 2.6887736838268896,
+   "startTime": 15.596577447281458,
+   "duration": 5.300000000000001,
    "keyframes": [],
-   "captionText": "Zoom all the way in",
-   "fadeIn": 0.35,
+   "captionText": "PROMOSHOT",
    "fadeOut": 0.35,
    "captionStyle": {
     "alignment": "center",
-    "fontSize": 52,
+    "fontSize": 64,
     "isBold": true,
     "textColorHex": "FFFFFF",
     "placement": {
@@ -4139,7 +4740,12 @@
     "padding": 16,
     "shadowColorHex": "000000",
     "shadowOpacity": 0.6,
-    "shadowRadius": 12
+    "shadowRadius": 12,
+    "reveal": {
+     "by": "character",
+     "mode": "wipe",
+     "secondsPer": 0.3
+    }
    }
   }
  ]
