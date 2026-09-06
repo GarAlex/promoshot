@@ -2,11 +2,18 @@
 //! a quad's pixel size, which the compositor then draws like any other
 //! picture — the slab pattern per frame on the GPU (3D plan, section 2).
 //!
-//! Shading v1 is PBR-lite: one key light (Lambert + a Blinn-Phong lobe
-//! narrowed by roughness), an ambient term and a rim, all from the theme
-//! by default. sRGB textures decode to linear and the result encodes back,
-//! premultiplied, so the compositor's existing input path applies.
-//! Depth is real within the pass; between layers `sortIndex` orders.
+//! Shading is metallic-roughness PBR: one key light through a GGX lobe
+//! (Smith visibility, Schlick Fresnel, energy-conserving), an ambient
+//! term and a rim from the theme, and an environment read through the
+//! split-sum approximation — prefiltered per mip with the same lobe. A
+//! finish WORD (rung 44) adds what two sliders cannot say: a clear coat,
+//! a grain, the dielectric's reflectance, and transmission through a
+//! thin body. Highlights past 0.76 roll off toward white instead of
+//! clipping. sRGB textures decode to linear and the result encodes
+//! back, premultiplied, so the compositor's existing input path
+//! applies. Depth is real within the pass; between layers `sortIndex`
+//! orders, and within it the meshes light passes through are drawn
+//! after the opaque ones.
 
 use crate::compositor::InputTexture;
 use crate::{GpuContext, GpuError};
@@ -21,6 +28,47 @@ pub struct MeshInput<'a> {
     /// Index into the matrices `render` is given — the node the mesh
     /// hangs from. 0 for a model that is one piece.
     pub node: usize,
+}
+
+/// What a finish WORD adds beyond metallic and roughness (rung 44): a
+/// clear coat and its roughness, a grain, the dielectric's reflectance
+/// straight on, and how much light a thin body passes. Every value is
+/// 0…1; the default is a plain surface, what every slot had before the
+/// words existed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SurfaceFinish {
+    pub clearcoat: f32,
+    pub clearcoat_roughness: f32,
+    pub anisotropy: f32,
+    pub specular: f32,
+    pub transmission: f32,
+}
+
+impl Default for SurfaceFinish {
+    fn default() -> Self {
+        SurfaceFinish {
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.05,
+            anisotropy: 0.0,
+            specular: 0.04,
+            transmission: 0.0,
+        }
+    }
+}
+
+impl SurfaceFinish {
+    /// The two uniform rows the shader reads.
+    fn raw(&self) -> ([f32; 4], [f32; 4]) {
+        (
+            [
+                self.clearcoat.clamp(0.0, 1.0),
+                self.clearcoat_roughness.clamp(0.0, 1.0),
+                self.anisotropy.clamp(0.0, 1.0),
+                self.specular.clamp(0.0, 1.0),
+            ],
+            [self.transmission.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
+        )
+    }
 }
 
 /// A material's factors and, if any, its textures: base colour (RGBA8
@@ -228,6 +276,12 @@ struct Material {
     // x = how much of the surface has dissolved (0 whole, 1 gone), y =
     // the size of the cells it goes in, world units.
     extra: vec4<f32>,
+    // A finish word's extras: x = clear coat (0 none … 1 a full coat),
+    // y = the coat's roughness, z = anisotropy (a grain), w = the
+    // dielectric's reflectance straight on (F0; 0.04 plastic and glass).
+    finish: vec4<f32>,
+    // x = transmission through a thin body (0 opaque … 1 clear).
+    finish2: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var env_tex: texture_2d<f32>;
@@ -303,6 +357,105 @@ fn env_sample(dir: vec3<f32>, lod: f32) -> vec3<f32> {
     return textureSampleLevel(env_tex, env_samp, vec2<f32>(u, v), lod).rgb * frame.env_params.y;
 }
 
+const PI: f32 = 3.1415927;
+
+// GGX (Trowbridge-Reitz) normal distribution; `a` is roughness squared.
+fn ggx_d(ndh: f32, a: f32) -> f32 {
+    let a2 = a * a;
+    let d = ndh * ndh * (a2 - 1.0) + 1.0;
+    return a2 / (PI * d * d);
+}
+// The anisotropic form (Burley, as Filament writes it): the lobe
+// stretched along the tangent, `at` and `ab` the two roughnesses.
+fn ggx_d_aniso(ndh: f32, tdh: f32, bdh: f32, at: f32, ab: f32) -> f32 {
+    let a2 = at * ab;
+    let v = vec3<f32>(ab * tdh, at * bdh, a2 * ndh);
+    let v2 = dot(v, v);
+    let w2 = a2 / max(v2, 1e-8);
+    return a2 * w2 * w2 / PI;
+}
+// Height-correlated Smith visibility for GGX (Heitz), with the
+// 1 / (4 n·l n·v) folded in.
+fn smith_vis(ndv: f32, ndl: f32, a: f32) -> f32 {
+    let a2 = a * a;
+    let gv = ndl * sqrt(ndv * ndv * (1.0 - a2) + a2);
+    let gl = ndv * sqrt(ndl * ndl * (1.0 - a2) + a2);
+    return 0.5 / max(gv + gl, 1e-4);
+}
+fn fresnel_schlick(f0: vec3<f32>, vdh: f32) -> vec3<f32> {
+    return f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vdh, 5.0);
+}
+// The split-sum's second half without a lookup table (Karis's fit for
+// mobile): what a surface of this F0 and roughness reflects of a
+// prefiltered environment at this viewing angle.
+fn env_brdf_approx(f0: vec3<f32>, roughness: f32, ndv: f32) -> vec3<f32> {
+    let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4<f32>(1.0, 0.0425, 1.04, -0.04);
+    let r = roughness * c0 + c1;
+    let a004 = min(r.x * r.x, exp2(-9.28 * ndv)) * r.x + r.y;
+    let ab = vec2<f32>(-1.04, 1.04) * a004 + r.zw;
+    return f0 * ab.x + vec3<f32>(ab.y);
+}
+// The shoulder of Khronos's PBR-neutral tone map, alone: highlights past
+// 0.76 roll off toward white instead of clipping, and nothing under it
+// moves, so a theme-lit body renders as it always did.
+fn compress_highlights(c: vec3<f32>) -> vec3<f32> {
+    let start = 0.76;
+    let peak = max(c.r, max(c.g, c.b));
+    if (peak <= start) {
+        return c;
+    }
+    let d = 1.0 - start;
+    let new_peak = 1.0 - d * d / (peak + d - start);
+    let scaled = c * (new_peak / peak);
+    let g = 1.0 - 1.0 / (0.15 * (peak - new_peak) + 1.0);
+    return mix(scaled, vec3<f32>(new_peak), g);
+}
+// The surface's tangent from the same screen-space derivatives the
+// normal map uses — the direction a brushed grain runs, along u.
+fn tangent_of(n: vec3<f32>, p: vec3<f32>, uv: vec2<f32>) -> vec3<f32> {
+    let dp1 = dpdx(p);
+    let dp2 = dpdy(p);
+    let duv1 = dpdx(uv);
+    let duv2 = dpdy(uv);
+    let dp2perp = cross(dp2, n);
+    let dp1perp = cross(n, dp1);
+    let t = dp2perp * duv1.x + dp1perp * duv2.x;
+    if (dot(t, t) < 1e-14) {
+        let up = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.y) < 0.9);
+        return normalize(cross(up, n));
+    }
+    return normalize(t - n * dot(n, t));
+}
+// What the world contributes to a direction: the bound environment
+// through its prefiltered mips, else the theme's stand-in sky-to-ground
+// gradient with a darker horizon band.
+fn world_light(dir: vec3<f32>, roughness: f32) -> vec3<f32> {
+    if (frame.env_params.x > 0.5) {
+        return env_sample(dir, roughness * frame.env_params.w);
+    }
+    let up = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+    let sky = frame.rim_rgb.rgb * 1.4 + vec3<f32>(0.35);
+    let ground = frame.ambient_rgb.rgb * 0.6;
+    let env = mix(ground, sky, up);
+    return env * (0.7 + 0.3 * smoothstep(0.0, 0.25, abs(dir.y)));
+}
+// A clear coat's own light: the key through a narrow GGX lobe and the
+// world at the coat's roughness, both at glass's F0 — added over a body
+// or over a screen alike.
+fn coat_light(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, key: vec3<f32>, cc: f32, cc_rough: f32) -> vec3<f32> {
+    let h = normalize(l + v);
+    let ndl = max(dot(n, l), 0.0);
+    let ndh = max(dot(n, h), 0.0);
+    let ndv = max(dot(n, v), 1e-3);
+    let vdh = max(dot(v, h), 0.0);
+    let a = max(cc_rough * cc_rough, 0.001);
+    let fc = 0.04 + 0.96 * pow(1.0 - vdh, 5.0);
+    let direct = ggx_d(ndh, a) * smith_vis(ndv, ndl, a) * fc * PI * ndl * key;
+    let world = world_light(reflect(-v, n), cc_rough) * env_brdf_approx(vec3<f32>(0.04), cc_rough, ndv);
+    return (direct + world) * cc;
+}
+
 @fragment
 fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
     // A dissolving body: cells of its surface go in a fixed random order
@@ -355,6 +508,21 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         let t = textureSample(base_tex, base_samp, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)));
         let under = linear_to_srgb(clamp(material.base_color.rgb * frame.ambient_rgb.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
         let shown = mix(under, t.rgb, t.a * inside);
+        let coat = material.finish.x;
+        if (coat > 0.0) {
+            // Glass over the screen: the picture stays the display it is,
+            // dimmed a little where the coat turns to mirror, with the
+            // coat's own highlight and the world laid over it.
+            let v = normalize(frame.camera_pos.xyz - in.world);
+            let l = normalize(frame.light_dir.xyz);
+            let ndv = max(dot(n, v), 1e-3);
+            let fc_view = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
+            let key = frame.key_rgb.rgb * frame.light_dir.w;
+            let lit = srgb_to_linear(shown) * (1.0 - coat * fc_view)
+                + coat_light(n, v, l, key, coat, material.finish.y);
+            let out = linear_to_srgb(clamp(compress_highlights(lit), vec3<f32>(0.0), vec3<f32>(1.0)));
+            return vec4<f32>(out * material.base_color.a, material.base_color.a);
+        }
         return vec4<f32>(shown * material.base_color.a, material.base_color.a);
     } else if (material.factors.z > 0.5) {
         let t = textureSample(base_tex, base_samp, in.uv);
@@ -371,47 +539,76 @@ fn fs_main(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         roughness = clamp(material.factors.y * mr.g, 0.05, 1.0);
         metallic = material.factors.x * mr.b;
     }
+    let cc = material.finish.x;
+    let cc_rough = clamp(material.finish.y, 0.03, 1.0);
+    let aniso = material.finish.z;
+    let f0_dielectric = vec3<f32>(material.finish.w);
+    let transmission = clamp(material.finish2.x, 0.0, 1.0);
+
     let l = normalize(frame.light_dir.xyz);
     let v = normalize(frame.camera_pos.xyz - in.world);
     let h = normalize(l + v);
     let ndl = max(dot(n, l), 0.0);
     let ndh = max(dot(n, h), 0.0);
-    let ndv = max(dot(n, v), 0.0);
-    // Diffuse dims with metalness; the specular lobe takes the base colour
-    // for a metal and stays white for a dielectric.
-    let diffuse = albedo.rgb * (1.0 - metallic) * ndl;
-    let shininess = mix(8.0, 160.0, (1.0 - roughness) * (1.0 - roughness));
-    let spec_color = mix(vec3<f32>(0.04), albedo.rgb, metallic);
-    let specular = spec_color * pow(ndh, shininess) * (1.0 - roughness * 0.6) * step(0.0001, ndl);
-    let key = (diffuse + specular) * frame.key_rgb.rgb * frame.light_dir.w;
-    let ambient = albedo.rgb * (1.0 - metallic * 0.8) * frame.ambient_rgb.rgb;
-    let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6 * (1.0 - metallic * 0.5);
-    // What a metal mirrors and a glossy dielectric sheens: the scene's
-    // environment when one is bound — an equirectangular HDR sampled at
-    // the reflection, blurrier with roughness, its blurriest level
-    // standing in for irradiance — else a stand-in sky-to-ground gradient
-    // by the reflection's height with a darker horizon band.
-    let refl = reflect(-v, n);
-    var env: vec3<f32>;
-    var ambient_env = vec3<f32>(0.0);
-    if (frame.env_params.x > 0.5) {
-        env = env_sample(refl, roughness * frame.env_params.w);
-        ambient_env = env_sample(n, frame.env_params.w);
+    let ndv = max(dot(n, v), 1e-3);
+    let vdh = max(dot(v, h), 0.0);
+    let a = max(roughness * roughness, 0.002);
+    // A metal's reflectance is its colour; a dielectric's is its F0, and
+    // its diffuse is what Fresnel leaves.
+    let f0 = mix(f0_dielectric, albedo.rgb, metallic);
+    let f = fresnel_schlick(f0, vdh);
+    var d: f32;
+    // A grain: the lobe stretched along the tangent, and the world's
+    // reflection bent the same way (Filament's anisotropic reflection),
+    // so brushed metal smears the light boxes across it.
+    var refl = reflect(-v, n);
+    if (aniso > 0.001) {
+        let t = tangent_of(n, in.world, in.uv);
+        let b = cross(n, t);
+        let at = max(a * (1.0 + aniso), 0.002);
+        let ab = max(a * (1.0 - aniso), 0.002);
+        d = ggx_d_aniso(ndh, dot(t, h), dot(b, h), at, ab);
+        let grain_tangent = cross(b, v);
+        let grain_normal = cross(grain_tangent, b);
+        let bent = normalize(mix(n, grain_normal, aniso));
+        refl = reflect(-v, bent);
     } else {
-        let up = clamp(refl.y * 0.5 + 0.5, 0.0, 1.0);
-        let sky = frame.rim_rgb.rgb * 1.4 + vec3<f32>(0.35);
-        let ground = frame.ambient_rgb.rgb * 0.6;
-        env = mix(ground, sky, up);
-        env = env * (0.7 + 0.3 * smoothstep(0.0, 0.25, abs(refl.y)));
+        d = ggx_d(ndh, a);
     }
-    let fresnel = pow(1.0 - ndv, 5.0);
-    let gloss = 1.0 - roughness;
-    let mirror = env * albedo.rgb * metallic * (0.75 + 0.25 * fresnel) * (0.5 + 0.5 * gloss);
-    let sheen = env * (0.04 + 0.35 * fresnel) * gloss * (1.0 - metallic);
-    let fill = albedo.rgb * (1.0 - metallic * 0.8) * ambient_env * 0.5;
-    let lit = key + ambient + fill + rim + mirror + sheen;
+    // The key's strength is the irradiance a facing Lambert surface
+    // receives, as it always was here; the BRDF times π keeps that.
+    let key = frame.key_rgb.rgb * frame.light_dir.w;
+    let kd = (vec3<f32>(1.0) - f) * (1.0 - metallic);
+    var body = kd * albedo.rgb * ndl * key;
+    var spec = d * smith_vis(ndv, ndl, a) * f * PI * ndl * key;
+    let ambient = albedo.rgb * (1.0 - metallic) * frame.ambient_rgb.rgb;
+    let rim = frame.rim_rgb.rgb * pow(1.0 - ndv, 3.0) * 0.6 * (1.0 - metallic * 0.5);
+    // The world: the reflection through the prefiltered environment
+    // weighted by the split-sum's BRDF term, and a diffuse fill from
+    // its blurriest levels when one is bound.
+    var fill = vec3<f32>(0.0);
+    if (frame.env_params.x > 0.5) {
+        fill = albedo.rgb * (1.0 - metallic) * env_sample(n, frame.env_params.w - 1.0) * 0.5;
+    }
+    var spec_env = world_light(refl, roughness) * env_brdf_approx(f0, roughness, ndv);
+    body = body + ambient + fill + rim;
+    if (cc > 0.0) {
+        // The coat takes its share of the light first; what it reflects
+        // the body under it never gets.
+        let fc_view = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
+        let under = 1.0 - cc * fc_view;
+        body = body * under;
+        spec = spec * under;
+        spec_env = spec_env * under + coat_light(n, v, l, key, cc, cc_rough);
+    }
+    // Thin glass: the body's weight drops with what passes through, the
+    // reflections stay, and the alpha carries what stands behind — more
+    // straight on, less at a grazing angle where glass turns to mirror.
+    let fv = f0_dielectric.x + (1.0 - f0_dielectric.x) * pow(1.0 - ndv, 5.0);
+    let through = transmission * (1.0 - fv);
+    let lit = compress_highlights(body * (1.0 - transmission) + spec + spec_env);
     let encoded = linear_to_srgb(clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0)));
-    return vec4<f32>(encoded * albedo.a, albedo.a);
+    return vec4<f32>(encoded * albedo.a, albedo.a * (1.0 - through));
 }
 "#;
 
@@ -435,6 +632,8 @@ struct MaterialRaw {
     fit: [f32; 4],
     uv: [f32; 4],
     extra: [f32; 4],
+    finish: [f32; 4],
+    finish2: [f32; 4],
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -533,6 +732,8 @@ struct GpuMaterial {
     mr_view: Option<wgpu::TextureView>,
     /// The bound picture's own mip chain, kept alive while it is bound.
     bound_copy: Option<wgpu::Texture>,
+    /// What a finish word adds beyond the two factors; plain by default.
+    finish: SurfaceFinish,
 }
 
 impl GpuMaterial {
@@ -542,6 +743,33 @@ impl GpuMaterial {
             if self.normal_view.is_some() { 1.0 } else { 0.0 },
             if self.mr_view.is_some() { 1.0 } else { 0.0 },
         )
+    }
+
+    /// The uniform, from every field — one place, so no setter can leave
+    /// a row stale.
+    fn raw(&self) -> MaterialRaw {
+        let (has_normal, has_mr) = self.map_flags();
+        let (finish, finish2) = self.finish.raw();
+        MaterialRaw {
+            uv: self.uv,
+            extra: [self.dissolve, self.cell, 0.0, 0.0],
+            base_color: self.base_color,
+            factors: [
+                self.metallic,
+                self.roughness,
+                self.textured,
+                if self.double_sided { 1.0 } else { 0.0 },
+            ],
+            fit: [self.aspect, has_normal, has_mr, 0.0],
+            finish,
+            finish2,
+        }
+    }
+
+    /// Light passes through this slot (thin glass): drawn after the
+    /// opaque meshes, so what stands behind it is there to blend over.
+    fn transmissive(&self) -> bool {
+        self.finish.transmission > 0.0
     }
 }
 
@@ -916,6 +1144,7 @@ impl ModelPass {
                 .metal_rough
                 .filter(well_formed)
                 .map(|(w, h, px)| upload_rgba(ctx, w, h, px).create_view(&Default::default()));
+            let (finish, finish2) = SurfaceFinish::default().raw();
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("model-material"),
                 contents: as_bytes(&MaterialRaw {
@@ -934,6 +1163,8 @@ impl ModelPass {
                         if mr_view.is_some() { 1.0 } else { 0.0 },
                         0.0,
                     ],
+                    finish,
+                    finish2,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
@@ -988,6 +1219,7 @@ impl ModelPass {
                 bound_copy: None,
                 normal_view,
                 mr_view,
+                finish: SurfaceFinish::default(),
             });
         }
         let mut gpu_meshes = Vec::with_capacity(meshes.len());
@@ -1080,23 +1312,26 @@ impl ModelPass {
             m.base_color = rgba.unwrap_or(m.file_base_color);
             m.metallic = metallic.unwrap_or(m.file_metallic).clamp(0.0, 1.0);
             m.roughness = roughness.unwrap_or(m.file_roughness).clamp(0.0, 1.0);
-            let (has_normal, has_mr) = m.map_flags();
-            ctx.queue.write_buffer(
-                &m.uniform,
-                0,
-                as_bytes(&MaterialRaw {
-                    uv: m.uv,
-                    extra: [m.dissolve, m.cell, 0.0, 0.0],
-                    base_color: m.base_color,
-                    factors: [
-                        m.metallic,
-                        m.roughness,
-                        m.textured,
-                        if m.double_sided { 1.0 } else { 0.0 },
-                    ],
-                    fit: [m.aspect, has_normal, has_mr, 0.0],
-                }),
-            );
+            ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
+        }
+    }
+
+    /// What a finish WORD adds to one slot beyond the two factors (rung
+    /// 44): the coat, the grain, the reflectance, the transmission. The
+    /// default is the plain surface every slot starts with.
+    pub fn set_finish(
+        &self,
+        ctx: &GpuContext,
+        model: &mut GpuModel,
+        material: usize,
+        finish: SurfaceFinish,
+    ) {
+        if let Some(m) = model.materials.get_mut(material) {
+            if m.finish == finish {
+                return;
+            }
+            m.finish = finish;
+            ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
         }
     }
 
@@ -1127,23 +1362,7 @@ impl ModelPass {
             .map(|t| t.create_view(&Default::default()));
         let view = chain_view.as_ref().unwrap_or(view);
         m.textured = if m.worn { 4.0 } else { 2.0 };
-        let (has_normal, has_mr) = m.map_flags();
-        ctx.queue.write_buffer(
-            &m.uniform,
-            0,
-            as_bytes(&MaterialRaw {
-                uv: m.uv,
-                extra: [m.dissolve, m.cell, 0.0, 0.0],
-                base_color: m.base_color,
-                factors: [
-                    m.metallic,
-                    m.roughness,
-                    m.textured,
-                    if m.double_sided { 1.0 } else { 0.0 },
-                ],
-                fit: [m.aspect, has_normal, has_mr, 0.0],
-            }),
-        );
+        ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
         m.bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("model-material-bound"),
             layout: &self.material_layout,
@@ -1268,23 +1487,7 @@ impl ModelPass {
             }
             m.dissolve = amount;
             m.cell = cell;
-            let (has_normal, has_mr) = m.map_flags();
-            ctx.queue.write_buffer(
-                &m.uniform,
-                0,
-                as_bytes(&MaterialRaw {
-                    uv: m.uv,
-                    extra: [m.dissolve, m.cell, 0.0, 0.0],
-                    base_color: m.base_color,
-                    factors: [
-                        m.metallic,
-                        m.roughness,
-                        m.textured,
-                        if m.double_sided { 1.0 } else { 0.0 },
-                    ],
-                    fit: [m.aspect, has_normal, has_mr, 0.0],
-                }),
-            );
+            ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
         }
     }
 
@@ -1310,23 +1513,7 @@ impl ModelPass {
         if m.textured > 1.5 && m.textured < 2.5 || m.textured > 3.5 {
             m.textured = if worn { 4.0 } else { 2.0 };
         }
-        let (has_normal, has_mr) = m.map_flags();
-        ctx.queue.write_buffer(
-            &m.uniform,
-            0,
-            as_bytes(&MaterialRaw {
-                uv: m.uv,
-                extra: [m.dissolve, m.cell, 0.0, 0.0],
-                base_color: m.base_color,
-                factors: [
-                    m.metallic,
-                    m.roughness,
-                    m.textured,
-                    if m.double_sided { 1.0 } else { 0.0 },
-                ],
-                fit: [m.aspect, has_normal, has_mr, 0.0],
-            }),
-        );
+        ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
     }
 
     /// A stage: several models and camera-facing pictures drawn through
@@ -1402,17 +1589,8 @@ impl ModelPass {
                     // picture's own alpha decides what is drawn.
                     m.aspect = size[0] / size[1].max(1e-6);
                     m.textured = 3.0;
-                    ctx.queue.write_buffer(
-                        &m.uniform,
-                        0,
-                        as_bytes(&MaterialRaw {
-                            uv: m.uv,
-                            extra: [m.dissolve, m.cell, 0.0, 0.0],
-                            base_color: m.base_color,
-                            factors: [m.metallic, m.roughness, 3.0, 1.0],
-                            fit: [m.aspect, 0.0, 0.0, 0.0],
-                        }),
-                    );
+                    m.double_sided = true;
+                    ctx.queue.write_buffer(&m.uniform, 0, as_bytes(&m.raw()));
                 }
                 billboards.push(model);
             }
@@ -1525,24 +1703,32 @@ impl ModelPass {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &frame_bind, &[]);
-            let mut next_billboard = billboards.iter();
-            for item in items {
-                let model: &GpuModel = match item {
-                    StageItem::Model { model, .. } => model,
-                    StageItem::Billboard { .. } => match next_billboard.next() {
-                        Some(b) => b,
-                        None => continue,
-                    },
-                };
-                for mesh in &model.meshes {
-                    let Some(material) = model.materials.get(mesh.material) else {
-                        continue;
+            // The opaque meshes of every member first, then the ones light
+            // passes through, so what stands behind a pane is there when
+            // the pane blends over it.
+            for through in [false, true] {
+                let mut next_billboard = billboards.iter();
+                for item in items {
+                    let model: &GpuModel = match item {
+                        StageItem::Model { model, .. } => model,
+                        StageItem::Billboard { .. } => match next_billboard.next() {
+                            Some(b) => b,
+                            None => continue,
+                        },
                     };
-                    pass.set_bind_group(1, &material.bind, &[]);
-                    pass.set_bind_group(2, &mesh.placement_bind, &[]);
-                    pass.set_vertex_buffer(0, mesh.vertices.slice(..));
-                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                    for mesh in &model.meshes {
+                        let Some(material) = model.materials.get(mesh.material) else {
+                            continue;
+                        };
+                        if material.transmissive() != through {
+                            continue;
+                        }
+                        pass.set_bind_group(1, &material.bind, &[]);
+                        pass.set_bind_group(2, &mesh.placement_bind, &[]);
+                        pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                        pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                    }
                 }
             }
         }
@@ -1685,15 +1871,21 @@ impl ModelPass {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &frame_bind, &[]);
-            for mesh in &model.meshes {
-                let Some(material) = model.materials.get(mesh.material) else {
-                    continue;
-                };
-                pass.set_bind_group(1, &material.bind, &[]);
-                pass.set_bind_group(2, &mesh.placement_bind, &[]);
-                pass.set_vertex_buffer(0, mesh.vertices.slice(..));
-                pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+            // Opaque first, then what light passes through.
+            for through in [false, true] {
+                for mesh in &model.meshes {
+                    let Some(material) = model.materials.get(mesh.material) else {
+                        continue;
+                    };
+                    if material.transmissive() != through {
+                        continue;
+                    }
+                    pass.set_bind_group(1, &material.bind, &[]);
+                    pass.set_bind_group(2, &mesh.placement_bind, &[]);
+                    pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                }
             }
         }
         ctx.queue.submit(Some(encoder.finish()));
@@ -1728,7 +1920,10 @@ impl ModelPass {
 }
 
 /// Equirectangular size of a generated environment and its mip count
-/// (256 × 128 down to 1 × 1, whose one texel is the irradiance stand-in).
+/// (256 × 128 down to 1 × 1). Level i is the sphere seen through a GGX
+/// lobe of roughness i / (ENV_MIPS − 1), so a reflection read at
+/// `roughness * (ENV_MIPS − 1)` is the prefiltered radiance the
+/// split-sum wants; the bottom texel is the mean.
 const ENV_WIDTH: u32 = 256;
 const ENV_HEIGHT: u32 = 128;
 const ENV_MIPS: u32 = 8;
@@ -1826,9 +2021,118 @@ fn f16(x: f32) -> u16 {
     }
 }
 
+/// One level of a prefiltered environment: every texel's direction seen
+/// through a GGX lobe of `roughness` (importance-sampled, the view taken
+/// along the normal as the split-sum assumes), read from the full-size
+/// level `base` bilinearly. Roughness 0 is the base itself.
+fn prefilter_level(
+    base: &[[f32; 4]],
+    bw: usize,
+    bh: usize,
+    nw: usize,
+    nh: usize,
+    roughness: f32,
+) -> Vec<[f32; 4]> {
+    use std::f32::consts::PI;
+    let alpha = (roughness * roughness).max(1e-3);
+    const K: u32 = 64;
+    let lookup = |d: [f32; 3]| -> [f32; 3] {
+        let yaw = d[0].atan2(d[2]);
+        let el = d[1].clamp(-1.0, 1.0).asin();
+        let fx = (yaw / (2.0 * PI) + 0.5) * bw as f32 - 0.5;
+        let fy = (0.5 - el / PI) * bh as f32 - 0.5;
+        let (x0, y0) = (fx.floor(), fy.floor());
+        let (tx, ty) = (fx - x0, fy - y0);
+        let at = |x: i64, y: i64| -> [f32; 4] {
+            let xi = x.rem_euclid(bw as i64) as usize;
+            let yi = y.clamp(0, bh as i64 - 1) as usize;
+            base[yi * bw + xi]
+        };
+        let (x0, y0) = (x0 as i64, y0 as i64);
+        let (a, b, c, d) = (
+            at(x0, y0),
+            at(x0 + 1, y0),
+            at(x0, y0 + 1),
+            at(x0 + 1, y0 + 1),
+        );
+        let mut out = [0.0f32; 3];
+        for (k, o) in out.iter_mut().enumerate() {
+            let top = a[k] + (b[k] - a[k]) * tx;
+            let bottom = c[k] + (d[k] - c[k]) * tx;
+            *o = top + (bottom - top) * ty;
+        }
+        out
+    };
+    let mut out = Vec::with_capacity(nw * nh);
+    for y in 0..nh {
+        let el = PI / 2.0 - (y as f32 + 0.5) / nh as f32 * PI;
+        for x in 0..nw {
+            let yaw = (x as f32 + 0.5) / nw as f32 * 2.0 * PI - PI;
+            let n = [el.cos() * yaw.sin(), el.sin(), el.cos() * yaw.cos()];
+            if roughness <= 0.0 {
+                let c = lookup(n);
+                out.push([c[0], c[1], c[2], 1.0]);
+                continue;
+            }
+            let up = if n[1].abs() < 0.999 {
+                [0.0, 1.0, 0.0]
+            } else {
+                [1.0, 0.0, 0.0]
+            };
+            let cross = |a: [f32; 3], b: [f32; 3]| {
+                [
+                    a[1] * b[2] - a[2] * b[1],
+                    a[2] * b[0] - a[0] * b[2],
+                    a[0] * b[1] - a[1] * b[0],
+                ]
+            };
+            let norm = |v: [f32; 3]| {
+                let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-9);
+                [v[0] / l, v[1] / l, v[2] / l]
+            };
+            let t = norm(cross(up, n));
+            let b = cross(n, t);
+            let mut acc = [0.0f32; 3];
+            let mut weight = 0.0f32;
+            for i in 0..K {
+                // Hammersley: stratified over the lobe.
+                let u1 = (i as f32 + 0.5) / K as f32;
+                let u2 = (i.reverse_bits() as f32) / 4_294_967_296.0;
+                let phi = 2.0 * PI * u1;
+                let cos_theta = ((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2)).sqrt();
+                let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+                let hl = [sin_theta * phi.cos(), sin_theta * phi.sin(), cos_theta];
+                let hw = [
+                    t[0] * hl[0] + b[0] * hl[1] + n[0] * hl[2],
+                    t[1] * hl[0] + b[1] * hl[1] + n[1] * hl[2],
+                    t[2] * hl[0] + b[2] * hl[1] + n[2] * hl[2],
+                ];
+                let ndh = n[0] * hw[0] + n[1] * hw[1] + n[2] * hw[2];
+                let l = [
+                    2.0 * ndh * hw[0] - n[0],
+                    2.0 * ndh * hw[1] - n[1],
+                    2.0 * ndh * hw[2] - n[2],
+                ];
+                let ndl = n[0] * l[0] + n[1] * l[1] + n[2] * l[2];
+                if ndl <= 0.0 {
+                    continue;
+                }
+                let c = lookup(l);
+                for k in 0..3 {
+                    acc[k] += c[k] * ndl;
+                }
+                weight += ndl;
+            }
+            let w = weight.max(1e-6);
+            out.push([acc[0] / w, acc[1] / w, acc[2] / w, 1.0]);
+        }
+    }
+    out
+}
+
 /// A preset as an Rgba16Float equirectangular texture with a full mip
-/// chain — each level a box filter of the one above, the last a single
-/// texel of the sphere's mean radiance.
+/// chain, each level prefiltered for the roughness it stands for, the
+/// last a single texel of the sphere's mean radiance.
 fn upload_env(ctx: &GpuContext, preset: EnvPreset) -> wgpu::Texture {
     let (w, h) = (ENV_WIDTH as usize, ENV_HEIGHT as usize);
     let mut level: Vec<[f32; 4]> = Vec::with_capacity(w * h);
@@ -1855,6 +2159,7 @@ fn upload_env(ctx: &GpuContext, preset: EnvPreset) -> wgpu::Texture {
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
+    let base = level.clone();
     let (mut lw, mut lh) = (w, h);
     for mip in 0..ENV_MIPS {
         let bytes: Vec<u8> = level
@@ -1884,25 +2189,8 @@ fn upload_env(ctx: &GpuContext, preset: EnvPreset) -> wgpu::Texture {
             break;
         }
         let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
-        let mut next = Vec::with_capacity(nw * nh);
-        for y in 0..nh {
-            for x in 0..nw {
-                let mut acc = [0.0f32; 4];
-                let mut n = 0.0;
-                for dy in 0..2 {
-                    for dx in 0..2 {
-                        let (sx, sy) = ((x * 2 + dx).min(lw - 1), (y * 2 + dy).min(lh - 1));
-                        let p = level[sy * lw + sx];
-                        for k in 0..4 {
-                            acc[k] += p[k];
-                        }
-                        n += 1.0;
-                    }
-                }
-                next.push([acc[0] / n, acc[1] / n, acc[2] / n, acc[3] / n]);
-            }
-        }
-        level = next;
+        let roughness = (mip + 1) as f32 / (ENV_MIPS - 1) as f32;
+        level = prefilter_level(&base, w, h, nw, nh, roughness);
         lw = nw;
         lh = nh;
     }
@@ -2410,6 +2698,262 @@ mod tests {
         // The face spans roughly x 24..72 at distance 3; uv.x runs left
         // to right across it.
         (mean(28, 44), mean(52, 68))
+    }
+
+    /// One grey cube under the studio, shot four ways by finish word:
+    /// chrome (a mirror of the light boxes), brushed (the same metal
+    /// with a grain), matte plastic, and thin glass. Each pair reads
+    /// differently, and only the glass lets the background through.
+    fn finished_cube(finish: SurfaceFinish, metallic: f32, roughness: f32) -> Vec<u8> {
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let mut model = pass
+            .upload(
+                &ctx,
+                &[MeshInput {
+                    positions: &p,
+                    normals: &n,
+                    uvs: &uv,
+                    indices: &idx,
+                    material: 0,
+                    node: 0,
+                }],
+                &[MaterialInput {
+                    base_color: [0.7, 0.7, 0.7, 1.0],
+                    metallic,
+                    roughness,
+                    double_sided: false,
+                    texture: None,
+                    normal: None,
+                    metal_rough: None,
+                }],
+            )
+            .expect("upload");
+        pass.set_finish(&ctx, &mut model, 0, finish);
+        let view = ModelView {
+            yaw: 25.0,
+            pitch: 20.0,
+            distance: 3.0,
+            light_yaw: 40.0,
+            light_pitch: 30.0,
+            environment: EnvironmentView {
+                preset: EnvPreset::Studio,
+                intensity: 1.0,
+                rotation_deg: 0.0,
+            },
+            ..ModelView::default()
+        };
+        pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+            .expect("render")
+    }
+
+    fn differing(a: &[u8], b: &[u8]) -> usize {
+        a.chunks_exact(4)
+            .zip(b.chunks_exact(4))
+            .filter(|(x, y)| (0..3).any(|k| (x[k] as i32 - y[k] as i32).abs() > 10))
+            .count()
+    }
+
+    #[test]
+    fn a_finish_word_shades_its_own_way() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let plain = SurfaceFinish::default();
+        let chrome = finished_cube(plain, 1.0, 0.06);
+        let brushed = finished_cube(
+            SurfaceFinish {
+                anisotropy: 0.8,
+                ..plain
+            },
+            1.0,
+            0.35,
+        );
+        let anodized = finished_cube(plain, 1.0, 0.35);
+        let matte = finished_cube(plain, 0.0, 0.85);
+        let lacquer = finished_cube(
+            SurfaceFinish {
+                clearcoat: 1.0,
+                clearcoat_roughness: 0.04,
+                ..plain
+            },
+            0.3,
+            0.5,
+        );
+        let uncoated = finished_cube(plain, 0.3, 0.5);
+        let glass = finished_cube(
+            SurfaceFinish {
+                transmission: 0.92,
+                ..plain
+            },
+            0.0,
+            0.05,
+        );
+        let body = 96 * 96 / 6;
+        assert!(
+            differing(&chrome, &matte) > body,
+            "chrome vs matte: {}",
+            differing(&chrome, &matte)
+        );
+        assert!(
+            differing(&brushed, &anodized) > body / 4,
+            "the grain changes the highlight: {}",
+            differing(&brushed, &anodized)
+        );
+        assert!(
+            differing(&lacquer, &uncoated) > body / 4,
+            "the coat adds its own light: {}",
+            differing(&lacquer, &uncoated)
+        );
+        // Alpha at the cube's centre: opaque for matte, mostly open for
+        // glass, and the glass never fully vanishes (it still reflects).
+        let centre = |px: &[u8]| px[(48 * 96 + 48) * 4 + 3];
+        assert_eq!(centre(&matte), 255);
+        let g = centre(&glass);
+        assert!(g < 100, "glass lets the background through: alpha {g}");
+        assert!(g > 0, "glass still stands there");
+    }
+
+    /// Glass over a screen: the same bound picture reads brighter where
+    /// the coat catches the studio, and the picture itself is still a
+    /// display — the same pixels away from the highlight.
+    #[test]
+    fn a_coat_on_a_screen_adds_the_worlds_highlight() {
+        if GpuContext::new().is_err() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let ctx = GpuContext::new().expect("gpu");
+        let pass = ModelPass::new(&ctx).expect("pass");
+        let (p, n, uv, idx) = cube();
+        let picture = upload_rgba(&ctx, 4, 4, &[[40u8, 40, 40, 255]; 16].concat());
+        let render = |coat: f32| -> Vec<u8> {
+            let mut model = pass
+                .upload(
+                    &ctx,
+                    &[MeshInput {
+                        positions: &p,
+                        normals: &n,
+                        uvs: &uv,
+                        indices: &idx,
+                        material: 0,
+                        node: 0,
+                    }],
+                    &[MaterialInput {
+                        base_color: [0.1, 0.1, 0.1, 1.0],
+                        metallic: 0.0,
+                        roughness: 0.5,
+                        double_sided: false,
+                        texture: None,
+                        normal: None,
+                        metal_rough: None,
+                    }],
+                )
+                .expect("upload");
+            pass.set_texture(
+                &ctx,
+                &mut model,
+                0,
+                &picture.create_view(&Default::default()),
+                None,
+            );
+            pass.set_finish(
+                &ctx,
+                &mut model,
+                0,
+                SurfaceFinish {
+                    clearcoat: coat,
+                    clearcoat_roughness: 0.05,
+                    ..SurfaceFinish::default()
+                },
+            );
+            let view = ModelView {
+                yaw: 25.0,
+                pitch: 20.0,
+                distance: 3.0,
+                environment: EnvironmentView {
+                    preset: EnvPreset::Studio,
+                    intensity: 1.0,
+                    rotation_deg: 0.0,
+                },
+                ..ModelView::default()
+            };
+            pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+                .expect("render")
+        };
+        let bare = render(0.0);
+        let glass = render(1.0);
+        let sum = |px: &[u8]| -> u64 {
+            px.chunks_exact(4)
+                .map(|p| p[0] as u64 + p[1] as u64 + p[2] as u64)
+                .sum()
+        };
+        assert!(
+            sum(&glass) > sum(&bare) + 96 * 96 / 6 * 3 * 4,
+            "the coat brightens the screen with the world: {} vs {}",
+            sum(&glass),
+            sum(&bare)
+        );
+        // A lift, never a replacement: glass over a dark screen reflects
+        // the room everywhere, but no pixel goes darker and the picture
+        // shows through — the alpha, the display's own, is untouched.
+        assert!(
+            bare.iter()
+                .zip(&glass)
+                .all(|(b, g)| *g as i32 >= *b as i32 - 2),
+            "the coat only adds light"
+        );
+        assert!(
+            bare.chunks_exact(4)
+                .zip(glass.chunks_exact(4))
+                .all(|(b, g)| b[3] == g[3]),
+            "a screen's alpha is the display's own"
+        );
+    }
+
+    /// The environment's levels get smoother as they get rougher: each
+    /// holds less contrast than the one above, and the sunset's sun is
+    /// a bright point at the top and a glow further down.
+    #[test]
+    fn the_environment_levels_are_prefiltered_by_roughness() {
+        let (w, h) = (ENV_WIDTH as usize, ENV_HEIGHT as usize);
+        let mut base = Vec::with_capacity(w * h);
+        for y in 0..h {
+            let el =
+                std::f32::consts::FRAC_PI_2 - (y as f32 + 0.5) / h as f32 * std::f32::consts::PI;
+            for x in 0..w {
+                let yaw =
+                    (x as f32 + 0.5) / w as f32 * 2.0 * std::f32::consts::PI - std::f32::consts::PI;
+                let c = env_radiance(EnvPreset::Sunset, yaw, el);
+                base.push([c[0], c[1], c[2], 1.0]);
+            }
+        }
+        let peak = |level: &[[f32; 4]]| level.iter().map(|p| p[0]).fold(0.0f32, f32::max);
+        let mean =
+            |level: &[[f32; 4]]| level.iter().map(|p| p[0]).sum::<f32>() / level.len() as f32;
+        let sharp = prefilter_level(&base, w, h, w, h, 0.0);
+        assert!(
+            (peak(&sharp) - peak(&base)).abs() < 1e-3,
+            "roughness 0 is the base itself"
+        );
+        let mut last_peak = peak(&base);
+        for (i, roughness) in [0.2f32, 0.45, 0.7, 1.0].iter().enumerate() {
+            let level = prefilter_level(&base, w, h, w >> (i + 1), h >> (i + 1), *roughness);
+            let p = peak(&level);
+            assert!(
+                p < last_peak,
+                "roughness {roughness}: peak {p} under {last_peak}"
+            );
+            assert!(
+                (mean(&level) - mean(&base)).abs() < mean(&base) * 0.5,
+                "the light is spread, not lost: {} vs {}",
+                mean(&level),
+                mean(&base)
+            );
+            last_peak = p;
+        }
     }
 
     /// A dissolving body loses its surface in cells as the amount rises:

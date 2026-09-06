@@ -1856,8 +1856,11 @@ mod tests {
         let (r, b, _) = strip(220, 300);
         assert!(r > 60 && r > b * 2, "the right is red: r {r} b {b}");
         let (r, b, _) = strip(20, 100);
+        // The file's own blue would read well above 100 here; the green
+        // binding keeps blue near its own 0x40, plus the sky a glossy
+        // dielectric reflects.
         assert!(
-            b < 60 && r < 60,
+            b < 96 && r < 60,
             "the left cube took its binding, not its file colour: r {r} b {b}"
         );
         let g = {
@@ -2965,6 +2968,63 @@ mod tests {
             "chrome and matte differ: {} of {}",
             differ(&chrome, &matte),
             bare.len()
+        );
+
+        // The WORDS (rung 44), under the studio so a mirror has light
+        // boxes to show and a grain has them to smear: each one shades
+        // its own way through the whole path, a number beside a word
+        // overrides the word's, and thin glass over a black background
+        // lets the black through.
+        let studio = |materials: &str| {
+            render(&doc(materials).replace(
+                r#""backgroundColorHex":"000000""#,
+                r#""backgroundColorHex":"000000","environment":{"preset":"studio"}"#,
+            ))
+        };
+        let word = |finish: &str| {
+            studio(&format!(
+                r#"{{"Body":{{"colorHex":"B0B0B0","finish":"{finish}"}}}}"#
+            ))
+        };
+        let lit_bare = studio(r#"{"Body":"B0B0B0"}"#);
+        let chrome_word = word("chrome");
+        let matte_word = word("matte");
+        let brushed_word = word("brushed");
+        let glass_word = word("glass");
+        let gloss_word = word("gloss");
+        assert!(
+            differ(&chrome_word, &lit_bare) > bare.len() / 5,
+            "chrome is not the file"
+        );
+        assert!(
+            differ(&chrome_word, &matte_word) > bare.len() / 5,
+            "chrome is not matte"
+        );
+        // On a flat cube the studio's soft boxes barely move with the
+        // lobe's width, so the grain and a tuned roughness show as small
+        // shifts over most of the body; the pass's own test measures the
+        // shape of the highlight. Here the point is that the word and
+        // the number beside it both reach the shader.
+        let touched = |a: &[u8], b: &[u8]| a.iter().zip(b).filter(|(x, y)| x != y).count();
+        assert!(
+            touched(&chrome_word, &brushed_word) > bare.len() / 4,
+            "the grain changes the picture: {} of {}",
+            touched(&chrome_word, &brushed_word),
+            bare.len()
+        );
+        let dull = studio(r#"{"Body":{"colorHex":"B0B0B0","finish":"chrome","roughness":0.9}}"#);
+        assert!(
+            touched(&dull, &chrome_word) > bare.len() / 4,
+            "a number beside the word tunes it: {} of {}",
+            touched(&dull, &chrome_word),
+            bare.len()
+        );
+        let brightness = |px: &[u8]| px.iter().map(|v| *v as u64).sum::<u64>();
+        assert!(
+            brightness(&glass_word) < brightness(&gloss_word) * 3 / 4,
+            "glass lets the black behind it through: {} vs {}",
+            brightness(&glass_word),
+            brightness(&gloss_word)
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

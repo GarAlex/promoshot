@@ -14,7 +14,7 @@
 use crate::governor::MemoryGovernor;
 use promo_gpu::compositor::{Compositor, InputTexture, Scene, SceneQuad};
 use promo_gpu::model_pass::{
-    GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView, StageItem,
+    GpuModel, Mat4, MaterialInput, MeshInput, ModelPass, ModelView, StageItem, SurfaceFinish,
 };
 use promo_gpu::{GpuSurface, ImportedFrame};
 // Only the Apple-typed render entries name this; the provider no longer does.
@@ -304,6 +304,10 @@ struct SlotPaint {
     roughness: Option<f32>,
     /// How the slot wears its picture, when the binding says (rung 38).
     wear: Option<SlotWear>,
+    /// What a finish WORD adds beyond the two factors (rung 44): the
+    /// coat, the grain, the reflectance, the transmission. `None` is the
+    /// plain surface.
+    finish: Option<SurfaceFinish>,
 }
 
 /// A bound picture worn as the slot's lit surface (or shown as a
@@ -3005,14 +3009,30 @@ impl PreviewEngine {
                 else {
                     continue;
                 };
+                // A finish WORD sets the two factors and the extras; the
+                // numbers written beside it override its two.
+                let recipe = binding.finish().map(promo_model::Finish::recipe);
                 let paint = SlotPaint {
                     color: binding.color_hex().map(|hex| {
                         let srgb = rgba_from_hex(settings.resolve_color(hex));
                         let lin = linear(srgb);
                         [lin[0], lin[1], lin[2], srgb[3]]
                     }),
-                    metallic: binding.metallic().map(|v| v as f32),
-                    roughness: binding.roughness().map(|v| v as f32),
+                    metallic: binding
+                        .metallic()
+                        .map(|v| v as f32)
+                        .or(recipe.map(|r| r.metallic)),
+                    roughness: binding
+                        .roughness()
+                        .map(|v| v as f32)
+                        .or(recipe.map(|r| r.roughness)),
+                    finish: recipe.map(|r| SurfaceFinish {
+                        clearcoat: r.clearcoat,
+                        clearcoat_roughness: r.clearcoat_roughness,
+                        anisotropy: r.anisotropy,
+                        specular: r.specular,
+                        transmission: r.transmission,
+                    }),
                     wear: binding.needs_rung_38().then(|| {
                         let (repeat, offset) = (binding.repeat(), binding.offset());
                         SlotWear {
@@ -3100,6 +3120,12 @@ impl PreviewEngine {
                     wear.worn,
                     wear.repeat,
                     wear.offset,
+                );
+                pass.set_finish(
+                    self.ctx,
+                    &mut loaded.gpu,
+                    index,
+                    paint.finish.unwrap_or_default(),
                 );
                 loaded.painted.insert(index, paint);
             }

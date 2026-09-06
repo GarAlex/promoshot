@@ -201,7 +201,12 @@ is for; the schema section says how to write it.
   are keyframed and ramp: a yaw from −60 to 20 over three seconds is a
   turntable. `materials` paints a slot by the name the file exports; a
   picture bound to a slot is a SCREEN unless `"mode": "surface"` wears
-  it as the slot's own colour under the light.
+  it as the slot's own colour under the light. Say what a surface IS
+  with a `finish` word — `chrome`, `brushed`, `anodized`, `gloss`,
+  `satin`, `matte`, `rubber`, `ceramic`, `lacquer`, `paper`, `glass`,
+  `frosted` — and the engine owns the physics; `glass` on a `Screen`
+  slot is the coat that makes a phone read as a phone. Reach for
+  `metallic`/`roughness` numbers only to tune a word.
 - **Devices** (`model`) — no file and no tool: a model resource whose
   recipe is `{ "device": { "kind": "phone" } }` (tablet, laptop) is
   built at load with `Body` and `Screen` slots, and a `Deck` on the
@@ -212,7 +217,7 @@ is for; the schema section says how to write it.
 - **Parts** (`parts`) — anything a product shot needs that is not a
   device or type: a stand, a plinth, a ring, a puck. Box, sphere,
   cylinder, torus, lathe and extrude, assembled like an SVG, each part a
-  named slot that takes colour and finish.
+  named slot that takes a colour and a finish word.
 - **Stages** (`stage`) — several bodies under ONE camera and ONE light.
   Prefer the one-layer form: a layer of `"kind": "stage"` with `members`,
   the camera and light on its own keyframes. The flat form (layers

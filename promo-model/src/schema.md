@@ -899,10 +899,25 @@ overrides the file's own factors — `metallic` 0 (dielectric) … 1
 (metal), `roughness` 0 (mirror) … 1 (matte) — and whatever the object
 leaves out keeps the file's value, so `{ "metallic": 1 }` alone makes
 the file's colour chrome; one body is chrome in this project and matte
-in the next without a second file. A finish on a slot that shows a
-picture as a screen does nothing (that picture is drawn unlit), and
+in the next without a second file. Bare numbers on a slot that shows a
+picture as a screen do nothing (that picture is drawn unlit), and
 `promo_validate` says so. A project with a finish, or a colour in the
 object form, carries `minReaderVersion: 32`.
+Prefer the WORD (rung 44): `"Body": { "colorHex": "@accent", "finish":
+"brushed" }` names what the surface IS and the engine owns the physics
+— the numbers, a clear coat, the grain, what passes through. The words:
+`chrome` (polished metal), `brushed` (metal with a grain), `anodized`
+(satin metal, a phone's frame), `gloss`, `satin`, `matte` (plastics),
+`rubber`, `ceramic` (glazed), `lacquer` (a clear coat over a deep
+colour), `paper`, `glass` (thin and clear: what is behind shows
+through, the colour tints it), `frosted`. `metallic` / `roughness`
+beside a word override its two numbers; the colour, the picture and its
+tiling stay yours, so a label sits under the lacquer. On a `screen`
+slot the word is the coat over the picture — `"Screen": { "resourceID":
+"<uuid>", "finish": "glass" }` is what makes a phone read as a phone.
+A word the vocabulary lacks is named by `promo_validate` and the file's
+own finish is used. A project with a finish word carries
+`minReaderVersion: 44`.
 A picture can be WORN by its slot instead of shown on it (rung 38):
 `"Body": { "resourceID": "<uuid>", "mode": "surface", "roughness": 0.3,
 "repeat": [3, 1] }` makes the picture the slot's colour under the light

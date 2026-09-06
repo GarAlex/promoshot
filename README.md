@@ -392,7 +392,12 @@ bounds radii, fov) and a `light`; `materials` on the resource bind a
 slot name to a colour — a palette name works, so `@accent` re-skins the
 body with the theme — and, in the object form, to a finish: `metallic`
 and `roughness` (each 0…1) over the file's own, so one body is chrome in
-this project and matte in the next (rung 32). Lighting defaults come
+this project and matte in the next (rung 32) — or, better, to a finish
+WORD (rung 44): `chrome`, `brushed`, `anodized`, `gloss`, `satin`,
+`matte`, `rubber`, `ceramic`, `lacquer`, `paper`, `glass`, `frosted`,
+each expanded by the engine into the numbers, the coat, the grain and
+the transmission it stands for, so nobody levels a reflection by hand;
+on a screen the word is the coat over the picture. Lighting defaults come
 from the theme; a scene `environment` (studio, sunset, night; rung
 35) is what metals mirror; a file's normal map and metallic-roughness
 texture are honoured. Rung 29. Built-in device bodies

@@ -85,17 +85,14 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         // A placement that positions or sizes an unmeasured source resolves
         // against a SQUARE — the schema says so, and now the validator does
         // too, instead of a centred 4:3 photo quietly hanging off-centre.
-        for layer in meta.layers.as_deref().unwrap_or(&[]) {
-            if !matches!(
-                layer.kind,
-                ProjectLayerKind::Image | ProjectLayerKind::Video
-            ) {
-                continue;
-            }
-            let placed = layer.keyframes.iter().any(|k| k.placement.is_some());
-            if !placed {
-                continue;
-            }
+        // Said ONCE per layer: the guess is the resource's, however many
+        // keyframes place it. (This check once sat in a second walk over
+        // the layers, which repeated it once per layer in the project.)
+        let placed = matches!(
+            layer.kind,
+            ProjectLayerKind::Image | ProjectLayerKind::Video
+        ) && layer.keyframes.iter().any(|k| k.placement.is_some());
+        if placed {
             let measured = layer
                 .resource_id
                 .as_ref()
@@ -113,8 +110,8 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             if !measured {
                 out.push(format!(
                     "layer \"{}\": placement resolves against a SQUARE source — the \
-                 resource stores no pixelWidth/pixelHeight (or videoNatural \
-                 size), so anchoring and width use a guessed aspect",
+                     resource stores no pixelWidth/pixelHeight (or videoNatural \
+                     size), so anchoring and width use a guessed aspect",
                     layer.name
                 ));
             }
@@ -559,8 +556,10 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// or a composition (a screen that plays a document, rung 43) is drawn on
 /// that surface; anything else — or a missing id — is a mistake worth
 /// naming before it reads as "the screen stayed dark". A
-/// finish outside 0…1, or one on a slot that shows a picture (a picture
-/// is drawn unlit, so the finish does nothing), is named the same way.
+/// finish outside 0…1, or bare numbers on a slot that shows a picture
+/// (a picture is drawn unlit, so they do nothing), is named the same
+/// way; a finish WORD the vocabulary lacks (rung 44) is named with the
+/// words that exist, since the slot then shades from the file's numbers.
 fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for model in resources
@@ -568,6 +567,16 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         .filter(|r| r.kind == promo_model::ProjectResourceKind::Model)
     {
         for (slot, binding) in model.materials.iter().flat_map(|m| m.iter()) {
+            if let Some(word) = binding.finish_name() {
+                if promo_model::Finish::parse(word).is_none() {
+                    out.push(format!(
+                        "model \"{}\": slot \"{slot}\" has finish \"{word}\", which is not \
+                         one — {}; the file's own finish is used",
+                        model.display_name,
+                        promo_model::Finish::NAMES.join(", ")
+                    ));
+                }
+            }
             let finish = [
                 ("metallic", binding.metallic(), "0 dielectric … 1 metal"),
                 ("roughness", binding.roughness(), "0 mirror … 1 matte"),
@@ -612,13 +621,17 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 }
                 continue;
             };
+            // A finish WORD on a screen is the coat over the picture —
+            // `glass` on a phone — so only bare numbers are the mistake.
             if binding.mode() == promo_model::SurfaceMode::Screen
+                && binding.finish().is_none()
                 && (binding.metallic().is_some() || binding.roughness().is_some())
             {
                 out.push(format!(
                     "model \"{}\": slot \"{slot}\" shows a picture AND carries a finish; a \
                      picture shown as a screen is drawn unlit, so its metallic/roughness are \
-                     ignored — write \"mode\": \"surface\" to wear it under the light",
+                     ignored — write \"mode\": \"surface\" to wear it under the light, or \
+                     \"finish\": \"glass\" for the coat over the screen",
                     model.display_name
                 ));
             }
@@ -1533,6 +1546,55 @@ mod tests {
         assert!(warnings[0].contains("ignored"), "{}", warnings[0]);
     }
 
+    /// One line per LAYER. Not one per placement keyframe, and not — the
+    /// bug this pins — one per layer in the PROJECT: the check once sat
+    /// inside a second walk over `meta.layers`, so a three-layer project
+    /// named each unmeasured layer three times (the app's findings banner
+    /// showed seven lines, six of them copies).
+    #[test]
+    fn an_unmeasured_placement_is_named_once_per_layer() {
+        let meta = project(
+            r#"{"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A10","name":"Phone","sortIndex":0,"kind":"image",
+                "isEnabled":true,"startTime":0,"duration":4,"resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A20",
+                "keyframes":[
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A11","time":0,"transitionDuration":0,
+                   "placement":{"height":900,"anchor":"center"}},
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A12","time":1,"transitionDuration":0,
+                   "placement":{"height":700,"anchor":"topLeft"}},
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A13","time":2,"transitionDuration":0,
+                   "placement":{"width":500,"anchor":"bottom"}}]},
+               {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A14","name":"Tablet","sortIndex":1,"kind":"video",
+                "isEnabled":true,"startTime":0,"duration":4,"resourceID":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A21",
+                "keyframes":[
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A15","time":0,"transitionDuration":0,
+                   "placement":{"height":600}},
+                  {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A16","time":2,"transitionDuration":0,
+                   "placement":{"height":400}}]},
+               {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A17","name":"Backdrop","sortIndex":2,"kind":"background",
+                "isEnabled":true,"startTime":0,"duration":4,"keyframes":[]}"#,
+            r#","resources":[
+                {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A20","kind":"image","filename":"p.png",
+                 "displayName":"Phone shot","addedAt":0},
+                {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A21","kind":"video","filename":"t.mov",
+                 "displayName":"Tablet clip","addedAt":0}],
+               "minReaderVersion":18"#,
+        );
+        let found = warnings(&meta);
+        let square: Vec<&String> = found
+            .iter()
+            .filter(|w| w.contains("resolves against a SQUARE source"))
+            .collect();
+        assert_eq!(square.len(), 2, "{found:?}");
+        for name in ["Phone", "Tablet"] {
+            let line = format!("layer \"{name}\": placement resolves against a SQUARE source");
+            assert_eq!(
+                square.iter().filter(|w| w.starts_with(&line)).count(),
+                1,
+                "{found:?}"
+            );
+        }
+    }
+
     #[test]
     fn a_project_that_understates_its_reader_version_is_told() {
         let meta = project(&layer("video", r#","viewport":[0,0,0.5,0.5]"#), "");
@@ -1862,6 +1924,27 @@ mod tests {
         );
         assert!(!has("slot \"Base\""), "{warnings:?}");
         assert_eq!(meta.minimum_reader_version(), 32);
+
+        // A finish WORD (rung 44): a known one on a colour slot or on a
+        // screen says nothing (on a screen it is the coat over the
+        // picture); a word the vocabulary lacks is named with the words
+        // that exist.
+        let meta = project(
+            "",
+            r#","resources":[
+                {"id":"S","kind":"image","filename":"s.png","displayName":"Shot","addedAt":0},
+                {"id":"M","kind":"model","filename":"b.glb","displayName":"Body","addedAt":0,
+                 "materials":{"Body":{"colorHex":"@accent","finish":"brushed"},
+                              "Screen":{"resourceID":"S","finish":"glass"},
+                              "Base":{"finish":"chrom"}}}]"#,
+        );
+        let found = super::warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(!has("slot \"Body\""), "{found:?}");
+        assert!(!has("slot \"Screen\""), "{found:?}");
+        assert!(has("slot \"Base\" has finish \"chrom\""), "{found:?}");
+        assert!(has("chrome, brushed, anodized"), "{found:?}");
+        assert_eq!(meta.minimum_reader_version(), 44);
     }
 
     /// A route (rung 40): a good one says nothing; a route with one point,

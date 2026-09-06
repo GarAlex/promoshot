@@ -384,8 +384,10 @@ impl Route {
 /// colour under the light and the finish — a label, a print, a video
 /// wrapped on a body — stretched over the slot's uv layout, tiled by
 /// `repeat` and shifted by `offset` (uv units). Where the picture is
-/// transparent the slot's own colour shows. A finish on a screen is
-/// ignored — that picture is drawn unlit.
+/// transparent the slot's own colour shows. Bare `metallic`/`roughness`
+/// on a screen are ignored — that picture is drawn unlit — but a
+/// `finish` WORD on a screen (rung 44) is the coat over the picture:
+/// `glass` on a phone's screen is what makes it read as a phone.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceBinding {
@@ -397,6 +399,12 @@ pub struct SurfaceBinding {
     pub metallic: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub roughness: Option<f64>,
+    /// What the surface IS, by name (rung 44): one of [`Finish::NAMES`].
+    /// The engine expands it into the numbers a physics panel would ask
+    /// for; `metallic` / `roughness` written beside it override the
+    /// word's own two.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub finish: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "is_none")]
@@ -424,6 +432,182 @@ impl SurfaceMode {
             "screen" => Some(SurfaceMode::Screen),
             "surface" => Some(SurfaceMode::Surface),
             _ => None,
+        }
+    }
+}
+
+/// What a surface IS, by name (rung 44). Nobody placing a vase wants to
+/// level a reflection, and most real surfaces are one of these; each
+/// has settled numbers, which [`Finish::recipe`] holds in ONE place so
+/// the app, the CLI and the MCP server render the same `glass`. The
+/// colour, the picture and its tiling stay the author's: a label sits
+/// under the lacquer, a screenshot under the glass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Finish {
+    /// A polished metal: a mirror of the environment.
+    Chrome,
+    /// Metal with a grain: highlights smeared along it.
+    Brushed,
+    /// A satin metal, the finish of a phone's frame.
+    Anodized,
+    /// A glossy plastic.
+    Gloss,
+    /// A satin plastic.
+    Satin,
+    /// A matte plastic.
+    Matte,
+    /// Rubber: no sheen at all.
+    Rubber,
+    /// Glazed ceramic: a soft body under a hard shine.
+    Ceramic,
+    /// A clear coat over a deep colour — car paint, piano black.
+    Lacquer,
+    /// Paper or card: flat.
+    Paper,
+    /// Thin clear glass: what is behind it shows through, its own colour
+    /// tints it, and the world reflects in it.
+    Glass,
+    /// Frosted glass: translucent, its reflections blurred.
+    Frosted,
+}
+
+/// A finish word in numbers — the recipe the engine shades from. Every
+/// value is 0…1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FinishRecipe {
+    /// 0 dielectric … 1 metal.
+    pub metallic: f32,
+    /// 0 mirror … 1 matte.
+    pub roughness: f32,
+    /// A clear lacquer over the base: 0 none … 1 a full coat.
+    pub clearcoat: f32,
+    /// The coat's own roughness.
+    pub clearcoat_roughness: f32,
+    /// Highlights stretched along the surface's grain: 0 round … 1 brushed.
+    pub anisotropy: f32,
+    /// A dielectric's reflectance straight on (F0): 0.04 is plastic and
+    /// glass, 0.02 rubber and paper.
+    pub specular: f32,
+    /// How much light passes through a thin body: 0 opaque … 1 clear.
+    pub transmission: f32,
+}
+
+impl Finish {
+    /// Every word, in the order a menu shows them.
+    pub const NAMES: [&'static str; 12] = [
+        "chrome", "brushed", "anodized", "gloss", "satin", "matte", "rubber", "ceramic", "lacquer",
+        "paper", "glass", "frosted",
+    ];
+    pub const ALL: [Finish; 12] = [
+        Finish::Chrome,
+        Finish::Brushed,
+        Finish::Anodized,
+        Finish::Gloss,
+        Finish::Satin,
+        Finish::Matte,
+        Finish::Rubber,
+        Finish::Ceramic,
+        Finish::Lacquer,
+        Finish::Paper,
+        Finish::Glass,
+        Finish::Frosted,
+    ];
+    pub fn parse(name: &str) -> Option<Finish> {
+        Finish::ALL.iter().copied().find(|f| f.name() == name)
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Finish::Chrome => "chrome",
+            Finish::Brushed => "brushed",
+            Finish::Anodized => "anodized",
+            Finish::Gloss => "gloss",
+            Finish::Satin => "satin",
+            Finish::Matte => "matte",
+            Finish::Rubber => "rubber",
+            Finish::Ceramic => "ceramic",
+            Finish::Lacquer => "lacquer",
+            Finish::Paper => "paper",
+            Finish::Glass => "glass",
+            Finish::Frosted => "frosted",
+        }
+    }
+    /// The numbers behind the word. Textbook values, not inventions:
+    /// polished metal near a mirror, plastics at F0 0.04, rubber and
+    /// paper a little under, a coat over lacquer and glaze, a grain on
+    /// brushed metal, and glass mostly transmitted.
+    pub fn recipe(self) -> FinishRecipe {
+        let plain = FinishRecipe {
+            metallic: 0.0,
+            roughness: 0.5,
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.05,
+            anisotropy: 0.0,
+            specular: 0.04,
+            transmission: 0.0,
+        };
+        match self {
+            Finish::Chrome => FinishRecipe {
+                metallic: 1.0,
+                roughness: 0.06,
+                ..plain
+            },
+            Finish::Brushed => FinishRecipe {
+                metallic: 1.0,
+                roughness: 0.35,
+                anisotropy: 0.8,
+                ..plain
+            },
+            Finish::Anodized => FinishRecipe {
+                metallic: 1.0,
+                roughness: 0.5,
+                ..plain
+            },
+            Finish::Gloss => FinishRecipe {
+                roughness: 0.12,
+                ..plain
+            },
+            Finish::Satin => FinishRecipe {
+                roughness: 0.4,
+                ..plain
+            },
+            Finish::Matte => FinishRecipe {
+                roughness: 0.85,
+                specular: 0.035,
+                ..plain
+            },
+            Finish::Rubber => FinishRecipe {
+                roughness: 0.95,
+                specular: 0.02,
+                ..plain
+            },
+            Finish::Ceramic => FinishRecipe {
+                roughness: 0.25,
+                clearcoat: 0.6,
+                clearcoat_roughness: 0.08,
+                ..plain
+            },
+            Finish::Lacquer => FinishRecipe {
+                metallic: 0.3,
+                roughness: 0.5,
+                clearcoat: 1.0,
+                clearcoat_roughness: 0.04,
+                ..plain
+            },
+            Finish::Paper => FinishRecipe {
+                roughness: 0.92,
+                specular: 0.025,
+                ..plain
+            },
+            Finish::Glass => FinishRecipe {
+                roughness: 0.05,
+                transmission: 0.92,
+                ..plain
+            },
+            Finish::Frosted => FinishRecipe {
+                roughness: 0.45,
+                transmission: 0.75,
+                ..plain
+            },
         }
     }
 }
@@ -466,6 +650,25 @@ impl MaterialBinding {
             MaterialBinding::Color(_) => None,
             MaterialBinding::Surface(s) => s.roughness,
         }
+    }
+
+    /// The finish word as written, if any — known or not.
+    pub fn finish_name(&self) -> Option<&str> {
+        match self {
+            MaterialBinding::Color(_) => None,
+            MaterialBinding::Surface(s) => s.finish.as_deref(),
+        }
+    }
+    /// The finish word, when it is one; an unknown word is `None` and the
+    /// slot shades from the file's numbers (`promo_validate` names it).
+    pub fn finish(&self) -> Option<Finish> {
+        self.finish_name().and_then(Finish::parse)
+    }
+    /// Carries a finish word (rung 44) — a key an older reader drops on
+    /// save, sending the body back to the file's own numbers: a
+    /// different picture, so the rung refuses.
+    pub fn needs_rung_44(&self) -> bool {
+        self.finish_name().is_some()
     }
 
     /// How the slot wears its picture; an unknown name is a screen.
@@ -4062,6 +4265,20 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 44 is a finish WORD on a slot — what a surface is, named. An
+        // older reader drops the key on save and the body goes back to
+        // the file's own numbers: chrome turns to grey plastic, silently.
+        let worded = resources.iter().any(|r| {
+            r.kind == ProjectResourceKind::Model
+                && r.materials
+                    .iter()
+                    .flat_map(|m| m.values())
+                    .any(|b| b.needs_rung_44())
+        });
+        if worded {
+            return 44;
+        }
+
         // 43 is a composition on a slot — a screen that plays a document.
         // An older reader binds nothing there and shows the file's own
         // screen: the reel is gone, silently.
@@ -5260,6 +5477,46 @@ mod placement_model_tests {
         assert_eq!(worn.minimum_reader_version(), 38);
         let json = worn.to_json().unwrap();
         assert!(json.contains(r#""mode":"surface""#), "{json}");
+
+        // A finish WORD (rung 44) round-trips as written, known or not;
+        // only a known one is a `Finish`, and each word's recipe is the
+        // settled thing it names.
+        let glass = doc(r#"{"colorHex":"88CCFF","finish":"glass"}"#);
+        let gb = body(&glass);
+        assert_eq!(gb.finish_name(), Some("glass"));
+        assert_eq!(gb.finish(), Some(Finish::Glass));
+        assert!(gb.needs_rung_44());
+        assert_eq!(glass.minimum_reader_version(), 44);
+        let glass_json = glass.to_json().unwrap();
+        assert!(glass_json.contains(r#""finish":"glass""#), "{glass_json}");
+        let typo = body(&doc(r#"{"finish":"chrom"}"#));
+        assert_eq!(typo.finish_name(), Some("chrom"));
+        assert_eq!(typo.finish(), None);
+        assert!(body(&screen).finish_name().is_none());
+        for (name, finish) in Finish::NAMES.iter().zip(Finish::ALL) {
+            assert_eq!(Finish::parse(name), Some(finish), "{name}");
+            assert_eq!(finish.name(), *name);
+            let r = finish.recipe();
+            for v in [
+                r.metallic,
+                r.roughness,
+                r.clearcoat,
+                r.clearcoat_roughness,
+                r.anisotropy,
+                r.specular,
+                r.transmission,
+            ] {
+                assert!((0.0..=1.0).contains(&v), "{name}: {v}");
+            }
+        }
+        assert_eq!(Finish::Chrome.recipe().metallic, 1.0);
+        assert!(Finish::Chrome.recipe().roughness < Finish::Brushed.recipe().roughness);
+        assert!(Finish::Brushed.recipe().anisotropy > 0.5);
+        assert_eq!(Finish::Matte.recipe().metallic, 0.0);
+        assert!(Finish::Lacquer.recipe().clearcoat > 0.9);
+        assert!(Finish::Glass.recipe().transmission > 0.9);
+        assert!(Finish::Frosted.recipe().roughness > Finish::Glass.recipe().roughness);
+        assert!(Finish::Rubber.recipe().specular < Finish::Gloss.recipe().specular);
         assert!(json.contains(r#""repeat":[3.0,1.0]"#), "{json}");
         let back = ProjectMetadata::from_json(&json).unwrap();
         assert_eq!(body(&back), b, "the wear survives the round trip");
@@ -5537,6 +5794,15 @@ mod placement_model_tests {
         assert_eq!(
             model(r#"{"Body":{"colorHex":"@accent","roughness":0.2}}"#).minimum_reader_version(),
             32
+        );
+        // 44: a finish WORD on a slot, whatever else the binding says.
+        assert_eq!(
+            model(r#"{"Body":{"finish":"chrome"}}"#).minimum_reader_version(),
+            44
+        );
+        assert_eq!(
+            model(r#"{"Screen":{"resourceID":"S","finish":"glass"}}"#).minimum_reader_version(),
+            44
         );
 
         // 33: a stage as one layer, a kind.
