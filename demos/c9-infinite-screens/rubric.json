@@ -2,10 +2,33 @@
   "media": [],
   "retired": "a built showcase (build.py derives the screen stills from the scenes themselves); not an agent task yet",
   "checks": [
-    {"name": "four scenes", "assert": "layers named Laptop, Tablet, Phone and Cube exist, in that order in time"},
-    {"name": "the screens show the next scene", "assert": "each device's Screen slot binds an image whose pixels are the next scene's first frame"},
-    {"name": "the zoom fills the canvas", "assert": "at each scene's end the fitted picture on the screen covers the canvas within one percent"},
-    {"name": "invisible cuts", "assert": "the frame before and after each cut differ by less than a small threshold"},
-    {"name": "length", "assert": "36 seconds"}
+    {
+      "name": "four scenes",
+      "assert": "layers named Laptop, Tablet and Phone precede the cube piece's Bench stage in time"
+    },
+    {
+      "name": "the screens show the next scene",
+      "assert": "each device's Screen slot binds an image whose pixels are the next scene's first frame"
+    },
+    {
+      "name": "one rate",
+      "assert": "every body's placed height follows one exponential rate, and the next scene starts growing at that rate"
+    },
+    {
+      "name": "no holds",
+      "assert": "no placement keyframe repeats the previous one's height"
+    },
+    {
+      "name": "invisible cuts",
+      "assert": "the frame before and after each cut differ by less than a small threshold"
+    },
+    {
+      "name": "the final scene is the cube piece",
+      "assert": "the last ten seconds are 34-cube-to-word's layers and resources, time-shifted only"
+    },
+    {
+      "name": "length",
+      "assert": "between thirty and forty seconds"
+    }
   ]
 }
