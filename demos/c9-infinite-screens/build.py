@@ -12,10 +12,13 @@ screen and the one that later fills the canvas are the same document on
 the same clock, so the cut changes nothing. The top-level layers show
 the four compositions stacked, each revealed as the one above ends.
 
-    python3 demos/c9-infinite-screens/build.py [--render]
+    python3 demos/c9-infinite-screens/build.py [laptop-first|phone-first] [--render]
 
-Needs the release CLI. --render also writes a contact sheet and the mp4
-into the demo's runs/ for a look.
+Two films from the same scenes. `laptop-first` (the default) is the one
+above. `phone-first` runs the other way — a phone, a tablet, a laptop,
+the cube — so the sizes climb towards the finale, and carries one
+headline caption per device scene. Needs the release CLI. --render also
+writes a contact sheet and the mp4 into the demo's runs/ for a look.
 """
 import json, os, shutil, subprocess, sys, uuid
 HERE = os.path.dirname(os.path.abspath(__file__)); CORE = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -61,6 +64,19 @@ FINISH = {'laptop': ("2B2B2E", 1, 0.40), 'tablet': ("D8DADC", 1, 0.35), 'phone':
 DEVICES = [('laptop', 'DeviceLaptop.glb', 1.095, dict(yaw=-30, pitch=16), 520, 40, 'bg_laptop.png'),
            ('tablet', 'DeviceTablet.glb', 0.864, dict(yaw=-26, pitch=12), 480, 30, 'bg_tablet.png'),
            ('phone',  'DevicePhone.glb',  0.395, dict(yaw=-24, pitch=10), 700, 20, 'bg_phone.png')]
+DEVICE = {d[0]: d for d in DEVICES}
+FILMS = {
+    'laptop-first': dict(name='Infinite screens', order=('laptop', 'tablet', 'phone'), captions=None,
+                         out='build', reference='reference.json', video='infinite-screens.mp4'),
+    'phone-first': dict(name='Infinite screens, phone first', order=('phone', 'tablet', 'laptop'),
+                        captions=('One project, four compositions', 'Every screen plays the next scene',
+                                  'Zoom all the way in'),
+                        out='phone-first', reference='reference-phone-first.json',
+                        video='infinite-screens-phone-first.mp4'),
+}
+CAPTION_STYLE = {"alignment": "center", "fontSize": 52, "isBold": True, "textColorHex": "FFFFFF",
+                 "placement": {"anchor": "top", "offset": [0, 40]}, "padding": 16,
+                 "shadowColorHex": "000000", "shadowOpacity": 0.6, "shadowRadius": 12}
 
 def flight(h0, h1):
     import math
@@ -162,20 +178,22 @@ def cube_scene(cube, pre, total):
     return res("composition", "", "Scene cube", duration=total, pixelWidth=W, pixelHeight=H,
                composition={"canvasWidth": W, "canvasHeight": H, "backgroundColorHex": "0B0D12", "layers": layers})
 
-def build():
+def build(film):
+    order, captions = film['order'], film['captions']
+    devices = [DEVICE[n] for n in order]
     cube = json.load(open(CUBE_REF))
     settings = dict(cube['compositionSettings']); settings.update({"canvasWidth": W, "canvasHeight": H})
     resources = list(cube['resources'])
     floor = res("image", "floor.png", "Floor", pixelWidth=4096, pixelHeight=900); resources.append(floor)
     shadow = res("image", "shadow.png", "Shadow", pixelWidth=1600, pixelHeight=500); resources.append(shadow)
     # the flight's timing first, so every composition knows the film's length
-    durs = [flight(h0, end_placement(n)['height']) for (n, _, _, _, h0, _, _) in DEVICES]
+    durs = [flight(h0, end_placement(n)['height']) for (n, _, _, _, h0, _, _) in devices]
     starts = [sum(durs[:i]) for i in range(3)]
     t3 = sum(durs); total = t3 + cube['videoDuration'] - CUBE_SKIP
     comps = [None] * 4
     comps[3] = cube_scene(cube, t3 - CUBE_SKIP, total)
     for i in (2, 1, 0):
-        name, glb, radius, pose0, h0, off0, bg = DEVICES[i]
+        name, glb, radius, pose0, h0, off0, bg = devices[i]
         comp, extra, _ = scene(name, glb, radius, pose0, h0, off0, bg, floor, shadow, comps[i + 1], starts[i], total)
         comps[i] = comp; resources += extra
     resources += comps
@@ -186,10 +204,18 @@ def build():
         layers.append(layer(comp["displayName"], 3 - i, "video", 0, dur, resourceID=comp["id"],
                             **({"transitionOut": {"kind": "fade", "duration": FADE}} if i < 3 else {}),
                             keyframes=[kf(0, placement={"mode": "fill", "anchor": "center"})]))
-    return {"id": U(), "name": "Infinite screens", "createdAt": 0, "state": "recorded",
+    # One headline per device scene, at the top, over the flight's first
+    # part: in after the cut has settled, out well before the next one,
+    # so no two captions ever share a frame — and the cube piece keeps
+    # its own title.
+    for i, text in enumerate(captions or ()):
+        start = starts[i] + (0.3 if i == 0 else FADE + 0.15); end = starts[i] + 0.62 * durs[i]
+        layers.append(layer(f"Caption {order[i]}", 10 + i, "caption", start, end - start, captionText=text,
+                            fadeIn=0.35, fadeOut=0.35, captionStyle=dict(CAPTION_STYLE)))
+    return {"id": U(), "name": film['name'], "createdAt": 0, "state": "recorded",
             "trimStart": 0, "trimEnd": total, "videoDuration": total, "subtitles": [],
             "minReaderVersion": 43, "compositionSettings": settings, "resources": resources, "layers": layers,
-            "_scenes": list(zip([d[0] for d in DEVICES], starts, durs))}
+            "_scenes": list(zip(order, starts, durs))}
 
 def materialize(meta, pkg):
     shutil.rmtree(pkg, ignore_errors=True); os.makedirs(pkg + '/Resources')
@@ -198,10 +224,11 @@ def materialize(meta, pkg):
     json.dump(meta, open(pkg + '/metadata.json', 'w'), indent=1)
 
 if __name__ == '__main__':
-    work = os.path.join(HERE, 'runs', 'build'); os.makedirs(work, exist_ok=True)
-    pkg = os.path.join(work, 'Infinite screens.promo')
-    meta = build(); scenes = meta.pop('_scenes'); materialize(meta, pkg)
-    json.dump(meta, open(os.path.join(HERE, 'reference.json'), 'w'), indent=1)
+    film = FILMS[next((a for a in sys.argv[1:] if a in FILMS), 'laptop-first')]
+    work = os.path.join(HERE, 'runs', film['out']); os.makedirs(work, exist_ok=True)
+    pkg = os.path.join(work, film['name'] + '.promo')
+    meta = build(film); scenes = meta.pop('_scenes'); materialize(meta, pkg)
+    json.dump(meta, open(os.path.join(HERE, film['reference']), 'w'), indent=1)
     print('scenes:', [(n, round(t, 2), round(d, 2)) for n, t, d in scenes], 'total', round(meta['videoDuration'], 2))
     v = subprocess.run([CLI, 'validate', pkg], capture_output=True, text=True); print(v.stdout.strip()[:800])
     if '--render' in sys.argv:
@@ -210,4 +237,4 @@ if __name__ == '__main__':
         subprocess.run([CLI, 'frames', pkg, '--out', os.path.join(work, 'frames'), '--times',
                         ','.join(f'{t:.2f}' for t in times), '--size', '720x450',
                         '--sheet', os.path.join(work, 'sheet.png')], check=False)
-        subprocess.run([CLI, 'video', pkg, '--out', os.path.join(work, 'infinite-screens.mp4')], check=False)
+        subprocess.run([CLI, 'video', pkg, '--out', os.path.join(work, film['video'])], check=False)
