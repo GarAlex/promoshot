@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Through the surfaces, the simple way: a composition is a texture.
 
+The main is ONE video layer (rung 47, the takeover): a swap keyframe at
+each switch names the next film with a short fade and no sourceTime, so
+the film arrives where its clock already is. MODE=stack builds the older
+form — one layer per film, fading out — which draws the same pictures.
+
 Four films, each as long as the whole piece and each with a camera of
 its own. The deepest — a chrome word on a mirror floor, the camera
 drifting round it — is bound to a phone's Screen; the phone's film is
@@ -28,6 +33,7 @@ ENV_ROT = float(os.environ.get('ENV_ROT', '180'))          # the studio turned: 
 LAPTOP_FOV = float(os.environ.get('LAPTOP_FOV', '28'))   # the laptop close-up's field: narrower covers more of the lid
 PROBE = os.environ.get('PROBE', '')                      # a film's name (tablet|phone|words) on a magenta canvas: its extent on the screen showing it
 LAPTOP_LOOK = float(os.environ.get('LAPTOP_LOOK', '-0.05'))  # where the laptop close-up looks: the lid's centre, above the body's
+MODE = os.environ.get('MODE', 'swaps')       # swaps: one video layer taking over each film (rung 47) | stack: one layer per film, fading out
 
 W, H = 1440, 900          # the main canvas
 T = 26.0                  # every film is this long
@@ -155,16 +161,29 @@ def build():
     for i in (2, 1, 0):
         films[i], extra = scene(LEVELS[i], films[i + 1], *shapes[i]); resources += extra
     resources += films
-    # the MAIN: every film from frame one on one clock, the outer ones on
-    # top, each dissolving away at its switch onto the one it was showing
-    layers = []
     ends = [LEVELS[0]['fly'][1], LEVELS[1]['fly'][1], LEVELS[2]['fly'][1], T]
-    for i, f in enumerate(films):
-        dur = T if i == 3 else ends[i] + FADE
-        layers.append(layer(f["displayName"], 3 - i, "video", 0, dur, resourceID=f["id"],
-                            **({"transitionOut": {"kind": "fade", "duration": FADE}} if i < 3 else {}),
-                            keyframes=[kf(0, placement={"mode": "fill"})]))
-    return {"id": U(), "name": "Through the surfaces", "createdAt": 0, "state": "recorded", "minReaderVersion": 45,
+    layers = []
+    if MODE == 'swaps':
+        # The MAIN, the simple way (rung 47, the takeover): ONE video layer
+        # from frame one, a swap keyframe at each switch naming the next
+        # film with a short fade and no sourceTime — the film arrives where
+        # its clock already is, the instant the screen was showing.
+        keys = [kf(0, placement={"mode": "fill"})]
+        for i in (1, 2, 3):
+            keys.append(kf(ends[i - 1], resourceID=films[i]["id"], placement={"mode": "fill"},
+                           transition={"kind": "fade", "duration": FADE}))
+        layers.append(layer("The main", 0, "video", 0, T, resourceID=films[0]["id"], keyframes=keys))
+    else:
+        # The MAIN as a stack: every film from frame one on one clock, the
+        # outer ones on top, each dissolving away at its switch onto the one
+        # it was showing.
+        for i, f in enumerate(films):
+            dur = T if i == 3 else ends[i] + FADE
+            layers.append(layer(f["displayName"], 3 - i, "video", 0, dur, resourceID=f["id"],
+                                **({"transitionOut": {"kind": "fade", "duration": FADE}} if i < 3 else {}),
+                                keyframes=[kf(0, placement={"mode": "fill"})]))
+    return {"id": U(), "name": "Through the surfaces", "createdAt": 0, "state": "recorded",
+            "minReaderVersion": 47 if MODE == 'swaps' else 45,
             "trimStart": 0, "trimEnd": T, "videoDuration": T, "subtitles": [],
             "compositionSettings": {"canvasWidth": W, "canvasHeight": H, "backgroundColorHex": "070707",
                                     "environment": {"preset": "studio", "intensity": 1.05, "rotation": ENV_ROT}},
