@@ -50,6 +50,9 @@ SETS = [
  {"id": "c11", "slug": "through-the-screens", "title": "Through the screens, no files",
   "goal": "No media. A laptop on a polished table under studio light; on its glass screen, a tablet on a table of its own; on the tablet's screen, a phone; on the phone's screen, something of yours. The camera flies into each screen in turn — the picture on the screen becomes the whole frame and the flight carries on into the next — one continuous movement, twenty to thirty seconds, landscape. Make it look real: reflections, shadows, the light catching the glass. Whatever you need beyond what the format gives you, make yourself.",
   "media": {}, "duration": [18, 32], "must_use": []},
+ {"id": "c12", "slug": "through-the-surfaces", "title": "Through the surfaces, no files",
+  "goal": "No media. Use a composition as the texture on a surface, three or four levels deep: a scene whose device screen shows another composition, whose surface shows another, and so on, down to a movie of your own that plays for the whole length. Each level is its own film with its own camera. To pass from one level into the next, take the camera to a maximum close-up on that surface and switch to the composition it shows — the close-up is the illusion of the transition. Twenty to thirty seconds, landscape, on a polished table under studio light with glass on the screens.",
+  "media": {}, "duration": [18, 32], "must_use": []},
 ]
 
 def main():

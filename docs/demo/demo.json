@@ -6122,6 +6122,172 @@
   "page": "docs/demo/democ11.md"
  },
  {
+  "id": "c12",
+  "slug": "c12-through-the-surfaces",
+  "title": "Through the surfaces, no files",
+  "blurb": "A composition as the texture on a surface, three or four levels deep, each level its own film, and a maximum close-up on the surface as the whole transition \u2014 from a short brief and no media. The hand-built reference on the page does the same thing with no measurement at all.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   18,
+   32
+  ],
+  "prompt": "No media. Use a composition as the texture on a surface, three or four levels deep: a scene whose device screen shows another composition, whose surface shows another, and so on, down to a movie of your own that plays for the whole length. Each level is its own film with its own camera. To pass from one level into the next, take the camera to a maximum close-up on that surface and switch to the composition it shows \u2014 the close-up is the illusion of the transition. Twenty to thirty seconds, landscape, on a polished table under studio light with glass on the screens.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "26.0s, asked 18\u201332s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "21 features: chapters, markers, composition, stage, stageLayer, model, camera, materials, finish, finishWord, floor, device, light, morph, cameraTarget, facedBox, textBody, environment, particles, partsBody, mediaCuts"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "7 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "6 layers"
+    }
+   ],
+   "summary": "turns=94 cost=$11.42 secs=1691",
+   "run": {
+    "turns": 94,
+    "wall_s": 1690,
+    "api_s": 1637,
+    "cost_usd": 11.42,
+    "tokens": {
+     "input": 160,
+     "cache_read": 12630445,
+     "cache_write": 222702,
+     "output": 114998,
+     "thinking": 65006
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 12853307,
+      "output": 114998,
+      "cost_usd": 11.42
+     }
+    ],
+    "mcp": {
+     "calls": 32,
+     "ms": 44661,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 36150,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 16,
+       "ms": 8072,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 3,
+       "ms": 352,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 4,
+       "ms": 77,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 4,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "chapters",
+    "markers",
+    "composition",
+    "stage",
+    "stageLayer",
+    "model",
+    "camera",
+    "materials",
+    "finish",
+    "finishWord",
+    "floor",
+    "device",
+    "light",
+    "morph",
+    "cameraTarget",
+    "facedBox",
+    "textBody",
+    "environment",
+    "particles",
+    "partsBody",
+    "mediaCuts"
+   ],
+   "captions": [
+    "01 / 04",
+    "04 / 04",
+    "03 / 04",
+    "02 / 04",
+    "Through the Surfaces",
+    "four films, each inside the last",
+    "four films, one frame"
+   ],
+   "notes": "**`out.promo` is built, validated, inspected, and rendered.** `Exports/export.mp4` \u2014 1920\u00d71080, 26.0 s, 780 frames, 12 MB. `Resources/` is empty: nothing in the piece comes from a file.\n\n**Four films, each on a surface in the one above**\n\n| | level | surface it wears | camera |\n|---|---|---|---|\n| 0.0\u20136.6 | a laptop on the polished table | its `Screen` \u2192 level two | fov 20, d 6.24 \u2192 1.45 |\n| 6.6\u201313.1 | a tablet on the table | its `Screen` \u2192 level three | fov 26, d 6.62 \u2192 1.82 |\n| 13.1\u201319.3 | a slab \u2014 a faced box, surface and nothing else | its front face \u2192 level four | fov 24, d 7.00 \u2192 2.20 |\n| 19.3\u201326.0 | the cloud: a cube bursts into 4 200 points that drift and gather into the word SURFACE | \u2014 | slow orbit, d 3.4 \u2192 1.5 |\n\n`promo_inspect` confirms the recursion: each composition is *placed by 1 layer, on 1 slot* \u2014 once worn on the surface above, once full-frame after the cut.\n\nAll four run one shared 26-second clock, so level four is genuinely playing from frame one \u2014 you can see it as a speck three screens deep at t=0.5, and the descent arrives just in time to watch it gather. Each descent is a `mediaCut` that starts the incoming composition at the exact second the surface was showing; it enters at the 7% overfill it had on the glass and settles to full frame over 1.2 s, so the close-up carries through the cut. A depth gauge (`01 / 04` \u2026 `04 / 04`) sits in each film's own corner and clears before the next fills the frame.\n\n**Three things I had to measure, because nothing reports them**\n\n- Camera distance **clamps at \u22481.046 bounds radii** \u2014 a laptop can't be made to fill the frame by moving closer, so each level's close-up is set by `fov` instead. The law `distance = A(fov)/widthPx + s` (with `A(fov) = A32\u00b7tan16\u00b0/tan(fov/2)`, verified to 4 s.f.) put every dive on its m",
+   "contact": "docs/demo/c12-through-the-surfaces/contact-result.png",
+   "reference_contact": "docs/demo/c12-through-the-surfaces/contact-reference.png",
+   "video": "docs/demo/c12-through-the-surfaces/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c12-through-the-surfaces.mp4",
+   "video_hd_bytes": 4132280,
+   "metadata": "docs/demo/c12-through-the-surfaces/result-metadata.json",
+   "gif": "docs/demo/c12-through-the-surfaces/result.gif",
+   "thumb": "docs/demo/c12-through-the-surfaces/thumb.png"
+  },
+  "page": "docs/demo/democ12.md"
+ },
+ {
   "id": "c2",
   "slug": "c2-social-teaser",
   "title": "Social teaser",

@@ -1,0 +1,1399 @@
+{
+ "id": "C12-THROUGH-THE-SURFACES",
+ "name": "Through the Surfaces",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 46,
+ "trimStart": 0,
+ "trimEnd": 26.0,
+ "videoDuration": 26.0,
+ "subtitles": [],
+ "markers": [
+  {
+   "id": "mk1",
+   "time": 0.0,
+   "name": "One \u2014 the laptop",
+   "kind": "chapter"
+  },
+  {
+   "id": "mk2",
+   "time": 6.6,
+   "name": "Two \u2014 the tablet",
+   "kind": "chapter"
+  },
+  {
+   "id": "mk3",
+   "time": 13.1,
+   "name": "Three \u2014 the slab",
+   "kind": "chapter"
+  },
+  {
+   "id": "mk4",
+   "time": 19.3,
+   "name": "Four \u2014 the cloud",
+   "kind": "chapter"
+  }
+ ],
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "fps": 30,
+  "backgroundColorHex": "@canvas",
+  "environment": {
+   "preset": "night",
+   "intensity": 1.0,
+   "rotation": 24
+  },
+  "palette": [
+   {
+    "name": "canvas",
+    "colorHex": "07080C"
+   },
+   {
+    "name": "text",
+    "colorHex": "F2F4FA"
+   },
+   {
+    "name": "text-bg",
+    "colorHex": "0A0B0E"
+   },
+   {
+    "name": "edge",
+    "colorHex": "2B2F3A"
+   },
+   {
+    "name": "caption-outline",
+    "colorHex": "05060A"
+   },
+   {
+    "name": "caption-shadow",
+    "colorHex": "000000"
+   },
+   {
+    "name": "media-shadow",
+    "colorHex": "000000"
+   },
+   {
+    "name": "highlight",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "warm",
+    "colorHex": "FF9A5A"
+   },
+   {
+    "name": "deep",
+    "colorHex": "0E1838"
+   }
+  ],
+  "subtitleFontFamily": "system",
+  "subtitleFontSize": 64,
+  "subtitleBold": true,
+  "subtitleColorHex": "@text",
+  "subtitleBackgroundOpacity": 0.0,
+  "subtitleBackgroundPadding": 22,
+  "subtitleLeftMargin": 150,
+  "subtitleRightMargin": 150,
+  "subtitleShadowColorHex": "@caption-shadow",
+  "subtitleShadowOpacity": 0.6,
+  "subtitleShadowRadius": 20,
+  "subtitleShadowOffset": [
+   0,
+   8
+  ]
+ },
+ "resources": [
+  {
+   "id": "cL4",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Level four \u2014 the cloud",
+   "addedAt": 0,
+   "duration": 26.0,
+   "trimStart": 0,
+   "trimEnd": 26.0,
+   "pixelWidth": 1920,
+   "pixelHeight": 1080,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "mediaCuts": [
+    {
+     "id": "cutL4",
+     "name": "from the surface",
+     "trimStart": 19.3,
+     "trimEnd": 26.0
+    }
+   ],
+   "composition": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "backgroundColorHex": "07080C",
+    "layers": [
+     {
+      "id": "l4bg",
+      "name": "Field",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "l4g0",
+        "time": 0,
+        "transitionDuration": 0,
+        "colorHex": "0A1028"
+       },
+       {
+        "id": "l4g1",
+        "time": 13.0,
+        "transitionDuration": 13.0,
+        "easing": "easeInOut",
+        "colorHex": "0E1838"
+       },
+       {
+        "id": "l4g2",
+        "time": 26.0,
+        "transitionDuration": 13.0,
+        "easing": "easeInOut",
+        "colorHex": "0C1430"
+       }
+      ]
+     },
+     {
+      "id": "l4stage",
+      "name": "Points",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "floor": "none",
+      "effects": {
+       "glow": 0.4,
+       "glowRadius": 26,
+       "glowThreshold": 0.5,
+       "vignette": 0.35
+      },
+      "keyframes": [
+       {
+        "id": "l4c0",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -34,
+         "pitch": 10,
+         "distance": 3.4,
+         "fov": 34,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 34,
+         "pitch": 42,
+         "intensity": 1.35
+        }
+       },
+       {
+        "id": "l4c1",
+        "time": 26.0,
+        "transitionDuration": 26.0,
+        "easing": "easeInOut",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 16,
+         "pitch": 6,
+         "distance": 1.5,
+         "fov": 34,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -26,
+         "pitch": 52,
+         "intensity": 1.35
+        }
+       }
+      ],
+      "members": [
+       {
+        "id": "l4cube",
+        "name": "Cube",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "resourceID": "rCube",
+        "keyframes": [
+         {
+          "id": "l4cu0",
+          "time": 0,
+          "transitionDuration": 0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ]
+       },
+       {
+        "id": "l4word",
+        "name": "Word",
+        "sortIndex": 1,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "resourceID": "rWord",
+        "keyframes": [
+         {
+          "id": "l4wo0",
+          "time": 0,
+          "transitionDuration": 0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ]
+       },
+       {
+        "id": "l4pts",
+        "name": "Cloud",
+        "sortIndex": 2,
+        "kind": "drawing",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "resourceID": "rMorph",
+        "keyframes": [
+         {
+          "id": "l4p0",
+          "time": 0.0,
+          "transitionDuration": 0,
+          "progress": 0.0
+         },
+         {
+          "id": "l4p1",
+          "time": 3.2,
+          "transitionDuration": 3.2,
+          "easing": "easeOut",
+          "progress": 0.45
+         },
+         {
+          "id": "l4p2",
+          "time": 18.4,
+          "transitionDuration": 15.2,
+          "easing": "linear",
+          "progress": 0.62
+         },
+         {
+          "id": "l4p3",
+          "time": 24.2,
+          "transitionDuration": 5.8,
+          "easing": "easeIn",
+          "progress": 1.0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "l4num",
+      "name": "Depth",
+      "sortIndex": 90,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.2,
+      "duration": 25.8,
+      "fadeOut": 0.6,
+      "captionText": "04 / 04",
+      "captionStyle": {
+       "fontFamily": "monospaced",
+       "fontSize": 34,
+       "weight": "semibold",
+       "tracking": 7,
+       "alignment": "trailing",
+       "placement": {
+        "anchor": "bottomRight",
+        "offset": [
+         -74,
+         -54
+        ]
+       }
+      },
+      "keyframes": [
+       {
+        "id": "l4numa",
+        "time": 0,
+        "opacity": 0,
+        "transitionDuration": 0
+       },
+       {
+        "id": "l4numb",
+        "time": 0.7,
+        "opacity": 0.46,
+        "transitionDuration": 0.7
+       }
+      ]
+     },
+     {
+      "id": "l4end",
+      "name": "Sign-off",
+      "sortIndex": 91,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 24.5,
+      "duration": 1.5,
+      "captionText": "four films, one frame",
+      "captionStyle": {
+       "fontSize": 40,
+       "weight": "light",
+       "tracking": 11,
+       "placement": {
+        "anchor": "bottom",
+        "offset": [
+         0,
+         -132
+        ]
+       }
+      },
+      "keyframes": [
+       {
+        "id": "l4e0",
+        "time": 0,
+        "opacity": 0,
+        "transitionDuration": 0
+       },
+       {
+        "id": "l4e1",
+        "time": 0.8,
+        "opacity": 0.9,
+        "transitionDuration": 0.8
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "cL3",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Level three \u2014 the slab",
+   "addedAt": 0,
+   "duration": 26.0,
+   "trimStart": 0,
+   "trimEnd": 26.0,
+   "pixelWidth": 1920,
+   "pixelHeight": 1080,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "mediaCuts": [
+    {
+     "id": "cutL3",
+     "name": "from the surface",
+     "trimStart": 13.1,
+     "trimEnd": 26.0
+    }
+   ],
+   "composition": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "backgroundColorHex": "07080C",
+    "layers": [
+     {
+      "id": "l3bg",
+      "name": "Table",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 19.7,
+      "keyframes": [
+       {
+        "id": "l3bga",
+        "time": 0,
+        "transitionDuration": 0,
+        "colorHex": "131C33"
+       },
+       {
+        "id": "l3bgb",
+        "time": 19.7,
+        "transitionDuration": 19.7,
+        "easing": "linear",
+        "colorHex": "182340"
+       }
+      ]
+     },
+     {
+      "id": "l3stg",
+      "name": "Level",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 19.7,
+      "floor": "glossy",
+      "keyframes": [
+       {
+        "id": "l3stgc0",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -34,
+         "pitch": 19,
+         "roll": 0,
+         "distance": 5.7531,
+         "fov": 24,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 48,
+         "pitch": 42,
+         "intensity": 1.15
+        }
+       },
+       {
+        "id": "l3stgc1",
+        "time": 1.7,
+        "transitionDuration": 1.7,
+        "easing": "easeInOut",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -26,
+         "pitch": 14,
+         "roll": 0,
+         "distance": 5.2214,
+         "fov": 24,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 42,
+         "pitch": 44,
+         "intensity": 1.2
+        }
+       },
+       {
+        "id": "l3stgc2",
+        "time": 19.3,
+        "transitionDuration": 17.6,
+        "easing": "easeIn",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0.0,
+         "pitch": 0.0,
+         "roll": 0,
+         "distance": 2.2016,
+         "fov": 24,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -46,
+         "pitch": 52,
+         "intensity": 1.45
+        }
+       }
+      ],
+      "members": [
+       {
+        "id": "l3stgm",
+        "name": "Body",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 19.7,
+        "resourceID": "mSlab",
+        "keyframes": [
+         {
+          "id": "l3stgmk",
+          "time": 0,
+          "transitionDuration": 0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "l3num",
+      "name": "Depth",
+      "sortIndex": 90,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.2,
+      "duration": 17.7,
+      "fadeOut": 0.6,
+      "captionText": "03 / 04",
+      "captionStyle": {
+       "fontFamily": "monospaced",
+       "fontSize": 34,
+       "weight": "semibold",
+       "tracking": 7,
+       "alignment": "trailing",
+       "placement": {
+        "anchor": "bottomRight",
+        "offset": [
+         -74,
+         -54
+        ]
+       }
+      },
+      "keyframes": [
+       {
+        "id": "l3numa",
+        "time": 0,
+        "opacity": 0,
+        "transitionDuration": 0
+       },
+       {
+        "id": "l3numb",
+        "time": 0.7,
+        "opacity": 0.46,
+        "transitionDuration": 0.7
+       }
+      ]
+     },
+     {
+      "id": "l3desc",
+      "name": "Into the surface",
+      "sortIndex": 40,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 19.3,
+      "duration": 6.699999999999999,
+      "resourceID": "cL4",
+      "mediaCutID": "cutL4",
+      "fadeIn": 0.3,
+      "keyframes": [
+       {
+        "id": "l3desca",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1159,
+         "anchor": "center"
+        }
+       },
+       {
+        "id": "l3descb",
+        "time": 1.2,
+        "transitionDuration": 1.2,
+        "easing": "easeOut",
+        "placement": {
+         "height": 1080,
+         "anchor": "center"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "cL2",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Level two \u2014 the tablet",
+   "addedAt": 0,
+   "duration": 26.0,
+   "trimStart": 0,
+   "trimEnd": 26.0,
+   "pixelWidth": 1920,
+   "pixelHeight": 1080,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "mediaCuts": [
+    {
+     "id": "cutL2",
+     "name": "from the surface",
+     "trimStart": 6.6,
+     "trimEnd": 26.0
+    }
+   ],
+   "composition": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "backgroundColorHex": "07080C",
+    "layers": [
+     {
+      "id": "l2bg",
+      "name": "Table",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13.5,
+      "keyframes": [
+       {
+        "id": "l2bga",
+        "time": 0,
+        "transitionDuration": 0,
+        "colorHex": "111726"
+       },
+       {
+        "id": "l2bgb",
+        "time": 13.5,
+        "transitionDuration": 13.5,
+        "easing": "linear",
+        "colorHex": "161E33"
+       }
+      ]
+     },
+     {
+      "id": "l2stg",
+      "name": "Level",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 13.5,
+      "floor": "glossy",
+      "keyframes": [
+       {
+        "id": "l2stgc0",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 31,
+         "pitch": 23,
+         "roll": 0,
+         "distance": 5.2995,
+         "fov": 26,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -42,
+         "pitch": 40,
+         "intensity": 1.15
+        }
+       },
+       {
+        "id": "l2stgc1",
+        "time": 1.7,
+        "transitionDuration": 1.7,
+        "easing": "easeInOut",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 24,
+         "pitch": 19,
+         "roll": 0,
+         "distance": 4.7589,
+         "fov": 26,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -36,
+         "pitch": 42,
+         "intensity": 1.2
+        }
+       },
+       {
+        "id": "l2stgc2",
+        "time": 13.1,
+        "transitionDuration": 11.4,
+        "easing": "easeIn",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0.0,
+         "pitch": 0.0,
+         "roll": 0,
+         "distance": 1.8197,
+         "fov": 26,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 50,
+         "pitch": 54,
+         "intensity": 1.45
+        }
+       }
+      ],
+      "members": [
+       {
+        "id": "l2stgm",
+        "name": "Body",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 13.5,
+        "resourceID": "mTablet",
+        "keyframes": [
+         {
+          "id": "l2stgmk",
+          "time": 0,
+          "transitionDuration": 0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "l2num",
+      "name": "Depth",
+      "sortIndex": 90,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.2,
+      "duration": 11.5,
+      "fadeOut": 0.6,
+      "captionText": "02 / 04",
+      "captionStyle": {
+       "fontFamily": "monospaced",
+       "fontSize": 34,
+       "weight": "semibold",
+       "tracking": 7,
+       "alignment": "trailing",
+       "placement": {
+        "anchor": "bottomRight",
+        "offset": [
+         -74,
+         -54
+        ]
+       }
+      },
+      "keyframes": [
+       {
+        "id": "l2numa",
+        "time": 0,
+        "opacity": 0,
+        "transitionDuration": 0
+       },
+       {
+        "id": "l2numb",
+        "time": 0.7,
+        "opacity": 0.46,
+        "transitionDuration": 0.7
+       }
+      ]
+     },
+     {
+      "id": "l2desc",
+      "name": "Into the glass",
+      "sortIndex": 40,
+      "kind": "video",
+      "isEnabled": true,
+      "startTime": 13.1,
+      "duration": 12.9,
+      "resourceID": "cL3",
+      "mediaCutID": "cutL3",
+      "fadeIn": 0.3,
+      "keyframes": [
+       {
+        "id": "l2desca",
+        "time": 0,
+        "transitionDuration": 0,
+        "placement": {
+         "height": 1159,
+         "anchor": "center"
+        }
+       },
+       {
+        "id": "l2descb",
+        "time": 1.2,
+        "transitionDuration": 1.2,
+        "easing": "easeOut",
+        "placement": {
+         "height": 1080,
+         "anchor": "center"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "mLaptop",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Laptop",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "device": {
+     "kind": "laptop"
+    }
+   },
+   "materials": {
+    "Body": {
+     "colorHex": "@edge",
+     "metallic": 0.78,
+     "roughness": 0.28
+    },
+    "Deck": {
+     "colorHex": "@edge",
+     "metallic": 0.78,
+     "roughness": 0.28
+    },
+    "Screen": {
+     "resourceID": "cL2",
+     "finish": "glass"
+    }
+   }
+  },
+  {
+   "id": "mTablet",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Tablet",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "device": {
+     "kind": "tablet"
+    }
+   },
+   "materials": {
+    "Body": {
+     "colorHex": "@edge",
+     "metallic": 0.78,
+     "roughness": 0.28
+    },
+    "Screen": {
+     "resourceID": "cL3",
+     "finish": "glass"
+    }
+   }
+  },
+  {
+   "id": "mSlab",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Slab",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Panel",
+      "shape": {
+       "box": {
+        "size": [
+         1.78,
+         1.0,
+         0.09
+        ],
+        "radius": 0.02,
+        "faces": true
+       }
+      },
+      "position": [
+       0,
+       0,
+       0
+      ]
+     }
+    ]
+   },
+   "materials": {
+    "Panel": {
+     "colorHex": "222732",
+     "metallic": 0.7,
+     "roughness": 0.18
+    },
+    "Panel/front": {
+     "resourceID": "cL4",
+     "finish": "glass"
+    }
+   }
+  },
+  {
+   "id": "rCube",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Cube",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "parts": [
+     {
+      "slot": "Cube",
+      "shape": {
+       "box": {
+        "size": [
+         1.4,
+         1.4,
+         1.4
+        ],
+        "radius": 0.08
+       }
+      },
+      "position": [
+       0,
+       0,
+       0
+      ]
+     }
+    ]
+   },
+   "materials": {
+    "Cube": {
+     "colorHex": "@accent",
+     "metallic": 0.9,
+     "roughness": 0.22
+    }
+   }
+  },
+  {
+   "id": "rWord",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Word",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "text": {
+     "text": "SURFACE",
+     "bold": true,
+     "depth": 0.25,
+     "size": 2.4
+    }
+   },
+   "materials": {
+    "Face": {
+     "colorHex": "FFFFFF",
+     "metallic": 0.08,
+     "roughness": 0.36
+    },
+    "Side": {
+     "colorHex": "@accent",
+     "metallic": 0.55,
+     "roughness": 0.32
+    }
+   }
+  },
+  {
+   "id": "rMorph",
+   "kind": "particles",
+   "filename": "",
+   "displayName": "Cloud",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "particles": {
+    "colors": [
+     "@accent",
+     "FFFFFF",
+     "@warm"
+    ],
+    "seed": 7,
+    "morph": {
+     "from": "rCube",
+     "to": "rWord",
+     "count": 4200,
+     "spread": 1.25,
+     "size": 0.02,
+     "turbulence": 0.18,
+     "stagger": 0.4
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "l1bg",
+   "name": "Table",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 7.0,
+   "keyframes": [
+    {
+     "id": "l1bga",
+     "time": 0,
+     "transitionDuration": 0,
+     "colorHex": "0A0D15"
+    },
+    {
+     "id": "l1bgb",
+     "time": 7.0,
+     "transitionDuration": 7.0,
+     "easing": "linear",
+     "colorHex": "0E1220"
+    }
+   ]
+  },
+  {
+   "id": "l1stg",
+   "name": "Level",
+   "sortIndex": 1,
+   "kind": "stage",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 7.0,
+   "floor": "glossy",
+   "keyframes": [
+    {
+     "id": "l1stgc0",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "mode": "fill"
+     },
+     "camera": {
+      "yaw": -24,
+      "pitch": 24,
+      "roll": 0,
+      "distance": 6.2434,
+      "fov": 20,
+      "target": {
+       "point": [
+        0,
+        0.044,
+        0
+       ]
+      }
+     },
+     "light": {
+      "yaw": 46,
+      "pitch": 44,
+      "intensity": 1.15
+     }
+    },
+    {
+     "id": "l1stgc1",
+     "time": 1.7,
+     "transitionDuration": 1.7,
+     "easing": "easeInOut",
+     "placement": {
+      "mode": "fill"
+     },
+     "camera": {
+      "yaw": -19,
+      "pitch": 21,
+      "roll": 0,
+      "distance": 5.6284,
+      "fov": 20,
+      "target": {
+       "point": [
+        0,
+        0.044,
+        0
+       ]
+      }
+     },
+     "light": {
+      "yaw": 40,
+      "pitch": 46,
+      "intensity": 1.2
+     }
+    },
+    {
+     "id": "l1stgc2",
+     "time": 6.6,
+     "transitionDuration": 4.8999999999999995,
+     "easing": "easeIn",
+     "placement": {
+      "mode": "fill"
+     },
+     "camera": {
+      "yaw": 0.0,
+      "pitch": 12.2,
+      "roll": 0,
+      "distance": 1.4486,
+      "fov": 20,
+      "target": {
+       "point": [
+        0,
+        0.044,
+        0
+       ]
+      }
+     },
+     "light": {
+      "yaw": -48,
+      "pitch": 54,
+      "intensity": 1.45
+     }
+    }
+   ],
+   "members": [
+    {
+     "id": "l1stgm",
+     "name": "Body",
+     "sortIndex": 0,
+     "kind": "model",
+     "isEnabled": true,
+     "startTime": 0,
+     "duration": 7.0,
+     "resourceID": "mLaptop",
+     "keyframes": [
+      {
+       "id": "l1stgmk",
+       "time": 0,
+       "transitionDuration": 0,
+       "depth": 0,
+       "stageOffset": [
+        0,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l1title",
+   "name": "Title",
+   "sortIndex": 20,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.55,
+   "duration": 4.1,
+   "captionText": "Through the Surfaces",
+   "captionStyle": {
+    "fontSize": 78,
+    "weight": "heavy",
+    "tracking": 1.5,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      92
+     ]
+    }
+   },
+   "keyframes": [
+    {
+     "id": "l1t0",
+     "time": 0,
+     "opacity": 0,
+     "transitionDuration": 0
+    },
+    {
+     "id": "l1t1",
+     "time": 0.7,
+     "opacity": 1,
+     "transitionDuration": 0.7
+    },
+    {
+     "id": "l1t2",
+     "time": 3.3,
+     "opacity": 1,
+     "transitionDuration": 0
+    },
+    {
+     "id": "l1t3",
+     "time": 4.1,
+     "opacity": 0,
+     "transitionDuration": 0.8
+    }
+   ]
+  },
+  {
+   "id": "l1sub",
+   "name": "Subtitle",
+   "sortIndex": 21,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 1.2,
+   "duration": 3.45,
+   "captionText": "four films, each inside the last",
+   "captionStyle": {
+    "fontSize": 36,
+    "weight": "light",
+    "tracking": 8,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      258
+     ]
+    }
+   },
+   "keyframes": [
+    {
+     "id": "l1s0",
+     "time": 0,
+     "opacity": 0,
+     "transitionDuration": 0
+    },
+    {
+     "id": "l1s1",
+     "time": 0.7,
+     "opacity": 0.82,
+     "transitionDuration": 0.7
+    },
+    {
+     "id": "l1s2",
+     "time": 2.7,
+     "opacity": 0.82,
+     "transitionDuration": 0
+    },
+    {
+     "id": "l1s3",
+     "time": 3.5,
+     "opacity": 0,
+     "transitionDuration": 0.8
+    }
+   ]
+  },
+  {
+   "id": "l1num",
+   "name": "Depth",
+   "sortIndex": 90,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0.2,
+   "duration": 5.0,
+   "fadeOut": 0.6,
+   "captionText": "01 / 04",
+   "captionStyle": {
+    "fontFamily": "monospaced",
+    "fontSize": 34,
+    "weight": "semibold",
+    "tracking": 7,
+    "alignment": "trailing",
+    "placement": {
+     "anchor": "bottomRight",
+     "offset": [
+      -74,
+      -54
+     ]
+    }
+   },
+   "keyframes": [
+    {
+     "id": "l1numa",
+     "time": 0,
+     "opacity": 0,
+     "transitionDuration": 0
+    },
+    {
+     "id": "l1numb",
+     "time": 0.7,
+     "opacity": 0.46,
+     "transitionDuration": 0.7
+    }
+   ]
+  },
+  {
+   "id": "l1desc",
+   "name": "Into the screen",
+   "sortIndex": 40,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 6.6,
+   "duration": 19.4,
+   "resourceID": "cL2",
+   "mediaCutID": "cutL2",
+   "fadeIn": 0.3,
+   "keyframes": [
+    {
+     "id": "l1desca",
+     "time": 0,
+     "transitionDuration": 0,
+     "placement": {
+      "height": 1159,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "l1descb",
+     "time": 1.2,
+     "transitionDuration": 1.2,
+     "easing": "easeOut",
+     "placement": {
+      "height": 1080,
+      "anchor": "center"
+     }
+    }
+   ]
+  }
+ ]
+}

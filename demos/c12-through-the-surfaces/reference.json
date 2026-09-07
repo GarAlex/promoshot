@@ -1,0 +1,2082 @@
+{
+ "id": "991785BA-BADC-4867-8F6A-10C0724C60A4",
+ "name": "Through the surfaces",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 45,
+ "trimStart": 0,
+ "trimEnd": 26.0,
+ "videoDuration": 26.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "backgroundColorHex": "070707",
+  "environment": {
+   "preset": "studio",
+   "intensity": 1.05,
+   "rotation": 180.0
+  }
+ },
+ "resources": [
+  {
+   "id": "6A24EE6A-D90C-438A-81DB-7E230097F1F3",
+   "kind": "model",
+   "filename": "",
+   "displayName": "PROMO",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "text": {
+     "text": "PROMO",
+     "bold": true,
+     "depth": 0.25,
+     "size": 0.3
+    }
+   },
+   "materials": {
+    "Face": {
+     "colorHex": "E4E8EC",
+     "finish": "chrome"
+    },
+    "Side": {
+     "colorHex": "3A3F46",
+     "finish": "brushed"
+    }
+   }
+  },
+  {
+   "id": "2B9B152F-B7D6-4409-B459-69915EA08B5B",
+   "kind": "model",
+   "filename": "",
+   "displayName": "SHOT",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "text": {
+     "text": "SHOT",
+     "bold": true,
+     "depth": 0.25,
+     "size": 0.3
+    }
+   },
+   "materials": {
+    "Face": {
+     "colorHex": "E4E8EC",
+     "finish": "chrome"
+    },
+    "Side": {
+     "colorHex": "3A3F46",
+     "finish": "brushed"
+    }
+   }
+  },
+  {
+   "id": "03C2FAC6-78F2-4458-BDC5-A99582F3FD22",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Phone",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "device": {
+     "kind": "phone"
+    }
+   },
+   "materials": {
+    "Body": {
+     "colorHex": "9B978F",
+     "finish": "anodized"
+    },
+    "Deck": {
+     "colorHex": "9B978F",
+     "finish": "anodized"
+    },
+    "Screen": {
+     "resourceID": "828469E4-2273-4791-844A-A6F7D981E4C1",
+     "finish": "glass"
+    }
+   }
+  },
+  {
+   "id": "F78BDA69-EDD2-4564-B2A4-04B3C85B29F1",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Tablet",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "device": {
+     "kind": "tablet"
+    }
+   },
+   "materials": {
+    "Body": {
+     "colorHex": "D8DADC",
+     "finish": "anodized"
+    },
+    "Deck": {
+     "colorHex": "D8DADC",
+     "finish": "anodized"
+    },
+    "Screen": {
+     "resourceID": "F131115A-AE51-4E9C-B36F-1FBF075542B0",
+     "finish": "glass"
+    }
+   }
+  },
+  {
+   "id": "3F5189CB-3172-4BEE-A947-278C160A60C1",
+   "kind": "model",
+   "filename": "",
+   "displayName": "Laptop",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "clips": [],
+   "recipe": {
+    "device": {
+     "kind": "laptop"
+    }
+   },
+   "materials": {
+    "Body": {
+     "colorHex": "2B2B2E",
+     "finish": "anodized"
+    },
+    "Deck": {
+     "colorHex": "2B2B2E",
+     "finish": "anodized"
+    },
+    "Screen": {
+     "resourceID": "94CB20F8-FAA2-4198-B75D-551294C8D20A",
+     "finish": "glass"
+    }
+   }
+  },
+  {
+   "id": "9E4E92EE-8CDC-4468-ADDF-6BEAE8FD3651",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the laptop",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 26.0,
+   "pixelWidth": 1440,
+   "pixelHeight": 900,
+   "composition": {
+    "canvasWidth": 1440,
+    "canvasHeight": 900,
+    "backgroundColorHex": "070707",
+    "layers": [
+     {
+      "id": "0237B026-63A0-40A0-AEE7-EBC7701F30C5",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "A6B89F28-8B01-401B-9041-A5B0781BDAC6",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.5,
+          0.42
+         ],
+         "end": [
+          1.2,
+          0.42
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "6B5237",
+           "at": 0.0
+          },
+          {
+           "colorHex": "6B5237",
+           "at": 0.12
+          },
+          {
+           "colorHex": "0B0806",
+           "at": 0.9
+          },
+          {
+           "colorHex": "0B0806",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "45994B5A-A755-49B5-8532-EBA5576EDC43",
+      "name": "Laptop on the table",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "950D7630-21C7-4A67-B186-86B7CF270DB4",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -37,
+         "pitch": 16,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "D77D3D3C-E374-4DC6-B619-67808425508D",
+        "time": 1.5,
+        "transitionDuration": 1.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -30,
+         "pitch": 16,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "AF31687B-6DEE-4886-935E-529E256E5123",
+        "time": 2.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -27.5,
+         "pitch": 15.666666666666666,
+         "roll": 0,
+         "distance": 3.7418,
+         "fov": 29.833333333333332,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 29.166666666666668,
+         "pitch": 41.11771432346219,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "0AD2B268-F980-4D9D-B940-33D6A6DFAAC3",
+        "time": 2.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -25.0,
+         "pitch": 15.333333333333334,
+         "roll": 0,
+         "distance": 3.3335,
+         "fov": 29.666666666666668,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 23.333333333333336,
+         "pitch": 37.5,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "65E2A33A-180A-43B5-A9AD-57D4578DE0CA",
+        "time": 3.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -22.5,
+         "pitch": 15.0,
+         "roll": 0,
+         "distance": 2.9698,
+         "fov": 29.5,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 17.5,
+         "pitch": 34.39339828220179,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "8707A445-E578-4D25-8275-1FD2711F9542",
+        "time": 3.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -20.0,
+         "pitch": 14.666666666666666,
+         "roll": 0,
+         "distance": 2.6458,
+         "fov": 29.333333333333332,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 11.666666666666668,
+         "pitch": 32.00961894323342,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "9A3E70E0-D535-4A88-BD7C-5EE6C5004AAA",
+        "time": 4.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -17.5,
+         "pitch": 14.333333333333334,
+         "roll": 0,
+         "distance": 2.3572,
+         "fov": 29.166666666666668,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 5.833333333333332,
+         "pitch": 30.511112605663975,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "DBDFACA4-2BE0-42D1-9252-DFC547C9777D",
+        "time": 4.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -15.0,
+         "pitch": 14.0,
+         "roll": 0,
+         "distance": 2.1,
+         "fov": 29.0,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": 0.0,
+         "pitch": 30.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "B19CF7E1-D375-48D5-B6F0-45BBAE925DB1",
+        "time": 5.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -12.5,
+         "pitch": 13.666666666666666,
+         "roll": 0,
+         "distance": 1.8709,
+         "fov": 28.833333333333332,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -5.833333333333336,
+         "pitch": 30.511112605663975,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "F87F53D3-A488-4F8D-A178-8EF55194467E",
+        "time": 5.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -10.0,
+         "pitch": 13.333333333333334,
+         "roll": 0,
+         "distance": 1.6668,
+         "fov": 28.666666666666668,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -11.666666666666664,
+         "pitch": 32.00961894323342,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "26287869-18F3-4AFD-98C3-65014076C93B",
+        "time": 6.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -7.5,
+         "pitch": 13.0,
+         "roll": 0,
+         "distance": 1.4849,
+         "fov": 28.5,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -17.5,
+         "pitch": 34.39339828220179,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "189755B9-8B69-4B92-A0C5-0C2591E3BC42",
+        "time": 6.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -5.0,
+         "pitch": 12.666666666666666,
+         "roll": 0,
+         "distance": 1.3229,
+         "fov": 28.333333333333332,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -23.333333333333336,
+         "pitch": 37.5,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "1E40A432-81E9-4970-9A6C-612AAE1F41E8",
+        "time": 7.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -2.5,
+         "pitch": 12.333333333333334,
+         "roll": 0,
+         "distance": 1.1786,
+         "fov": 28.166666666666668,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -29.166666666666657,
+         "pitch": 41.11771432346219,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "D7784755-1043-4C4B-B589-131FD0C4B7C2",
+        "time": 7.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0.0,
+         "pitch": 12.0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 28.0,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "74024BB5-99C0-4B73-88E8-5586A62BE956",
+        "time": 7.8,
+        "transitionDuration": 0.3,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 12,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 26.040000000000003,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "3FD9F2B6-ADD3-4070-B3E7-884D2EFE2ED0",
+        "time": 26.0,
+        "transitionDuration": 18.2,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 12,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 26.040000000000003,
+         "target": {
+          "point": [
+           0,
+           -0.05,
+           -0.53
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       }
+      ],
+      "floor": "glossy",
+      "members": [
+       {
+        "id": "B5E262E3-8E34-4B65-A3F4-044297FC10FE",
+        "name": "Laptop",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "keyframes": [
+         {
+          "id": "0646E9CE-6A9D-4B58-ADC9-CF6A308B693C",
+          "time": 0,
+          "transitionDuration": 0.0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ],
+        "resourceID": "3F5189CB-3172-4BEE-A947-278C160A60C1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "94CB20F8-FAA2-4198-B75D-551294C8D20A",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the tablet",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 26.0,
+   "pixelWidth": 1485,
+   "pixelHeight": 900,
+   "composition": {
+    "canvasWidth": 1485,
+    "canvasHeight": 900,
+    "backgroundColorHex": "070707",
+    "layers": [
+     {
+      "id": "BAE93971-6E9B-4851-A2E5-EE7C10303978",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "20A56B91-8E7B-4AFD-9DE2-15CF261CD86B",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.5,
+          0.42
+         ],
+         "end": [
+          1.2,
+          0.42
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "3E5570",
+           "at": 0.0
+          },
+          {
+           "colorHex": "3E5570",
+           "at": 0.12
+          },
+          {
+           "colorHex": "05070C",
+           "at": 0.9
+          },
+          {
+           "colorHex": "05070C",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "87B1AD6A-C3C8-4F78-96EC-56B8D8A28D1A",
+      "name": "Tablet on the table",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "42A529BD-F7B7-445B-B779-FD953B16FA6A",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -33,
+         "pitch": 12,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "B460E011-FC2E-48E2-9AB6-74BD799956A7",
+        "time": 7.5,
+        "transitionDuration": 7.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -26,
+         "pitch": 12,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "A3DDFA0E-3A24-429C-A19A-D2FA7A15CA36",
+        "time": 8.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -23.833333333333332,
+         "pitch": 11.0,
+         "roll": 0,
+         "distance": 3.7418,
+         "fov": 31.666666666666668,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 29.166666666666668,
+         "pitch": 41.11771432346219,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "854DB969-F014-4246-91AE-DA90B8614FAB",
+        "time": 8.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -21.666666666666668,
+         "pitch": 10.0,
+         "roll": 0,
+         "distance": 3.3335,
+         "fov": 33.333333333333336,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 23.333333333333336,
+         "pitch": 37.5,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "090697E7-583A-4B7D-920F-9001D2B193F9",
+        "time": 9.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -19.5,
+         "pitch": 9.0,
+         "roll": 0,
+         "distance": 2.9698,
+         "fov": 35.0,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 17.5,
+         "pitch": 34.39339828220179,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "1BBBD9B7-C746-4AA5-ABA6-C8B784557A8E",
+        "time": 9.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -17.333333333333336,
+         "pitch": 8.0,
+         "roll": 0,
+         "distance": 2.6458,
+         "fov": 36.666666666666664,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 11.666666666666668,
+         "pitch": 32.00961894323342,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "60CDA119-9D5B-4D19-8132-963239F8B896",
+        "time": 10.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -15.166666666666666,
+         "pitch": 7.0,
+         "roll": 0,
+         "distance": 2.3572,
+         "fov": 38.333333333333336,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 5.833333333333332,
+         "pitch": 30.511112605663975,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "9872C6C5-0516-489C-9BC6-2B051A1913AE",
+        "time": 10.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -13.0,
+         "pitch": 6.0,
+         "roll": 0,
+         "distance": 2.1,
+         "fov": 40.0,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 0.0,
+         "pitch": 30.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "7A3283CA-EADC-4000-B319-67A4A3FA7BC4",
+        "time": 11.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -10.833333333333332,
+         "pitch": 5.0,
+         "roll": 0,
+         "distance": 1.8709,
+         "fov": 41.66666666666667,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -5.833333333333336,
+         "pitch": 30.511112605663975,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "0498D228-515E-4897-B8C1-B6768286A1D6",
+        "time": 11.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -8.666666666666668,
+         "pitch": 4.0,
+         "roll": 0,
+         "distance": 1.6668,
+         "fov": 43.33333333333333,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -11.666666666666664,
+         "pitch": 32.00961894323342,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "04D3B391-9DF7-460B-9B64-00AD85F70ADE",
+        "time": 12.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -6.5,
+         "pitch": 3.0,
+         "roll": 0,
+         "distance": 1.4849,
+         "fov": 45.0,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -17.5,
+         "pitch": 34.39339828220179,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "A3467079-A203-489C-8928-D8C77AA2BDB0",
+        "time": 12.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -4.333333333333332,
+         "pitch": 2.0,
+         "roll": 0,
+         "distance": 1.3229,
+         "fov": 46.66666666666667,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -23.333333333333336,
+         "pitch": 37.5,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "01E438C6-C09A-4991-A292-9D7BD3FF86C4",
+        "time": 13.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -2.166666666666668,
+         "pitch": 1.0,
+         "roll": 0,
+         "distance": 1.1786,
+         "fov": 48.33333333333333,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -29.166666666666657,
+         "pitch": 41.11771432346219,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "95DA4A3F-EB54-4539-9158-0CBFB9F72392",
+        "time": 13.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0.0,
+         "pitch": 0.0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 50.0,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "784A40E6-21F5-4492-BAF9-9C17158A8BE0",
+        "time": 13.8,
+        "transitionDuration": 0.3,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 46.5,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "3571D375-6D50-4095-A070-95EC0DA06B9E",
+        "time": 26.0,
+        "transitionDuration": 12.2,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 46.5,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       }
+      ],
+      "floor": "satin",
+      "members": [
+       {
+        "id": "5FC7BB20-0459-480C-BE41-ED3E97943F28",
+        "name": "Tablet",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "keyframes": [
+         {
+          "id": "175A4723-E035-41B6-A5EA-6911CB37F837",
+          "time": 0,
+          "transitionDuration": 0.0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ],
+        "resourceID": "F78BDA69-EDD2-4564-B2A4-04B3C85B29F1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "F131115A-AE51-4E9C-B36F-1FBF075542B0",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the phone",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 26.0,
+   "pixelWidth": 1317,
+   "pixelHeight": 900,
+   "composition": {
+    "canvasWidth": 1317,
+    "canvasHeight": 900,
+    "backgroundColorHex": "070707",
+    "layers": [
+     {
+      "id": "D2AC1D7D-BCEE-4270-94BA-5381CD927C75",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "99D2D3AF-2A44-47CB-9B29-CAB59712CFA1",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.5,
+          0.42
+         ],
+         "end": [
+          1.2,
+          0.42
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "2F5A4B",
+           "at": 0.0
+          },
+          {
+           "colorHex": "2F5A4B",
+           "at": 0.12
+          },
+          {
+           "colorHex": "05100C",
+           "at": 0.9
+          },
+          {
+           "colorHex": "05100C",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "96381E01-0CAF-4C1F-9A9F-D29DBB91CD43",
+      "name": "Phone on the table",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "11D9590D-9D2D-4152-87A3-12D7D9A58E63",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -31,
+         "pitch": 10,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "CAEE6C0A-0BB1-4F93-BD24-688D470143D3",
+        "time": 13.5,
+        "transitionDuration": 13.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -24,
+         "pitch": 10,
+         "roll": 0,
+         "distance": 4.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "93DDD18F-20EA-4222-ABD6-B1B6F44386FA",
+        "time": 14.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -22.0,
+         "pitch": 9.166666666666666,
+         "roll": 0,
+         "distance": 3.7418,
+         "fov": 29.958333333333332,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 29.166666666666668,
+         "pitch": 41.11771432346219,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "1733086E-971F-48F5-ABA5-AA52F494A463",
+        "time": 14.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -20.0,
+         "pitch": 8.333333333333334,
+         "roll": 0,
+         "distance": 3.3335,
+         "fov": 29.916666666666668,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 23.333333333333336,
+         "pitch": 37.5,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "6D25B686-48A8-442D-9341-C322086F1E4D",
+        "time": 15.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -18.0,
+         "pitch": 7.5,
+         "roll": 0,
+         "distance": 2.9698,
+         "fov": 29.875,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 17.5,
+         "pitch": 34.39339828220179,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "C3D61A18-9CDE-4B43-A4D5-28A4EA7800FD",
+        "time": 15.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -16.0,
+         "pitch": 6.666666666666667,
+         "roll": 0,
+         "distance": 2.6458,
+         "fov": 29.833333333333332,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 11.666666666666668,
+         "pitch": 32.00961894323342,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "9E59388B-5AF6-499C-B203-BBCB7BA0177D",
+        "time": 16.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -14.0,
+         "pitch": 5.833333333333333,
+         "roll": 0,
+         "distance": 2.3572,
+         "fov": 29.791666666666668,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 5.833333333333332,
+         "pitch": 30.511112605663975,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "0F6D2BA5-000A-43D4-9DD9-97F2487D323C",
+        "time": 16.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -12.0,
+         "pitch": 5.0,
+         "roll": 0,
+         "distance": 2.1,
+         "fov": 29.75,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 0.0,
+         "pitch": 30.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "80A70834-B1C0-486B-8324-8FB21CD80064",
+        "time": 17.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -10.0,
+         "pitch": 4.166666666666666,
+         "roll": 0,
+         "distance": 1.8709,
+         "fov": 29.708333333333332,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -5.833333333333336,
+         "pitch": 30.511112605663975,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "C5F356AF-4977-4C4F-B31B-7D9C56C37D88",
+        "time": 17.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -8.0,
+         "pitch": 3.333333333333334,
+         "roll": 0,
+         "distance": 1.6668,
+         "fov": 29.666666666666668,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -11.666666666666664,
+         "pitch": 32.00961894323342,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "46FA8ABA-228F-4048-A5F8-D2A3523FB3CA",
+        "time": 18.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -6.0,
+         "pitch": 2.5,
+         "roll": 0,
+         "distance": 1.4849,
+         "fov": 29.625,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -17.5,
+         "pitch": 34.39339828220179,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "B15F3A6F-DB59-4E55-A9AF-83D122D18975",
+        "time": 18.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -4.0,
+         "pitch": 1.666666666666666,
+         "roll": 0,
+         "distance": 1.3229,
+         "fov": 29.583333333333332,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -23.333333333333336,
+         "pitch": 37.5,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "80938490-B3A4-48B7-9BF6-141345E0D773",
+        "time": 19.0,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -2.0,
+         "pitch": 0.8333333333333339,
+         "roll": 0,
+         "distance": 1.1786,
+         "fov": 29.541666666666668,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -29.166666666666657,
+         "pitch": 41.11771432346219,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "52109464-98D5-4DC5-8C7A-B8FF0089B03C",
+        "time": 19.5,
+        "transitionDuration": 0.5,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0.0,
+         "pitch": 0.0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 29.5,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "DDDB603E-9178-46A6-AD0F-ABB2FF5802D2",
+        "time": 19.8,
+        "transitionDuration": 0.3,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 27.435000000000002,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "CFEE8D04-6878-4ABF-B537-0A4508C71086",
+        "time": 26.0,
+        "transitionDuration": 6.2,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 0,
+         "pitch": 0,
+         "roll": 0,
+         "distance": 1.05,
+         "fov": 27.435000000000002,
+         "target": {
+          "point": [
+           0,
+           0,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -35.0,
+         "pitch": 45.0,
+         "intensity": 1.05
+        }
+       }
+      ],
+      "floor": "glossy",
+      "members": [
+       {
+        "id": "F9FEFA6D-F98C-48DC-AB5C-6D1C0B806B12",
+        "name": "Phone",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "keyframes": [
+         {
+          "id": "108BD086-B8ED-431D-A751-0CDF38FC3D4B",
+          "time": 0,
+          "transitionDuration": 0.0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ],
+        "resourceID": "03C2FAC6-78F2-4458-BDC5-A99582F3FD22"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "828469E4-2273-4791-844A-A6F7D981E4C1",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the words",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 26.0,
+   "pixelWidth": 720,
+   "pixelHeight": 1579,
+   "composition": {
+    "canvasWidth": 720,
+    "canvasHeight": 1579,
+    "backgroundColorHex": "070707",
+    "layers": [
+     {
+      "id": "47EDC61F-A001-4A44-8730-6132029FA87F",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "D25FE215-2E13-4F21-A20D-FC87171D3F12",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.5,
+          0.42
+         ],
+         "end": [
+          1.2,
+          0.42
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "3A2740",
+           "at": 0.0
+          },
+          {
+           "colorHex": "3A2740",
+           "at": 0.12
+          },
+          {
+           "colorHex": "07050A",
+           "at": 0.9
+          },
+          {
+           "colorHex": "07050A",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "EDD81DD0-F684-4BD3-BCAB-6FAE465BE732",
+      "name": "The words on the floor",
+      "sortIndex": 1,
+      "kind": "stage",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 26.0,
+      "keyframes": [
+       {
+        "id": "16D09F78-BAA2-47AE-98D7-7468C212C738",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": -32,
+         "pitch": 12,
+         "roll": 0,
+         "distance": 7.0,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           0.15,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": 40,
+         "pitch": 42,
+         "intensity": 1.05
+        }
+       },
+       {
+        "id": "0E39B134-C4EE-44A0-84F4-1135ECFC8677",
+        "time": 26.0,
+        "transitionDuration": 26.0,
+        "easing": "linear",
+        "placement": {
+         "mode": "fill"
+        },
+        "camera": {
+         "yaw": 32,
+         "pitch": 8,
+         "roll": 0,
+         "distance": 6.2,
+         "fov": 30,
+         "target": {
+          "point": [
+           0,
+           0.15,
+           0
+          ]
+         }
+        },
+        "light": {
+         "yaw": -30,
+         "pitch": 30,
+         "intensity": 1.05
+        }
+       }
+      ],
+      "floor": "mirror",
+      "members": [
+       {
+        "id": "A01B3E46-F75A-45D9-A3E4-94D6D91EC807",
+        "name": "PROMO",
+        "sortIndex": 0,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "keyframes": [
+         {
+          "id": "F896243A-8299-451F-B7E0-895DAA397776",
+          "time": 0,
+          "transitionDuration": 0.0,
+          "depth": 0,
+          "stageOffset": [
+           0,
+           0.36
+          ]
+         }
+        ],
+        "resourceID": "6A24EE6A-D90C-438A-81DB-7E230097F1F3"
+       },
+       {
+        "id": "17DD8DEF-68AE-4F90-A9C5-37E352A13904",
+        "name": "SHOT",
+        "sortIndex": 1,
+        "kind": "model",
+        "isEnabled": true,
+        "startTime": 0,
+        "duration": 26.0,
+        "keyframes": [
+         {
+          "id": "5199D5B6-2372-499C-A774-237427FE5C51",
+          "time": 0,
+          "transitionDuration": 0.0,
+          "depth": 0.02,
+          "stageOffset": [
+           0,
+           0
+          ]
+         }
+        ],
+        "resourceID": "2B9B152F-B7D6-4409-B459-69915EA08B5B"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "4B4F1506-006F-4EC6-9F01-870174B8AD2A",
+   "name": "Film: the laptop",
+   "sortIndex": 3,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 7.8,
+   "keyframes": [
+    {
+     "id": "DF96B004-418A-4C98-81B5-DFBF66004B0D",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "mode": "fill"
+     }
+    }
+   ],
+   "resourceID": "9E4E92EE-8CDC-4468-ADDF-6BEAE8FD3651",
+   "transitionOut": {
+    "kind": "fade",
+    "duration": 0.3
+   }
+  },
+  {
+   "id": "08823C92-41EF-4C07-B40B-630362315C5A",
+   "name": "Film: the tablet",
+   "sortIndex": 2,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 13.8,
+   "keyframes": [
+    {
+     "id": "0AA41ACD-2BA5-4288-A773-FD3A3D90D5C9",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "mode": "fill"
+     }
+    }
+   ],
+   "resourceID": "94CB20F8-FAA2-4198-B75D-551294C8D20A",
+   "transitionOut": {
+    "kind": "fade",
+    "duration": 0.3
+   }
+  },
+  {
+   "id": "36977D14-0519-485D-A746-2E57D3944136",
+   "name": "Film: the phone",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 19.8,
+   "keyframes": [
+    {
+     "id": "326DC9E3-F050-4937-995B-C01F1AF5331A",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "mode": "fill"
+     }
+    }
+   ],
+   "resourceID": "F131115A-AE51-4E9C-B36F-1FBF075542B0",
+   "transitionOut": {
+    "kind": "fade",
+    "duration": 0.3
+   }
+  },
+  {
+   "id": "639DA962-C9C9-4903-BF4D-EE40A01D6661",
+   "name": "Film: the words",
+   "sortIndex": 0,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 26.0,
+   "keyframes": [
+    {
+     "id": "F45F4534-67BF-4508-B75C-EFC904CC2279",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "mode": "fill"
+     }
+    }
+   ],
+   "resourceID": "828469E4-2273-4791-844A-A6F7D981E4C1"
+  }
+ ]
+}

@@ -1,0 +1,7 @@
+No media. Use a composition as the texture on a surface, three or four levels deep: a scene whose device screen shows another composition, whose surface shows another, and so on, down to a movie of your own that plays for the whole length. Each level is its own film with its own camera. To pass from one level into the next, take the camera to a maximum close-up on that surface and switch to the composition it shows — the close-up is the illusion of the transition. Twenty to thirty seconds, landscape, on a polished table under studio light with glass on the screens.
+
+Use the PromoShot skill and the PromoShot MCP tools for this. Work in the
+current folder: the media is in `resources/`. Write the project as a
+`.promo` folder named `out.promo` here (copy the media you use into its
+`Resources/`), validate it, inspect it, render a contact sheet of a few
+moments, and render the video. Do not ask questions; make sensible choices.
