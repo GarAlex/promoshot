@@ -712,7 +712,8 @@ impl PreviewEngine {
     /// Sets the proxy tier used for subsequent video-frame requests.
     /// Render the project over nothing: no settings colour, no gradient,
     /// so an alpha export keeps what the layers drew and nothing else. A
-    /// background LAYER still paints.
+    /// background LAYER still paints what it keys or binds — a colour, a
+    /// gradient, a resource; a plain one is the plate, and paints nothing.
     pub fn set_transparent_plate(&mut self, on: bool) {
         self.transparent_plate = on;
     }
@@ -2182,16 +2183,38 @@ impl PreviewEngine {
             .find(|l| l.kind == ProjectLayerKind::Background && tl::layer_is_visible(l, time));
         // The look resolves keyframes-first, then the layer's BACKGROUND
         // RESOURCE (rung 16 — swap-aware, so a keyframe can replace the
-        // whole plate), then the composition settings. The resource slots
-        // in by overriding a local copy of the settings: the existing
-        // keyframe resolution then falls back to it naturally.
+        // whole plate), then the PLATE under this level. Both slot in by
+        // overriding a local copy of the settings: the existing keyframe
+        // resolution then falls back to them naturally.
         let bg_all = self.meta.resources.clone().unwrap_or_default();
         let bg_resource = bg_layer
             .and_then(|l| tl::layer_resource_id(l, time, &bg_all))
             .and_then(|rid| bg_all.iter().find(|r| r.id == rid))
             .filter(|r| r.kind == promo_model::ProjectResourceKind::Background)
             .cloned();
+        // The plate is THIS document's, not the project's at every level:
+        // the project's settings colour and gradient; a composition's own
+        // colour (rung 19 — none means transparent, and a composition has
+        // no gradient of its own); nothing under an alpha export. A
+        // keyframe-less background layer is that plate, whichever it is.
+        // It used to fall back to the project's colour and gradient at
+        // every level, so a yellow-plated composition with a plain
+        // background layer painted the project's green, and an alpha
+        // export with one painted the settings colour it was meant to drop.
+        let (plate_hex, plate_gradient) = match &doc.plate {
+            Plate::Project => (
+                Some(settings.background_color_hex.clone()),
+                settings.background_gradient.clone(),
+            ),
+            Plate::Composition(hex) => (hex.clone(), None),
+            Plate::Transparent => (None, None),
+        };
         let mut bg_settings = settings.clone();
+        // A plate with no colour leaves the fallback EMPTY: the timeline
+        // hands it back untouched when no keyframe and no resource says
+        // otherwise, and an empty colour paints nothing below.
+        bg_settings.background_color_hex = plate_hex.unwrap_or_default();
+        bg_settings.background_gradient = plate_gradient;
         if let Some(style) = bg_resource.as_ref().and_then(|r| r.background.as_ref()) {
             if let Some(hex) = &style.color_hex {
                 bg_settings.background_color_hex = hex.clone();
@@ -2202,24 +2225,21 @@ impl PreviewEngine {
         }
         // A composition's plate is its own colour, or nothing at all: a title
         // comp over footage shows the footage through. A nested background
-        // LAYER still paints as in any document.
-        let background = match (&doc.plate, bg_layer) {
-            (Plate::Composition(None), None) | (Plate::Transparent, None) => [0.0, 0.0, 0.0, 0.0],
-            (Plate::Composition(Some(hex)), None) => rgba_from_hex(settings.resolve_color(hex)),
-            _ => {
-                let bg_hex = bg_layer
-                    .map(|l| tl::layer_background_color_hex(l, time, &bg_settings))
-                    .unwrap_or_else(|| bg_settings.background_color_hex.clone());
-                rgba_from_hex(settings.resolve_color(&bg_hex))
-            }
+        // LAYER still paints as in any document: its keyed colour, its
+        // resource's, else the plate it stands on.
+        let bg_hex = match bg_layer {
+            Some(layer) => tl::layer_background_color_hex(layer, time, &bg_settings),
+            None => bg_settings.background_color_hex.clone(),
+        };
+        let background = if bg_hex.is_empty() {
+            [0.0, 0.0, 0.0, 0.0]
+        } else {
+            rgba_from_hex(settings.resolve_color(&bg_hex))
         };
 
         let background_gradient = bg_layer
             .and_then(|layer| tl::layer_background_gradient(layer, time, &bg_settings))
-            .or_else(|| match doc.plate {
-                Plate::Project => bg_settings.background_gradient.clone(),
-                Plate::Composition(_) | Plate::Transparent => None,
-            })
+            .or_else(|| bg_settings.background_gradient.clone())
             // Absent geometry resolved at READ — the timeline already
             // resolved keyframed gradients against the plate; this covers
             // the plate/settings fallbacks themselves.
@@ -2885,7 +2905,8 @@ enum Plate {
     Project,
     Composition(Option<String>),
     /// The project rendered over nothing — an alpha export: no settings
-    /// colour, no gradient; a background LAYER still paints.
+    /// colour, no gradient; a background LAYER paints only what it keys
+    /// or binds.
     Transparent,
 }
 
@@ -6128,6 +6149,98 @@ mod tests {
         assert!(
             (centre - 47.5).abs() <= 4.0,
             "a centred body sits at the strip's middle, not row {centre}"
+        );
+    }
+
+    /// A project whose settings colour is green (plus whatever
+    /// `settings_extra` adds), a background layer keyed blue, and a
+    /// full-frame video layer showing a composition of the project's size
+    /// that holds one PLAIN background layer — no colour keyframe, no
+    /// resource — over the plate given.
+    fn plain_background_in_a_composition(settings_extra: &str, plate: &str) -> ProjectMetadata {
+        let json = format!(
+            r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-000000000006",
+            "name": "nested plate", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {{"canvasWidth": 96, "canvasHeight": 96,
+                                    "backgroundColorHex": "00FF00"{settings_extra}}},
+            "layers": [
+                {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0,
+                 "keyframes": [{{"id": "BK", "time": 0, "transitionDuration": 0,
+                                "colorHex": "0000FF"}}]}},
+                {{"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE04",
+                 "keyframes": [{{"id": "K", "time": 0, "transitionDuration": 0,
+                                "placement": {{"mode": "fill"}}}}]}}
+            ],
+            "resources": [
+                {{"id": "AAAAAAAA-0000-0000-0000-00000000EE04", "kind": "composition",
+                 "filename": "", "displayName": "Inner", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 96, "pixelHeight": 96,
+                 "composition": {{"canvasWidth": 96, "canvasHeight": 96, {plate}
+                   "layers": [
+                     {{"id": "IBG", "name": "plain", "sortIndex": 0, "kind": "background",
+                      "isEnabled": true, "startTime": 0, "keyframes": []}}
+                 ]}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []}}
+            ]}}"#
+        );
+        ProjectMetadata::from_json(&json).expect("nested plate fixture")
+    }
+
+    /// Render that fixture at 1 s: the centre pixel, and how many of the
+    /// 96×96 pixels are exactly `colour` (BGRA).
+    fn plate_census(meta: ProjectMetadata, colour: [u8; 4]) -> ([u8; 4], usize) {
+        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
+        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
+        engine.render(1.0, out.raw(), 96, 96).unwrap();
+        let px = out.read_pixels().unwrap();
+        let count = px.chunks(4).filter(|p| p[..] == colour[..]).count();
+        (pixel(&out, 48, 48), count)
+    }
+
+    /// A plain background layer inside a composition is the COMPOSITION's
+    /// plate, not the project's. The scene builder handed every level the
+    /// project's settings as the layer's fallback, so a composition plated
+    /// yellow with a keyframe-less background layer painted the project's
+    /// green — full-frame on a video layer and on a model's slot alike —
+    /// while the same composition without the layer painted yellow. The
+    /// project's gradient leaked the same way.
+    #[test]
+    fn a_plain_background_layer_in_a_composition_paints_the_compositions_plate() {
+        let gradient = r#", "backgroundGradient": {"kind": "linear", "start": [0, 0],
+            "end": [1, 1], "repeat": "clamp", "stops": [{"colorHex": "00FF00", "at": 0},
+            {"colorHex": "0000FF", "at": 1}]}"#;
+        let meta =
+            plain_background_in_a_composition(gradient, r#""backgroundColorHex": "FFFF00","#);
+        let yellow = [0, 255, 255, 255];
+        let (centre, count) = plate_census(meta, yellow);
+        assert_eq!(centre, yellow, "the composition's own plate, BGRA");
+        assert!(
+            count > 8000,
+            "yellow corner to corner, not the project's colour or gradient: {count}"
+        );
+    }
+
+    /// The same layer in a composition with NO plate paints nothing — a
+    /// title comp over footage shows the footage through a plain
+    /// background layer as it does through none — rather than the
+    /// project's settings colour.
+    #[test]
+    fn a_plain_background_layer_in_a_plateless_composition_paints_nothing() {
+        let meta = plain_background_in_a_composition("", "");
+        let blue = [255, 0, 0, 255];
+        let (centre, count) = plate_census(meta, blue);
+        assert_eq!(
+            centre, blue,
+            "the project's keyed background shows through, BGRA"
+        );
+        assert!(
+            count > 8000,
+            "through the whole frame, not the settings green: {count}"
         );
     }
 
