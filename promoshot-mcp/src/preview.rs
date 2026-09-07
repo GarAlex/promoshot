@@ -6,7 +6,8 @@
 //! The image travels as an MCP image content block — a multimodal client
 //! hands it to the model as an IMAGE (a 480px thumbnail is ~170 image
 //! tokens), and a text-only client just sees the text result it always
-//! saw. The same pixels land at `Exports/preview.png`, overwritten each
+//! saw. The same pixels land at `<Name> Exports/preview.png` beside the
+//! project, overwritten each
 //! call, so a person can keep the file open and watch the composition
 //! form — the closest headless gets to an editor viewport.
 //!
@@ -58,7 +59,7 @@ where
     // tool: one call, one picture, instead of a directory the agent then
     // reads one PNG at a time.
     if tool == "promo_render_frames" {
-        let sheet = dir.join("Exports").join("frames-sheet.png");
+        let sheet = crate::exports_dir(&project).join("frames-sheet.png");
         let bytes = std::fs::read(&sheet).map_err(|e| format!("frames-sheet.png: {e}"))?;
         return Ok(image_block(&bytes));
     }
@@ -71,7 +72,7 @@ where
         .flatten();
     let time = sample_time(&doc, touched_layer(tool, args, &doc), keyframe_time);
     let (width, height) = thumb_size(&doc);
-    let exports = dir.join("Exports");
+    let exports = crate::exports_dir(&project);
     std::fs::create_dir_all(&exports).map_err(|e| e.to_string())?;
     let out = exports.join("preview.png");
 

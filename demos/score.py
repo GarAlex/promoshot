@@ -56,9 +56,12 @@ def score_creative(rubric, meta, project):
         r = subprocess.run([promo, 'validate', project], capture_output=True, text=True)
         valid = r.returncode == 0
     check("valid", valid, "promo validate")
-    exports = os.path.join(project, 'Exports')
+    # Exports live BESIDE the project: `<Name> Exports/` next to `<Name>.promo`.
+    stem = os.path.basename(project.rstrip('/'))
+    stem = stem[:-6] if stem.endswith('.promo') else stem
+    exports = os.path.join(os.path.dirname(project.rstrip('/')), f"{stem} Exports")
     rendered = os.path.isdir(exports) and any(f.endswith('.mp4') for f in os.listdir(exports))
-    check("rendered", rendered, "an mp4 in Exports/")
+    check("rendered", rendered, "an mp4 beside the project")
     layers = meta.get('layers', [])
     dur = meta.get('videoDuration') or (max(l.get('startTime', 0) + (l.get('duration') or 0) for l in layers) if layers else 0)
     lo, hi = rubric.get('duration', [0, 1e9])

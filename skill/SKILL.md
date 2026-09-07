@@ -96,8 +96,9 @@ write, not after. The detail is under "With the app attached" below.
    answer with a small thumbnail ATTACHED — a keyframe's glance looks
    where the motion arrives; the others sample the touched layer's
    midpoint, past its fadeIn — and write the same image to
-   `Exports/preview.png`. Look at it before the next edit; it is the
-   editor viewport. (`preview: false` turns it off.)
+   `<Name> Exports/preview.png` beside the project. Look at it before
+   the next edit; it is the editor viewport. (`preview: false` turns it
+   off.)
 4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
    means "renders"; anything else is a silent correction named before you
    see it in pixels. `promo_inspect` summarizes what is in the project —
@@ -114,9 +115,10 @@ write, not after. The detail is under "With the app attached" below.
    mis-aimed viewport, an empty frame or an invisible caption. Name
    `times` for exact moments. `promo_render_still` when one moment is
    the question. Then `promo_render_video` for the mp4 or
-   `promo_render_gif` for the looping preview. A render lands in the
-   project's `Exports/` and returns paths; only the sheet and the
-   authoring tools' glance return pixels.
+   `promo_render_gif` for the looping preview. A render lands BESIDE
+   the project, in `<Name> Exports/` (never inside the `.promo`), and
+   returns paths; only the sheet and the authoring tools' glance return
+   pixels.
 
 Narration: `promo_voices` lists a provider's voices (pick a voiceID
 from it); `promo_speak` synthesizes every resource whose `speech.text`

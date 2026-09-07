@@ -352,7 +352,7 @@ The loop:
 4. `promo_validate` — the renderer's own parser. `ok` means it will render.
 5. `promo_render_frames` — LOOK. It samples the piece and answers with one contact sheet as an image. Fix what you see, then `promo_render_video`.
 
-Renders land in the project's `Exports/` and return paths, never bytes.";
+Renders land BESIDE the project, in `<Name> Exports/`, and return paths, never bytes.";
 
 fn initialize(request: &Value) -> Value {
     // Answer in the client's protocol dialect when it names one; this server
@@ -380,7 +380,7 @@ fn tool_descriptors() -> Value {
         "Path to the .promo project folder (metadata.json + Resources/)" });
     let preview = json!({ "type": "boolean", "description":
         "Attach an inline thumbnail of the composition (default true); the \
-         same image lands at <project>/Exports/preview.png" });
+         same image lands at <Name> Exports/preview.png beside the project" });
     // The editor's Command enum as the `commands` item schema — the
     // vocabulary (which commands exist, and what each names) and NOT the
     // model's whole type graph.
@@ -462,7 +462,7 @@ fn tool_descriptors() -> Value {
                         "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
                          missing proxies first; off never reads one. A full-size render never does." },
                     "out": { "type": "string", "description":
-                        "Output file (default: <project>/Exports/still-<time>s.png)" }
+                        "Output file (default: <Name> Exports/still-<time>s.png beside the project)" }
                 },
                 "required": ["project"] }
         },
@@ -491,7 +491,7 @@ fn tool_descriptors() -> Value {
                         "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
                          missing proxies first; off never reads one. A full-size render never does." },
                     "outDir": { "type": "string", "description":
-                        "Output directory (default: <project>/Exports/frames)" }
+                        "Output directory (default: <Name> Exports/frames beside the project)" }
                 },
                 "required": ["project"] }
         },
@@ -513,7 +513,7 @@ fn tool_descriptors() -> Value {
                     "alpha": { "type": "boolean", "description":
                         "Render over nothing and keep the frames' alpha — ProRes 4444 in a .mov." },
                     "out": { "type": "string", "description":
-                        "Output file (default: <project>/Exports/export.mp4)" }
+                        "Output file (default: <Name> Exports/export.mp4 beside the project)" }
                 },
                 "required": ["project"] }
         },
@@ -530,7 +530,7 @@ fn tool_descriptors() -> Value {
                         "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
                          missing proxies first; off never reads one. A full-size render never does." },
                     "out": { "type": "string", "description":
-                        "Output file (default: <project>/Exports/export.gif)" }
+                        "Output file (default: <Name> Exports/export.gif beside the project)" }
                 },
                 "required": ["project"] }
         },
@@ -1222,7 +1222,7 @@ fn fenced_project(args: &Value, config: &Config) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
-/// An explicit output path wins; otherwise the project's Exports folder,
+/// An explicit output path wins; otherwise the project's exports folder,
 /// created on the way — the same default the app's own tools use.
 /// Moments a bare `promo_render_frames` renders, and the most any one call
 /// will. The ceiling's message names the way out.
@@ -1234,18 +1234,35 @@ const FRAME_CAP: usize = 240;
 /// so `frame-*.png` stays a clean glob for ffmpeg and the preview knows
 /// where to look without re-deriving `outDir`.
 fn sheet_path(project: &str) -> String {
-    Path::new(project)
-        .join("Exports")
+    exports_dir(project)
         .join("frames-sheet.png")
         .display()
         .to_string()
+}
+
+/// Where a project's outputs go: BESIDE it, never inside. `<parent>/<Name>
+/// Exports/` for `<parent>/<Name>.promo` (a project folder without the
+/// extension keeps its whole name). An export is an output, not part of
+/// the work — a project that swallowed its own renders grew to gigabytes
+/// and travelled that way — and the apps keep the same rule.
+pub(crate) fn exports_dir(project: &str) -> std::path::PathBuf {
+    let path = Path::new(project);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.strip_suffix(".promo").unwrap_or(n))
+        .unwrap_or("project");
+    path.parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default()
+        .join(format!("{name} Exports"))
 }
 
 fn default_out(args: &Value, key: &str, project: &str, filename: &str) -> Result<String, String> {
     if let Some(out) = args.get(key).and_then(Value::as_str) {
         return Ok(out.to_string());
     }
-    let exports = Path::new(project).join("Exports");
+    let exports = exports_dir(project);
     std::fs::create_dir_all(&exports)
         .map_err(|e| format!("could not create {}: {e}", exports.display()))?;
     Ok(exports.join(filename).display().to_string())
@@ -1521,13 +1538,23 @@ mod tests {
             Some("still-2.5s.png"),
             "defaulted still name: {out}"
         );
+        let beside = format!("{} Exports", project.file_name().unwrap().to_str().unwrap());
         assert_eq!(
             out_path
                 .parent()
                 .and_then(|p| p.file_name())
                 .and_then(|n| n.to_str()),
-            Some("Exports"),
-            "defaulted into the project's Exports: {out}"
+            Some(beside.as_str()),
+            "defaulted BESIDE the project, into its exports folder: {out}"
+        );
+        assert!(
+            !out_path.starts_with(&project),
+            "never inside the project: {out}"
+        );
+        assert_eq!(
+            exports_dir("/tmp/Show.promo"),
+            Path::new("/tmp/Show Exports"),
+            "a package's extension is not part of the folder's name"
         );
         assert!(
             Path::new(&out).parent().unwrap().is_dir(),
@@ -1773,7 +1800,11 @@ mod tests {
         assert_eq!(content[1]["mimeType"], "image/png");
         let argv = seen.borrow().last().unwrap().clone();
         assert_eq!(argv[0], "still");
-        assert!(project.join("Exports/preview.png").is_file());
+        assert!(
+            root.join("Show Exports/preview.png").is_file(),
+            "the glance beside the project"
+        );
+        assert!(!project.join("Exports").exists(), "and nothing inside it");
         // And the classic show carries its caption as a layer.
         let meta: Value =
             serde_json::from_str(&std::fs::read_to_string(project.join("metadata.json")).unwrap())
