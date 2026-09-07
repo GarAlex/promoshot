@@ -47,6 +47,9 @@ SETS = [
  {"id": "c10", "slug": "three-devices", "title": "Three devices, no files",
   "goal": "No media. Three devices — a phone, a tablet and a laptop — together on a polished table under studio light, glass on every screen and something of your own showing on each, one camera move through the scene, ten to fifteen seconds, landscape. Make it look real: the table reflects them, they cast shadows, the light catches the glass. Whatever you need beyond what the format gives you, make yourself.",
   "media": {}, "duration": [9, 16], "must_use": []},
+ {"id": "c11", "slug": "through-the-screens", "title": "Through the screens, no files",
+  "goal": "No media. A laptop on a polished table under studio light; on its glass screen, a tablet on a table of its own; on the tablet's screen, a phone; on the phone's screen, something of yours. The camera flies into each screen in turn — the picture on the screen becomes the whole frame and the flight carries on into the next — one continuous movement, twenty to thirty seconds, landscape. Make it look real: reflections, shadows, the light catching the glass. Whatever you need beyond what the format gives you, make yourself.",
+  "media": {}, "duration": [18, 32], "must_use": []},
 ]
 
 def main():

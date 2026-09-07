@@ -59,8 +59,8 @@ if [ -f "$OUT/metadata.json" ]; then
     SRC="$OUT"; [ "$side" = reference ] && SRC="$REF"
     mkdir -p "$RUN/frames-$side"
     for f in 0.08 0.25 0.42 0.6 0.78 0.95; do
-      T=$(python3 -c "print(f'{$DUR*$f:.2f}')")
-      "$PROMO" still "$SRC" --out "$RUN/frames-$side/t$T.png" --time $T --size 640x400 > /dev/null 2>&1 || true
+      T=$(python3 -c "print(f'{$DUR*$f:.2f}')"); TAG=$(python3 -c "print(f'{$DUR*$f:06.2f}')")
+      "$PROMO" still "$SRC" --out "$RUN/frames-$side/t$TAG.png" --time $T --size 640x400 > /dev/null 2>&1 || true
     done
     ffmpeg -v error -y -pattern_type glob -i "$RUN/frames-$side/*.png" -filter_complex "tile=3x2" "$RUN/contact-$side.png" 2>/dev/null || true
   done

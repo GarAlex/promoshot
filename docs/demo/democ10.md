@@ -1,6 +1,6 @@
 # C10 Three devices, no files
 
-The three-device scene of C9 from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light — and make its own screens?
+Three devices on a polished table from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light — and make its own screens?
 
 *Any canvas, 9 to 16 s.* A **creative run**: a goal, the material and the tools, nothing about how. Part of [the demos](../../demo.md): a fresh agent, the media and the prompt below, the public skill and the headless MCP, nothing else.
 

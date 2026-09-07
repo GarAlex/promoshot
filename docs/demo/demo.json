@@ -5819,7 +5819,7 @@
   "id": "c10",
   "slug": "c10-three-devices",
   "title": "Three devices, no files",
-  "blurb": "The three-device scene of C9 from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light \u2014 and make its own screens?",
+  "blurb": "Three devices on a polished table from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light \u2014 and make its own screens?",
   "kind": "creative",
   "canvas": null,
   "duration": [
@@ -5975,6 +5975,151 @@
    "thumb": "docs/demo/c10-three-devices/thumb.png"
   },
   "page": "docs/demo/democ10.md"
+ },
+ {
+  "id": "c11",
+  "slug": "c11-through-the-screens",
+  "title": "Through the screens, no files",
+  "blurb": "A laptop whose screen shows a tablet whose screen shows a phone, and a camera that flies into each screen and on into the next \u2014 from a two-line brief and no media. Does a fresh agent, given only the skill, find compositions on screens and a flight that lands on the picture?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   18,
+   32
+  ],
+  "prompt": "No media. A laptop on a polished table under studio light; on its glass screen, a tablet on a table of its own; on the tablet's screen, a phone; on the phone's screen, something of yours. The camera flies into each screen in turn \u2014 the picture on the screen becomes the whole frame and the flight carries on into the next \u2014 one continuous movement, twenty to thirty seconds, landscape. Make it look real: reflections, shadows, the light catching the glass. Whatever you need beyond what the format gives you, make yourself.",
+  "resources": [],
+  "result": {
+   "score": 83,
+   "passed": 5,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "26.4s, asked 18\u201332s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "14 features: composition, gradient, stage, stageLayer, model, camera, materials, finishWord, floor, device, light, cameraTarget, textBody, environment"
+    },
+    {
+     "check": "words",
+     "ok": false,
+     "detail": "0 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "3 layers"
+    }
+   ],
+   "summary": "turns=139 cost=$18.66 secs=2471",
+   "run": {
+    "turns": 139,
+    "wall_s": 2470,
+    "api_s": 2357,
+    "cost_usd": 18.66,
+    "tokens": {
+     "input": 242,
+     "cache_read": 23643892,
+     "cache_write": 274421,
+     "output": 163757,
+     "thinking": 113615
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 23918555,
+      "output": 163757,
+      "cost_usd": 18.66
+     }
+    ],
+    "mcp": {
+     "calls": 47,
+     "ms": 92494,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 75960,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 21,
+       "ms": 14177,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 15,
+       "ms": 2311,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 4,
+       "ms": 33,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 3,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 3,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "composition",
+    "gradient",
+    "stage",
+    "stageLayer",
+    "model",
+    "camera",
+    "materials",
+    "finishWord",
+    "floor",
+    "device",
+    "light",
+    "cameraTarget",
+    "textBody",
+    "environment"
+   ],
+   "captions": [],
+   "notes": "Done. **`out.promo`** is written, validates clean, and the video is rendered.\n\n**The piece** \u2014 26.4s, 1920\u00d71080, one continuous flight:\n\n| | |\n|---|---|\n| 0\u20137.1s | a laptop on a polished table, studio key, mirrored floor \u2014 flying into its glass |\n| 7.1\u201312.4s | on the laptop's screen, a tablet on a cooler table of its own |\n| 12.4\u201321.0s | on the tablet's screen, a phone |\n| 21.0\u201326.4s | on the phone's screen: the same warm table, the same laptop, and the word **AGAIN** standing on it in chrome \u2014 the ring closes on the opening frame, held for the last beat |\n\n**How the seams work.** Each level is a `stage` layer \u2014 a device recipe body on a `mirror`/`satin` floor under a `studio` environment, screen bound with `finish: \"glass\"` so the key light glances off it. The whole flight is one exponential zoom on a single clock (rate eased in over 1.6s, held, eased to rest at 26s). Each level's camera carries it until that screen exactly covers the frame; then a flat copy of the same nested composition \u2014 held on the project clock from t=0, so it is on exactly the frame the screen was showing \u2014 dissolves in over 0.35s at the identical rect, and the next level's camera picks up at the same rate. Composite zoom rate is continuous across every handoff; the only thing that changes is the glare lifting off the glass as you pass through it.\n\n**Getting there needed measurement, not guessing.** I calibrated each device by binding a magenta composition to its Screen slot and measuring the rect: `widthPx = A/(distance \u2212 s)`, with `A` scaling as `1/tan(fov/2)` and with canvas *height* (fov is vertical \u2014 confirmed to 0.03%). Two things the model got wrong, both caught by rendering:\n\n- Screens are rounded rects and the fitted `A` carries ~1\u20135% error, so each screen is driven 4.5\u201317% past exact co",
+   "contact": "docs/demo/c11-through-the-screens/contact-result.png",
+   "video": "docs/demo/c11-through-the-screens/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c11-through-the-screens.mp4",
+   "video_hd_bytes": 1645255,
+   "metadata": "docs/demo/c11-through-the-screens/result-metadata.json",
+   "gif": "docs/demo/c11-through-the-screens/result.gif",
+   "thumb": "docs/demo/c11-through-the-screens/thumb.png"
+  },
+  "page": "docs/demo/democ11.md"
  },
  {
   "id": "c2",
@@ -7192,7 +7337,7 @@
   "id": "c9",
   "slug": "c9-infinite-screens",
   "title": "Infinite screens",
-  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them \u2014 every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight. What a fresh agent makes of the same scene from a two-line brief and no media is C10.",
+  "blurb": "A built showcase, not an agent run: a script writes four compositions from the format and flies through them \u2014 every screen plays the next scene, each cut lands on the picture already on the screen. Rebuilt on the engine's words: anodized bodies with glass over every screen, each standing in its own stage on a glossy floor that mirrors it, under the studio, with the key light swinging through every flight.",
   "kind": "showcase",
   "canvas": [
    1440,
