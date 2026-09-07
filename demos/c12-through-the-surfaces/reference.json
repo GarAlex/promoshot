@@ -1,5 +1,5 @@
 {
- "id": "991785BA-BADC-4867-8F6A-10C0724C60A4",
+ "id": "595612BB-3E6B-42D3-95B0-347881E44221",
  "name": "Through the surfaces",
  "createdAt": 0,
  "state": "recorded",
@@ -20,7 +20,7 @@
  },
  "resources": [
   {
-   "id": "6A24EE6A-D90C-438A-81DB-7E230097F1F3",
+   "id": "B50E0F38-3EEF-4D84-9111-7DC547A3A9D8",
    "kind": "model",
    "filename": "",
    "displayName": "PROMO",
@@ -48,7 +48,7 @@
    }
   },
   {
-   "id": "2B9B152F-B7D6-4409-B459-69915EA08B5B",
+   "id": "918B5430-1972-4B64-80C6-95405974F5ED",
    "kind": "model",
    "filename": "",
    "displayName": "SHOT",
@@ -76,7 +76,7 @@
    }
   },
   {
-   "id": "03C2FAC6-78F2-4458-BDC5-A99582F3FD22",
+   "id": "345876CD-35F9-4B38-9BC4-C429AB78E49C",
    "kind": "model",
    "filename": "",
    "displayName": "Phone",
@@ -99,13 +99,13 @@
      "finish": "anodized"
     },
     "Screen": {
-     "resourceID": "828469E4-2273-4791-844A-A6F7D981E4C1",
+     "resourceID": "8927D03F-5792-42AB-AFE2-4ACD9388129D",
      "finish": "glass"
     }
    }
   },
   {
-   "id": "F78BDA69-EDD2-4564-B2A4-04B3C85B29F1",
+   "id": "86EABDB1-6025-4594-AFAE-F43984FD6B62",
    "kind": "model",
    "filename": "",
    "displayName": "Tablet",
@@ -128,13 +128,13 @@
      "finish": "anodized"
     },
     "Screen": {
-     "resourceID": "F131115A-AE51-4E9C-B36F-1FBF075542B0",
+     "resourceID": "FA719D85-5F91-4375-8E36-81567720EB02",
      "finish": "glass"
     }
    }
   },
   {
-   "id": "3F5189CB-3172-4BEE-A947-278C160A60C1",
+   "id": "0E4E2FAD-DC02-4B27-BD98-1366FFB7A448",
    "kind": "model",
    "filename": "",
    "displayName": "Laptop",
@@ -157,13 +157,13 @@
      "finish": "anodized"
     },
     "Screen": {
-     "resourceID": "94CB20F8-FAA2-4198-B75D-551294C8D20A",
+     "resourceID": "B168D00C-21E8-40A5-BBC9-A769041273F9",
      "finish": "glass"
     }
    }
   },
   {
-   "id": "9E4E92EE-8CDC-4468-ADDF-6BEAE8FD3651",
+   "id": "C23744ED-8D7F-4210-90C0-FE53B97D2A34",
    "kind": "composition",
    "filename": "",
    "displayName": "Film: the laptop",
@@ -179,7 +179,7 @@
     "backgroundColorHex": "070707",
     "layers": [
      {
-      "id": "0237B026-63A0-40A0-AEE7-EBC7701F30C5",
+      "id": "2F9966DB-D9AF-4B12-B517-1934E1E5C1E5",
       "name": "Room",
       "sortIndex": 0,
       "kind": "background",
@@ -188,7 +188,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "A6B89F28-8B01-401B-9041-A5B0781BDAC6",
+        "id": "374787CE-82D6-4AF9-8EF5-D2D7F7871292",
         "time": 0,
         "transitionDuration": 0.0,
         "gradient": {
@@ -225,7 +225,7 @@
       ]
      },
      {
-      "id": "45994B5A-A755-49B5-8532-EBA5576EDC43",
+      "id": "7265EEDC-AED2-4DF6-845E-15FF6223280C",
       "name": "Laptop on the table",
       "sortIndex": 1,
       "kind": "stage",
@@ -234,7 +234,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "950D7630-21C7-4A67-B186-86B7CF270DB4",
+        "id": "3E5CADC8-02F4-47BB-A290-DBB07FC2CCA3",
         "time": 0,
         "transitionDuration": 0.0,
         "placement": {
@@ -261,7 +261,7 @@
         }
        },
        {
-        "id": "D77D3D3C-E374-4DC6-B619-67808425508D",
+        "id": "4B4CB7D7-5D26-4D52-AC8F-5F42837E975E",
         "time": 1.5,
         "transitionDuration": 1.5,
         "easing": "linear",
@@ -289,7 +289,7 @@
         }
        },
        {
-        "id": "AF31687B-6DEE-4886-935E-529E256E5123",
+        "id": "41F1AFBE-C37B-4DBA-808A-04CDD8F9A6CD",
         "time": 2.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -317,7 +317,7 @@
         }
        },
        {
-        "id": "0AD2B268-F980-4D9D-B940-33D6A6DFAAC3",
+        "id": "DDCD7806-0E29-42B8-89BB-F90B51E2146A",
         "time": 2.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -345,7 +345,7 @@
         }
        },
        {
-        "id": "65E2A33A-180A-43B5-A9AD-57D4578DE0CA",
+        "id": "F471C69D-691B-4829-9219-A90EA997DD0C",
         "time": 3.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -373,7 +373,7 @@
         }
        },
        {
-        "id": "8707A445-E578-4D25-8275-1FD2711F9542",
+        "id": "DF59DB56-A16A-46CB-875C-57147C7E8AAE",
         "time": 3.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -401,7 +401,7 @@
         }
        },
        {
-        "id": "9A3E70E0-D535-4A88-BD7C-5EE6C5004AAA",
+        "id": "50F6B7EF-E083-4715-9997-B4EF74521AEA",
         "time": 4.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -429,7 +429,7 @@
         }
        },
        {
-        "id": "DBDFACA4-2BE0-42D1-9252-DFC547C9777D",
+        "id": "0DD9BF37-364C-484F-81F3-2A0FD1918B9A",
         "time": 4.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -457,7 +457,7 @@
         }
        },
        {
-        "id": "B19CF7E1-D375-48D5-B6F0-45BBAE925DB1",
+        "id": "7D0436F7-3005-4814-A4CE-F4FDF8EA775E",
         "time": 5.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -485,7 +485,7 @@
         }
        },
        {
-        "id": "F87F53D3-A488-4F8D-A178-8EF55194467E",
+        "id": "C5F05A13-78BB-44A6-8395-AD35B85642E9",
         "time": 5.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -513,7 +513,7 @@
         }
        },
        {
-        "id": "26287869-18F3-4AFD-98C3-65014076C93B",
+        "id": "C0E2D83C-9604-421E-9C4F-CEF5C0BA0C89",
         "time": 6.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -541,7 +541,7 @@
         }
        },
        {
-        "id": "189755B9-8B69-4B92-A0C5-0C2591E3BC42",
+        "id": "9E6135B7-BC10-4452-99ED-63D296801747",
         "time": 6.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -569,7 +569,7 @@
         }
        },
        {
-        "id": "1E40A432-81E9-4970-9A6C-612AAE1F41E8",
+        "id": "C5138253-428A-41B4-9563-1C2F2ABA6047",
         "time": 7.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -597,7 +597,7 @@
         }
        },
        {
-        "id": "D7784755-1043-4C4B-B589-131FD0C4B7C2",
+        "id": "73BC5A75-BD02-4823-B91D-37A76B82619C",
         "time": 7.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -625,37 +625,9 @@
         }
        },
        {
-        "id": "74024BB5-99C0-4B73-88E8-5586A62BE956",
-        "time": 7.8,
-        "transitionDuration": 0.3,
-        "easing": "linear",
-        "placement": {
-         "mode": "fill"
-        },
-        "camera": {
-         "yaw": 0,
-         "pitch": 12,
-         "roll": 0,
-         "distance": 1.05,
-         "fov": 26.040000000000003,
-         "target": {
-          "point": [
-           0,
-           -0.05,
-           -0.53
-          ]
-         }
-        },
-        "light": {
-         "yaw": -35.0,
-         "pitch": 45.0,
-         "intensity": 1.05
-        }
-       },
-       {
-        "id": "3FD9F2B6-ADD3-4070-B3E7-884D2EFE2ED0",
+        "id": "08FE7DEC-2940-4524-AB4E-684F8F1816DC",
         "time": 26.0,
-        "transitionDuration": 18.2,
+        "transitionDuration": 18.5,
         "easing": "linear",
         "placement": {
          "mode": "fill"
@@ -665,7 +637,7 @@
          "pitch": 12,
          "roll": 0,
          "distance": 1.05,
-         "fov": 26.040000000000003,
+         "fov": 28.0,
          "target": {
           "point": [
            0,
@@ -684,7 +656,7 @@
       "floor": "glossy",
       "members": [
        {
-        "id": "B5E262E3-8E34-4B65-A3F4-044297FC10FE",
+        "id": "DE60340E-4635-40FB-B57D-1F7540703C62",
         "name": "Laptop",
         "sortIndex": 0,
         "kind": "model",
@@ -693,7 +665,7 @@
         "duration": 26.0,
         "keyframes": [
          {
-          "id": "0646E9CE-6A9D-4B58-ADC9-CF6A308B693C",
+          "id": "661FD583-735E-4DF8-8183-99F14D0AC944",
           "time": 0,
           "transitionDuration": 0.0,
           "depth": 0,
@@ -703,7 +675,7 @@
           ]
          }
         ],
-        "resourceID": "3F5189CB-3172-4BEE-A947-278C160A60C1"
+        "resourceID": "0E4E2FAD-DC02-4B27-BD98-1366FFB7A448"
        }
       ]
      }
@@ -711,7 +683,7 @@
    }
   },
   {
-   "id": "94CB20F8-FAA2-4198-B75D-551294C8D20A",
+   "id": "B168D00C-21E8-40A5-BBC9-A769041273F9",
    "kind": "composition",
    "filename": "",
    "displayName": "Film: the tablet",
@@ -727,7 +699,7 @@
     "backgroundColorHex": "070707",
     "layers": [
      {
-      "id": "BAE93971-6E9B-4851-A2E5-EE7C10303978",
+      "id": "0D2CEFBB-B3EC-4B71-A798-7C690244F602",
       "name": "Room",
       "sortIndex": 0,
       "kind": "background",
@@ -736,7 +708,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "20A56B91-8E7B-4AFD-9DE2-15CF261CD86B",
+        "id": "7BA9AF55-D473-4451-83CA-AED1F5C46DFF",
         "time": 0,
         "transitionDuration": 0.0,
         "gradient": {
@@ -773,7 +745,7 @@
       ]
      },
      {
-      "id": "87B1AD6A-C3C8-4F78-96EC-56B8D8A28D1A",
+      "id": "D5864CEB-31FA-44CF-BD41-675BF9EC0236",
       "name": "Tablet on the table",
       "sortIndex": 1,
       "kind": "stage",
@@ -782,7 +754,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "42A529BD-F7B7-445B-B779-FD953B16FA6A",
+        "id": "C80D43B0-C347-4924-93F2-1E031D371563",
         "time": 0,
         "transitionDuration": 0.0,
         "placement": {
@@ -809,7 +781,7 @@
         }
        },
        {
-        "id": "B460E011-FC2E-48E2-9AB6-74BD799956A7",
+        "id": "C3851C09-68EF-4F8D-91C6-F4C8DD58972A",
         "time": 7.5,
         "transitionDuration": 7.5,
         "easing": "linear",
@@ -837,7 +809,7 @@
         }
        },
        {
-        "id": "A3DDFA0E-3A24-429C-A19A-D2FA7A15CA36",
+        "id": "54D844FD-E5C8-434A-8419-B3FF7C3E6031",
         "time": 8.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -865,7 +837,7 @@
         }
        },
        {
-        "id": "854DB969-F014-4246-91AE-DA90B8614FAB",
+        "id": "7E41AFEE-1F0D-4FF1-8FB6-2F4261F4977B",
         "time": 8.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -893,7 +865,7 @@
         }
        },
        {
-        "id": "090697E7-583A-4B7D-920F-9001D2B193F9",
+        "id": "80166E40-62F7-4F25-8145-E5CCD707E001",
         "time": 9.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -921,7 +893,7 @@
         }
        },
        {
-        "id": "1BBBD9B7-C746-4AA5-ABA6-C8B784557A8E",
+        "id": "021D3727-6C5F-483B-9B06-5C1BD40430AD",
         "time": 9.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -949,7 +921,7 @@
         }
        },
        {
-        "id": "60CDA119-9D5B-4D19-8132-963239F8B896",
+        "id": "0DBE88E4-9F5A-4FD8-A83A-01689135FDBB",
         "time": 10.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -977,7 +949,7 @@
         }
        },
        {
-        "id": "9872C6C5-0516-489C-9BC6-2B051A1913AE",
+        "id": "43E9A17A-484A-44A5-B32B-9D135DBC7A8A",
         "time": 10.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1005,7 +977,7 @@
         }
        },
        {
-        "id": "7A3283CA-EADC-4000-B319-67A4A3FA7BC4",
+        "id": "4A42CE59-11FE-4D3F-A326-DFE75A249052",
         "time": 11.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1033,7 +1005,7 @@
         }
        },
        {
-        "id": "0498D228-515E-4897-B8C1-B6768286A1D6",
+        "id": "BE35C171-FD23-4B2B-A8D4-080A85FC2F4F",
         "time": 11.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1061,7 +1033,7 @@
         }
        },
        {
-        "id": "04D3B391-9DF7-460B-9B64-00AD85F70ADE",
+        "id": "89021136-B611-4DE3-995D-59C5AE46B2F1",
         "time": 12.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1089,7 +1061,7 @@
         }
        },
        {
-        "id": "A3467079-A203-489C-8928-D8C77AA2BDB0",
+        "id": "1A4E995F-5508-42DA-856D-93C6A2D7D586",
         "time": 12.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1117,7 +1089,7 @@
         }
        },
        {
-        "id": "01E438C6-C09A-4991-A292-9D7BD3FF86C4",
+        "id": "CD2C58F5-3D24-4174-A903-7882AE24F36A",
         "time": 13.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1145,7 +1117,7 @@
         }
        },
        {
-        "id": "95DA4A3F-EB54-4539-9158-0CBFB9F72392",
+        "id": "9F339D33-C331-4D85-9EF1-B360B7D6634C",
         "time": 13.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1173,37 +1145,9 @@
         }
        },
        {
-        "id": "784A40E6-21F5-4492-BAF9-9C17158A8BE0",
-        "time": 13.8,
-        "transitionDuration": 0.3,
-        "easing": "linear",
-        "placement": {
-         "mode": "fill"
-        },
-        "camera": {
-         "yaw": 0,
-         "pitch": 0,
-         "roll": 0,
-         "distance": 1.05,
-         "fov": 46.5,
-         "target": {
-          "point": [
-           0,
-           0,
-           0
-          ]
-         }
-        },
-        "light": {
-         "yaw": -35.0,
-         "pitch": 45.0,
-         "intensity": 1.05
-        }
-       },
-       {
-        "id": "3571D375-6D50-4095-A070-95EC0DA06B9E",
+        "id": "5A083739-6DAA-4968-A380-51A8BC29821A",
         "time": 26.0,
-        "transitionDuration": 12.2,
+        "transitionDuration": 12.5,
         "easing": "linear",
         "placement": {
          "mode": "fill"
@@ -1213,7 +1157,7 @@
          "pitch": 0,
          "roll": 0,
          "distance": 1.05,
-         "fov": 46.5,
+         "fov": 50,
          "target": {
           "point": [
            0,
@@ -1232,7 +1176,7 @@
       "floor": "satin",
       "members": [
        {
-        "id": "5FC7BB20-0459-480C-BE41-ED3E97943F28",
+        "id": "30868778-CF6D-4728-876F-889489C613C0",
         "name": "Tablet",
         "sortIndex": 0,
         "kind": "model",
@@ -1241,7 +1185,7 @@
         "duration": 26.0,
         "keyframes": [
          {
-          "id": "175A4723-E035-41B6-A5EA-6911CB37F837",
+          "id": "C0984385-6E19-48CF-B5F6-22E3A629CD82",
           "time": 0,
           "transitionDuration": 0.0,
           "depth": 0,
@@ -1251,7 +1195,7 @@
           ]
          }
         ],
-        "resourceID": "F78BDA69-EDD2-4564-B2A4-04B3C85B29F1"
+        "resourceID": "86EABDB1-6025-4594-AFAE-F43984FD6B62"
        }
       ]
      }
@@ -1259,7 +1203,7 @@
    }
   },
   {
-   "id": "F131115A-AE51-4E9C-B36F-1FBF075542B0",
+   "id": "FA719D85-5F91-4375-8E36-81567720EB02",
    "kind": "composition",
    "filename": "",
    "displayName": "Film: the phone",
@@ -1275,7 +1219,7 @@
     "backgroundColorHex": "070707",
     "layers": [
      {
-      "id": "D2AC1D7D-BCEE-4270-94BA-5381CD927C75",
+      "id": "69004A82-CC87-47F7-AC3C-A56274A1AA7A",
       "name": "Room",
       "sortIndex": 0,
       "kind": "background",
@@ -1284,7 +1228,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "99D2D3AF-2A44-47CB-9B29-CAB59712CFA1",
+        "id": "BE54253C-F2D1-48AE-997F-3E91CD39B4E9",
         "time": 0,
         "transitionDuration": 0.0,
         "gradient": {
@@ -1321,7 +1265,7 @@
       ]
      },
      {
-      "id": "96381E01-0CAF-4C1F-9A9F-D29DBB91CD43",
+      "id": "C0C35763-BB90-4BAB-92B0-2DF7B17F0725",
       "name": "Phone on the table",
       "sortIndex": 1,
       "kind": "stage",
@@ -1330,7 +1274,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "11D9590D-9D2D-4152-87A3-12D7D9A58E63",
+        "id": "A767D4D1-F297-467A-9363-1B731E5C8E56",
         "time": 0,
         "transitionDuration": 0.0,
         "placement": {
@@ -1357,7 +1301,7 @@
         }
        },
        {
-        "id": "CAEE6C0A-0BB1-4F93-BD24-688D470143D3",
+        "id": "8A148484-D1F8-4E44-A390-F8F47CD5EA02",
         "time": 13.5,
         "transitionDuration": 13.5,
         "easing": "linear",
@@ -1385,7 +1329,7 @@
         }
        },
        {
-        "id": "93DDD18F-20EA-4222-ABD6-B1B6F44386FA",
+        "id": "590303D1-1667-4019-90DC-AEEFF1666BF7",
         "time": 14.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1413,7 +1357,7 @@
         }
        },
        {
-        "id": "1733086E-971F-48F5-ABA5-AA52F494A463",
+        "id": "BD91C756-9EA9-4F86-9B68-CDF2739460D6",
         "time": 14.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1441,7 +1385,7 @@
         }
        },
        {
-        "id": "6D25B686-48A8-442D-9341-C322086F1E4D",
+        "id": "CE42C4C4-ECCE-4D1C-8D9E-4C57B2655D18",
         "time": 15.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1469,7 +1413,7 @@
         }
        },
        {
-        "id": "C3D61A18-9CDE-4B43-A4D5-28A4EA7800FD",
+        "id": "70EFDCA1-5C07-4654-8F66-6B4A8E3860DE",
         "time": 15.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1497,7 +1441,7 @@
         }
        },
        {
-        "id": "9E59388B-5AF6-499C-B203-BBCB7BA0177D",
+        "id": "FFD6487B-0B1D-49B3-8958-DC6541454F71",
         "time": 16.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1525,7 +1469,7 @@
         }
        },
        {
-        "id": "0F6D2BA5-000A-43D4-9DD9-97F2487D323C",
+        "id": "6F44DC9A-9E1D-4670-8323-CC058640BD88",
         "time": 16.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1553,7 +1497,7 @@
         }
        },
        {
-        "id": "80A70834-B1C0-486B-8324-8FB21CD80064",
+        "id": "7D49404B-F2F2-4A67-8E9F-DD768EC39890",
         "time": 17.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1581,7 +1525,7 @@
         }
        },
        {
-        "id": "C5F356AF-4977-4C4F-B31B-7D9C56C37D88",
+        "id": "B2BAF6A5-29F5-4EAC-8C6C-90400E0EDB23",
         "time": 17.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1609,7 +1553,7 @@
         }
        },
        {
-        "id": "46FA8ABA-228F-4048-A5F8-D2A3523FB3CA",
+        "id": "C81EF3CE-50BE-46CA-B8ED-6072D3F6468D",
         "time": 18.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1637,7 +1581,7 @@
         }
        },
        {
-        "id": "B15F3A6F-DB59-4E55-A9AF-83D122D18975",
+        "id": "A7A8E350-85F5-4AE2-B6BA-77FB322E08DD",
         "time": 18.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1665,7 +1609,7 @@
         }
        },
        {
-        "id": "80938490-B3A4-48B7-9BF6-141345E0D773",
+        "id": "93386D89-3CE7-455A-B728-3F1A4BE7DCFE",
         "time": 19.0,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1693,7 +1637,7 @@
         }
        },
        {
-        "id": "52109464-98D5-4DC5-8C7A-B8FF0089B03C",
+        "id": "786701B0-69BB-4857-8B64-C641AC4E1BBC",
         "time": 19.5,
         "transitionDuration": 0.5,
         "easing": "linear",
@@ -1721,37 +1665,9 @@
         }
        },
        {
-        "id": "DDDB603E-9178-46A6-AD0F-ABB2FF5802D2",
-        "time": 19.8,
-        "transitionDuration": 0.3,
-        "easing": "linear",
-        "placement": {
-         "mode": "fill"
-        },
-        "camera": {
-         "yaw": 0,
-         "pitch": 0,
-         "roll": 0,
-         "distance": 1.05,
-         "fov": 27.435000000000002,
-         "target": {
-          "point": [
-           0,
-           0,
-           0
-          ]
-         }
-        },
-        "light": {
-         "yaw": -35.0,
-         "pitch": 45.0,
-         "intensity": 1.05
-        }
-       },
-       {
-        "id": "CFEE8D04-6878-4ABF-B537-0A4508C71086",
+        "id": "9D9EDC26-990D-45E0-BCAF-27AA4FABAD8E",
         "time": 26.0,
-        "transitionDuration": 6.2,
+        "transitionDuration": 6.5,
         "easing": "linear",
         "placement": {
          "mode": "fill"
@@ -1761,7 +1677,7 @@
          "pitch": 0,
          "roll": 0,
          "distance": 1.05,
-         "fov": 27.435000000000002,
+         "fov": 29.5,
          "target": {
           "point": [
            0,
@@ -1780,7 +1696,7 @@
       "floor": "glossy",
       "members": [
        {
-        "id": "F9FEFA6D-F98C-48DC-AB5C-6D1C0B806B12",
+        "id": "F69ED17B-CBC1-4398-9935-9FBABC745659",
         "name": "Phone",
         "sortIndex": 0,
         "kind": "model",
@@ -1789,7 +1705,7 @@
         "duration": 26.0,
         "keyframes": [
          {
-          "id": "108BD086-B8ED-431D-A751-0CDF38FC3D4B",
+          "id": "B2A8C7D1-9174-4E60-888C-664143AE0A39",
           "time": 0,
           "transitionDuration": 0.0,
           "depth": 0,
@@ -1799,7 +1715,7 @@
           ]
          }
         ],
-        "resourceID": "03C2FAC6-78F2-4458-BDC5-A99582F3FD22"
+        "resourceID": "345876CD-35F9-4B38-9BC4-C429AB78E49C"
        }
       ]
      }
@@ -1807,7 +1723,7 @@
    }
   },
   {
-   "id": "828469E4-2273-4791-844A-A6F7D981E4C1",
+   "id": "8927D03F-5792-42AB-AFE2-4ACD9388129D",
    "kind": "composition",
    "filename": "",
    "displayName": "Film: the words",
@@ -1823,7 +1739,7 @@
     "backgroundColorHex": "070707",
     "layers": [
      {
-      "id": "47EDC61F-A001-4A44-8730-6132029FA87F",
+      "id": "8276D022-AE7E-4F34-A77C-0CC1BA97B47C",
       "name": "Room",
       "sortIndex": 0,
       "kind": "background",
@@ -1832,7 +1748,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "D25FE215-2E13-4F21-A20D-FC87171D3F12",
+        "id": "A0C82A33-9643-4670-AB38-5CA4AC4D7B33",
         "time": 0,
         "transitionDuration": 0.0,
         "gradient": {
@@ -1869,7 +1785,7 @@
       ]
      },
      {
-      "id": "EDD81DD0-F684-4BD3-BCAB-6FAE465BE732",
+      "id": "48DFEC8C-2754-4212-BA39-40DBC4F2559D",
       "name": "The words on the floor",
       "sortIndex": 1,
       "kind": "stage",
@@ -1878,7 +1794,7 @@
       "duration": 26.0,
       "keyframes": [
        {
-        "id": "16D09F78-BAA2-47AE-98D7-7468C212C738",
+        "id": "02E1DC0A-29AF-40D0-A784-9B322607ACA1",
         "time": 0,
         "transitionDuration": 0.0,
         "placement": {
@@ -1905,7 +1821,7 @@
         }
        },
        {
-        "id": "0E39B134-C4EE-44A0-84F4-1135ECFC8677",
+        "id": "2FAAC386-149B-4C70-923E-1C0115636C4B",
         "time": 26.0,
         "transitionDuration": 26.0,
         "easing": "linear",
@@ -1936,7 +1852,7 @@
       "floor": "mirror",
       "members": [
        {
-        "id": "A01B3E46-F75A-45D9-A3E4-94D6D91EC807",
+        "id": "3F9147B0-C47F-4E66-9A8E-12DF14B5D03E",
         "name": "PROMO",
         "sortIndex": 0,
         "kind": "model",
@@ -1945,7 +1861,7 @@
         "duration": 26.0,
         "keyframes": [
          {
-          "id": "F896243A-8299-451F-B7E0-895DAA397776",
+          "id": "C7C29C71-4D04-4DB2-8DBF-0A1A2564BBE6",
           "time": 0,
           "transitionDuration": 0.0,
           "depth": 0,
@@ -1955,10 +1871,10 @@
           ]
          }
         ],
-        "resourceID": "6A24EE6A-D90C-438A-81DB-7E230097F1F3"
+        "resourceID": "B50E0F38-3EEF-4D84-9111-7DC547A3A9D8"
        },
        {
-        "id": "17DD8DEF-68AE-4F90-A9C5-37E352A13904",
+        "id": "D6C4647D-7169-4A1D-AFF9-5BFEAAC0AEF7",
         "name": "SHOT",
         "sortIndex": 1,
         "kind": "model",
@@ -1967,7 +1883,7 @@
         "duration": 26.0,
         "keyframes": [
          {
-          "id": "5199D5B6-2372-499C-A774-237427FE5C51",
+          "id": "4C3B7D70-AF27-4EFC-9CBA-B22FBDF8AA5E",
           "time": 0,
           "transitionDuration": 0.0,
           "depth": 0.02,
@@ -1977,7 +1893,7 @@
           ]
          }
         ],
-        "resourceID": "2B9B152F-B7D6-4409-B459-69915EA08B5B"
+        "resourceID": "918B5430-1972-4B64-80C6-95405974F5ED"
        }
       ]
      }
@@ -1987,7 +1903,7 @@
  ],
  "layers": [
   {
-   "id": "4B4F1506-006F-4EC6-9F01-870174B8AD2A",
+   "id": "9F0233D6-E5C1-4CC7-A95D-C16606B55FC4",
    "name": "Film: the laptop",
    "sortIndex": 3,
    "kind": "video",
@@ -1996,7 +1912,7 @@
    "duration": 7.8,
    "keyframes": [
     {
-     "id": "DF96B004-418A-4C98-81B5-DFBF66004B0D",
+     "id": "A0BEF4B2-FB74-4B58-AFEE-0B598A53CD9F",
      "time": 0,
      "transitionDuration": 0.0,
      "placement": {
@@ -2004,14 +1920,14 @@
      }
     }
    ],
-   "resourceID": "9E4E92EE-8CDC-4468-ADDF-6BEAE8FD3651",
+   "resourceID": "C23744ED-8D7F-4210-90C0-FE53B97D2A34",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.3
    }
   },
   {
-   "id": "08823C92-41EF-4C07-B40B-630362315C5A",
+   "id": "990CA0EC-6FAE-42B9-821B-4D6D21C7C01A",
    "name": "Film: the tablet",
    "sortIndex": 2,
    "kind": "video",
@@ -2020,7 +1936,7 @@
    "duration": 13.8,
    "keyframes": [
     {
-     "id": "0AA41ACD-2BA5-4288-A773-FD3A3D90D5C9",
+     "id": "76EF413D-CCC5-40F0-9B4A-B0C010735B4B",
      "time": 0,
      "transitionDuration": 0.0,
      "placement": {
@@ -2028,14 +1944,14 @@
      }
     }
    ],
-   "resourceID": "94CB20F8-FAA2-4198-B75D-551294C8D20A",
+   "resourceID": "B168D00C-21E8-40A5-BBC9-A769041273F9",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.3
    }
   },
   {
-   "id": "36977D14-0519-485D-A746-2E57D3944136",
+   "id": "4F8E3973-6B66-4C53-9211-3798BE02C1FE",
    "name": "Film: the phone",
    "sortIndex": 1,
    "kind": "video",
@@ -2044,7 +1960,7 @@
    "duration": 19.8,
    "keyframes": [
     {
-     "id": "326DC9E3-F050-4937-995B-C01F1AF5331A",
+     "id": "BC79DB7B-C044-4C72-9C19-60A6A76E2500",
      "time": 0,
      "transitionDuration": 0.0,
      "placement": {
@@ -2052,14 +1968,14 @@
      }
     }
    ],
-   "resourceID": "F131115A-AE51-4E9C-B36F-1FBF075542B0",
+   "resourceID": "FA719D85-5F91-4375-8E36-81567720EB02",
    "transitionOut": {
     "kind": "fade",
     "duration": 0.3
    }
   },
   {
-   "id": "639DA962-C9C9-4903-BF4D-EE40A01D6661",
+   "id": "64693B52-8E89-4091-B232-B8F468D44298",
    "name": "Film: the words",
    "sortIndex": 0,
    "kind": "video",
@@ -2068,7 +1984,7 @@
    "duration": 26.0,
    "keyframes": [
     {
-     "id": "F45F4534-67BF-4508-B75C-EFC904CC2279",
+     "id": "9B62E984-E0D7-40DE-9E53-0B0D87988288",
      "time": 0,
      "transitionDuration": 0.0,
      "placement": {
@@ -2076,7 +1992,7 @@
      }
     }
    ],
-   "resourceID": "828469E4-2273-4791-844A-A6F7D981E4C1"
+   "resourceID": "8927D03F-5792-42AB-AFE2-4ACD9388129D"
   }
  ]
 }

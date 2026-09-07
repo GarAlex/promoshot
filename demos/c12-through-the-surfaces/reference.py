@@ -106,12 +106,12 @@ def stage_keys(level, ch):
                  pitch=rest['pitch'] + (close['pitch'] - rest['pitch']) * f,
                  distance=round(d, 4), fov=rest['fov'] + (close['fov'] - rest['fov']) * f)
         keys.append(kf(t, ramp=(t1 - t0) / n, easing="linear", placement=placed(ch), camera=cam(c), light=light(f)))
-    # No pause at the switch: the next film's flight starts on the switch
-    # at the same rate, and this one keeps zooming through the fade — the
-    # orbit is at its floor, so the field narrows a little more.
-    through = dict(close, fov=close['fov'] * 0.93)
-    keys.append(kf(t1 + FADE, ramp=FADE, easing="linear", placement=placed(ch), camera=cam(through), light=light(1.0)))
-    keys.append(kf(T, ramp=T - t1 - FADE, easing="linear", placement=placed(ch), camera=cam(through), light=light(1.0)))
+    # No pause at the switch: the next film's flight starts ON the switch
+    # at the same rate, so the motion carries through the fade in the
+    # film that is arriving; this one holds its close-up, exactly where
+    # the next film picks up — zooming on through the fade would make the
+    # picture step down by that much when the fade lands.
+    keys.append(kf(T, ramp=T - t1, easing="linear", placement=placed(ch), camera=cam(close), light=light(1.0)))
     return keys
 
 def scene(level, shown, cw, ch):
