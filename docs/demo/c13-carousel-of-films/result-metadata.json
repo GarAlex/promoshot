@@ -1,0 +1,555 @@
+{
+  "id": "carousel-of-films",
+  "name": "Carousel of Films",
+  "createdAt": 0,
+  "state": "recorded",
+  "minReaderVersion": 47,
+  "trimStart": 0,
+  "trimEnd": 20.5,
+  "videoDuration": 20.5,
+  "subtitles": [],
+
+  "compositionSettings": {
+    "canvasWidth": 1920,
+    "canvasHeight": 1080,
+    "fps": 30,
+    "palette": [
+      { "name": "canvas", "colorHex": "080B14" },
+      { "name": "text", "colorHex": "F4F7FF" },
+      { "name": "text-bg", "colorHex": "121A2E" },
+      { "name": "edge", "colorHex": "31405F" },
+      { "name": "caption-outline", "colorHex": "05070D" },
+      { "name": "caption-shadow", "colorHex": "000000" },
+      { "name": "media-shadow", "colorHex": "000000" },
+      { "name": "highlight", "colorHex": "7CA8FF" },
+      { "name": "accent", "colorHex": "6E9BFF" },
+      { "name": "accent2", "colorHex": "5BD6A8" },
+      { "name": "accent3", "colorHex": "FF9F6B" },
+      { "name": "accent4", "colorHex": "C08BFF" },
+      { "name": "muted", "colorHex": "8FA0C4" }
+    ],
+    "backgroundColorHex": "@canvas",
+    "backgroundGradient": {
+      "kind": "linear",
+      "start": [0, 0],
+      "end": [0, 1],
+      "stops": [
+        { "colorHex": "0D1322", "at": 0 },
+        { "colorHex": "05070E", "at": 1 }
+      ]
+    },
+    "videoCornerRadius": 26,
+    "videoBorderWidth": 2,
+    "videoBorderColorHex": "@edge",
+    "videoShadowColorHex": "@media-shadow",
+    "videoShadowOpacity": 0.55,
+    "videoShadowRadius": 54,
+    "videoShadowOffset": [0, 22],
+    "subtitleFontFamily": "system",
+    "subtitleFontSize": 34,
+    "subtitleBold": false,
+    "subtitleColorHex": "@text",
+    "subtitleBackgroundOpacity": 0.0,
+    "subtitleBackgroundPadding": 10,
+    "subtitleLeftMargin": 200,
+    "subtitleRightMargin": 200,
+    "subtitleVerticalMargin": 92
+  },
+
+  "resources": [
+    {
+      "id": "compA",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Scene 1 — The opening title",
+      "addedAt": 0,
+      "duration": 5.6,
+      "pixelWidth": 1280,
+      "pixelHeight": 720,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1280,
+        "canvasHeight": 720,
+        "backgroundColorHex": "0A0E1E",
+        "layers": [
+          {
+            "id": "a_bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 5.6,
+            "keyframes": [
+              { "id": "a_bg0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "linear", "start": [0, 0], "end": [1, 1],
+                  "stops": [ { "colorHex": "17224A", "at": 0 }, { "colorHex": "0A0E1E", "at": 1 } ] } },
+              { "id": "a_bg1", "time": 5.6, "transitionDuration": 5.6, "easing": "easeInOut",
+                "gradient": { "kind": "linear", "start": [0, 0], "end": [1, 1],
+                  "stops": [ { "colorHex": "31439A", "at": 0 }, { "colorHex": "0A0E1E", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "a_kicker", "name": "Kicker", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0.15, "duration": 5.45, "fadeIn": 0.45,
+            "captionText": "PROMOSHOT",
+            "captionStyle": {
+              "fontSize": 24, "weight": "semibold", "tracking": 8,
+              "textColorHex": "@accent", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "top", "offset": [0, 96] }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "a_head", "name": "Headline", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 0.5, "duration": 5.1,
+            "captionText": "Four films,\none frame",
+            "captionStyle": {
+              "fontSize": 92, "weight": "heavy", "tracking": -1.5, "lineHeight": 1.04,
+              "textColorHex": "@text", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "center", "offset": [0, -6] },
+              "reveal": { "by": "word", "mode": "rise", "secondsPer": 0.17, "unitSeconds": 0.42, "rise": 0.7, "easing": "easeOut" }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "a_sub", "name": "Sub", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 1.6, "duration": 4.0, "fadeIn": 0.6,
+            "captionText": "one card, four compositions",
+            "captionStyle": {
+              "fontSize": 30, "weight": "regular", "tracking": 1.5,
+              "textColorHex": "@muted", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "bottom", "offset": [0, -92] }
+            },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "compB",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Scene 2 — What it does",
+      "addedAt": 0,
+      "duration": 5.6,
+      "pixelWidth": 1280,
+      "pixelHeight": 720,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1280,
+        "canvasHeight": 720,
+        "backgroundColorHex": "07161B",
+        "layers": [
+          {
+            "id": "b_bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 5.6,
+            "keyframes": [
+              { "id": "b_bg0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "linear", "start": [0, 0], "end": [1, 1],
+                  "stops": [ { "colorHex": "0C2C33", "at": 0 }, { "colorHex": "06111A", "at": 1 } ] } },
+              { "id": "b_bg1", "time": 5.6, "transitionDuration": 5.6, "easing": "easeInOut",
+                "gradient": { "kind": "linear", "start": [0, 0], "end": [1, 1],
+                  "stops": [ { "colorHex": "10454E", "at": 0 }, { "colorHex": "06111A", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "b_title", "name": "List title", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0.15, "duration": 5.45, "fadeIn": 0.4,
+            "captionText": "What it does",
+            "captionStyle": {
+              "fontSize": 44, "weight": "semibold", "tracking": -0.4,
+              "textColorHex": "@text", "alignment": "leading",
+              "leftMargin": 112, "rightMargin": 112,
+              "placement": { "anchor": "topLeft", "offset": [112, 92] }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "b_rule", "name": "Rule", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 0.35, "duration": 5.25, "fadeIn": 0.5,
+            "captionText": "————————",
+            "captionStyle": {
+              "fontSize": 22, "weight": "regular", "tracking": -2,
+              "textColorHex": "@accent2", "alignment": "leading",
+              "leftMargin": 112, "rightMargin": 112,
+              "placement": { "anchor": "topLeft", "offset": [112, 168] }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "b_r1", "name": "Row 1", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 0.55, "duration": 5.05,
+            "transitionIn": { "kind": "slide", "from": "left", "duration": 0.5, "easing": "easeOut" },
+            "captionText": "01     One layer, four films",
+            "captionStyle": {
+              "fontSize": 38, "weight": "medium", "textColorHex": "@text", "alignment": "leading",
+              "leftMargin": 112, "rightMargin": 112,
+              "placement": { "anchor": "topLeft", "offset": [112, 250] }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "b_r2", "name": "Row 2", "sortIndex": 4, "kind": "caption",
+            "isEnabled": true, "startTime": 0.95, "duration": 4.65,
+            "transitionIn": { "kind": "slide", "from": "left", "duration": 0.5, "easing": "easeOut" },
+            "captionText": "02     Each one starts as it arrives",
+            "captionStyle": {
+              "fontSize": 38, "weight": "medium", "textColorHex": "@text", "alignment": "leading",
+              "leftMargin": 112, "rightMargin": 112,
+              "placement": { "anchor": "topLeft", "offset": [112, 362] }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "b_r3", "name": "Row 3", "sortIndex": 5, "kind": "caption",
+            "isEnabled": true, "startTime": 1.35, "duration": 4.25,
+            "transitionIn": { "kind": "slide", "from": "left", "duration": 0.5, "easing": "easeOut" },
+            "captionText": "03     A different cut every time",
+            "captionStyle": {
+              "fontSize": 38, "weight": "medium", "textColorHex": "@text", "alignment": "leading",
+              "leftMargin": 112, "rightMargin": 112,
+              "placement": { "anchor": "topLeft", "offset": [112, 474] }
+            },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "compC",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Scene 3 — By the numbers",
+      "addedAt": 0,
+      "duration": 5.6,
+      "pixelWidth": 1280,
+      "pixelHeight": 720,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1280,
+        "canvasHeight": 720,
+        "backgroundColorHex": "160A16",
+        "layers": [
+          {
+            "id": "c_bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 5.6,
+            "keyframes": [
+              { "id": "c_bg0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "radial", "start": [0.5, 0.45], "end": [1.1, 1.1],
+                  "stops": [ { "colorHex": "3A1B33", "at": 0 }, { "colorHex": "120814", "at": 1 } ] } },
+              { "id": "c_bg1", "time": 5.6, "transitionDuration": 5.6, "easing": "easeInOut",
+                "gradient": { "kind": "radial", "start": [0.5, 0.45], "end": [0.75, 0.75],
+                  "stops": [ { "colorHex": "5B2743", "at": 0 }, { "colorHex": "120814", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "c_title", "name": "Numbers title", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0.15, "duration": 5.45, "fadeIn": 0.4,
+            "captionText": "By the numbers",
+            "captionStyle": {
+              "fontSize": 40, "weight": "semibold", "tracking": 1,
+              "textColorHex": "@text", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "top", "offset": [0, 92] }
+            },
+            "keyframes": []
+          },
+
+          {
+            "id": "c_n1", "name": "Number 1", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 0.5, "duration": 5.1,
+            "captionText": "4",
+            "captionStyle": {
+              "fontSize": 108, "weight": "heavy", "tracking": -2,
+              "textColorHex": "@accent3", "alignment": "center",
+              "leftMargin": 440, "rightMargin": 440,
+              "placement": { "anchor": "center", "offset": [-400, -14] }
+            },
+            "keyframes": [
+              { "id": "c_n1a", "time": 0, "fontSize": 62, "opacity": 0, "transitionDuration": 0 },
+              { "id": "c_n1b", "time": 0.55, "fontSize": 108, "opacity": 1, "transitionDuration": 0.55, "easing": "easeOut" }
+            ]
+          },
+          {
+            "id": "c_l1", "name": "Label 1", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 0.9, "duration": 4.7, "fadeIn": 0.45,
+            "captionText": "scenes",
+            "captionStyle": {
+              "fontSize": 26, "weight": "regular", "tracking": 4,
+              "textColorHex": "@muted", "alignment": "center",
+              "leftMargin": 440, "rightMargin": 440,
+              "placement": { "anchor": "center", "offset": [-400, 78] }
+            },
+            "keyframes": []
+          },
+
+          {
+            "id": "c_n2", "name": "Number 2", "sortIndex": 4, "kind": "caption",
+            "isEnabled": true, "startTime": 0.8, "duration": 4.8,
+            "captionText": "20s",
+            "captionStyle": {
+              "fontSize": 108, "weight": "heavy", "tracking": -2,
+              "textColorHex": "@accent4", "alignment": "center",
+              "leftMargin": 440, "rightMargin": 440,
+              "placement": { "anchor": "center", "offset": [0, -14] }
+            },
+            "keyframes": [
+              { "id": "c_n2a", "time": 0, "fontSize": 62, "opacity": 0, "transitionDuration": 0 },
+              { "id": "c_n2b", "time": 0.55, "fontSize": 108, "opacity": 1, "transitionDuration": 0.55, "easing": "easeOut" }
+            ]
+          },
+          {
+            "id": "c_l2", "name": "Label 2", "sortIndex": 5, "kind": "caption",
+            "isEnabled": true, "startTime": 1.2, "duration": 4.4, "fadeIn": 0.45,
+            "captionText": "runtime",
+            "captionStyle": {
+              "fontSize": 26, "weight": "regular", "tracking": 4,
+              "textColorHex": "@muted", "alignment": "center",
+              "leftMargin": 440, "rightMargin": 440,
+              "placement": { "anchor": "center", "offset": [0, 78] }
+            },
+            "keyframes": []
+          },
+
+          {
+            "id": "c_n3", "name": "Number 3", "sortIndex": 6, "kind": "caption",
+            "isEnabled": true, "startTime": 1.1, "duration": 4.5,
+            "captionText": "1",
+            "captionStyle": {
+              "fontSize": 108, "weight": "heavy", "tracking": -2,
+              "textColorHex": "@accent2", "alignment": "center",
+              "leftMargin": 440, "rightMargin": 440,
+              "placement": { "anchor": "center", "offset": [400, -14] }
+            },
+            "keyframes": [
+              { "id": "c_n3a", "time": 0, "fontSize": 62, "opacity": 0, "transitionDuration": 0 },
+              { "id": "c_n3b", "time": 0.55, "fontSize": 108, "opacity": 1, "transitionDuration": 0.55, "easing": "easeOut" }
+            ]
+          },
+          {
+            "id": "c_l3", "name": "Label 3", "sortIndex": 7, "kind": "caption",
+            "isEnabled": true, "startTime": 1.5, "duration": 4.1, "fadeIn": 0.45,
+            "captionText": "card",
+            "captionStyle": {
+              "fontSize": 26, "weight": "regular", "tracking": 4,
+              "textColorHex": "@muted", "alignment": "center",
+              "leftMargin": 440, "rightMargin": 440,
+              "placement": { "anchor": "center", "offset": [400, 78] }
+            },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "compD",
+      "kind": "composition",
+      "filename": "",
+      "displayName": "Scene 4 — The sign-off",
+      "addedAt": 0,
+      "duration": 5.7,
+      "pixelWidth": 1280,
+      "pixelHeight": 720,
+      "imageCuts": [],
+      "disabledAudioTrackIndices": [],
+      "composition": {
+        "canvasWidth": 1280,
+        "canvasHeight": 720,
+        "backgroundColorHex": "070A14",
+        "layers": [
+          {
+            "id": "d_bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+            "isEnabled": true, "startTime": 0, "duration": 5.7,
+            "keyframes": [
+              { "id": "d_bg0", "time": 0, "transitionDuration": 0,
+                "gradient": { "kind": "radial", "start": [0.5, 0.5], "end": [1.2, 1.2],
+                  "stops": [ { "colorHex": "121A3B", "at": 0 }, { "colorHex": "060810", "at": 1 } ] } },
+              { "id": "d_bg1", "time": 5.7, "transitionDuration": 5.7, "easing": "easeInOut",
+                "gradient": { "kind": "radial", "start": [0.5, 0.5], "end": [0.7, 0.7],
+                  "stops": [ { "colorHex": "27357E", "at": 0 }, { "colorHex": "060810", "at": 1 } ] } }
+            ]
+          },
+          {
+            "id": "d_mark", "name": "Wordmark", "sortIndex": 1, "kind": "caption",
+            "isEnabled": true, "startTime": 0.3, "duration": 5.4,
+            "captionText": "PromoShot",
+            "captionStyle": {
+              "fontSize": 96, "weight": "heavy", "tracking": -1.5,
+              "textColorHex": "@text", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "center", "offset": [0, -24] },
+              "reveal": { "by": "character", "mode": "fade", "secondsPer": 0.05, "unitSeconds": 0.5, "easing": "easeOut" }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "d_tag", "name": "Tagline", "sortIndex": 2, "kind": "caption",
+            "isEnabled": true, "startTime": 1.5, "duration": 4.2, "fadeIn": 0.7,
+            "captionText": "make the film, not the file",
+            "captionStyle": {
+              "fontSize": 32, "weight": "regular", "tracking": 2,
+              "textColorHex": "@muted", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "center", "offset": [0, 68] }
+            },
+            "keyframes": []
+          },
+          {
+            "id": "d_url", "name": "URL", "sortIndex": 3, "kind": "caption",
+            "isEnabled": true, "startTime": 2.4, "duration": 3.3, "fadeIn": 0.7,
+            "captionText": "promoshot.app",
+            "captionStyle": {
+              "fontSize": 24, "weight": "medium", "tracking": 6,
+              "textColorHex": "@accent", "alignment": "center",
+              "leftMargin": 90, "rightMargin": 90,
+              "placement": { "anchor": "bottom", "offset": [0, -76] }
+            },
+            "keyframes": []
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "dots1", "kind": "drawing", "filename": "", "displayName": "Dots — 1",
+      "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+      "drawing": { "shapes": [
+        { "id": "s1_b", "kind": "rect", "points": [[0, 0], [1920, 1080]], "strokeColorHex": "FFFFFF", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0, "arrowStart": false, "arrowEnd": false },
+        { "id": "s1_1", "kind": "oval", "points": [[880, 981], [902, 1003]], "strokeColorHex": "@accent", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@accent", "fillOpacity": 1, "arrowStart": false, "arrowEnd": false },
+        { "id": "s1_2", "kind": "oval", "points": [[930, 985], [944, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s1_3", "kind": "oval", "points": [[976, 985], [990, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s1_4", "kind": "oval", "points": [[1022, 985], [1036, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false }
+      ] }
+    },
+    {
+      "id": "dots2", "kind": "drawing", "filename": "", "displayName": "Dots — 2",
+      "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+      "drawing": { "shapes": [
+        { "id": "s2_b", "kind": "rect", "points": [[0, 0], [1920, 1080]], "strokeColorHex": "FFFFFF", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0, "arrowStart": false, "arrowEnd": false },
+        { "id": "s2_1", "kind": "oval", "points": [[884, 985], [898, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s2_2", "kind": "oval", "points": [[926, 981], [948, 1003]], "strokeColorHex": "@accent2", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@accent2", "fillOpacity": 1, "arrowStart": false, "arrowEnd": false },
+        { "id": "s2_3", "kind": "oval", "points": [[976, 985], [990, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s2_4", "kind": "oval", "points": [[1022, 985], [1036, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false }
+      ] }
+    },
+    {
+      "id": "dots3", "kind": "drawing", "filename": "", "displayName": "Dots — 3",
+      "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+      "drawing": { "shapes": [
+        { "id": "s3_b", "kind": "rect", "points": [[0, 0], [1920, 1080]], "strokeColorHex": "FFFFFF", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0, "arrowStart": false, "arrowEnd": false },
+        { "id": "s3_1", "kind": "oval", "points": [[884, 985], [898, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s3_2", "kind": "oval", "points": [[930, 985], [944, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s3_3", "kind": "oval", "points": [[972, 981], [994, 1003]], "strokeColorHex": "@accent4", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@accent4", "fillOpacity": 1, "arrowStart": false, "arrowEnd": false },
+        { "id": "s3_4", "kind": "oval", "points": [[1022, 985], [1036, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false }
+      ] }
+    },
+    {
+      "id": "dots4", "kind": "drawing", "filename": "", "displayName": "Dots — 4",
+      "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+      "drawing": { "shapes": [
+        { "id": "s4_b", "kind": "rect", "points": [[0, 0], [1920, 1080]], "strokeColorHex": "FFFFFF", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "FFFFFF", "fillOpacity": 0, "arrowStart": false, "arrowEnd": false },
+        { "id": "s4_1", "kind": "oval", "points": [[884, 985], [898, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s4_2", "kind": "oval", "points": [[930, 985], [944, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s4_3", "kind": "oval", "points": [[976, 985], [990, 999]], "strokeColorHex": "@muted", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@muted", "fillOpacity": 0.3, "arrowStart": false, "arrowEnd": false },
+        { "id": "s4_4", "kind": "oval", "points": [[1018, 981], [1040, 1003]], "strokeColorHex": "@accent", "strokeWidth": 1, "strokeOpacity": 0, "fillColorHex": "@accent", "fillOpacity": 1, "arrowStart": false, "arrowEnd": false }
+      ] }
+    }
+  ],
+
+  "layers": [
+    {
+      "id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+      "isEnabled": true, "startTime": 0, "duration": 20.5,
+      "keyframes": [
+        { "id": "bg0", "time": 0, "transitionDuration": 0,
+          "gradient": { "kind": "linear", "start": [0.1, 0], "end": [0.9, 1],
+            "stops": [ { "colorHex": "101728", "at": 0 }, { "colorHex": "05070E", "at": 1 } ] } },
+        { "id": "bg1", "time": 20.5, "transitionDuration": 20.5, "easing": "easeInOut",
+          "gradient": { "kind": "linear", "start": [0.1, 0], "end": [0.9, 1],
+            "stops": [ { "colorHex": "1A2036", "at": 0 }, { "colorHex": "05070E", "at": 1 } ] } }
+      ]
+    },
+
+    {
+      "id": "card", "name": "Card", "sortIndex": 1, "kind": "video",
+      "isEnabled": true, "startTime": 0, "duration": 20.5,
+      "resourceID": "compA", "beyondEnd": "hold",
+      "fadeIn": 0.5, "fadeOut": 0.6,
+      "keyframes": [
+        { "id": "cd0", "time": 0, "transitionDuration": 0,
+          "sourceTime": 0, "playback": "play",
+          "placement": { "height": 700, "anchor": "center", "offset": [0, 40] } },
+        { "id": "cd1", "time": 5.0, "transitionDuration": 0,
+          "resourceID": "compB", "sourceTime": 0,
+          "transition": { "kind": "push", "from": "right", "duration": 0.7, "easing": "easeInOut" } },
+        { "id": "cd2", "time": 10.0, "transitionDuration": 0,
+          "resourceID": "compC", "sourceTime": 0,
+          "transition": { "kind": "wipe", "from": "left", "duration": 0.6, "easing": "easeInOut" } },
+        { "id": "cd3", "time": 15.0, "transitionDuration": 0,
+          "resourceID": "compD", "sourceTime": 0,
+          "transition": { "kind": "fade", "duration": 0.8, "easing": "easeInOut" } }
+      ]
+    },
+
+    {
+      "id": "dots", "name": "Carousel dots", "sortIndex": 2, "kind": "drawing",
+      "isEnabled": true, "startTime": 0, "duration": 20.5,
+      "resourceID": "dots1", "fadeIn": 0.6, "fadeOut": 0.5,
+      "keyframes": [
+        { "id": "dt1", "time": 5.0, "resourceID": "dots2", "transition": { "kind": "fade", "duration": 0.35 } },
+        { "id": "dt2", "time": 10.0, "resourceID": "dots3", "transition": { "kind": "fade", "duration": 0.35 } },
+        { "id": "dt3", "time": 15.0, "resourceID": "dots4", "transition": { "kind": "fade", "duration": 0.35 } }
+      ]
+    },
+
+    {
+      "id": "lab1", "name": "Label 1", "sortIndex": 3, "kind": "caption",
+      "isEnabled": true, "startTime": 0.25, "duration": 4.45, "fadeIn": 0.4, "fadeOut": 0.3,
+      "captionText": "1 / 4     The opening title",
+      "captionStyle": {
+        "fontSize": 32, "weight": "medium", "tracking": 3,
+        "textColorHex": "@muted", "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 104] }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "lab2", "name": "Label 2", "sortIndex": 4, "kind": "caption",
+      "isEnabled": true, "startTime": 5.2, "duration": 4.5, "fadeIn": 0.4, "fadeOut": 0.3,
+      "captionText": "2 / 4     What it does",
+      "captionStyle": {
+        "fontSize": 32, "weight": "medium", "tracking": 3,
+        "textColorHex": "@muted", "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 104] }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "lab3", "name": "Label 3", "sortIndex": 5, "kind": "caption",
+      "isEnabled": true, "startTime": 10.2, "duration": 4.5, "fadeIn": 0.4, "fadeOut": 0.3,
+      "captionText": "3 / 4     By the numbers",
+      "captionStyle": {
+        "fontSize": 32, "weight": "medium", "tracking": 3,
+        "textColorHex": "@muted", "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 104] }
+      },
+      "keyframes": []
+    },
+    {
+      "id": "lab4", "name": "Label 4", "sortIndex": 6, "kind": "caption",
+      "isEnabled": true, "startTime": 15.3, "duration": 4.9, "fadeIn": 0.4, "fadeOut": 0.5,
+      "captionText": "4 / 4     The sign-off",
+      "captionStyle": {
+        "fontSize": 32, "weight": "medium", "tracking": 3,
+        "textColorHex": "@muted", "alignment": "center",
+        "placement": { "anchor": "top", "offset": [0, 104] }
+      },
+      "keyframes": []
+    }
+  ]
+}

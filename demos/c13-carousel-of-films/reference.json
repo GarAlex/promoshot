@@ -1,0 +1,1223 @@
+{
+ "id": "36EE1506-3279-48D3-B065-F3D13D08881D",
+ "name": "A carousel of films",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 47,
+ "trimStart": 0,
+ "trimEnd": 22.0,
+ "videoDuration": 22.0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1440,
+  "canvasHeight": 900,
+  "backgroundColorHex": "@ink",
+  "palette": [
+   {
+    "name": "ink",
+    "colorHex": "0C0E14"
+   },
+   {
+    "name": "paper",
+    "colorHex": "F4F1EA"
+   },
+   {
+    "name": "accent",
+    "colorHex": "5B8CFF"
+   },
+   {
+    "name": "accent2",
+    "colorHex": "FF9A5B"
+   },
+   {
+    "name": "mint",
+    "colorHex": "3FD2A0"
+   },
+   {
+    "name": "plum",
+    "colorHex": "3A2740"
+   }
+  ],
+  "videoCornerRadius": 28,
+  "videoBorderWidth": 0
+ },
+ "resources": [
+  {
+   "id": "05C692B9-3350-4E42-AECE-225535A294A3",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the title",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 22.0,
+   "pixelWidth": 1200,
+   "pixelHeight": 750,
+   "composition": {
+    "canvasWidth": 1200,
+    "canvasHeight": 750,
+    "backgroundColorHex": "@ink",
+    "layers": [
+     {
+      "id": "9E5F9EBC-99A6-412D-9F7A-1755AB29BC1B",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "EE5085EA-0A47-4EA3-80C5-BE7EC0CA27F5",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.38,
+          0.45
+         ],
+         "end": [
+          1.0299999999999998,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@plum",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@plum",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       },
+       {
+        "id": "CC0DD170-F85B-46CB-A9E5-A1994FD4D60A",
+        "time": 22.0,
+        "transitionDuration": 22.0,
+        "easing": "linear",
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.62,
+          0.45
+         ],
+         "end": [
+          1.27,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@plum",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@plum",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "A89D07F4-D53D-48A2-AFFB-25247C3357B6",
+      "name": "Title",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.3,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "64B0B3AB-9FD1-4428-AB09-1FAA02A16890",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "Every card is its own film",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 76,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         0,
+         -40
+        ]
+       },
+       "reveal": {
+        "by": "word",
+        "seconds": 1.4
+       }
+      }
+     },
+     {
+      "id": "158D13E1-B3B2-42CA-BA1F-16A17E09B8F2",
+      "name": "Line",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.9,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "EB0A1425-D5A3-4692-A841-A37EF65B2B98",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "One layer holds the frame",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 40,
+       "isBold": true,
+       "textColorHex": "@accent",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         0,
+         70
+        ]
+       },
+       "reveal": {
+        "by": "character",
+        "seconds": 1.0
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "822A0541-BB86-412E-9BD2-007735B37113",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the list",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 22.0,
+   "pixelWidth": 1200,
+   "pixelHeight": 750,
+   "composition": {
+    "canvasWidth": 1200,
+    "canvasHeight": 750,
+    "backgroundColorHex": "@ink",
+    "layers": [
+     {
+      "id": "8B5BCAC2-AD00-4F5F-BE91-C1E6ABA22EA0",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "13913AF3-BC04-4112-9E13-52B88CF10360",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.38,
+          0.45
+         ],
+         "end": [
+          1.0299999999999998,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@accent",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@accent",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       },
+       {
+        "id": "62C069BE-974A-4D2E-8DC4-EA8F7C1C4972",
+        "time": 22.0,
+        "transitionDuration": 22.0,
+        "easing": "linear",
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.62,
+          0.45
+         ],
+         "end": [
+          1.27,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@accent",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@accent",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "CB8A8FA2-0D12-4BA1-AF07-1CC3801AE314",
+      "name": "Item 1",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.4,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "91B6BA67-4FBD-4FD2-B013-0784981D4049",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "01   Pause it",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 54,
+       "isBold": true,
+       "textColorHex": "@ink",
+       "backgroundOpacity": 0.9,
+       "placement": {
+        "anchor": "left",
+        "offset": [
+         160,
+         -130
+        ]
+       },
+       "backgroundColorHex": "@paper",
+       "cornerRadius": 22,
+       "padding": 22,
+       "reveal": {
+        "by": "word",
+        "seconds": 0.5
+       }
+      }
+     },
+     {
+      "id": "72CE5D86-EC61-4565-840A-C6D5B7024FE3",
+      "name": "Item 2",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.1,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "9B66FD3D-A78A-46EE-9DD0-D9AFFDBB84D0",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "02   Seek it",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 54,
+       "isBold": true,
+       "textColorHex": "@ink",
+       "backgroundOpacity": 0.9,
+       "placement": {
+        "anchor": "left",
+        "offset": [
+         160,
+         0
+        ]
+       },
+       "backgroundColorHex": "@paper",
+       "cornerRadius": 22,
+       "padding": 22,
+       "reveal": {
+        "by": "word",
+        "seconds": 0.5
+       }
+      }
+     },
+     {
+      "id": "CFE8D7EA-8FBE-4250-BDCE-95916AC2CDD2",
+      "name": "Item 3",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.7999999999999998,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "BBED5DF5-9FC3-41E9-AFC8-4249E931B40E",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "03   Swap it",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 54,
+       "isBold": true,
+       "textColorHex": "@ink",
+       "backgroundOpacity": 0.9,
+       "placement": {
+        "anchor": "left",
+        "offset": [
+         160,
+         130
+        ]
+       },
+       "backgroundColorHex": "@paper",
+       "cornerRadius": 22,
+       "padding": 22,
+       "reveal": {
+        "by": "word",
+        "seconds": 0.5
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "CA191A85-80C5-4264-A429-2E39CC82745C",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the numbers",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 22.0,
+   "pixelWidth": 1200,
+   "pixelHeight": 750,
+   "composition": {
+    "canvasWidth": 1200,
+    "canvasHeight": 750,
+    "backgroundColorHex": "@ink",
+    "layers": [
+     {
+      "id": "A7806546-28DB-4046-9E3E-C0268D990B7D",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "4EF46785-072D-4C47-BE4F-B5AE05A2F815",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.38,
+          0.45
+         ],
+         "end": [
+          1.0299999999999998,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@mint",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@mint",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       },
+       {
+        "id": "193DA8A9-53DD-4449-B2F4-3E0E7A4AE2CF",
+        "time": 22.0,
+        "transitionDuration": 22.0,
+        "easing": "linear",
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.62,
+          0.45
+         ],
+         "end": [
+          1.27,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@mint",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@mint",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "DF294D14-6848-4B66-98E7-2C7BD1EE07DF",
+      "name": "Number 1",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.3,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "3A4E78FE-1755-49E1-98E5-2735F9556DBC",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "fontSize": 40,
+        "opacity": 0
+       },
+       {
+        "id": "056A2504-AE1E-40DE-8207-B5F25A7B1EB1",
+        "time": 0.5,
+        "transitionDuration": 0.5,
+        "easing": "easeOut",
+        "fontSize": 200,
+        "opacity": 1
+       }
+      ],
+      "captionText": "47",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 200,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         -360,
+         -50
+        ]
+       }
+      }
+     },
+     {
+      "id": "0A902129-6FCC-4F36-BC92-6CAF87C22F6C",
+      "name": "Label 1",
+      "sortIndex": 4,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.8,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "A40F3F77-9CC6-4B4B-8613-56C0800513AD",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "rungs",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 40,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         -360,
+         110
+        ]
+       }
+      }
+     },
+     {
+      "id": "9555F216-45F8-4F1C-A872-4044821FA030",
+      "name": "Number 2",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.8999999999999999,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "5512F059-05D5-4060-B0BA-DB331E587CCB",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "fontSize": 40,
+        "opacity": 0
+       },
+       {
+        "id": "41F89076-4FEB-495D-BCE2-61FBCAD7A45C",
+        "time": 0.5,
+        "transitionDuration": 0.5,
+        "easing": "easeOut",
+        "fontSize": 200,
+        "opacity": 1
+       }
+      ],
+      "captionText": "4",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 200,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         0,
+         -50
+        ]
+       }
+      }
+     },
+     {
+      "id": "08D5F8F3-6496-41C0-B9E1-B7482027B86C",
+      "name": "Label 2",
+      "sortIndex": 5,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.4,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "53BB5FB9-F992-4663-AE51-DE1512F4289F",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "films",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 40,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         0,
+         110
+        ]
+       }
+      }
+     },
+     {
+      "id": "C7C39475-6184-4632-9790-B42FE603001E",
+      "name": "Number 3",
+      "sortIndex": 3,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.5,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "8A5107CB-4743-426E-86D9-FF99EFB4A3AC",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "fontSize": 40,
+        "opacity": 0
+       },
+       {
+        "id": "269B41BE-0233-49FF-B912-58839A93FA70",
+        "time": 0.5,
+        "transitionDuration": 0.5,
+        "easing": "easeOut",
+        "fontSize": 200,
+        "opacity": 1
+       }
+      ],
+      "captionText": "1",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 200,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         360,
+         -50
+        ]
+       }
+      }
+     },
+     {
+      "id": "E2D6A691-E2C1-4431-9089-3E77E86C3703",
+      "name": "Label 3",
+      "sortIndex": 6,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 2.0,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "C99EFBCF-C5AC-4543-BFCB-61C9CB3D1349",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "layer",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 40,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         360,
+         110
+        ]
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "294C0F21-2B50-4BA0-8B13-B1FB9503E0A4",
+   "kind": "composition",
+   "filename": "",
+   "displayName": "Film: the sign-off",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "duration": 22.0,
+   "pixelWidth": 1200,
+   "pixelHeight": 750,
+   "composition": {
+    "canvasWidth": 1200,
+    "canvasHeight": 750,
+    "backgroundColorHex": "@ink",
+    "layers": [
+     {
+      "id": "020DA5D9-E9A0-40A6-8913-5B13F6EA7181",
+      "name": "Room",
+      "sortIndex": 0,
+      "kind": "background",
+      "isEnabled": true,
+      "startTime": 0,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "22508DCF-645B-415A-8F54-7B0B085E5995",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.38,
+          0.45
+         ],
+         "end": [
+          1.0299999999999998,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@accent2",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@accent2",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       },
+       {
+        "id": "D40C1B04-3A2C-4CA3-9218-F74121007A43",
+        "time": 22.0,
+        "transitionDuration": 22.0,
+        "easing": "linear",
+        "gradient": {
+         "kind": "radial",
+         "start": [
+          0.62,
+          0.45
+         ],
+         "end": [
+          1.27,
+          0.45
+         ],
+         "repeat": "clamp",
+         "stops": [
+          {
+           "colorHex": "@accent2",
+           "at": 0.0
+          },
+          {
+           "colorHex": "@accent2",
+           "at": 0.1
+          },
+          {
+           "colorHex": "@ink",
+           "at": 0.9
+          },
+          {
+           "colorHex": "@ink",
+           "at": 1.0
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "839725BD-464F-4B40-A23B-0FC8FCE73578",
+      "name": "Word",
+      "sortIndex": 1,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 0.2,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "8DB78B6A-38C5-42DA-BD02-0FF55FCEF5C3",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "glow": 0,
+        "opacity": 1
+       },
+       {
+        "id": "B9952D3F-C8CA-484D-9891-E7B7C9B9EEF1",
+        "time": 1.2,
+        "transitionDuration": 1.0,
+        "easing": "easeInOut",
+        "glow": 18
+       },
+       {
+        "id": "B9DCB8B8-FF32-4CF4-84AC-906D92BF406B",
+        "time": 2.6,
+        "transitionDuration": 1.4,
+        "easing": "easeInOut",
+        "glow": 4
+       }
+      ],
+      "captionText": "PROMOSHOT",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 112,
+       "isBold": true,
+       "textColorHex": "@paper",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         0,
+         -20
+        ]
+       }
+      }
+     },
+     {
+      "id": "827A237F-4B6E-4120-8242-FE4F0D3DB166",
+      "name": "Line",
+      "sortIndex": 2,
+      "kind": "caption",
+      "isEnabled": true,
+      "startTime": 1.4,
+      "duration": 22.0,
+      "keyframes": [
+       {
+        "id": "134B3B22-BABB-4EC0-9F42-A9305209AB38",
+        "time": 0,
+        "transitionDuration": 0.0,
+        "opacity": 1
+       }
+      ],
+      "captionText": "compositions, all the way down",
+      "captionStyle": {
+       "alignment": "center",
+       "fontSize": 36,
+       "isBold": true,
+       "textColorHex": "@accent2",
+       "backgroundOpacity": 0,
+       "placement": {
+        "anchor": "center",
+        "offset": [
+         0,
+         110
+        ]
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "589EA928-35CF-4BBD-A2F7-9C1A7F9186EE",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "The title",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "captionText": "The title",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "isBold": true,
+    "textColorHex": "@paper",
+    "backgroundOpacity": 0,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      60
+     ]
+    }
+   }
+  },
+  {
+   "id": "88FC544A-B64D-46FD-AF07-DF08321B1697",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "The list",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "captionText": "The list",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "isBold": true,
+    "textColorHex": "@paper",
+    "backgroundOpacity": 0,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      60
+     ]
+    }
+   }
+  },
+  {
+   "id": "BE8DD6C9-448E-4442-A97C-C9574949388D",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "The numbers",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "captionText": "The numbers",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "isBold": true,
+    "textColorHex": "@paper",
+    "backgroundOpacity": 0,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      60
+     ]
+    }
+   }
+  },
+  {
+   "id": "25469B66-6744-4130-981A-277EBEBFE49A",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "The sign-off",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "captionText": "The sign-off",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "isBold": true,
+    "textColorHex": "@paper",
+    "backgroundOpacity": 0,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      60
+     ]
+    }
+   }
+  },
+  {
+   "id": "EC5E2BD4-A877-438D-B5A6-D05EB1950798",
+   "kind": "caption",
+   "filename": "",
+   "displayName": "The title",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "captionText": "The title",
+   "captionStyle": {
+    "alignment": "center",
+    "fontSize": 44,
+    "isBold": true,
+    "textColorHex": "@paper",
+    "backgroundOpacity": 0,
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      60
+     ]
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "id": "96FE8202-2043-4053-8052-841ACA80257E",
+   "name": "Backdrop",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 22.0,
+   "keyframes": [
+    {
+     "id": "98C37052-23EB-4908-9E9E-373874F6587D",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "colorHex": "@ink"
+    }
+   ]
+  },
+  {
+   "id": "C1481D89-FB0D-4FF9-84CA-BA0E5C9A5C1F",
+   "name": "The card",
+   "sortIndex": 1,
+   "kind": "video",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 22.0,
+   "keyframes": [
+    {
+     "id": "5698B0B4-8F42-4250-A367-586FB8E63CBB",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "height": 640,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     }
+    },
+    {
+     "id": "0DE28342-94F2-4881-A20C-E73EBB3E398B",
+     "time": 5.0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "height": 640,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     },
+     "resourceID": "822A0541-BB86-412E-9BD2-007735B37113",
+     "sourceTime": 0,
+     "transition": {
+      "kind": "push",
+      "from": "right",
+      "duration": 0.7,
+      "easing": "easeInOut"
+     }
+    },
+    {
+     "id": "269DB600-101F-4C5E-85F6-53292CBAD5A0",
+     "time": 10.0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "height": 640,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     },
+     "resourceID": "CA191A85-80C5-4264-A429-2E39CC82745C",
+     "sourceTime": 0,
+     "transition": {
+      "kind": "wipe",
+      "from": "left",
+      "duration": 0.6,
+      "easing": "easeOut"
+     }
+    },
+    {
+     "id": "9CFCCA72-C9A8-4B60-8BDF-281CC53BABD7",
+     "time": 15.0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "height": 640,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     },
+     "resourceID": "294C0F21-2B50-4BA0-8B13-B1FB9503E0A4",
+     "sourceTime": 0,
+     "transition": {
+      "kind": "blurDissolve",
+      "duration": 0.8
+     }
+    },
+    {
+     "id": "20092539-B575-4157-A527-CFB0CBE8E3ED",
+     "time": 20.0,
+     "transitionDuration": 0.0,
+     "placement": {
+      "height": 640,
+      "anchor": "center",
+      "offset": [
+       0,
+       40
+      ]
+     },
+     "resourceID": "05C692B9-3350-4E42-AECE-225535A294A3",
+     "sourceTime": 0,
+     "transition": {
+      "kind": "zoom",
+      "duration": 0.7
+     }
+    }
+   ],
+   "resourceID": "05C692B9-3350-4E42-AECE-225535A294A3"
+  },
+  {
+   "id": "55681435-F6E2-44F8-86C8-301B21E41950",
+   "name": "Which card",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 22.0,
+   "keyframes": [
+    {
+     "id": "2ABC5979-E849-431E-9D62-09CA239C3B6D",
+     "time": 0,
+     "transitionDuration": 0.0,
+     "opacity": 1
+    },
+    {
+     "id": "012162B4-203D-414B-9BDC-785284FAACF0",
+     "time": 5.0,
+     "transitionDuration": 0.0,
+     "resourceID": "88FC544A-B64D-46FD-AF07-DF08321B1697"
+    },
+    {
+     "id": "29C42A68-5E0C-4EF0-90F5-CCB81E7E6015",
+     "time": 10.0,
+     "transitionDuration": 0.0,
+     "resourceID": "BE8DD6C9-448E-4442-A97C-C9574949388D"
+    },
+    {
+     "id": "D56D908E-5999-479F-A5FC-2C78F69F0502",
+     "time": 15.0,
+     "transitionDuration": 0.0,
+     "resourceID": "25469B66-6744-4130-981A-277EBEBFE49A"
+    },
+    {
+     "id": "DFC96FAD-7586-477F-92F0-6820B2BCF8D8",
+     "time": 20.0,
+     "transitionDuration": 0.0,
+     "resourceID": "EC5E2BD4-A877-438D-B5A6-D05EB1950798"
+    }
+   ],
+   "resourceID": "589EA928-35CF-4BBD-A2F7-9C1A7F9186EE"
+  }
+ ]
+}

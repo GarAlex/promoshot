@@ -6288,6 +6288,165 @@
   "page": "docs/demo/democ12.md"
  },
  {
+  "id": "c13",
+  "slug": "c13-carousel-of-films",
+  "title": "A carousel of films, no files",
+  "blurb": "Four scenes as compositions in one card-shaped rectangle on a flat canvas, each its own film starting as it arrives, a different cut between each \u2014 from a short brief and no media. Does a fresh agent find the one-layer carousel: a swap keyframe per card with its transition and a fresh start?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   14,
+   26
+  ],
+  "prompt": "No media, no 3D. Four short scenes, each its own composition with its own motion \u2014 a title, a list, some numbers, a sign-off \u2014 shown one after another in one card-shaped rectangle on a flat canvas, like a carousel: each scene starts as it arrives, and a different cut between each pair \u2014 a push, a wipe, a dissolve, whatever reads well. A line above the card says which scene is up. Fifteen to twenty-five seconds, landscape.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "20.5s, asked 14\u201326s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "4 features: composition, gradient, swaps, transitions"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "22 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "7 layers"
+    }
+   ],
+   "summary": "turns=20 cost=$2.20 secs=363",
+   "run": {
+    "turns": 20,
+    "wall_s": 362,
+    "api_s": 355,
+    "cost_usd": 2.2,
+    "tokens": {
+     "input": 34,
+     "cache_read": 1274124,
+     "cache_write": 80330,
+     "output": 30366,
+     "thinking": 14725
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 1354488,
+      "output": 30366,
+      "cost_usd": 2.2
+     }
+    ],
+    "mcp": {
+     "calls": 9,
+     "ms": 5030,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 4720,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 267,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 33,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_explain": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 2,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "composition",
+    "gradient",
+    "swaps",
+    "transitions"
+   ],
+   "captions": [
+    "PROMOSHOT",
+    "What it does",
+    "By the numbers",
+    "1 / 4     The opening title",
+    "PromoShot",
+    "\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014",
+    "Four films,\none frame",
+    "4",
+    "01     One layer, four films",
+    "20s",
+    "scenes",
+    "02     Each one starts as it arrives",
+    "1",
+    "runtime",
+    "03     A different cut every time",
+    "make the film, not the file",
+    "card",
+    "one card, four compositions",
+    "promoshot.app",
+    "2 / 4     What it does",
+    "3 / 4     By the numbers",
+    "4 / 4     The sign-off"
+   ],
+   "notes": "Done. `out.promo` is written, validated, inspected, sampled and rendered.\n\n**`Exports/export.mp4`** \u2014 1920\u00d71080, 20.5 s, 615 frames @ 30 fps, 2.2 MB.\n\n**How it's built.** `Resources/` is empty because the piece needs no media \u2014 every scene is a **composition resource** (1280\u00d7720, card-shaped), drawn entirely from gradients and type.\n\n- **Scene 1 \u2014 The opening title**: kicker, \"Four films, / one frame\" arriving word-by-word on a rise reveal, subtitle under it, over a drifting blue gradient.\n- **Scene 2 \u2014 What it does**: a title, a rule, three numbered rows sliding in from the left 0.4 s apart, teal.\n- **Scene 3 \u2014 By the numbers**: `4 / 20s / 1` scaling up from 62 pt to 108 pt on eased `fontSize` tracks, staggered, with labels fading in behind them, magenta radial.\n- **Scene 4 \u2014 The sign-off**: the wordmark assembling character-by-character, tagline, URL, over a radial that closes in.\n\n**The carousel is one video layer.** `card` starts on scene 1 and takes over the other three with swap keyframes at 5 / 10 / 15 s, each carrying `sourceTime: 0` \u2014 that's what makes a scene start from its own beginning as it arrives rather than being sampled at wherever the main timeline already stands. `promo_explain` at 15.2 s confirms it: `showing: compD`, and scene 4's tagline is still fading in a second and a half later, which only happens on a restarted clock.\n\n**Three different cuts**, one per pair: a **push** from the right (0.7 s) into scene 2, a **wipe** from the left (0.6 s) into scene 3, a **dissolve** (0.8 s) into scene 4.\n\n**Around the card**: the line above it changes with each scene (four caption layers with lives strictly clear of each other, so no two headlines ever cross-fade), and four carousel dots below it \u2014 one drawing resource per position, swapped on a single drawing",
+   "contact": "docs/demo/c13-carousel-of-films/contact-result.png",
+   "reference_contact": "docs/demo/c13-carousel-of-films/contact-reference.png",
+   "video": "docs/demo/c13-carousel-of-films/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c13-carousel-of-films.mp4",
+   "video_hd_bytes": 877916,
+   "metadata": "docs/demo/c13-carousel-of-films/result-metadata.json",
+   "gif": "docs/demo/c13-carousel-of-films/result.gif",
+   "thumb": "docs/demo/c13-carousel-of-films/thumb.png"
+  },
+  "page": "docs/demo/democ13.md"
+ },
+ {
   "id": "c2",
   "slug": "c2-social-teaser",
   "title": "Social teaser",

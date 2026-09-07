@@ -53,6 +53,9 @@ SETS = [
  {"id": "c12", "slug": "through-the-surfaces", "title": "Through the surfaces, no files",
   "goal": "No media. Use a composition as the texture on a surface, three or four levels deep: a scene whose device screen shows another composition, whose surface shows another, and so on, down to a movie of your own that plays for the whole length. Each level is its own film with its own camera. To pass from one level into the next, take the camera to a maximum close-up on that surface and switch to the composition it shows — the close-up is the illusion of the transition. Twenty to thirty seconds, landscape, on a polished table under studio light with glass on the screens.",
   "media": {}, "duration": [18, 32], "must_use": []},
+ {"id": "c13", "slug": "carousel-of-films", "title": "A carousel of films, no files",
+  "goal": "No media, no 3D. Four short scenes, each its own composition with its own motion — a title, a list, some numbers, a sign-off — shown one after another in one card-shaped rectangle on a flat canvas, like a carousel: each scene starts as it arrives, and a different cut between each pair — a push, a wipe, a dissolve, whatever reads well. A line above the card says which scene is up. Fifteen to twenty-five seconds, landscape.",
+  "media": {}, "duration": [14, 26], "must_use": []},
 ]
 
 def main():
