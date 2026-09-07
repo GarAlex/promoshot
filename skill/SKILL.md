@@ -300,7 +300,15 @@ is for; the schema section says how to write it.
   should hold still until then says `"playback": "pause"` on its first
   keyframe and `"play"` at the switch. `"placement": { "mode": "fill" }`
   is a centred cover crop and a close-up covers by width, centred, so
-  the bands nest on their own; nothing is measured between the films. Keep
+  the bands nest on their own; nothing is measured between the films. A
+  CAROUSEL of films on a flat canvas is the same feature without the
+  close-up: one video layer holding a card's rectangle (`placement`:
+  height, anchor, offset), a swap keyframe per card naming the next
+  composition with its own `transition` — push, wipe, blurDissolve,
+  zoom, flash, glitch, dip — and `"sourceTime": 0` so each film starts
+  as it arrives; a caption layer above swaps its words on the same
+  instants. Every film is built to the card's shape and knows nothing
+  of the others. Keep
   the studio's key box out of a leaning lid's mirror
   (`"environment": { "rotation": 180 }`) and bring the key light away
   from the screen before the switch: the glass, and its glance, go
