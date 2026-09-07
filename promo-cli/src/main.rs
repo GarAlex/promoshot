@@ -361,23 +361,43 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
         }
     }
     // Nested compositions: what each holds, and who places it — the
-    // layers naming it, and the material slots a body binds it to (rung
-    // 43: a screen that plays a document). A composition on a device's
-    // Screen is named by no layer, and "placed by 0" read as an unused
-    // resource to the agent that authored the three-devices demo.
-    // Bindings sit on the project's own resources — a nested composition
-    // carries layers, not resources — so one walk over them sees a slot
-    // on a body that a stage member or a nested layer places.
+    // layers naming it at rest, the swap keyframes that take it over
+    // (rung 47: a video layer swapped to a composition, the takeover;
+    // the same walk sees an image swapped in on an image layer), and
+    // the material slots a body binds it to (rung 43: a screen that
+    // plays a document). A composition on a device's Screen is named by
+    // no layer, and "placed by 0" read as an unused resource to the
+    // agent that authored the three-devices demo; the carousel demo's
+    // scenes 2–4, reached only by swaps on its one card layer, read the
+    // same way. The layer walk is every layer — top level, stage
+    // members and nested. Bindings sit on the project's own resources
+    // — a nested composition carries layers, not resources — so one
+    // walk over them sees a slot on a body that a stage member or a
+    // nested layer places.
     let resources = project.resources();
+    let all_layers = promo_model::nesting::all_layers(&project.meta);
     let compositions: Vec<serde_json::Value> = resources
         .iter()
         .filter(|r| r.kind == promo_model::ProjectResourceKind::Composition)
         .map(|r| {
             let nested = r.composition.as_ref().map(|c| c.layers.len()).unwrap_or(0);
-            let placed_by: Vec<String> = promo_model::nesting::all_layers(&project.meta)
-                .into_iter()
-                .filter(|l| l.resource_id.as_deref() == Some(r.id.as_str()))
+            let id = r.id.as_str();
+            let placed_by: Vec<String> = all_layers
+                .iter()
+                .filter(|l| l.resource_id.as_deref() == Some(id))
                 .map(|l| l.id.clone())
+                .collect();
+            // A takeover is a keyframe on whichever layer; the layer's id
+            // and the keyframe's layer-local time are the handle
+            // promo_upsert_keyframe takes, so that pair is what is listed.
+            let taken_over_by: Vec<serde_json::Value> = all_layers
+                .iter()
+                .flat_map(|l| {
+                    l.keyframes
+                        .iter()
+                        .filter(move |k| k.resource_id.as_deref() == Some(id))
+                        .map(move |k| serde_json::json!({ "layer": l.id, "time": k.time }))
+                })
                 .collect();
             let bound_to: Vec<serde_json::Value> = resources
                 .iter()
@@ -393,7 +413,8 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
                 .collect();
             serde_json::json!({
                 "id": r.id, "name": r.display_name, "duration": r.duration,
-                "layers": nested, "placedBy": placed_by, "boundTo": bound_to,
+                "layers": nested, "placedBy": placed_by, "takenOverBy": taken_over_by,
+                "boundTo": bound_to,
             })
         })
         .collect();
@@ -455,33 +476,48 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
     out.push_str(&format!("resources: {}\n", resources.len()));
     if !compositions.is_empty() {
         out.push_str(&format!("compositions: {}\n", compositions.len()));
+        // Each way a composition is placed, said in its own words — the
+        // layers naming it at rest; the swap keyframes that take it over,
+        // by layer and time; the slots, by body and name — so "0 layers"
+        // on a device's screen, or on a scene one card swaps to, does not
+        // read as unused.
+        fn each(
+            list: &serde_json::Value,
+            say: impl Fn(&serde_json::Value) -> String,
+        ) -> Vec<String> {
+            list.as_array()
+                .map(|items| items.iter().map(say).collect())
+                .unwrap_or_default()
+        }
         for c in &compositions {
             let layers = c["placedBy"].as_array().map(|p| p.len()).unwrap_or(0);
             let mut placed = format!("placed by {layers} layer{}", plural(layers));
-            // A slot use said apart from a layer's — the body and the slot
-            // — so "0 layers" on a device's screen does not read as unused.
-            let slots: Vec<String> = c["boundTo"]
-                .as_array()
-                .map(|bindings| {
-                    bindings
-                        .iter()
-                        .map(|b| {
-                            format!(
-                                "{} {}",
-                                b["resource"].as_str().unwrap_or(""),
-                                b["slot"].as_str().unwrap_or("")
-                            )
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !slots.is_empty() {
-                placed.push_str(&format!(
-                    ", on {} slot{} ({})",
-                    slots.len(),
-                    plural(slots.len()),
-                    slots.join(", ")
-                ));
+            let takeovers = each(&c["takenOverBy"], |k| {
+                format!(
+                    "{} {:.2}s",
+                    k["layer"].as_str().unwrap_or(""),
+                    k["time"].as_f64().unwrap_or(0.0)
+                )
+            });
+            let slots = each(&c["boundTo"], |b| {
+                format!(
+                    "{} {}",
+                    b["resource"].as_str().unwrap_or(""),
+                    b["slot"].as_str().unwrap_or("")
+                )
+            });
+            for (how, what, uses) in [
+                ("taken over by", "keyframe", takeovers),
+                ("on", "slot", slots),
+            ] {
+                if !uses.is_empty() {
+                    placed.push_str(&format!(
+                        ", {how} {} {what}{} ({})",
+                        uses.len(),
+                        plural(uses.len()),
+                        uses.join(", ")
+                    ));
+                }
             }
             out.push_str(&format!(
                 "  {}  \"{}\"  {:.2}s  {} layers  {placed}\n",
@@ -1225,6 +1261,93 @@ mod tests {
         let text = inspect(&project, &Options::parse(&[]).unwrap()).unwrap();
         assert!(
             text.contains("placed by 0 layers, on 1 slot (dev Screen)"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A composition reached only by a swap keyframe — the takeover (rung
+    /// 47): one video layer, a scene per swap — is placed, though no layer
+    /// names it at rest. Inspect said "placed by 0 layers" of the
+    /// carousel demo's scenes 2–4, and the agent that authored it read the
+    /// line as understating the truth. A takeover is counted on any layer
+    /// — top level, stage member or nested — and said apart from a rest
+    /// placement, with the layer and the time: the handle
+    /// promo_upsert_keyframe takes.
+    #[test]
+    fn inspect_counts_a_composition_a_swap_keyframe_takes_over_as_placed() {
+        let dir =
+            std::env::temp_dir().join(format!("promo-takeover-inspect-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Carousel","createdAt":0,"state":"recorded","minReaderVersion":47,
+            "trimStart":0,"trimEnd":12,"videoDuration":12,"subtitles":[],
+            "compositionSettings":{"canvasWidth":1280,"canvasHeight":720},
+            "resources":[{"id":"cap","kind":"caption","filename":"","displayName":"Words","addedAt":0,
+               "captionText":"hi","imageCuts":[]},
+              {"id":"A","kind":"composition","filename":"","displayName":"Scene 1","addedAt":0,
+               "duration":4,"pixelWidth":1280,"pixelHeight":720,"imageCuts":[],
+               "composition":{"canvasWidth":1280,"canvasHeight":720,"layers":[
+                 {"id":"a1","name":"words","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"cap","keyframes":[]}]}},
+              {"id":"B","kind":"composition","filename":"","displayName":"Scene 2","addedAt":0,
+               "duration":4,"pixelWidth":1280,"pixelHeight":720,"imageCuts":[],
+               "composition":{"canvasWidth":1280,"canvasHeight":720,"layers":[
+                 {"id":"b1","name":"words","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"cap","keyframes":[]}]}},
+              {"id":"C","kind":"composition","filename":"","displayName":"Scene 3","addedAt":0,
+               "duration":4,"pixelWidth":1280,"pixelHeight":720,"imageCuts":[],
+               "composition":{"canvasWidth":1280,"canvasHeight":720,"layers":[
+                 {"id":"c1","name":"inner card","sortIndex":0,"kind":"video","isEnabled":true,
+                  "startTime":0,"duration":4,"resourceID":"A","keyframes":[
+                    {"id":"ck","time":1,"resourceID":"B","transitionDuration":0}]}]}}],
+            "layers":[{"id":"card","name":"Card","sortIndex":0,"kind":"video","isEnabled":true,
+              "startTime":0,"duration":12,"resourceID":"A","keyframes":[
+                {"id":"k1","time":4,"resourceID":"B","transitionDuration":0,"sourceTime":0},
+                {"id":"k2","time":8,"resourceID":"C","transitionDuration":0,"sourceTime":0}]}]}"#,
+        )
+        .unwrap();
+        let project = Project::open(&dir).expect("opens");
+        let out = inspect(&project, &Options::parse(&["--json".into()]).unwrap()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let scene = |id: &str| {
+            json["compositions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["id"] == id)
+                .cloned()
+                .unwrap_or_else(|| panic!("no composition {id} in {out}"))
+        };
+        // Scene 1 is placed at rest twice — by the card, and by the inner
+        // card nested in scene 3 — and taken over by nothing.
+        assert_eq!(scene("A")["placedBy"], serde_json::json!(["card", "c1"]));
+        assert_eq!(scene("A")["takenOverBy"], serde_json::json!([]));
+        // Scene 2 is named by no layer at rest; two swaps reach it — the
+        // card's, and the nested inner card's.
+        assert_eq!(scene("B")["placedBy"], serde_json::json!([]));
+        assert_eq!(
+            scene("B")["takenOverBy"],
+            serde_json::json!([{ "layer": "card", "time": 4.0 }, { "layer": "c1", "time": 1.0 }]),
+            "{out}"
+        );
+        assert_eq!(
+            scene("C")["takenOverBy"],
+            serde_json::json!([{ "layer": "card", "time": 8.0 }])
+        );
+        assert_eq!(json["renderable"], 1, "a swapped card needs no file");
+        let text = inspect(&project, &Options::parse(&[]).unwrap()).unwrap();
+        assert!(
+            text.contains("\"Scene 1\"  4.00s  1 layers  placed by 2 layers\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("placed by 0 layers, taken over by 2 keyframes (card 4.00s, c1 1.00s)\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("placed by 0 layers, taken over by 1 keyframe (card 8.00s)\n"),
             "{text}"
         );
         let _ = std::fs::remove_dir_all(&dir);
