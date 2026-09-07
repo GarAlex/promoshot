@@ -489,7 +489,13 @@ pixels in the compositor. Blur, glow and vignette are keyframe tracks
 too, so a focus pull or a glow that pulses ramps like the grade does.
 Five transitions ride the same passes — `blurDissolve`, `zoom`, `flash`,
 `glitch` and `dip` — beside the fade, wipe, slide, push and scale that
-were there, at a layer's edges and at a resource swap alike.
+were there, at a layer's edges and at a resource swap alike. A video
+layer's swap may name a composition (rung 47): the takeover, the next
+film arriving through any of those cuts where its `sourceTime` says, or
+where its clock already is. The same keyframes carry the consumer's
+transport for anything with a clock — a video, an audio, a composition,
+a sprite: `sourceTime` seeks it, `playback` pauses and resumes it, and
+its sound follows.
 
 ## Looks from a `.cube`
 

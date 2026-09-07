@@ -413,6 +413,8 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 
     wrong_level_warnings(meta, &mut out);
     floor_warnings(meta, &mut out);
+    transport_warnings(meta, &mut out);
+    swap_warnings(meta, &mut out);
     let required = meta.minimum_reader_version();
     match meta.min_reader_version {
         Some(declared) if declared >= required => {}
@@ -434,6 +436,77 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
 /// A floor word (rung 45) the vocabulary lacks is named with the words
 /// that exist; a floor on a layer that is neither a stage layer nor a
 /// flat stage's member does nothing, and is named so.
+/// The consumer's transport (rung 47) on material that has no clock: a
+/// still, a caption, a drawing, a background have nothing to pause or
+/// seek, so the keyframe's `sourceTime` or `playback` does nothing there.
+fn transport_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    for layer in promo_model::nesting::all_layers(meta) {
+        let clocked = matches!(
+            layer.kind,
+            promo_model::ProjectLayerKind::Video
+                | promo_model::ProjectLayerKind::Audio
+                | promo_model::ProjectLayerKind::Model
+        ) || (layer.kind == promo_model::ProjectLayerKind::Image
+            && layer.resource_id.as_deref().is_some_and(|id| {
+                meta.resources
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|r| r.id == id && r.sprite.is_some())
+            }));
+        if clocked {
+            continue;
+        }
+        for k in &layer.keyframes {
+            if k.source_time.is_some() || k.playback.is_some() {
+                out.push(format!(
+                    "layer \"{}\" keyframe at {}s carries sourceTime/playback, but a {:?} \
+                     layer plays nothing with a clock — it is ignored; the transport is \
+                     for a video, an audio, a composition on a video layer, a sprite, \
+                     or a model's screen",
+                    layer.name, k.time, layer.kind
+                ));
+                break;
+            }
+        }
+    }
+}
+
+/// A swap the layer would silently ignore: a keyframe `resourceID` naming a
+/// resource of a kind this layer cannot show — a composition on an image
+/// layer, a video on a video layer, a picture on a caption. Named here, so
+/// a deck that never switches says why.
+fn swap_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for layer in promo_model::nesting::all_layers(meta) {
+        for k in &layer.keyframes {
+            let Some(id) = k.resource_id.as_deref() else {
+                continue;
+            };
+            let Some(named) = resources.iter().find(|r| r.id == id) else {
+                continue; // a missing resource is named elsewhere
+            };
+            if crate::sprite::swappable(layer, id, resources).is_some() {
+                continue;
+            }
+            let hint = match (layer.kind, named.kind) {
+                (promo_model::ProjectLayerKind::Image, promo_model::ProjectResourceKind::Composition) => {
+                    "; a composition is shown, and swapped to, by a video layer"
+                }
+                (promo_model::ProjectLayerKind::Video, promo_model::ProjectResourceKind::Video) => {
+                    "; a video layer swaps to a composition — for a second clip, place another layer"
+                }
+                _ => "",
+            };
+            out.push(format!(
+                "layer \"{}\" keyframe at {}s swaps to \"{}\" ({:?}), which a {:?} layer \
+                 cannot show — the swap is ignored{hint}",
+                layer.name, k.time, named.display_name, named.kind, layer.kind
+            ));
+        }
+    }
+}
+
 fn floor_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     for layer in promo_model::nesting::all_layers(meta) {
         let Some(word) = layer.floor.as_deref() else {
@@ -2027,6 +2100,40 @@ mod tests {
             "{found:?}"
         );
         assert_eq!(meta.minimum_reader_version(), 45);
+    }
+
+    /// The consumer's transport (rung 47): a pause on a video layer and a
+    /// composition swap on a video layer say nothing and lift the ladder;
+    /// a seek on a caption (nothing to seek) and a composition swap on an
+    /// image layer (which cannot show one) are each named.
+    #[test]
+    fn a_transport_is_checked() {
+        let meta = project(
+            r#"{"id":"V","name":"deck","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":8,"resourceID":"CA",
+                "keyframes":[{"id":"K0","time":1,"playback":"pause","transitionDuration":0},
+                             {"id":"K1","time":3,"resourceID":"CB","sourceTime":0,"transitionDuration":0}]},
+               {"id":"C","name":"cap","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":0,"duration":4,"captionText":"Hi",
+                "keyframes":[{"id":"K2","time":1,"sourceTime":2,"transitionDuration":0}]},
+               {"id":"I","name":"still","sortIndex":2,"kind":"image","isEnabled":true,"startTime":0,"duration":4,"resourceID":"CA",
+                "keyframes":[{"id":"K3","time":2,"resourceID":"CB","transitionDuration":0}]}"#,
+            r#","resources":[{"id":"CA","kind":"composition","filename":"","displayName":"A","addedAt":0,"duration":8,"pixelWidth":80,"pixelHeight":50,
+                "composition":{"canvasWidth":80,"canvasHeight":50,"layers":[]},"imageCuts":[],"disabledAudioTrackIndices":[]},
+               {"id":"CB","kind":"composition","filename":"","displayName":"B","addedAt":0,"duration":8,"pixelWidth":80,"pixelHeight":50,
+                "composition":{"canvasWidth":80,"canvasHeight":50,"layers":[]},"imageCuts":[],"disabledAudioTrackIndices":[]}]"#,
+        );
+        let found = super::warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(!has("\"deck\" keyframe"), "{found:?}");
+        assert!(
+            has("layer \"cap\" keyframe at 1s carries sourceTime/playback"),
+            "{found:?}"
+        );
+        assert!(
+            has("layer \"still\" keyframe at 2s swaps to \"B\""),
+            "{found:?}"
+        );
+        assert!(has("shown, and swapped to, by a video layer"), "{found:?}");
+        assert_eq!(meta.minimum_reader_version(), 47);
     }
 
     /// A route (rung 40): a good one says nothing; a route with one point,

@@ -2173,6 +2173,160 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A composition on a video layer, for the transport tests: a room in
+    /// one colour and a caption that ARRIVES at the film's own second one —
+    /// so a still says where the film's clock is.
+    fn transport_project(dir: &std::path::Path, keyframes: &str) -> String {
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let film = |id: &str, hex: &str, word: &str| {
+            format!(
+                r#"{{"id":"{id}","kind":"composition","filename":"","displayName":"{word}","addedAt":0,"duration":20,
+                     "pixelWidth":800,"pixelHeight":500,"imageCuts":[],"disabledAudioTrackIndices":[],
+                     "composition":{{"canvasWidth":800,"canvasHeight":500,"backgroundColorHex":"{hex}","layers":[
+                       {{"id":"{id}-bg","name":"room","sortIndex":0,"kind":"background","isEnabled":true,"startTime":0,"duration":20,
+                        "keyframes":[{{"id":"{id}-k","time":0,"transitionDuration":0,"colorHex":"{hex}"}}]}},
+                       {{"id":"{id}-cap","name":"word","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":1.0,"duration":19,
+                        "captionText":"{word}","captionStyle":{{"alignment":"center","fontSize":180,"isBold":true,"textColorHex":"FFFFFF",
+                        "placement":{{"anchor":"center"}}}},
+                        "keyframes":[{{"id":"{id}-o","time":0,"transitionDuration":0,"opacity":1}}]}}]}}}}"#
+            )
+        };
+        let json = format!(
+            r#"{{"id":"P","name":"Transport","createdAt":0,"state":"recorded","minReaderVersion":47,
+            "trimStart":0,"trimEnd":10,"videoDuration":10,"subtitles":[],
+            "compositionSettings":{{"canvasWidth":1280,"canvasHeight":800,"backgroundColorHex":"101010"}},
+            "resources":[{a},{b}],
+            "layers":[{{"id":"L","name":"deck","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":10,"resourceID":"A",
+              "keyframes":[{{"id":"K0","time":0,"transitionDuration":0,"placement":{{"height":500,"anchor":"center"}}}}{keyframes}]}}]}}"#,
+            a = film("A", "C03030", "A"),
+            b = film("B", "3050C0", "B"),
+        );
+        std::fs::write(dir.join("metadata.json"), &json).unwrap();
+        json
+    }
+
+    /// (red at the card's left and right sample, blue there, white anywhere)
+    fn read_transport(frame: &[u8], w: usize) -> ((bool, bool), (bool, bool), usize) {
+        let at = |x: usize, y: usize| {
+            let i = (y * w + x) * 4;
+            (frame[i + 2], frame[i + 1], frame[i])
+        };
+        let red = |p: (u8, u8, u8)| p.0 > 150 && p.2 < 90;
+        let blue = |p: (u8, u8, u8)| p.2 > 150 && p.0 < 90;
+        let (l, r) = (at(300, 400), at(980, 400));
+        let white = frame
+            .chunks_exact(4)
+            .filter(|p| p[0] > 230 && p[1] > 230 && p[2] > 230)
+            .count();
+        ((red(l), red(r)), (blue(l), blue(r)), white)
+    }
+
+    /// The consumer's transport (rung 47): a pause holds a composition's
+    /// clock — its caption, due at its own second one, never arrives while
+    /// the layer is paused — play resumes it from where it stood, and a
+    /// seek to 0 starts it over.
+    #[test]
+    fn a_layer_pauses_and_seeks_the_film_it_plays() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-transport-{}", std::process::id()));
+        transport_project(
+            &dir,
+            r#",{"id":"K1","time":0.5,"transitionDuration":0,"playback":"pause"},
+               {"id":"K2","time":3.0,"transitionDuration":0,"playback":"play"},
+               {"id":"K3","time":5.0,"transitionDuration":0,"sourceTime":0}"#,
+        );
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 1280, 800).expect("renderer");
+        let white_at = |renderer: &mut Renderer, t: f64| {
+            read_transport(&renderer.frame_bgra(t).expect("frame"), 1280).2
+        };
+        assert_eq!(
+            white_at(&mut renderer, 0.25),
+            0,
+            "before its second one the film has no caption"
+        );
+        assert_eq!(
+            white_at(&mut renderer, 2.0),
+            0,
+            "paused at 0.5 s of its own, the caption never arrives"
+        );
+        assert!(
+            white_at(&mut renderer, 3.8) > 200,
+            "played again at 3 s, the film is at 1.3 s of its own: the caption is there"
+        );
+        assert_eq!(
+            white_at(&mut renderer, 5.2),
+            0,
+            "sought to 0 at 5 s, the film starts over: no caption at 0.2 s"
+        );
+        assert!(
+            white_at(&mut renderer, 6.5) > 200,
+            "and it arrives again at 1.5 s of its own"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The takeover (rung 47): a video layer swaps to a composition, and
+    /// the swap's wipe draws both — the outgoing film whole, the arriving
+    /// one wiping in from the left. `sourceTime: 0` on the swap starts the
+    /// arriving film fresh; without it the film is wherever the layer's
+    /// clock already is.
+    #[test]
+    fn a_video_layer_swaps_to_a_composition_through_a_wipe() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-takeover-{}", std::process::id()));
+        // Fresh at the takeover.
+        transport_project(
+            &dir,
+            r#",{"id":"K1","time":3.0,"transitionDuration":0,"resourceID":"B","sourceTime":0,
+                "transition":{"kind":"wipe","from":"left","duration":0.6}}"#,
+        );
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 1280, 800).expect("renderer");
+        let (red, blue, _) = read_transport(&renderer.frame_bgra(2.9).expect("frame"), 1280);
+        assert_eq!(
+            (red, blue),
+            ((true, true), (false, false)),
+            "before the swap the deck shows A, red"
+        );
+        let (red, blue, _) = read_transport(&renderer.frame_bgra(3.3).expect("frame"), 1280);
+        assert!(blue.0, "halfway through the wipe B has arrived on the left");
+        assert!(red.1, "and A still shows on the right");
+        let (red, blue, white) = read_transport(&renderer.frame_bgra(3.8).expect("frame"), 1280);
+        assert_eq!(
+            (red, blue),
+            ((false, false), (true, true)),
+            "after the wipe the deck shows B, blue"
+        );
+        assert_eq!(
+            white, 0,
+            "started fresh at 3 s, B is at 0.8 s of its own: its caption is not due"
+        );
+        let (_, _, white) = read_transport(&renderer.frame_bgra(4.5).expect("frame"), 1280);
+        assert!(white > 200, "at 1.5 s of its own, B's caption is there");
+        // Wherever the clock already is: no sourceTime.
+        transport_project(
+            &dir,
+            r#",{"id":"K1","time":3.0,"transitionDuration":0,"resourceID":"B",
+                "transition":{"kind":"wipe","from":"left","duration":0.6}}"#,
+        );
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 1280, 800).expect("renderer");
+        let (_, blue, white) = read_transport(&renderer.frame_bgra(3.8).expect("frame"), 1280);
+        assert_eq!(blue, (true, true), "B has arrived");
+        assert!(
+            white > 200,
+            "B has run since the layer's start, so at 3.8 s its caption is long there"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Models (rung 29): a generated cube glb on a model layer renders lit
     /// — face-on it is one shade, from a keyed three-quarter camera it is
     /// several with the top face brightest — and a `@accent` material

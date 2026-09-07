@@ -579,6 +579,111 @@ fn automation_points(layer: &ProjectLayer, base: f32) -> Option<Vec<VolumePoint>
 /// depth the model allows. v1 leaves a nested caption's narration and the
 /// parent's loop and extended pauses out; a nested clip's own pauses are
 /// not offset by a parent trim.
+/// The consumer's transport (rung 47) on a layer's sound: the material is
+/// heard only while the layer plays it, from where its clock has it. Each
+/// playing span becomes one input — the layer's input shifted so the
+/// material stands where the span opens, cut to the span's window — so a
+/// pause is silence and a seek is a jump, and a layer with no transport
+/// keyframes is exactly its own input.
+pub(crate) fn transported(layer: &ProjectLayer, inputs: Vec<AudioInput>) -> Vec<AudioInput> {
+    if !crate::transport::has_transport(layer) {
+        return inputs;
+    }
+    let spans = crate::transport::playing_spans(layer);
+    let mut out = Vec::new();
+    for input in inputs {
+        for span in &spans {
+            // Material `material_start` at output `start + local_start`: the
+            // input's own clock, which starts at the layer's start, slides by
+            // the difference — then the window consumes what played before.
+            let mut shifted = input.clone();
+            shifted.start_time += span.local_start - span.material_start;
+            let from = layer.start_time + span.local_start;
+            // An open span runs to the layer's end, not past it.
+            let to = span
+                .local_end
+                .or(layer.duration)
+                .map(|e| layer.start_time + e);
+            if let Some(cut) = windowed(&shifted, from, to) {
+                out.push(cut);
+            }
+        }
+    }
+    out
+}
+
+/// The input cut to the output window `from..to`: what its clock played
+/// before `from` is consumed from its ranges (so the material continues
+/// from where the clock has it), what would play past `to` is capped. The
+/// level automation is on the layer's own clock and stays where it is.
+fn windowed(input: &AudioInput, from: f64, to: Option<f64>) -> Option<AudioInput> {
+    let mut out = input.clone();
+    let speed = if input.speed.is_finite() {
+        input.speed.clamp(0.1, 10.0)
+    } else {
+        1.0
+    };
+    if from > out.start_time {
+        let consumed_output = from - out.start_time;
+        // Along the played material, at the source's rate.
+        let consumed = consumed_output * speed;
+        match out.included_ranges.as_mut() {
+            Some(ranges) => consume_ranges(ranges, consumed),
+            // The whole asset: from `consumed` on, however long it is.
+            None => {
+                out.included_ranges = Some(vec![VideoTrimRange {
+                    start: consumed,
+                    end: consumed + WHOLE_ASSET,
+                }])
+            }
+        }
+        for pause in out.extended_pauses.iter_mut() {
+            pause.start_time -= consumed;
+        }
+        out.extended_pauses.retain(|p| p.start_time >= 0.0);
+        out.start_time = from;
+        if let Some(cap) = out.duration_cap.as_mut() {
+            *cap -= consumed_output;
+            if *cap <= 0.0 {
+                return None;
+            }
+        }
+    }
+    if let Some(to) = to {
+        let cap = to - out.start_time;
+        if cap <= 0.0 {
+            return None;
+        }
+        out.duration_cap = Some(out.duration_cap.map_or(cap, |d| d.min(cap)));
+    }
+    if out.included_ranges.as_ref().is_some_and(|r| r.is_empty()) {
+        return None;
+    }
+    Some(out)
+}
+
+/// "The rest of the asset" as a range end: long past any recording, and
+/// finite, so the placer's arithmetic stays sane.
+const WHOLE_ASSET: f64 = 1.0e9;
+
+/// Drop the first `consume` source seconds from the ranges, in order.
+fn consume_ranges(ranges: &mut Vec<VideoTrimRange>, mut consume: f64) {
+    let mut kept = Vec::with_capacity(ranges.len());
+    for r in ranges.iter() {
+        let len = (r.end - r.start).max(0.0);
+        if consume >= len {
+            consume -= len;
+            continue;
+        }
+        kept.push(VideoTrimRange {
+            start: r.start + consume,
+            end: r.end,
+        });
+        consume = 0.0;
+    }
+    *ranges = kept;
+}
+
 fn nested_inputs(
     parent: &ProjectLayer,
     shown: &promo_model::ProjectResource,
@@ -782,7 +887,7 @@ pub fn audio_inputs(
                 // by its speed, clipped to its window.
                 if let Some(shown) = promo_model::nesting::composition_of(layer, resources) {
                     let (nested, spans) = nested_inputs(layer, shown, resources, is_renderable, 1);
-                    inputs.extend(nested);
+                    inputs.extend(transported(layer, nested));
                     focus.extend(spans);
                     continue;
                 }
@@ -809,28 +914,31 @@ pub fn audio_inputs(
                     .unwrap_or_else(|| res.duration.unwrap_or(0.0))
                     / rate;
                 let is_video = layer.kind == ProjectLayerKind::Video;
-                inputs.push(AudioInput {
-                    layer_id: layer.id.clone(),
-                    source: AudioSource::Resource(stored.id.clone()),
-                    included_ranges: ranges,
-                    start_time: layer.start_time,
-                    duration_cap: layer.duration,
-                    extended_pauses: if is_video {
-                        crate::mapping::extended_video_pauses(&res)
-                    } else {
-                        Vec::new()
-                    },
-                    volume: res.effective_volume(),
-                    volume_points: automation(layer, res.effective_volume()),
-                    disabled_audio_track_indices: if is_video {
-                        res.disabled_audio_track_indices.clone()
-                    } else {
-                        Vec::new()
-                    },
-                    single_track: !is_video,
-                    is_focused: layer.is_audio_focused(),
-                    speed: crate::mapping::effective_speed(&res),
-                });
+                inputs.extend(transported(
+                    layer,
+                    vec![AudioInput {
+                        layer_id: layer.id.clone(),
+                        source: AudioSource::Resource(stored.id.clone()),
+                        included_ranges: ranges,
+                        start_time: layer.start_time,
+                        duration_cap: layer.duration,
+                        extended_pauses: if is_video {
+                            crate::mapping::extended_video_pauses(&res)
+                        } else {
+                            Vec::new()
+                        },
+                        volume: res.effective_volume(),
+                        volume_points: automation(layer, res.effective_volume()),
+                        disabled_audio_track_indices: if is_video {
+                            res.disabled_audio_track_indices.clone()
+                        } else {
+                            Vec::new()
+                        },
+                        single_track: !is_video,
+                        is_focused: layer.is_audio_focused(),
+                        speed: crate::mapping::effective_speed(&res),
+                    }],
+                ));
             }
             ProjectLayerKind::Caption => {
                 let caption_resource = layer.resource_id.as_deref().and_then(|rid| {

@@ -87,13 +87,14 @@ pub fn frame_at(
 ///
 /// - The swap is a STEP. It lands at the keyframe's own time, not at the
 ///   start of a ramp, and no transition applies to it.
-/// - Only image and caption layers honour swaps. On video or audio the
-///   layer's local time maps to source time through trims, speed and cuts, so
-///   a mid-layer swap would have to answer "where does the second clip
-///   start" — a sequence model, not a keyframe field.
-/// - The new resource must be of the layer's OWN kind. Anything else is
-///   ignored rather than drawn, because an image layer handed a video has no
-///   sensible thing to do with it.
+/// - Image, caption, drawing and background layers swap to their OWN kind.
+///   Anything else is ignored rather than drawn, because an image layer
+///   handed a video has no sensible thing to do with it.
+/// - A VIDEO layer swaps to a COMPOSITION (rung 47): the takeover. "Where
+///   does the second clip start" is the swap keyframe's `sourceTime` — the
+///   consumer's transport — and absent, wherever the layer's clock already
+///   is. A video swapping to another video waits on the hosts' decoders,
+///   which key on the layer.
 ///
 /// The resource `id` names, if this layer could actually swap to it —
 /// it exists and is the kind this layer draws.
@@ -121,6 +122,9 @@ pub fn swappable_kind(layer: &ProjectLayer) -> Option<promo_model::ProjectResour
         promo_model::ProjectLayerKind::Background => {
             Some(promo_model::ProjectResourceKind::Background)
         }
+        // The takeover (rung 47): a video layer swaps to a composition —
+        // the next film, arriving where its `sourceTime` says.
+        promo_model::ProjectLayerKind::Video => Some(promo_model::ProjectResourceKind::Composition),
         _ => None,
     }
 }
@@ -132,9 +136,8 @@ pub fn layer_resource_id<'a>(
 ) -> Option<&'a str> {
     let base = layer.resource_id.as_deref();
     // A drawing swaps like an image: the vector document is just as
-    // replaceable as a bitmap. Video is deliberately absent — a mid-layer
-    // swap there is a playlist, and it would have to answer where the second
-    // clip starts and what happens to its audio.
+    // replaceable as a bitmap. A video layer swaps to a composition — the
+    // takeover of rung 47 — its clock answered by the keyframe's transport.
     let Some(wanted) = swappable_kind(layer) else {
         return base;
     };

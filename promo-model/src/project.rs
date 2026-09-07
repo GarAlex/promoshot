@@ -2497,6 +2497,22 @@ impl Serialize for CompositionSettings {
 // ---------------------------------------------------------------------------
 // Layers
 
+impl ProjectLayerKeyframe {
+    /// A seek or a playback state: the consumer's transport (rung 47).
+    pub fn needs_rung_47(&self) -> bool {
+        self.source_time.is_some() || self.playback.is_some()
+    }
+}
+
+/// What a layer does to the clock of the material it plays (rung 47): a
+/// state held from the keyframe that says it to the next that says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Playback {
+    Play,
+    Pause,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLayerKeyframe {
@@ -2522,6 +2538,19 @@ pub struct ProjectLayerKeyframe {
     /// pass with no deadlock.
     #[serde(default, skip_serializing_if = "is_false")]
     pub wait: bool,
+    /// The consumer's transport (rung 47): a SEEK — from this keyframe the
+    /// material the layer plays (a video, a composition, an audio, a
+    /// sprite) stands at this time of its own. Absent, the material is
+    /// wherever its clock already is, by default running since the layer's
+    /// start. On a swap keyframe it is where the ARRIVING material starts:
+    /// absent, wherever it already is; 0, fresh at the takeover.
+    #[serde(default, rename = "sourceTime", skip_serializing_if = "is_none")]
+    pub source_time: Option<f64>,
+    /// The consumer's transport (rung 47): `play` or `pause`, a state held
+    /// until the next keyframe that says. Paused, the material's clock
+    /// stops on the frame it is on and its sound stops with it.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub playback: Option<Playback>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub zoom: Option<f64>,
     /// Caption font size in points, its own field (rung 18). On a caption
@@ -4378,6 +4407,30 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 47 is the consumer's transport — a seek or a pause on a keyframe
+        // — and a swap on a VIDEO layer to a composition, the takeover.
+        // An older reader drops the fields on save and the material runs
+        // on, or ignores the swap and never switches: a different film.
+        let all = crate::nesting::all_layers(self);
+        if all
+            .iter()
+            .any(|l| l.keyframes.iter().any(|k| k.needs_rung_47()))
+        {
+            return 47;
+        }
+        if all.iter().any(|l| {
+            l.kind == ProjectLayerKind::Video
+                && l.keyframes.iter().any(|k| {
+                    k.resource_id.as_deref().is_some_and(|id| {
+                        resources
+                            .iter()
+                            .any(|r| r.id == id && r.kind == ProjectResourceKind::Composition)
+                    })
+                })
+        }) {
+            return 47;
+        }
+
         // 46 is a PICTURE of the world as the environment. An older
         // reader drops `resourceID` on save and the bodies mirror the
         // preset, or the synthetic sky, instead: a different picture.
@@ -4907,6 +4960,60 @@ impl ProjectMetadata {
 #[cfg(test)]
 mod forward_compat_tests {
     use super::*;
+
+    /// The consumer's transport (rung 47) round-trips as written — a seek
+    /// and a state — and lifts the ladder; a video layer swapping to a
+    /// composition lifts it too, and an image swap does not.
+    #[test]
+    fn the_transport_round_trips_and_needs_rung_47() {
+        let json = r#"{"id":"P","name":"t","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":8,"videoDuration":8,"subtitles":[],
+            "compositionSettings":{"canvasWidth":160,"canvasHeight":100,"backgroundColorHex":"000000"},
+            "resources":[{"id":"CA","kind":"composition","filename":"","displayName":"A","addedAt":0,"duration":8,"pixelWidth":80,"pixelHeight":50,
+                          "composition":{"canvasWidth":80,"canvasHeight":50,"layers":[]},"imageCuts":[],"disabledAudioTrackIndices":[]},
+                         {"id":"I1","kind":"image","filename":"a.png","displayName":"a","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]},
+                         {"id":"I2","kind":"image","filename":"b.png","displayName":"b","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]}],
+            "layers":[{"id":"V","name":"deck","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":8,"resourceID":"CA",
+                       "keyframes":[{"id":"K0","time":1,"playback":"pause","transitionDuration":0},
+                                    {"id":"K1","time":3,"playback":"play","sourceTime":2.5,"transitionDuration":0}]}]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("transport keyframes decode");
+        let deck = &meta.layers.as_ref().unwrap()[0];
+        assert_eq!(deck.keyframes[0].playback, Some(Playback::Pause));
+        assert_eq!(deck.keyframes[1].playback, Some(Playback::Play));
+        assert_eq!(deck.keyframes[1].source_time, Some(2.5));
+        assert!(deck.keyframes[0].needs_rung_47());
+        assert_eq!(meta.minimum_reader_version(), 47);
+        let out = meta.to_json().unwrap();
+        assert!(out.contains(r#""playback":"pause""#), "{out}");
+        assert!(out.contains(r#""sourceTime":2.5"#), "{out}");
+        // A takeover — a video layer's swap to a composition — is 47 too.
+        let swap = json.replace(r#"{"id":"K0","time":1,"playback":"pause","transitionDuration":0},
+                                    {"id":"K1","time":3,"playback":"play","sourceTime":2.5,"transitionDuration":0}"#,
+                                r#"{"id":"K1","time":3,"resourceID":"CA","transitionDuration":0}"#);
+        assert_ne!(swap, json);
+        assert_eq!(
+            ProjectMetadata::from_json(&swap)
+                .unwrap()
+                .minimum_reader_version(),
+            47
+        );
+        // An image swapping to an image is what it was.
+        let image = swap
+            .replace(
+                r#""kind":"video","isEnabled":true,"startTime":0,"duration":8,"resourceID":"CA""#,
+                r#""kind":"image","isEnabled":true,"startTime":0,"duration":8,"resourceID":"I1""#,
+            )
+            .replace(
+                r#""resourceID":"CA","transitionDuration":0}"#,
+                r#""resourceID":"I2","transitionDuration":0}"#,
+            );
+        assert_ne!(image, swap);
+        assert!(
+            ProjectMetadata::from_json(&image)
+                .unwrap()
+                .minimum_reader_version()
+                < 47
+        );
+    }
 
     #[test]
     fn unknown_keys_survive_the_round_trip_at_every_level() {

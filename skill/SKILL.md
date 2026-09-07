@@ -290,14 +290,17 @@ is for; the schema section says how to write it.
   is a texture: build it as its own film, as long as the whole piece,
   with a camera of its own, to the shape of the surface that will show
   it. THROUGH THE SURFACES, three or four levels deep, is then one
-  feature used over and over — switching which composition is MAIN:
-  every film is a layer from frame one, on one clock, the outer ones
-  on top with a short `transitionOut` fade at their switch; each outer
-  camera flies to the maximum close-up on its screen (above) and the
-  fade lands on the film that screen was showing, at the same instant,
-  already the same picture. `"placement": { "mode": "fill" }` is a
-  centred cover crop and a close-up covers by width, centred, so the
-  bands nest on their own; nothing is measured between the films. Keep
+  feature used over and over — switching which composition is MAIN: ONE
+  video layer from frame one, a swap keyframe (`resourceID`) at each
+  switch naming the next film with a `transition` (a fade, a wipe), no
+  `sourceTime` so the film arrives where its clock already is — the
+  same instant the screen was showing — and the outer camera flying to
+  the maximum close-up on its screen (above) just before. A film that
+  should start fresh at its takeover says `"sourceTime": 0`; one that
+  should hold still until then says `"playback": "pause"` on its first
+  keyframe and `"play"` at the switch. `"placement": { "mode": "fill" }`
+  is a centred cover crop and a close-up covers by width, centred, so
+  the bands nest on their own; nothing is measured between the films. Keep
   the studio's key box out of a leaning lid's mirror
   (`"environment": { "rotation": 180 }`) and bring the key light away
   from the screen before the switch: the glass, and its glance, go

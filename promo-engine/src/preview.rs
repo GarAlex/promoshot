@@ -976,7 +976,7 @@ impl PreviewEngine {
             if layer.kind != ProjectLayerKind::Video || !tl::layer_is_visible(layer, time) {
                 continue;
             }
-            let local = tl::layer_local_time(layer, time);
+            let local = tl::transport::material_time(layer, tl::layer_local_time(layer, time));
             let source_time = match self.resource_for(layer) {
                 Some(res) => {
                     let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
@@ -1384,7 +1384,8 @@ impl PreviewEngine {
         let resource = resources.iter().find(|r| r.id == showing);
         let mut uv_rect = [0.0f32, 0.0, 1.0, 1.0];
         if let Some(sheet) = resource.and_then(tl::sheet_for) {
-            let local = tl::layer_local_time(layer, time);
+            // The consumer's transport (rung 47): a paused sheet holds its cell.
+            let local = tl::transport::material_time(layer, tl::layer_local_time(layer, time));
             let Some(cell) = tl::sprite_frame_at(sheet, layer, local, Size::new(fw, fh)) else {
                 // `hide`: the cycle is spent and the layer asked to go.
                 return None;
@@ -2541,7 +2542,10 @@ impl PreviewEngine {
             };
 
             let source_time = if layer.kind == ProjectLayerKind::Video {
-                let local = tl::layer_local_time(layer, centre);
+                // The consumer's transport (rung 47): where the layer has
+                // its material — paused, sought, or running since its start.
+                let local =
+                    tl::transport::material_time(layer, tl::layer_local_time(layer, centre));
                 match self.resource_for(layer) {
                     Some(res) => {
                         // A layer naming a cut plays that sub-range; the
@@ -2675,6 +2679,19 @@ impl PreviewEngine {
                 // wipe needs both on screen at once, which is exactly what a
                 // swap could not do while a layer drew one quad.
                 if let Some(previous) = swap.previous.as_deref() {
+                    // A composition going out (the takeover, rung 47) is
+                    // drawn by recursion at the clock it was on, as the one
+                    // arriving is; a picture or a video rides the host path.
+                    let outgoing = resources
+                        .iter()
+                        .find(|r| {
+                            r.id == previous
+                                && r.kind == promo_model::ProjectResourceKind::Composition
+                        })
+                        .cloned()
+                        .and_then(|res| {
+                            self.composition_frame(layer, &res, source_time, tier, doc.depth, &used)
+                        });
                     // The outgoing material's shadow is discarded: one
                     // shadow per layer, and the incoming quad carries it.
                     if let Some((mut quad, _shadow, id, lut_id)) = self.media_quad(
@@ -2688,7 +2705,7 @@ impl PreviewEngine {
                         is_drawing,
                         &resources,
                         &used,
-                        None,
+                        outgoing,
                     ) {
                         apply_effect(&mut quad, swap.departing, canvas, time);
                         apply_transition(&mut quad, layer, time, canvas);
@@ -3136,7 +3153,8 @@ impl PreviewEngine {
                     let Some((layer, time)) = video_time else {
                         continue;
                     };
-                    let local = tl::layer_local_time(layer, time);
+                    let local =
+                        tl::transport::material_time(layer, tl::layer_local_time(layer, time));
                     let view = tl::resource_for_cut(res, None);
                     match tl::source_time_for_layer(&view, local, layer.beyond_end) {
                         Some(t) => t,
@@ -3152,7 +3170,8 @@ impl PreviewEngine {
                     let Some((layer, time)) = video_time else {
                         continue;
                     };
-                    let local = tl::layer_local_time(layer, time);
+                    let local =
+                        tl::transport::material_time(layer, tl::layer_local_time(layer, time));
                     let view = tl::resource_for_cut(res, None);
                     let Some(t) = tl::source_time_for_layer(&view, local, layer.beyond_end) else {
                         continue;
@@ -3442,7 +3461,11 @@ impl PreviewEngine {
                             Some(res) => {
                                 let view =
                                     tl::resource_for_cut(res, member.media_cut_id.as_deref());
-                                match tl::source_time_for_layer(&view, local, member.beyond_end) {
+                                match tl::source_time_for_layer(
+                                    &view,
+                                    tl::transport::material_time(member, local),
+                                    member.beyond_end,
+                                ) {
                                     Some(t) => t,
                                     None => continue,
                                 }

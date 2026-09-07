@@ -421,14 +421,31 @@ Semantics worth knowing:
   is a STEP landing at the keyframe's own time: there is no halfway
   between two images, and on a keyframe that only swaps,
   transitionDuration has nothing to ramp and does nothing. The
-  layer's own resourceID shows before the first swap. Image, caption
-  and drawing layers only — on video or audio a mid-layer swap would
-  have to say where the second clip starts playing — and only to a
-  resource of the layer's own kind; anything else is ignored. A
-  caption swap replaces the WORDS (each caption resource carries its
-  own text and style), a drawing swap the marks. Height is preserved
-  across a swap (it is canvasHeight * zoom) while width follows the
-  new source's aspect, anchored top-left.
+  layer's own resourceID shows before the first swap. Image, caption,
+  drawing and background layers swap to a resource of their own kind;
+  a VIDEO layer swaps to a COMPOSITION (rung 47) — the takeover: the
+  next film arriving where the keyframe's `sourceTime` says, or, with
+  none, wherever the layer's clock already is. Anything else is
+  ignored, and promo_validate names it. A caption swap replaces the
+  WORDS (each caption resource carries its own text and style), a
+  drawing swap the marks. Height is preserved across a swap (it is
+  canvasHeight * zoom) while width follows the new source's aspect,
+  anchored top-left.
+- The CONSUMER'S TRANSPORT (rung 47). A clocked resource — a video, an
+  audio, a composition, a sprite sheet, a picture on a model's screen —
+  runs from its beginning on the layer's clock by default. The layer
+  that plays it decides what happens to that clock, by keyframes of its
+  own: `"sourceTime": 12` is a SEEK — from this keyframe the material
+  stands at 12 s of its own; `"playback": "pause"` stops its clock on
+  the frame it is on (and its sound), `"playback": "play"` resumes it,
+  a state held until the next keyframe that says. Both are steps, not
+  ramps. "Static until it takes control" is `pause` on the first
+  keyframe and `play` on the takeover. Two layers may play one
+  composition at different points, or one paused; the same clocks
+  compose in order — the layer's local time, the transport, then the
+  resource's own trims, speed, media cuts and beyondEnd. A project using
+  the transport, or a composition swap on a video layer, carries
+  `minReaderVersion: 47`.
 - Give a swap keyframe a `transition` and it stops being a cut:
   { "time": 4, "resourceID": "<the next image>", "transition":
   { "kind": "wipe", "from": "left", "duration": 0.6 } } draws BOTH

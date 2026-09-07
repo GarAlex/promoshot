@@ -377,6 +377,8 @@ mod schema_doc_tests {
             horizontal_shift: Some(240.0),
             color_hex: Some("@accent".into()),
             resource_id: Some("R2".into()),
+            source_time: Some(2.5),
+            playback: Some(Playback::Pause),
             transition: Some(full_transition(TransitionKind::Push, TransitionEdge::Right)),
             gradient: Some(full_gradient()),
             gain: Some(0.8),

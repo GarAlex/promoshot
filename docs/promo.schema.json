@@ -2012,6 +2012,13 @@
       ],
       "type": "string"
     },
+    "Playback": {
+      "enum": [
+        "play",
+        "pause"
+      ],
+      "type": "string"
+    },
     "Point": {
       "maxItems": 2,
       "minItems": 2,
@@ -2603,6 +2610,16 @@
             }
           ]
         },
+        "playback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Playback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "progress": {
           "format": "double",
           "type": [
@@ -2631,6 +2648,13 @@
           ]
         },
         "shutter": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sourceTime": {
           "format": "double",
           "type": [
             "number",

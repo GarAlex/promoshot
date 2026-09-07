@@ -22,6 +22,7 @@ pub mod reveal;
 pub mod route;
 pub mod sprite;
 pub mod transition;
+pub mod transport;
 pub mod validate;
 pub mod viewport;
 
@@ -476,6 +477,66 @@ mod tests {
         );
     }
 
+    /// The consumer's transport (rung 47) on the soundtrack: a paused span
+    /// is a gap, a seek starts a new input at the material it names, what
+    /// played before a window is consumed from the ranges, and an open
+    /// span ends with the layer. The same case the Swift twin pins.
+    #[test]
+    fn the_soundtrack_follows_the_playing_spans() {
+        let layer: promo_model::ProjectLayer = serde_json::from_str(
+            r#"{"id": "L", "name": "deck", "sortIndex": 0, "kind": "video", "isEnabled": true,
+                "startTime": 2.0, "duration": 20, "resourceID": "V", "keyframes": [
+                {"id": "A", "time": 2, "transitionDuration": 0, "playback": "pause"},
+                {"id": "B", "time": 5, "transitionDuration": 0, "playback": "play"},
+                {"id": "C", "time": 9, "transitionDuration": 0, "sourceTime": 0}]}"#,
+        )
+        .unwrap();
+        let base = crate::audio::AudioInput {
+            layer_id: "L".into(),
+            source: crate::audio::AudioSource::Resource("V".into()),
+            included_ranges: Some(vec![promo_model::VideoTrimRange {
+                start: 10.0,
+                end: 30.0,
+            }]),
+            start_time: 2.0,
+            duration_cap: Some(20.0),
+            extended_pauses: Vec::new(),
+            volume: 1.0,
+            volume_points: None,
+            disabled_audio_track_indices: Vec::new(),
+            single_track: false,
+            is_focused: false,
+            speed: 1.0,
+        };
+        let inputs = crate::audio::transported(&layer, vec![base.clone()]);
+        assert_eq!(inputs.len(), 3, "{inputs:?}");
+        let range = |i: usize| inputs[i].included_ranges.as_ref().unwrap()[0].start;
+        // 0–2 s: material from 0 — the range's start.
+        assert_eq!(
+            (inputs[0].start_time, inputs[0].duration_cap, range(0)),
+            (2.0, Some(2.0), 10.0)
+        );
+        // 5–9 s: the material continues from 2 s, consumed from the range.
+        assert_eq!(
+            (inputs[1].start_time, inputs[1].duration_cap, range(1)),
+            (7.0, Some(4.0), 12.0)
+        );
+        // 9 s on: sought to 0, the range's start again, and it ends with the layer.
+        assert_eq!(
+            (inputs[2].start_time, inputs[2].duration_cap, range(2)),
+            (11.0, Some(11.0), 10.0)
+        );
+        // No transport: the input is its own.
+        let plain: promo_model::ProjectLayer = serde_json::from_str(
+            r#"{"id": "L", "name": "deck", "sortIndex": 0, "kind": "video", "isEnabled": true,
+                "startTime": 2.0, "duration": 20, "resourceID": "V", "keyframes": []}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            crate::audio::transported(&plain, vec![base.clone()]),
+            vec![base]
+        );
+    }
     #[test]
     fn scaled_segments_divide_only_the_output_placement_by_speed() {
         let scaled =
