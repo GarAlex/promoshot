@@ -5816,637 +5816,6 @@
   "page": "docs/demo/democ1.md"
  },
  {
-  "id": "c10",
-  "slug": "c10-three-devices",
-  "title": "Three devices, no files",
-  "blurb": "Three devices on a polished table from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light \u2014 and make its own screens?",
-  "kind": "creative",
-  "canvas": null,
-  "duration": [
-   9,
-   16
-  ],
-  "prompt": "No media. Three devices \u2014 a phone, a tablet and a laptop \u2014 together on a polished table under studio light, glass on every screen and something of your own showing on each, one camera move through the scene, ten to fifteen seconds, landscape. Make it look real: the table reflects them, they cast shadows, the light catches the glass. Whatever you need beyond what the format gives you, make yourself.",
-  "resources": [],
-  "result": {
-   "score": 100,
-   "passed": 6,
-   "total": 6,
-   "checks": [
-    {
-     "check": "valid",
-     "ok": true,
-     "detail": "promo validate"
-    },
-    {
-     "check": "rendered",
-     "ok": true,
-     "detail": "an mp4 in Exports/"
-    },
-    {
-     "check": "length",
-     "ok": true,
-     "detail": "13.0s, asked 9\u201316s"
-    },
-    {
-     "check": "vocabulary",
-     "ok": true,
-     "detail": "13 features: composition, effects, gradient, stage, stageLayer, model, camera, materials, finishWord, floor, device, light, environment"
-    },
-    {
-     "check": "words",
-     "ok": true,
-     "detail": "16 captions"
-    },
-    {
-     "check": "layers",
-     "ok": true,
-     "detail": "3 layers"
-    }
-   ],
-   "summary": "turns=77 cost=$5.59 secs=783",
-   "run": {
-    "turns": 77,
-    "wall_s": 782,
-    "api_s": 762,
-    "cost_usd": 5.59,
-    "tokens": {
-     "input": 86,
-     "cache_read": 5439252,
-     "cache_write": 149575,
-     "output": 54882,
-     "thinking": 28490
-    },
-    "models": [
-     {
-      "model": "claude-opus-5",
-      "input": 5588913,
-      "output": 54882,
-      "cost_usd": 5.59
-     }
-    ],
-    "mcp": {
-     "calls": 18,
-     "ms": 17194,
-     "tools": {
-      "promo_render_video": {
-       "calls": 1,
-       "ms": 14858,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 4,
-       "ms": 1271,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 6,
-       "ms": 948,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 2,
-       "ms": 109,
-       "errors": 0
-      },
-      "promo_inspect": {
-       "calls": 1,
-       "ms": 8,
-       "errors": 0
-      },
-      "promo_schema": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_workspace": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_schema_full": {
-       "calls": 2,
-       "ms": 0,
-       "errors": 0
-      }
-     }
-    }
-   },
-   "used": [
-    "composition",
-    "effects",
-    "gradient",
-    "stage",
-    "stageLayer",
-    "model",
-    "camera",
-    "materials",
-    "finishWord",
-    "floor",
-    "device",
-    "light",
-    "environment"
-   ],
-   "captions": [
-    "PROMOSHOT",
-    "STORYBOARD",
-    "PROMOSHOT STUDIO",
-    "Ready\nfor the\nshot.",
-    "Three frames,\none move.",
-    "c10 \u00b7 three devices",
-    "3 devices \u00b7 one key light \u00b7 13 s",
-    "01   Open on the table",
-    "1920 \u00d7 1080 \u00b7 30 fps \u00b7 one camera move",
-    "Render",
-    "02   Cross the glass",
-    "00:00:00:00      \u25b8      00:00:13:00",
-    "03   Land on the laptop",
-    "RENDER",
-    "13.0 s \u00b7 landscape",
-    "Three screens. One take."
-   ],
-   "notes": "Done \u2014 `out.promo` is written, validated, inspected, and rendered.\n\n**`Exports/export.mp4`** \u2014 1920\u00d71080, 390 frames @ 30 fps (13.0 s), landscape.\n\n**What's in it.** `resources/` was empty, so nothing in the shot is imported media \u2014 the whole scene is built out of the format:\n\n- **The three devices** are generated model bodies (`recipe: {\"device\": {\"kind\": \"phone\" | \"tablet\" | \"laptop\"}}`), standing together in one `stage` layer through one camera and one depth buffer, arranged by `stageOffset`/`depth` \u2014 tablet left, laptop centre-back, phone front-right.\n- **The screens** are three nested `composition` resources bound to each body's `Screen` slot, so each device is genuinely showing something of its own: a phone app screen, a landscape storyboard, and an editor window. They're built from background gradients and captions (the plated captions do the chips and buttons), and they play on the layer's clock.\n- **Glass** is `\"finish\": \"glass\"` on every `Screen` slot, `\"anodized\"` on the bodies, under a `studio` environment \u2014 that's what puts the key light's glance across each screen.\n- **The table** is `\"floor\": \"mirror\"` on the stage \u2014 it gives the reflections and the contact shadows \u2014 over a background layer whose vertical gradient paints the warm horizon the light pools on, with a vignette and a little grain.\n- **One camera move**: four keyframes with `smooth` easing so the speed carries through rather than stopping at each one \u2014 yaw \u221218\u00b0 \u2192 +10\u00b0, pitch 21\u00b0 \u2192 8\u00b0, dolly 4.9 \u2192 4.2 radii \u2014 while the key light swings the opposite way, so the highlight travels across the glass as the camera crosses it. One title lands at 8.4 s and clears before the end.\n\n**What I changed after looking.** Three passes on the contact sheets fixed real problems: the tablet body is landscape and my",
-   "contact": "docs/demo/c10-three-devices/contact-result.png",
-   "video": "docs/demo/c10-three-devices/result.mp4",
-   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c10-three-devices.mp4",
-   "video_hd_bytes": 1371890,
-   "metadata": "docs/demo/c10-three-devices/result-metadata.json",
-   "gif": "docs/demo/c10-three-devices/result.gif",
-   "thumb": "docs/demo/c10-three-devices/thumb.png"
-  },
-  "page": "docs/demo/democ10.md"
- },
- {
-  "id": "c11",
-  "slug": "c11-through-the-screens",
-  "title": "Through the screens, no files",
-  "blurb": "A laptop whose screen shows a tablet whose screen shows a phone, and a camera that flies into each screen and on into the next \u2014 from a two-line brief and no media. Does a fresh agent, given only the skill, find compositions on screens and a flight that lands on the picture?",
-  "kind": "creative",
-  "canvas": null,
-  "duration": [
-   18,
-   32
-  ],
-  "prompt": "No media. A laptop on a polished table under studio light; on its glass screen, a tablet on a table of its own; on the tablet's screen, a phone; on the phone's screen, something of yours. The camera flies into each screen in turn \u2014 the picture on the screen becomes the whole frame and the flight carries on into the next \u2014 one continuous movement, twenty to thirty seconds, landscape. Make it look real: reflections, shadows, the light catching the glass. Whatever you need beyond what the format gives you, make yourself.",
-  "resources": [],
-  "result": {
-   "score": 83,
-   "passed": 5,
-   "total": 6,
-   "checks": [
-    {
-     "check": "valid",
-     "ok": true,
-     "detail": "promo validate"
-    },
-    {
-     "check": "rendered",
-     "ok": true,
-     "detail": "an mp4 in Exports/"
-    },
-    {
-     "check": "length",
-     "ok": true,
-     "detail": "26.4s, asked 18\u201332s"
-    },
-    {
-     "check": "vocabulary",
-     "ok": true,
-     "detail": "14 features: composition, gradient, stage, stageLayer, model, camera, materials, finishWord, floor, device, light, cameraTarget, textBody, environment"
-    },
-    {
-     "check": "words",
-     "ok": false,
-     "detail": "0 captions"
-    },
-    {
-     "check": "layers",
-     "ok": true,
-     "detail": "3 layers"
-    }
-   ],
-   "summary": "turns=139 cost=$18.66 secs=2471",
-   "run": {
-    "turns": 139,
-    "wall_s": 2470,
-    "api_s": 2357,
-    "cost_usd": 18.66,
-    "tokens": {
-     "input": 242,
-     "cache_read": 23643892,
-     "cache_write": 274421,
-     "output": 163757,
-     "thinking": 113615
-    },
-    "models": [
-     {
-      "model": "claude-opus-5",
-      "input": 23918555,
-      "output": 163757,
-      "cost_usd": 18.66
-     }
-    ],
-    "mcp": {
-     "calls": 47,
-     "ms": 92494,
-     "tools": {
-      "promo_render_video": {
-       "calls": 1,
-       "ms": 75960,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 21,
-       "ms": 14177,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 15,
-       "ms": 2311,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 4,
-       "ms": 33,
-       "errors": 0
-      },
-      "promo_inspect": {
-       "calls": 1,
-       "ms": 9,
-       "errors": 0
-      },
-      "promo_schema": {
-       "calls": 1,
-       "ms": 3,
-       "errors": 0
-      },
-      "promo_schema_full": {
-       "calls": 3,
-       "ms": 1,
-       "errors": 0
-      },
-      "promo_workspace": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      }
-     }
-    }
-   },
-   "used": [
-    "composition",
-    "gradient",
-    "stage",
-    "stageLayer",
-    "model",
-    "camera",
-    "materials",
-    "finishWord",
-    "floor",
-    "device",
-    "light",
-    "cameraTarget",
-    "textBody",
-    "environment"
-   ],
-   "captions": [],
-   "notes": "Done. **`out.promo`** is written, validates clean, and the video is rendered.\n\n**The piece** \u2014 26.4s, 1920\u00d71080, one continuous flight:\n\n| | |\n|---|---|\n| 0\u20137.1s | a laptop on a polished table, studio key, mirrored floor \u2014 flying into its glass |\n| 7.1\u201312.4s | on the laptop's screen, a tablet on a cooler table of its own |\n| 12.4\u201321.0s | on the tablet's screen, a phone |\n| 21.0\u201326.4s | on the phone's screen: the same warm table, the same laptop, and the word **AGAIN** standing on it in chrome \u2014 the ring closes on the opening frame, held for the last beat |\n\n**How the seams work.** Each level is a `stage` layer \u2014 a device recipe body on a `mirror`/`satin` floor under a `studio` environment, screen bound with `finish: \"glass\"` so the key light glances off it. The whole flight is one exponential zoom on a single clock (rate eased in over 1.6s, held, eased to rest at 26s). Each level's camera carries it until that screen exactly covers the frame; then a flat copy of the same nested composition \u2014 held on the project clock from t=0, so it is on exactly the frame the screen was showing \u2014 dissolves in over 0.35s at the identical rect, and the next level's camera picks up at the same rate. Composite zoom rate is continuous across every handoff; the only thing that changes is the glare lifting off the glass as you pass through it.\n\n**Getting there needed measurement, not guessing.** I calibrated each device by binding a magenta composition to its Screen slot and measuring the rect: `widthPx = A/(distance \u2212 s)`, with `A` scaling as `1/tan(fov/2)` and with canvas *height* (fov is vertical \u2014 confirmed to 0.03%). Two things the model got wrong, both caught by rendering:\n\n- Screens are rounded rects and the fitted `A` carries ~1\u20135% error, so each screen is driven 4.5\u201317% past exact co",
-   "contact": "docs/demo/c11-through-the-screens/contact-result.png",
-   "video": "docs/demo/c11-through-the-screens/result.mp4",
-   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c11-through-the-screens.mp4",
-   "video_hd_bytes": 1645255,
-   "metadata": "docs/demo/c11-through-the-screens/result-metadata.json",
-   "gif": "docs/demo/c11-through-the-screens/result.gif",
-   "thumb": "docs/demo/c11-through-the-screens/thumb.png"
-  },
-  "page": "docs/demo/democ11.md"
- },
- {
-  "id": "c12",
-  "slug": "c12-through-the-surfaces",
-  "title": "Through the surfaces, no files",
-  "blurb": "A composition as the texture on a surface, three or four levels deep, each level its own film, and a maximum close-up on the surface as the whole transition \u2014 from a short brief and no media. The hand-built reference on the page does the same thing with no measurement at all.",
-  "kind": "creative",
-  "canvas": null,
-  "duration": [
-   18,
-   32
-  ],
-  "prompt": "No media. Use a composition as the texture on a surface, three or four levels deep: a scene whose device screen shows another composition, whose surface shows another, and so on, down to a movie of your own that plays for the whole length. Each level is its own film with its own camera. To pass from one level into the next, take the camera to a maximum close-up on that surface and switch to the composition it shows \u2014 the close-up is the illusion of the transition. Twenty to thirty seconds, landscape, on a polished table under studio light with glass on the screens.",
-  "resources": [],
-  "result": {
-   "score": 100,
-   "passed": 6,
-   "total": 6,
-   "checks": [
-    {
-     "check": "valid",
-     "ok": true,
-     "detail": "promo validate"
-    },
-    {
-     "check": "rendered",
-     "ok": true,
-     "detail": "an mp4 in Exports/"
-    },
-    {
-     "check": "length",
-     "ok": true,
-     "detail": "26.0s, asked 18\u201332s"
-    },
-    {
-     "check": "vocabulary",
-     "ok": true,
-     "detail": "21 features: chapters, markers, composition, stage, stageLayer, model, camera, materials, finish, finishWord, floor, device, light, morph, cameraTarget, facedBox, textBody, environment, particles, partsBody, mediaCuts"
-    },
-    {
-     "check": "words",
-     "ok": true,
-     "detail": "7 captions"
-    },
-    {
-     "check": "layers",
-     "ok": true,
-     "detail": "6 layers"
-    }
-   ],
-   "summary": "turns=94 cost=$11.42 secs=1691",
-   "run": {
-    "turns": 94,
-    "wall_s": 1690,
-    "api_s": 1637,
-    "cost_usd": 11.42,
-    "tokens": {
-     "input": 160,
-     "cache_read": 12630445,
-     "cache_write": 222702,
-     "output": 114998,
-     "thinking": 65006
-    },
-    "models": [
-     {
-      "model": "claude-opus-5",
-      "input": 12853307,
-      "output": 114998,
-      "cost_usd": 11.42
-     }
-    ],
-    "mcp": {
-     "calls": 32,
-     "ms": 44661,
-     "tools": {
-      "promo_render_video": {
-       "calls": 1,
-       "ms": 36150,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 16,
-       "ms": 8072,
-       "errors": 0
-      },
-      "promo_render_still": {
-       "calls": 3,
-       "ms": 352,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 4,
-       "ms": 77,
-       "errors": 0
-      },
-      "promo_inspect": {
-       "calls": 1,
-       "ms": 8,
-       "errors": 0
-      },
-      "promo_schema_types": {
-       "calls": 1,
-       "ms": 2,
-       "errors": 0
-      },
-      "promo_schema": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_workspace": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_schema_full": {
-       "calls": 4,
-       "ms": 0,
-       "errors": 0
-      }
-     }
-    }
-   },
-   "used": [
-    "chapters",
-    "markers",
-    "composition",
-    "stage",
-    "stageLayer",
-    "model",
-    "camera",
-    "materials",
-    "finish",
-    "finishWord",
-    "floor",
-    "device",
-    "light",
-    "morph",
-    "cameraTarget",
-    "facedBox",
-    "textBody",
-    "environment",
-    "particles",
-    "partsBody",
-    "mediaCuts"
-   ],
-   "captions": [
-    "01 / 04",
-    "04 / 04",
-    "03 / 04",
-    "02 / 04",
-    "Through the Surfaces",
-    "four films, each inside the last",
-    "four films, one frame"
-   ],
-   "notes": "**`out.promo` is built, validated, inspected, and rendered.** `Exports/export.mp4` \u2014 1920\u00d71080, 26.0 s, 780 frames, 12 MB. `Resources/` is empty: nothing in the piece comes from a file.\n\n**Four films, each on a surface in the one above**\n\n| | level | surface it wears | camera |\n|---|---|---|---|\n| 0.0\u20136.6 | a laptop on the polished table | its `Screen` \u2192 level two | fov 20, d 6.24 \u2192 1.45 |\n| 6.6\u201313.1 | a tablet on the table | its `Screen` \u2192 level three | fov 26, d 6.62 \u2192 1.82 |\n| 13.1\u201319.3 | a slab \u2014 a faced box, surface and nothing else | its front face \u2192 level four | fov 24, d 7.00 \u2192 2.20 |\n| 19.3\u201326.0 | the cloud: a cube bursts into 4 200 points that drift and gather into the word SURFACE | \u2014 | slow orbit, d 3.4 \u2192 1.5 |\n\n`promo_inspect` confirms the recursion: each composition is *placed by 1 layer, on 1 slot* \u2014 once worn on the surface above, once full-frame after the cut.\n\nAll four run one shared 26-second clock, so level four is genuinely playing from frame one \u2014 you can see it as a speck three screens deep at t=0.5, and the descent arrives just in time to watch it gather. Each descent is a `mediaCut` that starts the incoming composition at the exact second the surface was showing; it enters at the 7% overfill it had on the glass and settles to full frame over 1.2 s, so the close-up carries through the cut. A depth gauge (`01 / 04` \u2026 `04 / 04`) sits in each film's own corner and clears before the next fills the frame.\n\n**Three things I had to measure, because nothing reports them**\n\n- Camera distance **clamps at \u22481.046 bounds radii** \u2014 a laptop can't be made to fill the frame by moving closer, so each level's close-up is set by `fov` instead. The law `distance = A(fov)/widthPx + s` (with `A(fov) = A32\u00b7tan16\u00b0/tan(fov/2)`, verified to 4 s.f.) put every dive on its m",
-   "contact": "docs/demo/c12-through-the-surfaces/contact-result.png",
-   "reference_contact": "docs/demo/c12-through-the-surfaces/contact-reference.png",
-   "video": "docs/demo/c12-through-the-surfaces/result.mp4",
-   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c12-through-the-surfaces.mp4",
-   "video_hd_bytes": 4132280,
-   "metadata": "docs/demo/c12-through-the-surfaces/result-metadata.json",
-   "gif": "docs/demo/c12-through-the-surfaces/result.gif",
-   "thumb": "docs/demo/c12-through-the-surfaces/thumb.png"
-  },
-  "page": "docs/demo/democ12.md"
- },
- {
-  "id": "c13",
-  "slug": "c13-carousel-of-films",
-  "title": "A carousel of films, no files",
-  "blurb": "Four scenes as compositions in one card-shaped rectangle on a flat canvas, each its own film starting as it arrives, a different cut between each \u2014 from a short brief and no media. Does a fresh agent find the one-layer carousel: a swap keyframe per card with its transition and a fresh start?",
-  "kind": "creative",
-  "canvas": null,
-  "duration": [
-   14,
-   26
-  ],
-  "prompt": "No media, no 3D. Four short scenes, each its own composition with its own motion \u2014 a title, a list, some numbers, a sign-off \u2014 shown one after another in one card-shaped rectangle on a flat canvas, like a carousel: each scene starts as it arrives, and a different cut between each pair \u2014 a push, a wipe, a dissolve, whatever reads well. A line above the card says which scene is up. Fifteen to twenty-five seconds, landscape.",
-  "resources": [],
-  "result": {
-   "score": 100,
-   "passed": 6,
-   "total": 6,
-   "checks": [
-    {
-     "check": "valid",
-     "ok": true,
-     "detail": "promo validate"
-    },
-    {
-     "check": "rendered",
-     "ok": true,
-     "detail": "an mp4 in Exports/"
-    },
-    {
-     "check": "length",
-     "ok": true,
-     "detail": "20.5s, asked 14\u201326s"
-    },
-    {
-     "check": "vocabulary",
-     "ok": true,
-     "detail": "4 features: composition, gradient, swaps, transitions"
-    },
-    {
-     "check": "words",
-     "ok": true,
-     "detail": "22 captions"
-    },
-    {
-     "check": "layers",
-     "ok": true,
-     "detail": "7 layers"
-    }
-   ],
-   "summary": "turns=20 cost=$2.20 secs=363",
-   "run": {
-    "turns": 20,
-    "wall_s": 362,
-    "api_s": 355,
-    "cost_usd": 2.2,
-    "tokens": {
-     "input": 34,
-     "cache_read": 1274124,
-     "cache_write": 80330,
-     "output": 30366,
-     "thinking": 14725
-    },
-    "models": [
-     {
-      "model": "claude-opus-5",
-      "input": 1354488,
-      "output": 30366,
-      "cost_usd": 2.2
-     }
-    ],
-    "mcp": {
-     "calls": 9,
-     "ms": 5030,
-     "tools": {
-      "promo_render_video": {
-       "calls": 1,
-       "ms": 4720,
-       "errors": 0
-      },
-      "promo_render_frames": {
-       "calls": 1,
-       "ms": 267,
-       "errors": 0
-      },
-      "promo_validate": {
-       "calls": 1,
-       "ms": 33,
-       "errors": 0
-      },
-      "promo_inspect": {
-       "calls": 1,
-       "ms": 8,
-       "errors": 0
-      },
-      "promo_explain": {
-       "calls": 1,
-       "ms": 2,
-       "errors": 0
-      },
-      "promo_schema": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_schema_full": {
-       "calls": 2,
-       "ms": 0,
-       "errors": 0
-      },
-      "promo_workspace": {
-       "calls": 1,
-       "ms": 0,
-       "errors": 0
-      }
-     }
-    }
-   },
-   "used": [
-    "composition",
-    "gradient",
-    "swaps",
-    "transitions"
-   ],
-   "captions": [
-    "PROMOSHOT",
-    "What it does",
-    "By the numbers",
-    "1 / 4     The opening title",
-    "PromoShot",
-    "\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014",
-    "Four films,\none frame",
-    "4",
-    "01     One layer, four films",
-    "20s",
-    "scenes",
-    "02     Each one starts as it arrives",
-    "1",
-    "runtime",
-    "03     A different cut every time",
-    "make the film, not the file",
-    "card",
-    "one card, four compositions",
-    "promoshot.app",
-    "2 / 4     What it does",
-    "3 / 4     By the numbers",
-    "4 / 4     The sign-off"
-   ],
-   "notes": "Done. `out.promo` is written, validated, inspected, sampled and rendered.\n\n**`Exports/export.mp4`** \u2014 1920\u00d71080, 20.5 s, 615 frames @ 30 fps, 2.2 MB.\n\n**How it's built.** `Resources/` is empty because the piece needs no media \u2014 every scene is a **composition resource** (1280\u00d7720, card-shaped), drawn entirely from gradients and type.\n\n- **Scene 1 \u2014 The opening title**: kicker, \"Four films, / one frame\" arriving word-by-word on a rise reveal, subtitle under it, over a drifting blue gradient.\n- **Scene 2 \u2014 What it does**: a title, a rule, three numbered rows sliding in from the left 0.4 s apart, teal.\n- **Scene 3 \u2014 By the numbers**: `4 / 20s / 1` scaling up from 62 pt to 108 pt on eased `fontSize` tracks, staggered, with labels fading in behind them, magenta radial.\n- **Scene 4 \u2014 The sign-off**: the wordmark assembling character-by-character, tagline, URL, over a radial that closes in.\n\n**The carousel is one video layer.** `card` starts on scene 1 and takes over the other three with swap keyframes at 5 / 10 / 15 s, each carrying `sourceTime: 0` \u2014 that's what makes a scene start from its own beginning as it arrives rather than being sampled at wherever the main timeline already stands. `promo_explain` at 15.2 s confirms it: `showing: compD`, and scene 4's tagline is still fading in a second and a half later, which only happens on a restarted clock.\n\n**Three different cuts**, one per pair: a **push** from the right (0.7 s) into scene 2, a **wipe** from the left (0.6 s) into scene 3, a **dissolve** (0.8 s) into scene 4.\n\n**Around the card**: the line above it changes with each scene (four caption layers with lives strictly clear of each other, so no two headlines ever cross-fade), and four carousel dots below it \u2014 one drawing resource per position, swapped on a single drawing",
-   "contact": "docs/demo/c13-carousel-of-films/contact-result.png",
-   "reference_contact": "docs/demo/c13-carousel-of-films/contact-reference.png",
-   "video": "docs/demo/c13-carousel-of-films/result.mp4",
-   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c13-carousel-of-films.mp4",
-   "video_hd_bytes": 877916,
-   "metadata": "docs/demo/c13-carousel-of-films/result-metadata.json",
-   "gif": "docs/demo/c13-carousel-of-films/result.gif",
-   "thumb": "docs/demo/c13-carousel-of-films/thumb.png"
-  },
-  "page": "docs/demo/democ13.md"
- },
- {
   "id": "c2",
   "slug": "c2-social-teaser",
   "title": "Social teaser",
@@ -7702,5 +7071,636 @@
    "thumb": "docs/demo/c9-infinite-screens/thumb.png"
   },
   "page": "docs/demo/democ9.md"
+ },
+ {
+  "id": "c10",
+  "slug": "c10-three-devices",
+  "title": "Three devices, no files",
+  "blurb": "Three devices on a polished table from a two-line brief and no media at all: does a fresh agent, given only the skill, reach for device bodies, finish words, a floor, an environment and a keyed light \u2014 and make its own screens?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   9,
+   16
+  ],
+  "prompt": "No media. Three devices \u2014 a phone, a tablet and a laptop \u2014 together on a polished table under studio light, glass on every screen and something of your own showing on each, one camera move through the scene, ten to fifteen seconds, landscape. Make it look real: the table reflects them, they cast shadows, the light catches the glass. Whatever you need beyond what the format gives you, make yourself.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "13.0s, asked 9\u201316s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "13 features: composition, effects, gradient, stage, stageLayer, model, camera, materials, finishWord, floor, device, light, environment"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "16 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "3 layers"
+    }
+   ],
+   "summary": "turns=77 cost=$5.59 secs=783",
+   "run": {
+    "turns": 77,
+    "wall_s": 782,
+    "api_s": 762,
+    "cost_usd": 5.59,
+    "tokens": {
+     "input": 86,
+     "cache_read": 5439252,
+     "cache_write": 149575,
+     "output": 54882,
+     "thinking": 28490
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 5588913,
+      "output": 54882,
+      "cost_usd": 5.59
+     }
+    ],
+    "mcp": {
+     "calls": 18,
+     "ms": 17194,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 14858,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 4,
+       "ms": 1271,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 6,
+       "ms": 948,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 109,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 2,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "composition",
+    "effects",
+    "gradient",
+    "stage",
+    "stageLayer",
+    "model",
+    "camera",
+    "materials",
+    "finishWord",
+    "floor",
+    "device",
+    "light",
+    "environment"
+   ],
+   "captions": [
+    "PROMOSHOT",
+    "STORYBOARD",
+    "PROMOSHOT STUDIO",
+    "Ready\nfor the\nshot.",
+    "Three frames,\none move.",
+    "c10 \u00b7 three devices",
+    "3 devices \u00b7 one key light \u00b7 13 s",
+    "01   Open on the table",
+    "1920 \u00d7 1080 \u00b7 30 fps \u00b7 one camera move",
+    "Render",
+    "02   Cross the glass",
+    "00:00:00:00      \u25b8      00:00:13:00",
+    "03   Land on the laptop",
+    "RENDER",
+    "13.0 s \u00b7 landscape",
+    "Three screens. One take."
+   ],
+   "notes": "Done \u2014 `out.promo` is written, validated, inspected, and rendered.\n\n**`Exports/export.mp4`** \u2014 1920\u00d71080, 390 frames @ 30 fps (13.0 s), landscape.\n\n**What's in it.** `resources/` was empty, so nothing in the shot is imported media \u2014 the whole scene is built out of the format:\n\n- **The three devices** are generated model bodies (`recipe: {\"device\": {\"kind\": \"phone\" | \"tablet\" | \"laptop\"}}`), standing together in one `stage` layer through one camera and one depth buffer, arranged by `stageOffset`/`depth` \u2014 tablet left, laptop centre-back, phone front-right.\n- **The screens** are three nested `composition` resources bound to each body's `Screen` slot, so each device is genuinely showing something of its own: a phone app screen, a landscape storyboard, and an editor window. They're built from background gradients and captions (the plated captions do the chips and buttons), and they play on the layer's clock.\n- **Glass** is `\"finish\": \"glass\"` on every `Screen` slot, `\"anodized\"` on the bodies, under a `studio` environment \u2014 that's what puts the key light's glance across each screen.\n- **The table** is `\"floor\": \"mirror\"` on the stage \u2014 it gives the reflections and the contact shadows \u2014 over a background layer whose vertical gradient paints the warm horizon the light pools on, with a vignette and a little grain.\n- **One camera move**: four keyframes with `smooth` easing so the speed carries through rather than stopping at each one \u2014 yaw \u221218\u00b0 \u2192 +10\u00b0, pitch 21\u00b0 \u2192 8\u00b0, dolly 4.9 \u2192 4.2 radii \u2014 while the key light swings the opposite way, so the highlight travels across the glass as the camera crosses it. One title lands at 8.4 s and clears before the end.\n\n**What I changed after looking.** Three passes on the contact sheets fixed real problems: the tablet body is landscape and my",
+   "contact": "docs/demo/c10-three-devices/contact-result.png",
+   "video": "docs/demo/c10-three-devices/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c10-three-devices.mp4",
+   "video_hd_bytes": 1371890,
+   "metadata": "docs/demo/c10-three-devices/result-metadata.json",
+   "gif": "docs/demo/c10-three-devices/result.gif",
+   "thumb": "docs/demo/c10-three-devices/thumb.png"
+  },
+  "page": "docs/demo/democ10.md"
+ },
+ {
+  "id": "c11",
+  "slug": "c11-through-the-screens",
+  "title": "Through the screens, no files",
+  "blurb": "A laptop whose screen shows a tablet whose screen shows a phone, and a camera that flies into each screen and on into the next \u2014 from a two-line brief and no media. Does a fresh agent, given only the skill, find compositions on screens and a flight that lands on the picture?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   18,
+   32
+  ],
+  "prompt": "No media. A laptop on a polished table under studio light; on its glass screen, a tablet on a table of its own; on the tablet's screen, a phone; on the phone's screen, something of yours. The camera flies into each screen in turn \u2014 the picture on the screen becomes the whole frame and the flight carries on into the next \u2014 one continuous movement, twenty to thirty seconds, landscape. Make it look real: reflections, shadows, the light catching the glass. Whatever you need beyond what the format gives you, make yourself.",
+  "resources": [],
+  "result": {
+   "score": 83,
+   "passed": 5,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "26.4s, asked 18\u201332s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "14 features: composition, gradient, stage, stageLayer, model, camera, materials, finishWord, floor, device, light, cameraTarget, textBody, environment"
+    },
+    {
+     "check": "words",
+     "ok": false,
+     "detail": "0 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "3 layers"
+    }
+   ],
+   "summary": "turns=139 cost=$18.66 secs=2471",
+   "run": {
+    "turns": 139,
+    "wall_s": 2470,
+    "api_s": 2357,
+    "cost_usd": 18.66,
+    "tokens": {
+     "input": 242,
+     "cache_read": 23643892,
+     "cache_write": 274421,
+     "output": 163757,
+     "thinking": 113615
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 23918555,
+      "output": 163757,
+      "cost_usd": 18.66
+     }
+    ],
+    "mcp": {
+     "calls": 47,
+     "ms": 92494,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 75960,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 21,
+       "ms": 14177,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 15,
+       "ms": 2311,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 4,
+       "ms": 33,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 9,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 3,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 3,
+       "ms": 1,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "composition",
+    "gradient",
+    "stage",
+    "stageLayer",
+    "model",
+    "camera",
+    "materials",
+    "finishWord",
+    "floor",
+    "device",
+    "light",
+    "cameraTarget",
+    "textBody",
+    "environment"
+   ],
+   "captions": [],
+   "notes": "Done. **`out.promo`** is written, validates clean, and the video is rendered.\n\n**The piece** \u2014 26.4s, 1920\u00d71080, one continuous flight:\n\n| | |\n|---|---|\n| 0\u20137.1s | a laptop on a polished table, studio key, mirrored floor \u2014 flying into its glass |\n| 7.1\u201312.4s | on the laptop's screen, a tablet on a cooler table of its own |\n| 12.4\u201321.0s | on the tablet's screen, a phone |\n| 21.0\u201326.4s | on the phone's screen: the same warm table, the same laptop, and the word **AGAIN** standing on it in chrome \u2014 the ring closes on the opening frame, held for the last beat |\n\n**How the seams work.** Each level is a `stage` layer \u2014 a device recipe body on a `mirror`/`satin` floor under a `studio` environment, screen bound with `finish: \"glass\"` so the key light glances off it. The whole flight is one exponential zoom on a single clock (rate eased in over 1.6s, held, eased to rest at 26s). Each level's camera carries it until that screen exactly covers the frame; then a flat copy of the same nested composition \u2014 held on the project clock from t=0, so it is on exactly the frame the screen was showing \u2014 dissolves in over 0.35s at the identical rect, and the next level's camera picks up at the same rate. Composite zoom rate is continuous across every handoff; the only thing that changes is the glare lifting off the glass as you pass through it.\n\n**Getting there needed measurement, not guessing.** I calibrated each device by binding a magenta composition to its Screen slot and measuring the rect: `widthPx = A/(distance \u2212 s)`, with `A` scaling as `1/tan(fov/2)` and with canvas *height* (fov is vertical \u2014 confirmed to 0.03%). Two things the model got wrong, both caught by rendering:\n\n- Screens are rounded rects and the fitted `A` carries ~1\u20135% error, so each screen is driven 4.5\u201317% past exact co",
+   "contact": "docs/demo/c11-through-the-screens/contact-result.png",
+   "video": "docs/demo/c11-through-the-screens/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c11-through-the-screens.mp4",
+   "video_hd_bytes": 1645255,
+   "metadata": "docs/demo/c11-through-the-screens/result-metadata.json",
+   "gif": "docs/demo/c11-through-the-screens/result.gif",
+   "thumb": "docs/demo/c11-through-the-screens/thumb.png"
+  },
+  "page": "docs/demo/democ11.md"
+ },
+ {
+  "id": "c12",
+  "slug": "c12-through-the-surfaces",
+  "title": "Through the surfaces, no files",
+  "blurb": "A composition as the texture on a surface, three or four levels deep, each level its own film, and a maximum close-up on the surface as the whole transition \u2014 from a short brief and no media. The hand-built reference on the page does the same thing with no measurement at all.",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   18,
+   32
+  ],
+  "prompt": "No media. Use a composition as the texture on a surface, three or four levels deep: a scene whose device screen shows another composition, whose surface shows another, and so on, down to a movie of your own that plays for the whole length. Each level is its own film with its own camera. To pass from one level into the next, take the camera to a maximum close-up on that surface and switch to the composition it shows \u2014 the close-up is the illusion of the transition. Twenty to thirty seconds, landscape, on a polished table under studio light with glass on the screens.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "26.0s, asked 18\u201332s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "21 features: chapters, markers, composition, stage, stageLayer, model, camera, materials, finish, finishWord, floor, device, light, morph, cameraTarget, facedBox, textBody, environment, particles, partsBody, mediaCuts"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "7 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "6 layers"
+    }
+   ],
+   "summary": "turns=94 cost=$11.42 secs=1691",
+   "run": {
+    "turns": 94,
+    "wall_s": 1690,
+    "api_s": 1637,
+    "cost_usd": 11.42,
+    "tokens": {
+     "input": 160,
+     "cache_read": 12630445,
+     "cache_write": 222702,
+     "output": 114998,
+     "thinking": 65006
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 12853307,
+      "output": 114998,
+      "cost_usd": 11.42
+     }
+    ],
+    "mcp": {
+     "calls": 32,
+     "ms": 44661,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 36150,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 16,
+       "ms": 8072,
+       "errors": 0
+      },
+      "promo_render_still": {
+       "calls": 3,
+       "ms": 352,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 4,
+       "ms": 77,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_schema_types": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 4,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "chapters",
+    "markers",
+    "composition",
+    "stage",
+    "stageLayer",
+    "model",
+    "camera",
+    "materials",
+    "finish",
+    "finishWord",
+    "floor",
+    "device",
+    "light",
+    "morph",
+    "cameraTarget",
+    "facedBox",
+    "textBody",
+    "environment",
+    "particles",
+    "partsBody",
+    "mediaCuts"
+   ],
+   "captions": [
+    "01 / 04",
+    "04 / 04",
+    "03 / 04",
+    "02 / 04",
+    "Through the Surfaces",
+    "four films, each inside the last",
+    "four films, one frame"
+   ],
+   "notes": "**`out.promo` is built, validated, inspected, and rendered.** `Exports/export.mp4` \u2014 1920\u00d71080, 26.0 s, 780 frames, 12 MB. `Resources/` is empty: nothing in the piece comes from a file.\n\n**Four films, each on a surface in the one above**\n\n| | level | surface it wears | camera |\n|---|---|---|---|\n| 0.0\u20136.6 | a laptop on the polished table | its `Screen` \u2192 level two | fov 20, d 6.24 \u2192 1.45 |\n| 6.6\u201313.1 | a tablet on the table | its `Screen` \u2192 level three | fov 26, d 6.62 \u2192 1.82 |\n| 13.1\u201319.3 | a slab \u2014 a faced box, surface and nothing else | its front face \u2192 level four | fov 24, d 7.00 \u2192 2.20 |\n| 19.3\u201326.0 | the cloud: a cube bursts into 4 200 points that drift and gather into the word SURFACE | \u2014 | slow orbit, d 3.4 \u2192 1.5 |\n\n`promo_inspect` confirms the recursion: each composition is *placed by 1 layer, on 1 slot* \u2014 once worn on the surface above, once full-frame after the cut.\n\nAll four run one shared 26-second clock, so level four is genuinely playing from frame one \u2014 you can see it as a speck three screens deep at t=0.5, and the descent arrives just in time to watch it gather. Each descent is a `mediaCut` that starts the incoming composition at the exact second the surface was showing; it enters at the 7% overfill it had on the glass and settles to full frame over 1.2 s, so the close-up carries through the cut. A depth gauge (`01 / 04` \u2026 `04 / 04`) sits in each film's own corner and clears before the next fills the frame.\n\n**Three things I had to measure, because nothing reports them**\n\n- Camera distance **clamps at \u22481.046 bounds radii** \u2014 a laptop can't be made to fill the frame by moving closer, so each level's close-up is set by `fov` instead. The law `distance = A(fov)/widthPx + s` (with `A(fov) = A32\u00b7tan16\u00b0/tan(fov/2)`, verified to 4 s.f.) put every dive on its m",
+   "contact": "docs/demo/c12-through-the-surfaces/contact-result.png",
+   "reference_contact": "docs/demo/c12-through-the-surfaces/contact-reference.png",
+   "video": "docs/demo/c12-through-the-surfaces/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c12-through-the-surfaces.mp4",
+   "video_hd_bytes": 4132280,
+   "metadata": "docs/demo/c12-through-the-surfaces/result-metadata.json",
+   "gif": "docs/demo/c12-through-the-surfaces/result.gif",
+   "thumb": "docs/demo/c12-through-the-surfaces/thumb.png"
+  },
+  "page": "docs/demo/democ12.md"
+ },
+ {
+  "id": "c13",
+  "slug": "c13-carousel-of-films",
+  "title": "A carousel of films, no files",
+  "blurb": "Four scenes as compositions in one card-shaped rectangle on a flat canvas, each its own film starting as it arrives, a different cut between each \u2014 from a short brief and no media. Does a fresh agent find the one-layer carousel: a swap keyframe per card with its transition and a fresh start?",
+  "kind": "creative",
+  "canvas": null,
+  "duration": [
+   14,
+   26
+  ],
+  "prompt": "No media, no 3D. Four short scenes, each its own composition with its own motion \u2014 a title, a list, some numbers, a sign-off \u2014 shown one after another in one card-shaped rectangle on a flat canvas, like a carousel: each scene starts as it arrives, and a different cut between each pair \u2014 a push, a wipe, a dissolve, whatever reads well. A line above the card says which scene is up. Fifteen to twenty-five seconds, landscape.",
+  "resources": [],
+  "result": {
+   "score": 100,
+   "passed": 6,
+   "total": 6,
+   "checks": [
+    {
+     "check": "valid",
+     "ok": true,
+     "detail": "promo validate"
+    },
+    {
+     "check": "rendered",
+     "ok": true,
+     "detail": "an mp4 in Exports/"
+    },
+    {
+     "check": "length",
+     "ok": true,
+     "detail": "20.5s, asked 14\u201326s"
+    },
+    {
+     "check": "vocabulary",
+     "ok": true,
+     "detail": "4 features: composition, gradient, swaps, transitions"
+    },
+    {
+     "check": "words",
+     "ok": true,
+     "detail": "22 captions"
+    },
+    {
+     "check": "layers",
+     "ok": true,
+     "detail": "7 layers"
+    }
+   ],
+   "summary": "turns=20 cost=$2.20 secs=363",
+   "run": {
+    "turns": 20,
+    "wall_s": 362,
+    "api_s": 355,
+    "cost_usd": 2.2,
+    "tokens": {
+     "input": 34,
+     "cache_read": 1274124,
+     "cache_write": 80330,
+     "output": 30366,
+     "thinking": 14725
+    },
+    "models": [
+     {
+      "model": "claude-opus-5",
+      "input": 1354488,
+      "output": 30366,
+      "cost_usd": 2.2
+     }
+    ],
+    "mcp": {
+     "calls": 9,
+     "ms": 5030,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 4720,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 267,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 1,
+       "ms": 33,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 8,
+       "errors": 0
+      },
+      "promo_explain": {
+       "calls": 1,
+       "ms": 2,
+       "errors": 0
+      },
+      "promo_schema": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 2,
+       "ms": 0,
+       "errors": 0
+      },
+      "promo_workspace": {
+       "calls": 1,
+       "ms": 0,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": [
+    "composition",
+    "gradient",
+    "swaps",
+    "transitions"
+   ],
+   "captions": [
+    "PROMOSHOT",
+    "What it does",
+    "By the numbers",
+    "1 / 4     The opening title",
+    "PromoShot",
+    "\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014",
+    "Four films,\none frame",
+    "4",
+    "01     One layer, four films",
+    "20s",
+    "scenes",
+    "02     Each one starts as it arrives",
+    "1",
+    "runtime",
+    "03     A different cut every time",
+    "make the film, not the file",
+    "card",
+    "one card, four compositions",
+    "promoshot.app",
+    "2 / 4     What it does",
+    "3 / 4     By the numbers",
+    "4 / 4     The sign-off"
+   ],
+   "notes": "Done. `out.promo` is written, validated, inspected, sampled and rendered.\n\n**`Exports/export.mp4`** \u2014 1920\u00d71080, 20.5 s, 615 frames @ 30 fps, 2.2 MB.\n\n**How it's built.** `Resources/` is empty because the piece needs no media \u2014 every scene is a **composition resource** (1280\u00d7720, card-shaped), drawn entirely from gradients and type.\n\n- **Scene 1 \u2014 The opening title**: kicker, \"Four films, / one frame\" arriving word-by-word on a rise reveal, subtitle under it, over a drifting blue gradient.\n- **Scene 2 \u2014 What it does**: a title, a rule, three numbered rows sliding in from the left 0.4 s apart, teal.\n- **Scene 3 \u2014 By the numbers**: `4 / 20s / 1` scaling up from 62 pt to 108 pt on eased `fontSize` tracks, staggered, with labels fading in behind them, magenta radial.\n- **Scene 4 \u2014 The sign-off**: the wordmark assembling character-by-character, tagline, URL, over a radial that closes in.\n\n**The carousel is one video layer.** `card` starts on scene 1 and takes over the other three with swap keyframes at 5 / 10 / 15 s, each carrying `sourceTime: 0` \u2014 that's what makes a scene start from its own beginning as it arrives rather than being sampled at wherever the main timeline already stands. `promo_explain` at 15.2 s confirms it: `showing: compD`, and scene 4's tagline is still fading in a second and a half later, which only happens on a restarted clock.\n\n**Three different cuts**, one per pair: a **push** from the right (0.7 s) into scene 2, a **wipe** from the left (0.6 s) into scene 3, a **dissolve** (0.8 s) into scene 4.\n\n**Around the card**: the line above it changes with each scene (four caption layers with lives strictly clear of each other, so no two headlines ever cross-fade), and four carousel dots below it \u2014 one drawing resource per position, swapped on a single drawing",
+   "contact": "docs/demo/c13-carousel-of-films/contact-result.png",
+   "reference_contact": "docs/demo/c13-carousel-of-films/contact-reference.png",
+   "video": "docs/demo/c13-carousel-of-films/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/c13-carousel-of-films.mp4",
+   "video_hd_bytes": 877916,
+   "metadata": "docs/demo/c13-carousel-of-films/result-metadata.json",
+   "gif": "docs/demo/c13-carousel-of-films/result.gif",
+   "thumb": "docs/demo/c13-carousel-of-films/thumb.png"
+  },
+  "page": "docs/demo/democ13.md"
  }
 ]

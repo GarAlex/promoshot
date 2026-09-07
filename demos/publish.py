@@ -11,7 +11,7 @@ its build outputs instead, on its own page and in its own table.
 demo's entry from the existing docs/demo/demo.json, so one new piece
 does not re-encode forty videos.
 """
-import json, os, shutil, subprocess, sys
+import json, re, os, shutil, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORE = os.path.dirname(HERE)
 ASSETS = os.path.join(CORE, 'docs', 'demo')
@@ -235,7 +235,11 @@ def main():
         except Exception:
             previous = {}
     manifest, rows, crows, srows, pages = [], [], [], [], []
-    for name in sorted(os.listdir(HERE)):
+    # In numeric order: C10 comes after C9, not between C1 and C2.
+    def natural(name):
+        m = re.match(r'([a-z]*)(\d+)', name)
+        return (m.group(1), int(m.group(2)), name) if m else ('~', 0, name)
+    for name in sorted(os.listdir(HERE), key=natural):
         demo = os.path.join(HERE, name)
         creative = name[:1] == 'c' and name[1:2].isdigit()
         if not (os.path.isdir(demo) and (ident(name).isdigit() or creative) and os.path.exists(os.path.join(demo, 'rubric.json'))):
