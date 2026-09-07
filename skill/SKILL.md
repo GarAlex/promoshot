@@ -215,8 +215,17 @@ is for; the schema section says how to write it.
   built at load with `Body` and `Screen` slots, and a `Deck` on the
   laptop. The picture goes on `Screen` — an image, a video or a
   composition — and the accent on `Body`. Build a screen's picture to
-  its shape: the phone's is tall (about 9:19.5), the tablet's 4:3, the
-  laptop's 3:2.
+  its shape: the phone's is 0.46 wide for its height, the tablet's
+  1.46, the laptop's 1.65. A MAXIMUM CLOSE-UP on a screen — the frame
+  covered by the picture, looking straight at it — is one pose per
+  body, no measuring: the orbit's `distance` at its floor of 1.05 and
+  the field that covers, `"camera": { "yaw": 0, "pitch": 0, "distance":
+  1.05, "fov": 50, "target": { "point": [0, 0, 0] } }` for the tablet,
+  `"fov": 29.5` for the phone, and for the laptop's leaning lid
+  `"pitch": 12, "fov": 28, "target": { "point": [0, -0.05, -0.53] }`,
+  on a canvas 1.6 wide for its height. Any other body: look along the
+  surface's normal at its centre, distance at the floor, and widen the
+  field until a still shows the picture in all four corners.
 - **Text as a body** (`recipe`) — real type standing in the scene, lit
   and turning. Reach for it when a title must catch the light or show a
   side; a flat title is a caption.
@@ -277,13 +286,22 @@ is for; the schema section says how to write it.
   once and place it three times; editing it changes all three — or
   bind it to any surface's slot, where it plays in place on the
   layer's clock: a reel on a screen, an app flow, a film on a wall, the
-  next scene of the piece on a device. A flight INTO a screen is that
-  binding and a cut: grow the body until the screen's picture fills the
-  canvas, then cut to the composition placed whole (`"placement": {
-  "mode": "fill" }`) and running since the same frame the screen began
-  showing it, so the cut lands on the picture already there. Bring the
-  key light away from the screen before the cut: the screen's glass
-  goes with it.
+  next scene of the piece on a device. The composition never knows it
+  is a texture: build it as its own film, as long as the whole piece,
+  with a camera of its own, to the shape of the surface that will show
+  it. THROUGH THE SURFACES, three or four levels deep, is then one
+  feature used over and over — switching which composition is MAIN:
+  every film is a layer from frame one, on one clock, the outer ones
+  on top with a short `transitionOut` fade at their switch; each outer
+  camera flies to the maximum close-up on its screen (above) and the
+  fade lands on the film that screen was showing, at the same instant,
+  already the same picture. `"placement": { "mode": "fill" }` is a
+  centred cover crop and a close-up covers by width, centred, so the
+  bands nest on their own; nothing is measured between the films. Keep
+  the studio's key box out of a leaning lid's mirror
+  (`"environment": { "rotation": 180 }`) and bring the key light away
+  from the screen before the switch: the glass, and its glance, go
+  with the fade.
 - **Follow the pointer** (`pointer`) — a Mac recording carries the
   cursor track, and `follow` on the layer keeps the viewport on it.
 
