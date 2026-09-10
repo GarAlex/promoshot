@@ -1136,3 +1136,13 @@ and the highlights together — and the floor does not; a `sunset` casts
 a hard edge, the `studio` a soft one — and the same size shapes the
 key's glance on glass and gloss: a soft box's spread, the sun's point. A
 project with a floor carries `minReaderVersion: 45`.
+
+`handles` (top level, optional): the author's spellings for ids the app
+minted — `{"<minted uuid>": "deck", ...}`. Ids are strings; short
+mnemonics are fine and are what the tools take. When the PromoShot app
+opens a file whose ids are not UUIDs it mints one per spelling
+(deterministically, RFC 4122 v5 salted by the project's id) and keeps
+the spelling here, so `promo inspect` can show `<uuid> … ← deck` and
+every tool — headless or the app's — accepts either form. Losing the
+map changes nothing on screen, so it carries no `minReaderVersion`.
+

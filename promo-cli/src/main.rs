@@ -447,6 +447,19 @@ fn validate(project: &Project, opts: &Options) -> Result<String, String> {
 
 fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
     let layers = project.meta.layers.as_deref().unwrap_or(&[]);
+    // The author's spellings the app kept when it minted UUIDs (`handles`,
+    // minted id → spelling): shown beside each id, because every tool
+    // takes either, and "deck" is what the person who wrote it remembers.
+    let handles = project
+        .meta
+        .extra
+        .get("handles")
+        .and_then(serde_json::Value::as_object);
+    let handle = |id: &str| {
+        handles
+            .and_then(|h| h.get(id))
+            .and_then(serde_json::Value::as_str)
+    };
     let (w, h) = (
         project.meta.composition_settings.canvas_width,
         project.meta.composition_settings.canvas_height,
@@ -529,6 +542,7 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
                 .map(|l| serde_json::json!({
                     "id": l.id, "name": l.name, "kind": l.kind,
                     "startTime": l.start_time, "duration": l.duration,
+                    "handle": handle(&l.id),
                 }))
                 .collect::<Vec<_>>(),
             "resources": resources.len(),
@@ -567,9 +581,18 @@ fn inspect(project: &Project, opts: &Options) -> Result<String, String> {
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))
             .unwrap_or_else(|| format!("{:?}", layer.kind));
+        let spelling = handle(&layer.id)
+            .map(|h| format!("  ← {h}"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "  {}  {kind}  {:.2}–{end}s  \"{}\"\n",
+            "  {}  {kind}  {:.2}–{end}s  \"{}\"{spelling}\n",
             layer.id, layer.start_time, layer.name
+        ));
+    }
+    if let Some(kept) = handles.filter(|h| !h.is_empty()) {
+        out.push_str(&format!(
+            "handles:   {} author ids kept — every tool takes either\n",
+            kept.len()
         ));
     }
     out.push_str(&format!("resources: {}\n", resources.len()));
@@ -1325,6 +1348,44 @@ mod tests {
         let opts = Options::parse(&["--json".into(), "--time".into(), "2".into()]).unwrap();
         assert!(opts.json);
         assert_eq!(opts.time, Some(2.0));
+    }
+
+    /// After the app has minted a project's ids, `handles` keeps the
+    /// author's spellings, and inspect shows each beside its UUID — what
+    /// the person who wrote "deck" remembers, and what every tool takes.
+    #[test]
+    fn inspect_shows_the_authors_spelling_beside_a_minted_id() {
+        let dir =
+            std::env::temp_dir().join(format!("promo-handles-inspect-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let uuid = "7B1C6C4E-1F8A-5C1C-9E2B-2D6F3A4B5C6D";
+        std::fs::write(
+            dir.join("metadata.json"),
+            format!(
+                r#"{{"id":"P","name":"n","createdAt":0,"state":"recorded","trimStart":0,
+                "trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":1280,"canvasHeight":720}},
+                "resources":[],"layers":[{{"id":"{uuid}","name":"Deck","sortIndex":0,
+                "kind":"background","isEnabled":true,"startTime":0,"duration":4,"keyframes":[]}}],
+                "handles":{{"{uuid}":"deck"}}}}"#
+            ),
+        )
+        .unwrap();
+        let project = Project::open(&dir).unwrap();
+        let text = inspect(&project, &Options::default()).unwrap();
+        assert!(text.contains(&format!("{uuid}  background")), "{text}");
+        assert!(text.contains("← deck"), "{text}");
+        assert!(text.contains("handles:   1 author ids kept"), "{text}");
+        let json = inspect(
+            &project,
+            &Options {
+                json: true,
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        assert!(json.contains(r#""handle":"deck""#), "{json}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A placed composition is renderable — it needs no file — and inspect

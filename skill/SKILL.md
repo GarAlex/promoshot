@@ -209,9 +209,11 @@ a feature's own section rather than the whole 67 KB —
 **The rules that are only here:**
 
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
-  fine and are the handles the tools take; the app mints a UUID for each
-  on adoption and keeps the mapping, so re-anchor on what `promo_inspect`
-  lists after a person has opened the project.
+  fine and are the handles the tools take. When a person opens the
+  project in the app it mints a UUID for each and KEEPS your spelling
+  under `handles`: `promo_inspect` lists `<uuid> … ← deck`, and every
+  tool takes either the UUID or `deck`. The file's own ids are the UUIDs
+  from then on; your names still work.
 - **Never write `minReaderVersion` by hand.** The tools compute it from
   what the file uses, and `promo_validate` names the number when a
   hand-written file declares one that is too low. A literal is a guess

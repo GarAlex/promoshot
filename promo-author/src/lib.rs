@@ -36,6 +36,74 @@ fn mint() -> String {
     uuid::Uuid::new_v4().to_string().to_uppercase()
 }
 
+/// The author's spellings, kept by the app when it minted UUIDs for them:
+/// `handles` at the top level of the file, minted id → spelling. A tool
+/// argument that names an entity by its spelling — `"layer": "deck"` —
+/// resolves to the id the file carries, so what an agent called its
+/// layers keeps working after the app has saved the project. Only the
+/// keys that point at an entity are touched: the set the app's minting
+/// door rewrites, plus the tools' own `layer` and `resource`. The app's
+/// server does the same on its side.
+fn resolving_handles(text: &str, args: &Value) -> Value {
+    let Some(handles) = serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|doc| doc.get("handles").and_then(Value::as_object).cloned())
+    else {
+        return args.clone();
+    };
+    let by_spelling: std::collections::HashMap<String, String> = handles
+        .iter()
+        .filter_map(|(id, spelling)| spelling.as_str().map(|s| (s.to_string(), id.clone())))
+        .collect();
+    if by_spelling.is_empty() {
+        return args.clone();
+    }
+    fn pointer(key: &str, parent: Option<&str>) -> bool {
+        matches!(
+            key,
+            "id" | "layer"
+                | "resource"
+                | "resourceID"
+                | "paletteResourceID"
+                | "pathResourceID"
+                | "maskResourceID"
+                | "imageCutID"
+                | "mediaCutID"
+                | "layerId"
+        ) || matches!(
+            (parent, key),
+            (Some("morph"), "from") | (Some("morph"), "to") | (Some("target"), "member")
+        )
+    }
+    fn walk(
+        node: &Value,
+        parent: Option<&str>,
+        by: &std::collections::HashMap<String, String>,
+    ) -> Value {
+        match node {
+            Value::Object(map) => Value::Object(
+                map.iter()
+                    .map(|(key, value)| {
+                        let out = match value {
+                            Value::String(s) if pointer(key, parent) => by
+                                .get(s)
+                                .map(|id| Value::String(id.clone()))
+                                .unwrap_or_else(|| value.clone()),
+                            other => walk(other, Some(key), by),
+                        };
+                        (key.clone(), out)
+                    })
+                    .collect(),
+            ),
+            Value::Array(items) => {
+                Value::Array(items.iter().map(|item| walk(item, parent, by)).collect())
+            }
+            other => other.clone(),
+        }
+    }
+    walk(args, None, &by_spelling)
+}
+
 fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
     args.get(key)
         .and_then(Value::as_str)
@@ -208,6 +276,8 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
     let text = std::fs::read_to_string(&meta_path)
         .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
     let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+    let resolved = resolving_handles(&text, args);
+    let args = &resolved;
 
     let kind_name = required_str(args, "kind")?;
     if !matches!(kind_name, "image" | "video" | "caption") {
@@ -538,6 +608,8 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
     let text = std::fs::read_to_string(&meta_path)
         .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
     let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+    let resolved = resolving_handles(&text, args);
+    let args = &resolved;
 
     let layer_id = required_str(args, "layer")?.to_string();
     let layers = meta.layers.get_or_insert_with(Vec::new);
@@ -695,6 +767,8 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let meta_path = dir.join("metadata.json");
     let text = std::fs::read_to_string(&meta_path)
         .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
+    let resolved = resolving_handles(&text, args);
+    let args = &resolved;
 
     let raw = args
         .get("commands")
@@ -1245,6 +1319,53 @@ fn fence_new_path(path: &Path, root: Option<&Path>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// After the app has saved a project, its ids are minted UUIDs and the
+    /// author's spellings sit under `handles`. A tool still takes the
+    /// spelling. The app's MCPServerTests pin the same case.
+    #[test]
+    fn the_authors_spelling_still_names_a_layer_the_app_has_minted() {
+        let dir = std::env::temp_dir().join(format!("author-handles-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let uuid = "7B1C6C4E-1F8A-5C1C-9E2B-2D6F3A4B5C6D";
+        std::fs::write(
+            dir.join("metadata.json"),
+            format!(
+                r#"{{"id":"P","name":"n","createdAt":0,"state":"recorded","trimStart":0,
+                "trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":1280,"canvasHeight":720}},
+                "resources":[],"layers":[{{"id":"{uuid}","name":"Deck","sortIndex":0,
+                "kind":"image","isEnabled":true,"startTime":0,"duration":4,"keyframes":[]}}],
+                "handles":{{"{uuid}":"deck"}}}}"#
+            ),
+        )
+        .unwrap();
+        let args = serde_json::json!({
+            "project": dir.display().to_string(), "layer": "deck", "id": "k1",
+            "time": 1.0, "zoom": 1.2
+        });
+        upsert_keyframe(&args, None).unwrap();
+        let meta = ProjectMetadata::from_json(
+            &std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+        )
+        .unwrap();
+        let layers = meta.layers.clone().unwrap();
+        assert_eq!(layers[0].id, uuid, "the file's id stays the minted one");
+        assert!(
+            layers[0].keyframes.iter().any(|k| k.id == "k1"),
+            "the keyframe landed by the author's spelling"
+        );
+        assert_eq!(
+            meta.extra
+                .get("handles")
+                .and_then(|h| h.get(uuid))
+                .and_then(serde_json::Value::as_str),
+            Some("deck"),
+            "and the handle survived the write"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// The probe a test injects: a literal, which is the point of the
     /// seam — these tests hold the DOCUMENT logic, not a host's media
