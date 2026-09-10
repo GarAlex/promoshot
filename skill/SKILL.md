@@ -47,8 +47,9 @@ Find out what is here before choosing.
    for the binary); `promo_context` is answered only by the app's.
 2. **What the machine has.** The app: `/Applications/PromoShot.app`, or
    `mdfind "kMDItemCFBundleIdentifier == 'com.writea.revoice'"`. The
-   pair: `command -v promo promoshot-mcp`. A server joins a session at
-   its start, so registering is one line and a new session — the app:
+   pair, if the person installed it: `command -v promo promoshot-mcp`.
+   A server joins a session at its start, so registering is one line
+   and a new session — the app:
    `claude mcp add promoshot -- "/Applications/PromoShot.app/Contents/MacOS/PromoShot" --mcp-stdio`
    (the app opens itself when a session needs it, no token to paste;
    Settings ▸ Automation copies that line, and a config block for other
@@ -76,24 +77,19 @@ Find out what is here before choosing.
    then call. This is the person's app and the person's token on the
    person's machine: a bridge for a session that started before the
    server was registered, not a way around asking to enable automation.
-5. **No binaries.** `promo` and `promoshot-mcp` ship together. The
-   package manager's way, on macOS and Linux:
-   `brew tap garalex/promoshot && brew install promoshot` (ffmpeg comes
-   along; rendering video wants it). Otherwise the prebuilt pair:
-   <https://github.com/GarAlex/promoshot/releases/latest> —
-   `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`, each
-   with its sha256 on the release — untarred onto PATH; running what was
-   downloaded is the person's call, so propose the commands and let
-   them say. Either way the `promo` CLI then works from the shell in
-   THIS session, no registration needed: `promo schema | validate |
-   inspect | still | frames | video | gif`, the same contract as the
-   tools, argument for argument — so headless work never waits on a new
-   session. `promo skill install` puts this skill where every agent
-   tool on the machine reads it.
+5. **Neither the app nor the pair.** Do not install anything. Point
+   the person at the instructions —
+   <https://github.com/GarAlex/promoshot#connect-an-agent> — and stop
+   there: the pair comes as a build, a prebuilt release, or the image,
+   and putting it on PATH is theirs to do. Once it is there, the `promo`
+   CLI works from the shell in THIS session, no registration needed:
+   `promo schema | validate | inspect | still | frames | video | gif`,
+   the same contract as the tools, argument for argument — so headless
+   work never waits on a new session. `promo skill install` puts this
+   skill where every agent tool on the machine reads it.
 
 Do not guess a port, a path or a token: the app's Automation page and
-its defaults are the source of the first, the release page of the
-second.
+its defaults are the source of the first, the person of the second.
 
 ## The loop
 

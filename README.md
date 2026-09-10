@@ -95,12 +95,10 @@ cargo build --release -p promo-cli -p promoshot-mcp
 # binaries: target/release/promo  target/release/promoshot-mcp
 ```
 
-No Rust toolchain? `brew tap garalex/promoshot && brew install promoshot`
-(macOS, Linux; the formula is written by the release from the assets'
-digests), or grab the prebuilt pair from
+No Rust toolchain? Grab the prebuilt pair from
 [Releases](https://github.com/GarAlex/promoshot/releases) (linux-x64,
-macos-arm64), or pull the image:
-`docker pull ghcr.io/garalex/promoshot-mcp` — all carry `promo` and
+macos-arm64; each asset's sha256 is on the release), or pull the image:
+`docker pull ghcr.io/garalex/promoshot-mcp` — both carry `promo` and
 `promoshot-mcp` together.
 
 Put both on PATH, or pass `--promo` to the server. Rendering video also

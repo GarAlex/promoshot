@@ -4,11 +4,6 @@
 #   - promoshot-<tag>-linux-x64.tar.gz  (promo + promoshot-mcp)
 #   - promoshot-<tag>-macos-arm64.tar.gz
 #   - ghcr.io/garalex/promoshot-mcp:<tag> and :latest
-#   - Formula/promoshot.rb on main, written from the assets' digests — and
-#     mirrored into the tap repo (GarAlex/homebrew-promoshot) when a
-#     TAP_TOKEN secret with contents:write on it exists, so
-#     `brew tap garalex/promoshot && brew install promoshot` is a package
-#     manager's install, not a hand-run download.
 name: release
 
 on:
@@ -43,39 +38,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.tar.gz
-
-  formula:
-    needs: binaries
-    runs-on: ubuntu-latest
-    env:
-      TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Write the formula from the release's digests
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/homebrew-formula.py "${GITHUB_REF_NAME}" > Formula/promoshot.rb
-      - name: Commit it to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/promoshot.rb
-          git commit -m "Homebrew formula for ${GITHUB_REF_NAME}" || exit 0
-          git push
-      - name: Mirror it into the tap
-        if: env.TAP_TOKEN != ''
-        run: |
-          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/GarAlex/homebrew-promoshot.git" tap
-          mkdir -p tap/Formula
-          cp Formula/promoshot.rb tap/Formula/promoshot.rb
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/promoshot.rb
-          git commit -m "promoshot ${GITHUB_REF_NAME}" || exit 0
-          git push
 
   docker:
     runs-on: ubuntu-latest
