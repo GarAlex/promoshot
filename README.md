@@ -102,7 +102,11 @@ macos-arm64), or pull the image:
 `promoshot-mcp` together.
 
 Put both on PATH, or pass `--promo` to the server. Rendering video also
-wants `ffmpeg`/`ffprobe` on PATH.
+wants `ffmpeg`/`ffprobe` on PATH. `promo skill install` then puts the
+agent skill where every agent tool on the machine reads it — the shared
+`~/.agents/skills` (Codex, Gemini CLI, Cursor, GitHub Copilot, Grok
+Build) and the own folder of each tool found that reads only its own
+(Claude Code, Antigravity); `promo skill` prints it.
 
 **2. MCP (required for tools)**
 

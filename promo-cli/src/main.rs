@@ -22,6 +22,8 @@ promo — render a PromoShot project folder
 USAGE:
     promo validate <project-dir>
     promo schema [--full|--types]
+    promo skill [install [--home DIR] [--dry-run]]
+        print the agent skill, or install it for every agent tool found
     promo inspect <project-dir>
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
     promo frames  <project-dir> --out <dir> [--times <s,s,…>|--sample <n>|--fps <n>]
@@ -101,6 +103,11 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         return Ok(());
     }
+    // The skill travels with the binary: printed, or installed for every
+    // agent tool found under the home folder. No project either.
+    if command == "skill" {
+        return skill(rest);
+    }
     let dir = rest
         .first()
         .filter(|a| !a.starts_with("--"))
@@ -132,6 +139,94 @@ fn run(args: &[String]) -> Result<(), String> {
     }?;
     println!("{answer}");
     Ok(())
+}
+
+/// The shipped skill, the workflow layer over the tools.
+const SKILL: &str = include_str!("../../skill/SKILL.md");
+
+/// A tool that reads skills: its name, its home folder under ~, and the
+/// skills folder of its own it reads when the shared one is not enough —
+/// `None` when `~/.agents/skills` already covers it.
+const SKILL_TOOLS: &[(&str, &str, Option<&str>)] = &[
+    ("Claude Code", ".claude", Some(".claude/skills")),
+    ("Codex", ".codex", None),
+    ("Gemini CLI", ".gemini", None),
+    (
+        "Antigravity",
+        ".gemini/antigravity",
+        Some(".gemini/antigravity/skills"),
+    ),
+    (
+        "Antigravity",
+        ".gemini/config",
+        Some(".gemini/config/skills"),
+    ),
+    ("Cursor", ".cursor", None),
+    ("GitHub Copilot", ".copilot", None),
+    ("Grok Build", ".grok", None),
+];
+
+/// `promo skill` prints the skill; `promo skill install [--home DIR]
+/// [--dry-run]` writes `<folder>/promoshot/SKILL.md` into the Agent Skills
+/// standard's shared home, `~/.agents/skills` — read by Codex, Gemini CLI,
+/// Cursor, GitHub Copilot and Grok Build — and into the own folder of each
+/// tool found that reads only its own: Claude Code (`~/.claude/skills`),
+/// Antigravity (`~/.gemini/config/skills`; older builds
+/// `~/.gemini/antigravity/skills`). A tool is found by its home folder.
+/// The app's installer is the twin.
+fn skill(rest: &[String]) -> Result<(), String> {
+    if rest.first().map(String::as_str) != Some("install") {
+        print!("{SKILL}");
+        return Ok(());
+    }
+    let home = rest
+        .iter()
+        .position(|a| a == "--home")
+        .and_then(|i| rest.get(i + 1))
+        .map(PathBuf::from)
+        .or_else(home_dir)
+        .ok_or("no home folder to install into; pass --home DIR")?;
+    let dry = rest.iter().any(|a| a == "--dry-run");
+    for (label, folder) in skill_destinations(&home) {
+        let dir = folder.join("promoshot");
+        if !dry {
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            std::fs::write(dir.join("SKILL.md"), SKILL)
+                .map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
+        println!("{label}: {}", dir.display());
+    }
+    Ok(())
+}
+
+fn skill_destinations(home: &Path) -> Vec<(String, PathBuf)> {
+    let found: Vec<&(&str, &str, Option<&str>)> = SKILL_TOOLS
+        .iter()
+        .filter(|(_, tool_home, _)| home.join(tool_home).is_dir())
+        .collect();
+    let covered: Vec<&str> = found
+        .iter()
+        .filter(|(_, _, own)| own.is_none())
+        .map(|(name, _, _)| *name)
+        .collect();
+    let shared = if covered.is_empty() {
+        "shared, for the next tool that reads ~/.agents/skills".to_string()
+    } else {
+        format!("shared, read by {}", covered.join(", "))
+    };
+    let mut out = vec![(shared, home.join(".agents/skills"))];
+    for (name, _, own) in found {
+        if let Some(own) = own {
+            out.push((name.to_string(), home.join(own)));
+        }
+    }
+    out
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 #[derive(Default)]
@@ -1053,6 +1148,56 @@ fn frame_count(start: f64, end: f64, fps: f64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The skill installs once for every agent tool found: the shared home
+    /// always, a tool's own folder only when it reads nothing else. The
+    /// app's SkillInstallerTests pin the same case.
+    #[test]
+    fn the_skill_installs_for_every_tool_found() {
+        let home = std::env::temp_dir().join(format!("promo-skill-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        for folder in [".claude", ".codex", ".gemini/antigravity", ".cursor"] {
+            std::fs::create_dir_all(home.join(folder)).unwrap();
+        }
+        let destinations = skill_destinations(&home);
+        let labels: Vec<&str> = destinations.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "shared, read by Codex, Gemini CLI, Cursor",
+                "Claude Code",
+                "Antigravity"
+            ]
+        );
+        skill(&[
+            "install".into(),
+            "--home".into(),
+            home.display().to_string(),
+        ])
+        .unwrap();
+        for path in [
+            ".agents/skills/promoshot/SKILL.md",
+            ".claude/skills/promoshot/SKILL.md",
+            ".gemini/antigravity/skills/promoshot/SKILL.md",
+        ] {
+            let written = std::fs::read_to_string(home.join(path)).unwrap();
+            assert!(written.starts_with("---\n"), "{path}");
+        }
+        assert!(
+            !home.join(".codex/skills").exists(),
+            "Codex reads the shared home"
+        );
+        let bare = home.join("bare");
+        std::fs::create_dir_all(&bare).unwrap();
+        let alone = skill_destinations(&bare);
+        assert_eq!(alone.len(), 1);
+        assert!(
+            alone[0].0.starts_with("shared, for the next tool"),
+            "{}",
+            alone[0].0
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
 
     /// The moments a frames call renders, in precedence order: exact times,
     /// then a sample across the range, then every frame at the rate. The
