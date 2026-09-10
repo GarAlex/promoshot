@@ -35,29 +35,38 @@ write, not after. The detail is under "With the app attached" below.
 
 ## Reaching the tools
 
-The tools are an MCP server's; a session has them or it does not.
+The tools are an MCP server's; a session has them or it does not. Two
+servers exist, one contract: the PromoShot APP's — the person's live
+document, their undo, their proposals, a window they watch — and the
+HEADLESS one, `promoshot-mcp` — nobody watching, the file is yours.
+Find out what is here before choosing.
 
 1. **Already there.** Tools named `promo_*` are registered — use them.
-   `promo_context` is answered only by the app's server; the headless
-   one has no such tool.
-2. **Not registered.** A server joins a session at its start, so
-   register it, then open a new session:
-   - the app's — PromoShot ▸ Settings ▸ Automation, switched on, has
-     **Copy MCP Config**: `http://127.0.0.1:8765/mcp` with a bearer
-     token (the port can differ; the block is the truth). Ask the person
-     for that block, or register it for Claude Code with
-     `claude mcp add --transport http promoshot <url> --header
-     "Authorization: Bearer <token>"`;
-   - the headless one — `claude mcp add promoshot -- promoshot-mcp`
-     (stdio), or the image: `claude mcp add promoshot -- docker run -i
-     --rm -v "<your projects>:/projects" ghcr.io/garalex/promoshot-mcp`.
-   **Mid-session, when the client cannot take a new server**, the
-   app's can be spoken to directly: streamable-HTTP JSON-RPC at that
-   endpoint (confirm the port with `lsof -iTCP:8765 -sTCP:LISTEN`), the
-   bearer token in the app's own defaults — `defaults read
-   com.writea.revoice PromoMCPToken`. `initialize`, then
-   `notifications/initialized`, then `tools/call` — the same tools, the
-   same arguments, one POST each:
+   A tool carries its server's registered name as a prefix, so both may
+   be present side by side (`promoshot` for the app, `promoshot-headless`
+   for the binary); `promo_context` is answered only by the app's.
+2. **What the machine has.** The app: `/Applications/PromoShot.app`, or
+   `mdfind "kMDItemCFBundleIdentifier == 'com.writea.revoice'"`. The
+   pair: `command -v promo promoshot-mcp`. A server joins a session at
+   its start, so registering is one line and a new session — the app:
+   `claude mcp add promoshot -- "/Applications/PromoShot.app/Contents/MacOS/PromoShot" --mcp-stdio`
+   (the app opens itself when a session needs it, no token to paste;
+   Settings ▸ Automation copies that line, and a config block for other
+   clients); the pair: `claude mcp add promoshot-headless -- promoshot-mcp`,
+   or the image, `claude mcp add promoshot-headless -- docker run -i --rm
+   -v "<your projects>:/projects" ghcr.io/garalex/promoshot-mcp`.
+3. **Which, when both are there.** The prompt says — follow it. A
+   project the person has open in the app — the app's. Otherwise ASK
+   the person: in the app, where they watch and can undo, or headless,
+   where nothing is watching and the file is yours. That is their call,
+   not a default.
+4. **Mid-session, when the client cannot take a new server**, the app's
+   can be spoken to directly: streamable-HTTP JSON-RPC at
+   `http://127.0.0.1:8765/mcp` (the port the app wrote is
+   `defaults read com.writea.revoice PromoMCPPort`), the bearer token in
+   the app's own defaults — `defaults read com.writea.revoice
+   PromoMCPToken`. `initialize`, then `notifications/initialized`, then
+   `tools/call` — the same tools, the same arguments, one POST each:
    `curl -s http://127.0.0.1:8765/mcp -H "Authorization: Bearer $T"
    -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,
    "method":"tools/call","params":{"name":"promo_context","arguments":{}}}'`.
@@ -67,7 +76,7 @@ The tools are an MCP server's; a session has them or it does not.
    then call. This is the person's app and the person's token on the
    person's machine: a bridge for a session that started before the
    server was registered, not a way around asking to enable automation.
-3. **No binaries.** `promo` and `promoshot-mcp` ship together, prebuilt:
+5. **No binaries.** `promo` and `promoshot-mcp` ship together, prebuilt:
    <https://github.com/GarAlex/promoshot/releases/latest> —
    `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`; untar
    both onto PATH (rendering video also wants `ffmpeg`/`ffprobe`). The
@@ -76,15 +85,9 @@ The tools are an MCP server's; a session has them or it does not.
    frames | video | gif`, the same contract as the tools, argument for
    argument — so headless work never waits on a new session.
 
-Both on one machine is the normal case, and it is ONE skill: the two
-servers speak the same contract, and a tool carries its server's
-registered name as a prefix, so register them under different names
-(`promoshot` for the app, `promoshot-headless` for the binary) and both
-sets sit side by side. Use the app's for a project the person has open
-— it is their live document, with their undo — and the headless one for
-everything else: a batch, a run nobody is watching, a machine without
-the app. Do not guess a port, a path or a token: the app's Automation
-page is the source of the first, the release page of the second.
+Do not guess a port, a path or a token: the app's Automation page and
+its defaults are the source of the first, the release page of the
+second.
 
 ## The loop
 
