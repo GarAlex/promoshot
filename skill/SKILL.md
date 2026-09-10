@@ -33,6 +33,43 @@ projects are actually open, which layer is selected, where the playhead
 is, and whether Ask before applying is on. Read it before your first
 write, not after. The detail is under "With the app attached" below.
 
+## Reaching the tools
+
+The tools are an MCP server's; a session has them or it does not.
+
+1. **Already there.** Tools named `promo_*` are registered — use them.
+   `promo_context` is answered only by the app's server; the headless
+   one has no such tool.
+2. **Not registered.** A server joins a session at its start, so
+   register it, then open a new session:
+   - the app's — PromoShot ▸ Settings ▸ Automation, switched on, has
+     **Copy MCP Config**: `http://127.0.0.1:8765/mcp` with a bearer
+     token (the port can differ; the block is the truth). Ask the person
+     for that block, or register it for Claude Code with
+     `claude mcp add --transport http promoshot <url> --header
+     "Authorization: Bearer <token>"`;
+   - the headless one — `claude mcp add promoshot -- promoshot-mcp`
+     (stdio), or the image: `claude mcp add promoshot -- docker run -i
+     --rm -v "<your projects>:/projects" ghcr.io/garalex/promoshot-mcp`.
+3. **No binaries.** `promo` and `promoshot-mcp` ship together, prebuilt:
+   <https://github.com/GarAlex/promoshot/releases/latest> —
+   `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`; untar
+   both onto PATH (rendering video also wants `ffmpeg`/`ffprobe`). The
+   `promo` CLI then works from the shell in THIS session, no
+   registration needed: `promo schema | validate | inspect | still |
+   frames | video | gif`, the same contract as the tools, argument for
+   argument — so headless work never waits on a new session.
+
+Both on one machine is the normal case, and it is ONE skill: the two
+servers speak the same contract, and a tool carries its server's
+registered name as a prefix, so register them under different names
+(`promoshot` for the app, `promoshot-headless` for the binary) and both
+sets sit side by side. Use the app's for a project the person has open
+— it is their live document, with their undo — and the headless one for
+everything else: a batch, a run nobody is watching, a machine without
+the app. Do not guess a port, a path or a token: the app's Automation
+page is the source of the first, the release page of the second.
+
 ## The loop
 
 1. **Learn the format** — `promo_schema` once: the authoring subset plus
