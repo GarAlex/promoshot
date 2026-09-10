@@ -51,6 +51,19 @@ The tools are an MCP server's; a session has them or it does not.
    - the headless one — `claude mcp add promoshot -- promoshot-mcp`
      (stdio), or the image: `claude mcp add promoshot -- docker run -i
      --rm -v "<your projects>:/projects" ghcr.io/garalex/promoshot-mcp`.
+   **Mid-session, when the client cannot take a new server**, the
+   app's can be spoken to directly: streamable-HTTP JSON-RPC at that
+   endpoint (confirm the port with `lsof -iTCP:8765 -sTCP:LISTEN`), the
+   bearer token in the app's own defaults — `defaults read
+   com.writea.revoice PromoMCPToken`. `initialize`, then
+   `notifications/initialized`, then `tools/call` — the same tools, the
+   same arguments, one POST each:
+   `curl -s http://127.0.0.1:8765/mcp -H "Authorization: Bearer $T"
+   -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,
+   "method":"tools/call","params":{"name":"promo_context","arguments":{}}}'`.
+   This is the person's app and the person's token on the person's
+   machine: a bridge for a session that started before the server was
+   registered, not a way around asking to enable automation.
 3. **No binaries.** `promo` and `promoshot-mcp` ship together, prebuilt:
    <https://github.com/GarAlex/promoshot/releases/latest> —
    `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`; untar
