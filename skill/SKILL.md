@@ -35,34 +35,36 @@ write, not after. The detail is under "With the app attached" below.
 
 ## Reaching the tools
 
-The tools are an MCP server's; a session has them or it does not. Two
-servers exist, one contract: the PromoShot APP's — the person's live
+Two servers, one contract: the PromoShot APP's — the person's live
 document, their undo, their proposals, a window they watch — and the
-HEADLESS one, `promoshot-mcp` — nobody watching, the file is yours.
-Find out what is here before choosing.
+HEADLESS one, `promoshot-mcp`, with the `promo` CLI beside it — nobody
+watching, the file is yours. Check what is here, in this order, and use
+what is here. How it got there is not your concern.
 
-1. **Already there.** Tools named `promo_*` are registered — use them.
-   A tool carries its server's registered name as a prefix, so both may
+1. **Registered.** Tools named `promo_*` in the session — use them. A
+   tool carries its server's registered name as a prefix, so both may
    be present side by side (`promoshot` for the app, `promoshot-headless`
    for the binary); `promo_context` is answered only by the app's.
-2. **What the machine has.** The app: `/Applications/PromoShot.app`, or
-   `mdfind "kMDItemCFBundleIdentifier == 'com.writea.revoice'"`. The
-   pair, if the person installed it: `command -v promo promoshot-mcp`.
-   A server joins a session at its start, so registering is one line
-   and a new session — the app:
+2. **On PATH.** `command -v promo promoshot-mcp`. Found: the `promo`
+   CLI works from the shell NOW, no registration needed —
+   `promo schema | validate | inspect | still | frames | video | gif`,
+   the tools' contract argument for argument — and
+   `claude mcp add promoshot-headless -- promoshot-mcp` gives the next
+   session the tools themselves (or the image:
+   `claude mcp add promoshot-headless -- docker run -i --rm -v
+   "<your projects>:/projects" ghcr.io/garalex/promoshot-mcp`).
+3. **The app installed.** `/Applications/PromoShot.app`, or
+   `mdfind "kMDItemCFBundleIdentifier == 'com.writea.revoice'"`. Found:
    `claude mcp add promoshot -- "/Applications/PromoShot.app/Contents/MacOS/PromoShot" --mcp-stdio`
-   (the app opens itself when a session needs it, no token to paste;
-   Settings ▸ Automation copies that line, and a config block for other
-   clients); the pair: `claude mcp add promoshot-headless -- promoshot-mcp`,
-   or the image, `claude mcp add promoshot-headless -- docker run -i --rm
-   -v "<your projects>:/projects" ghcr.io/garalex/promoshot-mcp`.
-3. **Which, when both are there.** The prompt says — follow it. A
-   project the person has open in the app — the app's. Otherwise ASK
-   the person: in the app, where they watch and can undo, or headless,
-   where nothing is watching and the file is yours. That is their call,
-   not a default.
-4. **Mid-session, when the client cannot take a new server**, the app's
-   can be spoken to directly: streamable-HTTP JSON-RPC at
+   gives the next session its tools (the app opens itself when a
+   session needs it, no token to paste; Settings ▸ Automation copies
+   that line, and a config block for other clients); THIS session
+   reaches it directly, rung 5.
+4. **Both here.** The prompt says — follow it. A project the person
+   has open in the app — the app's. Otherwise ASK the person: in the
+   app, where they watch and can undo, or headless, where nothing is
+   watching and the file is yours. That is their call, not a default.
+5. **The app, mid-session.** Streamable-HTTP JSON-RPC at
    `http://127.0.0.1:8765/mcp` (the port the app wrote is
    `defaults read com.writea.revoice PromoMCPPort`), the bearer token in
    the app's own defaults — `defaults read com.writea.revoice
@@ -77,16 +79,11 @@ Find out what is here before choosing.
    then call. This is the person's app and the person's token on the
    person's machine: a bridge for a session that started before the
    server was registered, not a way around asking to enable automation.
-5. **Neither the app nor the pair.** Do not install anything. Point
-   the person at the instructions —
-   <https://github.com/GarAlex/promoshot#connect-an-agent> — and stop
-   there: the pair comes as a build, a prebuilt release, or the image,
-   and putting it on PATH is theirs to do. Once it is there, the `promo`
-   CLI works from the shell in THIS session, no registration needed:
-   `promo schema | validate | inspect | still | frames | video | gif`,
-   the same contract as the tools, argument for argument — so headless
-   work never waits on a new session. `promo skill install` puts this
-   skill where every agent tool on the machine reads it.
+6. **Nothing here.** Do not install anything. Point the person at the
+   instructions — <https://github.com/GarAlex/promoshot#connect-an-agent>
+   — and stop: putting the app or the pair on the machine is theirs to
+   do. (`promo skill install` puts this skill where every agent tool on
+   the machine reads it, once the pair is there.)
 
 Do not guess a port, a path or a token: the app's Automation page and
 its defaults are the source of the first, the person of the second.
