@@ -61,9 +61,12 @@ The tools are an MCP server's; a session has them or it does not.
    `curl -s http://127.0.0.1:8765/mcp -H "Authorization: Bearer $T"
    -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,
    "method":"tools/call","params":{"name":"promo_context","arguments":{}}}'`.
-   This is the person's app and the person's token on the person's
-   machine: a bridge for a session that started before the server was
-   registered, not a way around asking to enable automation.
+   The app not running? `open -b com.writea.revoice` launches it, and
+   with automation once switched on the server comes up with it — poll
+   the endpoint until a POST without a token answers 401 (listening),
+   then call. This is the person's app and the person's token on the
+   person's machine: a bridge for a session that started before the
+   server was registered, not a way around asking to enable automation.
 3. **No binaries.** `promo` and `promoshot-mcp` ship together, prebuilt:
    <https://github.com/GarAlex/promoshot/releases/latest> —
    `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`; untar
