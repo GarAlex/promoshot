@@ -76,14 +76,20 @@ Find out what is here before choosing.
    then call. This is the person's app and the person's token on the
    person's machine: a bridge for a session that started before the
    server was registered, not a way around asking to enable automation.
-5. **No binaries.** `promo` and `promoshot-mcp` ship together, prebuilt:
+5. **No binaries.** `promo` and `promoshot-mcp` ship together. The
+   package manager's way, on macOS and Linux:
+   `brew tap garalex/promoshot && brew install promoshot` (ffmpeg comes
+   along; rendering video wants it). Otherwise the prebuilt pair:
    <https://github.com/GarAlex/promoshot/releases/latest> —
-   `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`; untar
-   both onto PATH (rendering video also wants `ffmpeg`/`ffprobe`). The
-   `promo` CLI then works from the shell in THIS session, no
-   registration needed: `promo schema | validate | inspect | still |
-   frames | video | gif`, the same contract as the tools, argument for
-   argument — so headless work never waits on a new session.
+   `promoshot-<tag>-macos-arm64.tar.gz` or `-linux-x64.tar.gz`, each
+   with its sha256 on the release — untarred onto PATH; running what was
+   downloaded is the person's call, so propose the commands and let
+   them say. Either way the `promo` CLI then works from the shell in
+   THIS session, no registration needed: `promo schema | validate |
+   inspect | still | frames | video | gif`, the same contract as the
+   tools, argument for argument — so headless work never waits on a new
+   session. `promo skill install` puts this skill where every agent
+   tool on the machine reads it.
 
 Do not guess a port, a path or a token: the app's Automation page and
 its defaults are the source of the first, the release page of the
