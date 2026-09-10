@@ -93,6 +93,8 @@ Neither is vendor-specific. Agents do not find this repo by themselves.
 ```bash
 cargo build --release -p promo-cli -p promoshot-mcp
 # binaries: target/release/promo  target/release/promoshot-mcp
+scripts/install-local.sh   # …and on PATH, linked from target/release,
+                           # so every later build is what runs
 ```
 
 No Rust toolchain? Grab the prebuilt pair from
