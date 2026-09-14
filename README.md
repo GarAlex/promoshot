@@ -27,6 +27,12 @@ subset with four validated recipes (`promo schema`), the full document
 structs (`--types`) — and the parser the validator runs is the parser the
 renderers use, so "validates" means "renders".
 
+## Product listing / PAD
+
+Consumer apps: [promoshot.app](https://promoshot.app) · [App Store](https://apps.apple.com/us/app/promoshot-app/id6770157576). Software directories can ingest this PAD 4.0 file:
+
+`https://raw.githubusercontent.com/GarAlex/promoshot/main/promoshot.pad.xml`
+
 ## Crates
 
 | Crate | What it owns |
