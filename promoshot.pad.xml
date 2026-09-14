@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XML_DIZ_INFO>
+  <MASTER_PAD_VERSION_INFO>
+    <MASTER_PAD_VERSION>4.0</MASTER_PAD_VERSION>
+    <MASTER_PAD_EDITOR>Grok Bot marketing draft 2026-09-14</MASTER_PAD_EDITOR>
+  </MASTER_PAD_VERSION_INFO>
+  <Company_Info>
+    <Company_Name>Alexander Garmash / WriteA</Company_Name>
+    <Address_1></Address_1>
+    <City_Town></City_Town>
+    <State_Province></State_Province>
+    <Zip_Postal_Code></Zip_Postal_Code>
+    <Country>United States</Country>
+    <Company_WebSite_URL>https://writea.com</Company_WebSite_URL>
+    <Contact_Info>
+      <Author_First_Name>Alexander</Author_First_Name>
+      <Author_Last_Name>Garmash</Author_Last_Name>
+      <Author_Email>garalex@gmail.com</Author_Email>
+      <Contact_First_Name>Alexander</Contact_First_Name>
+      <Contact_Last_Name>Garmash</Contact_Last_Name>
+      <Contact_Email>garalex@gmail.com</Contact_Email>
+    </Contact_Info>
+    <Support_Info>
+      <Sales_Email>garalex@gmail.com</Sales_Email>
+      <Support_Email>garalex@gmail.com</Support_Email>
+      <General_Email>garalex@gmail.com</General_Email>
+      <Support_WebSite_URL>https://promoshot.app</Support_WebSite_URL>
+    </Support_Info>
+  </Company_Info>
+  <Program_Info>
+    <Program_Name>PromoShot</Program_Name>
+    <Program_Version>3.0</Program_Version>
+    <Program_Release_Month>09</Program_Release_Month>
+    <Program_Release_Day>06</Program_Release_Day>
+    <Program_Release_Year>2026</Program_Release_Year>
+    <Program_Cost_Dollars>0</Program_Cost_Dollars>
+    <Program_Type>Freeware</Program_Type>
+    <Program_Release_Status>Major Update</Program_Release_Status>
+    <Program_Install_Support>Install and Uninstall</Program_Install_Support>
+    <Program_OS_Support>macOS, iOS, iPadOS</Program_OS_Support>
+    <Program_Language>English</Program_Language>
+    <Program_Category_Class>Multimedia::Video</Program_Category_Class>
+    <File_Info>
+      <File_Size_Bytes>0</File_Size_Bytes>
+      <File_Size_K>0</File_Size_K>
+      <File_Size_MB>0</File_Size_MB>
+    </File_Info>
+    <Expire_Info>
+      <Has_Expire_Info>N</Has_Expire_Info>
+    </Expire_Info>
+    <Program_System_Requirements>App Store; Mac, iPhone, and iPad open the same .promo project. See store listing for OS versions.</Program_System_Requirements>
+    <Program_Description_2000>PromoShot is a layer editor for promo video. Record screen or camera, import media, arrange layers on a timeline, then keyframe position, scale, rotation, opacity, color, and more. Export video, stills, or GIF. Made for app makers, creators, founders, and marketers who want a real editor without a subscription. Free exports carry a watermark; PromoShot Pro removes it, one time. Mac now; iPhone and iPad open the same .promo folder. Automation / MCP on Mac. Open-source Rust engine on GitHub (GarAlex/promoshot). App Store id 6770157576. Site: https://promoshot.app. Unrelated to other App Store apps named PromoShot.</Program_Description_2000>
+    <Program_Description_250>Layer editor for promo video on Mac, iPhone, and iPad. Keyframe layers, export video/stills/GIF. Free with watermark; one-time Pro. promoshot.app</Program_Description_250>
+    <Program_Description_450>PromoShot turns screen recordings, video, photos, and captions into promo assets on a timeline. Free watermarked exports; one-time Pro removes it. Mac, iPhone, iPad. https://promoshot.app</Program_Description_450>
+    <Program_Description_80>Promo video layer editor — Mac / iPhone / iPad</Program_Description_80>
+  </Program_Info>
+  <Web_Info>
+    <Application_URLs>
+      <Application_Info_URL>https://promoshot.app</Application_Info_URL>
+      <Application_Order_URL>https://apps.apple.com/app/id6770157576</Application_Order_URL>
+      <Application_Screenshot_URL>https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/c7/09/c6/c709c69c-5f9d-e3c5-dadb-97472e74f5aa/ios-1.png/320x480bb.jpg</Application_Screenshot_URL>
+      <Application_Icon_URL>https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/06/86/43/0686433c-4d14-0eff-4892-08e5ddda974a/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg</Application_Icon_URL>
+      <Application_XML_File_URL>https://raw.githubusercontent.com/GarAlex/promoshot/main/promoshot.pad.xml</Application_XML_File_URL>
+    </Application_URLs>
+    <Download_URLs>
+      <Primary_Download_URL>https://apps.apple.com/app/id6770157576</Primary_Download_URL>
+      <Secondary_Download_URL>https://promoshot.app</Secondary_Download_URL>
+      <Additional_Download_URL_1>https://github.com/GarAlex/promoshot</Additional_Download_URL_1>
+    </Download_URLs>
+  </Web_Info>
+  <Permissions>
+    <Distribution_Permissions>The distribution permissions for this PAD file are granted to Softpedia and other software directories for listing PromoShot with App Store download links. The open-source engine in GarAlex/promoshot remains Apache-2.0.</Distribution_Permissions>
+    <EULA>See App Store listing terms. Product site: https://promoshot.app. Engine source: Apache-2.0.</EULA>
+  </Permissions>
+</XML_DIZ_INFO>
