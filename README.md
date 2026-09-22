@@ -27,6 +27,12 @@ subset with four validated recipes (`promo schema`), the full document
 structs (`--types`) — and the parser the validator runs is the parser the
 renderers use, so "validates" means "renders".
 
+## Not the other PromoShot
+
+This is the open engine (and App Store app) for **[PromoShot](https://promoshot.app)** by Alexander Garmash — a full **layer / keyframe / timeline** editor for screen recordings, video, and photos (Mac; iPhone and iPad open the same `.promo` projects).
+
+It is **not** the similarly named App Store apps that turn screenshots into template videos (for example “PromoShot: Screenshot to Video”). If you want keyframes, masks, GPU compositing, and an open `.promo` format, you want this one: [promoshot.app](https://promoshot.app) · [App Store](https://apps.apple.com/us/app/promoshot-app/id6770157576).
+
 ## Product listing / PAD
 
 Consumer apps: [promoshot.app](https://promoshot.app) · [App Store](https://apps.apple.com/us/app/promoshot-app/id6770157576). Software directories can ingest this PAD 4.0 file:
