@@ -51,7 +51,10 @@ what is here. How it got there is not your concern.
 2. **On PATH.** `command -v promo promoshot-mcp`. Found: the `promo`
    CLI works from the shell NOW, no registration needed —
    `promo schema | validate | inspect | still | frames | video | gif`,
-   the tools' contract argument for argument — and
+   the tools' contract argument for argument, plus the authoring tools
+   as verbs (`promo upsert-keyframe <project> --args '<the tool's JSON>'`,
+   likewise `init`, `upsert-layer`, `apply`, `slideshow`, `explain`,
+   `diff`) with the tools' defaults — and
    `claude mcp add promoshot-headless -- promoshot-mcp` gives the next
    session the tools themselves (or the image:
    `claude mcp add promoshot-headless -- docker run -i --rm -v
@@ -202,8 +205,9 @@ obtain a voice file, drop it into `Resources/`, and reference it as an
 ordinary audio resource.
 
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
-still | frames | video | gif`), and `promo_workspace` names a folder for
-new projects.
+still | frames | video | gif`, and the authoring tools as verbs taking the
+tool's arguments as `--args '<json>'`), and `promo_workspace` names a
+folder for new projects.
 
 ## The rules, and where the rest lives
 

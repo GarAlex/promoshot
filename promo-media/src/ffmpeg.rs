@@ -321,6 +321,11 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
     Ok(info)
 }
 
+/// The stream probe, for `promo_media::probe_stream`.
+pub(crate) fn probe_stream(path: &Path) -> Result<VideoInfo, MediaError> {
+    probe(path)
+}
+
 /// Display rotation, if the container carries one.
 fn probe_rotation(path: &Path) -> i32 {
     let Ok(output) = Command::new("ffprobe")

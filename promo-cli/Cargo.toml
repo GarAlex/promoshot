@@ -24,6 +24,9 @@ promo-timeline = { path = "../promo-timeline" }
 promo-gpu = { path = "../promo-gpu" }
 promo-engine = { path = "../promo-engine" }
 promo-media = { path = "../promo-media" }
+# The MCP tools' own authoring functions, so `promo upsert-keyframe` and a
+# `promo_upsert_keyframe` call are one code path with one set of defaults.
+promo-author = { path = "../promo-author" }
 serde_json.workspace = true
 # PNG/JPEG only: this decodes project images and writes frames, it is not an
 # image-processing tool.

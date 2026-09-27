@@ -71,6 +71,9 @@ cargo build --release -p promo-cli     # -> target/release/promo
 promo schema                            # authoring subset + recipes; --full, --types
 promo validate <project> [--strict]     # "NOT OK" lists what will not render; --strict exits 1 on any finding
 promo inspect  <project>                # canvas, layers, missing media, undefined colours
+promo upsert-keyframe <project> --args '{"layer":"bg","time":2,"zoom":1.2}'
+                                        # the MCP authoring tools as verbs (init, upsert-layer,
+                                        # upsert-keyframe, apply, slideshow, explain, diff)
 promo still    <project> --out f.png --time 2.5
 promo frames   <project> --out frames/ --fps 30 --from 0 --to 4
 promo video    <project> --out out.mp4 --fps 30

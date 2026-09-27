@@ -208,6 +208,28 @@ pub fn init(args: &Value, root: Option<&Path>) -> Result<String, String> {
     });
 
     let mut settings = json!({ "canvasWidth": width, "canvasHeight": height });
+    // The composition's caption defaults are sized for 1920x1080: on a
+    // 640x360 canvas the first caption sat 642 px below the bottom edge.
+    // Scaled to the canvas instead — margins by their own axis, type and
+    // padding by the tighter one — so a caption added next lands where it
+    // would on the canvas they were made for.
+    let defaults = promo_model::CompositionSettings::default();
+    let (across, down) = (
+        width / defaults.canvas_width,
+        height / defaults.canvas_height,
+    );
+    if (across - 1.0).abs() > 1e-9 || (down - 1.0).abs() > 1e-9 {
+        let tight = across.min(down);
+        let scaled = |value: f64, by: f64| (value * by).round().max(1.0);
+        settings["subtitleFontSize"] = json!(scaled(defaults.subtitle_font_size, tight));
+        settings["subtitleVerticalMargin"] = json!(scaled(defaults.subtitle_vertical_margin, down));
+        settings["subtitleLeftMargin"] = json!(scaled(defaults.subtitle_left_margin, across));
+        settings["subtitleRightMargin"] = json!(scaled(defaults.subtitle_right_margin, across));
+        settings["subtitleBackgroundPadding"] =
+            json!(scaled(defaults.subtitle_background_padding, tight));
+        settings["subtitleBackgroundCornerRadius"] =
+            json!(scaled(defaults.subtitle_background_corner_radius, tight));
+    }
     if has_canvas_colour {
         settings["backgroundColorHex"] = json!("@canvas");
     }
@@ -1469,6 +1491,40 @@ mod tests {
     fn read(dir: &Path) -> ProjectMetadata {
         let text = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
         ProjectMetadata::from_json(&text).unwrap()
+    }
+
+    /// A caption on a small canvas lands ON it. The composition's caption
+    /// defaults are sized for 1920x1080, and init wrote them unscaled: on a
+    /// 640x360 canvas the first caption sat 642 px below the bottom edge
+    /// (found through the CLI's authoring commands, review 2026-09-27).
+    #[test]
+    fn a_caption_on_a_small_canvas_lands_on_it() {
+        let root = scratch();
+        for (canvas, dir) in [("640x360", "Small.promo"), ("1080x1920", "Tall.promo")] {
+            let dir = root.join(dir);
+            let project = dir.display().to_string();
+            init(&json!({"project": project, "canvas": canvas}), None).unwrap();
+            let answer = upsert_layer(
+                &json!({"project": project, "kind": "caption", "captionText": "Hello",
+                        "startTime": 0, "duration": 3}),
+                None,
+                &|_: &Path, _: bool| MediaInfo::default(),
+            )
+            .unwrap();
+            assert!(!answer.contains("past the canvas"), "{canvas}: {answer}");
+        }
+        // The canvas the defaults were made for keeps the file as it was.
+        let dir = root.join("Standard.promo");
+        init(
+            &json!({"project": dir.display().to_string(), "canvas": "1920x1080"}),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            read(&dir).composition_settings.subtitle_vertical_margin,
+            880.0
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The reader stamp is what the file USES, at every step, with no

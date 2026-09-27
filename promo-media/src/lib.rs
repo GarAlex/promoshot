@@ -75,6 +75,15 @@ pub trait DecoderBackend: Send + Sync {
     fn open(&self, path: &Path) -> Result<Box<dyn VideoDecoder>, MediaError>;
 }
 
+/// What a file holds, as it will be DISPLAYED: width and height after the
+/// container's rotation (a portrait phone capture is stored landscape with
+/// a quarter-turn tag), duration, frame rate, alpha. Stills answer too —
+/// one frame, no duration. The CLI's authoring commands size resources
+/// with this, so a placement resolves against the picture people see.
+pub fn probe_stream(path: &Path) -> Result<VideoInfo, MediaError> {
+    ffmpeg::probe_stream(path)
+}
+
 /// Interleaved f32 PCM, and what it is.
 #[derive(Debug, Clone)]
 pub struct AudioBuffer {

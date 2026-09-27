@@ -34,6 +34,17 @@ USAGE:
     promo device  <phone|tablet|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
 
+AUTHORING — the MCP tools' own functions, so the defaults and checks match:
+    promo init            <project-dir> --args '{\"canvas\":\"1920x1080\"}'
+    promo upsert-layer    <project-dir> --args '{\"kind\":\"caption\",\"captionText\":\"Hi\"}'
+    promo upsert-keyframe <project-dir> --args '{\"layer\":\"bg\",\"time\":2,\"zoom\":1.2}'
+    promo apply           <project-dir> --args '{\"commands\":[{\"kind\":\"renameLayer\",…}]}'
+    promo slideshow       <project-dir> --args '{\"slides\":[{\"file\":\"a.png\"}]}'
+    promo explain         <project-dir> --args '{\"layer\":\"bg\",\"time\":2}'
+    promo diff            <project-dir> --args '{\"against\":\"before.json\"}'
+        --args is the tool's arguments as one JSON object (inline, @file.json,
+        or - for stdin) — the same keys promo_<verb> takes, minus `project`.
+
 OPTIONS:
     --time <s>     Timestamp for a still (default 0)
     --fps <n>      Frames per second, overriding the project's own
@@ -118,6 +129,13 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         .first()
         .filter(|a| !a.starts_with("--"))
         .ok_or_else(|| format!("{command}: expected a project directory\n\n{USAGE}"))?;
+    // Authoring answers before a project is opened: `init` creates one, and
+    // the rest write through promo-author, which reads the file itself.
+    if AUTHORING.contains(&command) {
+        let answer = author(command, dir, &rest[1..])?;
+        println!("{answer}");
+        return Ok(ExitCode::SUCCESS);
+    }
     let opts = Options::parse(&rest[1..])?;
     // The model senses take a FILE, not a project: what a glb holds, and
     // how it looks from around — before anyone places it.
@@ -156,6 +174,89 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     }?;
     println!("{answer}");
     Ok(ExitCode::SUCCESS)
+}
+
+/// The authoring verbs, each the MCP tool of the same name.
+const AUTHORING: [&str; 7] = [
+    "init",
+    "upsert-layer",
+    "upsert-keyframe",
+    "apply",
+    "slideshow",
+    "explain",
+    "diff",
+];
+
+/// An authoring verb through promo-author — the functions the headless MCP
+/// server calls (review 2026-09-27, P1-22). A CLI-only agent hand-wrote
+/// JSON and met none of the tools' guardrails: a keyframe created by
+/// `promo_upsert_keyframe` ramps from the previous one, a hand-written one
+/// holds until 0.5 s before it — the stress test's "keyframes never
+/// animate". The arguments are the tool's own, as one JSON object.
+fn author(command: &str, dir: &str, rest: &[String]) -> Result<String, String> {
+    let tool = format!("promo_{}", command.replace('-', "_"));
+    let mut args = serde_json::Map::new();
+    let mut json = false;
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--args" => {
+                let raw = rest
+                    .get(i + 1)
+                    .ok_or("--args: expected a JSON object, @file.json or -")?;
+                let text = if raw == "-" {
+                    let mut buffer = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer)
+                        .map_err(|e| format!("--args -: {e}"))?;
+                    buffer
+                } else if let Some(file) = raw.strip_prefix('@') {
+                    std::fs::read_to_string(file).map_err(|e| format!("--args {raw}: {e}"))?
+                } else {
+                    raw.clone()
+                };
+                match serde_json::from_str::<serde_json::Value>(&text) {
+                    Ok(serde_json::Value::Object(map)) => args.extend(map),
+                    Ok(_) => return Err("--args: expected a JSON object".into()),
+                    Err(e) => return Err(format!("--args: {e}")),
+                }
+                i += 2;
+            }
+            "--json" => {
+                json = true;
+                i += 1;
+            }
+            other => {
+                return Err(format!(
+                    "{command}: unknown option `{other}` — the arguments go in --args as one \
+                     JSON object, the same keys {tool} takes"
+                ))
+            }
+        }
+    }
+    args.insert("project".into(), serde_json::Value::String(dir.to_string()));
+    let args = serde_json::Value::Object(args);
+    let probe = |path: &Path, _video: bool| match promo_media::probe_stream(path) {
+        Ok(info) => promo_author::MediaInfo {
+            duration: (info.duration_s > 0.0).then_some(info.duration_s),
+            pixels: (info.width > 0 && info.height > 0)
+                .then_some((info.width as f64, info.height as f64)),
+        },
+        Err(_) => promo_author::MediaInfo::default(),
+    };
+    let answer = match command {
+        "init" => promo_author::init(&args, None),
+        "upsert-layer" => promo_author::upsert_layer(&args, None, &probe),
+        "upsert-keyframe" => promo_author::upsert_keyframe(&args, None),
+        "apply" => promo_author::apply(&args, None),
+        "slideshow" => promo_author::slideshow(&args, None, &probe),
+        "explain" => promo_author::explain(&args, None),
+        _ => promo_author::diff(&args, None),
+    }?;
+    Ok(if json {
+        serde_json::json!({ "ok": true, "answer": answer }).to_string()
+    } else {
+        answer
+    })
 }
 
 /// The shipped skill, the workflow layer over the tools.

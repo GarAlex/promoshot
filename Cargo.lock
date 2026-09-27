@@ -2026,6 +2026,7 @@ name = "promo-cli"
 version = "0.2.78"
 dependencies = [
  "image",
+ "promo-author",
  "promo-engine",
  "promo-gpu",
  "promo-media",
