@@ -352,7 +352,33 @@ where
         "promo_media_silences" => media::silences(args),
         "promo_media_scenes" => media::scenes(args),
         "promo_transcribe" => media::transcribe(args),
-        "promo_explain" => promo_author::explain(args, config.root.as_deref()),
+        "promo_explain" => {
+            let answer = promo_author::explain(args, config.root.as_deref())?;
+            // A model showing something on a slot: where it lands is the
+            // renderer's to measure (review 2026-09-27, P2-36), so the CLI —
+            // which renders — answers instead, and a failed measurement
+            // still leaves the project-only answer.
+            if !answer.contains("\"shows\"") {
+                return Ok(answer);
+            }
+            let project = fenced_project(args, config)?;
+            let mut asked = args.clone();
+            if let Some(map) = asked.as_object_mut() {
+                map.remove("project");
+            }
+            match run(
+                config,
+                &[
+                    "explain".to_string(),
+                    project,
+                    "--args".into(),
+                    asked.to_string(),
+                ],
+            ) {
+                Ok(measured) => Ok(measured),
+                Err(why) => Ok(format!("{answer}\n(slot placement not measured: {why})")),
+            }
+        }
         "promo_diff" => promo_author::diff(args, config.root.as_deref()),
         "promo_init" => promo_author::init(args, config.root.as_deref()),
         "promo_upsert_layer" => {
@@ -647,6 +673,62 @@ mod tests {
         let text = answer["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.starts_with("unknown tool `promo_open`"), "{text}");
         assert!(!ran);
+    }
+
+    /// Explain on a project whose model shows something on a slot asks the
+    /// CLI, which renders — where a screen lands is measured, not guessed
+    /// (review 2026-09-27, P2-36); a project without one never leaves the
+    /// process.
+    #[test]
+    fn explain_asks_the_renderer_where_a_screen_lands() {
+        let dir = std::env::temp_dir().join(format!("mcp-explain3d-{}.promo", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |materials: Value| {
+            std::fs::write(
+                dir.join("metadata.json"),
+                serde_json::json!({
+                    "id": "P", "name": "E", "createdAt": 0, "state": "recorded",
+                    "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                    "compositionSettings": { "canvasWidth": 64, "canvasHeight": 64 },
+                    "resources": [
+                        { "id": "pic", "kind": "image", "filename": "p.png", "displayName": "p", "addedAt": 0 },
+                        { "id": "phone", "kind": "model", "filename": "", "displayName": "Phone",
+                          "addedAt": 0, "recipe": { "device": { "kind": "phone" } },
+                          "materials": materials }],
+                    "layers": [{ "id": "m", "name": "m", "sortIndex": 0, "kind": "model",
+                                 "isEnabled": true, "startTime": 0, "duration": 2,
+                                 "resourceID": "phone", "keyframes": [] }]
+                })
+                .to_string(),
+            )
+            .unwrap();
+        };
+        let call = || {
+            let seen = std::cell::RefCell::new(Vec::new());
+            let req = serde_json::json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                "params": { "name": "promo_explain",
+                            "arguments": { "project": dir.display().to_string(), "time": 1 } } });
+            let answer = handle(&req, &config(), &recording(&seen)).unwrap();
+            let argv = seen.borrow().first().cloned();
+            (answer, argv)
+        };
+        write(serde_json::json!({ "Screen": { "resourceID": "pic" } }));
+        let (_, argv) = call();
+        let argv = argv.expect("the CLI was asked");
+        assert_eq!(argv[0], "explain");
+        assert_eq!(argv[2], "--args");
+        assert!(argv[3].contains("\"time\":1"), "{argv:?}");
+        write(serde_json::json!({ "Body": "@accent" }));
+        let (answer, argv) = call();
+        assert!(
+            argv.is_none(),
+            "no slot shows anything: answered in process"
+        );
+        assert!(answer["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("\"camera\""));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A project that is not there says how to make one — the refusal

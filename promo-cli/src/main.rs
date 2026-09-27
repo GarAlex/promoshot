@@ -266,7 +266,8 @@ fn author(command: &str, dir: &str, rest: &[String]) -> Result<String, String> {
         "upsert-keyframe" => promo_author::upsert_keyframe(&args, None),
         "apply" => promo_author::apply(&args, None),
         "slideshow" => promo_author::slideshow(&args, None, &probe),
-        "explain" => promo_author::explain(&args, None),
+        // With the renderer's measurements of where each bound slot lands.
+        "explain" => promo_cli::placement::explain(&args, None),
         _ => promo_author::diff(&args, None),
     }?;
     Ok(if json {

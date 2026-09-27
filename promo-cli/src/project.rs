@@ -78,6 +78,18 @@ impl Project {
         })
     }
 
+    /// The same folder with other metadata — a what-if the renderer can
+    /// draw without touching the file (explain's slot probes).
+    pub fn with_meta(&self, meta: ProjectMetadata) -> Self {
+        let resolved = promo_model::effective_resources(&meta, &Self::listing(&self.dir));
+        Self {
+            dir: self.dir.clone(),
+            meta,
+            resolved,
+            attachment_problems: self.attachment_problems.clone(),
+        }
+    }
+
     /// Filenames in `Resources/` (and `Images/`, which slideshow stills use).
     fn listing(dir: &Path) -> Vec<String> {
         let mut names = Vec::new();

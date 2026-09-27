@@ -1089,13 +1089,20 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
     let settings = &meta.composition_settings;
-    let canvas = promo_model::Size::new(settings.canvas_width, settings.canvas_height);
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     let layers = meta.layers.as_deref().unwrap_or(&[]);
     let only = args.get("layer").and_then(Value::as_str);
     let time = args.get("time").and_then(Value::as_f64).unwrap_or_else(|| {
-        // The composition's midpoint: never t=0, where fade-ins hide everything.
-        meta.video_duration / 2.0
+        // The composition's midpoint: never t=0, where fade-ins hide
+        // everything — and the layers' own end when the file states no
+        // duration, as a tool-written one does not.
+        let stated = meta.video_duration;
+        let duration = if stated > 0.0 {
+            stated
+        } else {
+            promo_timeline::composition_duration(&meta)
+        };
+        duration / 2.0
     });
     if let Some(id) = only {
         if !layers.iter().any(|l| l.id == id) {
@@ -1105,99 +1112,7 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
 
     let mut docs = Vec::new();
     for layer in layers.iter().filter(|l| only.is_none_or(|id| l.id == id)) {
-        let local = promo_timeline::layer_local_time(layer, time);
-        let end = layer.duration.map(|d| layer.start_time + d);
-        let visible = promo_timeline::layer_is_visible(layer, time);
-        let why_hidden = if visible {
-            None
-        } else if !layer.is_enabled {
-            Some("disabled")
-        } else if time < layer.start_time {
-            Some("not started yet")
-        } else {
-            Some("already ended")
-        };
-        // The resource shown at this moment: the latest swap keyframe at or
-        // before the local time, else the layer's own.
-        let showing = layer
-            .keyframes
-            .iter()
-            .filter(|k| k.time <= local && k.resource_id.is_some())
-            .max_by(|a, b| a.time.total_cmp(&b.time))
-            .and_then(|k| k.resource_id.clone())
-            .or_else(|| layer.resource_id.clone());
-        let resource = showing
-            .as_ref()
-            .and_then(|id| resources.iter().find(|r| &r.id == id));
-        let tr = promo_timeline::layer_transform_along_paths(layer, time, settings, resources);
-        let source = resource.and_then(promo_timeline::layout::resource_source_size);
-        let framed = source.map(|size| {
-            promo_timeline::framed_pixel_size(size, resource.and_then(|r| r.frame.as_ref()))
-        });
-        let rect = framed.map(|size| {
-            let r = if layer.kind == ProjectLayerKind::Drawing {
-                promo_timeline::drawing_rect(
-                    size,
-                    canvas,
-                    tr.zoom,
-                    tr.horizontal_shift,
-                    tr.vertical_shift,
-                )
-            } else {
-                promo_timeline::media_rect(
-                    size,
-                    canvas,
-                    tr.zoom,
-                    tr.horizontal_shift,
-                    tr.vertical_shift,
-                )
-            };
-            json!({ "x": r.x(), "y": r.y(), "width": r.width(), "height": r.height() })
-        });
-        let sorted: Vec<_> = {
-            let mut k: Vec<_> = layer.keyframes.iter().collect();
-            k.sort_by(|a, b| a.time.total_cmp(&b.time));
-            k
-        };
-        let previous = sorted.iter().rev().find(|k| k.time <= local);
-        let next = sorted.iter().find(|k| k.time > local);
-        let brief = |k: &&promo_model::ProjectLayerKeyframe| json!({ "id": k.id, "time": k.time, "transitionDuration": k.transition_duration });
-        let default_gain = resource.map(|r| r.effective_volume()).unwrap_or(1.0);
-        let caption = if layer.kind == ProjectLayerKind::Caption {
-            Some(json!({
-                "text": layer.caption_text,
-                "placement": layer.caption_style.as_ref().and_then(|s| s.placement.clone()),
-                "fontSize": layer.caption_style.as_ref().and_then(|s| s.font_size),
-            }))
-        } else {
-            None
-        };
-        docs.push(json!({
-            "id": layer.id,
-            "name": layer.name,
-            "kind": serde_json::to_value(layer.kind).unwrap_or(Value::Null),
-            "visible": visible,
-            "whyHidden": why_hidden,
-            "life": { "start": layer.start_time, "end": end },
-            "localTime": local,
-            "showing": showing,
-            "source": framed.map(|s| json!({ "width": s.width(), "height": s.height(),
-                "framed": resource.and_then(|r| r.frame.as_ref()).is_some() })),
-            "transform": { "zoom": tr.zoom, "horizontalShift": tr.horizontal_shift,
-                           "verticalShift": tr.vertical_shift },
-            "rect": rect,
-            "opacity": promo_timeline::layer_opacity(layer, time),
-            "rotation": promo_timeline::layer_rotation(layer, time),
-            "tilt": promo_timeline::layer_tilt_offset(layer, time).map(|(x, y)| json!([x, y])),
-            "viewport": promo_timeline::layer_viewport(layer, time),
-            "gain": promo_timeline::layer_gain(layer, local, default_gain),
-            "caption": caption,
-            "keyframes": { "count": layer.keyframes.len(),
-                           "previous": previous.map(brief), "next": next.map(brief) },
-            "transitionIn": layer.transition_in.as_ref().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
-            "transitionOut": layer.transition_out.as_ref().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
-            "fadeIn": layer.fade_in, "fadeOut": layer.fade_out,
-        }));
+        docs.push(layer_doc(layer, time, settings, resources, None, 0));
     }
     let mut timing_copy = meta.clone();
     let timing_problems: Vec<String> = promo_timeline::resolve_attachments(&mut timing_copy)
@@ -1213,6 +1128,334 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
         "warnings": promo_timeline::validate::warnings(&meta),
     });
     serde_json::to_string_pretty(&out).map_err(|e| e.to_string())
+}
+
+/// One layer at `time`, as the renderer resolves it — see [`explain`]. A
+/// model or stage layer adds its camera, light and slots (review
+/// 2026-09-27, P2-36: explain saw only 2D rectangles, and 3D is where the
+/// agents' turns go), a stage layer its members, and a layer showing a
+/// composition the composition's own layers at the moment it shows —
+/// each with `onCanvas` mapped through its hosts when `to_canvas` (this
+/// document's pixels onto the top canvas: x, y offset and x, y scale) is
+/// given.
+fn layer_doc(
+    layer: &ProjectLayer,
+    time: f64,
+    settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
+    to_canvas: Option<[f64; 4]>,
+    depth: usize,
+) -> Value {
+    let canvas = promo_model::Size::new(settings.canvas_width, settings.canvas_height);
+    let local = promo_timeline::layer_local_time(layer, time);
+    let end = layer.duration.map(|d| layer.start_time + d);
+    let visible = promo_timeline::layer_is_visible(layer, time);
+    let why_hidden = if visible {
+        None
+    } else if !layer.is_enabled {
+        Some("disabled")
+    } else if time < layer.start_time {
+        Some("not started yet")
+    } else {
+        Some("already ended")
+    };
+    // The resource shown at this moment: the latest swap keyframe at or
+    // before the local time, else the layer's own.
+    let showing = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.time <= local && k.resource_id.is_some())
+        .max_by(|a, b| a.time.total_cmp(&b.time))
+        .and_then(|k| k.resource_id.clone())
+        .or_else(|| layer.resource_id.clone());
+    let resource = showing
+        .as_ref()
+        .and_then(|id| resources.iter().find(|r| &r.id == id));
+    let tr = promo_timeline::layer_transform_along_paths(layer, time, settings, resources);
+    // What the placement lays out: a picture's pixels, a composition's
+    // canvas, and for a model the square its view is drawn into — the
+    // sizes the engine places each with.
+    let source = resource.and_then(|r| match r.kind {
+        promo_model::ProjectResourceKind::Composition => r
+            .composition
+            .as_ref()
+            .map(|c| promo_model::Size::new(c.canvas_width, c.canvas_height)),
+        promo_model::ProjectResourceKind::Model => Some(promo_model::Size::new(1.0, 1.0)),
+        _ => promo_timeline::layout::resource_source_size(r),
+    });
+    let framed = source.map(|size| {
+        promo_timeline::framed_pixel_size(size, resource.and_then(|r| r.frame.as_ref()))
+    });
+    let rect = framed.map(|size| {
+        let r = if layer.kind == ProjectLayerKind::Drawing {
+            promo_timeline::drawing_rect(
+                size,
+                canvas,
+                tr.zoom,
+                tr.horizontal_shift,
+                tr.vertical_shift,
+            )
+        } else {
+            promo_timeline::media_rect(
+                size,
+                canvas,
+                tr.zoom,
+                tr.horizontal_shift,
+                tr.vertical_shift,
+            )
+        };
+        json!({ "x": r.x(), "y": r.y(), "width": r.width(), "height": r.height() })
+    });
+    let sorted: Vec<_> = {
+        let mut k: Vec<_> = layer.keyframes.iter().collect();
+        k.sort_by(|a, b| a.time.total_cmp(&b.time));
+        k
+    };
+    let previous = sorted.iter().rev().find(|k| k.time <= local);
+    let next = sorted.iter().find(|k| k.time > local);
+    let brief = |k: &&promo_model::ProjectLayerKeyframe| json!({ "id": k.id, "time": k.time, "transitionDuration": k.transition_duration });
+    let default_gain = resource.map(|r| r.effective_volume()).unwrap_or(1.0);
+    let caption = if layer.kind == ProjectLayerKind::Caption {
+        Some(json!({
+            "text": layer.caption_text,
+            "placement": layer.caption_style.as_ref().and_then(|s| s.placement.clone()),
+            "fontSize": layer.caption_style.as_ref().and_then(|s| s.font_size),
+        }))
+    } else {
+        None
+    };
+    let mut doc = json!({
+        "id": layer.id,
+        "name": layer.name,
+        "kind": serde_json::to_value(layer.kind).unwrap_or(Value::Null),
+        "visible": visible,
+        "whyHidden": why_hidden,
+        "life": { "start": layer.start_time, "end": end },
+        "localTime": local,
+        "showing": showing,
+        "source": framed.map(|s| json!({ "width": s.width(), "height": s.height(),
+            "framed": resource.and_then(|r| r.frame.as_ref()).is_some() })),
+        "transform": { "zoom": tr.zoom, "horizontalShift": tr.horizontal_shift,
+                       "verticalShift": tr.vertical_shift },
+        "rect": rect,
+        "opacity": promo_timeline::layer_opacity(layer, time),
+        "rotation": promo_timeline::layer_rotation(layer, time),
+        "tilt": promo_timeline::layer_tilt_offset(layer, time).map(|(x, y)| json!([x, y])),
+        "viewport": promo_timeline::layer_viewport(layer, time),
+        "gain": promo_timeline::layer_gain(layer, local, default_gain),
+        "caption": caption,
+        "keyframes": { "count": layer.keyframes.len(),
+                       "previous": previous.map(brief), "next": next.map(brief) },
+        "transitionIn": layer.transition_in.as_ref().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
+        "transitionOut": layer.transition_out.as_ref().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
+        "fadeIn": layer.fade_in, "fadeOut": layer.fade_out,
+    });
+    let on_canvas = |r: &Value| -> Option<[f64; 4]> {
+        let (x, y) = (r["x"].as_f64()?, r["y"].as_f64()?);
+        let (w, h) = (r["width"].as_f64()?, r["height"].as_f64()?);
+        Some(match to_canvas {
+            None => [x, y, w, h],
+            Some([ox, oy, sx, sy]) => [ox + x * sx, oy + y * sy, w * sx, h * sy],
+        })
+    };
+    let placed = doc["rect"]
+        .is_object()
+        .then(|| on_canvas(&doc["rect"]))
+        .flatten();
+    if let (Some(_), Some([x, y, w, h])) = (to_canvas, placed) {
+        doc["onCanvas"] = json!({ "x": x, "y": y, "width": w, "height": h });
+    }
+    let three_d = matches!(
+        layer.kind,
+        ProjectLayerKind::Model | ProjectLayerKind::Stage
+    ) || layer.stage.is_some();
+    if three_d {
+        doc["camera"] = camera_doc(layer, local);
+        doc["light"] = light_doc(layer, local);
+        if let Some(stage) = layer.stage.as_deref() {
+            doc["stage"] = json!(stage);
+        }
+    }
+    if let Some(r) = resource {
+        if r.kind == promo_model::ProjectResourceKind::Model {
+            doc["slots"] = slots_doc(r, resources);
+        }
+        if r.kind == promo_model::ProjectResourceKind::Composition {
+            doc["inside"] = composition_doc(layer, r, time, settings, resources, placed, depth);
+        }
+    }
+    if let Some(members) = layer.members.as_deref() {
+        doc["members"] = Value::Array(
+            members
+                .iter()
+                .map(|m| layer_doc(m, time, settings, resources, to_canvas, depth))
+                .collect(),
+        );
+    }
+    doc
+}
+
+/// The camera a model or stage layer looks through at its local time: the
+/// same keyframe interpolation and defaults the engine reads, the distance
+/// after its floor (the camera stops at 1.05 radii, where it would enter
+/// the body — C11 measured that by hand), where it looks and the route it
+/// is flying.
+fn camera_doc(layer: &ProjectLayer, local: f64) -> Value {
+    let scalar = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+        promo_timeline::interpolation::layer_interpolated_scalar(layer, local, select)
+    };
+    let camera = promo_model::Camera {
+        yaw: scalar(|k| k.camera.as_ref().and_then(|c| c.yaw)),
+        pitch: scalar(|k| k.camera.as_ref().and_then(|c| c.pitch)),
+        roll: scalar(|k| k.camera.as_ref().and_then(|c| c.roll)),
+        distance: scalar(|k| k.camera.as_ref().and_then(|c| c.distance)),
+        fov: scalar(|k| k.camera.as_ref().and_then(|c| c.fov)),
+        motion_path: None,
+        target: None,
+    };
+    let mut doc = json!({
+        "yaw": camera.yaw(), "pitch": camera.pitch(), "roll": camera.roll(),
+        "distance": camera.distance(), "fov": camera.fov(),
+        "units": "distance in the model's bounds radii (a stage's: its deepest member's)",
+    });
+    if let Some(asked) = camera.distance.filter(|d| *d < 1.05) {
+        doc["distanceNote"] = json!(format!(
+            "asked {asked:.3}; the camera stops at 1.05 radii, where it would enter the body"
+        ));
+    }
+    if let Some(asked) = camera.fov.filter(|f| !(5.0..=120.0).contains(f)) {
+        doc["fovNote"] = json!(format!(
+            "asked {asked:.1}°; the field of view is held to 5–120°"
+        ));
+    }
+    let by_time = |a: &&promo_model::ProjectLayerKeyframe,
+                   b: &&promo_model::ProjectLayerKeyframe| {
+        a.time.total_cmp(&b.time)
+    };
+    if let Some(target) = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.time <= local + 1e-9 && k.camera.as_ref().is_some_and(|c| c.target.is_some()))
+        .max_by(by_time)
+        .and_then(|k| k.camera.as_ref()?.target.clone())
+    {
+        doc["target"] = serde_json::to_value(target).unwrap_or(Value::Null);
+    }
+    if let Some(route) = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.time > local)
+        .min_by(by_time)
+        .and_then(|k| k.camera.as_ref()?.motion_path.as_ref())
+    {
+        doc["route"] = json!(route.path_resource_id);
+    }
+    if layer.stage.is_some() && layer.kind == ProjectLayerKind::Model {
+        doc["note"] = json!(
+            "a stage has one camera, its first member's; on any other member these yaw and \
+             pitch TURN the model about its origin"
+        );
+    }
+    doc
+}
+
+/// The key light at the layer's local time, with the model's defaults.
+fn light_doc(layer: &ProjectLayer, local: f64) -> Value {
+    let scalar = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+        promo_timeline::interpolation::layer_interpolated_scalar(layer, local, select)
+    };
+    let light = promo_model::Light {
+        yaw: scalar(|k| k.light.and_then(|l| l.yaw)),
+        pitch: scalar(|k| k.light.and_then(|l| l.pitch)),
+        intensity: scalar(|k| k.light.and_then(|l| l.intensity)),
+    };
+    json!({ "yaw": light.yaw(), "pitch": light.pitch(), "intensity": light.intensity() })
+}
+
+/// What a model's slots are bound to: a colour, or the picture, video or
+/// composition a slot shows or wears. Where each lands on the canvas is
+/// measured by the renderer (`promo_cli::placement`), not guessed here.
+fn slots_doc(model: &ProjectResource, resources: &[ProjectResource]) -> Value {
+    let mut slots = serde_json::Map::new();
+    for (slot, binding) in model.materials.iter().flatten() {
+        let mut doc = serde_json::Map::new();
+        if let Some(hex) = binding.color_hex() {
+            doc.insert("colorHex".into(), json!(hex));
+        }
+        if let Some(id) = binding.resource_id() {
+            doc.insert("shows".into(), json!(id));
+            if let Some(r) = resources.iter().find(|r| r.id == id) {
+                doc.insert(
+                    "showsKind".into(),
+                    serde_json::to_value(r.kind).unwrap_or(Value::Null),
+                );
+            }
+        }
+        if let promo_model::MaterialBinding::Surface(surface) = binding {
+            if let Some(mode) = surface.mode.as_ref() {
+                doc.insert(
+                    "mode".into(),
+                    serde_json::to_value(mode).unwrap_or(Value::Null),
+                );
+            }
+        }
+        slots.insert(slot.clone(), Value::Object(doc));
+    }
+    Value::Object(slots)
+}
+
+/// The composition a layer shows, at the moment it shows it: its clock is
+/// the layer's material time (the transport's, trims and speed included),
+/// its canvas its own, and its layers explained on that canvas — mapped
+/// onto the top canvas through `host_rect` when the host was placed.
+fn composition_doc(
+    host: &ProjectLayer,
+    composition: &ProjectResource,
+    time: f64,
+    settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
+    host_rect: Option<[f64; 4]>,
+    depth: usize,
+) -> Value {
+    let Some(inner) = composition.composition.as_ref() else {
+        return Value::Null;
+    };
+    if depth + 1 >= promo_model::nesting::MAX_DEPTH {
+        return json!({ "composition": composition.id, "note": "nested deeper than explain follows" });
+    }
+    let material = promo_timeline::transport::material_time(
+        host,
+        promo_timeline::layer_local_time(host, time),
+    );
+    let view = promo_timeline::resource_for_cut(composition, host.media_cut_id.as_deref());
+    let Some(inner_time) = promo_timeline::source_time_for_layer(&view, material, host.beyond_end)
+    else {
+        return json!({ "composition": composition.id,
+                       "note": "the layer has outlived its composition and draws nothing (beyondEnd)" });
+    };
+    let mut nested = settings.clone();
+    nested.canvas_width = inner.canvas_width;
+    nested.canvas_height = inner.canvas_height;
+    let to_canvas = host_rect.map(|[x, y, w, h]| {
+        [
+            x,
+            y,
+            w / inner.canvas_width.max(1.0),
+            h / inner.canvas_height.max(1.0),
+        ]
+    });
+    json!({
+        "composition": composition.id,
+        "time": inner_time,
+        "canvas": { "width": inner.canvas_width, "height": inner.canvas_height },
+        "note": "rects are on this composition's canvas; onCanvas maps them through the host \
+                 (rotation and tilt of the host not applied)",
+        "layers": inner
+            .layers
+            .iter()
+            .map(|l| layer_doc(l, inner_time, &nested, resources, to_canvas, depth + 1))
+            .collect::<Vec<_>>(),
+    })
 }
 
 /// "What changed since I last looked" in the format's own terms: two
@@ -2193,6 +2436,102 @@ mod tests {
             "keyframes read in time order"
         );
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Explain sees 3D and looks inside compositions (review 2026-09-27,
+    /// P2-36): a model layer's camera with its floor applied and said, its
+    /// light, what each slot shows; a composition's own layers at the
+    /// moment it shows, mapped onto the top canvas.
+    #[test]
+    fn explain_sees_the_camera_and_inside_compositions() {
+        let root = scratch();
+        let dir = root.join("Deep.promo");
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(dir.join("Resources/shot.png"), PNG_1X1).unwrap();
+        let meta = json!({
+            "id": "P", "name": "Deep", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": { "canvasWidth": 1920, "canvasHeight": 1080 },
+            "resources": [
+                { "id": "shot", "kind": "image", "filename": "shot.png", "displayName": "s",
+                  "addedAt": 0, "pixelWidth": 1, "pixelHeight": 1 },
+                { "id": "phone", "kind": "model", "filename": "", "displayName": "Phone",
+                  "addedAt": 0, "recipe": { "device": { "kind": "phone" } },
+                  "materials": { "Screen": { "resourceID": "shot" }, "Body": "@accent" } },
+                { "id": "card", "kind": "composition", "filename": "", "displayName": "Card",
+                  "addedAt": 0, "duration": 4,
+                  "composition": { "canvasWidth": 800, "canvasHeight": 600, "layers": [
+                      { "id": "title", "name": "t", "sortIndex": 0, "kind": "image",
+                        "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "shot",
+                        "keyframes": [{ "id": "t0", "time": 0,
+                            "placement": { "height": 300, "anchor": "topLeft" } }] } ] } }
+            ],
+            "layers": [
+                { "id": "model", "name": "m", "sortIndex": 0, "kind": "model", "isEnabled": true,
+                  "startTime": 0, "duration": 4, "resourceID": "phone",
+                  "keyframes": [{ "id": "c0", "time": 0,
+                      "camera": { "yaw": 20, "distance": 0.8 }, "light": { "intensity": 2 } }] },
+                { "id": "host", "name": "h", "sortIndex": 1, "kind": "video", "isEnabled": true,
+                  "startTime": 0, "duration": 4, "resourceID": "card",
+                  "keyframes": [{ "id": "h0", "time": 0,
+                      "placement": { "height": 540, "anchor": "topLeft" } }] }
+            ]
+        });
+        std::fs::write(dir.join("metadata.json"), meta.to_string()).unwrap();
+        let answer: Value = serde_json::from_str(
+            &explain(
+                &json!({ "project": dir.to_string_lossy(), "time": 1.0 }),
+                Some(&root),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let layer = |id: &str| {
+            answer["layers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|l| l["id"] == id)
+                .unwrap()
+                .clone()
+        };
+        let model = layer("model");
+        assert_eq!(model["camera"]["yaw"], 20.0);
+        assert_eq!(
+            model["camera"]["distance"], 1.05,
+            "the floor, applied: {model}"
+        );
+        assert!(model["camera"]["distanceNote"]
+            .as_str()
+            .unwrap()
+            .contains("1.05"));
+        assert_eq!(model["light"]["intensity"], 2.0);
+        assert_eq!(model["slots"]["Screen"]["shows"], "shot");
+        assert_eq!(model["slots"]["Body"]["colorHex"], "@accent");
+        assert_eq!(
+            model["rect"]["width"], model["rect"]["height"],
+            "a model draws in a square"
+        );
+
+        let host = layer("host");
+        assert_eq!(
+            host["rect"]["height"], 540.0,
+            "a composition is placed by its canvas"
+        );
+        assert_eq!(host["rect"]["width"], 720.0, "800x600 at 540 high");
+        let inside = &host["inside"];
+        assert_eq!(inside["composition"], "card");
+        assert_eq!(inside["time"], 1.0);
+        let title = &inside["layers"][0];
+        assert_eq!(
+            title["rect"]["height"], 300.0,
+            "on the composition's own canvas"
+        );
+        assert_eq!(
+            title["onCanvas"]["height"], 270.0,
+            "and mapped through the host: 300 × 540/600"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// A malformed command is answered with what that command takes, from

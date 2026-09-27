@@ -654,8 +654,13 @@ pub fn tools(host: Host) -> Vec<Value> {
                 renderer's OWN numbers at a moment. Per layer: visible and why not, the \
                 resource shown (swap-aware), the resolved transform and the rect on the \
                 canvas in pixels, opacity, rotation, tilt, viewport, gain, the keyframes \
-                bracketing the moment, transitions and fades; per project: timing \
-                problems and validate's warnings. Defaults to the composition's midpoint.",
+                bracketing the moment, transitions and fades. A model or stage adds its \
+                camera (after its 1.05-radii floor) and light, and each slot's binding \
+                with where it lands on the canvas and how much of the frame it covers — \
+                measured by rendering, so no calibration renders are needed; a layer \
+                showing a composition adds that composition's layers at the moment, \
+                mapped onto the canvas. Per project: timing problems and validate's \
+                warnings. Defaults to the composition's midpoint.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,

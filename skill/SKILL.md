@@ -311,7 +311,10 @@ is for; the schema section says how to write it.
   `satin`, `matte`, `rubber`, `ceramic`, `lacquer`, `paper`, `glass`,
   `frosted` — and the engine owns the physics; `glass` on a `Screen`
   slot is the coat that makes a phone read as a phone. Reach for
-  `metallic`/`roughness` numbers only to tune a word.
+  `metallic`/`roughness` numbers only to tune a word. Where a screen
+  LANDS is `promo_explain` at that moment: each bound slot's rect on the
+  canvas and the share of the frame it covers, measured by rendering —
+  never fit a camera law from probe renders.
 - **Devices** (`model`) — no file and no tool: a model resource whose
   recipe is `{ "device": { "kind": "phone" } }` (tablet, laptop) is
   built at load with `Body` and `Screen` slots, and a `Deck` on the
