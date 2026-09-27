@@ -606,20 +606,65 @@ enum ResolvedFamily {
     Monospace,
 }
 
-/// UI sans-serifs in preference order — Apple first, then the common Linux
-/// and Windows faces, so a headline looks like a headline everywhere.
+/// "system": Helvetica Neue wherever it is installed — every Mac and every
+/// iPhone — so a caption is the same picture whether or not someone
+/// installed SF Pro, and the editor draws it in the same face (review
+/// 2026-09-27, P2-29). SF Pro came first here once, and a render changed
+/// with the machine's fonts. (SF itself is a variable font fontdb reads at
+/// Regular only; Helvetica Neue has every weight.) After it, Helvetica's
+/// metric twins, then the common sans faces.
 const UI_SANS: &[&str] = &[
-    "SF Pro Text",
-    "SF Pro Display",
     "Helvetica Neue",
     "Helvetica",
+    "Liberation Sans",
+    "Arimo",
+    "Nimbus Sans",
     "Inter",
     "Segoe UI",
     "Noto Sans",
     "DejaVu Sans",
-    "Liberation Sans",
     "Arial",
 ];
+
+/// "rounded": the system's rounded design, then rounded faces; a machine
+/// with none falls back to the UI sans.
+const ROUNDED: &[&str] = &[
+    ".SF NS Rounded",
+    "SF Pro Rounded",
+    "Arial Rounded MT Bold",
+    "Nunito",
+    "Varela Round",
+];
+
+/// "serif": the system's serif design (New York), then the common serifs.
+const SERIF: &[&str] = &[
+    ".New York",
+    "New York",
+    "Georgia",
+    "Times New Roman",
+    "Liberation Serif",
+    "Tinos",
+    "DejaVu Serif",
+];
+
+/// "monospaced": the system's monospace (SF Mono), then Menlo and the common
+/// monospaced faces.
+const MONO: &[&str] = &[
+    ".SF NS Mono",
+    "SF Mono",
+    "Menlo",
+    "Liberation Mono",
+    "Cousine",
+    "DejaVu Sans Mono",
+];
+
+/// The first family of `chain` this font database has.
+fn first_installed(fonts: &FontSystem, chain: &[&str]) -> Option<String> {
+    chain
+        .iter()
+        .find(|candidate| has_family(fonts, candidate))
+        .map(|family| (*family).to_string())
+}
 
 /// Lowercased with spaces, hyphens and underscores removed, so the name a
 /// project stores can be compared with the name the system installed.
@@ -707,13 +752,30 @@ fn stand_in_from(fonts: &FontSystem, name: &str, table: &[(&str, &[&str])]) -> O
 }
 
 fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFamily {
+    // The app's four system designs, each an explicit chain — the same
+    // families the app's editor draws them in — rather than whatever fontdb
+    // calls its default serif or mono, and "rounded" no longer falls
+    // through to plain sans.
     match requested {
-        Some("serif") => return ResolvedFamily::Serif,
-        Some("monospaced") | Some("mono") | Some("monospace") => return ResolvedFamily::Monospace,
+        Some("rounded") => {
+            if let Some(family) = first_installed(fonts, ROUNDED) {
+                return ResolvedFamily::Named(family);
+            }
+        }
+        Some("serif") => {
+            return first_installed(fonts, SERIF)
+                .map(ResolvedFamily::Named)
+                .unwrap_or(ResolvedFamily::Serif)
+        }
+        Some("monospaced") | Some("mono") | Some("monospace") => {
+            return first_installed(fonts, MONO)
+                .map(ResolvedFamily::Named)
+                .unwrap_or(ResolvedFamily::Monospace)
+        }
         // A named font that exists wins; one that does not falls through to
         // the UI sans below, rather than silently handing back whatever
         // fontdb happens to default to.
-        Some(name) if name != "system" && !name.is_empty() => {
+        Some(name) if name != "system" && name != "rounded" && !name.is_empty() => {
             if let Some(family) = matching_family(fonts, name) {
                 return ResolvedFamily::Named(family);
             }
@@ -723,12 +785,9 @@ fn resolve_family(fonts: &mut FontSystem, requested: Option<&str>) -> ResolvedFa
         }
         _ => {}
     }
-    for candidate in UI_SANS {
-        if has_family(fonts, candidate) {
-            return ResolvedFamily::Named((*candidate).to_string());
-        }
-    }
-    ResolvedFamily::SansSerif
+    first_installed(fonts, UI_SANS)
+        .map(ResolvedFamily::Named)
+        .unwrap_or(ResolvedFamily::SansSerif)
 }
 
 /// Process-wide font system. Discovery scans the OS font directories, which
@@ -2141,6 +2200,55 @@ mod smoothing_tests {
             let mut db = cosmic_text::fontdb::Database::new();
             db.load_font_data(include_bytes!("../fonts/Tuffy.ttf").to_vec());
             FontSystem::new_with_locale_and_db("en-US".into(), db)
+        }
+
+        /// A chain answers with its first installed family.
+        #[test]
+        fn a_chain_takes_its_first_installed_family() {
+            let fonts = fonts_with_tuffy();
+            assert_eq!(
+                first_installed(&fonts, &["Not Here", "Tuffy", "Also Not"]),
+                Some("Tuffy".to_string())
+            );
+            assert_eq!(first_installed(&fonts, &["Not Here"]), None);
+        }
+
+        /// "system" is Helvetica Neue first, on every machine: an installed
+        /// SF Pro used to change what a render looked like.
+        #[test]
+        fn system_is_helvetica_neue_before_anything_installed() {
+            assert_eq!(UI_SANS[0], "Helvetica Neue");
+            assert!(!UI_SANS.iter().any(|f| f.starts_with("SF ")), "{UI_SANS:?}");
+        }
+
+        /// On a Mac the four designs land on the faces the app's editor
+        /// draws them in: Helvetica Neue, and the system's rounded, serif
+        /// (New York) and monospaced (SF Mono) designs.
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn the_designs_are_the_systems_on_a_mac() {
+            let mut fonts = font_system().lock().unwrap();
+            let named =
+                |fonts: &mut FontSystem, wanted: &str| match resolve_family(fonts, Some(wanted)) {
+                    ResolvedFamily::Named(name) => name,
+                    other => format!("{other:?}"),
+                };
+            assert_eq!(named(&mut fonts, "system"), "Helvetica Neue");
+            assert!(
+                named(&mut fonts, "rounded").contains("Rounded"),
+                "{}",
+                named(&mut fonts, "rounded")
+            );
+            assert!(
+                named(&mut fonts, "serif").contains("New York"),
+                "{}",
+                named(&mut fonts, "serif")
+            );
+            assert!(
+                named(&mut fonts, "monospaced").contains("Mono"),
+                "{}",
+                named(&mut fonts, "monospaced")
+            );
         }
 
         /// A curated face that is absent takes the first INSTALLED stand-in,
