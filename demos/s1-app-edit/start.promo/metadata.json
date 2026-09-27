@@ -1,0 +1,98 @@
+{
+ "id": "S1",
+ "name": "Launch card",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 18,
+ "trimStart": 0,
+ "trimEnd": 0,
+ "videoDuration": 0,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1080,
+  "canvasHeight": 1080,
+  "backgroundColorHex": "10182B",
+  "fps": 30
+ },
+ "resources": [
+  {
+   "id": "shot",
+   "kind": "image",
+   "filename": "shot.png",
+   "displayName": "Shot",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1290,
+   "pixelHeight": 2796
+  }
+ ],
+ "layers": [
+  {
+   "id": "bg",
+   "name": "Background",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 6,
+   "keyframes": [
+    {
+     "id": "bg0",
+     "time": 0,
+     "colorHex": "10182B"
+    }
+   ]
+  },
+  {
+   "id": "card",
+   "name": "Screenshot",
+   "sortIndex": 1,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 6,
+   "resourceID": "shot",
+   "keyframes": [
+    {
+     "id": "card0",
+     "time": 0,
+     "placement": {
+      "height": 760,
+      "anchor": "bottom",
+      "offset": [
+       0,
+       -40
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "headline",
+   "name": "Headline",
+   "sortIndex": 2,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 6,
+   "captionText": "Ship it faster",
+   "captionStyle": {
+    "placement": {
+     "anchor": "top",
+     "offset": [
+      0,
+      90
+     ]
+    }
+   },
+   "keyframes": [
+    {
+     "id": "h0",
+     "time": 0,
+     "fontSize": 64
+    }
+   ]
+  }
+ ]
+}

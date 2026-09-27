@@ -1,0 +1,20 @@
+{
+ "mode": "app",
+ "path": true,
+ "requires": {
+  "automation": false
+ },
+ "ask": [
+  "Automation is OFF in PromoShot's Settings (the runner checks)."
+ ],
+ "why": "The app installed and registered with Automation off (review 2026-09-27, P2-35): its server answers every call with the switch to flip. A fresh agent should tell the person so, and still do the work through the CLI on PATH.",
+ "expect": {
+  "says": [
+   "Automation"
+  ],
+  "bash": [
+   "promo "
+  ],
+  "valid": true
+ }
+}

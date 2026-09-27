@@ -1,0 +1,10 @@
+{
+ "mode": "path",
+ "why": "The skill's second rung (review 2026-09-27, P2-35): the skill installed and the binaries on PATH, nothing registered. A fresh agent should find the CLI and author, check and render through it.",
+ "expect": {
+  "bash": [
+   "promo "
+  ],
+  "valid": true
+ }
+}

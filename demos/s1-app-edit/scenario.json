@@ -1,0 +1,31 @@
+{
+ "mode": "app",
+ "start": "start.promo",
+ "open": true,
+ "requires": {
+  "automation": true
+ },
+ "ask": [
+  "Automation is ON in PromoShot's Settings (the runner checks).",
+  "The runner opens out.promo in PromoShot: turn on Ask before applying in its Agent panel.",
+  "Approve this run's folder when PromoShot asks for it."
+ ],
+ "why": "The app's server with the person's project open and Ask before applying on (review 2026-09-27, P2-35) \u2014 the path no harness run had ever taken. A fresh agent should read promo_context, write through the editor's commands rather than the file, and say its change waits for the person's approval.",
+ "expect": {
+  "used": [
+   "mcp__promoshot__promo_context",
+   "mcp__promoshot__promo_upsert_keyframe|mcp__promoshot__promo_apply|mcp__promoshot__promo_upsert_layer"
+  ],
+  "not_written": [
+   "out.promo/metadata.json"
+  ],
+  "unchanged": [
+   "out.promo/metadata.json"
+  ],
+  "says": [
+   "approv",
+   "propos",
+   "accept"
+  ]
+ }
+}
