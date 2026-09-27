@@ -103,6 +103,46 @@ jobs:
           path: /tmp/sheet.png
           if-no-files-found: warn
 
+  # The Apple half: the engine's IOSurface suite, the Metal backend and the
+  # macOS-only paths compile nowhere else, and until 2026-09-27 they ran only
+  # when someone ran them by hand. The app suites stay local (their repos are
+  # not public): Scripts/gate.sh there, with its stamp, before an archive.
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master, 2026-09
+        with:
+          toolchain: 1.96.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+      - name: ffmpeg
+        run: brew install ffmpeg
+      - name: test
+        env:
+          PROMO_REQUIRE_GPU: "1"
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast 2>&1 | tee /tmp/test.log
+      - name: Name every failed test
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          log = pathlib.Path("/tmp/test.log").read_text(errors="replace") if pathlib.Path("/tmp/test.log").exists() else ""
+          def esc(s): return s.replace("%", "%25").replace("\r", "").replace("\n", " / ")
+          failed = re.findall(r"^test (\S+) \.\.\. FAILED$", log, re.M)
+          for name in failed:
+              m = re.search(r"---- " + re.escape(name) + r" stdout ----\n(.*?)(?:\n\n|\n---- |\Z)", log, re.S)
+              lines = [l.strip() for l in (m.group(1) if m else "").splitlines()]
+              keep = [l for l in lines if l and not l.startswith("note:")][:6]
+              print(f"::error title=macOS {esc(name)}::{esc(' | '.join(keep))[:1500] or 'failed'}")
+          for crate in re.findall(r"^error: could not compile `([^`]+)`", log, re.M):
+              print(f"::error title=macOS compile {esc(crate)}::could not compile")
+          print(f"::notice title=cargo test (macOS)::{len(failed)} failed test(s)")
+          PY
+
   latest-stable:
     runs-on: ubuntu-latest
     continue-on-error: true
