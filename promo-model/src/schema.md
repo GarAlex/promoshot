@@ -101,7 +101,12 @@ the same placement language media layers use — `{ "anchor": "bottom",
 box's size is the text at its fontSize plus padding, and validation names
 a height/width/mode here. With a placement present the margins keep only
 their other job, the WRAP width; without one the caption sits where the
-margins have always put it. Both fields are rung 18.
+margins have always put it. Both fields are rung 18. To MOVE a caption,
+key `placement` on its keyframes (anchor and offset again): the box
+travels between the rules' positions on the keyframes' ramps, the style's
+placement standing wherever no keyframe says otherwise — `{ "anchor":
+"left", "offset": [-400, 0] }` at 0 and `{ "anchor": "center" }` at 1.2
+flies a title in from the left.
 
 A keyframe animates a layer over its LOCAL time:
 
@@ -729,7 +734,11 @@ Semantics worth knowing:
 - Captions are placed by the subtitle margins (subtitleVerticalMargin
   measured from the TOP of the canvas) — or by `captionStyle.placement`,
   which wins and leaves the margins their wrap-width job (see the
-  typography paragraph near the top).
+  typography paragraph near the top) — or, keyframed, by `placement` on
+  the layer's keyframes, which wins over both while the layer keys one:
+  the box travels between the rules' positions. On a placed caption a
+  keyed verticalShift does nothing and a keyed horizontalShift only moves
+  where the words wrap; validation says so.
 - A caption keyframe animates its size as `fontSize`, in points. The
   LEGACY spelling reused the transform fields with absolute values —
   zoom = font size, verticalShift = vertical margin, horizontalShift =

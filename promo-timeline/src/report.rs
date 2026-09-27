@@ -1020,8 +1020,54 @@ mod tests {
         assert!(
             found
                 .iter()
-                .any(|l| l.contains("its captionStyle.placement fixes the box")),
+                .any(|l| l.contains("verticalShift moves a caption through its top margin")),
             "{found:?}"
+        );
+    }
+
+    /// The app pins a new caption keyframe's margins to the style's own;
+    /// on a placed caption those say nothing, and are no finding.
+    #[test]
+    fn margins_equal_to_the_base_style_are_no_finding() {
+        let caption = r#"{"id":"C","kind":"caption","filename":"","displayName":"title","addedAt":0,
+            "imageCuts":[],"disabledAudioTrackIndices":[],"captionText":"Hi",
+            "captionStyle":{"placement":{"anchor":"top"},"leftMargin":120,"verticalMargin":80}}"#;
+        let layers = r#"{"id":"T","name":"title","sortIndex":0,"kind":"caption","isEnabled":true,
+            "startTime":0,"duration":4,"resourceID":"C","keyframes":[
+              {"id":"K","time":1,"transitionDuration":0,"zoom":48,"verticalShift":80,"horizontalShift":120}]}"#;
+        let report = run(&project(layers, caption), None);
+        assert!(report.is_clean(), "{}", report.text());
+    }
+
+    /// A caption's keyframes place its box now (anchor and offset): that
+    /// is no finding at all, and a size on such a rule is a break — a
+    /// caption is as big as its words.
+    #[test]
+    fn a_caption_placed_by_keyframes_is_fine_and_its_sizes_are_not() {
+        let caption = r#"{"id":"C","kind":"caption","filename":"","displayName":"title","addedAt":0,
+            "imageCuts":[],"disabledAudioTrackIndices":[],"captionText":"Hi"}"#;
+        let layers = |rule: &str| {
+            format!(
+                r#"{{"id":"T","name":"title","sortIndex":0,"kind":"caption","isEnabled":true,
+                "startTime":0,"duration":4,"resourceID":"C","keyframes":[
+                  {{"id":"K","time":0,"transitionDuration":0,"placement":{rule}}}]}}"#
+            )
+        };
+        let moving = run(
+            &project(&layers(r#"{"anchor":"topLeft","offset":[10,10]}"#), caption),
+            None,
+        );
+        assert!(moving.is_clean(), "{}", moving.text());
+        let sized = run(
+            &project(&layers(r#"{"anchor":"top","height":80}"#), caption),
+            None,
+        );
+        assert!(
+            breaks(&sized)
+                .iter()
+                .any(|l| l.contains("a caption's placement reads anchor and offset only")),
+            "{}",
+            sized.text()
         );
     }
 }

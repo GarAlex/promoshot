@@ -725,6 +725,39 @@ pub fn layer_caption_values(
     Some(values(first))
 }
 
+/// Where a caption's box hangs at `time` when its keyframes carry a
+/// `placement` (review 2026-09-27, P1-20) — `None` when none does, and the
+/// style's own placement (or the margins) stand.
+///
+/// A caption's size is its text at its fontSize, so only a rule's `anchor`
+/// and `offset` are read; the box is measured by the caller, each
+/// bracketing keyframe's rule is resolved against it, and the ORIGINS are
+/// blended on the same hold-then-ease clock as every other track — so a
+/// move from `top` to `bottomRight` travels across the frame instead of
+/// snapping at the midpoint, and easing and smooth ramps apply as they do
+/// to a picture's position. Until this existed a caption could not be
+/// moved by keyframes at all once its style placed it (an agent's
+/// fly-across rendered as a caption standing still).
+pub fn caption_box_origin(
+    layer: &ProjectLayer,
+    time: f64,
+    box_size: (f64, f64),
+    canvas: (f64, f64),
+) -> Option<(f64, f64)> {
+    let sorted = sorted_by_time(&layer.keyframes, |k| k.placement.is_some());
+    let (a, b, progress) = track_window(&sorted, layer_local_time(layer, time))?;
+    let origin = |k: &ProjectLayerKeyframe| {
+        k.placement
+            .as_ref()
+            .map(|rule| rule.position_box(box_size.0, box_size.1, canvas.0, canvas.1))
+            .unwrap_or((0.0, 0.0))
+    };
+    Some((
+        blend(&sorted, a, b, progress, &|k| origin(k).0),
+        blend(&sorted, a, b, progress, &|k| origin(k).1),
+    ))
+}
+
 /// Swift `ProjectLayer.backgroundColorHex(at:defaults:)`.
 pub fn layer_background_color_hex(
     layer: &ProjectLayer,
@@ -2088,6 +2121,51 @@ mod tests {
             settings_background_color_hex(&settings, 3.0),
             settings.background_color_hex,
             "with no keyframes the flat background colour is the answer"
+        );
+    }
+}
+
+#[cfg(test)]
+mod caption_placement_tests {
+    use super::*;
+
+    fn caption(keyframes: &str) -> ProjectLayer {
+        serde_json::from_str(&format!(
+            r#"{{"id":"T","name":"title","sortIndex":0,"kind":"caption","isEnabled":true,
+                "startTime":1,"duration":6,"keyframes":[{keyframes}]}}"#
+        ))
+        .unwrap()
+    }
+
+    /// A caption placed by keyframes travels between the resolved ORIGINS:
+    /// held until the ramp into the next keyframe, then moving — here from
+    /// top-left to bottom-right of a 1000x500 canvas with a 200x100 box.
+    #[test]
+    fn a_caption_travels_between_its_keyframed_placements() {
+        let layer = caption(
+            r#"{"id":"A","time":0,"transitionDuration":0,"placement":{"anchor":"topLeft","offset":[20,10]}},
+               {"id":"B","time":4,"transitionDuration":2,"placement":{"anchor":"bottomRight","height":999}}"#,
+        );
+        let at = |t: f64| caption_box_origin(&layer, t, (200.0, 100.0), (1000.0, 500.0)).unwrap();
+        // Before and during the hold: the first rule, offset included.
+        assert_eq!(at(0.0), (20.0, 10.0));
+        assert_eq!(at(1.0 + 1.5), (20.0, 10.0));
+        // Halfway through the ramp (local 3 of 2..4): halfway between the
+        // origins; the size in the second rule is not read.
+        let (x, y) = at(1.0 + 3.0);
+        assert!((x - (20.0 + 800.0) / 2.0).abs() < 1e-9, "{x}");
+        assert!((y - (10.0 + 400.0) / 2.0).abs() < 1e-9, "{y}");
+        // After the last keyframe: bottom-right, box inside the canvas.
+        assert_eq!(at(1.0 + 5.0), (800.0, 400.0));
+    }
+
+    /// No keyframe placement: nothing to say, the style decides.
+    #[test]
+    fn a_caption_without_keyframed_placement_is_left_to_its_style() {
+        let layer = caption(r#"{"id":"A","time":0,"transitionDuration":0,"fontSize":40}"#);
+        assert_eq!(
+            caption_box_origin(&layer, 2.0, (200.0, 100.0), (1000.0, 500.0)),
+            None
         );
     }
 }

@@ -490,11 +490,15 @@ fn placement_no_ops(meta: &ProjectMetadata, out: &mut Report) {
             };
             let at = format!("layer \"{}\" at {}s", layer.name, keyframe.time);
             match layer.kind {
+                // A caption's keyframes place its box (anchor and offset,
+                // blended between keyframes); its size is its fontSize.
                 ProjectLayerKind::Caption => {
-                    out.breaks(format!(
-                        "{at}: a keyframe placement is not read on a caption — a caption's \
-                         box is placed by its captionStyle.placement (anchor and offset)"
-                    ));
+                    if rule.sizes() {
+                        out.breaks(format!(
+                            "{at}: a caption's placement reads anchor and offset only — its \
+                             size is its fontSize, so height/width/mode do nothing"
+                        ));
+                    }
                     continue;
                 }
                 ProjectLayerKind::Background | ProjectLayerKind::Audio => {
@@ -562,27 +566,47 @@ fn placement_no_ops(meta: &ProjectMetadata, out: &mut Report) {
 }
 
 /// What a caption's keyframes cannot do. Shifts move a caption through its
-/// MARGINS, and a caption whose style carries a placement is not laid out
-/// by margins, so the shifts do nothing; and a caption's `zoom` is the old
-/// spelling of `fontSize` — points, not a factor — so `zoom: 1.2` draws
-/// the words 1.2 pt tall.
+/// MARGINS, and a caption with a placement — its style's or its
+/// keyframes' — is not positioned by margins: `verticalShift` does nothing,
+/// and `horizontalShift` only moves where the words wrap. A caption's
+/// `zoom` is the old spelling of `fontSize` — points, not a factor — so
+/// `zoom: 1.2` draws the words 1.2 pt tall.
 fn caption_no_ops(meta: &ProjectMetadata, out: &mut Report) {
     for (layer, _) in placeable_layers(meta) {
         if layer.kind != ProjectLayerKind::Caption {
             continue;
         }
-        let placed = meta
-            .caption_style_for(layer)
-            .is_some_and(|style| style.placement.is_some());
+        let style = meta.caption_style_for(layer);
+        let placed = style.as_ref().is_some_and(|s| s.placement.is_some())
+            || layer.keyframes.iter().any(|k| k.placement.is_some());
+        // The app pins a caption keyframe's margins to the style's own when
+        // it creates one (a keyframe falls back to the BASE style, not to
+        // the previous keyframe), so a keyed margin equal to the base says
+        // nothing and is no finding. One that differs was meant to move it.
+        let base = crate::caption::caption_style(style.as_ref(), &meta.composition_settings);
+        let differs = |value: Option<f64>, base: f64| value.is_some_and(|v| (v - base).abs() > 0.5);
         if placed
             && layer
                 .keyframes
                 .iter()
-                .any(|k| k.horizontal_shift.is_some() || k.vertical_shift.is_some())
+                .any(|k| differs(k.vertical_shift, base.vertical_margin))
         {
             out.breaks(format!(
-                "layer \"{}\": horizontalShift/verticalShift move a caption through its margins, \
-                 and its captionStyle.placement fixes the box — the shifts do nothing",
+                "layer \"{}\": verticalShift moves a caption through its top margin, and its \
+                 placement fixes the box — the shift does nothing; key the placement's offset",
+                layer.name
+            ));
+        }
+        if placed
+            && layer
+                .keyframes
+                .iter()
+                .any(|k| differs(k.horizontal_shift, base.left_margin))
+        {
+            out.warn(format!(
+                "layer \"{}\": horizontalShift does not move a placed caption — it sets the \
+                 left margin, which only decides where the words wrap; key the placement's \
+                 offset to move it",
                 layer.name
             ));
         }

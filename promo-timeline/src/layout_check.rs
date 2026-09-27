@@ -107,7 +107,11 @@ fn caption_checks(
         let Some(b) = promo_text::measure(text, w, h, &style) else {
             continue;
         };
-        let (x0, y0, x1, y1) = (b.x, b.y, b.x + b.width, b.y + b.height);
+        // Where the keyframes put the box, when they place it — the same
+        // track the renderer draws.
+        let (bx, by) =
+            ip::caption_box_origin(layer, t, (b.width, b.height), (w, h)).unwrap_or((b.x, b.y));
+        let (x0, y0, x1, y1) = (bx, by, bx + b.width, by + b.height);
         // Past the canvas.
         let sides = [
             (-x0, "left"),

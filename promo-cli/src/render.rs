@@ -2486,6 +2486,74 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Keyframed caption placement (review 2026-09-27, P1-20): a caption
+    /// whose keyframes place it travels between the rules' ORIGINS — here
+    /// from the top-left corner to the bottom-right over a two-second ramp,
+    /// over a style that says `top` — where it used to stand still at the
+    /// style's place (an agent's fly-across rendered as a parked title).
+    /// Read by intent: the lit pixels' centre starts in the top-left
+    /// quarter, ends in the bottom-right one, and is halfway at mid-ramp.
+    #[test]
+    fn a_caption_travels_between_keyframed_placements() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-capmove-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Move","createdAt":0,"state":"recorded","minReaderVersion":18,
+                "trimStart":0,"trimEnd":3,"videoDuration":3,"subtitles":[],
+                "compositionSettings":{"canvasWidth":640,"canvasHeight":360,"backgroundColorHex":"000000",
+                  "subtitleFontSize":48,"subtitleBold":true,"subtitleColorHex":"FFFFFF",
+                  "subtitleBackgroundOpacity":0},
+                "resources":[],
+                "layers":[{"id":"L","name":"word","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":3,"captionText":"III",
+                  "captionStyle":{"alignment":"center","leftMargin":10,"rightMargin":10,
+                                  "placement":{"anchor":"top"}},
+                  "keyframes":[
+                    {"id":"A","time":0,"transitionDuration":0,
+                     "placement":{"anchor":"topLeft","offset":[20,20]}},
+                    {"id":"B","time":2,"transitionDuration":2,
+                     "placement":{"anchor":"bottomRight","offset":[-20,-20]}}]}]}"#,
+        )
+        .unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 640, 360).expect("renderer");
+        let stride = renderer.width as usize;
+        let mut centre = |time: f64| -> (f64, f64) {
+            let frame = renderer.frame_bgra(time).expect("frame");
+            let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
+            for y in 0..360 {
+                for x in 0..640 {
+                    if frame[(y * stride + x) * 4 + 2] > 128 {
+                        sx += x as f64;
+                        sy += y as f64;
+                        n += 1.0;
+                    }
+                }
+            }
+            assert!(n > 50.0, "the caption is drawn at {time}s");
+            (sx / n, sy / n)
+        };
+        let start = centre(0.0);
+        let middle = centre(1.0);
+        let end = centre(2.5);
+        assert!(
+            start.0 < 160.0 && start.1 < 90.0,
+            "starts top-left: {start:?}"
+        );
+        assert!(end.0 > 480.0 && end.1 > 270.0, "ends bottom-right: {end:?}");
+        let halfway = ((start.0 + end.0) / 2.0, (start.1 + end.1) / 2.0);
+        assert!(
+            (middle.0 - halfway.0).abs() < 12.0 && (middle.1 - halfway.1).abs() < 12.0,
+            "halfway at mid-ramp: {middle:?} vs {halfway:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Caption tilt: `tiltY` keyframes on a caption layer lean it in
     /// perspective — the lit width of a wide white word narrows against
     /// its flat twin, and its near edge stays the taller one.

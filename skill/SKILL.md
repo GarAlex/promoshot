@@ -223,6 +223,9 @@ a feature's own section rather than the whole 67 KB —
   refitted to its `placement`/`zoom` at any camera, so distance and
   `fov` change the drawing, not how big it is. To push in, key `zoom` or
   `placement` — in canvas PIXELS, never fractions of the canvas.
+- **A caption moves by keyed `placement`** — anchor and offset on its
+  keyframes; the box travels between them. Its size is its `fontSize`
+  (points, never a zoom factor), and shifts do not move a placed caption.
 
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
   fine and are the handles the tools take. When a person opens the

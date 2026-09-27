@@ -1815,6 +1815,11 @@ impl PreviewEngine {
                 frame.frame.height as f64 / scale,
             );
             let (x, y) = frame.caption_origin?;
+            // Keyframed placements move the box without touching its
+            // pixels, so the cached raster serves every frame of the move.
+            let (x, y) =
+                tl::caption_box_origin(layer, time, (w, h), (canvas.width(), canvas.height()))
+                    .unwrap_or((x, y));
             let mut quad = caption_scene_quad(x, y, w, h);
             if let Some((adjust, tint)) = self.adjust_for(layer, time) {
                 quad.adjust = adjust;
@@ -1877,12 +1882,10 @@ impl PreviewEngine {
         );
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
-        let mut quad = caption_scene_quad(
-            raster.x / scale,
-            raster.y / scale,
-            raster.width as f64 / scale,
-            raster.height as f64 / scale,
-        );
+        let (w, h) = (raster.width as f64 / scale, raster.height as f64 / scale);
+        let (x, y) = tl::caption_box_origin(layer, time, (w, h), (canvas.width(), canvas.height()))
+            .unwrap_or((raster.x / scale, raster.y / scale));
+        let mut quad = caption_scene_quad(x, y, w, h);
         if let Some((adjust, tint)) = self.adjust_for(layer, time) {
             quad.adjust = adjust;
             quad.tint_rgba = tint;
