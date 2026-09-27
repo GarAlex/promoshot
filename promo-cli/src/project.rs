@@ -45,6 +45,15 @@ impl std::fmt::Display for Unsupported {
     }
 }
 
+/// One plain path component: no folder, no `..`, not absolute.
+pub fn plain_filename(name: &str) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(
+        (parts.next(), parts.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    ) && !name.contains('\\')
+}
+
 impl Project {
     pub fn open(dir: &Path) -> Result<Self, String> {
         let meta_path = dir.join("metadata.json");
@@ -135,14 +144,43 @@ impl Project {
     /// called it missing: two resolvers disagreeing about one file, and the
     /// picture and the sound vanished with nothing saying why. Now there is
     /// one answer, and validate names the folder in the filename.
+    ///
+    /// Read as it is written: ONE plain file name, inside the folder. A
+    /// declared `../../elsewhere` or an absolute path was read wherever it
+    /// pointed, and a link in `Resources/` was followed out of the project —
+    /// so an untrusted project could read outside its folder whatever
+    /// `--root` said (review 2026-09-27, P2-38).
     pub fn resource_path(&self, resource: &ProjectResource) -> Option<PathBuf> {
+        self.resource_path_or_why(resource).ok()
+    }
+
+    /// [`Self::resource_path`], or why there is none — a reason `inspect`
+    /// and `validate` can say.
+    pub fn resource_path_or_why(&self, resource: &ProjectResource) -> Result<PathBuf, String> {
         if resource.filename.is_empty() {
-            return None;
+            return Err("it names no file".into());
         }
-        ["Resources", "Images"]
+        if !plain_filename(&resource.filename) {
+            return Err(format!(
+                "its filename \"{}\" must be one plain file name in Resources/",
+                resource.filename
+            ));
+        }
+        let candidate = ["Resources", "Images"]
             .into_iter()
             .map(|sub| self.dir.join(sub).join(&resource.filename))
             .find(|candidate| candidate.is_file())
+            .ok_or_else(|| format!("its file \"{}\" is not in Resources/", resource.filename))?;
+        let inside = std::fs::canonicalize(&self.dir)
+            .and_then(|root| std::fs::canonicalize(&candidate).map(|real| real.starts_with(root)))
+            .unwrap_or(false);
+        if !inside {
+            return Err(format!(
+                "its file \"{}\" is a link to somewhere outside the project, which is not followed",
+                resource.filename
+            ));
+        }
+        Ok(candidate)
     }
 
     /// Composition length: the furthest any layer runs, falling back to the
@@ -157,10 +195,14 @@ impl Project {
             .resource_id
             .as_ref()
             .and_then(|id| self.resource(id))?;
-        let Some(path) = self.resource_path(resource) else {
-            return Some(Unsupported::MissingFile(
-                self.dir.join("Resources").join(&resource.filename),
-            ));
+        let path = match self.resource_path_or_why(resource) {
+            Ok(path) => path,
+            Err(why) if why.contains("not in Resources/") || why.contains("names no file") => {
+                return Some(Unsupported::MissingFile(
+                    self.dir.join("Resources").join(&resource.filename),
+                ))
+            }
+            Err(why) => return Some(Unsupported::MissingResource(why)),
         };
         // Actually open a decoder rather than just checking the file exists,
         // so `inspect` can say "ffmpeg not found" or "no video stream"
@@ -270,5 +312,47 @@ impl Project {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A resource is read inside its project: one plain file name, and a
+    /// link that leads out of the folder is not followed (review
+    /// 2026-09-27, P2-38) — an untrusted project read whatever it named.
+    #[test]
+    fn a_resource_is_read_inside_its_project() {
+        let root = std::env::temp_dir().join(format!("promo-fence-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Fenced.promo");
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(root.join("secret.png"), b"outside").unwrap();
+        std::fs::write(dir.join("Resources/own.png"), b"inside").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(root.join("secret.png"), dir.join("Resources/link.png"))
+            .unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"F","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":0,
+                "videoDuration":0,"subtitles":[],"compositionSettings":{"canvasWidth":64,"canvasHeight":64},
+                "resources":[
+                  {"id":"up","kind":"image","filename":"../../secret.png","displayName":"a","addedAt":0},
+                  {"id":"abs","kind":"image","filename":"/etc/hosts","displayName":"b","addedAt":0},
+                  {"id":"link","kind":"image","filename":"link.png","displayName":"c","addedAt":0},
+                  {"id":"own","kind":"image","filename":"own.png","displayName":"d","addedAt":0}],
+                "layers":[]}"#,
+        )
+        .unwrap();
+        let project = Project::open(&dir).unwrap();
+        let path = |id: &str| project.resource_path_or_why(project.resource(id).unwrap());
+        assert!(path("up").unwrap_err().contains("one plain file name"));
+        assert!(path("abs").unwrap_err().contains("one plain file name"));
+        #[cfg(unix)]
+        assert!(path("link").unwrap_err().contains("outside the project"));
+        assert!(path("own").is_ok());
+        assert!(plain_filename("shot.png") && !plain_filename("a/b.png") && !plain_filename(".."));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

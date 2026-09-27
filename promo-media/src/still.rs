@@ -145,7 +145,7 @@ fn to_srgb(icc: &[u8], rgba: &[u8]) -> Option<Vec<u8>> {
 fn heif_as_png(path: &Path) -> Result<Vec<u8>, MediaError> {
     let output = Command::new("ffmpeg")
         .args(["-v", "error", "-i"])
-        .arg(path)
+        .arg(crate::tool_path(path))
         .args(["-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"])
         .output()
         .map_err(|e| match e.kind() {

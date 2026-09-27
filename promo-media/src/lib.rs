@@ -162,6 +162,18 @@ impl TrackSelection {
     }
 }
 
+/// A path as ffmpeg and ffprobe read it: absolute, or `./` in front. A
+/// bare relative name starting with `-` is read as an option, and one like
+/// `concat:list` or `http:host` as a protocol — an agent names these paths
+/// (review 2026-09-27, P2-38).
+pub fn tool_path(path: &Path) -> std::ffi::OsString {
+    if path.is_absolute() || path.starts_with(".") {
+        path.as_os_str().to_owned()
+    } else {
+        Path::new(".").join(path).into_os_string()
+    }
+}
+
 pub trait AudioReader: Send + Sync {
     /// `None` when the asset carries no audio track — which is not an error,
     /// it is most screen recordings.

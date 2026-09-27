@@ -21,11 +21,10 @@ fn required_file(args: &Value) -> Result<PathBuf, String> {
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .ok_or("`file` is required")?;
-    let path = PathBuf::from(path);
-    if !path.exists() {
-        return Err(format!("file {} does not exist", path.display()));
-    }
-    Ok(path)
+    // The real, absolute path: what ffprobe and ffmpeg are handed, where
+    // a bare name starting with `-` would be an option (review 2026-09-27,
+    // P2-38) — and what the served root is checked against.
+    std::fs::canonicalize(path).map_err(|_| format!("file {path} does not exist"))
 }
 
 /// The facts, distilled: ffprobe's firehose reduced to what an authoring

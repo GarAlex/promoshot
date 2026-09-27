@@ -303,23 +303,32 @@ where
     match name {
         "promo_schema" => Ok(promo_model::SCHEMA_QUICK.to_string()),
         "promo_media_probe" => {
+            media_fence(args, config)?;
             let is_model = args
                 .get("file")
                 .and_then(Value::as_str)
                 .is_some_and(|f| f.to_ascii_lowercase().ends_with(".glb"));
             if is_model {
-                let file = args["file"].as_str().unwrap_or_default().to_string();
+                let file = args["file"].as_str().unwrap_or_default();
+                let file = std::fs::canonicalize(file)
+                    .map(|p| p.display().to_string())
+                    .map_err(|_| format!("file {file} does not exist"))?;
                 run(config, &["model".to_string(), file, "--json".into()])
             } else {
                 media::probe_many(args)
             }
         }
         "promo_media_turntable" => {
+            media_fence(args, config)?;
             let file = args
                 .get("file")
                 .and_then(Value::as_str)
                 .ok_or("promo_media_turntable: `file` is required")?
                 .to_string();
+            // Absolute and real, so the CLI never reads it as a flag.
+            let file = std::fs::canonicalize(&file)
+                .map(|p| p.display().to_string())
+                .map_err(|_| format!("file {file} does not exist"))?;
             let stem = Path::new(&file)
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -348,10 +357,22 @@ where
             }
             run(config, &argv)
         }
-        "promo_media_filmstrip" => media::filmstrip(args, &config.workspace),
-        "promo_media_silences" => media::silences(args),
-        "promo_media_scenes" => media::scenes(args),
-        "promo_transcribe" => media::transcribe(args),
+        "promo_media_filmstrip" => {
+            media_fence(args, config)?;
+            media::filmstrip(args, &config.workspace)
+        }
+        "promo_media_silences" => {
+            media_fence(args, config)?;
+            media::silences(args)
+        }
+        "promo_media_scenes" => {
+            media_fence(args, config)?;
+            media::scenes(args)
+        }
+        "promo_transcribe" => {
+            media_fence(args, config)?;
+            media::transcribe(args)
+        }
         "promo_explain" => {
             let answer = promo_author::explain(args, config.root.as_deref())?;
             // A model showing something on a slot: where it lands is the
@@ -602,6 +623,35 @@ pub(crate) fn exports_dir(project: &str) -> std::path::PathBuf {
         .map(Path::to_path_buf)
         .unwrap_or_default()
         .join(format!("{name} Exports"))
+}
+
+/// A media tool reads the files it is named inside `--root` when one is
+/// served, as a project tool does (review 2026-09-27, P2-38) — the media
+/// tools read whatever they were told, from anywhere. A file that is not
+/// there is left to the tool, which says so.
+fn media_fence(args: &Value, config: &Config) -> Result<(), String> {
+    let Some(root) = &config.root else {
+        return Ok(());
+    };
+    let root = std::fs::canonicalize(root).map_err(|e| format!("--root: {e}"))?;
+    let mut named: Vec<&str> = Vec::new();
+    if let Some(file) = args.get("file").and_then(Value::as_str) {
+        named.push(file);
+    }
+    if let Some(list) = args.get("files").and_then(Value::as_array) {
+        named.extend(list.iter().filter_map(Value::as_str));
+    }
+    for raw in named {
+        if let Ok(real) = std::fs::canonicalize(raw) {
+            if !real.starts_with(&root) {
+                return Err(format!(
+                    "file `{raw}` is outside the served root `{}`",
+                    root.display()
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// An explicit output path wins; otherwise the project's exports folder,
@@ -1120,6 +1170,48 @@ mod tests {
         );
         std::fs::remove_dir_all(&inside).unwrap();
         std::fs::remove_dir_all(&outside).unwrap();
+    }
+
+    /// The media tools read inside the served root too, and hand ffprobe
+    /// a real absolute path, never a bare name that could be an option
+    /// (review 2026-09-27, P2-38).
+    #[test]
+    fn media_tools_read_inside_the_root() {
+        let inside = std::env::temp_dir().join(format!("mcp-media-in-{}", std::process::id()));
+        let outside = std::env::temp_dir().join(format!("mcp-media-out-{}", std::process::id()));
+        std::fs::create_dir_all(&inside).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("clip.mp4"), b"not really").unwrap();
+        let fenced = Config {
+            root: Some(inside.clone()),
+            ..config()
+        };
+        for (name, arguments) in [
+            (
+                "promo_media_probe",
+                serde_json::json!({ "file": outside.join("clip.mp4") }),
+            ),
+            (
+                "promo_media_probe",
+                serde_json::json!({ "files": [outside.join("clip.mp4")] }),
+            ),
+            (
+                "promo_media_scenes",
+                serde_json::json!({ "file": outside.join("clip.mp4") }),
+            ),
+            (
+                "promo_media_turntable",
+                serde_json::json!({ "file": outside.join("clip.mp4") }),
+            ),
+        ] {
+            let req = serde_json::json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                "params": { "name": name, "arguments": arguments } });
+            let answer = handle(&req, &fenced, &never).unwrap();
+            let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+            assert!(text.contains("outside the served root"), "{name}: {text}");
+        }
+        let _ = std::fs::remove_dir_all(&inside);
+        let _ = std::fs::remove_dir_all(&outside);
     }
 
     /// The shipped skill (skill/SKILL.md) is the workflow layer over this

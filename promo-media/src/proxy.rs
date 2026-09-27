@@ -106,7 +106,7 @@ pub fn ensure(cache_dir: &Path, source: &Path, long_edge: u32) -> Result<PathBuf
     );
     let status = Command::new("ffmpeg")
         .args(["-v", "error", "-nostdin", "-y", "-i"])
-        .arg(source)
+        .arg(crate::tool_path(source))
         .args([
             "-an",
             "-vf",
@@ -124,7 +124,7 @@ pub fn ensure(cache_dir: &Path, source: &Path, long_edge: u32) -> Result<PathBuf
             "-movflags",
             "+faststart",
         ])
-        .arg(&temp)
+        .arg(crate::tool_path(&temp))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())

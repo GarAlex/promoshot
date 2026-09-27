@@ -102,7 +102,7 @@ impl FfmpegDecoder {
         }
         command
             .arg("-i")
-            .arg(&self.path)
+            .arg(crate::tool_path(&self.path))
             .args([
                 "-f",
                 "rawvideo",
@@ -276,7 +276,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
             "-of",
             "default=noprint_wrappers=1",
         ])
-        .arg(path)
+        .arg(crate::tool_path(path))
         .output()
         .map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => MediaError::ToolMissing(
@@ -342,7 +342,7 @@ fn probe_rotation(path: &Path) -> i32 {
             "-of",
             "default=noprint_wrappers=1:nokey=1",
         ])
-        .arg(path)
+        .arg(crate::tool_path(path))
         .output()
     else {
         return 0;
@@ -389,7 +389,9 @@ impl AudioReader for FfmpegAudioReader {
             return Ok(None);
         }
         let mut command = Command::new("ffmpeg");
-        command.args(["-v", "error", "-nostdin", "-i"]).arg(path);
+        command
+            .args(["-v", "error", "-nostdin", "-i"])
+            .arg(crate::tool_path(path));
         if let Some(filter) = crate::atempo_chain(speed) {
             command.args(["-filter:a", &filter]);
         }
@@ -478,7 +480,9 @@ impl AudioReader for FfmpegAudioReader {
             return self.read_at_speed(path, sample_rate, channels, speed);
         }
         let mut command = Command::new("ffmpeg");
-        command.args(["-v", "error", "-nostdin", "-i"]).arg(path);
+        command
+            .args(["-v", "error", "-nostdin", "-i"])
+            .arg(crate::tool_path(path));
         if kept.len() == 1 {
             command.args(["-map", &format!("0:a:{}", kept[0])]);
             if let Some(filter) = &chain {
@@ -550,7 +554,7 @@ fn audio_stream_count(path: &Path) -> usize {
             "-of",
             "default=noprint_wrappers=1:nokey=1",
         ])
-        .arg(path)
+        .arg(crate::tool_path(path))
         .output()
     else {
         return 0;
@@ -576,7 +580,7 @@ fn has_audio_stream(path: &Path) -> bool {
             "-of",
             "default=noprint_wrappers=1:nokey=1",
         ])
-        .arg(path)
+        .arg(crate::tool_path(path))
         .output()
     else {
         return false;
@@ -716,7 +720,7 @@ impl FfmpegEncoder {
             command.args(["-c:a", "aac", "-b:a", "192k", "-shortest"]);
         }
         let child = command
-            .arg(path)
+            .arg(crate::tool_path(path))
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|e| match e.kind() {

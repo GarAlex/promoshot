@@ -128,13 +128,29 @@ impl fmt::Debug for Texture {
 pub enum ModelError {
     Decode(String),
     Empty,
+    /// Over one of the limits a model is held to — see [`MAX_GLB_BYTES`].
+    TooLarge(String),
 }
+
+/// The limits a `.glb` is held to before anything is allocated for it
+/// (review 2026-09-27, P2-38). A file of any size, a node tree that loops
+/// back on itself, or accessors declaring more than any scene needs were
+/// read for as long as memory lasted — an untrusted project could take the
+/// renderer down with one resource. The largest model file opened.
+pub const MAX_GLB_BYTES: usize = 512 << 20;
+/// The most nodes a scene may have; a tree that loops trips it too.
+pub const MAX_NODES: usize = 100_000;
+/// The most vertices across every triangle primitive.
+pub const MAX_VERTICES: usize = 20_000_000;
+/// The most indices (three per triangle) across every primitive.
+pub const MAX_INDICES: usize = 60_000_000;
 
 impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ModelError::Decode(why) => write!(f, "model: {why}"),
             ModelError::Empty => write!(f, "model: no geometry in the default scene"),
+            ModelError::TooLarge(why) => write!(f, "model: {why}"),
         }
     }
 }
@@ -299,6 +315,13 @@ fn flat_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
 impl Model {
     /// Decode a `.glb` (or a self-contained `.gltf` with data URIs).
     pub fn from_glb(bytes: &[u8]) -> Result<Model, ModelError> {
+        if bytes.len() > MAX_GLB_BYTES {
+            return Err(ModelError::TooLarge(format!(
+                "the file is {} MB; a model may be at most {} MB",
+                bytes.len() >> 20,
+                MAX_GLB_BYTES >> 20
+            )));
+        }
         let (document, buffers, images) =
             gltf::import_slice(bytes).map_err(|e| ModelError::Decode(e.to_string()))?;
 
@@ -350,7 +373,13 @@ impl Model {
         let mut meshes = Vec::new();
         let mut stack: Vec<(gltf::Node, Option<usize>)> =
             scene.nodes().map(|n| (n, None)).collect();
+        let (mut vertices, mut indices_read) = (0usize, 0usize);
         while let Some((node, parent)) = stack.pop() {
+            if nodes.len() >= MAX_NODES {
+                return Err(ModelError::TooLarge(format!(
+                    "more than {MAX_NODES} nodes — or a node tree that loops back on itself"
+                )));
+            }
             let (translation, rotation, scale) = node.transform().decomposed();
             let index = nodes.len();
             nodes.push(Node {
@@ -364,6 +393,21 @@ impl Model {
                 for primitive in mesh.primitives() {
                     if primitive.mode() != gltf::mesh::Mode::Triangles {
                         continue;
+                    }
+                    // Counted from the accessors BEFORE reading them, so a
+                    // declared count is refused rather than allocated.
+                    let count = primitive
+                        .get(&gltf::Semantic::Positions)
+                        .map(|a| a.count())
+                        .unwrap_or(0);
+                    vertices = vertices.saturating_add(count);
+                    indices_read = indices_read
+                        .saturating_add(primitive.indices().map(|a| a.count()).unwrap_or(count));
+                    if vertices > MAX_VERTICES || indices_read > MAX_INDICES {
+                        return Err(ModelError::TooLarge(format!(
+                            "more than {MAX_VERTICES} vertices or {} triangles",
+                            MAX_INDICES / 3
+                        )));
                     }
                     let reader = primitive.reader(|b| buffers.get(b.index()).map(|d| &d.0[..]));
                     let Some(positions) = reader.read_positions() else {
@@ -2029,6 +2073,30 @@ impl GlbGeometry {
 
 #[cfg(test)]
 mod tests {
+    /// A model is held to its limits before anything is allocated for it
+    /// (review 2026-09-27, P2-38): a file over the byte cap is refused
+    /// unread, and a node tree that loops back on itself ends in an error
+    /// rather than growing until memory runs out.
+    #[test]
+    fn a_model_is_held_to_its_limits() {
+        // Zeroed pages are mapped lazily: this costs nothing until read,
+        // and the cap is checked before a byte is.
+        let huge = vec![0u8; MAX_GLB_BYTES + 1];
+        match Model::from_glb(&huge) {
+            Err(ModelError::TooLarge(why)) => assert!(why.contains("MB"), "{why}"),
+            other => panic!("{:?}", other.map(|_| "a model")),
+        }
+        let looped = br#"{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"children":[0]}]}"#;
+        match Model::from_glb(looped) {
+            Err(ModelError::TooLarge(_)) | Err(ModelError::Decode(_)) => {}
+            other => panic!(
+                "a looping tree must end in an error: {:?}",
+                other.map(|_| "a model")
+            ),
+        }
+    }
+
     use super::*;
 
     #[test]
