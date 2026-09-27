@@ -657,9 +657,63 @@ impl Document {
     /// format carries unread, enum values it rewrote as their fallback — is
     /// carried over from the document (review 2026-09-27, P2-45).
     pub fn replace(&mut self, json: &str) -> Result<bool, String> {
-        let mut meta = ProjectMetadata::from_json(json)
+        let meta = ProjectMetadata::from_json(json)
             .map_err(|e| e.to_string())?
             .lifted();
+        self.take(meta)
+    }
+
+    /// `replace` for a writer that knows what it changed: the top-level
+    /// layers and resources `json` names swap in whole, matched by id, and
+    /// its `compositionSettings` and `updatedAt` when present — carried
+    /// like any replace, everything else as the document holds it. The
+    /// apps' sync after an edit, without encoding and parsing the whole
+    /// project each time (review 2026-09-27, P3-46). A layer or resource
+    /// the document does not have is refused: that is a structural change,
+    /// and the writer replaces the whole document instead.
+    pub fn replace_parts(&mut self, json: &str) -> Result<bool, String> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Parts {
+            #[serde(default)]
+            layers: Vec<promo_model::ProjectLayer>,
+            #[serde(default)]
+            resources: Vec<promo_model::ProjectResource>,
+            composition_settings: Option<promo_model::CompositionSettings>,
+            updated_at: Option<f64>,
+        }
+        let parts: Parts = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let mut meta = self.meta.clone();
+        for layer in parts.layers {
+            let slot = meta
+                .layers
+                .iter_mut()
+                .flatten()
+                .find(|l| l.id == layer.id)
+                .ok_or_else(|| format!("no layer {} to replace", layer.id))?;
+            *slot = layer;
+        }
+        for resource in parts.resources {
+            let slot = meta
+                .resources
+                .iter_mut()
+                .flatten()
+                .find(|r| r.id == resource.id)
+                .ok_or_else(|| format!("no resource {} to replace", resource.id))?;
+            *slot = resource;
+        }
+        if let Some(settings) = parts.composition_settings {
+            meta.composition_settings = settings;
+        }
+        if parts.updated_at.is_some() {
+            meta.updated_at = parts.updated_at;
+        }
+        self.take(meta.lifted())
+    }
+
+    /// The lossy writer's new copy as the document: carried, and a step
+    /// when it changed anything but the save's timestamp.
+    fn take(&mut self, mut meta: ProjectMetadata) -> Result<bool, String> {
         self.carry_unread_into(&mut meta);
         if meta == self.meta {
             return Ok(false);
@@ -2486,6 +2540,59 @@ mod tests {
         assert_eq!(saved["futureTop"], "kept");
         assert_eq!(saved["layers"][0]["futureLayer"], 1);
         assert!(saved["minReaderVersion"].as_u64().is_some());
+    }
+
+    /// A writer that names only what it changed lands exactly where a whole
+    /// replace would: the same document, one step, the unread keys of the
+    /// swapped layer carried; a timestamp alone is no step; a layer the
+    /// document lacks is refused (review 2026-09-27, P3-46).
+    #[test]
+    fn replacing_parts_lands_where_a_whole_replace_would() {
+        let project = |name: &str, color: &str, updated: f64| {
+            serde_json::json!({ "id": "P", "name": "P", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                "updatedAt": updated,
+                "compositionSettings": { "backgroundColorHex": color },
+                "layers": [
+                    { "id": "A", "name": name, "sortIndex": 0, "kind": "image",
+                      "isEnabled": true, "startTime": 0, "duration": 2, "keyframes": [] },
+                    { "id": "B", "name": "B", "sortIndex": 1, "kind": "image",
+                      "isEnabled": true, "startTime": 0, "duration": 2, "keyframes": [] }
+                ],
+                "resources": [] })
+        };
+        let file = {
+            let mut file = project("A", "000000", 1.0);
+            file["layers"][0]["future"] = serde_json::json!(true);
+            file
+        };
+        let mut whole = Document::open(&project("A", "000000", 1.0).to_string()).unwrap();
+        whole.absorb_unread(&file.to_string()).unwrap();
+        let mut parts = Document::open(&project("A", "000000", 1.0).to_string()).unwrap();
+        parts.absorb_unread(&file.to_string()).unwrap();
+
+        let edited = project("Title", "FF0000", 2.0);
+        assert!(whole.replace(&edited.to_string()).unwrap());
+        let changed = serde_json::json!({
+            "layers": [edited["layers"][0].clone()],
+            "compositionSettings": edited["compositionSettings"].clone(),
+            "updatedAt": 2.0,
+        });
+        assert!(parts.replace_parts(&changed.to_string()).unwrap());
+        assert_eq!(parts.to_json().unwrap(), whole.to_json().unwrap());
+        let now: serde_json::Value = serde_json::from_str(&parts.to_json().unwrap()).unwrap();
+        assert_eq!(now["layers"][0]["future"], true, "carried");
+        assert!(parts.can_undo());
+
+        let steps = parts.undo.len();
+        let later = serde_json::json!({ "updatedAt": 3.0 });
+        assert!(!parts.replace_parts(&later.to_string()).unwrap());
+        assert_eq!(parts.undo.len(), steps, "a timestamp is no step");
+
+        let stranger = serde_json::json!({ "layers": [{ "id": "Z", "name": "Z", "sortIndex": 0,
+            "kind": "image", "isEnabled": true, "startTime": 0, "duration": 2, "keyframes": [] }] });
+        assert!(parts.replace_parts(&stranger.to_string()).is_err());
+        assert_eq!(parts.undo.len(), steps, "refused, untouched");
     }
 
     /// Another writer changed the file while the app had it open: the
