@@ -516,7 +516,16 @@ fn fenced_project(args: &Value, config: &Config) -> Result<String, String> {
         .get("project")
         .and_then(Value::as_str)
         .ok_or("`project` is required")?;
-    let path = std::fs::canonicalize(raw).map_err(|e| format!("project `{raw}`: {e}"))?;
+    let path = std::fs::canonicalize(raw).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!(
+                "no project folder at `{raw}` — create one with promo_init (or promo_slideshow), \
+                 in the folder promo_workspace names"
+            )
+        } else {
+            format!("project `{raw}`: {e}")
+        }
+    })?;
     if let Some(root) = &config.root {
         let root = std::fs::canonicalize(root).map_err(|e| format!("--root: {e}"))?;
         if !path.starts_with(&root) {
@@ -628,6 +637,25 @@ mod tests {
         let text = answer["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.starts_with("unknown tool `promo_open`"), "{text}");
         assert!(!ran);
+    }
+
+    /// A project that is not there says how to make one — the refusal
+    /// used to be the OS's "No such file or directory" (review 2026-09-27,
+    /// P2-33).
+    #[test]
+    fn a_missing_project_says_how_to_make_one() {
+        let req = serde_json::json!({ "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+            "params": { "name": "promo_inspect", "arguments": { "project": "/nowhere/Gone.promo" } } });
+        let answer = handle(&req, &config(), &never).unwrap();
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("no project folder at `/nowhere/Gone.promo`"),
+            "{text}"
+        );
+        assert!(
+            text.contains("promo_init") && text.contains("promo_workspace"),
+            "{text}"
+        );
     }
 
     /// ProRes is a QuickTime movie on both servers: the default name is

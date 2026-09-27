@@ -786,6 +786,80 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
     ))
 }
 
+/// What a command of `kind` takes, from the editor's own Command schema —
+/// its fields by name, the required ones first — or, for a kind no command
+/// has, the kinds there are. An apply error used to point at
+/// promo_schema_types: 80 KB to find one command's fields in.
+fn command_hint(kind: &str) -> String {
+    let schema = promo_editor::command_schema();
+    let variants: Vec<Value> = schema
+        .get("oneOf")
+        .or_else(|| schema.get("anyOf"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let tag = |variant: &Value| -> Option<String> {
+        let kind = variant.pointer("/properties/kind")?;
+        kind.get("const")
+            .and_then(Value::as_str)
+            .or_else(|| {
+                kind.get("enum")
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.first())
+                    .and_then(Value::as_str)
+            })
+            .map(String::from)
+    };
+    let mut kinds: Vec<String> = variants.iter().filter_map(tag).collect();
+    kinds.sort();
+    let Some(variant) = variants.iter().find(|v| tag(v).as_deref() == Some(kind)) else {
+        return if kind == "?" {
+            format!("every command names its `kind`: {}", kinds.join(", "))
+        } else {
+            format!(
+                "`{kind}` is not a command — the commands are {}",
+                kinds.join(", ")
+            )
+        };
+    };
+    let required: Vec<&str> = variant
+        .get("required")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .filter(|k| *k != "kind")
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut optional: Vec<&str> = variant
+        .get("properties")
+        .and_then(Value::as_object)
+        .map(|p| {
+            p.keys()
+                .map(String::as_str)
+                .filter(|k| *k != "kind" && !required.contains(k))
+                .collect()
+        })
+        .unwrap_or_default();
+    optional.sort_unstable();
+    let mut parts = Vec::new();
+    if !required.is_empty() {
+        parts.push(format!("needs {}", required.join(", ")));
+    }
+    if !optional.is_empty() {
+        parts.push(format!("may take {}", optional.join(", ")));
+    }
+    if parts.is_empty() {
+        format!("`{kind}` takes nothing but its kind")
+    } else {
+        format!(
+            "`{kind}` {} (a field's own shape is in promo_schema_types)",
+            parts.join("; ")
+        )
+    }
+}
+
 /// The whole vocabulary through one door (REVIEW-2026-09 P2): a batch of
 /// promo-editor `Command`s applied to the file as ONE atomic group — every
 /// command succeeds or the file is untouched — through the same `Document`
@@ -833,9 +907,9 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
         .map(|(i, c)| {
             serde_json::from_value(c.clone()).map_err(|e| {
                 format!(
-                    "commands[{i}] ({}): {e} — the tool names the commands, \
-                         promo_schema_types has the shapes",
-                    kinds[i]
+                    "commands[{i}] ({}): {e} — {}",
+                    kinds[i],
+                    command_hint(&kinds[i])
                 )
             })
         })
@@ -2119,6 +2193,47 @@ mod tests {
             "keyframes read in time order"
         );
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A malformed command is answered with what that command takes, from
+    /// the Command schema, and an unknown kind with the kinds there are —
+    /// the error used to point at promo_schema_types, 80 KB (review
+    /// 2026-09-27, P2-33).
+    #[test]
+    fn a_bad_command_names_what_it_takes() {
+        let root = scratch();
+        let dir = root.join("Hint.promo");
+        let project = dir.to_string_lossy().to_string();
+        init(
+            &json!({"project": project, "canvas": "640x360"}),
+            Some(&root),
+        )
+        .unwrap();
+        let unknown = apply(
+            &json!({"project": project, "commands": [{"kind": "explodeLayer"}]}),
+            Some(&root),
+        )
+        .unwrap_err();
+        assert!(
+            unknown.contains("`explodeLayer` is not a command"),
+            "{unknown}"
+        );
+        assert!(
+            unknown.contains("renameLayer"),
+            "the kinds there are: {unknown}"
+        );
+        let short = apply(
+            &json!({"project": project, "commands": [{"kind": "renameLayer"}]}),
+            Some(&root),
+        )
+        .unwrap_err();
+        assert!(short.contains("`renameLayer` needs"), "{short}");
+        assert!(short.contains("layerID"), "its fields by name: {short}");
+        assert!(
+            !short.contains("promo_schema_types has the shapes"),
+            "{short}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// REVIEW A1's done-when: through tools alone an agent deletes,

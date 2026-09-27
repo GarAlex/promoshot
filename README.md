@@ -136,7 +136,7 @@ Claude Code / Cursor / any `mcp.json`:
 ```json
 {
   "mcpServers": {
-    "promoshot": {
+    "promoshot-headless": {
       "command": "/ABS/PATH/target/release/promoshot-mcp",
       "args": ["--workspace", "/ABS/PATH/Promo", "--root", "/ABS/PATH/Promo"]
     }
@@ -157,7 +157,7 @@ Client one-liners:
 claude mcp add promoshot-headless /ABS/PATH/target/release/promoshot-mcp
 
 # Grok Build
-grok mcp add promoshot -- /ABS/PATH/target/release/promoshot-mcp \
+grok mcp add promoshot-headless -- /ABS/PATH/target/release/promoshot-mcp \
   --workspace /ABS/PATH/Promo --root /ABS/PATH/Promo
 grok inspect   # confirms the server registered
 
@@ -165,6 +165,20 @@ grok inspect   # confirms the server registered
 docker build -t promoshot-mcp .
 # then command: docker, args: ["run","-i","--rm","-v","/ABS/PATH/Promo:/projects","promoshot-mcp"]
 ```
+
+**On a Mac with PromoShot 3.0 installed**, the app is a server too — the
+same tools, with the person's open document, undo and approvals behind
+them. Switch Automation on in PromoShot's Settings, then register the app
+itself; it launches when the client starts it:
+
+```bash
+claude mcp add promoshot -- "/Applications/PromoShot.app/Contents/MacOS/PromoShot" --mcp-stdio
+```
+
+Settings ▸ Automation shows that line with this Mac's own path, and the
+URL form for clients that take one. `promoshot` names the app and
+`promoshot-headless` the binary, so both can be registered side by side;
+the skill asks which to use when both are there.
 
 **3. Skill (the workflow)**
 
@@ -294,7 +308,7 @@ docker build -t promoshot-mcp .
 ```json
 {
   "mcpServers": {
-    "promoshot": {
+    "promoshot-headless": {
       "command": "docker",
       "args": ["run", "-i", "--rm",
                "-v", "/path/to/your/projects:/projects",
