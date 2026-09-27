@@ -95,8 +95,8 @@
    "captionText": "Now available",
    "captionStyle": {
     "alignment": "center",
-    "subtitleFontSize": 92,
-    "subtitleBold": true,
+    "fontSize": 92,
+    "isBold": true,
     "placement": {
      "anchor": "center",
      "offset": [

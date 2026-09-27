@@ -75,8 +75,8 @@
    "captionText": "Every theme,\nevery angle.",
    "captionStyle": {
     "alignment": "leading",
-    "subtitleFontSize": 72,
-    "subtitleBold": true,
+    "fontSize": 72,
+    "isBold": true,
     "placement": {
      "anchor": "left",
      "offset": [
@@ -109,8 +109,8 @@
    "captionText": "A .glb on a layer. The palette paints it; a shot fills its screen.",
    "captionStyle": {
     "alignment": "leading",
-    "subtitleFontSize": 30,
-    "subtitleColorHex": "A9B7D6",
+    "fontSize": 30,
+    "textColorHex": "A9B7D6",
     "placement": {
      "anchor": "left",
      "offset": [

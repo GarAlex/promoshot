@@ -20,7 +20,7 @@ const USAGE: &str = "\
 promo — render a PromoShot project folder
 
 USAGE:
-    promo validate <project-dir>
+    promo validate <project-dir> [--strict] [--json]
     promo schema [--full|--types]
     promo skill [install [--home DIR | --into DIR] [--dry-run]]
         print the agent skill, or install it for every agent tool found
@@ -49,9 +49,11 @@ OPTIONS:
     --size <WxH>   Output size (default: the project's canvas size)
     --json         Machine output: one JSON object on stdout (errors too)
 
-    `validate` decodes the project, resolves its attachments and reports what
-    the renderer would silently correct. Exit 0 when it is clean, 2 when the
-    project cannot be decoded at all.
+    `validate` decodes the project and reports, first, anything that will not
+    render or has no effect — a field nothing reads, a value that does
+    nothing where it is, missing media; the answer then starts NOT OK — and
+    then what the renderer adjusts (warnings). It exits 1 when the project
+    cannot be decoded; with --strict, also when anything is reported.
 
     `schema` prints the authoring subset plus four complete recipes — the
     same text the app's `promo_schema` tool serves. `schema --full` is the
@@ -74,7 +76,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     match run(&args) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(e) => {
             // With --json anywhere on the line, the failure is machine
             // output too: one object on stdout, the prose on stderr, the
@@ -88,7 +90,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(args: &[String]) -> Result<(), String> {
+fn run(args: &[String]) -> Result<ExitCode, String> {
     let command = args[0].as_str();
     let rest = &args[1..];
     // Describes the FORMAT, not a project, so it takes no directory — and
@@ -105,12 +107,12 @@ fn run(args: &[String]) -> Result<(), String> {
         } else {
             print!("{}", promo_model::SCHEMA_QUICK);
         }
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
     }
     // The skill travels with the binary: printed, or installed for every
     // agent tool found under the home folder. No project either.
     if command == "skill" {
-        return skill(rest);
+        return skill(rest).map(|()| ExitCode::SUCCESS);
     }
     let dir = rest
         .first()
@@ -127,13 +129,24 @@ fn run(args: &[String]) -> Result<(), String> {
             _ => turntable(file, &opts),
         }?;
         println!("{answer}");
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
     }
     let project = Project::open(Path::new(dir))?;
 
+    // One report, printed once — text or JSON — and with --strict the exit
+    // code says whether it had anything in it.
+    if command == "validate" {
+        let report = validation(&project);
+        println!("{}", report_answer(&report, &opts));
+        return Ok(if opts.strict && !report.is_clean() {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        });
+    }
+
     let answer = match command {
         "inspect" => inspect(&project, &opts),
-        "validate" => validate(&project, &opts),
         "proxy" => build_proxies(&project, &opts),
         "still" => still(&project, &opts),
         "frames" => frames(&project, &opts),
@@ -142,7 +155,7 @@ fn run(args: &[String]) -> Result<(), String> {
         other => Err(format!("unknown command `{other}`\n\n{USAGE}")),
     }?;
     println!("{answer}");
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 /// The shipped skill, the workflow layer over the tools.
@@ -262,6 +275,9 @@ fn home_dir() -> Option<PathBuf> {
 #[derive(Default)]
 struct Options {
     json: bool,
+    /// `validate`: exit 1 when anything is reported, not only on a decode
+    /// failure — for a script or an agent that gates on the exit code.
+    strict: bool,
     out: Option<PathBuf>,
     count: Option<u32>,
     time: Option<f64>,
@@ -298,6 +314,11 @@ impl Options {
             match flag {
                 "--json" => {
                     opts.json = true;
+                    i += 1;
+                    continue;
+                }
+                "--strict" => {
+                    opts.strict = true;
                     i += 1;
                     continue;
                 }
@@ -431,44 +452,57 @@ fn build_proxies(project: &Project, opts: &Options) -> Result<String, String> {
     Ok(out)
 }
 
-fn validate(project: &Project, opts: &Options) -> Result<String, String> {
-    let mut warnings = project.attachment_problems.clone();
-    warnings.extend(promo_timeline::validate::warnings(&project.meta));
+/// Everything `validate` reports, in one list with one headline: the
+/// core's report for the file as written (the same the app's
+/// `promo_validate` serves through the FFI) and each layer whose media
+/// this machine cannot open.
+fn validation(project: &Project) -> promo_timeline::report::Report {
+    let raw = std::fs::read_to_string(project.dir.join("metadata.json")).unwrap_or_default();
+    // The CLI opens every file below with a decoder instead of trusting a
+    // listing, which also catches a file that is there but cannot be read.
+    let mut report = promo_timeline::report::file_report(&raw, None).unwrap_or_else(|_| {
+        // The open decoded this very file a moment ago; if it has changed
+        // under us since, report on what was opened.
+        let mut report = promo_timeline::report::Report::default();
+        for problem in &project.attachment_problems {
+            report.warn(problem.clone());
+        }
+        report.findings.extend(
+            promo_timeline::report::report(
+                &project.meta,
+                &promo_timeline::report::Context {
+                    layout: true,
+                    ..Default::default()
+                },
+            )
+            .findings,
+        );
+        report
+    });
     // A layer whose media is gone. `inspect` has always reported these and
-    // `validate` never did, so a project with a hole in it came back "ok —
-    // nothing the renderer would quietly correct" and then rendered the
-    // hole. The tool's own description promises "ok means it will render".
+    // `validate` did not, so a project with a hole in it came back "ok" and
+    // then rendered the hole.
     for layer in promo_model::nesting::all_layers(&project.meta) {
         match project.unsupported(layer) {
             // Audio never reaches a frame, and that is not a fault.
             None | Some(crate::project::Unsupported::Audio) => {}
-            Some(why) => warnings.push(format!("layer \"{}\" will not render — {why}", layer.name)),
+            Some(why) => report.breaks(format!("layer \"{}\" will not render — {why}", layer.name)),
         }
     }
-    // Issue #9: what a document read alone cannot show — captions laid out
-    // flush with an edge or under a picture, viewports trimming a plate.
-    warnings.extend(promo_timeline::layout_check::layout_warnings(&project.meta));
+    report
+}
 
+fn report_answer(report: &promo_timeline::report::Report, opts: &Options) -> String {
     if opts.json {
-        // `ok` is the answer to "will this render as written", not "did the
-        // file parse" — it was a literal `true` beside a list of warnings.
-        return Ok(serde_json::json!({
-            "ok": warnings.is_empty(),
-            "warnings": warnings,
-        })
-        .to_string());
+        report.json().to_string()
+    } else {
+        report.text()
     }
-    if warnings.is_empty() {
-        return Ok("ok — nothing the renderer would quietly correct".into());
-    }
-    let mut out = format!(
-        "ok — the project decodes, with {} warning(s):",
-        warnings.len()
-    );
-    for warning in &warnings {
-        out.push_str(&format!("\n  - {warning}"));
-    }
-    Ok(out)
+}
+
+#[cfg(test)]
+fn validate(project: &Project, opts: &Options) -> Result<String, String> {
+    Ok(report_answer(&validation(project), opts))
 }
 
 fn inspect(project: &Project, opts: &Options) -> Result<String, String> {

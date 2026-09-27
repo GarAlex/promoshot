@@ -102,8 +102,8 @@
    "captionText": "One scene, two devices.",
    "captionStyle": {
     "alignment": "center",
-    "subtitleFontSize": 56,
-    "subtitleBold": true,
+    "fontSize": 56,
+    "isBold": true,
     "placement": {
      "anchor": "bottom",
      "offset": [

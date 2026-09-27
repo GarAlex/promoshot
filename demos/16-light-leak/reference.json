@@ -167,7 +167,6 @@
    "duration": 12,
    "resourceID": "BC2150D5-3ECD-3B98-8F1C-95F1A03EB37D",
    "blendMode": "multiply",
-   "opacity": 0.8,
    "fadeIn": 0.6,
    "fadeOut": 0.6,
    "keyframes": [
@@ -178,7 +177,8 @@
      "placement": {
       "height": 960,
       "anchor": "center"
-     }
+     },
+     "opacity": 0.8
     }
    ]
   },
@@ -192,7 +192,6 @@
    "duration": 10.8,
    "resourceID": "2DBA107F-46D8-C67C-1642-60D2F3380394",
    "blendMode": "screen",
-   "opacity": 0.75,
    "fadeIn": 1.0,
    "fadeOut": 1.3,
    "motionBlur": {
@@ -211,7 +210,8 @@
        -140
       ]
      },
-     "rotation": -18
+     "rotation": -18,
+     "opacity": 0.75
     },
     {
      "id": "1D436CF3-08CE-3F18-CEAE-85E2F6524126",
@@ -225,7 +225,8 @@
        120
       ]
      },
-     "rotation": -18
+     "rotation": -18,
+     "opacity": 0.75
     }
    ]
   },
@@ -239,7 +240,6 @@
    "duration": 6.4,
    "resourceID": "A487EE39-763E-BE3B-A2DA-229540D935EF",
    "blendMode": "add",
-   "opacity": 0.9,
    "fadeIn": 0.7,
    "fadeOut": 1.2,
    "keyframes": [
@@ -254,7 +254,8 @@
        -300,
        -170
       ]
-     }
+     },
+     "opacity": 0.9
     },
     {
      "id": "D4738741-9905-178F-CACE-5DC680D77ED9",
@@ -267,7 +268,8 @@
        340,
        60
       ]
-     }
+     },
+     "opacity": 0.9
     }
    ]
   },

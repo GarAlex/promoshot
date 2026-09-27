@@ -157,9 +157,12 @@ its defaults are the source of the first, the person of the second.
    `<Name> Exports/preview.png` beside the project. Look at it before
    the next edit; it is the editor viewport. (`preview: false` turns it
    off.)
-4. **Check** — `promo_validate` runs the renderers' own parser, so "ok"
-   means "renders"; anything else is a silent correction named before you
-   see it in pixels. `promo_inspect` summarizes what is in the project —
+4. **Check** — `promo_validate` runs the renderers' own parser, and its
+   first word is the verdict. `NOT OK` lists what will not render or has
+   no effect — a field nothing reads (with the name that was meant), a
+   value that does nothing where it is, missing media; fix those first.
+   `ok` means it renders; any warnings after it are the renderer's quiet
+   adjustments, named before you see them in pixels. `promo_inspect` summarizes what is in the project —
    canvas, each layer with its ID (the handle the upsert tools take,
    spelled as the file spells it), undefined colours, missing media.
    `promo_explain` is the debugger: the renderer's OWN numbers at a

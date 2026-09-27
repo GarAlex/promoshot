@@ -28,7 +28,9 @@ pub enum Unsupported {
     /// images and noted for video.
     Audio,
     MissingFile(PathBuf),
-    /// The layer points at a resource the project no longer has.
+    /// Nothing to draw from: the resource the layer names is not in the
+    /// project, its file is not in `Resources/`, or a drawing has no ink —
+    /// said in words that name which.
     MissingResource(String),
 }
 
@@ -38,9 +40,7 @@ impl std::fmt::Display for Unsupported {
             Unsupported::Undecodable(why) => write!(f, "{why}"),
             Unsupported::Audio => write!(f, "audio does not appear in a rendered frame"),
             Unsupported::MissingFile(p) => write!(f, "file missing: {}", p.display()),
-            Unsupported::MissingResource(name) => {
-                write!(f, "media missing: nothing in Resources/ for \"{name}\"")
-            }
+            Unsupported::MissingResource(why) => write!(f, "{why}"),
         }
     }
 }
@@ -116,20 +116,21 @@ impl Project {
     }
 
     /// Where a resource's file lives. The app writes media to `Resources/` and
-    /// slideshow stills to `Images/`; try both rather than encoding a rule
-    /// that only holds for one of them.
+    /// slideshow stills to `Images/` — the two folders the inventory lists
+    /// and the only two the app looks in. A third guess, the project folder
+    /// itself, used to find `Resources/tone.wav` written WITH its folder
+    /// while the inventory, and so every "is this layer's file there",
+    /// called it missing: two resolvers disagreeing about one file, and the
+    /// picture and the sound vanished with nothing saying why. Now there is
+    /// one answer, and validate names the folder in the filename.
     pub fn resource_path(&self, resource: &ProjectResource) -> Option<PathBuf> {
-        for sub in ["Resources", "Images", ""] {
-            let candidate = if sub.is_empty() {
-                self.dir.join(&resource.filename)
-            } else {
-                self.dir.join(sub).join(&resource.filename)
-            };
-            if candidate.is_file() {
-                return Some(candidate);
-            }
+        if resource.filename.is_empty() {
+            return None;
         }
-        None
+        ["Resources", "Images"]
+            .into_iter()
+            .map(|sub| self.dir.join(sub).join(&resource.filename))
+            .find(|candidate| candidate.is_file())
     }
 
     /// Composition length: the furthest any layer runs, falling back to the
@@ -166,8 +167,19 @@ impl Project {
         // while nothing of them reached a frame; a report that only checks
         // "is this kind supported" is how that hid.)
         if let Some(id) = layer.resource_id.as_deref() {
-            if self.is_missing(id) || self.resource(id).is_none() {
-                return Some(Unsupported::MissingResource(layer.name.clone()));
+            match self.resource(id) {
+                None => {
+                    return Some(Unsupported::MissingResource(format!(
+                        "its resourceID \"{id}\" names no resource in the project"
+                    )))
+                }
+                Some(resource) if self.is_missing(id) => {
+                    return Some(Unsupported::MissingResource(format!(
+                        "its file \"{}\" is not in Resources/",
+                        resource.filename
+                    )))
+                }
+                Some(_) => {}
             }
         }
         match layer.kind {
@@ -187,7 +199,9 @@ impl Project {
                 if has_shapes {
                     None
                 } else {
-                    Some(Unsupported::MissingResource(layer.name.clone()))
+                    Some(Unsupported::MissingResource(
+                        "its drawing has no shapes, so it draws nothing".into(),
+                    ))
                 }
             }
             // Captions render in the core now (promo-text).
@@ -204,7 +218,9 @@ impl Project {
                     .as_deref()
                     .and_then(|id| self.resource(id));
                 match resource {
-                    None => Some(Unsupported::MissingResource(layer.name.clone())),
+                    None => Some(Unsupported::MissingResource(
+                        "it names no model resource".into(),
+                    )),
                     // A body the document describes (a recipe) needs no file.
                     Some(r) if r.recipe.is_some() => None,
                     Some(r) => match self.resource_path(r) {

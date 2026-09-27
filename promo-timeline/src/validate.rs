@@ -4,6 +4,7 @@
 //! These are the silent corrections: a project that renders, but not the way
 //! the file says. The renderer has always made them; nothing said so.
 
+use crate::report::Report;
 use crate::viewport;
 use promo_model::{ProjectLayerKind, ProjectMetadata};
 
@@ -12,7 +13,7 @@ use promo_model::{ProjectLayerKind, ProjectMetadata};
 /// be is UNIQUE: every reference resolves by it, and the apps' door mints
 /// UUIDs for short ids BY VALUE, so two records sharing a spelling would
 /// silently become one. Named here, where every other silent correction is.
-fn duplicate_id_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn duplicate_id_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let mut seen = std::collections::BTreeMap::<&str, u32>::new();
     for resource in meta.resources.as_deref().unwrap_or(&[]) {
         *seen.entry(resource.id.as_str()).or_default() += 1;
@@ -25,7 +26,7 @@ fn duplicate_id_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
     for (id, count) in seen {
         if count > 1 && !id.is_empty() {
-            out.push(format!(
+            out.breaks(format!(
                 "id \"{id}\" is used by {count} records — ids resolve references \
                  and must be unique; the app would fold these into one"
             ));
@@ -33,14 +34,19 @@ fn duplicate_id_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
 }
 
-/// Every warning for `meta`, in the order an author would read the file.
+/// Every finding for `meta` that the document alone can show, in the order
+/// an author would read the file, each marked with whether the project
+/// still renders as written (a warning: the renderer adjusts something) or
+/// not (a break: something written will not show, or does nothing where it
+/// is). [`crate::report::report`] adds what needs more than the document —
+/// the raw text for keys nothing reads, the folder for missing media, text
+/// layout for captions against the frame.
 ///
-/// Strings rather than a typed enum: the two callers (the CLI and the MCP
-/// tool) both print prose, and a shape neither needs is a shape that goes
-/// stale. The prefix convention — `layer "NAME" at Ts: …` — matches the
-/// warnings the app already emits, so the two lists read as one.
-pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
-    let mut out = Vec::new();
+/// Prose rather than codes: every caller prints it. The prefix convention —
+/// `layer "NAME" at Ts: …` — matches the warnings the app already emits, so
+/// the lists read as one.
+pub fn findings(meta: &ProjectMetadata) -> Report {
+    let mut out = Report::default();
     duplicate_id_warnings(meta, &mut out);
     duration_rule_warnings(meta, &mut out);
     palette_warnings(meta, &mut out);
@@ -65,7 +71,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             };
             let at = format!("layer \"{}\" at {}s", layer.name, keyframe.time);
             if !honours_viewport {
-                out.push(format!(
+                out.breaks(format!(
                     "{at}: viewport is ignored on a {:?} layer — only image and \
                      video layers show a window of their source",
                     layer.kind
@@ -73,7 +79,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 continue;
             }
             if let Some(slid) = viewport::out_of_bounds(window) {
-                out.push(format!(
+                out.warn(format!(
                     "{at}: viewport {window:?} hangs outside the source — the \
                      renderer slides it back to {slid:?}, size first"
                 ));
@@ -108,7 +114,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                         || (r.video_natural_width.is_some() && r.video_natural_height.is_some())
                 });
             if !measured {
-                out.push(format!(
+                out.warn(format!(
                     "layer \"{}\": placement resolves against a SQUARE source — the \
                      resource stores no pixelWidth/pixelHeight (or videoNatural \
                      size), so anchoring and width use a guessed aspect",
@@ -126,7 +132,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             .and_then(|s| s.placement.as_ref())
         {
             if rule.sizes() {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": captionStyle.placement sets height/width/mode — \
                      a caption's size is its fontSize; only anchor and offset are read",
                     layer.name
@@ -145,7 +151,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 "fadeOut"
             };
             if let (Some(rich), Some(seconds)) = (rich.as_ref(), fade) {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": {shorthand} {seconds}s and {side} \"{}\" both set — \
                      {side} wins and the {shorthand} is ignored",
                     layer.name,
@@ -160,7 +166,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             ] {
                 if let Some(t) = transition {
                     if t.duration > span {
-                        out.push(format!(
+                        out.warn(format!(
                             "layer \"{}\": {side} lasts {}s but the layer is only {span}s — \
                              it never finishes arriving",
                             layer.name, t.duration
@@ -179,14 +185,14 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             let has_amount = adjust.tint_amount.is_some_and(|a| a > 0.0)
                 || layer.keyframes.iter().any(|k| k.tint_amount.is_some());
             if adjust.tint_hex.is_some() && !has_amount {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": adjustments name a tintHex but no tintAmount — \
                      the gel is never applied",
                     layer.name
                 ));
             }
             if has_amount && adjust.tint_hex.is_none() {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": a tintAmount with no tintHex does nothing — \
                      name the gel's colour",
                     layer.name
@@ -216,7 +222,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             ];
             for (both, name) in overridden {
                 if both {
-                    out.push(format!(
+                    out.breaks(format!(
                         "layer \"{}\": has BOTH a constant {name} and keyframed \
                          {name} — the keyframes win and the constant is ignored",
                         layer.name
@@ -234,7 +240,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 promo_model::ProjectLayerKind::Background | promo_model::ProjectLayerKind::Audio
             )
         {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\": blendMode on a {:?} layer does nothing — only \
                  layers that draw pixels combine with anything",
                 layer.name, layer.kind
@@ -250,7 +256,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         );
         if let Some(rid) = layer.mask_resource_id.as_deref() {
             if !media {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": maskResourceID on a {:?} layer does nothing — \
                      masks window video and image layers",
                     layer.name, layer.kind
@@ -263,18 +269,18 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 .iter()
                 .find(|r| r.id == rid)
             {
-                None => out.push(format!(
+                None => out.breaks(format!(
                     "layer \"{}\": maskResourceID \"{rid}\" names no resource — \
                      the layer renders unmasked",
                     layer.name
                 )),
                 Some(resource) => match resource.drawing.as_ref() {
-                    None => out.push(format!(
+                    None => out.breaks(format!(
                         "layer \"{}\": mask resource \"{}\" is {:?}, not a drawing — \
                          a mask is a drawing's ink, and the layer renders unmasked",
                         layer.name, resource.display_name, resource.kind
                     )),
-                    Some(doc) if doc.shapes.is_empty() => out.push(format!(
+                    Some(doc) if doc.shapes.is_empty() => out.breaks(format!(
                         "layer \"{}\": mask drawing \"{}\" has no shapes — no ink, \
                          no window, the layer renders unmasked",
                         layer.name, resource.display_name
@@ -283,7 +289,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 },
             }
         } else if layer.mask_inverted.is_some() {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\": maskInverted without a maskResourceID does nothing",
                 layer.name
             ));
@@ -296,7 +302,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
                 || k.mask_rotation.is_some()
         });
         if flies && layer.mask_resource_id.is_none() {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\": mask placement keyframes without a maskResourceID \
                  do nothing — there is no window to fly",
                 layer.name
@@ -304,7 +310,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
         for keyframe in &layer.keyframes {
             if keyframe.mask_zoom.is_some_and(|z| z <= 0.0) {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": maskZoom {} at {}s — zero or negative collapses \
                      the window; the renderer clamps it to nearly nothing",
                     layer.name,
@@ -330,7 +336,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         for keyframe in &layer.keyframes {
             if let Some(shutter) = keyframe.shutter {
                 if !(0.0..=1.0).contains(&shutter) {
-                    out.push(format!(
+                    out.warn(format!(
                         "layer \"{}\": keyframe shutter {} is outside 0..1 — the \
                          renderer clamps it (0 = sharp, 1 = 360 degrees)",
                         layer.name, shutter
@@ -339,7 +345,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
             }
         }
         if layer.motion_blur.is_some() && layer.keyframes.iter().any(|k| k.shutter.is_some()) {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\": has BOTH motionBlur and keyframed shutters — the \
                  keyframes win and the constant is ignored",
                 layer.name
@@ -347,13 +353,13 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         }
         if let Some(blur) = &layer.motion_blur {
             if blur.shutter <= 0.0 {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\": motionBlur shutter {} does nothing — use 0.5 \
                      for the classic 180 degrees, or drop the field",
                     layer.name, blur.shutter
                 ));
             } else if blur.shutter > 1.0 {
-                out.push(format!(
+                out.warn(format!(
                     "layer \"{}\": motionBlur shutter {} is longer than the frame \
                      — the renderer clamps it to 1 (360 degrees)",
                     layer.name, blur.shutter
@@ -366,7 +372,7 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     // the total wins — but it is certainly not what the author meant.
     let mut reveal_conflict = |where_: String, reveal: &promo_model::TextReveal| {
         if let (Some(per), Some(total)) = (reveal.seconds_per, reveal.seconds) {
-            out.push(format!(
+            out.breaks(format!(
                 "{where_}: reveal states secondsPer {per} AND seconds {total} — \
                  the total wins and the rate is ignored"
             ));
@@ -375,14 +381,14 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
         // does nothing, which reads as a broken feature rather than a
         // mode that was never changed.
         if reveal.unit_seconds.is_some() && !reveal.animates() {
-            out.push(format!(
+            out.breaks(format!(
                 "{where_}: reveal sets unitSeconds but mode {} has no arrival — \
                  use fade, rise or scale, or drop it",
                 reveal.mode.as_str()
             ));
         }
         if reveal.rise.is_some() && reveal.mode != promo_model::RevealMode::Rise {
-            out.push(format!(
+            out.breaks(format!(
                 "{where_}: reveal sets rise but mode is {} — it only travels in \
                  rise mode",
                 reveal.mode.as_str()
@@ -415,15 +421,18 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     floor_warnings(meta, &mut out);
     transport_warnings(meta, &mut out);
     swap_warnings(meta, &mut out);
+    placement_no_ops(meta, &mut out);
+    caption_no_ops(meta, &mut out);
+    filename_no_ops(meta, &mut out);
     let required = meta.minimum_reader_version();
     match meta.min_reader_version {
         Some(declared) if declared >= required => {}
-        Some(declared) => out.push(format!(
+        Some(declared) => out.warn(format!(
             "this project declares \"minReaderVersion\": {declared} but uses \
              features that need {required} — an older reader would open it and \
              drop them on its next save"
         )),
-        None if required > 1 => out.push(format!(
+        None if required > 1 => out.warn(format!(
             "this project uses features that need \"minReaderVersion\": \
              {required}, which it does not declare — an older reader would open \
              it and drop them on its next save"
@@ -433,13 +442,203 @@ pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     out
 }
 
+/// Every finding's message, breaks and warnings alike, in reading order —
+/// the list the editor's banner shows and the older callers print.
+pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
+    findings(meta).messages()
+}
+
+/// Every layer a keyframe placement can place, with the canvas it places
+/// on: the project's layers on the project canvas, a nested composition's
+/// on its own. A layer standing in a stage is left out — inside a stage its
+/// placement is ignored, which the stage checks already say.
+fn placeable_layers(meta: &ProjectMetadata) -> Vec<(&promo_model::ProjectLayer, (f64, f64))> {
+    let settings = &meta.composition_settings;
+    let mut out: Vec<(&promo_model::ProjectLayer, (f64, f64))> = meta
+        .layers
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .filter(|layer| layer.stage.is_none())
+        .map(|layer| (layer, (settings.canvas_width, settings.canvas_height)))
+        .collect();
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        if let Some(composition) = resource.composition.as_ref() {
+            out.extend(
+                composition
+                    .layers
+                    .iter()
+                    .filter(|layer| layer.stage.is_none())
+                    .map(|layer| (layer, (composition.canvas_width, composition.canvas_height))),
+            );
+        }
+    }
+    out
+}
+
+/// A placement's quiet losers (review 2026-09-27, P1-19; the app's
+/// validate said some of this, the core's said none of it, so a CLI-only
+/// agent met none of it). The rule decides the POSITION, so shifts beside
+/// it do nothing; a rule that SIZES decides the zoom too; of height, width
+/// and mode the first one given wins; and the numbers are canvas pixels,
+/// so a height of 0.42 — a fraction, meant as 42% — draws nothing at all.
+fn placement_no_ops(meta: &ProjectMetadata, out: &mut Report) {
+    for (layer, (canvas_width, canvas_height)) in placeable_layers(meta) {
+        for keyframe in &layer.keyframes {
+            let Some(rule) = keyframe.placement.as_ref() else {
+                continue;
+            };
+            let at = format!("layer \"{}\" at {}s", layer.name, keyframe.time);
+            match layer.kind {
+                ProjectLayerKind::Caption => {
+                    out.breaks(format!(
+                        "{at}: a keyframe placement is not read on a caption — a caption's \
+                         box is placed by its captionStyle.placement (anchor and offset)"
+                    ));
+                    continue;
+                }
+                ProjectLayerKind::Background | ProjectLayerKind::Audio => {
+                    out.breaks(format!(
+                        "{at}: placement does nothing on a {} layer — nothing is drawn to place",
+                        layer.kind.as_str()
+                    ));
+                    continue;
+                }
+                _ => {}
+            }
+            let given: Vec<&str> = [
+                (rule.height.is_some(), "height"),
+                (rule.width.is_some(), "width"),
+                (rule.mode.is_some(), "mode"),
+            ]
+            .into_iter()
+            .filter_map(|(set, name)| set.then_some(name))
+            .collect();
+            if given.len() > 1 {
+                out.breaks(format!(
+                    "{at}: placement gives {} — {} wins and the rest do nothing \
+                     (height wins over width, width over mode)",
+                    given.join(" and "),
+                    given[0]
+                ));
+            }
+            if keyframe.horizontal_shift.is_some() || keyframe.vertical_shift.is_some() {
+                out.breaks(format!(
+                    "{at}: horizontalShift/verticalShift beside a placement do nothing — the \
+                     placement's anchor and offset place the layer"
+                ));
+            }
+            if keyframe.zoom.is_some() && rule.sizes() {
+                out.breaks(format!(
+                    "{at}: zoom beside a placement that sets {} does nothing — the placement \
+                     sizes the layer",
+                    given[0]
+                ));
+            }
+            for (name, value, span, extent) in [
+                ("height", rule.height, canvas_height, "tall"),
+                ("width", rule.width, canvas_width, "wide"),
+            ] {
+                let Some(value) = value else { continue };
+                if value >= 1.0 {
+                    continue;
+                }
+                let meant = if value > 0.0 {
+                    format!(
+                        "; for {}% of the canvas write {}",
+                        (value * 100.0).round(),
+                        (value * span).round()
+                    )
+                } else {
+                    String::new()
+                };
+                out.breaks(format!(
+                    "{at}: placement {name} {value} is in canvas pixels — the layer is drawn \
+                     less than a pixel {extent}, which shows nothing{meant}"
+                ));
+            }
+        }
+    }
+}
+
+/// What a caption's keyframes cannot do. Shifts move a caption through its
+/// MARGINS, and a caption whose style carries a placement is not laid out
+/// by margins, so the shifts do nothing; and a caption's `zoom` is the old
+/// spelling of `fontSize` — points, not a factor — so `zoom: 1.2` draws
+/// the words 1.2 pt tall.
+fn caption_no_ops(meta: &ProjectMetadata, out: &mut Report) {
+    for (layer, _) in placeable_layers(meta) {
+        if layer.kind != ProjectLayerKind::Caption {
+            continue;
+        }
+        let placed = meta
+            .caption_style_for(layer)
+            .is_some_and(|style| style.placement.is_some());
+        if placed
+            && layer
+                .keyframes
+                .iter()
+                .any(|k| k.horizontal_shift.is_some() || k.vertical_shift.is_some())
+        {
+            out.breaks(format!(
+                "layer \"{}\": horizontalShift/verticalShift move a caption through its margins, \
+                 and its captionStyle.placement fixes the box — the shifts do nothing",
+                layer.name
+            ));
+        }
+        for keyframe in &layer.keyframes {
+            let Some(zoom) = keyframe.zoom else { continue };
+            if keyframe.font_size.is_none() && zoom < 6.0 {
+                out.breaks(format!(
+                    "layer \"{}\" at {}s: zoom on a caption is its font size in points (the old \
+                     spelling of fontSize) — zoom {zoom} draws the words {zoom} pt tall; write \
+                     fontSize",
+                    layer.name, keyframe.time
+                ));
+            }
+        }
+    }
+}
+
+/// A filename is the bare name of a file in `Resources/`. Written with the
+/// folder — `Resources/tone.wav` — it is looked for at
+/// `Resources/Resources/tone.wav`, by the app and the CLI alike, and
+/// whatever plays it renders nothing (review 2026-09-27: an agent's audio
+/// and its images both vanished this way).
+fn filename_no_ops(meta: &ProjectMetadata, out: &mut Report) {
+    let bare = |name: &str| name.rsplit(['/', '\\']).next().unwrap_or(name).to_string();
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        if resource.filename.contains(['/', '\\']) {
+            out.breaks(format!(
+                "resource \"{}\": filename \"{}\" names a folder — a filename is the bare name \
+                 of a file in Resources/ (\"{}\"); as written nothing finds it, and whatever \
+                 plays it renders nothing",
+                resource.display_name,
+                resource.filename,
+                bare(&resource.filename)
+            ));
+        }
+        for cut in &resource.image_cuts {
+            if cut.filename.contains(['/', '\\']) {
+                out.breaks(format!(
+                    "resource \"{}\": image cut filename \"{}\" names a folder — write the bare \
+                     name (\"{}\"); as written the cut shows nothing",
+                    resource.display_name,
+                    cut.filename,
+                    bare(&cut.filename)
+                ));
+            }
+        }
+    }
+}
+
 /// A floor word (rung 45) the vocabulary lacks is named with the words
 /// that exist; a floor on a layer that is neither a stage layer nor a
 /// flat stage's member does nothing, and is named so.
 /// The consumer's transport (rung 47) on material that has no clock: a
 /// still, a caption, a drawing, a background have nothing to pause or
 /// seek, so the keyframe's `sourceTime` or `playback` does nothing there.
-fn transport_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn transport_warnings(meta: &ProjectMetadata, out: &mut Report) {
     for layer in promo_model::nesting::all_layers(meta) {
         let clocked = matches!(
             layer.kind,
@@ -459,7 +658,7 @@ fn transport_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         }
         for k in &layer.keyframes {
             if k.source_time.is_some() || k.playback.is_some() {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\" keyframe at {}s carries sourceTime/playback, but a {:?} \
                      layer plays nothing with a clock — it is ignored; the transport is \
                      for a video, an audio, a composition on a video layer, a sprite, \
@@ -476,7 +675,7 @@ fn transport_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// resource of a kind this layer cannot show — a composition on an image
 /// layer, a video on a video layer, a picture on a caption. Named here, so
 /// a deck that never switches says why.
-fn swap_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn swap_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for layer in promo_model::nesting::all_layers(meta) {
         for k in &layer.keyframes {
@@ -498,7 +697,7 @@ fn swap_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 }
                 _ => "",
             };
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\" keyframe at {}s swaps to \"{}\" ({:?}), which a {:?} layer \
                  cannot show — the swap is ignored{hint}",
                 layer.name, k.time, named.display_name, named.kind, layer.kind
@@ -507,20 +706,20 @@ fn swap_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
 }
 
-fn floor_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn floor_warnings(meta: &ProjectMetadata, out: &mut Report) {
     for layer in promo_model::nesting::all_layers(meta) {
         let Some(word) = layer.floor.as_deref() else {
             continue;
         };
         if promo_model::Floor::parse(word).is_none() {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\" has floor \"{word}\", which is not one — {}; none is used",
                 layer.name,
                 promo_model::Floor::NAMES.join(", ")
             ));
         }
         if layer.kind != promo_model::ProjectLayerKind::Stage && layer.stage.is_none() {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\" has a floor but is not a stage; a floor is what a stage's \
                  bodies stand on and does nothing here",
                 layer.name
@@ -534,13 +733,30 @@ fn floor_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// to change stays as it was and nothing says why. These are the ones a
 /// model author reaches for: `materials` on the layer instead of the
 /// resource, a `camera` on the layer instead of a keyframe.
-fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
-    const RESOURCE_ONLY: [&str; 3] = ["materials", "clips", "boundsRadius"];
-    const KEYFRAME_ONLY: [&str; 5] = ["camera", "light", "stageOffset", "depth", "clip"];
+const RESOURCE_ONLY: [&str; 3] = ["materials", "clips", "boundsRadius"];
+const KEYFRAME_ONLY: [&str; 5] = ["camera", "light", "stageOffset", "depth", "clip"];
+/// Keys a top-level layer's bag may hold that [`wrong_level_warnings`]
+/// names in words written for them — the report's generic "not read here"
+/// leaves these to it.
+pub(crate) const LAYER_WRONG_LEVEL: [&str; 8] = [
+    "materials",
+    "clips",
+    "boundsRadius",
+    "camera",
+    "light",
+    "stageOffset",
+    "depth",
+    "clip",
+];
+/// The same, for a resource's bag.
+pub(crate) const RESOURCE_WRONG_LEVEL: [&str; 6] =
+    ["camera", "light", "stageOffset", "depth", "clip", "stage"];
+
+fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Report) {
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         for key in RESOURCE_ONLY {
             if layer.extra.contains_key(key) {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\" carries \"{key}\", which belongs on the model \
                      RESOURCE it plays (resources[].{key}) — here it is ignored, \
                      and dropped on the next save",
@@ -550,7 +766,7 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         }
         for key in KEYFRAME_ONLY {
             if layer.extra.contains_key(key) {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\" carries \"{key}\" at the layer level — it belongs \
                      on a KEYFRAME of the layer (keyframes[].{key}); here it is \
                      ignored, and dropped on the next save",
@@ -562,7 +778,7 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     for resource in meta.resources.as_deref().unwrap_or(&[]) {
         for key in KEYFRAME_ONLY {
             if resource.extra.contains_key(key) {
-                out.push(format!(
+                out.breaks(format!(
                     "resource \"{}\" carries \"{key}\", which belongs on a keyframe \
                      of the layer that plays it (layers[].keyframes[].{key}) — here \
                      it is ignored, and dropped on the next save",
@@ -571,7 +787,7 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             }
         }
         if resource.extra.contains_key("stage") {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\" carries \"stage\", which belongs on the layer that \
                  plays it (layers[].stage) — here it is ignored, and dropped on \
                  the next save",
@@ -602,7 +818,7 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// stand as billboards); and the other members' own 2D transforms —
 /// placement, zoom, shifts — are ignored inside the stage (their `depth`,
 /// `stageOffset` and, for models, camera turn are what count).
-fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn stage_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let layers = meta.layers.as_deref().unwrap_or(&[]);
     let mut names: Vec<&str> = layers.iter().filter_map(|l| l.stage.as_deref()).collect();
     names.sort_unstable();
@@ -616,7 +832,7 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         let Some(first) = members.first() else {
             continue;
         };
-        out.push(format!(
+        out.warn(format!(
             "stage \"{name}\" is written in the flat form (layers sharing a stage name); \
              the one-layer form is canonical — a layer of kind \"stage\" with `members`, \
              the camera and light on its own keyframes — and the app and promo_apply \
@@ -626,7 +842,7 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             first.kind,
             ProjectLayerKind::Model | ProjectLayerKind::Image | ProjectLayerKind::Video
         ) {
-            out.push(format!(
+            out.breaks(format!(
                 "stage \"{name}\": its first member \"{}\" is a {} layer — a stage is \
                  drawn through its first member, which must be a model, image or video",
                 first.name,
@@ -640,7 +856,7 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     || k.horizontal_shift.is_some()
                     || k.vertical_shift.is_some()
             }) {
-                out.push(format!(
+                out.breaks(format!(
                     "stage \"{name}\": \"{}\" keys a placement or shift — inside a stage \
                      its depth and stageOffset (and a picture's zoom) place it; the first \
                      member's placement places the whole stage",
@@ -659,7 +875,7 @@ fn stage_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// (a picture is drawn unlit, so they do nothing), is named the same
 /// way; a finish WORD the vocabulary lacks (rung 44) is named with the
 /// words that exist, since the slot then shades from the file's numbers.
-fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for model in resources
         .iter()
@@ -668,7 +884,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         for (slot, binding) in model.materials.iter().flat_map(|m| m.iter()) {
             if let Some(word) = binding.finish_name() {
                 if promo_model::Finish::parse(word).is_none() {
-                    out.push(format!(
+                    out.breaks(format!(
                         "model \"{}\": slot \"{slot}\" has finish \"{word}\", which is not \
                          one — {}; the file's own finish is used",
                         model.display_name,
@@ -683,7 +899,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             for (name, value, scale) in finish {
                 if let Some(v) = value {
                     if !v.is_finite() || !(0.0..=1.0).contains(&v) {
-                        out.push(format!(
+                        out.warn(format!(
                             "model \"{}\": slot \"{slot}\" has {name} {v}; a finish is \
                              0…1 ({scale}) — out of range it is clamped",
                             model.display_name
@@ -693,7 +909,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             }
             if let Some(name) = binding.mode_name() {
                 if promo_model::SurfaceMode::parse(name).is_none() {
-                    out.push(format!(
+                    out.breaks(format!(
                         "model \"{}\": slot \"{slot}\" has mode \"{name}\", which is not one — \
                          `screen` (the picture unlit, as a display) or `surface` (the picture \
                          lit, as the slot's colour under the finish); screen is used",
@@ -703,7 +919,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             }
             let repeat = binding.repeat();
             if repeat.iter().any(|v| !v.is_finite() || *v <= 0.0) {
-                out.push(format!(
+                out.breaks(format!(
                     "model \"{}\": slot \"{slot}\" has repeat [{}, {}]; both counts must be \
                      above zero ([1, 1] lays the picture once over the slot)",
                     model.display_name, repeat[0], repeat[1]
@@ -711,7 +927,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             }
             let Some(resource_id) = binding.resource_id() else {
                 if binding.needs_rung_38() {
-                    out.push(format!(
+                    out.breaks(format!(
                         "model \"{}\": slot \"{slot}\" says how a picture is worn (mode, \
                          repeat or offset) but binds none; they do nothing without a \
                          resourceID",
@@ -726,7 +942,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 && binding.finish().is_none()
                 && (binding.metallic().is_some() || binding.roughness().is_some())
             {
-                out.push(format!(
+                out.breaks(format!(
                     "model \"{}\": slot \"{slot}\" shows a picture AND carries a finish; a \
                      picture shown as a screen is drawn unlit, so its metallic/roughness are \
                      ignored — write \"mode\": \"surface\" to wear it under the light, or \
@@ -735,7 +951,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 ));
             }
             match resources.iter().find(|r| r.id == resource_id) {
-                None => out.push(format!(
+                None => out.breaks(format!(
                     "model \"{}\": slot \"{slot}\" is bound to a resource the project \
                      does not have ({resource_id})",
                     model.display_name
@@ -747,7 +963,7 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                             | promo_model::ProjectResourceKind::Video
                             | promo_model::ProjectResourceKind::Composition
                     ) => {}
-                Some(r) => out.push(format!(
+                Some(r) => out.breaks(format!(
                     "model \"{}\": slot \"{slot}\" is bound to a {} resource; an image, \
                      a video or a composition is drawn on a surface",
                     model.display_name,
@@ -762,12 +978,12 @@ fn material_binding_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// never itself a stage and names no stage, a stage layer plays no
 /// resource of its own, an empty stage draws nothing, and `members` on any
 /// other kind is ignored. Each is named before it reads as a blank stage.
-fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Report) {
     use promo_model::ProjectLayerKind as Kind;
     for layer in promo_model::nesting::all_layers(meta) {
         if layer.kind != Kind::Stage {
             if layer.members.as_ref().is_some_and(|m| !m.is_empty()) {
-                out.push(format!(
+                out.breaks(format!(
                     "layer \"{}\" carries `members` but is not a stage layer \
                      (`\"kind\": \"stage\"`) — they are ignored",
                     layer.name
@@ -776,14 +992,14 @@ fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             continue;
         }
         if layer.resource_id.is_some() {
-            out.push(format!(
+            out.breaks(format!(
                 "stage layer \"{}\" names a resource; a stage plays nothing of its own — \
                  bind media on a member",
                 layer.name
             ));
         }
         if layer.stage.is_some() {
-            out.push(format!(
+            out.breaks(format!(
                 "stage layer \"{}\" also names a stage; a stage layer is its own stage — \
                  drop the field",
                 layer.name
@@ -791,28 +1007,28 @@ fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         }
         let members = layer.members.as_deref().unwrap_or(&[]);
         if members.is_empty() {
-            out.push(format!(
+            out.breaks(format!(
                 "stage layer \"{}\" has no members; it draws nothing",
                 layer.name
             ));
         }
         for member in members {
             if member.kind == Kind::Stage {
-                out.push(format!(
+                out.breaks(format!(
                     "member \"{}\" of stage \"{}\" is itself a stage; one depth is drawn — \
                      flatten it into the stage",
                     member.name, layer.name
                 ));
             }
             if member.stage.is_some() {
-                out.push(format!(
+                out.breaks(format!(
                     "member \"{}\" of stage \"{}\" names a stage; a member belongs to the \
                      stage that holds it — drop the field",
                     member.name, layer.name
                 ));
             }
             if matches!(member.kind, Kind::Background | Kind::Audio) {
-                out.push(format!(
+                out.breaks(format!(
                     "member \"{}\" of stage \"{}\" is a layer of kind {}; a stage holds \
                      bodies and pictures — it is ignored",
                     member.name,
@@ -826,7 +1042,7 @@ fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     || k.horizontal_shift.is_some()
                     || k.vertical_shift.is_some()
             }) {
-                out.push(format!(
+                out.breaks(format!(
                     "member \"{}\" of stage \"{}\" keys a placement or shift — inside a \
                      stage its depth and stageOffset (and a picture's zoom) place it; the \
                      stage layer's placement places the whole stage",
@@ -841,13 +1057,13 @@ fn stage_layer_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// with glyphs, a depth and size above zero — and a body long enough to
 /// strain one mesh is better as a line per body. A recipe beside a
 /// filename is named: the recipe wins.
-fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn recipe_warnings(meta: &ProjectMetadata, out: &mut Report) {
     for resource in meta.resources.as_deref().unwrap_or(&[]) {
         let Some(recipe) = resource.recipe.as_ref() else {
             continue;
         };
         if resource.kind != promo_model::ProjectResourceKind::Model {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\" carries a recipe but is a {} resource; a recipe builds a \
                  MODEL — set \"kind\": \"model\"",
                 resource.display_name,
@@ -855,7 +1071,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         if !resource.filename.is_empty() {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\" carries both a recipe and a filename; the recipe is what \
                  renders and the file is ignored",
                 resource.display_name
@@ -865,7 +1081,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             promo_model::BodyRecipe::Parts(parts) => {
                 use promo_model::PartShape;
                 if parts.is_empty() {
-                    out.push(format!(
+                    out.breaks(format!(
                         "resource \"{}\": the parts body has no parts",
                         resource.display_name
                     ));
@@ -894,7 +1110,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                         ),
                     };
                     if let Some(why) = bad {
-                        out.push(format!(
+                        out.breaks(format!(
                             "resource \"{}\": part {} ({}): {why}",
                             resource.display_name,
                             i + 1,
@@ -906,7 +1122,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             }
             promo_model::BodyRecipe::Device(device) => {
                 if !device.is_known() {
-                    out.push(format!(
+                    out.breaks(format!(
                         "resource \"{}\": device recipe kind \"{}\" is not a body — phone, \
                          tablet or laptop",
                         resource.display_name, device.kind
@@ -917,13 +1133,13 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             promo_model::BodyRecipe::Text(body) => body,
         };
         if body.text.trim().is_empty() {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": the text body's text is empty; it has no glyphs to extrude",
                 resource.display_name
             ));
         }
         if body.text.chars().count() > 80 {
-            out.push(format!(
+            out.warn(format!(
                 "resource \"{}\": {} characters make a heavy body — a line per body, or a \
                  caption, reads better",
                 resource.display_name,
@@ -931,7 +1147,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         if body.depth() <= 0.0 {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": the text body's depth is {}; it is em along the body's Z and \
                  must be above zero (0.25 is the default)",
                 resource.display_name,
@@ -939,7 +1155,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         if body.size() <= 0.0 {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": the text body's size is {}; it is world units per em and \
                  must be above zero (1 is the default)",
                 resource.display_name,
@@ -951,12 +1167,12 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 
 /// A particle system (rung 36): a recipe that emits something, with the
 /// words the engine knows, played by a DRAWING layer.
-fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn particle_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for resource in resources {
         if resource.kind != promo_model::ProjectResourceKind::Particles {
             if resource.particles.is_some() {
-                out.push(format!(
+                out.breaks(format!(
                     "resource \"{}\" carries `particles` but is a {} resource; a particle \
                      system is \"kind\": \"particles\"",
                     resource.display_name,
@@ -966,7 +1182,7 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             continue;
         }
         let Some(recipe) = resource.particles.as_ref() else {
-            out.push(format!(
+            out.warn(format!(
                 "resource \"{}\" is a particles resource with no `particles` recipe; the \
                  defaults would draw a burst upward — say what you mean",
                 resource.display_name
@@ -974,7 +1190,7 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             continue;
         };
         if recipe.morph.is_none() && recipe.rate() <= 0.0 && recipe.burst() == 0 {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": rate 0 and no burst emit nothing",
                 resource.display_name
             ));
@@ -982,13 +1198,13 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         if let Some(morph) = recipe.morph.as_ref() {
             for (which, id) in [("from", &morph.from), ("to", &morph.to)] {
                 match resources.iter().find(|r| &r.id == id) {
-                    None => out.push(format!(
+                    None => out.breaks(format!(
                         "resource \"{}\": morph `{which}` names a resource the project does not \
                          have ({id})",
                         resource.display_name
                     )),
                     Some(r) if r.kind != promo_model::ProjectResourceKind::Model => {
-                        out.push(format!(
+                        out.breaks(format!(
                         "resource \"{}\": morph `{which}` names \"{}\", a {} resource; a morph \
                          flies between two BODIES (model resources)",
                         resource.display_name,
@@ -1003,7 +1219,7 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 .count
                 .is_some_and(|c| c > promo_model::ParticleMorph::MAX_COUNT)
             {
-                out.push(format!(
+                out.warn(format!(
                     "resource \"{}\": morph count {} is above the most a morph draws ({}); it is \
                      clamped",
                     resource.display_name,
@@ -1012,7 +1228,7 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 ));
             }
             if morph.stagger.is_some_and(|s| !(0.0..=0.95).contains(&s)) {
-                out.push(format!(
+                out.warn(format!(
                     "resource \"{}\": morph stagger {} is outside 0…0.95; it is clamped",
                     resource.display_name,
                     morph.stagger.unwrap_or(0.0)
@@ -1021,34 +1237,34 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         }
         let life = recipe.life();
         if life[0] <= 0.0 || life[1] < life[0] {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": life {:?} must be [min, max] with min above zero",
                 resource.display_name, life
             ));
         }
         if !promo_model::ParticleRecipe::SHAPES.contains(&recipe.shape()) {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": shape \"{}\" is not one — dot, square or streak",
                 resource.display_name,
                 recipe.shape()
             ));
         }
         if !promo_model::ParticleRecipe::SIZE_CURVES.contains(&recipe.size_over_life()) {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": sizeOverLife \"{}\" is not one — hold, shrink or grow",
                 resource.display_name,
                 recipe.size_over_life()
             ));
         }
         if !promo_model::ParticleRecipe::OPACITY_CURVES.contains(&recipe.opacity_over_life()) {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": opacityOverLife \"{}\" is not one — hold or fade",
                 resource.display_name,
                 recipe.opacity_over_life()
             ));
         }
         if recipe.rate() * recipe.life()[1] + recipe.burst() as f64 > 4000.0 {
-            out.push(format!(
+            out.warn(format!(
                 "resource \"{}\": rate × life keeps more than 4000 particles alive; the \
                  engine draws the first 4000",
                 resource.display_name
@@ -1062,7 +1278,7 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .and_then(|id| resources.iter().find(|r| r.id == id))
             .is_some_and(|r| r.kind == promo_model::ProjectResourceKind::Particles);
         if plays_particles && layer.kind != ProjectLayerKind::Drawing {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\" plays a particles resource but is a {} layer; a DRAWING \
                  layer plays particles",
                 layer.name,
@@ -1075,19 +1291,19 @@ fn particle_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// A scene environment (rung 35) names a preset the pass has and an
 /// intensity above zero; anything else falls back to the synthetic sky,
 /// which is worth saying before chrome reads dark for no visible reason.
-fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn environment_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let Some(env) = meta.composition_settings.environment.as_ref() else {
         return;
     };
     if !env.is_known() {
-        out.push(format!(
+        out.breaks(format!(
             "compositionSettings.environment names preset \"{}\", which is not one — \
              studio, sunset or night; the synthetic sky is used instead",
             env.preset
         ));
     }
     if env.intensity() <= 0.0 {
-        out.push(format!(
+        out.breaks(format!(
             "compositionSettings.environment has intensity {}; it must be above zero \
              (1 is the default) or the environment lights nothing",
             env.intensity()
@@ -1098,11 +1314,11 @@ fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     if let Some(id) = env.resource_id.as_deref() {
         let resources = meta.resources.as_deref().unwrap_or(&[]);
         match resources.iter().find(|r| r.id == id) {
-            None => out.push(format!(
+            None => out.breaks(format!(
                 "compositionSettings.environment names a picture the project does not have \
                  ({id}); the preset, or the synthetic sky, is mirrored instead"
             )),
-            Some(r) if r.kind != promo_model::ProjectResourceKind::Image => out.push(format!(
+            Some(r) if r.kind != promo_model::ProjectResourceKind::Image => out.breaks(format!(
                 "compositionSettings.environment names \"{}\", which is not an image; a \
                  picture of the world is an image resource — an equirectangular panorama",
                 r.display_name
@@ -1110,7 +1326,7 @@ fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             Some(r) => {
                 if let (Some(w), Some(h)) = (r.pixel_width, r.pixel_height) {
                     if h > 0.0 && !(1.6..=2.4).contains(&(w / h)) {
-                        out.push(format!(
+                        out.warn(format!(
                             "compositionSettings.environment picture \"{}\" is {}×{}; a panorama \
                              is twice as wide as tall, and this one is stretched to fit",
                             r.display_name, w, h
@@ -1126,7 +1342,7 @@ fn environment_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// a camera's `motionPath` must name one, a route needs two points and
 /// a known curve, and a camera's gaze must be a name it knows or a
 /// member the stage has.
-fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn route_warnings(meta: &ProjectMetadata, out: &mut Report) {
     use promo_model::ProjectLayerKind as Kind;
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for resource in resources {
@@ -1134,7 +1350,7 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             continue;
         };
         if resource.kind != promo_model::ProjectResourceKind::Path {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\" carries a `route` but is a {} resource; a route lives on a \
                  \"kind\": \"path\" resource",
                 resource.display_name,
@@ -1142,13 +1358,13 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             ));
         }
         if route.points.len() < 2 {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": a route needs at least two points",
                 resource.display_name
             ));
         }
         if !promo_model::Route::CURVES.contains(&route.curve()) {
-            out.push(format!(
+            out.breaks(format!(
                 "resource \"{}\": route curve \"{}\" is not one — smooth or linear",
                 resource.display_name,
                 route.curve()
@@ -1181,7 +1397,7 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     .iter()
                     .any(|r| r.id == path.path_resource_id && r.route.is_some());
                 if !has_route {
-                    out.push(format!(
+                    out.breaks(format!(
                         "member \"{}\" of stage \"{}\" names a motionPath ({}) that is not a \
                          path resource with a `route`; in a stage a move follows a 3D route, \
                          so it goes straight instead",
@@ -1199,7 +1415,7 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     .iter()
                     .any(|r| r.id == path.path_resource_id && r.route.is_some());
                 if !has_route {
-                    out.push(format!(
+                    out.breaks(format!(
                         "stage \"{}\": the camera's motionPath ({}) is not a path resource with \
                          a `route`; the camera moves on its orbit instead",
                         stage.name, path.path_resource_id
@@ -1210,14 +1426,14 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                 Some(promo_model::CameraTarget::Named(n))
                     if !promo_model::CameraTarget::NAMES.contains(&n.as_str()) =>
                 {
-                    out.push(format!(
+                    out.breaks(format!(
                         "stage \"{}\": camera target \"{n}\" is not one — center, ahead, a \
                          member or a point; the centre is used",
                         stage.name
                     ));
                 }
                 Some(promo_model::CameraTarget::Member { member }) if !is_member(member) => {
-                    out.push(format!(
+                    out.breaks(format!(
                         "stage \"{}\": the camera looks at member {member}, which the stage does \
                          not have; the centre is used",
                         stage.name
@@ -1232,7 +1448,7 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// A morph (rung 39) plays inside the stage its bodies are in, on a
 /// drawing member whose keyframes carry `progress`: a morph on the
 /// canvas draws nothing, and a `progress` anywhere else does nothing.
-fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn morph_warnings(meta: &ProjectMetadata, out: &mut Report) {
     use promo_model::ProjectLayerKind as Kind;
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     let is_morph = |id: Option<&str>| {
@@ -1264,7 +1480,7 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             continue;
         }
         if is_morph(layer.resource_id.as_deref()) {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\" plays a morph on the canvas; a morph is particles in a STAGE — \
                  make it a member of the stage its two bodies are in",
                 layer.name
@@ -1282,7 +1498,7 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         }
         let plays_morph = layer.kind == Kind::Drawing && is_morph(layer.resource_id.as_deref());
         if !plays_morph {
-            out.push(format!(
+            out.breaks(format!(
                 "layer \"{}\" keys `progress`, which only a stage member playing a morph \
                  reads; here it does nothing",
                 layer.name
@@ -1292,7 +1508,7 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .iter()
             .any(|p| !p.is_finite() || !(0.0..=1.0).contains(p))
         {
-            out.push(format!(
+            out.warn(format!(
                 "layer \"{}\" keys a progress outside 0…1; it is clamped",
                 layer.name
             ));
@@ -1306,7 +1522,7 @@ fn morph_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
 /// picture). Each still renders as it did; each is named with what
 /// replaced it — a text body and a device body, real bodies in a stage,
 /// lit and finished like everything else there.
-fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for layer in promo_model::nesting::all_layers(meta) {
         if layer.kind != ProjectLayerKind::Caption {
@@ -1323,7 +1539,7 @@ fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .and_then(|r| r.caption_style.as_ref())
             .is_some_and(|s| s.depth.is_some());
         if depth_on_layer || depth_on_resource {
-            out.push(format!(
+            out.warn(format!(
                 "caption \"{}\" uses 2.5D `depth` (stacked copies) — legacy; a title with a \
                  side is a TEXT BODY: a model resource with a recipe, standing in a stage \
                  under its light",
@@ -1335,7 +1551,7 @@ fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .iter()
             .any(|k| k.tilt_x.is_some() || k.tilt_y.is_some())
         {
-            out.push(format!(
+            out.warn(format!(
                 "caption \"{}\" keys a 2.5D tilt — legacy; a leaning title is a text body \
                  turned by its own `camera` in a stage",
                 layer.name
@@ -1348,7 +1564,7 @@ fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .as_ref()
             .is_some_and(|f| f.kind == promo_model::ResourceFrameKind::Device)
         {
-            out.push(format!(
+            out.warn(format!(
                 "resource \"{}\" wears a device FRAME — legacy 2.5D; a device is a BODY \
                  (`promo device`, the app's + Body menu, `promo_device_model`) with the \
                  picture bound to its Screen slot",
@@ -1358,7 +1574,7 @@ fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
 }
 
-fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let wears_slab = layer
@@ -1375,7 +1591,7 @@ fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .iter()
             .any(|k| k.tilt_x.is_some() || k.tilt_y.is_some())
         {
-            out.push(format!(
+            out.warn(format!(
                 "layer \"{}\": tilt keyframes on a device frame re-bake per frame \
                  only in the apps — a headless render (CLI/MCP) holds the frame's \
                  stored tilt",
@@ -1385,7 +1601,7 @@ fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     }
 }
 
-fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn palette_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let settings = &meta.composition_settings;
     let defined: std::collections::BTreeSet<String> = settings
         .palette
@@ -1401,7 +1617,7 @@ fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
     let mut used = std::collections::BTreeSet::new();
     collect_colour_references(&document, &mut used);
     for name in used.difference(&defined) {
-        out.push(format!(
+        out.breaks(format!(
             "colour \"@{name}\" is used but no palette entry defines it — an \
              unresolved name is NOT a fallback to the field's own default: it \
              is handed on unchanged, fails to parse as hex, and renders black"
@@ -1427,7 +1643,7 @@ fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
         );
     for entry in entries {
         if let Some(target) = entry.color_hex.strip_prefix('@') {
-            out.push(format!(
+            out.breaks(format!(
                 "palette entry \"{}\" holds \"@{target}\" — an entry is a \
                  definition, not a reference, and chains are not followed: \
                  every use of \"@{}\" renders black",
@@ -1448,7 +1664,7 @@ fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
             .iter()
             .find(|r| r.id == id)
         {
-            None => out.push(format!(
+            None => out.warn(format!(
                 "compositionSettings.paletteResourceID names \"{id}\", which is \
                  not a resource in this project — nothing materializes, and \
                  settings.palette stands as written"
@@ -1464,7 +1680,7 @@ fn palette_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                                 && a.color_hex.eq_ignore_ascii_case(&b.color_hex)
                         });
                 if !same {
-                    out.push(format!(
+                    out.warn(format!(
                         "compositionSettings.palette differs from the palette \
                          resource \"{}\" it follows — the app rewrites it from \
                          the resource on open, so a render from this file as it \
@@ -1508,7 +1724,7 @@ fn collect_colour_references(
     }
 }
 
-fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
+fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Report) {
     use promo_model::{DurationRuleKind, TimingReference};
     let layers = meta.layers.as_deref().unwrap_or(&[]);
     let resources = meta.resources.as_deref().unwrap_or(&[]);
@@ -1535,13 +1751,13 @@ fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     .and_then(|r| r.duration)
                     .is_some_and(|d| d > 0.0);
                 if layer.resource_id.is_none() {
-                    out.push(format!(
+                    out.breaks(format!(
                         "layer \"{}\": durationRule fitContent has no resource to fit — \
                          the stored duration stands",
                         layer.name
                     ));
                 } else if !has_content {
-                    out.push(format!(
+                    out.warn(format!(
                         "layer \"{}\": durationRule fitContent — the resource's length is \
                          not known yet (no file, or no measured duration); the stored \
                          duration stands until it is",
@@ -1549,7 +1765,7 @@ fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                     ));
                 }
                 if layer.timing.as_ref().is_some_and(|t| t.end.is_some()) {
-                    out.push(format!(
+                    out.breaks(format!(
                         "layer \"{}\": durationRule and an END anchor are two producers \
                          for one number — the anchor wins and the rule does nothing",
                         layer.name
@@ -1571,14 +1787,14 @@ fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Vec<String>) {
                         })
                 });
                 if !has_dependent {
-                    out.push(format!(
+                    out.breaks(format!(
                         "layer \"{}\": durationRule fitDependents, but no layer's start \
                          is anchored to it — nothing to fit, the stored duration stands",
                         layer.name
                     ));
                 }
                 if layer.timing.as_ref().is_some_and(|t| t.end.is_some()) {
-                    out.push(format!(
+                    out.breaks(format!(
                         "layer \"{}\": durationRule and an END anchor are two producers \
                          for one number — the anchor wins and the rule does nothing",
                         layer.name

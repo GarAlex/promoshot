@@ -69,7 +69,7 @@ Linux machine, `mesa-vulkan-drivers` (lavapipe) is enough of a GPU.
 cargo build --release -p promo-cli     # -> target/release/promo
 
 promo schema                            # authoring subset + recipes; --full, --types
-promo validate <project>                # exit 0 == this will render
+promo validate <project> [--strict]     # "NOT OK" lists what will not render; --strict exits 1 on any finding
 promo inspect  <project>                # canvas, layers, missing media, undefined colours
 promo still    <project> --out f.png --time 2.5
 promo frames   <project> --out frames/ --fps 30 --from 0 --to 4
@@ -356,13 +356,15 @@ Start with `promo schema`. The short version: a project folder holds
 are fine — apps mint UUIDs on adoption); layers place resources
 on a timeline with keyframes (hold-then-ease), placement rules, transitions
 and palette-named colours (`@accent`). Validate before rendering — the
-validator names what the renderer would silently correct, undefined colour
-names included.
+answer starts NOT OK when something will not render or has no effect (a
+field nothing reads, with the name that was meant; a value that does
+nothing where it is; missing media), then names what the renderer would
+quietly adjust, undefined colour names included.
 
 ```
 mkdir -p Demo.promo/Resources
 # write Demo.promo/metadata.json, copy media into Resources/
-promo validate Demo.promo && promo still Demo.promo --out look.png --time 1
+promo validate Demo.promo --strict && promo still Demo.promo --out look.png --time 1
 ```
 
 Or let the MCP server spend the boilerplate (`promo_init`,

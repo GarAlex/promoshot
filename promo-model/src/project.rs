@@ -1267,8 +1267,9 @@ pub struct Placement {
     /// Drawn width in canvas pixels. Needs the source aspect.
     #[serde(default, skip_serializing_if = "is_none")]
     pub width: Option<f64>,
-    /// Contain/cover the canvas. Wins under `height`, which wins under
-    /// `width`, when more than one is given (validation names the conflict).
+    /// Contain/cover the canvas. When more than one size is given, `height`
+    /// wins over `width` and `width` over `mode` (validation names the
+    /// losers as having no effect).
     #[serde(default, skip_serializing_if = "is_none")]
     pub mode: Option<PlacementMode>,
     /// Absent means `center`.
@@ -4901,6 +4902,105 @@ impl ProjectMetadata {
         serde_json::from_str(json)
     }
 
+    /// Every key in `json` that the model does not read (review 2026-09-27,
+    /// P1-18). Two kinds: keys serde IGNORES while decoding (types without a
+    /// preserved-unknown bag — keyframes, styles, settings — drop them),
+    /// found with `serde_ignored`, which counts an alias as read; and keys
+    /// that land in a bag (`extra` on the project, layers, resources, media
+    /// cuts, exports), which the core keeps for other readers and never
+    /// renders. The validator turns these into "has no effect" — a
+    /// misspelt or misplaced field used to pass validation silently.
+    ///
+    /// Some bag keys ARE read — by the apps (`speech`, `libraryID`, …) or
+    /// by the author tools (`handles`); telling those apart is the
+    /// validator's job, not this walk's.
+    pub fn unread_keys(json: &str) -> Result<Vec<UnreadKey>, serde_json::Error> {
+        fn steps(path: &serde_ignored::Path, out: &mut Vec<PathStep>) {
+            match path {
+                serde_ignored::Path::Root => {}
+                serde_ignored::Path::Seq { parent, index } => {
+                    steps(parent, out);
+                    out.push(PathStep::Index(*index));
+                }
+                serde_ignored::Path::Map { parent, key } => {
+                    steps(parent, out);
+                    out.push(PathStep::Key(key.clone()));
+                }
+                serde_ignored::Path::Some { parent }
+                | serde_ignored::Path::NewtypeStruct { parent }
+                | serde_ignored::Path::NewtypeVariant { parent } => steps(parent, out),
+            }
+        }
+        let mut out = Vec::new();
+        let mut de = serde_json::Deserializer::from_str(json);
+        let meta: ProjectMetadata = serde_ignored::deserialize(&mut de, |path| {
+            let mut path_steps = Vec::new();
+            steps(&path, &mut path_steps);
+            if let Some(PathStep::Key(key)) = path_steps.pop() {
+                out.push(UnreadKey {
+                    path: path_steps,
+                    key,
+                });
+            }
+        })?;
+        let key = |path: &[PathStep], key: &str| UnreadKey {
+            path: path.to_vec(),
+            key: key.to_string(),
+        };
+        let field = |name: &str| PathStep::Key(name.to_string());
+        for name in meta.extra.keys() {
+            out.push(key(&[], name));
+        }
+        fn walk(layers: &[ProjectLayer], at: &[PathStep], out: &mut Vec<UnreadKey>) {
+            for (index, layer) in layers.iter().enumerate() {
+                let mut here = at.to_vec();
+                here.push(PathStep::Index(index));
+                for name in layer.extra.keys() {
+                    out.push(UnreadKey {
+                        path: here.clone(),
+                        key: name.clone(),
+                    });
+                }
+                if let Some(members) = layer.members.as_deref() {
+                    let mut inner = here.clone();
+                    inner.push(PathStep::Key("members".into()));
+                    walk(members, &inner, out);
+                }
+            }
+        }
+        walk(
+            meta.layers.as_deref().unwrap_or(&[]),
+            &[field("layers")],
+            &mut out,
+        );
+        for (index, resource) in meta.resources.as_deref().unwrap_or(&[]).iter().enumerate() {
+            let here = [field("resources"), PathStep::Index(index)];
+            for name in resource.extra.keys() {
+                out.push(key(&here, name));
+            }
+            for (cut_index, cut) in resource.media_cuts.iter().enumerate() {
+                let at = [
+                    here.to_vec(),
+                    vec![field("mediaCuts"), PathStep::Index(cut_index)],
+                ]
+                .concat();
+                for name in cut.extra.keys() {
+                    out.push(key(&at, name));
+                }
+            }
+            if let Some(composition) = resource.composition.as_ref() {
+                let at = [here.to_vec(), vec![field("composition"), field("layers")]].concat();
+                walk(&composition.layers, &at, &mut out);
+            }
+        }
+        for (index, export) in meta.exports.as_deref().unwrap_or(&[]).iter().enumerate() {
+            for name in export.extra.keys() {
+                out.push(key(&[field("exports"), PathStep::Index(index)], name));
+            }
+        }
+        Ok(out)
+    }
+
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
@@ -4954,6 +5054,97 @@ impl ProjectMetadata {
         self.caption_resource_named(showing)
             .and_then(|resource| resource.caption_style.clone())
             .or_else(|| layer.caption_style.clone())
+    }
+}
+
+/// One step into the document: a key (a struct field, or a map's key such
+/// as a material slot's name) or an array index.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PathStep {
+    Key(String),
+    Index(usize),
+}
+
+/// A key a file carries that the model does not read: `path` leads to the
+/// object holding it, `key` is its name there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnreadKey {
+    pub path: Vec<PathStep>,
+    pub key: String,
+}
+
+impl UnreadKey {
+    /// The holding object written the way a person reads a path —
+    /// `layers[2].keyframes[0]`; empty at the top level.
+    pub fn location(&self) -> String {
+        let mut out = String::new();
+        for step in &self.path {
+            match step {
+                PathStep::Index(index) => out.push_str(&format!("[{index}]")),
+                PathStep::Key(name) => {
+                    if !out.is_empty() {
+                        out.push('.');
+                    }
+                    out.push_str(name);
+                }
+            }
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod unread_key_tests {
+    use super::*;
+
+    /// Every place a key can hide says where it is: a keyframe typo (a
+    /// type with no bag — serde drops it), a layer-level field (the
+    /// layer's bag keeps it), a caption style's settings-only name, a
+    /// material slot whose NAME has a dot in it (the path is structured,
+    /// never a dotted string split back apart), a nested composition's
+    /// layer, and the top level.
+    #[test]
+    fn every_unread_key_says_where_it_is() {
+        let json = r#"{"id":"P","name":"t","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":8,"videoDuration":8,"subtitles":[],
+            "$schema":"x",
+            "compositionSettings":{"canvasWidth":160,"canvasHeight":100,"backgroundColorHex":"000000"},
+            "resources":[{"id":"M","kind":"model","filename":"m.glb","displayName":"m","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+                          "materials":{"Screen.001":{"metalic":0.5}}},
+                         {"id":"C","kind":"caption","filename":"","displayName":"c","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+                          "captionText":"hi","captionStyle":{"subtitleFontSize":40}},
+                         {"id":"CA","kind":"composition","filename":"","displayName":"A","addedAt":0,"duration":8,"imageCuts":[],"disabledAudioTrackIndices":[],
+                          "composition":{"canvasWidth":80,"canvasHeight":50,"layers":[
+                              {"id":"N","name":"inner","sortIndex":0,"kind":"image","isEnabled":true,"startTime":0,"duration":8,"glow":1}]}}],
+            "layers":[{"id":"L","name":"card","sortIndex":0,"kind":"image","isEnabled":true,"startTime":0,"duration":8,"opacity":0.5,
+                       "keyframes":[{"id":"K0","time":0,"transitionDuration":0,"opacty":0.2}]}]}"#;
+        let keys = ProjectMetadata::unread_keys(json).expect("decodes");
+        let found: Vec<(String, String)> =
+            keys.iter().map(|k| (k.location(), k.key.clone())).collect();
+        for (at, key) in [
+            ("", "$schema"),
+            ("layers[0]", "opacity"),
+            ("layers[0].keyframes[0]", "opacty"),
+            ("resources[1].captionStyle", "subtitleFontSize"),
+            ("resources[2].composition.layers[0]", "glow"),
+        ] {
+            assert!(
+                found.contains(&(at.to_string(), key.to_string())),
+                "{key} at {at:?} missing from {found:?}"
+            );
+        }
+        // Material bindings are read loosely (a slot is a small open
+        // object), so the typo there is not the walk's to see; but the
+        // slot name with a dot must never be split into two steps.
+        assert!(
+            !keys
+                .iter()
+                .any(|k| k.path.contains(&PathStep::Key("Screen".into()))),
+            "a slot name was split at its dot: {found:?}"
+        );
+        // Read keys are not reported.
+        assert!(!found
+            .iter()
+            .any(|(_, key)| key == "captionText" || key == "transitionDuration"));
     }
 }
 

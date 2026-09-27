@@ -239,8 +239,8 @@
    "captionText": "One format. Real 3D.",
    "captionStyle": {
     "alignment": "center",
-    "subtitleFontSize": 54,
-    "subtitleBold": true,
+    "fontSize": 54,
+    "isBold": true,
     "placement": {
      "anchor": "bottom",
      "offset": [

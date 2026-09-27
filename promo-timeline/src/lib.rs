@@ -18,6 +18,7 @@ pub mod layout_check;
 pub mod mapping;
 pub mod motion;
 pub mod plan;
+pub mod report;
 pub mod reveal;
 pub mod route;
 pub mod sprite;

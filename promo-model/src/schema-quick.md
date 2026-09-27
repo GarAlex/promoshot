@@ -1,8 +1,9 @@
 # .promo, the short course
 
 A project is a FOLDER: `metadata.json` + `Resources/` holding the media it
-names. Write the JSON, `promo validate` it (the validator runs the
-renderers' own parser — "ok" means it renders), then render or open it.
+names. Write the JSON, `promo validate` it (the renderers' own parser:
+"ok" renders as written, "NOT OK" lists what will not), then render or
+open it.
 This is the authoring subset; `promo_schema_full` is the whole format.
 
 - Never guess `minReaderVersion`: copy what `promo_validate` names (the

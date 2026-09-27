@@ -349,7 +349,7 @@ The loop:
 1. `promo_schema` once — the format's authority, with complete recipes. `promo_schema_full` when you need a feature it does not cover.
 2. `promo_workspace` — where new projects may be created on this machine.
 3. Write `metadata.json`. Ids are strings, unique in the file; short names are fine (the app keeps them as `handles` when it mints UUIDs). Sizes and positions are in canvas pixels; prefer a `placement` rule over raw shifts.
-4. `promo_validate` — the renderer's own parser. `ok` means it will render.
+4. `promo_validate` — the renderer's own parser. The first word is the verdict: `NOT OK` lists what will not render or has no effect — fix those first; `ok` means it renders as written.
 5. `promo_render_frames` — LOOK. It samples the piece and answers with one contact sheet as an image. Fix what you see, then `promo_render_video`.
 
 Renders land BESIDE the project, in `<Name> Exports/`, and return paths, never bytes.";
@@ -403,9 +403,12 @@ fn tool_descriptors() -> Value {
     let mut descriptors = json!([
         {
             "name": "promo_validate",
-            "description": "Decode a project with the renderer's own parser and report \
-                everything it would silently correct. 'ok' means it will render. A \
-                mid-composition thumbnail comes attached — glance at it.",
+            "description": "Decode a project with the renderer's own parser and say whether \
+                it renders as written. NOT OK leads with what will not render or has no \
+                effect — a field nothing reads (with the name that was meant), a value that \
+                does nothing where it is, missing media; ok means it renders, and any \
+                warnings name what the renderer adjusts. A mid-composition thumbnail comes \
+                attached — glance at it.",
             "inputSchema": { "type": "object",
                 "properties": { "project": project, "preview": preview },
                 "required": ["project"] }
@@ -1690,6 +1693,9 @@ mod tests {
             "never video",
             "video layers cannot swap",
             "codec: \"prores\"",
+            // `ok` came back beside missing media and fields nothing read;
+            // the verdict is NOT OK / ok now, and "ok" no longer promises.
+            "means it will render",
         ];
         let tools = tool_descriptors().to_string();
         let sources = [
