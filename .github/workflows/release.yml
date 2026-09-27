@@ -4,6 +4,10 @@
 #   - promoshot-<tag>-linux-x64.tar.gz  (promo + promoshot-mcp)
 #   - promoshot-<tag>-macos-arm64.tar.gz
 #   - ghcr.io/garalex/promoshot-mcp:<tag> and :latest
+#
+# Nothing publishes until the regression round passes on the tagged commit:
+# both publishing jobs need it. (Until 2026-09-27 a tag published whatever
+# it pointed at while regression was red — 19 runs out of 19.)
 name: release
 
 on:
@@ -14,7 +18,13 @@ permissions:
   contents: read
 
 jobs:
+  regression:
+    uses: ./.github/workflows/regression.yml
+    permissions:
+      contents: read
+
   binaries:
+    needs: regression
     strategy:
       matrix:
         include:
@@ -51,6 +61,7 @@ jobs:
           generate_release_notes: true
 
   docker:
+    needs: regression
     runs-on: ubuntu-latest
     permissions:
       contents: read

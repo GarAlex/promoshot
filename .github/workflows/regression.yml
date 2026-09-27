@@ -3,7 +3,8 @@
 # fonts, ffmpeg for video.
 #
 # Runs on every push to main (so a failure is seen the day it lands, not at
-# the next tag), on tags, on demand, and as a reusable workflow. It failed
+# the next tag), on demand, and as a reusable workflow — release.yml calls
+# it on every tag and publishes nothing unless it passes. It failed
 # 19 times out of 19 while nothing read it; two things make it readable now:
 # `--no-fail-fast`, so one failing crate no longer hides the rest, and one
 # annotation per failed test, which the check-runs API serves without a
@@ -15,7 +16,6 @@ name: regression
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
   workflow_call:
 
