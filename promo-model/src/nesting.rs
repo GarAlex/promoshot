@@ -298,7 +298,7 @@ mod tests {
         assert_eq!(markers[0].kind, crate::MarkerKind::Chapter);
         assert_eq!(markers[1].kind, crate::MarkerKind::Marker);
         assert_eq!(
-            markers[2].kind,
+            markers[2].kind.known(),
             crate::MarkerKind::Marker,
             "unknown kinds read as markers"
         );
@@ -337,7 +337,7 @@ mod tests {
         assert_eq!(effects[0].kind, crate::AudioEffectKind::Normalize);
         assert_eq!(effects[0].target_lufs, Some(-14.0));
         assert_eq!(
-            effects[1].kind,
+            effects[1].kind.known(),
             crate::AudioEffectKind::None,
             "unknown effects are skipped"
         );

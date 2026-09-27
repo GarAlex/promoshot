@@ -23,9 +23,42 @@ fn is_false(v: &bool) -> bool {
     !*v
 }
 
-/// Tolerant string-enum decode helper: any unknown raw value maps to the
-/// given fallback (mirrors the Swift `init(from:)` overrides that keep old
-/// app versions able to open newer projects).
+/// An enum value this build does not know — kept, so a file a newer build
+/// wrote round-trips instead of being rewritten with the fallback (review
+/// 2026-09-27, P2-44). Interned, so the enums stay `Copy`: the table only
+/// grows by the distinct unknown strings a process ever reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UnknownValue(u32);
+
+impl UnknownValue {
+    fn table() -> &'static std::sync::Mutex<Vec<&'static str>> {
+        static TABLE: std::sync::OnceLock<std::sync::Mutex<Vec<&'static str>>> =
+            std::sync::OnceLock::new();
+        TABLE.get_or_init(Default::default)
+    }
+
+    /// The value for `raw`, the same one every time it is read.
+    pub fn intern(raw: &str) -> Self {
+        let mut table = Self::table().lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(index) = table.iter().position(|s| *s == raw) {
+            return UnknownValue(index as u32);
+        }
+        table.push(Box::leak(raw.to_string().into_boxed_str()));
+        UnknownValue(table.len() as u32 - 1)
+    }
+
+    /// The string as the file wrote it.
+    pub fn as_str(self) -> &'static str {
+        let table = Self::table().lock().unwrap_or_else(|p| p.into_inner());
+        table.get(self.0 as usize).copied().unwrap_or("")
+    }
+}
+
+/// Tolerant string enums: an unknown raw value decodes to `Unknown`, which
+/// BEHAVES as the given fallback everywhere a decision is made (`known()`)
+/// and is written back exactly as it came (mirrors the Swift `init(from:)`
+/// overrides that keep old app versions able to open newer projects — and,
+/// since review 2026-09-27 P2-44, without losing what they cannot read).
 macro_rules! tolerant_enum {
     ($name:ident, $fallback:ident, [$(($variant:ident, $raw:literal)),+ $(,)?]) => {
         tolerant_enum!($name, $fallback, [$(($variant, $raw)),+], legacy: []);
@@ -34,17 +67,36 @@ macro_rules! tolerant_enum {
     // variant. They never serialize, so they stay out of the enum itself.
     ($name:ident, $fallback:ident, [$(($variant:ident, $raw:literal)),+ $(,)?],
      legacy: [$(($legacy_variant:ident, $legacy_raw:literal)),* $(,)?]) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum $name {
-            $(#[serde(rename = $raw)] $variant,)+
+            $($variant,)+
+            /// A value a newer build wrote: acts as the fallback, written
+            /// back as it came.
+            Unknown(UnknownValue),
         }
 
         impl $name {
-            /// The wire string, from the same literal serde uses.
+            /// The wire string — for an unknown value, the one the file had.
             pub fn as_str(&self) -> &'static str {
                 match self {
                     $($name::$variant => $raw,)+
+                    $name::Unknown(raw) => raw.as_str(),
                 }
+            }
+
+            /// What this build does with the value: an unknown one acts as
+            /// the fallback.
+            pub fn known(self) -> Self {
+                match self {
+                    $name::Unknown(_) => $name::$fallback,
+                    other => other,
+                }
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                s.serialize_str(self.as_str())
             }
         }
 
@@ -54,8 +106,17 @@ macro_rules! tolerant_enum {
                 Ok(match raw.as_str() {
                     $($raw => $name::$variant,)+
                     $($legacy_raw => $name::$legacy_variant,)*
-                    _ => $name::$fallback,
+                    _ => $name::Unknown(UnknownValue::intern(&raw)),
                 })
+            }
+        }
+
+        impl schemars::JsonSchema for $name {
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($name).into()
+            }
+            fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                schemars::json_schema!({ "type": "string", "enum": [$($raw),+] })
             }
         }
     };
@@ -1206,7 +1267,8 @@ impl Easing {
     pub fn apply(self, t: f64) -> f64 {
         let t = t.clamp(0.0, 1.0);
         match self {
-            Easing::Linear => t,
+            // An easing a newer build wrote runs as the fallback, linear.
+            Easing::Linear | Easing::Unknown(_) => t,
             // Quadratic rather than cubic: gentle enough to be the answer to
             // "this looks mechanical" without becoming a gesture of its own.
             Easing::EaseIn => t * t,
@@ -1310,7 +1372,8 @@ impl Placement {
             Anchor::Top => (1, 0),
             Anchor::TopRight => (2, 0),
             Anchor::Left => (0, 1),
-            Anchor::Center => (1, 1),
+            // An anchor a newer build wrote sits where the fallback does.
+            Anchor::Center | Anchor::Unknown(_) => (1, 1),
             Anchor::Right => (2, 1),
             Anchor::BottomLeft => (0, 2),
             Anchor::Bottom => (1, 2),
@@ -2178,6 +2241,9 @@ pub struct CompositionSettings {
     pub gif_export_fps: f64,
     pub video_export_width: Option<f64>,
     pub video_export_height: Option<f64>,
+    /// Unknown keys, preserved — see `ProjectMetadata::extra` (review
+    /// 2026-09-27, P2-44).
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for CompositionSettings {
@@ -2243,6 +2309,7 @@ impl Default for CompositionSettings {
             gif_export_fps: 10.0,
             video_export_width: None,
             video_export_height: None,
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -2294,6 +2361,8 @@ struct CompositionSettingsWire {
     gif_export_fps: Option<f64>,
     video_export_width: Option<f64>,
     video_export_height: Option<f64>,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl<'de> Deserialize<'de> for CompositionSettings {
@@ -2387,6 +2456,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             gif_export_fps: w.gif_export_fps.unwrap_or(dflt.gif_export_fps),
             video_export_width: w.video_export_width,
             video_export_height: w.video_export_height,
+            extra: w.extra,
         })
     }
 }
@@ -2449,6 +2519,8 @@ impl Serialize for CompositionSettings {
             video_export_width: &'a Option<f64>,
             #[serde(skip_serializing_if = "is_none")]
             video_export_height: &'a Option<f64>,
+            #[serde(flatten)]
+            extra: &'a serde_json::Map<String, serde_json::Value>,
         }
         Wire {
             canvas_width: self.canvas_width,
@@ -2493,6 +2565,7 @@ impl Serialize for CompositionSettings {
             gif_export_fps: self.gif_export_fps,
             video_export_width: &self.video_export_width,
             video_export_height: &self.video_export_height,
+            extra: &self.extra,
         }
         .serialize(s)
     }
@@ -2729,6 +2802,11 @@ pub struct ProjectLayerKeyframe {
     /// its place. Image and video layers (sprites included).
     #[serde(default, skip_serializing_if = "is_none")]
     pub placement: Option<Placement>,
+    /// Unknown keys, preserved — see `ProjectMetadata::extra` (review
+    /// 2026-09-27, P2-44: a keyframe field a newer build wrote was dropped by
+    /// every re-encode here).
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 /// What a layer does once its local time runs past the end of its source.
 ///
@@ -4954,6 +5032,9 @@ impl ProjectMetadata {
         for name in meta.extra.keys() {
             out.push(key(&[], name));
         }
+        for name in meta.composition_settings.extra.keys() {
+            out.push(key(&[field("compositionSettings")], name));
+        }
         fn walk(layers: &[ProjectLayer], at: &[PathStep], out: &mut Vec<UnreadKey>) {
             for (index, layer) in layers.iter().enumerate() {
                 let mut here = at.to_vec();
@@ -4963,6 +5044,17 @@ impl ProjectMetadata {
                         path: here.clone(),
                         key: name.clone(),
                     });
+                }
+                for (k, keyframe) in layer.keyframes.iter().enumerate() {
+                    for name in keyframe.extra.keys() {
+                        let mut at = here.clone();
+                        at.push(PathStep::Key("keyframes".into()));
+                        at.push(PathStep::Index(k));
+                        out.push(UnreadKey {
+                            path: at,
+                            key: name.clone(),
+                        });
+                    }
                 }
                 if let Some(members) = layer.members.as_deref() {
                     let mut inner = here.clone();
@@ -5246,6 +5338,82 @@ mod forward_compat_tests {
         );
     }
 
+    /// Keyframes and composition settings carry what they do not model,
+    /// and an enum value this build does not know is written back as it
+    /// came — where it used to be rewritten as the fallback (review
+    /// 2026-09-27, P2-44). What the build DOES with an unknown value is
+    /// the fallback's behaviour.
+    #[test]
+    fn keyframes_settings_and_enum_values_round_trip_unread() {
+        let json = r#"{
+            "id": "T", "name": "T", "createdAt": 0, "state": "recorded",
+            "subtitles": [], "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "compositionSettings": { "canvasWidth": 640, "someFutureSetting": {"k": 1} },
+            "markers": [{ "id": "M", "time": 1, "kind": "bookmark" }],
+            "layers": [{
+                "id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                "isEnabled": true, "startTime": 0, "duration": 4,
+                "blendMode": "hue",
+                "transitionIn": { "kind": "spiral", "duration": 0.5, "from": "north" },
+                "keyframes": [{ "id": "K", "time": 0, "easing": "bounce",
+                                "placement": { "anchor": "nowhere", "mode": "stretch" },
+                                "someFutureKeyframeField": [3, 2, 1] }]
+            }],
+            "resources": [{
+                "id": "R", "kind": "audio", "filename": "a.wav", "displayName": "A",
+                "addedAt": 0, "audioEffects": [{ "kind": "reverb", "roomSize": 0.4 }]
+            }]
+        }"#;
+        let meta = ProjectMetadata::from_json(json).expect("decodes");
+        let value: serde_json::Value = serde_json::from_str(&meta.to_json().unwrap()).unwrap();
+        assert_eq!(value["compositionSettings"]["someFutureSetting"]["k"], 1);
+        assert_eq!(value["compositionSettings"]["canvasWidth"], 640.0);
+        let keyframe = &value["layers"][0]["keyframes"][0];
+        assert_eq!(
+            keyframe["someFutureKeyframeField"],
+            serde_json::json!([3, 2, 1])
+        );
+        assert_eq!(keyframe["easing"], "bounce");
+        assert_eq!(keyframe["placement"]["anchor"], "nowhere");
+        assert_eq!(keyframe["placement"]["mode"], "stretch");
+        assert_eq!(value["layers"][0]["blendMode"], "hue");
+        assert_eq!(value["layers"][0]["transitionIn"]["kind"], "spiral");
+        assert_eq!(value["layers"][0]["transitionIn"]["from"], "north");
+        assert_eq!(value["markers"][0]["kind"], "bookmark");
+        assert_eq!(value["resources"][0]["audioEffects"][0]["kind"], "reverb");
+
+        // What this build does with them: the fallback's behaviour.
+        let layer = &meta.layers.as_ref().unwrap()[0];
+        let easing = layer.keyframes[0].easing.unwrap();
+        assert!(matches!(easing, Easing::Unknown(_)));
+        assert_eq!(easing.known(), Easing::Linear);
+        assert_eq!(easing.apply(0.3), 0.3, "an unknown easing runs linear");
+        let kind = layer.transition_in.as_ref().unwrap().kind;
+        assert_eq!(kind.known(), TransitionKind::Fade);
+        assert_eq!(kind.as_str(), "spiral");
+        // Interned: one value per string, however often it is read.
+        let again = ProjectMetadata::from_json(json).unwrap();
+        assert_eq!(
+            again.layers.unwrap()[0].keyframes[0].easing.unwrap(),
+            easing
+        );
+
+        // And the report still names the keys nothing reads.
+        let unread: Vec<String> = ProjectMetadata::unread_keys(json)
+            .unwrap()
+            .iter()
+            .map(|k| format!("{}.{}", k.location(), k.key))
+            .collect();
+        assert!(
+            unread.iter().any(|k| k.contains("someFutureSetting")),
+            "{unread:?}"
+        );
+        assert!(
+            unread.iter().any(|k| k.contains("someFutureKeyframeField")),
+            "{unread:?}"
+        );
+    }
+
     #[test]
     fn version_fields_round_trip_and_stay_absent_when_unset() {
         let plain = r#"{
@@ -5462,8 +5630,15 @@ mod frame_kind_tests {
             "legacy phone frames keep their slab"
         );
 
+        // An unknown kind draws as none does, and is written back as it
+        // came (review 2026-09-27, P2-44).
         for raw in ["Border", "None", "Device", "3dbox", "phone2", "", "border "] {
-            assert_eq!(kind(raw), ResourceFrameKind::None, "unknown kind {raw:?}");
+            assert_eq!(
+                kind(raw).known(),
+                ResourceFrameKind::None,
+                "unknown kind {raw:?}"
+            );
+            assert_eq!(kind(raw).as_str(), raw, "kept as written");
         }
     }
 
@@ -5503,7 +5678,8 @@ mod placement_model_tests {
         // not the document.
         let future: Placement =
             serde_json::from_str(r#"{"height": 10, "anchor": "goldenSpiral"}"#).unwrap();
-        assert_eq!(future.anchor, Some(Anchor::Center));
+        assert_eq!(future.anchor.map(Anchor::known), Some(Anchor::Center));
+        assert_eq!(future.anchor.unwrap().as_str(), "goldenSpiral", "and kept");
 
         // A keyframe without one stays without one on the wire.
         let plain: ProjectLayerKeyframe =

@@ -528,6 +528,7 @@
       "type": "object"
     },
     "CompositionSettings": {
+      "additionalProperties": true,
       "properties": {
         "backgroundColorHex": {
           "default": null,
@@ -2432,6 +2433,7 @@
       "type": "object"
     },
     "ProjectLayerKeyframe": {
+      "additionalProperties": true,
       "properties": {
         "blur": {
           "format": "double",

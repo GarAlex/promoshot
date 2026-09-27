@@ -2480,7 +2480,8 @@ impl PreviewEngine {
                                     ..Default::default()
                                 };
                                 match style.fill {
-                                    promo_model::BackgroundFill::Stretch => {}
+                                    promo_model::BackgroundFill::Stretch
+                                    | promo_model::BackgroundFill::Unknown(_) => {}
                                     promo_model::BackgroundFill::Fit => {
                                         let scale = (cw / fw.max(1.0)).min(ch / fh.max(1.0));
                                         let (w, h) = (fw * scale, fh * scale);
@@ -4799,7 +4800,8 @@ fn media_border_style(
 ) -> MediaBorderStyle {
     let zoom = tl::clamped_zoom(zoom);
     if let Some(frame) = frame {
-        if frame.kind != promo_model::ResourceFrameKind::None {
+        // An unknown kind (a newer build's) draws as none did.
+        if frame.kind.known() != promo_model::ResourceFrameKind::None {
             return MediaBorderStyle {
                 corner_radius: (frame.corner_radius * canvas_width / 1080.0).max(0.0) * zoom,
                 border_width: (frame.border_width * canvas_width / 1080.0).max(1.0) * zoom,

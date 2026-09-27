@@ -126,7 +126,9 @@ pub fn placement_zoom(
     placement.mode.map(|mode| {
         let widthwise = canvas_width / (canvas_height * aspect);
         match mode {
-            promo_model::PlacementMode::Fit => widthwise.min(1.0),
+            promo_model::PlacementMode::Fit | promo_model::PlacementMode::Unknown(_) => {
+                widthwise.min(1.0)
+            }
             promo_model::PlacementMode::Fill => widthwise.max(1.0),
         }
     })
@@ -151,7 +153,7 @@ pub fn placement_position(
         Anchor::Top => (1, 0),
         Anchor::TopRight => (2, 0),
         Anchor::Left => (0, 1),
-        Anchor::Center => (1, 1),
+        Anchor::Center | Anchor::Unknown(_) => (1, 1),
         Anchor::Right => (2, 1),
         Anchor::BottomLeft => (0, 2),
         Anchor::Bottom => (1, 2),

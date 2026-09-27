@@ -227,7 +227,7 @@ mod tests {
 
         // Unknown export kind decodes tolerantly as Images.
         assert_eq!(
-            p.exports.as_ref().unwrap()[1].kind,
+            p.exports.as_ref().unwrap()[1].kind.known(),
             ProjectExportKind::Images
         );
     }
@@ -437,6 +437,7 @@ mod schema_doc_tests {
                 anchor: Some(Anchor::BottomRight),
                 offset: Some([0.0, -40.0]),
             }),
+            extra: Default::default(),
         }
     }
 
@@ -701,6 +702,7 @@ mod schema_doc_tests {
             gif_export_fps: 10.0,
             video_export_width: None,
             video_export_height: None,
+            extra: serde_json::Map::new(),
         }
     }
 

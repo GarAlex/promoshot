@@ -70,7 +70,7 @@ pub fn progress(reveal: &TextReveal, layer: &ProjectLayer, time: f64, units: usi
 pub fn unit_of(reveal: &TextReveal) -> promo_text::RevealBy {
     match reveal.by {
         RevealUnit::Character => promo_text::RevealBy::Character,
-        RevealUnit::Word => promo_text::RevealBy::Word,
+        RevealUnit::Word | RevealUnit::Unknown(_) => promo_text::RevealBy::Word,
         RevealUnit::Line => promo_text::RevealBy::Line,
     }
 }

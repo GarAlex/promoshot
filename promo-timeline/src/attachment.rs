@@ -445,7 +445,7 @@ fn resolve_waits(layers: &mut [ProjectLayer]) -> Vec<AttachmentProblem> {
                     ReleaseMoment::Start => Some(*start),
                     // A layer with no end of its own frees nothing: there is
                     // no moment to name.
-                    ReleaseMoment::End => *end,
+                    ReleaseMoment::End | ReleaseMoment::Unknown(_) => *end,
                 }
             })
             // The layer's own seconds, which is what a keyframe time is.

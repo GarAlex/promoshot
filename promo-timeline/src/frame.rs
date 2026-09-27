@@ -206,7 +206,7 @@ impl PhoneFrameGeometry {
 fn material_body_rgb(material: promo_model::FrameMaterial) -> [u8; 3] {
     use promo_model::FrameMaterial::*;
     let hex: u32 = match material {
-        SpaceBlack => 0x2B2B2E,
+        SpaceBlack | Unknown(_) => 0x2B2B2E,
         NaturalTitanium => 0x9B978F,
         Silver => 0xD8DADC,
         Gold => 0xE6D2A8,

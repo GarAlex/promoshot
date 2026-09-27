@@ -251,7 +251,7 @@ pub fn effects_chain(effects: &[promo_model::AudioEffect]) -> Option<String> {
             // Normalize is not a filter: one static gain at the end of the
             // chain, measured by `loudness` on what the chain produced —
             // the same gain the apps apply (review 2026-09-27, P2-30).
-            AudioEffectKind::None | AudioEffectKind::Normalize => {}
+            AudioEffectKind::None | AudioEffectKind::Normalize | AudioEffectKind::Unknown(_) => {}
             AudioEffectKind::Compressor => {
                 let threshold = effect.threshold_db.unwrap_or(-18.0).clamp(-60.0, 0.0);
                 let ratio = effect.ratio.unwrap_or(3.0).clamp(1.0, 20.0);

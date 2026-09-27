@@ -156,13 +156,13 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
         .apply(progress);
     let edge = transition.edge();
     match transition.kind {
-        TransitionKind::Fade => Effect {
+        TransitionKind::Fade | TransitionKind::Unknown(_) => Effect {
             opacity: progress,
             ..Effect::IDENTITY
         },
         TransitionKind::Wipe => Effect {
             reveal: match edge {
-                TransitionEdge::Left => [0.0, 0.0, progress, 1.0],
+                TransitionEdge::Left | TransitionEdge::Unknown(_) => [0.0, 0.0, progress, 1.0],
                 TransitionEdge::Right => [1.0 - progress, 0.0, progress, 1.0],
                 TransitionEdge::Top => [0.0, 0.0, 1.0, progress],
                 TransitionEdge::Bottom => [0.0, 1.0 - progress, 1.0, progress],
@@ -171,7 +171,7 @@ fn shape(transition: &LayerTransition, progress: f64) -> Effect {
         },
         TransitionKind::Slide | TransitionKind::Push => Effect {
             travel: match edge {
-                TransitionEdge::Left => [-(1.0 - progress), 0.0],
+                TransitionEdge::Left | TransitionEdge::Unknown(_) => [-(1.0 - progress), 0.0],
                 TransitionEdge::Right => [1.0 - progress, 0.0],
                 TransitionEdge::Top => [0.0, -(1.0 - progress)],
                 TransitionEdge::Bottom => [0.0, 1.0 - progress],
@@ -234,7 +234,7 @@ pub fn departing(transition: &LayerTransition, progress: f64) -> Effect {
         TransitionKind::Push => Effect {
             travel: match transition.edge() {
                 // Shoved out the far side: in from the right, out to the left.
-                TransitionEdge::Left => [progress, 0.0],
+                TransitionEdge::Left | TransitionEdge::Unknown(_) => [progress, 0.0],
                 TransitionEdge::Right => [-progress, 0.0],
                 TransitionEdge::Top => [0.0, progress],
                 TransitionEdge::Bottom => [0.0, -progress],
@@ -271,7 +271,8 @@ pub fn departing(transition: &LayerTransition, progress: f64) -> Effect {
         TransitionKind::Fade
         | TransitionKind::Wipe
         | TransitionKind::Slide
-        | TransitionKind::Scale => Effect::IDENTITY,
+        | TransitionKind::Scale
+        | TransitionKind::Unknown(_) => Effect::IDENTITY,
     }
 }
 
