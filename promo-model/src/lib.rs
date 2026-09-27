@@ -16,9 +16,28 @@ pub use inventory::{
 };
 pub use project::*;
 
-/// The `metadata.json` schema this crate targets. Bumped only when the Swift
-/// app changes its persisted format (both sides decode older payloads
-/// tolerantly, mirroring the Swift decoders).
+/// The newest `minReaderVersion` this build opens for WRITING — the
+/// format's one version (`schema.md`). The app's
+/// `ProjectStore.supportedFormatVersion` is the same number, held to it by
+/// core-private's bindings test.
+///
+/// 48 is the lossless reader: from 48 every writer keeps, at any depth,
+/// what it does not read — an unknown key (`unread::keep_unread` and the
+/// bags) and an enum value it does not know (the tolerant enums). So a
+/// field a later build adds that an older reader may simply IGNORE is
+/// stamped [`LOSSLESS_READER`] — a reader that keeps it — rather than a
+/// rung of its own (review 2026-09-27, P3-44). A new rung is for what an
+/// older reader cannot decode (a strict kind) or would contradict by
+/// editing around it.
+pub const READER_VERSION: i64 = 48;
+
+/// The first reader that keeps what it does not read (see
+/// [`READER_VERSION`]). A file carrying content its writer did not read,
+/// from a source stamped this or later, is stamped at least this, so a
+/// reader from before it cannot open the file and drop that content
+/// (`unread::floor_stamp`).
+pub const LOSSLESS_READER: i64 = 48;
+
 /// The project format, described for whoever is writing one by hand — an
 /// assistant, a generator script, or a person.
 ///

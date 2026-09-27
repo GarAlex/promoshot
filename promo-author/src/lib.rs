@@ -316,6 +316,7 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
     let meta_path = dir.join("metadata.json");
     let text = std::fs::read_to_string(&meta_path)
         .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
+    editable(&text, &dir)?;
     let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
@@ -648,6 +649,7 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
     let meta_path = dir.join("metadata.json");
     let text = std::fs::read_to_string(&meta_path)
         .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
+    editable(&text, &dir)?;
     let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
@@ -897,6 +899,7 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let meta_path = dir.join("metadata.json");
     let text = std::fs::read_to_string(&meta_path)
         .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
+    editable(&text, &dir)?;
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
 
@@ -1680,10 +1683,46 @@ fn stage_into_resources(project: &Path, source: &Path, info: &MediaInfo) -> Resu
 /// written and never moved; the ladder is at 42 now. Computing it here
 /// means a scaffolded project is stamped by what it actually uses, at
 /// every step, and no writer has to remember.
+/// A project this build may EDIT. `minReaderVersion` is the format's own
+/// gate: a file declaring more than this build reads was written by a
+/// newer build, whose fields an edit here could contradict — the app
+/// refuses it the same way. Reading, rendering, validating and explaining
+/// stay open (review 2026-09-27, P3-44).
+fn editable(text: &str, dir: &Path) -> Result<(), String> {
+    let declared = serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|v| v.get("minReaderVersion").and_then(Value::as_i64));
+    match declared {
+        Some(version) if version > promo_model::READER_VERSION => Err(format!(
+            "{} needs a newer promo to edit: it declares \"minReaderVersion\": {version}, \
+             and this build edits up to {} — update promo. Rendering, validating and \
+             inspecting it still work.",
+            dir.display(),
+            promo_model::READER_VERSION
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn write_metadata(meta: &ProjectMetadata, path: &Path) -> Result<(), String> {
     let mut stamped = meta.clone();
     stamped.min_reader_version = Some(stamped.minimum_reader_version());
-    let json = stamped.to_json().map_err(|e| e.to_string())?;
+    let mut json = stamped.to_json().map_err(|e| e.to_string())?;
+    // The file this replaces keeps what the format does not read, at any
+    // depth — a key a newer build wrote inside a placement or a camera
+    // survives this tool's write (review 2026-09-27, P3-44).
+    if let Some(previous) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+    {
+        let mut value: Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        let kept = promo_model::unread::keep_unread(&mut value, &previous);
+        // ...and the stamp keeps a reader that would drop it out (rung 48).
+        let raised = promo_model::unread::floor_stamp(&mut value, &previous);
+        if kept || raised {
+            json = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+        }
+    }
     std::fs::write(path, json).map_err(|e| format!("write: {e}"))
 }
 
@@ -1713,6 +1752,76 @@ fn fence_new_path(path: &Path, root: Option<&Path>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A headless edit keeps what it does not read, at any depth: a key a
+    /// newer build wrote inside a keyframe's placement is still in the file
+    /// after promo_apply renamed the layer (review 2026-09-27, P3-44).
+    #[test]
+    fn a_tool_write_keeps_an_unread_key_deep_in_the_file() {
+        let dir = std::env::temp_dir().join(format!("author-lossless-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"n","createdAt":0,"state":"recorded","trimStart":0,
+               "trimEnd":4,"videoDuration":4,"subtitles":[],"compositionSettings":{},
+               "resources":[],"layers":[
+               {"id":"card","name":"Card","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":4,"keyframes":[{"id":"k","time":0,
+                "transitionDuration":0.5,"placement":{"anchor":"center","future":7}}]}]}"#,
+        )
+        .unwrap();
+        let answer = apply(
+            &serde_json::json!({"project": dir.display().to_string(), "commands": [
+                {"kind": "renameLayer", "layerID": "card", "name": "Hero"}]}),
+            None,
+        )
+        .expect("applies");
+        assert!(answer.contains("renameLayer"), "{answer}");
+        let saved: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        assert_eq!(saved["layers"][0]["name"], "Hero");
+        assert_eq!(saved["layers"][0]["keyframes"][0]["placement"]["future"], 7);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A file declaring a newer reader than this build is not this build's
+    /// to edit: every editing tool refuses it and leaves it as it was.
+    #[test]
+    fn a_file_for_a_newer_reader_is_refused_for_editing() {
+        let dir = std::env::temp_dir().join(format!("author-newer-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let text = format!(
+            r#"{{"id":"P","name":"n","createdAt":0,"state":"recorded","trimStart":0,
+               "trimEnd":4,"videoDuration":4,"subtitles":[],"compositionSettings":{{}},
+               "minReaderVersion":{},"resources":[],"layers":[
+               {{"id":"card","name":"Card","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"duration":4,"keyframes":[]}}]}}"#,
+            promo_model::READER_VERSION + 1
+        );
+        std::fs::write(dir.join("metadata.json"), &text).unwrap();
+        let project = dir.display().to_string();
+        let refused = apply(
+            &serde_json::json!({"project": project, "commands": [
+                {"kind": "renameLayer", "layerID": "card", "name": "Hero"}]}),
+            None,
+        )
+        .expect_err("a newer file is refused");
+        assert!(refused.contains("needs a newer promo"), "{refused}");
+        let refused = upsert_keyframe(
+            &serde_json::json!({"project": project, "layer": "card", "time": 1}),
+            None,
+        )
+        .expect_err("a newer file is refused");
+        assert!(refused.contains("needs a newer promo"), "{refused}");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+            text
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// After the app has saved a project, its ids are minted UUIDs and the
     /// author's spellings sit under `handles`. A tool still takes the

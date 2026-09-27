@@ -425,6 +425,9 @@ pub struct Document {
     /// the entities that file brought, before the apps' copy hands them in
     /// (review 2026-09-27, P2-45).
     unread_source: Option<ProjectMetadata>,
+    /// That file as written, for what no struct keeps: a key at any depth
+    /// the format does not read (`promo_model::unread::keep_unread`).
+    unread_source_json: Option<serde_json::Value>,
 }
 
 impl Document {
@@ -441,6 +444,7 @@ impl Document {
             log: Vec::new(),
             layer_revisions: std::collections::HashMap::new(),
             unread_source: None,
+            unread_source_json: None,
         })
     }
 
@@ -750,6 +754,7 @@ impl Document {
         let before = self.meta.clone();
         self.meta.mirror_unread_from(&source);
         self.unread_source = Some(source);
+        self.unread_source_json = serde_json::from_str(json).ok();
         Ok(self.meta != before)
     }
 
@@ -762,7 +767,22 @@ impl Document {
         let mut meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
         self.carry_unread_into(&mut meta);
         meta.min_reader_version = Some(meta.minimum_reader_version());
-        meta.to_json().map_err(|e| e.to_string())
+        let written = meta.to_json().map_err(|e| e.to_string())?;
+        // Below the bags: a key the format does not read, at any depth, as
+        // the file held it (the lossless reader, review 2026-09-27, P3-44).
+        let Some(source) = &self.unread_source_json else {
+            return Ok(written);
+        };
+        let mut value: serde_json::Value =
+            serde_json::from_str(&written).map_err(|e| e.to_string())?;
+        let kept = promo_model::unread::keep_unread(&mut value, source);
+        // What it carries unread, a reader before the lossless one would
+        // drop: the stamp keeps such readers out (rung 48).
+        let raised = promo_model::unread::floor_stamp(&mut value, source);
+        if !kept && !raised {
+            return Ok(written);
+        }
+        serde_json::to_string(&value).map_err(|e| e.to_string())
     }
 
     /// The document's unread content into a lossy copy, then the last
@@ -2540,6 +2560,68 @@ mod tests {
         assert_eq!(saved["futureTop"], "kept");
         assert_eq!(saved["layers"][0]["futureLayer"], 1);
         assert!(saved["minReaderVersion"].as_u64().is_some());
+    }
+
+    /// The apps' save keeps what nobody reads at ANY depth: a key a newer
+    /// build wrote inside a keyframe's placement is in the file after the
+    /// Swift copy — which dropped it — is saved (review 2026-09-27, P3-44).
+    #[test]
+    fn the_apps_save_keeps_an_unread_key_deep_in_the_file() {
+        let file = serde_json::json!({ "id": "P", "name": "P", "createdAt": 0,
+            "state": "recorded", "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [], "compositionSettings": {},
+            "layers": [{ "id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                         "isEnabled": true, "startTime": 0, "duration": 2,
+                         "keyframes": [{ "id": "K", "time": 0, "transitionDuration": 0.5,
+                                         "placement": { "anchor": "center", "future": 7 } }] }] });
+        let mut lossy = file.clone();
+        lossy["layers"][0]["keyframes"][0]["placement"]
+            .as_object_mut()
+            .unwrap()
+            .remove("future");
+        lossy["layers"][0]["name"] = serde_json::json!("Renamed");
+        let mut doc = Document::open(&lossy.to_string()).unwrap();
+        doc.absorb_unread(&file.to_string()).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&lossy.to_string()).unwrap()).unwrap();
+        assert_eq!(saved["layers"][0]["keyframes"][0]["placement"]["future"], 7);
+        assert_eq!(saved["layers"][0]["name"], "Renamed");
+    }
+
+    /// Rung 48 through the apps' save: a file stamped for lossless readers
+    /// that carries a key this build does not read stays stamped 48 though
+    /// its features alone need less; once the entity holding the key is
+    /// gone, the stamp comes back down.
+    #[test]
+    fn the_apps_save_keeps_the_lossless_stamp_while_it_carries_unread() {
+        let file = serde_json::json!({ "id": "P", "name": "P", "createdAt": 0,
+            "state": "recorded", "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [], "compositionSettings": {}, "minReaderVersion": 48,
+            "layers": [
+                { "id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                  "isEnabled": true, "startTime": 0, "duration": 2,
+                  "keyframes": [{ "id": "K", "time": 0, "transitionDuration": 0.5,
+                                  "placement": { "anchor": "center", "future": 7 } }] },
+                { "id": "M", "name": "M", "sortIndex": 1, "kind": "image",
+                  "isEnabled": true, "startTime": 0, "duration": 2, "keyframes": [] }] });
+        let mut lossy = file.clone();
+        lossy["layers"][0]["keyframes"][0]["placement"]
+            .as_object_mut()
+            .unwrap()
+            .remove("future");
+        lossy.as_object_mut().unwrap().remove("minReaderVersion");
+        let mut doc = Document::open(&lossy.to_string()).unwrap();
+        doc.absorb_unread(&file.to_string()).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&lossy.to_string()).unwrap()).unwrap();
+        assert_eq!(saved["minReaderVersion"], 48);
+        assert_eq!(saved["layers"][0]["keyframes"][0]["placement"]["future"], 7);
+
+        let mut without = lossy.clone();
+        without["layers"].as_array_mut().unwrap().remove(0);
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&without.to_string()).unwrap()).unwrap();
+        assert!(saved["minReaderVersion"].as_i64().unwrap() < 48, "{saved}");
     }
 
     /// A writer that names only what it changed lands exactly where a whole

@@ -439,6 +439,17 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
         )),
         None => {}
     }
+    if let Some(declared) = meta
+        .min_reader_version
+        .filter(|v| *v > promo_model::READER_VERSION)
+    {
+        out.warn(format!(
+            "this project declares \"minReaderVersion\": {declared}, newer than this \
+             build reads ({}) — it renders and inspects here, but only a newer build \
+             may edit it, and what this build does not read is not drawn",
+            promo_model::READER_VERSION
+        ));
+    }
     out
 }
 
@@ -782,8 +793,8 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Report) {
             if layer.extra.contains_key(key) {
                 out.breaks(format!(
                     "layer \"{}\" carries \"{key}\", which belongs on the model \
-                     RESOURCE it plays (resources[].{key}) — here it is ignored, \
-                     and dropped on the next save",
+                     RESOURCE it plays (resources[].{key}) — nothing reads it here; \
+                     the file keeps it, and it does nothing",
                     layer.name
                 ));
             }
@@ -792,8 +803,8 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Report) {
             if layer.extra.contains_key(key) {
                 out.breaks(format!(
                     "layer \"{}\" carries \"{key}\" at the layer level — it belongs \
-                     on a KEYFRAME of the layer (keyframes[].{key}); here it is \
-                     ignored, and dropped on the next save",
+                     on a KEYFRAME of the layer (keyframes[].{key}); nothing reads \
+                     it here — the file keeps it, and it does nothing",
                     layer.name
                 ));
             }
@@ -804,8 +815,8 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Report) {
             if resource.extra.contains_key(key) {
                 out.breaks(format!(
                     "resource \"{}\" carries \"{key}\", which belongs on a keyframe \
-                     of the layer that plays it (layers[].keyframes[].{key}) — here \
-                     it is ignored, and dropped on the next save",
+                     of the layer that plays it (layers[].keyframes[].{key}) — nothing \
+                     reads it here; the file keeps it, and it does nothing",
                     resource.display_name
                 ));
             }
@@ -813,8 +824,8 @@ fn wrong_level_warnings(meta: &ProjectMetadata, out: &mut Report) {
         if resource.extra.contains_key("stage") {
             out.breaks(format!(
                 "resource \"{}\" carries \"stage\", which belongs on the layer that \
-                 plays it (layers[].stage) — here it is ignored, and dropped on \
-                 the next save",
+                 plays it (layers[].stage) — nothing reads it here; the file keeps \
+                 it, and it does nothing",
                 resource.display_name
             ));
         }
@@ -1970,6 +1981,25 @@ mod tests {
                 .iter()
                 .any(|w| w.contains("minReaderVersion") && w.contains('6')),
             "{warnings:?}"
+        );
+    }
+
+    /// A file for a newer reader than this build says so: it renders here,
+    /// but only a newer build may edit it. One this build reads does not.
+    #[test]
+    fn a_project_for_a_newer_reader_is_told_this_build_cannot_edit_it() {
+        let newer = format!(r#","minReaderVersion":{}"#, promo_model::READER_VERSION + 1);
+        let told = warnings(&project(&layer("video", ""), &newer));
+        assert!(
+            told.iter()
+                .any(|w| w.contains("only a newer build may edit it")),
+            "{told:?}"
+        );
+        let current = format!(r#","minReaderVersion":{}"#, promo_model::READER_VERSION);
+        let quiet = warnings(&project(&layer("video", ""), &current));
+        assert!(
+            !quiet.iter().any(|w| w.contains("newer build")),
+            "{quiet:?}"
         );
     }
 

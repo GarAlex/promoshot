@@ -4532,6 +4532,13 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 48 is the lossless reader (`crate::LOSSLESS_READER`): from it
+        // every writer keeps what it does not read, so a field added from
+        // here that an older reader may simply ignore returns 48 in this
+        // ladder rather than a number of its own. Nothing this build knows
+        // needs it — a file is stamped 48 only for content a newer build
+        // wrote that this one carries (`unread::floor_stamp`).
+        //
         // 47 is the consumer's transport — a seek or a pause on a keyframe
         // — and a swap on a VIDEO layer to a composition, the takeover.
         // An older reader drops the fields on save and the material runs
