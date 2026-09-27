@@ -1172,6 +1172,21 @@ mod tests {
         std::fs::remove_dir_all(&outside).unwrap();
     }
 
+    /// The registry manifest names the version being released and its
+    /// image: server.json is published from the tagged commit, so a bump
+    /// that forgot it would announce the previous image as the new one.
+    #[test]
+    fn the_registry_manifest_names_this_version() {
+        let manifest: Value = serde_json::from_str(include_str!("../../server.json")).unwrap();
+        let version = env!("CARGO_PKG_VERSION");
+        assert_eq!(manifest["version"], version);
+        let image = manifest
+            .pointer("/packages/0/identifier")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        assert!(image.ends_with(&format!(":v{version}")), "{image}");
+    }
+
     /// The media tools read inside the served root too, and hand ffprobe
     /// a real absolute path, never a bare name that could be an option
     /// (review 2026-09-27, P2-38).
