@@ -746,15 +746,27 @@ impl Document {
     /// changed. The file is the latest word on what the apps cannot see, so
     /// a key it removed goes and a value it changed is its value; what the
     /// apps read stays theirs. The file is kept as the source for entities
-    /// the document has not got yet. True when the document changed.
+    /// the document has not got yet — only when it holds something this
+    /// build does not read: a file the format reads whole has nothing to
+    /// put back, and a library of such projects should not hold each one
+    /// twice more. True when the document changed.
     pub fn absorb_unread(&mut self, json: &str) -> Result<bool, String> {
         let source = ProjectMetadata::from_json(json)
             .map_err(|e| e.to_string())?
             .lifted();
         let before = self.meta.clone();
         self.meta.mirror_unread_from(&source);
-        self.unread_source = Some(source);
-        self.unread_source_json = serde_json::from_str(json).ok();
+        let value: Option<serde_json::Value> = serde_json::from_str(json).ok();
+        if value
+            .as_ref()
+            .is_some_and(|v| promo_model::unread::first_unread(v).is_some())
+        {
+            self.unread_source = Some(source);
+            self.unread_source_json = value;
+        } else {
+            self.unread_source = None;
+            self.unread_source_json = None;
+        }
         Ok(self.meta != before)
     }
 
@@ -2586,6 +2598,35 @@ mod tests {
             serde_json::from_str(&doc.saved_json_from(&lossy.to_string()).unwrap()).unwrap();
         assert_eq!(saved["layers"][0]["keyframes"][0]["placement"]["future"], 7);
         assert_eq!(saved["layers"][0]["name"], "Renamed");
+    }
+
+    /// A file the format reads whole leaves no source behind (a library
+    /// holds every project's document); one with anything unread keeps it,
+    /// and a later file that dropped it lets it go.
+    #[test]
+    fn a_fully_read_file_keeps_no_source() {
+        let plain = serde_json::json!({ "id": "P", "name": "P", "createdAt": 0,
+            "state": "recorded", "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
+            "subtitles": [], "compositionSettings": {},
+            "layers": [{ "id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                         "isEnabled": true, "startTime": 0, "duration": 2, "keyframes": [] }] });
+        let mut doc = Document::open(&plain.to_string()).unwrap();
+        doc.absorb_unread(&plain.to_string()).unwrap();
+        assert!(doc.unread_source.is_none() && doc.unread_source_json.is_none());
+
+        let mut future = plain.clone();
+        future["layers"][0]["future"] = serde_json::json!(1);
+        doc.absorb_unread(&future.to_string()).unwrap();
+        assert!(doc.unread_source.is_some() && doc.unread_source_json.is_some());
+
+        doc.absorb_unread(&plain.to_string()).unwrap();
+        assert!(
+            doc.unread_source.is_none(),
+            "the file dropped it: the source goes"
+        );
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&plain.to_string()).unwrap()).unwrap();
+        assert!(saved["layers"][0].get("future").is_none(), "{saved}");
     }
 
     /// Rung 48 through the apps' save: a file stamped for lossless readers
