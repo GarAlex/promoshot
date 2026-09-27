@@ -2026,6 +2026,7 @@ name = "promo-cli"
 version = "0.2.78"
 dependencies = [
  "image",
+ "moxcms",
  "promo-author",
  "promo-engine",
  "promo-gpu",
@@ -2079,6 +2080,8 @@ dependencies = [
 name = "promo-media"
 version = "0.2.78"
 dependencies = [
+ "image",
+ "moxcms",
  "promo-gpu",
  "promo-model",
  "thiserror 2.0.20",

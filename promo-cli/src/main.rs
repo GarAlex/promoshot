@@ -235,13 +235,29 @@ fn author(command: &str, dir: &str, rest: &[String]) -> Result<String, String> {
     }
     args.insert("project".into(), serde_json::Value::String(dir.to_string()));
     let args = serde_json::Value::Object(args);
-    let probe = |path: &Path, _video: bool| match promo_media::probe_stream(path) {
-        Ok(info) => promo_author::MediaInfo {
-            duration: (info.duration_s > 0.0).then_some(info.duration_s),
-            pixels: (info.width > 0 && info.height > 0)
-                .then_some((info.width as f64, info.height as f64)),
-        },
-        Err(_) => promo_author::MediaInfo::default(),
+    // Measured the way the renderer will read it: a clip's DISPLAYED size,
+    // and a picture upright in sRGB — rewritten as a PNG when it needed
+    // anything to get there (HEIC, an EXIF rotation, a wide-gamut profile),
+    // so the file in Resources/ reads the same on every host.
+    let probe = |path: &Path, video: bool| {
+        if !video {
+            if let Ok(Some((png, width, height))) = promo_media::still::normalized_png(path) {
+                return promo_author::MediaInfo {
+                    duration: None,
+                    pixels: Some((width as f64, height as f64)),
+                    normalized: Some(png),
+                };
+            }
+        }
+        match promo_media::probe_stream(path) {
+            Ok(info) => promo_author::MediaInfo {
+                duration: (info.duration_s > 0.0).then_some(info.duration_s),
+                pixels: (info.width > 0 && info.height > 0)
+                    .then_some((info.width as f64, info.height as f64)),
+                normalized: None,
+            },
+            Err(_) => promo_author::MediaInfo::default(),
+        }
     };
     let answer = match command {
         "init" => promo_author::init(&args, None),

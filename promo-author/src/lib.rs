@@ -278,11 +278,16 @@ pub fn init(args: &Value, root: Option<&Path>) -> Result<String, String> {
 
 /// What a host knows about a media file it is staging. The server fills
 /// this with ffprobe; an app with AVFoundation; a test with a literal.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct MediaInfo {
     pub duration: Option<f64>,
-    /// (width, height) in source pixels.
+    /// (width, height) in source pixels — of `normalized` when there is one.
     pub pixels: Option<(f64, f64)>,
+    /// A picture the host rewrote so every renderer reads it the same way:
+    /// upright, sRGB, PNG — HEIC, an EXIF-rotated photo, a P3 screenshot
+    /// (review 2026-09-27, P1-23). These bytes land in `Resources/` as
+    /// `<stem>.png` instead of the file as it arrived.
+    pub normalized: Option<Vec<u8>>,
 }
 
 /// How a host measures media: handed the SOURCE path and whether the file
@@ -366,7 +371,8 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
             if !source.exists() {
                 return Err(format!("file {} does not exist", source.display()));
             }
-            let filename = copy_into_resources(&dir, &source)?;
+            let info = probe(&source, kind_name == "video");
+            let filename = stage_into_resources(&dir, &source, &info)?;
             let id = args
                 .get("resourceId")
                 .and_then(Value::as_str)
@@ -382,7 +388,6 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
             // aspect, and an unmeasured source is positioned as a SQUARE —
             // which the validator names. The HOST measures (ffprobe here,
             // AVFoundation in an app); this code only writes what it learns.
-            let info = probe(&source, kind_name == "video");
             if let Some((w, h)) = info.pixels {
                 if kind_name == "video" {
                     record["videoNaturalWidth"] = json!(w);
@@ -893,8 +898,8 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
             .map(|e| e.to_ascii_lowercase())
             .unwrap_or_default();
         let is_video = matches!(extension.as_str(), "mp4" | "mov" | "m4v" | "webm" | "mkv");
-        let filename = copy_into_resources(&dir, &source)?;
         let info = probe(&source, is_video);
+        let filename = stage_into_resources(&dir, &source, &info)?;
         let mut record = json!({
             "filename": filename,
             "kind": if is_video { "video" } else { "image" },
@@ -1315,6 +1320,23 @@ fn copy_into_resources(project: &Path, source: &Path) -> Result<String, String> 
     Ok(target.file_name().unwrap().to_string_lossy().into_owned())
 }
 
+/// Stages a source into `Resources/`: the host's normalised picture when it
+/// made one (upright sRGB PNG), the file exactly as it arrived otherwise.
+fn stage_into_resources(project: &Path, source: &Path, info: &MediaInfo) -> Result<String, String> {
+    let Some(png) = info.normalized.as_ref() else {
+        return copy_into_resources(project, source);
+    };
+    let resources = project.join("Resources");
+    std::fs::create_dir_all(&resources).map_err(|e| e.to_string())?;
+    let stem = source.file_stem().unwrap_or_default().to_string_lossy();
+    let mut target = resources.join(format!("{stem}.png"));
+    if target.exists() {
+        target = resources.join(format!("{stem}-{}.png", &mint()[..8]));
+    }
+    std::fs::write(&target, png).map_err(|e| format!("write: {e}"))?;
+    Ok(target.file_name().unwrap().to_string_lossy().into_owned())
+}
+
 /// Every write these tools make goes through here, and the reader stamp is
 /// COMPUTED on the way out.
 ///
@@ -1469,6 +1491,7 @@ mod tests {
         MediaInfo {
             duration: video.then_some(4.0),
             pixels: Some((800.0, 600.0)),
+            normalized: None,
         }
     }
 

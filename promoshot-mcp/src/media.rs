@@ -565,12 +565,40 @@ pub fn distill_transcript(raw: &Value) -> Value {
 
 /// The server's answer to promo-author's probe seam: ffprobe, best
 /// effort — absent facts stay absent and the document logic degrades the
-/// way the format does.
+/// way the format does. Pictures are copied as they are: the renderer the
+/// server runs (`promo`) reads them upright and in sRGB, as the apps do.
 pub fn host_probe(path: &Path, _video: bool) -> promo_author::MediaInfo {
     promo_author::MediaInfo {
         duration: probe_duration(path).ok(),
         pixels: probe_pixels(path).ok(),
+        normalized: None,
     }
+}
+
+/// The display rotation a stream carries (a portrait phone capture is
+/// stored landscape with a quarter-turn tag), in degrees.
+fn probe_rotation(path: &Path) -> i32 {
+    let Ok(output) = std::process::Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream_side_data=rotation",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(path)
+        .output()
+    else {
+        return 0;
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|l| l.trim().parse::<f64>().ok())
+        .map(|r| r.round() as i32)
+        .unwrap_or(0)
 }
 
 fn probe_pixels(path: &Path) -> Result<(f64, f64), String> {
@@ -598,6 +626,12 @@ fn probe_pixels(path: &Path) -> Result<(f64, f64), String> {
         .next()
         .and_then(|h| h.parse().ok())
         .ok_or("no height")?;
+    // The DISPLAYED size: a placement resolves against the picture people
+    // see, and a portrait capture stored landscape used to be stamped
+    // landscape (review 2026-09-27, P1-23).
+    if probe_rotation(path).rem_euclid(180) == 90 {
+        return Ok((height, width));
+    }
     Ok((width, height))
 }
 
@@ -628,6 +662,39 @@ fn probe_duration(path: &Path) -> Result<f64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A portrait phone capture is stored landscape with a quarter-turn
+    /// tag; the probe stamps the size people SEE (review 2026-09-27,
+    /// P1-23), which is what a placement resolves against.
+    #[test]
+    fn a_rotated_clip_is_measured_as_displayed() {
+        let dir = std::env::temp_dir().join(format!("promo-mcp-rotated-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let clip = dir.join("portrait.mp4");
+        let made = std::process::Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-display_rotation",
+                "90",
+                "-f",
+                "lavfi",
+                "-i",
+            ])
+            .arg("color=c=gray:size=64x32:rate=30:duration=1")
+            .args(["-pix_fmt", "yuv420p"])
+            .arg(&clip)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !made {
+            // No ffmpeg, no rotation to measure: the probe answers nothing.
+            assert!(host_probe(&clip, true).pixels.is_none());
+            return;
+        }
+        assert_eq!(host_probe(&clip, true).pixels, Some((32.0, 64.0)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// The probe distiller, on canned ffprobe JSON — a rotated portrait
     /// capture with sound, reduced to the facts an authoring decision reads.

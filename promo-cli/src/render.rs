@@ -49,6 +49,10 @@ struct VideoLayer {
     /// The engine copies during the call, but the buffer must outlive the
     /// call itself.
     last: Option<(Vec<u8>, u32, u32)>,
+    /// Provider flags for every frame of this clip: `FLAG_COLOR_709` when
+    /// the SOURCE says BT.709 (a proxy keeps the source's pixels, not
+    /// always its tags).
+    flags: i32,
 }
 
 impl HostState {
@@ -167,6 +171,7 @@ extern "C" fn provider(
     let Some((pixels, width, height)) = video.last.as_ref() else {
         return 1;
     };
+    let flags = video.flags;
     unsafe {
         *out_surface = HostSurface {
             kind: SURFACE_CPU_PIXELS,
@@ -176,7 +181,7 @@ extern "C" fn provider(
             bytes_per_row: width * 4,
             ..Default::default()
         };
-        *out_flags = 0;
+        *out_flags = flags;
     }
     0
 }
@@ -442,6 +447,7 @@ impl Renderer {
                             decoder: None,
                             last: None,
                             proxied,
+                            flags: Self::colour_flags(&source),
                         },
                     );
                 }
@@ -476,6 +482,7 @@ impl Renderer {
                         decoder: None,
                         last: None,
                         proxied,
+                        flags: Self::colour_flags(&source),
                     },
                 );
                 continue;
@@ -593,13 +600,25 @@ impl Renderer {
         (px, w, h, 0)
     }
 
-    /// One image file as the compositor wants it: premultiplied BGRA.
+    /// Whether the compositor converts this clip from BT.709 while sampling
+    /// — what the apps do for the colour space their decoder attaches to HD
+    /// video; without it headless midtones sat about 11/255 off the app's.
+    fn colour_flags(source: &std::path::Path) -> i32 {
+        match promo_media::probe_stream(source) {
+            Ok(info) if info.bt709 => promo_engine::FLAG_COLOR_709,
+            _ => 0,
+        }
+    }
+
+    /// One image file as the compositor wants it: upright sRGB (EXIF
+    /// orientation baked, an ICC profile converted, HEIC read through
+    /// ffmpeg — what ImageIO does in the apps), premultiplied BGRA.
     /// Straight alpha saturates every soft edge.
     fn decode_premultiplied(path: &std::path::Path) -> Result<(Vec<u8>, u32, u32), String> {
-        let decoded = image::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let rgba = decoded.to_rgba8();
-        let (w, h) = rgba.dimensions();
-        let mut bgra = rgba.into_raw();
+        let still =
+            promo_media::still::decode(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let (w, h) = (still.width, still.height);
+        let mut bgra = still.rgba;
         for px in bgra.chunks_exact_mut(4) {
             px.swap(0, 2);
             let a = px[3] as u32;
@@ -2483,6 +2502,140 @@ mod tests {
                 "{mode} lands on the wipe's picture: {end} vs {landed}"
             );
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// BT.709 video (review 2026-09-27, P1-23): a clip whose stream says
+    /// its transfer is BT.709 is converted to sRGB while sampling, as the
+    /// apps convert it from the colour space their decoder attaches — mid
+    /// grey 128 reads about 139 — while the same pixels untagged stay as
+    /// they are. Headless used to draw every clip untagged: midtones about
+    /// 11/255 darker than the app's.
+    #[test]
+    fn bt709_video_is_converted_like_the_apps_convert_it() {
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-709-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let clip = |name: &str, tags: &[&str]| -> bool {
+            Command::new("ffmpeg")
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+                .arg("color=c=0x808080:size=64x64:rate=30:duration=1")
+                .args(["-pix_fmt", "yuv420p"])
+                .args(tags)
+                .arg(dir.join("Resources").join(name))
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        // Tagged through the frames (setparams): ffmpeg takes a stream's
+        // colour tags from its frames, and output flags alone do not stick.
+        let tagged = [
+            "-vf",
+            "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709",
+        ];
+        assert!(
+            clip("tagged.mp4", &tagged) && clip("plain.mp4", &[]),
+            "ffmpeg makes the clips"
+        );
+        let centre = |file: &str| -> i32 {
+            std::fs::write(
+                dir.join("metadata.json"),
+                format!(
+                    r#"{{"id":"P","name":"709","createdAt":0,"state":"recorded","minReaderVersion":18,
+                    "trimStart":0,"trimEnd":1,"videoDuration":1,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"}},
+                    "resources":[{{"id":"R","kind":"video","filename":"{file}","displayName":"c","addedAt":0,
+                      "duration":1,"imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                    "layers":[{{"id":"V","name":"v","sortIndex":0,"kind":"video","isEnabled":true,
+                      "startTime":0,"duration":1,"resourceID":"R","keyframes":[]}}]}}"#
+                ),
+            )
+            .unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 64, 64).expect("renderer");
+            let stride = renderer.width as usize;
+            let frame = renderer.frame_bgra(0.5).expect("frame");
+            frame[(32 * stride + 32) * 4 + 1] as i32
+        };
+        let plain = centre("plain.mp4");
+        let converted = centre("tagged.mp4");
+        assert!((plain - 128).abs() <= 3, "untagged grey stays: {plain}");
+        assert!(
+            (converted - 139).abs() <= 3,
+            "BT.709 grey is converted: {converted} (plain {plain})"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A still stored sideways with an EXIF orientation renders upright, and
+    /// a P3-tagged picture renders as the colour it shows (review
+    /// 2026-09-27, P1-23) — what ImageIO does in the apps. Headless used to
+    /// draw the stored pixels: sideways, and desaturated.
+    #[test]
+    fn a_rotated_p3_still_renders_upright_and_in_its_colour() {
+        use image::ImageEncoder;
+        if GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-still-render-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        // Stored 40 wide, 20 tall, P3 (180, 60, 60) on the left half and
+        // black on the right; EXIF orientation 6 turns it 90° clockwise,
+        // so upright it is 20 wide, 40 tall, the colour along the top.
+        let mut stored = Vec::new();
+        for _y in 0..20 {
+            for x in 0..40 {
+                stored.extend_from_slice(if x < 20 {
+                    &[180, 60, 60, 255]
+                } else {
+                    &[0, 0, 0, 255]
+                });
+            }
+        }
+        let exif: Vec<u8> = vec![
+            b'I', b'I', 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
+            0,
+        ];
+        let mut bytes = Vec::new();
+        let mut encoder = image::codecs::png::PngEncoder::new(&mut bytes);
+        encoder.set_exif_metadata(exif).unwrap();
+        encoder
+            .set_icc_profile(moxcms::ColorProfile::new_display_p3().encode().unwrap())
+            .unwrap();
+        encoder
+            .write_image(&stored, 40, 20, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        std::fs::write(dir.join("Resources/photo.png"), &bytes).unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"photo","createdAt":0,"state":"recorded","minReaderVersion":18,
+                "trimStart":0,"trimEnd":1,"videoDuration":1,"subtitles":[],
+                "compositionSettings":{"canvasWidth":20,"canvasHeight":40,"backgroundColorHex":"000000"},
+                "resources":[{"id":"I","kind":"image","filename":"photo.png","displayName":"p","addedAt":0,
+                  "pixelWidth":20,"pixelHeight":40,"imageCuts":[],"disabledAudioTrackIndices":[]}],
+                "layers":[{"id":"L","name":"p","sortIndex":0,"kind":"image","isEnabled":true,
+                  "startTime":0,"duration":1,"resourceID":"I","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 20, 40).expect("renderer");
+        let stride = renderer.width as usize;
+        let frame = renderer.frame_bgra(0.5).expect("frame");
+        let at = |x: usize, y: usize| {
+            let i = (y * stride + x) * 4;
+            (frame[i + 2] as i32, frame[i + 1] as i32, frame[i] as i32)
+        };
+        let (r, g, b) = at(10, 8);
+        assert!(
+            r > 188 && g < 54 && b < 60,
+            "upright, and redder than its raw numbers: {:?}",
+            (r, g, b)
+        );
+        let (r, _, _) = at(10, 32);
+        assert!(r < 20, "the black half is at the bottom: {r}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

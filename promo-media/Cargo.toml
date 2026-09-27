@@ -12,3 +12,8 @@ workspace = true
 promo-model = { path = "../promo-model" }
 promo-gpu = { path = "../promo-gpu" }
 thiserror.workspace = true
+# Stills as every renderer should see them (still.rs): EXIF orientation
+# and ICC profiles are read here, and moxcms (already image's own colour
+# engine) converts a P3 screenshot to sRGB the way ImageIO does in the apps.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
+moxcms = "0.8"

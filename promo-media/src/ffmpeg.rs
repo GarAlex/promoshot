@@ -272,7 +272,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,r_frame_rate,duration,pix_fmt:format=duration",
+            "stream=width,height,r_frame_rate,duration,pix_fmt,color_transfer:format=duration",
             "-of",
             "default=noprint_wrappers=1",
         ])
@@ -301,6 +301,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
             "width" => info.width = value.trim().parse().unwrap_or(0),
             "height" => info.height = value.trim().parse().unwrap_or(0),
             "pix_fmt" => info.has_alpha = crate::pix_fmt_has_alpha(value),
+            "color_transfer" => info.bt709 = value.trim() == "bt709",
             "r_frame_rate" => info.nominal_fps = parse_rational(value.trim()),
             // The stream's duration is missing in some containers; ffprobe
             // then prints the format's, and the first one we see wins.

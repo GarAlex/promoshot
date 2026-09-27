@@ -13,6 +13,7 @@ pub mod conformance;
 pub mod ffmpeg;
 pub mod lut;
 pub mod proxy;
+pub mod still;
 
 use promo_gpu::GpuSurface;
 use std::path::Path;
@@ -54,6 +55,12 @@ pub struct VideoInfo {
     /// portrait phone capture is stored landscape with a rotation tag, and a
     /// backend that ignores it renders every such clip on its side.
     pub rotation_degrees: i32,
+    /// The stream says its transfer is BT.709 — HD video, most of it. The
+    /// compositor converts such frames to sRGB while sampling (the apps do
+    /// the same from the colour space their decoder attaches), so a
+    /// headless render's midtones match the app's instead of sitting about
+    /// 11/255 apart.
+    pub bt709: bool,
 }
 
 /// A decode session over one asset.
