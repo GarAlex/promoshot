@@ -103,6 +103,20 @@ macro_rules! tolerant_enum {
             }
         }
 
+        impl $name {
+            /// This enum as the wire knows it: every value, the fallback an
+            /// unknown one acts as, the retired spellings that still read
+            /// — what a host generating its own copy is held to.
+            pub fn wire() -> crate::wire::WireEnum {
+                crate::wire::WireEnum {
+                    name: stringify!($name),
+                    values: vec![$($raw),+],
+                    fallback: Some($name::$fallback.as_str()),
+                    legacy: vec![$(($legacy_raw, $name::$legacy_variant.as_str())),*],
+                }
+            }
+        }
+
         impl Tolerant for $name {
             fn is_unknown(&self) -> bool {
                 matches!(self, $name::Unknown(_))
@@ -154,6 +168,17 @@ macro_rules! strict_enum {
             pub fn as_str(&self) -> &'static str {
                 match self {
                     $($name::$variant => $raw,)+
+                }
+            }
+
+            /// This enum as the wire knows it: strict, so no fallback — an
+            /// unknown value refuses the file.
+            pub fn wire() -> crate::wire::WireEnum {
+                crate::wire::WireEnum {
+                    name: stringify!($name),
+                    values: vec![$($raw),+],
+                    fallback: None,
+                    legacy: Vec::new(),
                 }
             }
         }
