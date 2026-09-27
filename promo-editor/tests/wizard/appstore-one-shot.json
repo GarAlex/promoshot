@@ -1,0 +1,182 @@
+{
+ "expected": {
+  "compositionSettings": {
+   "backgroundColorHex": "000000",
+   "backgroundKeyframes": [],
+   "canvasHeight": 2796,
+   "canvasWidth": 1290,
+   "gifExportFPS": 10,
+   "gifExportScalePercent": 33,
+   "imageExportScalePercent": 100,
+   "subtitleAlignment": "center",
+   "subtitleBackgroundColorHex": "000000",
+   "subtitleBackgroundCornerRadius": 8,
+   "subtitleBackgroundOpacity": 0.7,
+   "subtitleBackgroundPadding": 16,
+   "subtitleBold": true,
+   "subtitleColorHex": "FFFFFF",
+   "subtitleFontFamily": "system",
+   "subtitleFontSize": 72,
+   "subtitleItalic": false,
+   "subtitleLeftMargin": 120,
+   "subtitleRightMargin": 120,
+   "subtitleShadowColorHex": "000000",
+   "subtitleShadowOpacity": 0,
+   "subtitleShadowRadius": 0,
+   "subtitleStrokeColorHex": "000000",
+   "subtitleStrokeWidth": 0,
+   "subtitleVerticalMargin": 880,
+   "videoBorderColorHex": "FFFFFF",
+   "videoBorderWidth": 0,
+   "videoCornerRadius": 0,
+   "videoKeyframes": [],
+   "videoShadowColorHex": "000000",
+   "videoShadowOpacity": 0,
+   "videoShadowRadius": 0
+  },
+  "exports": [],
+  "layers": [
+   {
+    "duration": 3,
+    "id": "layer0",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "colorHex": "000000",
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "background",
+    "name": "Background",
+    "sortIndex": 0,
+    "startTime": 0
+   },
+   {
+    "duration": 3,
+    "id": "layer1",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0
+     }
+    ],
+    "kind": "image",
+    "name": "Device",
+    "resourceID": "res0",
+    "sortIndex": 1,
+    "startTime": 0
+   },
+   {
+    "duration": 3,
+    "id": "layer2",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "time": 0,
+      "transitionDuration": 0
+     }
+    ],
+    "kind": "caption",
+    "name": "Headline",
+    "resourceID": "res1",
+    "sortIndex": 2,
+    "startTime": 0
+   }
+  ],
+  "resources": [
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s0.png",
+    "filename": "s0.png",
+    "frame": {
+     "bezelFraction": 0.035,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "naturalTitanium",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res0",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "padding": 16,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 349.206
+    },
+    "captionText": "Only",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Only",
+    "filename": "",
+    "id": "res1",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   }
+  ],
+  "state": "empty",
+  "subtitles": [],
+  "trimEnd": 3,
+  "trimKeyframes": [],
+  "trimStart": 0,
+  "videoDuration": 3
+ },
+ "spec": {
+  "angle": "quarterLeft",
+  "arrangement": "centred",
+  "backgroundColorHex": "000000",
+  "body": "slab",
+  "change": "screen",
+  "createdAt": 0,
+  "device": "iPhone",
+  "direction": "rightToLeft",
+  "framing": "flat",
+  "kind": "appStore",
+  "name": "Parity",
+  "narration": false,
+  "sizing": "fit",
+  "slides": [
+   {
+    "caption": "Only",
+    "displayName": "s0.png",
+    "duration": 3,
+    "filename": "s0.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.5
+   }
+  ],
+  "transition": "crossfade",
+  "turns": false
+ }
+}

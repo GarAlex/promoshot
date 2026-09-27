@@ -8,6 +8,7 @@
 
 pub mod author;
 pub mod document;
+mod listing;
 mod theme;
 
 pub use document::{command_schema, Changes, Command, Document};

@@ -1,0 +1,496 @@
+{
+ "expected": {
+  "compositionSettings": {
+   "backgroundColorHex": "000000",
+   "backgroundKeyframes": [],
+   "canvasHeight": 2796,
+   "canvasWidth": 1290,
+   "gifExportFPS": 10,
+   "gifExportScalePercent": 33,
+   "imageExportScalePercent": 100,
+   "subtitleAlignment": "center",
+   "subtitleBackgroundColorHex": "000000",
+   "subtitleBackgroundCornerRadius": 8,
+   "subtitleBackgroundOpacity": 0.7,
+   "subtitleBackgroundPadding": 16,
+   "subtitleBold": true,
+   "subtitleColorHex": "FFFFFF",
+   "subtitleFontFamily": "system",
+   "subtitleFontSize": 72,
+   "subtitleItalic": false,
+   "subtitleLeftMargin": 120,
+   "subtitleRightMargin": 120,
+   "subtitleShadowColorHex": "000000",
+   "subtitleShadowOpacity": 0,
+   "subtitleShadowRadius": 0,
+   "subtitleStrokeColorHex": "000000",
+   "subtitleStrokeWidth": 0,
+   "subtitleVerticalMargin": 880,
+   "videoBorderColorHex": "FFFFFF",
+   "videoBorderWidth": 0,
+   "videoCornerRadius": 0,
+   "videoKeyframes": [],
+   "videoShadowColorHex": "000000",
+   "videoShadowOpacity": 0,
+   "videoShadowRadius": 0
+  },
+  "exports": [],
+  "layers": [
+   {
+    "duration": 9,
+    "id": "layer0",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "colorHex": "000000",
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "background",
+    "name": "Background",
+    "sortIndex": 0,
+    "startTime": 0
+   },
+   {
+    "duration": 3,
+    "durationRule": {
+     "kind": "fitDependents",
+     "tail": 2.5
+    },
+    "id": "layer1",
+    "imageOrientation": "original",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "image",
+    "name": "s0.png",
+    "resourceID": "res0",
+    "sortIndex": 1,
+    "startTime": 0
+   },
+   {
+    "duration": 3,
+    "id": "layer2",
+    "isEnabled": true,
+    "keyframes": [],
+    "kind": "caption",
+    "name": "Caption 1",
+    "resourceID": "res1",
+    "sortIndex": 2,
+    "startTime": 0
+   },
+   {
+    "duration": 1,
+    "durationRule": {
+     "kind": "fitContent"
+    },
+    "id": "layer3",
+    "isEnabled": true,
+    "keyframes": [],
+    "kind": "audio",
+    "name": "Narration 1",
+    "resourceID": "res2",
+    "sortIndex": 3,
+    "startTime": 0.4,
+    "timing": {
+     "start": {
+      "from": "previousStart",
+      "offset": 0.4
+     }
+    }
+   },
+   {
+    "duration": 2.5,
+    "durationRule": {
+     "kind": "fitDependents",
+     "tail": 2.5
+    },
+    "fadeIn": 0.5,
+    "id": "layer4",
+    "imageOrientation": "original",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "image",
+    "name": "s1.png",
+    "resourceID": "res3",
+    "sortIndex": 4,
+    "startTime": 2.5,
+    "timing": {
+     "start": {
+      "from": "previousPeerEnd",
+      "offset": -0.5
+     }
+    }
+   },
+   {
+    "duration": 2.5,
+    "fadeIn": 0.5,
+    "id": "layer5",
+    "isEnabled": true,
+    "keyframes": [],
+    "kind": "caption",
+    "name": "Caption 2",
+    "resourceID": "res4",
+    "sortIndex": 5,
+    "startTime": 2.5
+   },
+   {
+    "duration": 1,
+    "durationRule": {
+     "kind": "fitContent"
+    },
+    "id": "layer6",
+    "isEnabled": true,
+    "keyframes": [],
+    "kind": "audio",
+    "name": "Narration 2",
+    "resourceID": "res5",
+    "sortIndex": 6,
+    "startTime": 2.9,
+    "timing": {
+     "start": {
+      "from": "previousStart",
+      "offset": 0.4
+     }
+    }
+   },
+   {
+    "duration": 4.75,
+    "durationRule": {
+     "kind": "fitDependents",
+     "tail": 2.5
+    },
+    "fadeIn": 0.75,
+    "id": "layer7",
+    "imageOrientation": "original",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "image",
+    "name": "s2.png",
+    "resourceID": "res6",
+    "sortIndex": 7,
+    "startTime": 4.25,
+    "timing": {
+     "start": {
+      "from": "previousPeerEnd",
+      "offset": -0.75
+     }
+    }
+   },
+   {
+    "duration": 4.75,
+    "fadeIn": 0.75,
+    "id": "layer8",
+    "isEnabled": true,
+    "keyframes": [],
+    "kind": "caption",
+    "name": "Caption 3",
+    "resourceID": "res7",
+    "sortIndex": 8,
+    "startTime": 4.25
+   },
+   {
+    "duration": 1,
+    "durationRule": {
+     "kind": "fitContent"
+    },
+    "id": "layer9",
+    "isEnabled": true,
+    "keyframes": [],
+    "kind": "audio",
+    "name": "Narration 3",
+    "resourceID": "res8",
+    "sortIndex": 9,
+    "startTime": 4.65,
+    "timing": {
+     "start": {
+      "from": "previousStart",
+      "offset": 0.4
+     }
+    }
+   }
+  ],
+  "resources": [
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s0.png",
+    "filename": "s0.png",
+    "frame": {
+     "bezelFraction": 0.035,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "naturalTitanium",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res0",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 167.76
+    },
+    "captionText": "Fast",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Fast",
+    "filename": "",
+    "id": "res1",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "Narration 1",
+    "filename": "",
+    "id": "res2",
+    "imageCuts": [],
+    "kind": "audio",
+    "mediaCuts": [],
+    "speech": {
+     "provider": "openai",
+     "sourceResourceID": "res0",
+     "text": "",
+     "voiceID": "alloy"
+    }
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s1.png",
+    "filename": "s1.png",
+    "frame": {
+     "bezelFraction": 0.035,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "naturalTitanium",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res3",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 167.76
+    },
+    "captionText": "Private by design, every step of the way",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Private by design, every step of the way",
+    "filename": "",
+    "id": "res4",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "Narration 2",
+    "filename": "",
+    "id": "res5",
+    "imageCuts": [],
+    "kind": "audio",
+    "mediaCuts": [],
+    "speech": {
+     "provider": "openai",
+     "sourceResourceID": "res3",
+     "text": "",
+     "voiceID": "alloy"
+    }
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s2.png",
+    "filename": "s2.png",
+    "frame": {
+     "bezelFraction": 0.035,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "naturalTitanium",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res6",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 167.76
+    },
+    "captionText": "",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Caption 3",
+    "filename": "",
+    "id": "res7",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "Narration 3",
+    "filename": "",
+    "id": "res8",
+    "imageCuts": [],
+    "kind": "audio",
+    "mediaCuts": [],
+    "speech": {
+     "provider": "openai",
+     "sourceResourceID": "res6",
+     "text": "",
+     "voiceID": "alloy"
+    }
+   }
+  ],
+  "state": "empty",
+  "subtitles": [],
+  "trimEnd": 9,
+  "trimKeyframes": [],
+  "trimStart": 0,
+  "videoDuration": 9
+ },
+ "spec": {
+  "angle": "quarterLeft",
+  "arrangement": "centred",
+  "backgroundColorHex": "000000",
+  "body": "slab",
+  "change": "screen",
+  "createdAt": 0,
+  "device": "iPhone",
+  "direction": "rightToLeft",
+  "framing": "flat",
+  "kind": "appStore",
+  "name": "Parity",
+  "narration": true,
+  "sizing": "fit",
+  "slides": [
+   {
+    "caption": "Fast",
+    "displayName": "s0.png",
+    "duration": 3,
+    "filename": "s0.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.5
+   },
+   {
+    "caption": "Private by design, every step of the way",
+    "displayName": "s1.png",
+    "duration": 2,
+    "filename": "s1.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.75
+   },
+   {
+    "caption": "",
+    "displayName": "s2.png",
+    "duration": 4,
+    "filename": "s2.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.5
+   }
+  ],
+  "transition": "crossfade",
+  "turns": false
+ }
+}

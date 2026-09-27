@@ -1,0 +1,367 @@
+{
+ "expected": {
+  "compositionSettings": {
+   "backgroundColorHex": "000000",
+   "backgroundKeyframes": [],
+   "canvasHeight": 1080,
+   "canvasWidth": 1920,
+   "gifExportFPS": 10,
+   "gifExportScalePercent": 33,
+   "imageExportScalePercent": 100,
+   "subtitleAlignment": "center",
+   "subtitleBackgroundColorHex": "000000",
+   "subtitleBackgroundCornerRadius": 8,
+   "subtitleBackgroundOpacity": 0.7,
+   "subtitleBackgroundPadding": 16,
+   "subtitleBold": true,
+   "subtitleColorHex": "FFFFFF",
+   "subtitleFontFamily": "system",
+   "subtitleFontSize": 72,
+   "subtitleItalic": false,
+   "subtitleLeftMargin": 120,
+   "subtitleRightMargin": 120,
+   "subtitleShadowColorHex": "000000",
+   "subtitleShadowOpacity": 0,
+   "subtitleShadowRadius": 0,
+   "subtitleStrokeColorHex": "000000",
+   "subtitleStrokeWidth": 0,
+   "subtitleVerticalMargin": 880,
+   "videoBorderColorHex": "FFFFFF",
+   "videoBorderWidth": 0,
+   "videoCornerRadius": 0,
+   "videoKeyframes": [],
+   "videoShadowColorHex": "000000",
+   "videoShadowOpacity": 0,
+   "videoShadowRadius": 0
+  },
+  "exports": [],
+  "layers": [
+   {
+    "duration": 7.5,
+    "id": "layer0",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "colorHex": "000000",
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "background",
+    "name": "Background",
+    "sortIndex": 0,
+    "startTime": 0
+   },
+   {
+    "duration": 3,
+    "id": "layer1",
+    "imageOrientation": "original",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 680,
+       "offset": [
+        0,
+        -30
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "rotation": 0,
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeInOut",
+      "placement": {
+       "anchor": "center",
+       "height": 720,
+       "offset": [
+        0,
+        -30
+       ]
+      },
+      "time": 2.1,
+      "transitionDuration": 1.2000000000000002
+     },
+     {
+      "easing": "easeIn",
+      "placement": {
+       "anchor": "center",
+       "height": 430,
+       "offset": [
+        -980,
+        0
+       ]
+      },
+      "time": 3,
+      "transitionDuration": 0.8999999999999999
+     },
+     {
+      "rotation": 0,
+      "time": 2.1,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeIn",
+      "rotation": -6,
+      "time": 3,
+      "transitionDuration": 0.8999999999999999
+     }
+    ],
+    "kind": "image",
+    "name": "s0.png",
+    "resourceID": "res0",
+    "sortIndex": 1,
+    "startTime": 0
+   },
+   {
+    "duration": 2,
+    "id": "layer2",
+    "imageOrientation": "original",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 430,
+       "offset": [
+        980,
+        0
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeOut",
+      "placement": {
+       "anchor": "center",
+       "height": 680,
+       "offset": [
+        0,
+        -30
+       ]
+      },
+      "time": 0.6,
+      "transitionDuration": 0.6
+     },
+     {
+      "rotation": 6,
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeOut",
+      "rotation": 0,
+      "time": 0.6,
+      "transitionDuration": 0.6
+     },
+     {
+      "easing": "easeInOut",
+      "placement": {
+       "anchor": "center",
+       "height": 720,
+       "offset": [
+        0,
+        -30
+       ]
+      },
+      "time": 1.4,
+      "transitionDuration": 0.8
+     },
+     {
+      "easing": "easeIn",
+      "placement": {
+       "anchor": "center",
+       "height": 430,
+       "offset": [
+        -980,
+        0
+       ]
+      },
+      "time": 2,
+      "transitionDuration": 0.6
+     },
+     {
+      "rotation": 0,
+      "time": 1.4,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeIn",
+      "rotation": -6,
+      "time": 2,
+      "transitionDuration": 0.6
+     }
+    ],
+    "kind": "image",
+    "name": "s1.png",
+    "resourceID": "res1",
+    "sortIndex": 2,
+    "startTime": 2.1
+   },
+   {
+    "duration": 4,
+    "id": "layer3",
+    "imageOrientation": "original",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 430,
+       "offset": [
+        980,
+        0
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeOut",
+      "placement": {
+       "anchor": "center",
+       "height": 680,
+       "offset": [
+        0,
+        -30
+       ]
+      },
+      "time": 0.9,
+      "transitionDuration": 0.9
+     },
+     {
+      "rotation": 6,
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "easing": "easeOut",
+      "rotation": 0,
+      "time": 0.9,
+      "transitionDuration": 0.9
+     },
+     {
+      "easing": "easeInOut",
+      "placement": {
+       "anchor": "center",
+       "height": 720,
+       "offset": [
+        0,
+        -30
+       ]
+      },
+      "time": 4,
+      "transitionDuration": 2.2
+     },
+     {
+      "rotation": 0,
+      "time": 4,
+      "transitionDuration": 0
+     }
+    ],
+    "kind": "image",
+    "name": "s2.png",
+    "resourceID": "res2",
+    "sortIndex": 3,
+    "startTime": 3.4999999999999996
+   }
+  ],
+  "resources": [
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s0.png",
+    "filename": "s0.png",
+    "id": "res0",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 900,
+    "pixelWidth": 1600
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s1.png",
+    "filename": "s1.png",
+    "id": "res1",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 1600,
+    "pixelWidth": 900
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s2.png",
+    "filename": "s2.png",
+    "id": "res2",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 1000,
+    "pixelWidth": 1000
+   }
+  ],
+  "state": "empty",
+  "subtitles": [],
+  "trimEnd": 7.5,
+  "trimKeyframes": [],
+  "trimStart": 0,
+  "videoDuration": 7.5
+ },
+ "spec": {
+  "angle": "quarterLeft",
+  "arrangement": "centred",
+  "backgroundColorHex": "000000",
+  "body": "slab",
+  "change": "screen",
+  "createdAt": 0,
+  "device": "iPhone",
+  "direction": "rightToLeft",
+  "framing": "flat",
+  "kind": "carousel",
+  "name": "Parity",
+  "narration": false,
+  "sizing": "fit",
+  "slides": [
+   {
+    "caption": "",
+    "displayName": "s0.png",
+    "duration": 3,
+    "filename": "s0.png",
+    "kind": "image",
+    "pixelHeight": 900,
+    "pixelWidth": 1600,
+    "transitionDuration": 0.5
+   },
+   {
+    "caption": "",
+    "displayName": "s1.png",
+    "duration": 2,
+    "filename": "s1.png",
+    "kind": "image",
+    "pixelHeight": 1600,
+    "pixelWidth": 900,
+    "transitionDuration": 0.75
+   },
+   {
+    "caption": "",
+    "displayName": "s2.png",
+    "duration": 4,
+    "filename": "s2.png",
+    "kind": "image",
+    "pixelHeight": 1000,
+    "pixelWidth": 1000,
+    "transitionDuration": 0.5
+   }
+  ],
+  "transition": "crossfade",
+  "turns": false
+ }
+}

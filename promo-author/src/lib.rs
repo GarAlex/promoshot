@@ -1033,6 +1033,13 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
         "sizing",
         "device",
         "framing",
+        "arrangement",
+        "turns",
+        "body",
+        "angle",
+        "change",
+        "material",
+        "narration",
         "backgroundColorHex",
     ] {
         if let Some(v) = args.get(key) {

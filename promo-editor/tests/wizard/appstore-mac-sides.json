@@ -1,0 +1,342 @@
+{
+ "expected": {
+  "compositionSettings": {
+   "backgroundColorHex": "000000",
+   "backgroundKeyframes": [],
+   "canvasHeight": 1800,
+   "canvasWidth": 2880,
+   "gifExportFPS": 10,
+   "gifExportScalePercent": 33,
+   "imageExportScalePercent": 100,
+   "subtitleAlignment": "center",
+   "subtitleBackgroundColorHex": "000000",
+   "subtitleBackgroundCornerRadius": 8,
+   "subtitleBackgroundOpacity": 0.7,
+   "subtitleBackgroundPadding": 16,
+   "subtitleBold": true,
+   "subtitleColorHex": "FFFFFF",
+   "subtitleFontFamily": "system",
+   "subtitleFontSize": 72,
+   "subtitleItalic": false,
+   "subtitleLeftMargin": 120,
+   "subtitleRightMargin": 120,
+   "subtitleShadowColorHex": "000000",
+   "subtitleShadowOpacity": 0,
+   "subtitleShadowRadius": 0,
+   "subtitleStrokeColorHex": "000000",
+   "subtitleStrokeWidth": 0,
+   "subtitleVerticalMargin": 880,
+   "videoBorderColorHex": "FFFFFF",
+   "videoBorderWidth": 0,
+   "videoCornerRadius": 0,
+   "videoKeyframes": [],
+   "videoShadowColorHex": "000000",
+   "videoShadowOpacity": 0,
+   "videoShadowRadius": 0
+  },
+  "exports": [],
+  "layers": [
+   {
+    "duration": 9,
+    "id": "layer0",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "colorHex": "000000",
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "background",
+    "name": "Background",
+    "sortIndex": 0,
+    "startTime": 0
+   },
+   {
+    "duration": 9,
+    "id": "layer1",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1069.2,
+       "offset": [
+        -1176.607894736842,
+        306
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1069.2,
+       "offset": [
+        1176.607894736842,
+        306
+       ]
+      },
+      "resourceID": "res0",
+      "time": 3,
+      "transition": {
+       "duration": 0.5,
+       "kind": "fade"
+      },
+      "transitionDuration": 2.0999999999999996
+     },
+     {
+      "placement": {
+       "anchor": "center",
+       "height": 1069.2,
+       "offset": [
+        -1176.607894736842,
+        306
+       ]
+      },
+      "resourceID": "res1",
+      "time": 6,
+      "transition": {
+       "duration": 0.5,
+       "kind": "fade"
+      },
+      "transitionDuration": 2.0999999999999996
+     }
+    ],
+    "kind": "image",
+    "name": "Device",
+    "resourceID": "res2",
+    "sortIndex": 1,
+    "startTime": 0
+   },
+   {
+    "duration": 9,
+    "id": "layer2",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "resourceID": "res3",
+      "time": 3.5,
+      "transitionDuration": 0
+     },
+     {
+      "resourceID": "res4",
+      "time": 6.5,
+      "transitionDuration": 0
+     }
+    ],
+    "kind": "caption",
+    "name": "Headline",
+    "resourceID": "res5",
+    "sortIndex": 2,
+    "startTime": 0
+   }
+  ],
+  "resources": [
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s1.png",
+    "filename": "s1.png",
+    "frame": {
+     "bezelFraction": 0.018,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "silver",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res0",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 1800,
+    "pixelWidth": 2880
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s2.png",
+    "filename": "s2.png",
+    "frame": {
+     "bezelFraction": 0.018,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "silver",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res1",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 1800,
+    "pixelWidth": 2880
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s0.png",
+    "filename": "s0.png",
+    "frame": {
+     "bezelFraction": 0.018,
+     "borderColorHex": "@edge",
+     "borderWidth": 12,
+     "cornerRadius": 0,
+     "depthFraction": 0.06,
+     "kind": "device",
+     "material": "silver",
+     "tiltX": 0,
+     "tiltY": 0
+    },
+    "id": "res2",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 1800,
+    "pixelWidth": 2880
+   },
+   {
+    "captionStyle": {
+     "alignment": "leading",
+     "backgroundOpacity": 0,
+     "fontSize": 178.56,
+     "isBold": true,
+     "leftMargin": 230.4,
+     "padding": 16,
+     "rightMargin": 1283.9684210526316,
+     "shadowOffset": [
+      0,
+      14.2848
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 39.2832,
+     "verticalMargin": 548
+    },
+    "captionText": "Private by design, every step of the way",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Private by design, every step of the way",
+    "filename": "",
+    "id": "res3",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "captionStyle": {
+     "alignment": "trailing",
+     "backgroundOpacity": 0,
+     "fontSize": 178.56,
+     "isBold": true,
+     "leftMargin": 1283.9684210526316,
+     "padding": 16,
+     "rightMargin": 230.4,
+     "shadowOffset": [
+      0,
+      14.2848
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 39.2832,
+     "verticalMargin": 772
+    },
+    "captionText": "",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Caption 3",
+    "filename": "",
+    "id": "res4",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "captionStyle": {
+     "alignment": "trailing",
+     "backgroundOpacity": 0,
+     "fontSize": 178.56,
+     "isBold": true,
+     "leftMargin": 1283.9684210526316,
+     "padding": 16,
+     "rightMargin": 230.4,
+     "shadowOffset": [
+      0,
+      14.2848
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 39.2832,
+     "verticalMargin": 772
+    },
+    "captionText": "Fast",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Fast",
+    "filename": "",
+    "id": "res5",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   }
+  ],
+  "state": "empty",
+  "subtitles": [],
+  "trimEnd": 9,
+  "trimKeyframes": [],
+  "trimStart": 0,
+  "videoDuration": 9
+ },
+ "spec": {
+  "angle": "quarterLeft",
+  "arrangement": "sides",
+  "backgroundColorHex": "000000",
+  "body": "slab",
+  "change": "screen",
+  "createdAt": 0,
+  "device": "mac",
+  "direction": "rightToLeft",
+  "framing": "flat",
+  "kind": "appStore",
+  "name": "Parity",
+  "narration": false,
+  "sizing": "fit",
+  "slides": [
+   {
+    "caption": "Fast",
+    "displayName": "s0.png",
+    "duration": 3,
+    "filename": "s0.png",
+    "kind": "image",
+    "pixelHeight": 1800,
+    "pixelWidth": 2880,
+    "transitionDuration": 0.5
+   },
+   {
+    "caption": "Private by design, every step of the way",
+    "displayName": "s1.png",
+    "duration": 2,
+    "filename": "s1.png",
+    "kind": "image",
+    "pixelHeight": 1800,
+    "pixelWidth": 2880,
+    "transitionDuration": 0.75
+   },
+   {
+    "caption": "",
+    "displayName": "s2.png",
+    "duration": 4,
+    "filename": "s2.png",
+    "kind": "image",
+    "pixelHeight": 1800,
+    "pixelWidth": 2880,
+    "transitionDuration": 0.5
+   }
+  ],
+  "transition": "crossfade",
+  "turns": false
+ }
+}

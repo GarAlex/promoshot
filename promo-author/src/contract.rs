@@ -604,12 +604,15 @@ pub fn tools(host: Host) -> Vec<Value> {
         json!({
             "name": "promo_slideshow",
             "description": "The wizard, for agents: pictures and clips in, a complete show \
-                out — the same arrangement the apps' wizard builds. kind classic (one \
+                out — the apps' own wizard, one implementation. kind classic (one \
                 slide at a time, crossfade by default), carousel (cards fly in and \
-                settle), or appStore (a store listing: your shots in one device frame \
-                over a background, a headline per shot, the canvas the store's own \
-                size). Creates the project folder and copies the media in; refine \
-                with the other tools afterwards. Never overwrites.",
+                settle), or appStore (a store listing: your shots on one device that \
+                moves between them, a headline per shot in the band it leaves, the \
+                canvas the store's own size — a 3D body by default, the drawn frame \
+                with body slab). narration adds a draft voice per slide, timed by \
+                rules so the show re-times when promo_speak lands the sound. Creates \
+                the project folder and copies the media in; refine with the other \
+                tools afterwards. Never overwrites.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": { "type": "string", "description":
@@ -618,7 +621,8 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "kind": { "type": "string", "enum": ["classic", "carousel", "appStore"],
                         "description": "Default classic" },
                     "transition": { "type": "string",
-                        "enum": ["none", "crossfade", "wipe", "slide", "push", "scale"],
+                        "enum": ["none", "crossfade", "wipe", "slide", "push", "scale",
+                                 "blurDissolve", "zoom", "flash", "glitch", "dip"],
                         "description": "Default crossfade" },
                     "transitionEdge": { "type": "string",
                         "enum": ["left", "right", "top", "bottom"] },
@@ -627,7 +631,28 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "sizing": { "type": "string", "enum": ["fit", "fill"] },
                     "device": { "type": "string", "enum": ["iPhone", "iPad", "mac"],
                         "description": "appStore: the frame and the store's canvas" },
-                    "framing": { "type": "string", "enum": ["flat", "angled"] },
+                    "framing": { "type": "string", "enum": ["flat", "angled"],
+                        "description": "appStore slab: straight on, or turned into the light" },
+                    "arrangement": { "type": "string", "enum": ["centred", "sides", "stacked"],
+                        "description": "appStore: every shot in the middle (default), \
+                            alternating sides, or alternating high and low — the words \
+                            take the room each shot leaves" },
+                    "turns": { "type": "boolean",
+                        "description": "appStore: turn the device a little further each shot" },
+                    "body": { "type": "string", "enum": ["model", "slab"],
+                        "description": "appStore: a 3D device body (default) or the drawn frame" },
+                    "angle": { "type": "string",
+                        "enum": ["straight", "quarterLeft", "quarterRight", "hero", "above"],
+                        "description": "appStore body: the camera preset (default quarterLeft)" },
+                    "change": { "type": "string", "enum": ["screen", "device"],
+                        "description": "appStore body: one device whose screen plays the \
+                            shots (default), or a device per shot" },
+                    "material": { "type": "string", "description":
+                        "appStore: the finish — naturalTitanium, spaceBlack, silver, gold, \
+                         deepBlue, plasticWhite… (default the device's own)" },
+                    "narration": { "type": "boolean",
+                        "description": "A draft narration per slide: an audio resource with an \
+                            empty script to fill, then promo_speak" },
                     "canvas": { "type": "string", "description":
                         "\"1920x1080\" (ignored for appStore — the store decides)" },
                     "backgroundColorHex": { "type": "string" },

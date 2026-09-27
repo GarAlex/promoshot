@@ -1,0 +1,452 @@
+{
+ "expected": {
+  "compositionSettings": {
+   "backgroundColorHex": "000000",
+   "backgroundKeyframes": [],
+   "canvasHeight": 2796,
+   "canvasWidth": 1290,
+   "gifExportFPS": 10,
+   "gifExportScalePercent": 33,
+   "imageExportScalePercent": 100,
+   "subtitleAlignment": "center",
+   "subtitleBackgroundColorHex": "000000",
+   "subtitleBackgroundCornerRadius": 8,
+   "subtitleBackgroundOpacity": 0.7,
+   "subtitleBackgroundPadding": 16,
+   "subtitleBold": true,
+   "subtitleColorHex": "FFFFFF",
+   "subtitleFontFamily": "system",
+   "subtitleFontSize": 72,
+   "subtitleItalic": false,
+   "subtitleLeftMargin": 120,
+   "subtitleRightMargin": 120,
+   "subtitleShadowColorHex": "000000",
+   "subtitleShadowOpacity": 0,
+   "subtitleShadowRadius": 0,
+   "subtitleStrokeColorHex": "000000",
+   "subtitleStrokeWidth": 0,
+   "subtitleVerticalMargin": 880,
+   "videoBorderColorHex": "FFFFFF",
+   "videoBorderWidth": 0,
+   "videoCornerRadius": 0,
+   "videoKeyframes": [],
+   "videoShadowColorHex": "000000",
+   "videoShadowOpacity": 0,
+   "videoShadowRadius": 0
+  },
+  "exports": [],
+  "layers": [
+   {
+    "duration": 9,
+    "id": "layer0",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "colorHex": "000000",
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "background",
+    "name": "Background",
+    "sortIndex": 0,
+    "startTime": 0
+   },
+   {
+    "duration": 3,
+    "id": "layer1",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "camera": {
+       "distance": 4.2,
+       "fov": 30,
+       "pitch": 8,
+       "roll": 0,
+       "yaw": -25
+      },
+      "light": {
+       "intensity": 1,
+       "pitch": 50,
+       "yaw": 15
+      },
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "model",
+    "name": "iPhone 1",
+    "resourceID": "res0",
+    "sortIndex": 1,
+    "startTime": 0
+   },
+   {
+    "duration": 2.5,
+    "fadeIn": 0.5,
+    "id": "layer2",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "camera": {
+       "distance": 4.2,
+       "fov": 30,
+       "pitch": 8,
+       "roll": 0,
+       "yaw": -25
+      },
+      "light": {
+       "intensity": 1,
+       "pitch": 50,
+       "yaw": 15
+      },
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "model",
+    "name": "iPhone 2",
+    "resourceID": "res2",
+    "sortIndex": 2,
+    "startTime": 2.5
+   },
+   {
+    "duration": 4.75,
+    "fadeIn": 0.75,
+    "id": "layer3",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "camera": {
+       "distance": 4.2,
+       "fov": 30,
+       "pitch": 8,
+       "roll": 0,
+       "yaw": -25
+      },
+      "light": {
+       "intensity": 1,
+       "pitch": 50,
+       "yaw": 15
+      },
+      "placement": {
+       "anchor": "center",
+       "height": 1862.136,
+       "offset": [
+        0,
+        363.48
+       ]
+      },
+      "time": 0,
+      "transitionDuration": 0.5
+     }
+    ],
+    "kind": "model",
+    "name": "iPhone 3",
+    "resourceID": "res4",
+    "sortIndex": 3,
+    "startTime": 4.25
+   },
+   {
+    "duration": 9,
+    "id": "layer4",
+    "isEnabled": true,
+    "keyframes": [
+     {
+      "time": 0,
+      "transitionDuration": 0
+     },
+     {
+      "resourceID": "res6",
+      "time": 3,
+      "transitionDuration": 0
+     },
+     {
+      "resourceID": "res7",
+      "time": 5,
+      "transitionDuration": 0
+     }
+    ],
+    "kind": "caption",
+    "name": "Headline",
+    "resourceID": "res8",
+    "sortIndex": 4,
+    "startTime": 0
+   }
+  ],
+  "resources": [
+   {
+    "boundsRadius": 0.395,
+    "clips": [],
+    "disabledAudioTrackIndices": [],
+    "displayName": "iPhone 1",
+    "filename": "DevicePhone.glb",
+    "id": "res0",
+    "imageCuts": [],
+    "kind": "model",
+    "libraryID": "1C1E1456-D9CB-5B96-9128-B5C23B0C198E",
+    "materials": {
+     "Body": {
+      "colorHex": "9B978F",
+      "finish": "anodized"
+     },
+     "Deck": {
+      "colorHex": "9B978F",
+      "finish": "anodized"
+     },
+     "Screen": {
+      "finish": "glass",
+      "resourceID": "res1"
+     }
+    },
+    "mediaCuts": []
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s0.png",
+    "filename": "s0.png",
+    "id": "res1",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "boundsRadius": 0.395,
+    "clips": [],
+    "disabledAudioTrackIndices": [],
+    "displayName": "iPhone 2",
+    "filename": "DevicePhone.glb",
+    "id": "res2",
+    "imageCuts": [],
+    "kind": "model",
+    "libraryID": "1C1E1456-D9CB-5B96-9128-B5C23B0C198E",
+    "materials": {
+     "Body": {
+      "colorHex": "9B978F",
+      "finish": "anodized"
+     },
+     "Deck": {
+      "colorHex": "9B978F",
+      "finish": "anodized"
+     },
+     "Screen": {
+      "finish": "glass",
+      "resourceID": "res3"
+     }
+    },
+    "mediaCuts": []
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s1.png",
+    "filename": "s1.png",
+    "id": "res3",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "boundsRadius": 0.395,
+    "clips": [],
+    "disabledAudioTrackIndices": [],
+    "displayName": "iPhone 3",
+    "filename": "DevicePhone.glb",
+    "id": "res4",
+    "imageCuts": [],
+    "kind": "model",
+    "libraryID": "1C1E1456-D9CB-5B96-9128-B5C23B0C198E",
+    "materials": {
+     "Body": {
+      "colorHex": "9B978F",
+      "finish": "anodized"
+     },
+     "Deck": {
+      "colorHex": "9B978F",
+      "finish": "anodized"
+     },
+     "Screen": {
+      "finish": "glass",
+      "resourceID": "res5"
+     }
+    },
+    "mediaCuts": []
+   },
+   {
+    "disabledAudioTrackIndices": [],
+    "displayName": "s2.png",
+    "filename": "s2.png",
+    "id": "res5",
+    "imageCuts": [],
+    "kind": "image",
+    "mediaCuts": [],
+    "pixelHeight": 2796,
+    "pixelWidth": 1290
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "padding": 16,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 299.206
+    },
+    "captionText": "Private by design, every step of the way",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Private by design, every step of the way",
+    "filename": "",
+    "id": "res6",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "padding": 16,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 349.206
+    },
+    "captionText": "",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Caption 3",
+    "filename": "",
+    "id": "res7",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   },
+   {
+    "captionStyle": {
+     "alignment": "center",
+     "backgroundOpacity": 0,
+     "fontSize": 79.98,
+     "isBold": true,
+     "leftMargin": 103.2,
+     "padding": 16,
+     "rightMargin": 103.2,
+     "shadowOffset": [
+      0,
+      6.3984000000000005
+     ],
+     "shadowOpacity": 0.35,
+     "shadowRadius": 17.5956,
+     "verticalMargin": 349.206
+    },
+    "captionText": "Fast",
+    "disabledAudioTrackIndices": [],
+    "displayName": "Fast",
+    "filename": "",
+    "id": "res8",
+    "imageCuts": [],
+    "kind": "caption",
+    "mediaCuts": []
+   }
+  ],
+  "state": "empty",
+  "subtitles": [],
+  "trimEnd": 9,
+  "trimKeyframes": [],
+  "trimStart": 0,
+  "videoDuration": 9
+ },
+ "spec": {
+  "angle": "quarterLeft",
+  "arrangement": "centred",
+  "backgroundColorHex": "000000",
+  "body": "model",
+  "change": "device",
+  "createdAt": 0,
+  "device": "iPhone",
+  "deviceModel": {
+   "addedAt": 810281788.216142,
+   "boundsRadius": 0.395,
+   "clips": [],
+   "disabledAudioTrackIndices": [],
+   "displayName": "Phone",
+   "filename": "DevicePhone.glb",
+   "id": "1C1E1456-D9CB-5B96-9128-B5C23B0C198E",
+   "imageCuts": [],
+   "kind": "model",
+   "libraryID": "1C1E1456-D9CB-5B96-9128-B5C23B0C198E",
+   "mediaCuts": []
+  },
+  "direction": "rightToLeft",
+  "framing": "flat",
+  "kind": "appStore",
+  "name": "Parity",
+  "narration": false,
+  "sizing": "fit",
+  "slides": [
+   {
+    "caption": "Fast",
+    "displayName": "s0.png",
+    "duration": 3,
+    "filename": "s0.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.5
+   },
+   {
+    "caption": "Private by design, every step of the way",
+    "displayName": "s1.png",
+    "duration": 2,
+    "filename": "s1.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.75
+   },
+   {
+    "caption": "",
+    "displayName": "s2.png",
+    "duration": 4,
+    "filename": "s2.png",
+    "kind": "image",
+    "pixelHeight": 2796,
+    "pixelWidth": 1290,
+    "transitionDuration": 0.5
+   }
+  ],
+  "transition": "crossfade",
+  "turns": false
+ }
+}
