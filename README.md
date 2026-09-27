@@ -1,8 +1,8 @@
 # promoshot
 
-**See it work:** [demo.md](demo.md) — twenty-four prompts, each given to a
-fresh agent with only the skill and the MCP, its result beside the
-hand-built reference. The suite is in [demos/](demos/README.md).
+**See it work:** [demo.md](demo.md) — technique prompts and open-ended
+creative briefs, each given to a fresh agent with only the skill and the
+MCP, its result beside the hand-built reference. The suite is in [demos/](demos/README.md).
 
 <p align="center">
   <img src="docs/rendered-on-linux.png" width="720"
@@ -151,7 +151,7 @@ Client one-liners:
 
 ```bash
 # Claude Code
-claude mcp add promoshot /ABS/PATH/target/release/promoshot-mcp
+claude mcp add promoshot-headless /ABS/PATH/target/release/promoshot-mcp
 
 # Grok Build
 grok mcp add promoshot -- /ABS/PATH/target/release/promoshot-mcp \
@@ -209,7 +209,8 @@ as a generated, types-only JSON Schema — also checked in at
 autocomplete), `promo_validate`, `promo_inspect` (each layer listed with
 its id — the handle the editing tools take),
 `promo_render_still`, `promo_render_frames`, `promo_render_video`,
-`promo_render_gif`, `promo_workspace`; the senses — `promo_media_probe`,
+`promo_render_gif`, `promo_proxy`, `promo_workspace`; the senses —
+`promo_media_probe`, `promo_media_turntable` (a model seen from around),
 `promo_media_filmstrip` (a contact sheet of a SOURCE clip, times per cell),
 `promo_media_silences` (silence spans and their inverse) and
 `promo_media_scenes` (scene cuts and the shots between them), so an agent
@@ -222,14 +223,20 @@ sizes are stamped, and the composition keeps covering its layers. Device
 frames bake headless too — the same slab the apps draw. `promo_slideshow`
 is the wizard: pictures and clips in, a complete classic, carousel or
 store-listing show out, a caption on any slide becoming a layer that
-lives with its picture. `promo_voices`
+lives with its picture. `promo_apply` reaches the whole vocabulary: a
+batch of editor commands (delete, move, update any layer, upsert any
+keyframe, patch a resource) applied atomically, the command schema served
+with it. `promo_explain` answers why a layer is where it is at a time, and
+`promo_diff` what changed since a project was last looked at;
+`promo_transcribe` drafts captions from speech. `promo_voices`
 lists a provider's voices and `promo_speak` synthesizes narration with the
 person's own provider key, reusing unchanged text by receipt. The authoring tools answer
 with an inline thumbnail of the composition, so a misplaced layer is caught
 at the moment it happens. The tools write ordinary `metadata.json`
 through the format's own parser — the schema stays the source of truth, and
-hand-editing remains first-class. Renders default their output into the
-project's `Exports/` folder and return the path written, never the bytes.
+hand-editing remains first-class. Renders default their output BESIDE the
+project, into `<Name> Exports/`, and return the path written, never the
+bytes.
 
 Flags, all optional: `--workspace <dir>` (where `promo_workspace` points;
 else `$PROMOSHOT_WORKSPACE`, else the XDG data dir), `--root <dir>` (refuse
@@ -323,7 +330,7 @@ way):
 
 ```json
 {"id":2,"result":{"content":[{"type":"text","text":"ok — nothing the renderer would quietly correct"}]}}
-{"id":3,"result":{"content":[{"type":"text","text":"wrote examples/LinuxSmoke.promo/Exports/still-5.5s.png (1280x720 at 5.50s)"}]}}
+{"id":3,"result":{"content":[{"type":"text","text":"wrote examples/LinuxSmoke Exports/still-5.5s.png (1280x720 at 5.50s)"}]}}
 ```
 
 ## One engine, every platform
@@ -366,6 +373,17 @@ Or let the MCP server spend the boilerplate (`promo_init`,
 
 - `SPECS.md` — the invariants the tests pin.
 
+## Versions
+
+Releases are `0.MINOR.PATCH` until 1.0. MINOR moves for a new format rung
+(a higher `minReaderVersion`), a new tool, or any change in behaviour a
+user or an agent would notice; PATCH is for fixes only. Every GitHub
+release carries generated notes and build provenance for its binaries,
+and releases come at most weekly. 0.3.0 is the first release under this
+rule: the reader is at rung 47. (0.2.x ran 79 patch releases in 11 days
+while it added rungs 19–47 — the numbers said nothing, which is what this
+rule fixes.)
+
 ## License
 
 Apache-2.0. The PromoShot applications built on this engine are separate,
@@ -393,8 +411,7 @@ list (a player's chapter menu); `inspect` lists them all.
 A video or audio resource may carry `audioEffects` — `normalize`
 (loudness to a target LUFS), `compressor` and one-band `eq` entries,
 applied in order before the mix in every render the core makes. The
-apps' exports take the same mix; their live preview plays the resource
-dry.
+apps' exports and their live preview take the same effects.
 
 ## Chroma key
 

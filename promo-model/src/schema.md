@@ -78,9 +78,10 @@ metadata.json (only the fields that matter for authoring):
   ]
 }
 
-The format is ONE version: stamp "minReaderVersion": 34 at the top
-level and think no more about it. promo_validate warns when a file
-claims a smaller number than its fields use.
+The format is ONE version, and `minReaderVersion` says which readers may
+open a file for writing. Do not guess it: the tools stamp it from the
+fields a file uses whenever they write, and for a file written by hand
+promo_validate names the exact number to declare.
 
 Ids are strings, unique within the file — that is the whole rule the
 ENGINE asks. UUIDs are the canonical spelling and what the apps write;

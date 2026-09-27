@@ -211,16 +211,26 @@ a feature's own section rather than the whole 67 KB —
 
 **The rules that are only here:**
 
+- **A keyframe ramps only in the `transitionDuration` before it** (0.5 s
+  when absent): the value HOLDS until that ramp begins. For a continuous
+  move from one keyframe to the next, set it to the gap between them —
+  `promo_upsert_keyframe` does that for you; hand-written JSON does not.
+  Stills at 25% and 75% of a gap that look identical mean exactly this.
+- **Camera distance is perspective, not size.** A model layer's box is
+  refitted to its `placement`/`zoom` at any camera, so distance and
+  `fov` change the drawing, not how big it is. To push in, key `zoom` or
+  `placement` — in canvas PIXELS, never fractions of the canvas.
+
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
   fine and are the handles the tools take. When a person opens the
   project in the app it mints a UUID for each and KEEPS your spelling
   under `handles`: `promo_inspect` lists `<uuid> … ← deck`, and every
   tool takes either the UUID or `deck`. The file's own ids are the UUIDs
   from then on; your names still work.
-- **Never write `minReaderVersion` by hand.** The tools compute it from
-  what the file uses, and `promo_validate` names the number when a
-  hand-written file declares one that is too low. A literal is a guess
-  that goes stale.
+- **Never guess `minReaderVersion`.** The tools compute it from what the
+  file uses whenever they write; for a file you write yourself,
+  `promo_validate` names the exact number to declare — copy that. A
+  remembered literal is a guess that goes stale.
 - **Measure what you place.** A placed image resource wants
   `pixelWidth`/`pixelHeight` (a video, `videoNaturalWidth`/`Height`), or
   a `placement` rule resolves against a SQUARE and lands wrong.
@@ -249,8 +259,9 @@ a feature's own section rather than the whole 67 KB —
 - **For autocomplete in hand-written files**, point `"$schema"` at
   `docs/promo.schema.json` in this repo.
 
-**Two tool arguments worth knowing:** `promo_render_video` takes
-`codec: "prores"` and `alpha: true` for an edit-ready master with
+**Two tool arguments worth knowing:** the headless `promo_render_video`
+takes `codec: "prores4444"` (or `"prores422"`) and `alpha: true` for an
+edit-ready master with
 transparency (h264/hevc cannot carry alpha); `promo_proxy {project}`
 builds a tier-1 proxy per video resource once, and every later render
 reads it — do it before working with long sources.

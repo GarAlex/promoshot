@@ -348,7 +348,7 @@ A project is a FOLDER named <Name>.promo holding `metadata.json` (the compositio
 The loop:
 1. `promo_schema` once — the format's authority, with complete recipes. `promo_schema_full` when you need a feature it does not cover.
 2. `promo_workspace` — where new projects may be created on this machine.
-3. Write `metadata.json`. Every id is a UUID. Sizes and positions are in canvas pixels; prefer a `placement` rule over raw shifts.
+3. Write `metadata.json`. Ids are strings, unique in the file; short names are fine (the app keeps them as `handles` when it mints UUIDs). Sizes and positions are in canvas pixels; prefer a `placement` rule over raw shifts.
 4. `promo_validate` — the renderer's own parser. `ok` means it will render.
 5. `promo_render_frames` — LOOK. It samples the piece and answers with one contact sheet as an image. Fix what you see, then `promo_render_video`.
 
@@ -659,8 +659,8 @@ fn tool_descriptors() -> Value {
                 existing id to UPDATE: only the fields you pass change, placement \
                 merges into the first keyframe, hand-added keyframes survive. This is \
                 the scaffold, not the whole format: motion and viewport ride \
-                promo_upsert_keyframe; transitions beyond fadeIn are ordinary JSON \
-                edits — start from a promo_schema recipe. A thumbnail sampled at \
+                promo_upsert_keyframe; transitions beyond fadeIn, swaps, waits, \
+                deletes and reorders are promo_apply commands. A thumbnail sampled at \
                 the touched layer's midpoint comes attached — LOOK at it before \
                 the next edit.",
             "inputSchema": { "type": "object",
@@ -713,7 +713,7 @@ fn tool_descriptors() -> Value {
                 background. Pass an existing keyframe id to UPDATE — only the \
                 fields you pass change. Creating without transitionDuration ramps \
                 from the previous keyframe (a stated 0 holds). Swaps, waits and \
-                motion paths stay ordinary JSON edits.",
+                motion paths: promo_apply's upsertKeyframe carries any keyframe field.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "project": project,
@@ -1675,6 +1675,37 @@ mod tests {
     /// server, and a skill that names tools the server does not offer — or
     /// misses ones it does — teaches wrongly. Held here, where the tool
     /// list lives, the same discipline as the app's SkillDriftTests.
+    /// Phrases that were true once and taught agents wrong after the format
+    /// moved on (review 2026-09-27). None may come back in anything an agent
+    /// reads: the skill, both schemas, the handshake, the tool descriptions.
+    /// The app's twin of this test reads its own descriptions.
+    #[test]
+    fn no_stale_phrase_reaches_an_agent() {
+        const STALE: &[&str] = &[
+            "Every id is a UUID",
+            "ordinary JSON edit",
+            "Stamp `\"minReaderVersion\"",
+            "stamp \"minReaderVersion\"",
+            "think no more about it",
+            "never video",
+            "video layers cannot swap",
+            "codec: \"prores\"",
+        ];
+        let tools = tool_descriptors().to_string();
+        let sources = [
+            ("SKILL.md", include_str!("../../skill/SKILL.md")),
+            ("schema-quick.md", promo_model::SCHEMA_QUICK),
+            ("schema.md", promo_model::SCHEMA),
+            ("the handshake", INSTRUCTIONS),
+            ("the tool descriptions", tools.as_str()),
+        ];
+        for (name, text) in sources {
+            for phrase in STALE {
+                assert!(!text.contains(phrase), "{name} still says \"{phrase}\"");
+            }
+        }
+    }
+
     #[test]
     fn the_skill_teaches_exactly_the_tools_the_server_offers() {
         let skill = include_str!("../../skill/SKILL.md");
@@ -1690,7 +1721,7 @@ mod tests {
         // literal 19, and went stale while the ladder climbed to 42: a
         // test can pin the wrong thing as easily as the right one.
         assert!(
-            skill.contains("Never write `minReaderVersion` by hand"),
+            skill.contains("Never guess `minReaderVersion`"),
             "the skill must teach that the stamp is computed, not a number"
         );
         for stale in [

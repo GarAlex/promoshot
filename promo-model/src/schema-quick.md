@@ -5,8 +5,14 @@ names. Write the JSON, `promo validate` it (the validator runs the
 renderers' own parser — "ok" means it renders), then render or open it.
 This is the authoring subset; `promo_schema_full` is the whole format.
 
-- Stamp `"minReaderVersion": 34`. Ids are strings, unique in the file —
-  short mnemonics ("bg", "clip", "k0") are fine; apps mint UUIDs on adopt.
+- Do not guess `minReaderVersion`: the tools stamp it when they write, and
+  for a file you write yourself `promo_validate` names the exact number to
+  declare (the recipes below carry theirs). Ids are strings, unique in the
+  file — short mnemonics ("bg", "clip", "k0") are fine; the app mints UUIDs
+  on adopt and keeps your spellings as `handles`, which every tool accepts.
+- A keyframe RAMPS only in the `transitionDuration` before it (0.5 s when
+  absent); until then the value holds. For a continuous move from one
+  keyframe to the next, set it to the gap between them.
 - Boilerplate every project carries: `id`, `name`, `createdAt: 0`,
   `state: "recorded"`, `trimStart: 0`, `trimEnd: <seconds>`,
   `videoDuration: <seconds>`, `subtitles: []`.
@@ -41,7 +47,9 @@ constant. The fields that matter first:
   `[0.25,0.25,0.5,0.5]` is the Ken Burns push. Keep `w == h` to keep the
   layer's shape; the layer's own rect never moves, only what it shows.
 - `resourceID` on a keyframe SWAPS what the layer shows (image, caption,
-  drawing layers only — never video): a sequence on ONE layer. Add
+  drawing and background layers; a VIDEO layer swaps only to a COMPOSITION —
+  the takeover, where the keyframe's `sourceTime` says where the arriving
+  film starts — never to another video): a sequence on ONE layer. Add
   `"transition": { "kind": "wipe", "from": "left", "duration": 0.6 }` and
   the cut becomes a blend. This is how a still-image slideshow crossfades
   with no second layer.
@@ -121,8 +129,8 @@ pushes in over a palette ground, title above, 6 seconds:
     {"id":"t1","time":0.3,"opacity":1,"transitionDuration":0.3}]}]}
 ```
 
-**Two-clip sequence with a wipe** — video layers cannot swap, so two
-clips are two layers, overlapped by the wipe (for STILLS, do this on one
+**Two-clip sequence with a wipe** — a video layer cannot swap to another
+video, so two clips are two layers, overlapped by the wipe (for STILLS, do this on one
 layer with a swap keyframe carrying the same `transition` object):
 
 ```json
