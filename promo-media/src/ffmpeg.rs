@@ -293,6 +293,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let mut info = VideoInfo::default();
+    let mut transfer: Option<String> = None;
     for line in text.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -301,7 +302,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
             "width" => info.width = value.trim().parse().unwrap_or(0),
             "height" => info.height = value.trim().parse().unwrap_or(0),
             "pix_fmt" => info.has_alpha = crate::pix_fmt_has_alpha(value),
-            "color_transfer" => info.bt709 = value.trim() == "bt709",
+            "color_transfer" => transfer = Some(value.trim().to_string()),
             "r_frame_rate" => info.nominal_fps = parse_rational(value.trim()),
             // The stream's duration is missing in some containers; ffprobe
             // then prints the format's, and the first one we see wins.
@@ -311,6 +312,7 @@ fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
             _ => {}
         }
     }
+    info.bt709 = crate::treated_as_bt709(transfer.as_deref(), info.width, info.height);
     info.rotation_degrees = probe_rotation(path);
     // ffprobe reports the STORED size; ffmpeg's decoder auto-applies the
     // display matrix, so a quarter-turn comes out transposed. Report what

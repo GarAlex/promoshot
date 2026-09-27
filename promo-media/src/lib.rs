@@ -55,12 +55,26 @@ pub struct VideoInfo {
     /// portrait phone capture is stored landscape with a rotation tag, and a
     /// backend that ignores it renders every such clip on its side.
     pub rotation_degrees: i32,
-    /// The stream says its transfer is BT.709 — HD video, most of it. The
-    /// compositor converts such frames to sRGB while sampling (the apps do
-    /// the same from the colour space their decoder attaches), so a
-    /// headless render's midtones match the app's instead of sitting about
-    /// 11/255 apart.
+    /// The frames are BT.709 as the apps' decoder sees them: see
+    /// [`treated_as_bt709`]. The compositor converts such frames to sRGB
+    /// while sampling, as the apps do, so a headless render's midtones match
+    /// the app's instead of sitting about 11/255 apart.
     pub bt709: bool,
+}
+
+/// Whether the apps' decoder hands these frames over as BT.709 — the
+/// colour space that routes them through the in-shader conversion. Tagged
+/// `bt709`, yes. UNTAGGED, AVFoundation guesses from the size: measured on
+/// macOS 26 with untagged H.264, a long side of 720 or more gets the
+/// CoreMedia 709 space (480x854, 720x360, 1920x1080) and anything smaller
+/// gets an unnamed SD guess that Core Image converts some other way
+/// (640x360, 704x480). Other tags (601, HDR, sRGB) are not BT.709.
+pub fn treated_as_bt709(transfer: Option<&str>, width: u32, height: u32) -> bool {
+    match transfer.map(str::trim) {
+        Some("bt709") => true,
+        None | Some("") | Some("unknown") | Some("unspecified") => width.max(height) >= 720,
+        Some(_) => false,
+    }
 }
 
 /// A decode session over one asset.
@@ -432,6 +446,26 @@ impl Registry {
             }
         }
         Err(last.unwrap_or_else(|| MediaError::NoBackend(path.display().to_string())))
+    }
+}
+
+#[cfg(test)]
+mod bt709_tests {
+    use super::treated_as_bt709;
+
+    /// The apps' decoder, measured: tagged BT.709 is BT.709; untagged is
+    /// BT.709 from a long side of 720; other tags are not.
+    #[test]
+    fn a_clip_is_bt709_the_way_the_apps_decoder_sees_it() {
+        assert!(treated_as_bt709(Some("bt709"), 640, 360));
+        assert!(treated_as_bt709(Some("unknown"), 1920, 1080));
+        assert!(treated_as_bt709(None, 480, 854));
+        assert!(treated_as_bt709(Some("unknown"), 720, 360));
+        assert!(!treated_as_bt709(Some("unknown"), 704, 480));
+        assert!(!treated_as_bt709(None, 640, 360));
+        assert!(!treated_as_bt709(Some("smpte170m"), 1920, 1080));
+        assert!(!treated_as_bt709(Some("iec61966-2-1"), 1920, 1080));
+        assert!(!treated_as_bt709(Some("arib-std-b67"), 1920, 1080));
     }
 }
 
