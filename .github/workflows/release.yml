@@ -82,12 +82,16 @@ jobs:
           tags: promoshot-mcp:smoke
       # The image the MCP registry runs must render before anyone pulls it:
       # a real frame from the example it ships, as the image's own user.
+      # Not blank is the test: this frame is about 10.8 KB as a PNG and a
+      # blank one of the same size 3.7 KB (measured in the image,
+      # 2026-09-27; the 20 KB this first said was never measured, and failed
+      # v0.3.0 with a correct frame).
       - name: Smoke render inside the image
         run: |
           docker run --rm --entrypoint promo promoshot-mcp:smoke \
             validate /usr/local/share/promoshot/examples/ProductCard.promo
           docker run --rm --entrypoint sh promoshot-mcp:smoke -c \
-            'promo still /usr/local/share/promoshot/examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300 && test $(wc -c < /tmp/smoke.png) -gt 20000'
+            'promo still /usr/local/share/promoshot/examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300 && test $(wc -c < /tmp/smoke.png) -gt 6000'
       - name: Push
         run: |
           for tag in "${GITHUB_REF_NAME}" latest; do
