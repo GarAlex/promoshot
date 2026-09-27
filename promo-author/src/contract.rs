@@ -216,23 +216,34 @@ pub fn tools(host: Host) -> Vec<Value> {
             "name": "promo_schema_types",
             "description": "The format as a JSON Schema, types only, GENERATED from the \
                 parser's own structs — fill a structured object against this instead of \
-                freehanding JSON; the prose lives in promo_schema.",
-            "inputSchema": { "type": "object", "properties": {} }
+                freehanding JSON; the prose lives in promo_schema. 80 KB whole: pass \
+                `types` for just the definitions you need.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "types": { "type": "array", "items": { "type": "string" }, "description":
+                        "Type names — ProjectLayer, ProjectLayerKeyframe, CaptionStyle, … — \
+                         for just those definitions and the names they reference; omit \
+                         for the whole schema" }
+                },
+                "required": [] }
         }),
         json!({
             "name": "promo_schema_full",
             "description": "The whole .promo format, from the same single file the \
                 engine compiles in — sprites, masks, motion paths, duration rules, \
-                waits, gradients, palette roles and all. 67 KB whole: pass `topics` \
-                to take only what this piece needs.",
+                waits, gradients, palette roles and all. 73 KB whole: pass `topics` \
+                to take only what this piece needs, no section over 5 KB.",
             "inputSchema": { "type": "object",
                 "properties": {
                     "topics": { "type": "array", "items": { "type": "string" },
                         "description":
-                            "\"core\" for the format proper, and a feature word for its \
-                             section: composition, markers, audio, chroma, pointer, \
-                             effects, lut, model, particles, route, morph, parts, \
-                             recipe, environment, stage. Omit for everything." }
+                            "\"core\" for the essentials, and any word a section's heading \
+                             names: keyframe, placement, timing, transition, swap, motion, \
+                             viewport, caption, tracking, reveal, background, palette, \
+                             frame, look, mask, rect, media — and the features: \
+                             composition, markers, audio, chroma, pointer, effects, lut, \
+                             model, particles, route, morph, parts, recipe, environment, \
+                             stage. Omit for everything." }
                 },
                 "required": [] }
         }),
@@ -997,11 +1008,14 @@ pub fn look_times(
 
 /// The format's prose, whole or by topic.
 ///
-/// The whole document is 67 KB, and nearly every session pulled all of it
-/// — most of which is the format proper, but 17 KB is feature sections a
-/// given piece may never touch. Naming topics takes those instead: "core"
-/// is the format itself, and a feature word takes the paragraph that
-/// introduces it. No topics still answers with everything.
+/// The whole document is 73 KB, and nearly every session pulled all of it
+/// — and "core", the format proper, was 51 KB of it, fetched in every run
+/// the review read (review 2026-09-27, P2-34). The format proper is now
+/// sections of at most 5 KB, each headed `## Title — word, word, …` with
+/// the words an author reaches for (the skill's among them), and the
+/// features after it are sections headed by their rung sentence. "core"
+/// is the essentials before the first section; any heading word takes
+/// its section. No topics still answers with everything.
 pub fn schema_text(topics: &[String]) -> String {
     if topics.is_empty() {
         return promo_model::SCHEMA.to_string();
@@ -1009,42 +1023,32 @@ pub fn schema_text(topics: &[String]) -> String {
     let (core, sections) = schema_split();
     let mut out = String::new();
     let mut missed: Vec<&str> = Vec::new();
-    for topic in topics {
-        let topic = topic.to_ascii_lowercase();
+    let mut taken: Vec<usize> = Vec::new();
+    for asked in topics {
+        let topic = asked.trim().to_ascii_lowercase();
         if topic == "core" || topic == "format" {
             out.push_str(core);
             out.push('\n');
             continue;
         }
         let mut found = false;
-        for section in &sections {
-            let heading = section
-                .lines()
-                .next()
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            if heading.contains(topic.as_str()) {
-                out.push_str(section);
-                out.push_str("\n\n");
+        for (index, section) in sections.iter().enumerate() {
+            if section_answers(section, &topic) {
                 found = true;
+                // Two words for one section give it once.
+                if !taken.contains(&index) {
+                    taken.push(index);
+                    out.push_str(section);
+                    out.push_str("\n\n");
+                }
             }
         }
         if !found {
-            missed.push(
-                topics
-                    .iter()
-                    .find(|t| t.eq_ignore_ascii_case(&topic))
-                    .map(String::as_str)
-                    .unwrap_or_default(),
-            );
+            missed.push(asked.as_str());
         }
     }
     if !missed.is_empty() {
-        let names: Vec<String> = sections
-            .iter()
-            .filter_map(|s| s.lines().next())
-            .map(|line| line.split(" (rung").next().unwrap_or(line).to_string())
-            .collect();
+        let names: Vec<String> = sections.iter().map(|s| section_title(s)).collect();
         out.push_str(&format!(
             "\n(no section for {}; the topics are \"core\" plus: {})\n",
             missed.join(", "),
@@ -1054,19 +1058,137 @@ pub fn schema_text(topics: &[String]) -> String {
     out
 }
 
-/// The format proper, and the feature sections after it.
+/// The format's machine schema, whole or by type name.
 ///
-/// A section starts at an unindented sentence naming its rung — the shape
-/// the document already has — and runs to the next one. Splitting on blank
-/// lines instead missed every section glued to the paragraph above it,
-/// which is most of them.
+/// Whole it is 80 KB pretty-printed, which an agent read to find one
+/// struct (review 2026-09-27, P2-34). Named types answer with just their
+/// definitions, the names each references (ask for those next), and the
+/// case of a name need not match. An unknown name is refused with the
+/// names there are.
+pub fn schema_types_text(types: &[String]) -> Result<String, String> {
+    let schema = promo_model::wire_schema();
+    if types.is_empty() {
+        return serde_json::to_string_pretty(&schema).map_err(|e| e.to_string());
+    }
+    let defs = schema
+        .get("$defs")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let root_name = schema
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("ProjectMetadata")
+        .to_string();
+    let mut picked = serde_json::Map::new();
+    let mut unknown: Vec<&str> = Vec::new();
+    for asked in types {
+        let wanted = asked.trim();
+        if wanted.eq_ignore_ascii_case(&root_name) {
+            let mut root = schema.clone();
+            if let Some(map) = root.as_object_mut() {
+                map.remove("$defs");
+                map.remove("$schema");
+            }
+            picked.insert(root_name.clone(), root);
+            continue;
+        }
+        match defs
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(wanted))
+        {
+            Some((name, body)) => {
+                picked.insert(name.clone(), body.clone());
+            }
+            None => unknown.push(asked.as_str()),
+        }
+    }
+    if !unknown.is_empty() {
+        let mut names: Vec<&str> = defs.keys().map(String::as_str).collect();
+        names.push(root_name.as_str());
+        names.sort_unstable();
+        return Err(format!(
+            "no type named {} — the types are {}",
+            unknown.join(", "),
+            names.join(", ")
+        ));
+    }
+    // The names the picked definitions point at, for the next ask.
+    fn references(node: &Value, into: &mut std::collections::BTreeSet<String>) {
+        match node {
+            Value::Object(map) => {
+                if let Some(target) = map.get("$ref").and_then(Value::as_str) {
+                    if let Some(name) = target.rsplit('/').next() {
+                        into.insert(name.to_string());
+                    }
+                }
+                map.values().for_each(|v| references(v, into));
+            }
+            Value::Array(items) => items.iter().for_each(|v| references(v, into)),
+            _ => {}
+        }
+    }
+    let mut referenced = std::collections::BTreeSet::new();
+    picked.values().for_each(|v| references(v, &mut referenced));
+    let referenced: Vec<String> = referenced
+        .into_iter()
+        .filter(|name| !picked.contains_key(name))
+        .collect();
+    serde_json::to_string_pretty(&json!({ "types": picked, "references": referenced }))
+        .map_err(|e| e.to_string())
+}
+
+/// Does `section` answer to `topic` (lowercase)? A `## Title — words`
+/// section answers to its title and each word, singular or plural; a
+/// feature section to any part of its rung sentence, as it always has.
+fn section_answers(section: &str, topic: &str) -> bool {
+    let heading = section.lines().next().unwrap_or_default();
+    match heading.strip_prefix("## ") {
+        Some(rest) => {
+            let (title, words) = rest.split_once(" — ").unwrap_or((rest, ""));
+            std::iter::once(title)
+                .chain(words.split(','))
+                .map(|w| w.trim().to_ascii_lowercase())
+                .filter(|w| !w.is_empty())
+                .any(|w| w == topic || format!("{w}s") == topic || w == format!("{topic}s"))
+        }
+        None => heading.to_ascii_lowercase().contains(topic),
+    }
+}
+
+/// A section's name in the list of topics: its title, or its rung
+/// sentence up to the rung.
+fn section_title(section: &str) -> String {
+    let heading = section.lines().next().unwrap_or_default();
+    match heading.strip_prefix("## ") {
+        Some(rest) => rest
+            .split(" — ")
+            .next()
+            .unwrap_or(rest)
+            .to_ascii_lowercase(),
+        None => heading
+            .split(" (rung")
+            .next()
+            .unwrap_or(heading)
+            .to_string(),
+    }
+}
+
+/// The format proper, and the sections after it.
+///
+/// A section starts at a `## ` heading or at an unindented sentence naming
+/// its rung — the feature sections' shape — and runs to the next one.
+/// Splitting on blank lines instead missed every section glued to the
+/// paragraph above it, which is most of them.
 fn schema_split() -> (&'static str, Vec<&'static str>) {
     let text = promo_model::SCHEMA;
     let mut starts: Vec<usize> = Vec::new();
     let mut at = 0usize;
     for line in text.split_inclusive('\n') {
         let head = line.trim_end();
-        if head.contains("(rung ") && head.starts_with(|c: char| c.is_ascii_uppercase()) {
+        let titled = head.starts_with("## ");
+        let rung = head.contains("(rung ") && head.starts_with(|c: char| c.is_ascii_uppercase());
+        if titled || rung {
             starts.push(at);
         }
         at += line.len();
@@ -1279,7 +1401,7 @@ mod tests {
         assert!(look_times(&meta, &json!({ "times": [11] })).is_err());
     }
 
-    /// The format's prose by topic. The whole document is 67 KB and nearly
+    /// The format's prose by topic. The whole document is 73 KB and nearly
     /// every session pulled all of it; a piece that uses particles can have
     /// the particles instead. No argument still answers with everything.
     #[test]
@@ -1292,11 +1414,7 @@ mod tests {
 
         let core = schema_text(&["core".into()]);
         assert!(core.starts_with("A PromoShot project is a FOLDER"));
-        assert!(
-            core.len() < promo_model::SCHEMA.len() * 4 / 5,
-            "{} bytes",
-            core.len()
-        );
+        assert!(core.len() <= 5_000, "core is {} bytes", core.len());
         assert!(
             !core.contains("(rung 36)"),
             "the feature sections are not in it"
@@ -1322,6 +1440,86 @@ mod tests {
             missed.contains("Particles") && missed.contains("Stages"),
             "{missed}"
         );
+    }
+
+    /// Every section of the format is at most 5 KB, and every topic word
+    /// the skill hands an agent takes a section — `reveal`, `tracking`,
+    /// `rect` and `transition` took nothing, and "core" was 51 KB fetched
+    /// in every run (review 2026-09-27, P2-34).
+    #[test]
+    fn every_section_is_small_and_every_skill_word_finds_one() {
+        let (core, sections) = schema_split();
+        assert!(core.len() <= 5_000, "core is {} bytes", core.len());
+        for section in &sections {
+            assert!(
+                section.len() <= 5_000,
+                "{} is {} bytes",
+                section_title(section),
+                section.len()
+            );
+        }
+        let skill = include_str!("../../skill/SKILL.md");
+        let start = skill
+            .find("The features, by the topic word that fetches them")
+            .expect("the skill's topic list");
+        let list = &skill[start..];
+        let list = &list[..list.find("\n\n**").unwrap_or(list.len())];
+        let mut words: Vec<&str> = list
+            .split("** (`")
+            .skip(1)
+            .filter_map(|rest| rest.split('`').next())
+            .collect();
+        words.sort_unstable();
+        words.dedup();
+        assert!(words.len() >= 15, "the skill's words: {words:?}");
+        for word in words {
+            let text = schema_text(&[word.to_string()]);
+            assert!(
+                !text.contains("no section for"),
+                "`{word}` takes no section"
+            );
+            assert!(text.len() <= 12_000, "`{word}` takes {} bytes", text.len());
+        }
+        // A word two sections answer to comes once per section.
+        let both = schema_text(&["reveal".into(), "kinetic".into()]);
+        assert_eq!(both.matches("## Reveal").count(), 1);
+        for word in [
+            "transition",
+            "tracking",
+            "rect",
+            "keyframe",
+            "placement",
+            "mask",
+            "palette",
+        ] {
+            let text = schema_text(&[word.to_string()]);
+            assert!(
+                text.starts_with("## "),
+                "`{word}` takes a titled section: {}",
+                &text[..80]
+            );
+        }
+    }
+
+    /// The machine schema by type name: just those definitions and what
+    /// they reference, any case; an unknown name lists the names there are.
+    #[test]
+    fn the_types_can_be_asked_for_by_name() {
+        let whole = schema_types_text(&[]).unwrap();
+        assert!(whole.len() > 40_000, "{} bytes whole", whole.len());
+        let layer = schema_types_text(&["projectlayer".into()]).unwrap();
+        let answer: Value = serde_json::from_str(&layer).unwrap();
+        assert!(answer["types"]["ProjectLayer"].is_object(), "{layer}");
+        assert!(layer.len() < whole.len() / 4, "{} bytes", layer.len());
+        assert!(
+            answer["references"]
+                .as_array()
+                .is_some_and(|r| !r.is_empty()),
+            "it names what it points at"
+        );
+        let refused = schema_types_text(&["Confetti".into()]).unwrap_err();
+        assert!(refused.contains("no type named Confetti"), "{refused}");
+        assert!(refused.contains("ProjectLayer"), "{refused}");
     }
 
     /// The handshake teaches the loop on both hosts; only the app speaks

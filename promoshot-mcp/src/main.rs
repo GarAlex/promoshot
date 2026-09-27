@@ -377,7 +377,17 @@ where
             Ok(contract::schema_text(&topics))
         }
         "promo_schema_types" => {
-            serde_json::to_string_pretty(&promo_model::wire_schema()).map_err(|e| e.to_string())
+            let types: Vec<String> = args
+                .get("types")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
+                .unwrap_or_default();
+            contract::schema_types_text(&types)
         }
         "promo_workspace" => {
             std::fs::create_dir_all(&config.workspace)

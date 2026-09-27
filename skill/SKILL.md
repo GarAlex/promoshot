@@ -13,6 +13,21 @@ later. The App Store's 2.3.1 reads projects up to `minReaderVersion` 17
 and has no `--mcp-stdio`; a project that needs more tells it "Update
 PromoShot to open it". Say so when a person on 2.3.1 cannot open your work.
 
+**The task, and the first call:**
+
+| The task | First call |
+|---|---|
+| A show from pictures or clips | `promo_slideshow` |
+| A new project, built up by hand | `promo_workspace`, then `promo_init` |
+| One layer added or changed | `promo_upsert_layer` |
+| Motion: a push-in, a Ken Burns, a ramp | `promo_upsert_keyframe` |
+| Anything else — delete, reorder, wipe, swap, trim | `promo_apply` |
+| What a source file holds | `promo_media_probe` (then `_filmstrip`, `_turntable`) |
+| A field you do not know | `promo_schema_full {"topics": ["<word>"]}` |
+| Is it right? | `promo_validate`, then `promo_render_frames` |
+| Why is that layer there? | `promo_explain` |
+| The file to hand over | `promo_render_video` (or `_gif`, `_still`) |
+
 ## Two modes, and they are not the same job
 
 **Nobody watching** (the headless server, the CLI): the file is yours.
@@ -212,9 +227,12 @@ folder for new projects.
 ## The rules, and where the rest lives
 
 The schema is the reference; this is the index and the judgment. Ask for
-a feature's own section rather than the whole 67 KB —
-`promo_schema_full {"topics": ["particles", "route"]}` is about 2 KB,
-`"core"` is the format proper.
+a feature's own section rather than the whole 73 KB —
+`promo_schema_full {"topics": ["particles", "route"]}` is about 3 KB;
+`"core"` is the essentials (5 KB), and every other section, none over
+5 KB, answers to the words its heading names — `keyframe`, `placement`,
+`timing`, `captions`, `palette`, `mask` and the feature words below.
+`promo_schema_types {"types": ["ProjectLayer"]}` is one struct's shape.
 
 **The rules that are only here:**
 

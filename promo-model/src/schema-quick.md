@@ -245,7 +245,8 @@ freehanding, and put
 The rest of the format — nested compositions, markers, audio effects,
 chroma key, pointer follow, image effects, LUTs, models, particles,
 routes, morphs, parts, recipes, environments, stages — is
-`promo_schema_full`. It answers whole (67 KB) or by topic: pass
-`{"topics": ["particles", "route"]}` and get those sections alone,
-`"core"` for the format proper.
+`promo_schema_full`. It answers whole (73 KB) or by topic: pass
+`{"topics": ["particles", "route"]}` and get those sections alone —
+`"core"` for the essentials, or any word a section's heading names
+(`keyframe`, `placement`, `timing`, `captions`, `reveal`, `mask`, …).
 in a metadata.json for editor autocomplete.
