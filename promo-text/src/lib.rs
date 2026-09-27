@@ -444,16 +444,22 @@ pub fn reveal_layout(
     // Laid out exactly as `rasterize` lays it out — same font resolution,
     // same metrics, same wrap width — or the spans would describe a picture
     // nobody drew.
-    let mut fonts = FontSystem::new();
-    let resolved = resolve_family(&mut fonts, style.font_family.as_deref());
+    // The SHARED font system, like every other layout here. A fresh one had
+    // no iOS fallback — fontdb finds no fonts there, so it came up empty and
+    // the shaper panicked ("no default font found"): on iOS every frame with
+    // a revealing caption failed to draw (review 2026-09-27, P2-25). It also
+    // re-scanned the system's fonts on every call.
+    let mut guard = font_system().lock().expect("font system");
+    let fonts = &mut *guard;
+    let resolved = resolve_family(fonts, style.font_family.as_deref());
     let metrics = Metrics::new(
         style.font_size as f32,
         (style.font_size * style.line_height) as f32,
     );
     // Decided before the buffer borrows the font system.
-    let weight = snap_weight(&fonts, &resolved, style_weight(style), style.italic);
-    let mut buffer = Buffer::new(&mut fonts, metrics);
-    let mut buffer = buffer.borrow_with(&mut fonts);
+    let weight = snap_weight(fonts, &resolved, style_weight(style), style.italic);
+    let mut buffer = Buffer::new(fonts, metrics);
+    let mut buffer = buffer.borrow_with(fonts);
     buffer.set_size(Some(box_.text_width as f32), None);
     let family = match &resolved {
         ResolvedFamily::Named(name) => Family::Name(name),
