@@ -269,12 +269,13 @@ a feature's own section rather than the whole 67 KB —
 - **For autocomplete in hand-written files**, point `"$schema"` at
   `docs/promo.schema.json` in this repo.
 
-**Two tool arguments worth knowing:** the headless `promo_render_video`
-takes `codec: "prores4444"` (or `"prores422"`) and `alpha: true` for an
-edit-ready master with
-transparency (h264/hevc cannot carry alpha); `promo_proxy {project}`
-builds a tier-1 proxy per video resource once, and every later render
-reads it — do it before working with long sources.
+**Two tool arguments worth knowing:** `promo_render_video` takes
+`codec: "prores4444"` (or `"prores422"`) and `alpha: true` for an
+edit-ready master with transparency (h264/hevc cannot carry alpha) — a
+.mov; `promo_proxy {project}` builds a tier-1 proxy per video resource
+once, and every later headless render reads it — do it before working
+with long sources. A tool refuses an argument it does not take, naming
+the ones it does.
 
 **The features, by the topic word that fetches them.** Each says what it
 is for; the schema section says how to write it.

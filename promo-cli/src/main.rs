@@ -12,6 +12,7 @@
 //! `promo inspect` reports anything a given project would lose.
 
 use project::{Project, Unsupported};
+use promo_cli::sheet::{blit, grid_for};
 use promo_cli::{project, render};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -867,37 +868,8 @@ fn plural(count: usize) -> &'static str {
 fn model_probe(file: &Path, opts: &Options) -> Result<String, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let model = promo_engine::model::Model::from_glb(&bytes).map_err(|e| e.to_string())?;
-    let slots: Vec<serde_json::Value> = model
-        .materials
-        .iter()
-        .filter(|m| !m.name.is_empty())
-        .map(|m| {
-            serde_json::json!({
-                "name": m.name,
-                "baseColor": m.base_color,
-                "metallic": m.metallic,
-                "roughness": m.roughness,
-                "textured": m.base_texture.is_some(),
-                "doubleSided": m.double_sided,
-            })
-        })
-        .collect();
-    let clips: Vec<serde_json::Value> = model
-        .clip_summary()
-        .into_iter()
-        .map(|(name, duration)| serde_json::json!({ "name": name, "duration": duration }))
-        .collect();
-    let triangles: usize = model.meshes.iter().map(|m| m.indices.len() / 3).sum();
-    let summary = serde_json::json!({
-        "kind": "model",
-        "file": file.display().to_string(),
-        "boundsRadius": model.bounds_radius,
-        "boundsCenter": model.bounds_center,
-        "slots": slots,
-        "clips": clips,
-        "meshes": model.meshes.len(),
-        "triangles": triangles,
-    });
+    let summary = promo_cli::sheet::model_facts(file)?;
+    let triangles = summary["triangles"].as_u64().unwrap_or(0);
     if opts.json {
         return Ok(summary.to_string());
     }
@@ -954,96 +926,37 @@ fn device(kind: &str, opts: &Options) -> Result<String, String> {
     ))
 }
 
-/// The model seen from around: `count` yaws evenly round the circle, each
-/// rendered on a square cell by the engine's own pass under the default
-/// light, tiled into one contact sheet — what an agent looks at before
-/// choosing a camera.
+/// The model seen from around — `promo_cli::sheet::turntable`, the one
+/// implementation the headless server and the Mac app's server both run.
 fn turntable(file: &Path, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
-    let count = opts.count.unwrap_or(6).clamp(1, 64) as usize;
-    let cell = opts.size.map(|(w, _)| w).unwrap_or(320).clamp(32, 1024);
-    let bytes = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
-    promo_engine::model::Model::from_glb(&bytes).map_err(|e| e.to_string())?;
-
-    // A throwaway project round the file: a model layer keyed once per
-    // cell, a step between yaws, rendered at whole seconds.
-    let dir = std::env::temp_dir().join(format!(
-        "promo-turntable-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    ));
-    std::fs::create_dir_all(dir.join("Resources")).map_err(|e| e.to_string())?;
-    let filename = file
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("model.glb")
-        .to_string();
-    std::fs::copy(file, dir.join("Resources").join(&filename)).map_err(|e| e.to_string())?;
-    let yaws: Vec<f64> = (0..count)
-        .map(|i| -180.0 + 360.0 * i as f64 / count as f64)
-        .collect();
-    let keyframes: Vec<serde_json::Value> = yaws
-        .iter()
-        .enumerate()
-        .map(|(i, yaw)| {
-            serde_json::json!({
-                "id": format!("K{i}"), "time": i as f64,
-                "camera": { "yaw": yaw, "pitch": 12.0 },
-                "transitionDuration": 0
-            })
-        })
-        .collect();
-    let doc = serde_json::json!({
-        "id": "turntable", "name": "Turntable", "createdAt": 0, "state": "recorded",
-        "minReaderVersion": 29,
-        "trimStart": 0, "trimEnd": count as f64, "videoDuration": count as f64, "subtitles": [],
-        "compositionSettings": { "canvasWidth": cell, "canvasHeight": cell, "backgroundColorHex": "1A1F2B" },
-        "resources": [{ "id": "M", "kind": "model", "filename": filename, "displayName": "Model", "addedAt": 0 }],
-        "layers": [{ "id": "L", "name": "model", "sortIndex": 0, "kind": "model", "isEnabled": true,
-                     "startTime": 0, "duration": count as f64, "resourceID": "M", "keyframes": keyframes }]
-    });
-    std::fs::write(dir.join("metadata.json"), doc.to_string()).map_err(|e| e.to_string())?;
-    let project = Project::open(&dir)?;
-    let mut renderer = render::Renderer::new(&project, cell, cell)?;
-    let (columns, rows) = grid_for(count);
-    let (sheet_w, sheet_h) = (columns as u32 * cell, rows as u32 * cell);
-    let mut sheet = vec![0u8; (sheet_w * sheet_h * 4) as usize];
-    let mut cells = Vec::new();
-    for (i, yaw) in yaws.iter().enumerate() {
-        let rgba = renderer.frame_rgba(i as f64 + 0.5)?;
-        let (cx, cy) = ((i % columns) as u32, (i / columns) as u32);
-        blit(&mut sheet, sheet_w, &rgba, cell, cell, cx * cell, cy * cell);
-        cells.push(serde_json::json!({ "yaw": yaw, "column": cx, "row": cy }));
-    }
-    render::write_png(out, &sheet, sheet_w, sheet_h)?;
-    let _ = std::fs::remove_dir_all(&dir);
+    let answer = promo_cli::sheet::turntable(
+        file,
+        out,
+        opts.count.map(|c| c as usize),
+        opts.size.map(|(w, _)| w),
+    )?;
     if opts.json {
-        return Ok(serde_json::json!({
-            "wrote": out.display().to_string(),
-            "cells": cells, "columns": columns, "rows": rows, "cell": cell,
-        })
-        .to_string());
+        return Ok(answer.to_string());
     }
     Ok(format!(
-        "wrote {} ({count} yaws, {columns}x{rows} cells of {cell}px)",
-        out.display()
+        "wrote {} ({} yaws, {}x{} cells of {}px)",
+        out.display(),
+        answer["cells"].as_array().map_or(0, Vec::len),
+        answer["columns"],
+        answer["rows"],
+        answer["cell"]
     ))
-}
-
-/// The grid a count tiles into — as square as it gets, row-major.
-fn grid_for(count: usize) -> (usize, usize) {
-    let columns = (count as f64).sqrt().ceil().max(1.0) as usize;
-    let rows = count.div_ceil(columns).max(1);
-    (columns, rows)
 }
 
 fn still(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let time = opts.time.unwrap_or(0.0);
+    // A moment past the end renders an empty frame; refuse it by the rule
+    // a look and the app's still share.
+    let whole = promo_timeline::export_plan(&project.meta, None, None, None);
+    promo_timeline::look_times(&[time], None, &whole, project.duration(), None)?;
     let mut renderer = render::Renderer::with_proxy(project, w, h, opts.proxy)?;
     renderer.set_transparent_plate(opts.alpha);
     let rgba = renderer.frame_rgba(time)?;
@@ -1061,17 +974,16 @@ fn still(project: &Project, opts: &Options) -> Result<String, String> {
 fn frames(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
-    let (start, end, fps) = range(project, opts);
-    let times = frame_times(start, end, fps, opts);
-    if let Some(cap) = opts.cap {
-        if times.len() > cap {
-            return Err(format!(
-                "{} frames is more than one call should render — ask for a range, \
-                 fewer times, or --sample {cap}",
-                times.len()
-            ));
-        }
-    }
+    // The moments, picked by the rule both servers' promo_render_frames
+    // share: times in order, a sample over the range, or every frame.
+    let plan = promo_timeline::export_plan(&project.meta, opts.fps, opts.from, opts.to);
+    let times = promo_timeline::look_times(
+        &opts.times,
+        opts.sample,
+        &plan,
+        project.duration(),
+        opts.cap,
+    )?;
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     // This tool's own previous frames go first. Without it a shorter run
     // leaves the tail of a longer one behind and the next reader — a person
@@ -1135,7 +1047,7 @@ fn frames(project: &Project, opts: &Options) -> Result<String, String> {
         return Ok(serde_json::json!({
             "wroteDir": out.display().to_string(),
             "frames": count, "width": w, "height": h,
-            "fps": fps, "from": start, "to": end,
+            "fps": plan.fps, "from": plan.start, "to": plan.end,
             "replaced": replaced,
             "times": times.iter().map(|t| (t * 1000.0).round() / 1000.0).collect::<Vec<f64>>(),
             "sheet": sheet_note.as_ref().map(|(p, c, r, n)| serde_json::json!({
@@ -1158,26 +1070,6 @@ fn frames(project: &Project, opts: &Options) -> Result<String, String> {
 
 /// The moments to render: exactly what was asked for, N spread evenly, or
 /// every frame at the rate — in that order of precedence.
-fn frame_times(start: f64, end: f64, fps: f64, opts: &Options) -> Vec<f64> {
-    if !opts.times.is_empty() {
-        let mut times = opts.times.clone();
-        times.sort_by(f64::total_cmp);
-        return times;
-    }
-    if let Some(n) = opts.sample {
-        if n == 1 {
-            return vec![(start + end) / 2.0];
-        }
-        let span = (end - start).max(0.0);
-        return (0..n)
-            .map(|i| start + span * i as f64 / (n - 1) as f64)
-            .collect();
-    }
-    (0..frame_count(start, end, fps))
-        .map(|i| start + i as f64 / fps)
-        .collect()
-}
-
 /// Deletes this tool's own `frame-NNNNN.png` from a directory, and answers
 /// how many. Nothing else is touched — a person's own files in the folder
 /// are not this tool's to remove.
@@ -1227,18 +1119,6 @@ fn downscale(rgba: &[u8], w: u32, h: u32, dw: u32, dh: u32) -> Vec<u8> {
         return vec![0; (dw * dh * 4) as usize];
     };
     image::imageops::resize(&src, dw, dh, image::imageops::FilterType::Triangle).into_raw()
-}
-
-/// One cell into the sheet, top-left corner at (x, y).
-fn blit(sheet: &mut [u8], sheet_w: u32, cell: &[u8], cw: u32, ch: u32, x: u32, y: u32) {
-    for row in 0..ch {
-        let src = (row * cw * 4) as usize;
-        let dst = (((y + row) * sheet_w + x) * 4) as usize;
-        let span = (cw * 4) as usize;
-        if src + span <= cell.len() && dst + span <= sheet.len() {
-            sheet[dst..dst + span].copy_from_slice(&cell[src..src + span]);
-        }
-    }
 }
 
 /// Renders straight into ffmpeg's stdin as raw BGRA — no intermediate PNGs,
@@ -1300,13 +1180,19 @@ fn video(project: &Project, opts: &Options) -> Result<String, String> {
 
 /// A looping GIF, the same frames `video` renders — encoded with the
 /// image crate rather than ffmpeg, because a GIF needs no codec licence
-/// and no external tool. Default 12fps: a GIF is a preview, not a master.
+/// and no external tool. The project's own GIF rate (10 unless set): a GIF
+/// is a preview, not a master.
 fn gif(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let (w, h) = opts.size(project);
     let start = opts.from.unwrap_or(0.0).max(0.0);
     let end = opts.to.unwrap_or_else(|| project.duration()).max(start);
-    let fps = opts.fps.unwrap_or(12.0).max(1.0);
+    // The project's own GIF rate, as the apps' GIF export reads it (a
+    // fixed 12 here used to disagree with their 10).
+    let fps = opts
+        .fps
+        .unwrap_or(project.meta.composition_settings.gif_export_fps)
+        .max(1.0);
     let count = frame_count(start, end, fps);
 
     let file = std::fs::File::create(out).map_err(|e| format!("{}: {e}", out.display()))?;
@@ -1420,39 +1306,30 @@ mod tests {
     /// the first and last picture.
     #[test]
     fn frame_times_follow_what_was_asked_for() {
-        let bare = Options::default();
-        let every = frame_times(0.0, 1.0, 4.0, &bare);
+        let plan = |end: f64, fps: f64| promo_timeline::ExportPlan {
+            start: 0.0,
+            end,
+            fps,
+            count: frame_count(0.0, end, fps),
+            width: 64,
+            height: 64,
+        };
+        let pick = |times: &[f64], sample: Option<usize>, end: f64, fps: f64| {
+            promo_timeline::look_times(times, sample, &plan(end, fps), 8.0, None).unwrap()
+        };
         assert_eq!(
-            every,
+            pick(&[], None, 1.0, 4.0),
             vec![0.0, 0.25, 0.5, 0.75],
             "the export plan's own count"
         );
-
-        let sampled = Options {
-            sample: Some(5),
-            ..Options::default()
-        };
+        assert_eq!(pick(&[], Some(5), 8.0, 30.0), vec![0.0, 2.0, 4.0, 6.0, 8.0]);
         assert_eq!(
-            frame_times(0.0, 8.0, 30.0, &sampled),
-            vec![0.0, 2.0, 4.0, 6.0, 8.0]
-        );
-        let one = Options {
-            sample: Some(1),
-            ..Options::default()
-        };
-        assert_eq!(
-            frame_times(0.0, 8.0, 30.0, &one),
+            pick(&[], Some(1), 8.0, 30.0),
             vec![4.0],
             "one moment is the middle"
         );
-
-        let listed = Options {
-            times: vec![3.0, 0.5],
-            sample: Some(5),
-            ..Options::default()
-        };
         assert_eq!(
-            frame_times(0.0, 8.0, 30.0, &listed),
+            pick(&[3.0, 0.5], Some(5), 8.0, 30.0),
             vec![0.5, 3.0],
             "exact times win, in order"
         );

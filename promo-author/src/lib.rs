@@ -22,6 +22,8 @@
 //! rendered like any hand-authored project — an author who outgrows the
 //! tools just edits the JSON.
 
+pub mod contract;
+
 use std::path::{Path, PathBuf};
 
 use promo_model::{Placement, ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource};

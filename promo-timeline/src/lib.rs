@@ -57,8 +57,8 @@ pub use mapping::{
 };
 pub use motion::{path_document_polyline, path_polyline, point_along, point_along_range, Polyline};
 pub use plan::{
-    composition_duration, export_fps, export_plan, export_size, frame_count, ExportPlan,
-    DEFAULT_FPS, MAX_FPS,
+    composition_duration, export_fps, export_plan, export_size, frame_count, look_times,
+    ExportPlan, DEFAULT_FPS, MAX_FPS,
 };
 pub use sprite::{
     frame_at as sprite_frame_at, is_nearest, layer_resource_id, sheet_for, SpriteFrame,

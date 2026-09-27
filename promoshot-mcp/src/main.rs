@@ -39,6 +39,7 @@ mod speak;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
+use promo_author::contract::{self, Host};
 use serde_json::{json, Value};
 
 const PROTOCOL_FALLBACK: &str = "2025-03-26";
@@ -201,7 +202,7 @@ where
     let result = match method {
         "initialize" => Ok(initialize(request)),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": tool_descriptors() })),
+        "tools/list" => Ok(json!({ "tools": contract::tools(Host::Headless) })),
         "tools/call" => Ok(call(request, config, run)),
         _ if id.is_none() => return None, // notifications/initialized and kin
         other => Err(format!("method `{other}` is not supported")),
@@ -215,144 +216,6 @@ where
         }),
     })
 }
-
-/// The format's prose, whole or by topic.
-///
-/// The whole document is 67 KB, and nearly every session pulled all of it
-/// — most of which is the format proper, but 17 KB is feature sections a
-/// given piece may never touch. Naming topics takes those instead: "core"
-/// is the format itself, and a feature word takes the paragraph that
-/// introduces it. No argument still answers with everything, so nothing
-/// that worked stops working.
-fn schema_sliced(topics: &[String]) -> String {
-    if topics.is_empty() {
-        return promo_model::SCHEMA.to_string();
-    }
-    let (core, sections) = schema_split();
-    let mut out = String::new();
-    let mut missed: Vec<&str> = Vec::new();
-    for topic in topics {
-        if topic == "core" || topic == "format" {
-            out.push_str(core);
-            out.push('\n');
-            continue;
-        }
-        let mut found = false;
-        for section in &sections {
-            let heading = section
-                .lines()
-                .next()
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            if heading.contains(topic.as_str()) {
-                out.push_str(section);
-                out.push_str("\n\n");
-                found = true;
-            }
-        }
-        if !found {
-            missed.push(topic.as_str());
-        }
-    }
-    if !missed.is_empty() {
-        let names: Vec<String> = sections
-            .iter()
-            .filter_map(|s| s.lines().next())
-            .map(|line| line.split(" (rung").next().unwrap_or(line).to_string())
-            .collect();
-        out.push_str(&format!(
-            "\n(no section for {}; the topics are \"core\" plus: {})\n",
-            missed.join(", "),
-            names.join(", ")
-        ));
-    }
-    out
-}
-
-/// The format proper, and the feature sections after it.
-///
-/// A section starts at an unindented sentence naming its rung — the shape
-/// the document already has — and runs to the next one. Splitting on blank
-/// lines instead missed every section glued to the paragraph above it,
-/// which is most of them.
-fn schema_split() -> (&'static str, Vec<&'static str>) {
-    let text = promo_model::SCHEMA;
-    let mut starts: Vec<usize> = Vec::new();
-    let mut at = 0usize;
-    for line in text.split_inclusive('\n') {
-        let head = line.trim_end();
-        if head.contains("(rung ") && head.starts_with(|c: char| c.is_ascii_uppercase()) {
-            starts.push(at);
-        }
-        at += line.len();
-    }
-    let Some(&first) = starts.first() else {
-        return (text, Vec::new());
-    };
-    let sections: Vec<&'static str> = starts
-        .iter()
-        .enumerate()
-        .map(|(i, &start)| {
-            let end = starts.get(i + 1).copied().unwrap_or(text.len());
-            text[start..end].trim_end()
-        })
-        .collect();
-    (&text[..first], sections)
-}
-
-/// Every `$ref` in a schema replaced by a named placeholder.
-///
-/// `#/$defs/ProjectLayer` becomes "a ProjectLayer — its shape is in
-/// promo_schema_types, its prose in promo_schema_full"; the bare `#`
-/// schemars writes for a command nested inside another (inComposition)
-/// used to resolve to promo_apply's own ARGUMENT object, which was never
-/// what it meant, and becomes a placeholder saying so. The placeholder
-/// carries no `type`, so it accepts whatever the reference accepted.
-fn without_type_graph(node: Value) -> Value {
-    match node {
-        Value::Object(map) => {
-            if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
-                let named = reference.rsplit('/').next().unwrap_or(reference);
-                let text = if reference == "#" {
-                    "another command, applied inside the composition".to_string()
-                } else {
-                    format!(
-                        "a {named} — its shape is in promo_schema_types, its prose in \
-                         promo_schema_full"
-                    )
-                };
-                return json!({ "description": text });
-            }
-            Value::Object(
-                map.into_iter()
-                    .map(|(key, value)| (key, without_type_graph(value)))
-                    .collect(),
-            )
-        }
-        Value::Array(items) => Value::Array(items.into_iter().map(without_type_graph).collect()),
-        other => other,
-    }
-}
-
-/// What a client is told at the handshake.
-///
-/// The skill (skill/SKILL.md) teaches this properly, and every demo run
-/// had it. But the registry and Docker installs hand a client 27 tools and
-/// nothing else — the loop is the one thing a server can say for itself,
-/// and `instructions` is where the protocol puts it.
-const INSTRUCTIONS: &str = "\
-PromoShot renders .promo projects — App Store shots, promo reels, product videos — headlessly.
-
-A project is a FOLDER named <Name>.promo holding `metadata.json` (the composition) and `Resources/` (the media, referenced by filename). You write metadata.json yourself; these tools scaffold it, check it and turn it into pixels.
-
-The loop:
-1. `promo_schema` once — the format's authority, with complete recipes. `promo_schema_full` when you need a feature it does not cover.
-2. `promo_workspace` — where new projects may be created on this machine.
-3. Write `metadata.json`. Ids are strings, unique in the file; short names are fine (the app keeps them as `handles` when it mints UUIDs). Sizes and positions are in canvas pixels; prefer a `placement` rule over raw shifts.
-4. `promo_validate` — the renderer's own parser. The first word is the verdict: `NOT OK` lists what will not render or has no effect — fix those first; `ok` means it renders as written.
-5. `promo_render_frames` — LOOK. It samples the piece and answers with one contact sheet as an image. Fix what you see, then `promo_render_video`.
-
-Renders land BESIDE the project, in `<Name> Exports/`, and return paths, never bytes.";
 
 fn initialize(request: &Value) -> Value {
     // Answer in the client's protocol dialect when it names one; this server
@@ -368,575 +231,7 @@ fn initialize(request: &Value) -> Value {
             "name": "promoshot-mcp",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": INSTRUCTIONS,
-    })
-}
-
-/// The tool surface, mirroring the Mac app's names so one skill drives both.
-/// Only `promo_open` stays app-side — putting a window in front of a person
-/// has no headless meaning.
-fn tool_descriptors() -> Value {
-    let project = json!({ "type": "string", "description":
-        "Path to the .promo project folder (metadata.json + Resources/)" });
-    let preview = json!({ "type": "boolean", "description":
-        "Attach an inline thumbnail of the composition (default true); the \
-         same image lands at <Name> Exports/preview.png beside the project" });
-    // The editor's Command enum as the `commands` item schema — the
-    // vocabulary (which commands exist, and what each names) and NOT the
-    // model's whole type graph.
-    //
-    // Those types used to ride along: schemars pulls every type a command
-    // mentions, and hoisting them put 90 definitions and 84 KB into
-    // `tools/list`, which every client loads on connect and carries in
-    // every request after. It was 83% of the whole tool surface, for the
-    // shapes of a layer and a resource that `promo_schema_types` already
-    // serves on request. Each reference becomes a named placeholder that
-    // says where its shape lives; a placeholder is an empty schema, so no
-    // client rejects an argument it would have accepted.
-    let mut command_items = promo_editor::command_schema();
-    if let Some(map) = command_items.as_object_mut() {
-        map.remove("$schema");
-        map.remove("title");
-        map.remove("$defs");
-    }
-    let command_items = without_type_graph(command_items);
-    let mut descriptors = json!([
-        {
-            "name": "promo_validate",
-            "description": "Decode a project with the renderer's own parser and say whether \
-                it renders as written. NOT OK leads with what will not render or has no \
-                effect — a field nothing reads (with the name that was meant), a value that \
-                does nothing where it is, missing media; ok means it renders, and any \
-                warnings name what the renderer adjusts. A mid-composition thumbnail comes \
-                attached — glance at it.",
-            "inputSchema": { "type": "object",
-                "properties": { "project": project, "preview": preview },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_inspect",
-            "description": "Canvas, duration, layers by kind, undefined colours, and any \
-                layer whose media is missing.",
-            "inputSchema": { "type": "object",
-                "properties": { "project": project },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_schema",
-            "description": "The authoring subset of the .promo format plus four \
-                complete, validated recipes. Read this once before authoring; \
-                promo_schema_full is the whole format.",
-            "inputSchema": { "type": "object", "properties": {} }
-        },
-        {
-            "name": "promo_schema_types",
-            "description": "The format as a JSON Schema, types only, GENERATED from the \
-                parser's own structs — fill a structured object against this instead of \
-                freehanding JSON; the prose lives in promo_schema.",
-            "inputSchema": { "type": "object", "properties": {} }
-        },
-        {
-            "name": "promo_schema_full",
-            "description": "The whole .promo format, from the same single file the \
-                engine compiles in — sprites, masks, motion paths, duration rules, \
-                waits, gradients, palette roles and all. 67 KB whole: pass `topics` \
-                to take only what this piece needs.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "topics": { "type": "array", "items": { "type": "string" },
-                        "description":
-                            "\"core\" for the format proper, and a feature word for its \
-                             section: composition, markers, audio, chroma, pointer, \
-                             effects, lut, model, particles, route, morph, parts, \
-                             recipe, environment, stage. Omit for everything." }
-                },
-                "required": [] }
-        },
-        {
-            "name": "promo_render_still",
-            "description": "Render one PNG at a moment. Returns the path written, never \
-                the bytes.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "time": { "type": "number", "description": "Seconds (default 0)" },
-                    "size": { "type": "string", "description": "WxH (default: canvas)" },
-                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
-                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
-                         missing proxies first; off never reads one. A full-size render never does." },
-                    "out": { "type": "string", "description":
-                        "Output file (default: <Name> Exports/still-<time>s.png beside the project)" }
-                },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_render_frames",
-            "description": "LOOK at the composition: moments rendered to PNGs and tiled into \
-                one contact sheet, attached to this reply as an image. Bare, it samples 12 \
-                moments across the whole piece — the fastest way to catch an off-centre card, \
-                an empty frame or a mis-aimed viewport. Name `times` for exact moments, or a \
-                from/to/fps range for every frame in it (240 at most). Frames from this tool's \
-                own previous call in the same folder are replaced, never mixed.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "times": { "type": "array", "items": { "type": "number" }, "description":
-                        "Exact seconds to render — the sheet's cells follow this order" },
-                    "sample": { "type": "integer", "description":
-                        "How many moments to spread across the range (default 12 when \
-                         neither times nor a range is given)" },
-                    "from": { "type": "number" },
-                    "to": { "type": "number" },
-                    "fps": { "type": "number", "description":
-                        "Every frame at this rate over the range — an export, not a look" },
-                    "size": { "type": "string", "description": "WxH (default: canvas)" },
-                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
-                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
-                         missing proxies first; off never reads one. A full-size render never does." },
-                    "outDir": { "type": "string", "description":
-                        "Output directory (default: <Name> Exports/frames beside the project)" }
-                },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_render_video",
-            "description": "Render the mp4, audio mixed — needs ffmpeg on PATH. Returns \
-                the path written.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "fps": { "type": "number", "description":
-                        "Default: the project's own, else 30" },
-                    "size": { "type": "string", "description": "WxH (default: canvas)" },
-                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
-                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
-                         missing proxies first; off never reads one. A full-size render never does." },
-                    "codec": { "type": "string", "enum": ["h264", "prores422", "prores4444"], "description":
-                        "h264 in an mp4 (default); ProRes 422 HQ or 4444 want a .mov out path." },
-                    "alpha": { "type": "boolean", "description":
-                        "Render over nothing and keep the frames' alpha — ProRes 4444 in a .mov." },
-                    "out": { "type": "string", "description":
-                        "Output file (default: <Name> Exports/export.mp4 beside the project)" }
-                },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_render_gif",
-            "description": "Render a looping GIF — the preview format, needing no ffmpeg. \
-                Default 12fps. Returns the path written.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "fps": { "type": "number", "description": "Default 12" },
-                    "size": { "type": "string", "description": "WxH (default: canvas)" },
-                    "proxy": { "type": "string", "enum": ["auto", "on", "off"], "description":
-                        "auto (default) reads a built tier-1 proxy when the output fits it; on builds \
-                         missing proxies first; off never reads one. A full-size render never does." },
-                    "out": { "type": "string", "description":
-                        "Output file (default: <Name> Exports/export.gif beside the project)" }
-                },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_proxy",
-            "description": "Build tier-1 proxies (960 px long edge, every frame a keyframe) for every \
-                video resource in a project, in the proxy cache outside the package. Stills, \
-                frames and small renders then read them by default (proxy: auto) — what makes \
-                an hour-long 4K source scrub and render like a short one.",
-            "inputSchema": { "type": "object",
-                "properties": { "project": { "type": "string" } },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_workspace",
-            "description": "The folder this machine keeps assistant-authored projects in. \
-                Create new .promo folders here.",
-            "inputSchema": { "type": "object", "properties": {} }
-        },
-        {
-            "name": "promo_media_probe",
-            "description": "The facts of one source file or SEVERAL, before composing with \
-                them: container, duration, streams — codec, size, fps, display rotation, \
-                channels. Distilled JSON, not ffprobe's firehose. Each answer carries the \
-                `resource` entry that file becomes, ready to paste into `resources` with \
-                its pixel size already measured — which is what a `placement` rule needs \
-                to resolve against anything other than a square.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "file": { "type": "string", "description": "One path" },
-                    "files": { "type": "array", "items": { "type": "string" }, "description":
-                        "Several paths at once; the answer is keyed by the path asked for" }
-                },
-                "required": [] }
-        },
-        {
-            "name": "promo_media_turntable",
-            "description": "Eyes on a model: a .glb rendered from N yaws round it, tiled into \
-                one PNG contact sheet with each cell's yaw. Look at this before choosing a \
-                camera for a model layer. (`promo_media_probe` on a .glb names its material \
-                slots, clips and bounds.)",
-            "inputSchema": { "type": "object",
-                "properties": { "file": { "type": "string" },
-                                "count": { "type": "integer" },
-                                "size": { "type": "integer", "description": "cell size in px (default 320)" },
-                                "out": { "type": "string" } },
-                "required": ["file"] }
-        },
-        {
-            "name": "promo_media_filmstrip",
-            "description": "Eyes on the footage: N evenly spaced frames tiled into one \
-                PNG contact sheet, sampled times returned so a cell maps to a moment. \
-                Look at this before deciding what a clip shows.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "file": { "type": "string" },
-                    "count": { "type": "number", "description": "Frames (default 12, max 48)" },
-                    "out": { "type": "string", "description":
-                        "Output PNG (default: the workspace folder)" }
-                },
-                "required": ["file"] }
-        },
-        {
-            "name": "promo_media_silences",
-            "description": "Ears on the footage: where the sound is NOT — silence spans \
-                and their inverse, the sound spans an edit actually wants. Cuts and \
-                captions land on these boundaries.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "file": { "type": "string" },
-                    "thresholdDb": { "type": "number", "description": "Default -35" },
-                    "minSeconds": { "type": "number", "description": "Default 0.35" }
-                },
-                "required": ["file"] }
-        },
-        {
-            "name": "promo_media_scenes",
-            "description": "Eyes for CUTS: per-frame scene-change scores distilled to \
-                cut times and the shots between them — the footage-first answer when \
-                a clip has no silence gaps to cut on. Scores are ffmpeg's scene \
-                score (0..1, motion-suppressed); 0.4 catches hard cuts.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "file": { "type": "string" },
-                    "threshold": { "type": "number", "description": "Default 0.4" }
-                },
-                "required": ["file"] }
-        },
-        {
-            "name": "promo_transcribe",
-            "description": "Ears for WORDS: a transcript with timings, the draft captions \
-                are cut from. Headless this needs whisper.cpp's whisper-cli on PATH and \
-                WHISPER_MODEL set; without them an agent cannot transcribe and the \
-                refusal says so.",
-            "inputSchema": { "type": "object",
-                "properties": { "file": { "type": "string" } },
-                "required": ["file"] }
-        },
-        {
-            "name": "promo_init",
-            "description": "Create a project folder: metadata.json boilerplate, canvas, \
-                palette, a background layer, ids minted. The file it writes is ordinary \
-                metadata.json — hand-edit it freely afterwards; the schema stays the \
-                source of truth. Never overwrites. A thumbnail comes attached.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "preview": preview,
-                    "canvas": { "type": "string", "description":
-                        "\"1920x1080\" (or {width, height})" },
-                    "palette": { "type": "object", "description":
-                        "Named colours: {\"canvas\": \"10182B\", \"text\": \"F3F5FF\"} \
-                         (or [{name, colorHex}]). \"canvas\" becomes the background." },
-                    "id": { "type": "string", "description":
-                        "Your own short project id; unnamed mints a UUID. The \
-                         background layer is always \"bg\"." },
-                    "name": { "type": "string" }
-                },
-                "required": ["project", "canvas"] }
-        },
-        {
-            "name": "promo_upsert_layer",
-            "description": "SCAFFOLD one layer — image, video or caption — with a \
-                placement, a fadeIn, a device/border frame. Media is copied in, sizes \
-                and durations probed, the composition re-stretched every call. Pass an \
-                existing id to UPDATE: only the fields you pass change, placement \
-                merges into the first keyframe, hand-added keyframes survive. This is \
-                the scaffold, not the whole format: motion and viewport ride \
-                promo_upsert_keyframe; transitions beyond fadeIn, swaps, waits, \
-                deletes and reorders are promo_apply commands. A thumbnail sampled at \
-                the touched layer's midpoint comes attached — LOOK at it before \
-                the next edit.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "preview": preview,
-                    "kind": { "type": "string", "enum": ["image", "video", "caption"] },
-                    "file": { "type": "string", "description":
-                        "Image/video to copy in — required to create, optional on \
-                         update (a repoint)" },
-                    "fadeIn": { "type": "number", "description": "Seconds" },
-                    "frame": { "type": "object", "description":
-                        "Resource dressing: {kind: \"device\"|\"border\", material, \
-                         tiltY, borderWidth, cornerRadius} — define @edge in the \
-                         palette when you frame" },
-                    "captionText": { "type": "string" },
-                    "fontSize": { "type": "number", "description": "Caption points" },
-                    "tracking": { "type": "number", "description":
-                        "Letter spacing in points — open a small eyebrow out (+6), \
-                         tighten a big headline (-1.4)" },
-                    "weight": { "type": "string", "description":
-                        "The face's weight; heavier than bold is where a store \
-                         headline lives",
-                        "enum": ["ultraLight", "thin", "light", "regular", "medium",
-                                 "semibold", "bold", "heavy", "black"] },
-                    "lineHeight": { "type": "number", "description":
-                        "Line spacing as a multiple of font size (default 1.25); \
-                         ~1.05 for a stacked headline" },
-                    "placement": { "type": "object", "description":
-                        "{height|width|mode, anchor, offset} — media sizes too; a \
-                         caption takes anchor and offset only" },
-                    "startTime": { "type": "number" },
-                    "duration": { "type": "number", "description":
-                        "Seconds (default: a video's own length, else 3)" },
-                    "id": { "type": "string", "description":
-                        "An existing layer's id makes this an UPDATE; on create, \
-                         your own short id (\"card\") is used verbatim" },
-                    "resourceId": { "type": "string", "description":
-                        "Your own short id for the created resource; unnamed \
-                         mints a UUID" },
-                    "name": { "type": "string" }
-                },
-                "required": ["project", "kind"] }
-        },
-        {
-            "name": "promo_upsert_keyframe",
-            "description": "MOTION in the format's own language: create or merge ONE \
-                keyframe on a layer. A second placement keyframe is a push-in, \
-                viewport keyframes are a Ken Burns ride, colorHex ramps a \
-                background. Pass an existing keyframe id to UPDATE — only the \
-                fields you pass change. Creating without transitionDuration ramps \
-                from the previous keyframe (a stated 0 holds). Swaps, waits and \
-                motion paths: promo_apply's upsertKeyframe carries any keyframe field.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "layer": { "type": "string", "description":
-                        "The layer's id — promo_inspect lists them" },
-                    "id": { "type": "string", "description":
-                        "An existing keyframe's id makes this an UPDATE; on \
-                         create, your own short id (\"k1\") is used verbatim" },
-                    "time": { "type": "number", "description":
-                        "Seconds, layer-local — required to create" },
-                    "placement": { "type": "object", "description":
-                        "{height|width|mode, anchor, offset} — a stored rule, \
-                         re-resolved on every read" },
-                    "viewport": { "type": "array", "description":
-                        "[x, y, w, h] window onto the source, unit coordinates" },
-                    "opacity": { "type": "number" },
-                    "zoom": { "type": "number" },
-                    "fontSize": { "type": "number", "description": "Caption points" },
-                    "colorHex": { "type": "string", "description":
-                        "Background layers only — ramps the colour" },
-                    "tiltX": { "type": "number" },
-                    "tiltY": { "type": "number" },
-                    "easing": { "type": "string",
-                        "enum": ["linear", "easeIn", "easeOut", "easeInOut", "smooth"] },
-                    "transitionDuration": { "type": "number", "description":
-                        "Seconds of ramp INTO this keyframe" },
-                    "preview": preview
-                },
-                "required": ["project", "layer"] }
-        },
-        {
-            "name": "promo_apply",
-            "description": "The whole vocabulary through one door: a batch of the editor's \
-                own commands applied as ONE atomic step — delete, move, rename, enable, \
-                retime; addLayer/addResource whole; updateLayer / patchResource / \
-                patchSettings as JSON merge patches (only the fields you pass change; \
-                null removes) — a wipe is {\"transitionIn\": {\"kind\": \"wipe\", \
-                \"duration\": 0.5}}, a swap is upsertKeyframe with resourceID and a \
-                transition, a trim is patchResource; setMarkers replaces the timeline's \
-                markers and chapters whole. Every command succeeds or nothing is \
-                written. The schema of `commands` IS the editor's Command enum.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "commands": { "type": "array", "minItems": 1, "items": command_items,
-                        "description": "Commands in order; ids are the file's own \
-                         (promo_inspect lists layers, resources by promo_schema_full)" },
-                    "preview": preview
-                },
-                "required": ["project", "commands"] }
-        },
-        {
-            "name": "promo_slideshow",
-            "description": "The wizard, for agents: pictures and clips in, a complete show \
-                out — the same arrangement the apps' wizard builds. kind classic (one \
-                slide at a time, crossfade by default), carousel (cards fly in and \
-                settle), or appStore (a store listing: your shots in one device frame \
-                over a background, a headline per shot, the canvas the store's own \
-                size). Creates the project folder and copies the media in; refine \
-                with the other tools afterwards. Never overwrites.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": { "type": "string", "description":
-                        "Folder to create, e.g. <workspace>/Show.promo" },
-                    "name": { "type": "string" },
-                    "kind": { "type": "string", "enum": ["classic", "carousel", "appStore"],
-                        "description": "Default classic" },
-                    "transition": { "type": "string",
-                        "enum": ["none", "crossfade", "wipe", "slide", "push", "scale"],
-                        "description": "Default crossfade" },
-                    "transitionEdge": { "type": "string",
-                        "enum": ["left", "right", "top", "bottom"] },
-                    "direction": { "type": "string",
-                        "enum": ["rightToLeft", "leftToRight"], "description": "Carousel" },
-                    "sizing": { "type": "string", "enum": ["fit", "fill"] },
-                    "device": { "type": "string", "enum": ["iPhone", "iPad", "mac"],
-                        "description": "appStore: the frame and the store's canvas" },
-                    "framing": { "type": "string", "enum": ["flat", "angled"] },
-                    "canvas": { "type": "string", "description":
-                        "\"1920x1080\" (ignored for appStore — the store decides)" },
-                    "backgroundColorHex": { "type": "string" },
-                    "slides": { "type": "array", "minItems": 1, "items": {
-                        "type": "object",
-                        "properties": {
-                            "file": { "type": "string", "description": "Image or clip to copy in" },
-                            "caption": { "type": "string", "description":
-                                "Words over the slide — a caption layer that lives and arrives with \
-                                 its picture: the headline band for appStore, a lower third otherwise" },
-                            "duration": { "type": "number", "description":
-                                "Seconds on screen (default 3; a clip's own length)" },
-                            "transitionDuration": { "type": "number", "description":
-                                "How long the NEXT slide takes to arrive (default 0.5)" },
-                            "looped": { "type": "boolean" },
-                            "displayName": { "type": "string" }
-                        },
-                        "required": ["file"] } },
-                    "preview": preview
-                },
-                "required": ["project", "slides"] }
-        },
-        {
-            "name": "promo_explain",
-            "description": "The agent's debugger: why is this layer where it is — the \
-                renderer's OWN numbers at a moment. Per layer: visible and why not, the \
-                resource shown (swap-aware), the resolved transform and the rect on the \
-                canvas in pixels, opacity, rotation, tilt, viewport, gain, the keyframes \
-                bracketing the moment, transitions and fades; per project: timing \
-                problems and validate's warnings. Defaults to the composition's midpoint.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "time": { "type": "number", "description": "Seconds (default: midpoint)" },
-                    "layer": { "type": "string", "description": "One layer's id; absent = all" }
-                },
-                "required": ["project"] }
-        },
-        {
-            "name": "promo_diff",
-            "description": "What changed since you last looked, in the format's own terms: \
-                two projects compared by entity — settings by key, resources and layers \
-                by id, keyframes by id — as lines you can act on. Copy metadata.json \
-                aside before a person's turn, then diff against the copy.",
-            "inputSchema": { "type": "object",
-                "properties": {
-                    "project": project,
-                    "against": { "type": "string", "description":
-                        "The other project folder (or its metadata.json)" }
-                },
-                "required": ["project", "against"] }
-        },
-        {
-            "name": "promo_voices",
-            "description": "A narration provider's voices — id, name and a line of detail per \
-                voice (openai's fixed roster; elevenlabs and google list live) — with the \
-                person's own key: the OS keyring (`promoshot-mcp key set <provider>`), else a \
-                secrets file (OPENAI_API_KEY_FILE, or /run/secrets/OPENAI_API_KEY) where \
-                there is no keyring. Use before promo_speak to pick a voiceID.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "provider": { "type": "string", "enum": ["openai", "elevenlabs", "google"],
-                        "description": "Default openai" }
-                }
-            }
-        },
-        {
-            "name": "promo_speak",
-            "description": "Synthesize narration for every resource whose speech.text \
-                says something, spending the PERSON'S OWN provider key from the \
-                OS keyring (`promoshot-mcp key set <provider>`) or, where there is none, a \
-                secrets file (OPENAI_API_KEY_FILE or /run/secrets/OPENAI_API_KEY), \
-                matching each script's provider (default openai/alloy). Unchanged \
-                text is reused by receipt, never billed twice. Keys are checked for EVERY pending narration before \
-                anything is bought, and each bought receipt is written back at once. Without a key an \
-                agent CANNOT narrate — record a voice file into Resources/ and \
-                reference it as an ordinary audio resource instead.",
-            "inputSchema": { "type": "object",
-                "properties": { "project": project,
-                    "check": { "type": "boolean", "description":
-                        "Spend nothing: report where each needed provider's key comes from \
-                         (never the key) and what a real call would synthesize — ready, blocked, \
-                         or nothing to do. With no project, the keys alone." } },
-                "required": [] }
-        }
-    ]);
-    if let Some(tools) = descriptors.as_array_mut() {
-        for tool in tools {
-            let name = tool["name"].as_str().unwrap_or_default().to_string();
-            tool["annotations"] = annotations_for(&name);
-        }
-    }
-    descriptors
-}
-
-/// What a tool does to the world, in the protocol's own vocabulary.
-///
-/// A host that gates on `readOnlyHint` — a planning mode, an approval
-/// prompt — has to assume the worst without these, so asking this server
-/// for the format's own schema looked exactly like asking it to render a
-/// video over someone's file. Read-only here means it writes nothing a
-/// person would miss: a probe's scratch file in the system temp directory
-/// does not count, a PNG in the project's Exports does.
-fn annotations_for(name: &str) -> Value {
-    // (title, read only, destructive, idempotent, reaches the network)
-    let (title, read_only, destructive, idempotent, open_world) = match name {
-        "promo_schema" => ("The format, in brief", true, false, true, false),
-        "promo_schema_types" => ("The format's machine schema", true, false, true, false),
-        "promo_schema_full" => ("The format, in full", true, false, true, false),
-        "promo_validate" => ("Check a project", false, false, true, false),
-        "promo_inspect" => ("What is in a project", true, false, true, false),
-        "promo_explain" => ("Why a layer looks like that", true, false, true, false),
-        "promo_diff" => ("What changed since a copy", true, false, true, false),
-        "promo_workspace" => ("Where new projects go", false, false, true, false),
-        "promo_media_probe" => ("Facts about a media file", true, false, true, false),
-        "promo_media_silences" => ("Where a recording goes quiet", true, false, true, false),
-        "promo_media_scenes" => ("Where a clip cuts", true, false, true, false),
-        "promo_transcribe" => ("Words from a recording", true, false, true, false),
-        "promo_voices" => ("A provider's voices", true, false, true, true),
-        "promo_media_filmstrip" => ("A contact sheet of a clip", false, false, true, false),
-        "promo_media_turntable" => ("A model from every side", false, false, true, false),
-        "promo_render_still" => ("One frame", false, false, true, false),
-        "promo_render_frames" => ("Look at the composition", false, false, true, false),
-        "promo_render_video" => ("The mp4", false, false, true, false),
-        "promo_render_gif" => ("The looping preview", false, false, true, false),
-        "promo_proxy" => ("Build proxies for long sources", false, false, true, false),
-        "promo_init" => ("Start a project", false, false, false, false),
-        "promo_upsert_layer" => ("Add or change a layer", false, false, false, false),
-        "promo_upsert_keyframe" => ("Add or change a keyframe", false, false, false, false),
-        "promo_slideshow" => ("Author a whole show", false, false, false, false),
-        // The one door that can DELETE: a layer, a resource, a keyframe.
-        "promo_apply" => ("Apply editor commands", false, true, false, false),
-        "promo_speak" => ("Synthesize the narration", false, false, false, true),
-        _ => (name, false, false, false, false),
-    };
-    json!({
-        "title": title,
-        "readOnlyHint": read_only,
-        "destructiveHint": destructive,
-        "idempotentHint": idempotent,
-        "openWorldHint": open_world,
+        "instructions": contract::instructions(Host::Headless),
     })
 }
 
@@ -951,7 +246,11 @@ where
     let empty = json!({});
     let args = request.pointer("/params/arguments").unwrap_or(&empty);
     let started = std::time::Instant::now();
-    let outcome = dispatch_tool(name, args, config, run);
+    // The contract first: a tool this server does not serve, or an
+    // argument the tool does not take, is refused by name — both servers
+    // used to ignore an unknown argument and do something else.
+    let outcome = contract::check_arguments(Host::Headless, name, args)
+        .and_then(|()| dispatch_tool(name, args, config, run));
     if let Some(path) = &config.log {
         // One line per call, appended: when, which tool, how long, how it
         // went. The timing a caller's own log cannot see — the render, the
@@ -1071,11 +370,11 @@ where
                 .map(|a| {
                     a.iter()
                         .filter_map(Value::as_str)
-                        .map(|t| t.to_ascii_lowercase())
+                        .map(String::from)
                         .collect()
                 })
                 .unwrap_or_default();
-            Ok(schema_sliced(&topics))
+            Ok(contract::schema_text(&topics))
         }
         "promo_schema_types" => {
             serde_json::to_string_pretty(&promo_model::wire_schema()).map_err(|e| e.to_string())
@@ -1109,45 +408,51 @@ where
             if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
                 argv.extend(["--proxy".into(), policy.to_string()]);
             }
-            let times: Vec<String> = args
-                .get("times")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(Value::as_f64)
-                        .map(|t| t.to_string())
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !times.is_empty() {
+            // The ask, the tool's defaults applied (bare: a sample of twelve
+            // moments), is the contract's — the app's server reads the same
+            // request, and the CLI picks the moments by the same rule.
+            let ask = contract::look_request(args);
+            if !ask.times.is_empty() {
+                let times: Vec<String> = ask.times.iter().map(f64::to_string).collect();
                 argv.extend(["--times".into(), times.join(",")]);
             }
-            let mut ranged = false;
-            for (key, flag) in [("from", "--from"), ("to", "--to"), ("fps", "--fps")] {
-                if let Some(v) = args.get(key).and_then(Value::as_f64) {
+            for (value, flag) in [(ask.from, "--from"), (ask.to, "--to"), (ask.fps, "--fps")] {
+                if let Some(v) = value {
                     argv.extend([flag.to_string(), v.to_string()]);
-                    ranged = true;
                 }
             }
-            if let Some(n) = args.get("sample").and_then(Value::as_u64) {
+            if let Some(n) = ask.sample {
                 argv.extend(["--sample".into(), n.to_string()]);
-            } else if times.is_empty() && !ranged {
-                // A LOOK, not an export. Asked for nothing in particular this
-                // rendered every frame of the composition at its own rate —
-                // 11,880 PNGs across the demo corpus, none of them read as a
-                // whole. Twelve moments is a contact sheet.
-                argv.extend(["--sample".into(), SAMPLE_FRAMES.to_string()]);
             }
             // The tool's own ceiling, which the CLI does not have: a person
             // may fairly ask for three thousand frames, a tool call may not.
-            argv.extend(["--cap".into(), FRAME_CAP.to_string()]);
+            argv.extend(["--cap".into(), contract::FRAME_CAP.to_string()]);
             argv.extend(["--sheet".into(), sheet_path(&project)]);
             push_size(&mut argv, args);
             run(config, &argv)
         }
         "promo_render_video" => {
             let project = fenced_project(args, config)?;
-            let out = default_out(args, "out", &project, "export.mp4")?;
+            // ProRes (and alpha, which is ProRes 4444) is a QuickTime movie:
+            // the default name says so, and an .mp4 path is refused as the
+            // app's server refuses it.
+            let prores = args.get("alpha").and_then(Value::as_bool) == Some(true)
+                || args
+                    .get("codec")
+                    .and_then(Value::as_str)
+                    .is_some_and(|c| c.starts_with("prores"));
+            if prores
+                && args
+                    .get("out")
+                    .and_then(Value::as_str)
+                    .is_some_and(|o| !o.to_ascii_lowercase().ends_with(".mov"))
+            {
+                return Err(
+                    "ProRes writes a QuickTime movie — name an `out` ending in .mov".into(),
+                );
+            }
+            let default_name = if prores { "export.mov" } else { "export.mp4" };
+            let out = default_out(args, "out", &project, default_name)?;
             let mut argv = vec!["video".to_string(), project, "--out".into(), out];
             if let Some(policy) = args.get("proxy").and_then(Value::as_str) {
                 argv.extend(["--proxy".into(), policy.to_string()]);
@@ -1225,13 +530,6 @@ fn fenced_project(args: &Value, config: &Config) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
-/// An explicit output path wins; otherwise the project's exports folder,
-/// created on the way — the same default the app's own tools use.
-/// Moments a bare `promo_render_frames` renders, and the most any one call
-/// will. The ceiling's message names the way out.
-const SAMPLE_FRAMES: usize = 12;
-const FRAME_CAP: usize = 240;
-
 /// Where a frames call leaves its contact sheet: one fixed place per
 /// project, beside the other exports rather than inside the frames folder,
 /// so `frame-*.png` stays a clean glob for ffmpeg and the preview knows
@@ -1261,6 +559,8 @@ pub(crate) fn exports_dir(project: &str) -> std::path::PathBuf {
         .join(format!("{name} Exports"))
 }
 
+/// An explicit output path wins; otherwise the project's exports folder,
+/// created on the way — the same default the app's own tools use.
 fn default_out(args: &Value, key: &str, project: &str, filename: &str) -> Result<String, String> {
     if let Some(out) = args.get(key).and_then(Value::as_str) {
         return Ok(out.to_string());
@@ -1296,6 +596,74 @@ mod tests {
 
     fn never(_: &Config, _: &[String]) -> Result<String, String> {
         panic!("this tool must not shell out")
+    }
+
+    /// The contract is enforced on the wire (review 2026-09-27, P2-32): an
+    /// argument the tool does not take, or a tool this server does not
+    /// serve, is refused by name and nothing runs. Both servers used to
+    /// ignore an unknown argument and do something else.
+    #[test]
+    fn a_call_outside_the_contract_is_refused_and_nothing_runs() {
+        let call = |name: &str, arguments: Value| {
+            let seen = std::cell::RefCell::new(Vec::new());
+            let req = serde_json::json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                "params": { "name": name, "arguments": arguments } });
+            let answer = handle(&req, &config(), &recording(&seen)).unwrap();
+            let ran = !seen.borrow().is_empty();
+            (answer, ran)
+        };
+        let (answer, ran) = call(
+            "promo_render_still",
+            serde_json::json!({ "project": "/tmp/x.promo", "scale": 50 }),
+        );
+        assert_eq!(answer["result"]["isError"], true);
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("does not take `scale`"), "{text}");
+        assert!(text.contains("`size`"), "it names what it takes: {text}");
+        assert!(!ran, "nothing ran");
+        let (answer, ran) = call(
+            "promo_open",
+            serde_json::json!({ "project": "/tmp/x.promo" }),
+        );
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.starts_with("unknown tool `promo_open`"), "{text}");
+        assert!(!ran);
+    }
+
+    /// ProRes is a QuickTime movie on both servers: the default name is
+    /// export.mov, and an .mp4 path is refused before anything renders.
+    #[test]
+    fn a_prores_render_is_a_movie() {
+        let project = std::env::temp_dir().join(format!("mcp-prores-{}.promo", std::process::id()));
+        std::fs::create_dir_all(&project).unwrap();
+        let path = project.display().to_string();
+        let seen = std::cell::RefCell::new(Vec::new());
+        let req = |arguments: Value| {
+            serde_json::json!({ "jsonrpc": "2.0", "id": 6, "method": "tools/call",
+                "params": { "name": "promo_render_video", "arguments": arguments } })
+        };
+        handle(
+            &req(serde_json::json!({ "project": path, "codec": "prores4444" })),
+            &config(),
+            &recording(&seen),
+        )
+        .unwrap();
+        let argv = seen.borrow()[0].clone();
+        let out = &argv[argv.iter().position(|a| a == "--out").unwrap() + 1];
+        assert!(out.ends_with("export.mov"), "{out}");
+        let refused = handle(
+            &req(serde_json::json!({ "project": path, "alpha": true, "out": "/tmp/a.mp4" })),
+            &config(),
+            &recording(&seen),
+        )
+        .unwrap();
+        assert_eq!(refused["result"]["isError"], true);
+        assert_eq!(seen.borrow().len(), 1, "the refused call ran nothing");
+        let _ = std::fs::remove_dir_all(&project);
+        let _ = std::fs::remove_dir_all(project.with_file_name(format!(
+            "{} Exports",
+            project.file_stem().unwrap().to_string_lossy()
+        )));
     }
 
     #[test]
@@ -1374,7 +742,7 @@ mod tests {
     /// claim to be read-only.
     #[test]
     fn every_tool_says_what_it_does_to_the_world() {
-        let tools = tool_descriptors();
+        let tools = Value::Array(contract::tools(Host::Headless));
         let tools = tools.as_array().unwrap();
         for tool in tools {
             let name = tool["name"].as_str().unwrap();
@@ -1429,51 +797,6 @@ mod tests {
         assert_eq!(
             voices["annotations"]["openWorldHint"], true,
             "it calls a provider"
-        );
-    }
-
-    /// The format's prose by topic. The whole document is 67 KB and nearly
-    /// every session pulled all of it; a piece that uses particles can have
-    /// the particles instead. No argument still answers with everything.
-    #[test]
-    fn the_format_can_be_asked_for_by_topic() {
-        assert_eq!(
-            schema_sliced(&[]),
-            promo_model::SCHEMA,
-            "everything, as before"
-        );
-
-        let core = schema_sliced(&["core".into()]);
-        assert!(core.starts_with("A PromoShot project is a FOLDER"));
-        assert!(
-            core.len() < promo_model::SCHEMA.len() * 4 / 5,
-            "{} bytes",
-            core.len()
-        );
-        assert!(
-            !core.contains("(rung 36)"),
-            "the feature sections are not in it"
-        );
-
-        let particles = schema_sliced(&["particles".into()]);
-        assert!(particles.contains("Particles (rung 36)"));
-        assert!(
-            particles.contains("MORPH (rung 39)"),
-            "both particle sections"
-        );
-        assert!(
-            !particles.contains("Chroma key (rung 22)"),
-            "and nothing else"
-        );
-        assert!(particles.len() < 4_000, "{} bytes", particles.len());
-
-        // An unknown topic answers with the ones that exist rather than
-        // with silence.
-        let missed = schema_sliced(&["confetti".into()]);
-        assert!(missed.contains("no section for confetti"), "{missed}");
-        assert!(
-            missed.contains("Particles") && missed.contains("Stages"),
-            "{missed}"
         );
     }
 
@@ -1576,14 +899,16 @@ mod tests {
     /// the references became placeholders.
     #[test]
     fn the_tool_surface_stays_small() {
-        let bytes = tool_descriptors().to_string().len();
+        let bytes = Value::Array(contract::tools(Host::Headless))
+            .to_string()
+            .len();
         assert!(
             bytes < 45_000,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
         // And the ceiling is not met by dropping tools or their prose.
-        let tools = tool_descriptors();
+        let tools = Value::Array(contract::tools(Host::Headless));
         let tools = tools.as_array().unwrap();
         assert_eq!(tools.len(), 26);
         assert!(
@@ -1616,10 +941,10 @@ mod tests {
         assert_eq!(bare[0], "frames");
         assert_eq!(
             after(&bare, "--sample"),
-            Some(SAMPLE_FRAMES.to_string()),
+            Some(contract::SAMPLE_FRAMES.to_string()),
             "{bare:?}"
         );
-        assert_eq!(after(&bare, "--cap"), Some(FRAME_CAP.to_string()));
+        assert_eq!(after(&bare, "--cap"), Some(contract::FRAME_CAP.to_string()));
         let sheet = after(&bare, "--sheet").expect("a sheet is always asked for");
         assert_eq!(
             Path::new(&sheet).file_name().and_then(|n| n.to_str()),
@@ -1633,7 +958,10 @@ mod tests {
             "project": project.display().to_string(), "from": 0, "to": 2, "fps": 12 }));
         assert_eq!(after(&ranged, "--sample"), None, "{ranged:?}");
         assert_eq!(after(&ranged, "--fps"), Some("12".into()));
-        assert_eq!(after(&ranged, "--cap"), Some(FRAME_CAP.to_string()));
+        assert_eq!(
+            after(&ranged, "--cap"),
+            Some(contract::FRAME_CAP.to_string())
+        );
 
         let listed = call(serde_json::json!({
             "project": project.display().to_string(), "times": [0.5, 2.0] }));
@@ -1697,12 +1025,13 @@ mod tests {
             // the verdict is NOT OK / ok now, and "ok" no longer promises.
             "means it will render",
         ];
-        let tools = tool_descriptors().to_string();
+        let tools = Value::Array(contract::tools(Host::Headless)).to_string();
+        let handshake = contract::instructions(Host::Headless);
         let sources = [
             ("SKILL.md", include_str!("../../skill/SKILL.md")),
             ("schema-quick.md", promo_model::SCHEMA_QUICK),
             ("schema.md", promo_model::SCHEMA),
-            ("the handshake", INSTRUCTIONS),
+            ("the handshake", handshake.as_str()),
             ("the tool descriptions", tools.as_str()),
         ];
         for (name, text) in sources {
@@ -1716,7 +1045,7 @@ mod tests {
     fn the_skill_teaches_exactly_the_tools_the_server_offers() {
         let skill = include_str!("../../skill/SKILL.md");
         assert!(skill.starts_with("---\n"), "front matter, so it installs");
-        let tools = tool_descriptors();
+        let tools = Value::Array(contract::tools(Host::Headless));
         for tool in tools.as_array().unwrap() {
             let name = tool["name"].as_str().unwrap();
             assert!(skill.contains(name), "the skill never mentions `{name}`");
@@ -1913,7 +1242,7 @@ mod tests {
     /// cannot — here, a deletion on a caption-only project (no probing).
     #[test]
     fn apply_carries_the_command_schema_and_reaches_the_long_tail() {
-        let tools = tool_descriptors();
+        let tools = Value::Array(contract::tools(Host::Headless));
         let apply = tools
             .as_array()
             .unwrap()

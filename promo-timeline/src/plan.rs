@@ -113,6 +113,66 @@ pub fn export_plan(
     }
 }
 
+/// The moments a LOOK renders — `promo frames`, and `promo_render_frames`
+/// on both servers, which used to pick them three ways (review 2026-09-27,
+/// P2-32): explicit `times` in time order; else `sample` moments spread
+/// over the plan's range, both ends included (one is the middle); else
+/// every frame of the plan. A moment outside the composition is refused
+/// rather than rendered as an empty frame, and so is more than `cap` of
+/// them — the message names the way out.
+pub fn look_times(
+    times: &[f64],
+    sample: Option<usize>,
+    plan: &ExportPlan,
+    duration: f64,
+    cap: Option<usize>,
+) -> Result<Vec<f64>, String> {
+    const SLACK: f64 = 1e-3;
+    let picked: Vec<f64> = if !times.is_empty() {
+        if let Some(bad) = times
+            .iter()
+            .find(|t| !t.is_finite() || **t < 0.0 || **t > duration + SLACK)
+        {
+            return Err(format!(
+                "time {bad:.3} is outside the composition (0…{duration:.3})"
+            ));
+        }
+        let mut times = times.to_vec();
+        times.sort_by(f64::total_cmp);
+        times
+    } else {
+        if plan.end > duration + SLACK {
+            return Err(format!(
+                "the range runs to {:.3}, past the composition's end ({duration:.3})",
+                plan.end
+            ));
+        }
+        match sample {
+            Some(0) => {
+                return Err("a sample of 0 moments renders nothing — ask for 1 or more".into())
+            }
+            Some(1) => vec![(plan.start + plan.end) / 2.0],
+            Some(n) => {
+                let span = (plan.end - plan.start).max(0.0);
+                (0..n)
+                    .map(|i| plan.start + span * i as f64 / (n - 1) as f64)
+                    .collect()
+            }
+            None => (0..plan.count).map(|i| plan.frame_time(i)).collect(),
+        }
+    };
+    if let Some(cap) = cap {
+        if picked.len() > cap {
+            return Err(format!(
+                "{} frames is more than one call should render — ask for a shorter \
+                 range, fewer times, or a sample of {cap} or fewer",
+                picked.len()
+            ));
+        }
+    }
+    Ok(picked)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +285,43 @@ mod tests {
             (inverted.start, inverted.end, inverted.count),
             (5.0, 5.0, 1)
         );
+    }
+
+    /// One rule for the moments a look renders: times in time order, a
+    /// sample spread over the range with both ends, every frame otherwise;
+    /// outside the composition or over the cap is refused, naming why.
+    #[test]
+    fn a_look_picks_its_moments_one_way() {
+        let plan = |from: Option<f64>, to: Option<f64>, fps: f64| ExportPlan {
+            start: from.unwrap_or(0.0),
+            end: to.unwrap_or(10.0),
+            fps,
+            count: frame_count(from.unwrap_or(0.0), to.unwrap_or(10.0), fps),
+            width: 64,
+            height: 64,
+        };
+        let whole = plan(None, None, 2.0);
+        assert_eq!(
+            look_times(&[4.0, 0.5], None, &whole, 10.0, Some(240)).unwrap(),
+            vec![0.5, 4.0]
+        );
+        let twelve = look_times(&[], Some(12), &whole, 10.0, Some(240)).unwrap();
+        assert_eq!(twelve.len(), 12);
+        assert_eq!((twelve[0], twelve[11]), (0.0, 10.0), "both ends");
+        assert_eq!(
+            look_times(&[], Some(1), &whole, 10.0, None).unwrap(),
+            vec![5.0]
+        );
+        assert_eq!(
+            look_times(&[], None, &plan(Some(2.0), Some(3.0), 4.0), 10.0, None).unwrap(),
+            vec![2.0, 2.25, 2.5, 2.75]
+        );
+        let outside = look_times(&[12.0], None, &whole, 10.0, None).unwrap_err();
+        assert!(outside.contains("outside the composition"), "{outside}");
+        let past = look_times(&[], Some(3), &plan(None, Some(20.0), 2.0), 10.0, None).unwrap_err();
+        assert!(past.contains("past the composition's end"), "{past}");
+        let over = look_times(&[], None, &plan(None, None, 30.0), 10.0, Some(240)).unwrap_err();
+        assert!(over.starts_with("300 frames"), "{over}");
+        assert!(look_times(&[], Some(0), &whole, 10.0, None).is_err());
     }
 }
