@@ -2603,9 +2603,8 @@ mod palette_tests {
                 "recipe {index} ({}) warns: {found:?}",
                 meta.name
             );
-            // The doc's advice is ONE version: stamp current, think no
-            // more. So a recipe stamps 34 even when its fields need less —
-            // never less than they need.
+            // Each recipe carries the stamp an agent copies with it: 34,
+            // even where its fields need less — never less than they need.
             assert_eq!(meta.min_reader_version, Some(34), "recipe {index} stamp");
             assert!(
                 meta.minimum_reader_version() <= 34,

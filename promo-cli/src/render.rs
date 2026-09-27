@@ -1773,10 +1773,13 @@ mod tests {
             "the picture stands in front of both: {r},{g},{b}"
         );
         // A caption member in front of everything: white glyph pixels reach
-        // the middle band, and the red cube shows between its glyphs.
+        // the middle band, and the red cube shows between its glyphs. Sized
+        // to fit the 320 px canvas in ANY face: eight I's at 120 pt fit in
+        // Helvetica Neue and wrapped in DejaVu Sans (Linux), which re-framed
+        // the whole stage around a tall column of glyphs.
         let caption = r#",{"id":"L4","name":"words","sortIndex":3,"kind":"caption","isEnabled":true,"stage":"s",
-            "startTime":0,"duration":2,"captionText":"IIIIIIII",
-            "captionStyle":{"alignment":"center","subtitleFontSize":120,"subtitleColorHex":"FFFFFF","subtitleBackgroundOpacity":0},
+            "startTime":0,"duration":2,"captionText":"IIIIII",
+            "captionStyle":{"alignment":"center","subtitleFontSize":100,"subtitleColorHex":"FFFFFF","subtitleBackgroundOpacity":0},
             "keyframes":[{"id":"K4","time":0,"depth":3.0,"transitionDuration":0}]}"#;
         std::fs::write(dir.join("metadata.json"), doc(1.0, -1.0, caption)).unwrap();
         let project = crate::project::Project::open(&dir).expect("project");

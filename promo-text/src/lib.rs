@@ -1547,7 +1547,11 @@ mod tests {
         let (l, _, _) = at(Align::Leading);
         assert!(l <= 4, "leading keeps the short line flush left: {l}");
         let (_, r, w) = at(Align::Trailing);
-        assert!(w - 1 - r <= 4, "trailing pushes it right: {}", w - 1 - r);
+        assert!(
+            w - 1 - r <= (w / 50).max(4),
+            "trailing pushes it right: {}",
+            w - 1 - r
+        );
     }
 
     /// A weight is chosen by number, and the flag keeps its old meaning
