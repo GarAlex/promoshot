@@ -254,11 +254,10 @@ a feature's own section rather than the whole 73 KB —
   (points, never a zoom factor), and shifts do not move a placed caption.
 
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
-  fine and are the handles the tools take. When a person opens the
-  project in the app it mints a UUID for each and KEEPS your spelling
+  fine and are the handles the tools take; the apps keep them as written.
+  A file an older app opened may carry minted UUIDs with your spellings
   under `handles`: `promo_inspect` lists `<uuid> … ← deck`, and every
-  tool takes either the UUID or `deck`. The file's own ids are the UUIDs
-  from then on; your names still work.
+  tool takes either the UUID or `deck`.
 - **Never guess `minReaderVersion`.** The tools compute it from what the
   file uses whenever they write; for a file you write yourself,
   `promo_validate` names the exact number to declare — copy that. A
@@ -481,7 +480,7 @@ what only an app can do:
   conflict. `promo_upsert_layer` through the app is the best write
   while they watch — it arrives as ONE step in their own undo history,
   so the person can ⌘Z you. Re-inspect at their turns (`updated:`
-  changes when anyone saves) and re-anchor on the minted ids.
+  changes when anyone saves) and re-anchor on the ids it lists.
 - `promo_context` is the person's gaze: which projects are open (and
   unsaved), the selected layer by the id the FILE spells, the playhead,
   the open section, their standing note to you, and whether Ask before

@@ -370,7 +370,7 @@ promo video examples/ProductCard.promo --out card.mp4
 
 Start with `promo schema`. The short version: a project folder holds
 `metadata.json` and `Resources/`; ids are unique strings (short mnemonics
-are fine — apps mint UUIDs on adoption); layers place resources
+are fine, and the apps keep them as written); layers place resources
 on a timeline with keyframes (hold-then-ease), placement rules, transitions
 and palette-named colours (`@accent`). Validate before rendering — the
 answer starts NOT OK when something will not render or has no effect (a

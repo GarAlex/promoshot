@@ -83,14 +83,12 @@ open a file for writing. Do not guess it: the tools stamp it from the
 fields a file uses whenever they write, and for a file written by hand
 promo_validate names the exact number to declare.
 
-Ids are strings, unique within the file — that is the whole rule the
-ENGINE asks. UUIDs are the canonical spelling and what the apps write;
-a headless author may use short mnemonic ids instead ("bg", "clip",
-"k0") and the CLI, the MCP server and the renderers take them as-is.
-When the app adopts such a project it mints a UUID for every short id
-and every reference follows through the same map — so keep ids UNIQUE:
-two records sharing a spelling would be folded into one, and
-promo_validate names exactly that before it happens.
+Ids are strings, unique within the file — that is the whole rule every
+reader asks. UUIDs are what the apps mint for new entities; a headless
+author may use short mnemonic ids instead ("bg", "clip", "k0") and the
+CLI, the MCP servers, the renderers and the apps take them as-is and
+keep them. Keep ids UNIQUE: two records sharing a spelling are one id to
+every reader, and promo_validate names exactly that.
 
 Layer kinds: background, video, image, drawing, caption, audio, and —
 in the features below — model and stage. sortIndex is z-order, low to
@@ -1208,12 +1206,12 @@ a hard edge, the `studio` a soft one — and the same size shapes the
 key's glance on glass and gloss: a soft box's spread, the sun's point. A
 project with a floor carries `minReaderVersion: 45`.
 
-`handles` (top level, optional): the author's spellings for ids the app
-minted — `{"<minted uuid>": "deck", ...}`. Ids are strings; short
-mnemonics are fine and are what the tools take. When the PromoShot app
-opens a file whose ids are not UUIDs it mints one per spelling
-(deterministically, RFC 4122 v5 salted by the project's id) and keeps
-the spelling here, so `promo inspect` can show `<uuid> … ← deck` and
-every tool — headless or the app's — accepts either form. Losing the
-map changes nothing on screen, so it carries no `minReaderVersion`.
+`handles` (top level, optional): the author's spellings for ids an
+older PromoShot app minted — `{"<minted uuid>": "deck", ...}`. Before
+3.0 the app rewrote ids that were not UUIDs when it opened a file
+(deterministically, RFC 4122 v5 salted by the project's id) and kept the
+spelling here, so `promo inspect` shows `<uuid> … ← deck` and every tool
+accepts either form. The apps keep ids as written now and add no new
+handles; a file that has them keeps them. Losing the map changes nothing
+on screen, so it carries no `minReaderVersion`.
 
