@@ -1536,8 +1536,12 @@ mod tests {
         };
         let (l, r, w) = at(Align::Center);
         let (gap_left, gap_right) = (l, w - 1 - r);
+        // Ink edges, not advances: the first glyph's left bearing and the
+        // last one's right bearing differ by face (DejaVu on Linux leaves
+        // 5 px where Helvetica Neue leaves 1), so the tolerance scales with
+        // the box. A flush-left short line misses it by hundreds of pixels.
         assert!(
-            (gap_left - gap_right).abs() <= 4,
+            (gap_left - gap_right).abs() <= (w / 50).max(4),
             "centred: {gap_left} px left vs {gap_right} px right of a {w}px box"
         );
         let (l, _, _) = at(Align::Leading);

@@ -1792,9 +1792,31 @@ mod tests {
                 .count()
         };
         let white = count(&|r, g, b| r > 200 && g > 200 && b > 200);
+        // Where white landed in the whole frame, so a miss says whether the
+        // caption was not drawn at all or drawn outside the counted band.
+        let everywhere: Vec<(usize, usize)> = (0..320)
+            .flat_map(|y| (0..320).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                let i = (y * 320 + x) * 4;
+                frame[i + 2] > 200 && frame[i + 1] > 200 && frame[i] > 200
+            })
+            .collect();
+        let bbox = everywhere
+            .iter()
+            .fold((320, 320, 0, 0), |(x0, y0, x1, y1), &(x, y)| {
+                (x0.min(x), y0.min(y), x1.max(x), y1.max(y))
+            });
+        let centre_px = {
+            let i = (160 * 320 + 160) * 4;
+            (frame[i + 2], frame[i + 1], frame[i])
+        };
         assert!(
             white > 200,
-            "the caption stands in front, white on the scene: {white} px"
+            "the caption stands in front, white on the scene: {white} px in the band; \
+             {} white px in the frame, bbox {:?}, centre {:?}",
+            everywhere.len(),
+            bbox,
+            centre_px
         );
         let red = count(&|r, g, b| r > 120 && g < 80 && b < 80);
         assert!(red > 200, "and the cube shows between its glyphs: {red} px");
@@ -2513,7 +2535,9 @@ mod tests {
         let leaning = lit(&doc(
             r#"{"id":"K","time":0,"tiltX":0,"tiltY":60,"transitionDuration":0}"#,
         ));
-        assert!(flat.0 > 300, "the flat word is wide: {}", flat.0);
+        // A sanity floor, not a font measurement: six W's are ~257 px wide
+        // in DejaVu Sans (Linux) and wider in Helvetica Neue.
+        assert!(flat.0 > 200, "the flat word is wide: {}", flat.0);
         assert!(
             leaning.0 < flat.0 * 3 / 4,
             "a tilted caption is narrower: {} vs {} flat",
