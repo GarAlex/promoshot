@@ -95,6 +95,10 @@ const KEYFRAME_RAMP: f64 = 0.5;
 pub struct AuthorSlide {
     /// Already staged into the project's Resources/ by the host.
     pub filename: String,
+    /// The id the host already gave the staged resource — the apps stage
+    /// before they author; absent, the wizard mints one.
+    #[serde(default)]
+    pub resource_id: Option<String>,
     #[serde(default)]
     pub display_name: Option<String>,
     /// "image" | "video"
@@ -502,7 +506,7 @@ pub fn author(spec: &AuthorSpec) -> Result<String, String> {
 
     for (i, slide) in spec.slides.iter().enumerate() {
         let is_video = slide.kind == "video";
-        let resource_id = ids.take();
+        let resource_id = slide.resource_id.clone().unwrap_or_else(|| ids.take());
         let mut resource = slide_resource(spec, slide, &resource_id);
         if app_store && !is_video && may_wear_a_device_frame(slide) {
             resource["frame"] = slab_json.clone();
@@ -792,7 +796,11 @@ fn listing_show(
     let mut shot_slides: Vec<&AuthorSlide> = Vec::new();
     // Ids in the order the per-slide path takes them, so a show that falls
     // back reads the same; the listing's own come after.
-    let staged: Vec<String> = spec.slides.iter().map(|_| ids.take()).collect();
+    let staged: Vec<String> = spec
+        .slides
+        .iter()
+        .map(|slide| slide.resource_id.clone().unwrap_or_else(|| ids.take()))
+        .collect();
     for (slide, id) in spec.slides.iter().zip(&staged) {
         let mut resource = slide_resource(spec, slide, id);
         // A PICTURE is required, not just permission to frame: the swap

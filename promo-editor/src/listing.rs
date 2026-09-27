@@ -194,7 +194,7 @@ pub(crate) const FINISHED_SLOTS: [&str; 2] = ["Body", "Deck"];
 /// Which part of the screen a shot is meant to SHOW. The device vacates a
 /// side and the words take it, so the part pointed at is always the part
 /// nearest the caption.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum Emphasis {
     None,
     Top,
@@ -521,4 +521,226 @@ pub(crate) fn build(
         caption_keys,
         span,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shot(index: usize, headline: &str, emphasis: Emphasis, hiding: f64) -> Shot {
+        let frame: ResourceFrame = serde_json::from_value(json!({"kind": "device"})).unwrap();
+        Shot {
+            resource_id: format!("shot-{index}"),
+            content: Some((1179.0, 2556.0)),
+            frame: Some(frame),
+            headline: headline.into(),
+            emphasis,
+            hiding,
+            box_aspect: None,
+        }
+    }
+
+    fn fade() -> Option<Value> {
+        Some(json!({"kind": "fade", "duration": 0.45}))
+    }
+
+    const CANVAS: (f64, f64) = (1290.0, 2796.0);
+
+    /// A listing is three layers however many shots: the device's keyframes
+    /// carry four swaps for five shots, each saying where its shot sits;
+    /// the words CUT (a blend would draw two headlines) and land after
+    /// their picture has arrived — the app's emitter tests, ported with it.
+    #[test]
+    fn a_listing_swaps_one_device_and_one_headline_whatever_the_count() {
+        let shots: Vec<Shot> = (1..=5)
+            .map(|i| {
+                let emphasis = if i % 2 == 0 {
+                    Emphasis::Bottom
+                } else {
+                    Emphasis::Trailing
+                };
+                shot(i, &format!("Headline {i}"), emphasis, 1.0 / 3.0)
+            })
+            .collect();
+        let built = build(
+            &shots,
+            CANVAS,
+            1850.0,
+            (CANVAS.0, 1850.0),
+            (0.0, 0.0),
+            3.0,
+            fade(),
+            None,
+            88.0,
+            90.0,
+            &json!({}),
+        )
+        .unwrap();
+        assert_eq!(built.span, 15.0);
+        assert_eq!(built.captions.len(), 5, "a headline per shot");
+        let swaps = built
+            .device_keys
+            .iter()
+            .filter(|k| k.get("resourceID").is_some())
+            .count();
+        assert_eq!(swaps, 4, "the layer's own resource is the first");
+        assert!(built
+            .device_keys
+            .iter()
+            .all(|k| k.get("placement").is_some()));
+        assert_eq!(
+            built.caption_keys[1].0, 3.45,
+            "after its picture has arrived"
+        );
+    }
+
+    /// A headline shrinks to clear the device rather than overlapping it,
+    /// down to a floor below which it is not a headline any more.
+    #[test]
+    fn a_headline_shrinks_to_clear_the_device() {
+        let roomy = build(
+            &[shot(1, "Short", Emphasis::Bottom, 1.0 / 3.0)],
+            CANVAS,
+            1850.0,
+            (CANVAS.0, 1850.0),
+            (0.0, 0.0),
+            3.0,
+            fade(),
+            None,
+            88.0,
+            90.0,
+            &json!({}),
+        )
+        .unwrap();
+        assert_eq!(
+            roomy.captions[0].style["fontSize"], 88.0,
+            "a short headline needs no help"
+        );
+        let long = "a headline that will not fit ".repeat(4);
+        let tight = build(
+            &[shot(1, &long, Emphasis::Trailing, 0.05)],
+            CANVAS,
+            2400.0,
+            (CANVAS.0, 2400.0),
+            (0.0, 0.0),
+            3.0,
+            fade(),
+            None,
+            88.0,
+            90.0,
+            &json!({}),
+        )
+        .unwrap();
+        let size = tight.captions[0].style["fontSize"].as_f64().unwrap();
+        assert!(size < 88.0 && size >= 48.0, "{size}");
+    }
+
+    /// Turning is an option: on, the angle alternates; off, none is written.
+    #[test]
+    fn alternating_tilt_is_an_option_not_a_bake() {
+        let shots: Vec<Shot> = (1..=4)
+            .map(|i| shot(i, "H", Emphasis::None, 1.0 / 3.0))
+            .collect();
+        let plain = build(
+            &shots,
+            CANVAS,
+            1850.0,
+            (CANVAS.0, 1850.0),
+            (0.0, 0.0),
+            3.0,
+            fade(),
+            None,
+            88.0,
+            90.0,
+            &json!({}),
+        )
+        .unwrap();
+        assert!(plain.device_keys.iter().all(|k| k.get("tiltY").is_none()));
+        let turned = build(
+            &shots,
+            CANVAS,
+            1850.0,
+            (CANVAS.0, 1850.0),
+            (0.0, 0.0),
+            3.0,
+            fade(),
+            Some(14.0),
+            88.0,
+            90.0,
+            &json!({}),
+        )
+        .unwrap();
+        let tilts: Vec<f64> = turned
+            .device_keys
+            .iter()
+            .map(|k| k["tiltY"].as_f64().unwrap())
+            .collect();
+        assert_eq!(tilts, vec![-14.0, 14.0, -14.0, 14.0]);
+    }
+
+    /// The arrangement is a PATTERN across the set, and it alternates: one
+    /// decision instead of one per shot.
+    #[test]
+    fn an_arrangement_alternates_across_the_set() {
+        let pattern = |name: &str| (0..4).map(|i| Emphasis::at(name, i)).collect::<Vec<_>>();
+        assert!(pattern("centred").iter().all(|e| *e == Emphasis::None));
+        assert!(
+            pattern("sides")
+                == vec![
+                    Emphasis::Trailing,
+                    Emphasis::Leading,
+                    Emphasis::Trailing,
+                    Emphasis::Leading
+                ]
+        );
+        assert!(
+            pattern("stacked")
+                == vec![
+                    Emphasis::Bottom,
+                    Emphasis::Top,
+                    Emphasis::Bottom,
+                    Emphasis::Top
+                ]
+        );
+    }
+
+    /// "Show the bottom" pushes the device UP and leaves the room below it;
+    /// showing the right pushes it left and leaves the right-hand column;
+    /// hiding more leaves more room — the trade being made.
+    #[test]
+    fn emphasis_pushes_the_opposite_way_and_says_what_is_left() {
+        let (canvas, framed) = (CANVAS, (901.0, 1954.0));
+        let near = |a: f64, b: f64| (a - b).abs() <= 1.0;
+        let up = Emphasis::Bottom.offset(framed, canvas, 1.0 / 3.0);
+        assert!(near(up.1, -1072.0) && up.0 == 0.0, "{up:?}");
+        let room = Emphasis::Bottom.clear_rect(framed, canvas, 1.0 / 3.0);
+        assert!(near(room.y, 1398.0 - 1072.0 + 977.0), "{}", room.y);
+        assert!(near(room.h, canvas.1 - room.y) && room.h > 1400.0);
+        let left = Emphasis::Trailing.offset(framed, canvas, 1.0 / 3.0);
+        assert!(near(left.0, -495.0), "{left:?}");
+        let column = Emphasis::Trailing.clear_rect(framed, canvas, 1.0 / 3.0);
+        assert!(near(column.x, 645.0 - 495.0 + 450.5) && column.w > 500.0);
+        let half = Emphasis::Trailing.clear_rect(framed, canvas, 0.5);
+        assert!(half.w > column.w);
+        assert_eq!(Emphasis::None.offset(framed, canvas, 0.5), (0.0, 0.0));
+        let whole = Emphasis::None.clear_rect(framed, canvas, 0.5);
+        assert_eq!(
+            (whole.x, whole.y, whole.w, whole.h),
+            (0.0, 0.0, canvas.0, canvas.1)
+        );
+    }
+
+    /// A reel's canvas is the device screen's shape, with an even width.
+    #[test]
+    fn a_reel_is_the_screen_shape_at_an_even_width() {
+        for device_name in ["iPhone", "iPad", "mac"] {
+            let height = device(device_name).canvas.1;
+            let (w, h) = screen_canvas(device_name, height);
+            assert!(
+                (w / h - screen_aspect(device_name)).abs() < 0.002,
+                "{device_name}"
+            );
+            assert_eq!(w as i64 % 2, 0, "an even width encodes");
+        }
+    }
 }

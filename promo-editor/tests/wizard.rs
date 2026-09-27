@@ -1,14 +1,15 @@
 //! The core's wizard held to the app's (review 2026-09-27, P3-46, F10).
 //!
 //! The wizard existed twice: the Mac and iOS app's `setupStarterLayers`,
-//! which people use, and `promo_editor::author`, which the headless servers
-//! and the CLI run for agents — with no test comparing them. The app cannot
-//! be run from here, so its answers are fixtures: the app's
-//! `WizardParityTests.testPrintsTheFixturesForTheCore` prints, per case,
-//! the spec this wizard is asked for and the app's project in comparable
-//! form (`tests/wizard/<case>.json`). This test authors each spec and holds
-//! the result to it in the same form: the core's own encoding, every id
-//! replaced by a label for what it names, the clock's stamps dropped.
+//! which people used, and `promo_editor::author`, which the headless servers
+//! and the CLI run for agents — with no test comparing them. The app's
+//! answers to 33 shows were printed from the app (its WizardParityTests, in
+//! comparable form: `tests/wizard/<case>.json`, the spec and the project),
+//! this author was brought to them case by case, and the app then switched
+//! to it. They stay as golden files: the listing, the carousel, the narrated
+//! shape and the 3D forms people made in the app, held in place. The form
+//! is the core's own encoding, every id replaced by a label for what it
+//! names, the clock's stamps dropped.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
