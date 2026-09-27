@@ -5766,650 +5766,6 @@ mod tests {
         );
     }
 
-    /// A model layer standing a generated phone, looked at from `yaw`.
-    fn model_fixture(yaw: f64) -> ProjectMetadata {
-        let json = format!(
-            r#"{{
-            "id": "AAAAAAAA-0000-0000-0000-000000000002",
-            "name": "body", "createdAt": 0, "state": "recorded",
-            "trimStart": 0, "trimEnd": 3, "videoDuration": 3,
-            "subtitles": [],
-            "compositionSettings": {{
-                "canvasWidth": 96, "canvasHeight": 96,
-                "backgroundColorHex": "003300"
-            }},
-            "layers": [
-                {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
-                  "isEnabled": true, "startTime": 0, "keyframes": []}},
-                {{"id": "BODY", "name": "phone", "sortIndex": 1, "kind": "model",
-                  "isEnabled": true, "startTime": 0, "duration": 3,
-                  "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC01",
-                  "keyframes": [{{"id": "K", "time": 0, "transitionDuration": 0,
-                    "placement": {{"height": 70, "anchor": "center"}},
-                    "camera": {{"yaw": {yaw}, "pitch": 10, "distance": 4.2, "fov": 30}},
-                    "light": {{"yaw": 40, "pitch": 50, "intensity": 1}}}}]}}
-            ],
-            "resources": [
-                {{"id": "AAAAAAAA-0000-0000-0000-00000000CC01", "kind": "model",
-                  "filename": "", "displayName": "Phone", "addedAt": 0,
-                  "recipe": {{"device": {{"kind": "phone"}}}},
-                  "imageCuts": [], "disabledAudioTrackIndices": []}}
-            ]}}"#,
-            yaw = yaw,
-        );
-        ProjectMetadata::from_json(&json).expect("model fixture")
-    }
-
-    /// A laptop whose screen plays a two-shot reel: a composition on the
-    /// Screen slot, red for two seconds then green, on a canvas the
-    /// screen's shape.
-    fn reel_fixture() -> ProjectMetadata {
-        let json = r#"{
-            "id": "AAAAAAAA-0000-0000-0000-000000000003",
-            "name": "reel", "createdAt": 0, "state": "recorded",
-            "trimStart": 0, "trimEnd": 4, "videoDuration": 4,
-            "subtitles": [],
-            "compositionSettings": {
-                "canvasWidth": 128, "canvasHeight": 128,
-                "backgroundColorHex": "003300"
-            },
-            "layers": [
-                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
-                 "isEnabled": true, "startTime": 0, "keyframes": []},
-                {"id": "BODY", "name": "laptop", "sortIndex": 1, "kind": "model",
-                 "isEnabled": true, "startTime": 0, "duration": 4,
-                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC02",
-                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
-                   "placement": {"height": 100, "anchor": "center"},
-                   "camera": {"yaw": -20, "pitch": 12, "distance": 3.6, "fov": 30}}]}
-            ],
-            "resources": [
-                {"id": "AAAAAAAA-0000-0000-0000-00000000CC02", "kind": "model",
-                 "filename": "", "displayName": "Laptop", "addedAt": 0,
-                 "recipe": {"device": {"kind": "laptop"}},
-                 "materials": {"Screen": {"resourceID": "AAAAAAAA-0000-0000-0000-00000000EE01"}},
-                 "imageCuts": [], "disabledAudioTrackIndices": []},
-                {"id": "AAAAAAAA-0000-0000-0000-00000000EE01", "kind": "composition",
-                 "filename": "", "displayName": "Reel", "addedAt": 0, "duration": 4,
-                 "pixelWidth": 400, "pixelHeight": 250,
-                 "composition": {"canvasWidth": 400, "canvasHeight": 250, "layers": [
-                   {"id": "N1", "name": "first", "sortIndex": 0, "kind": "image",
-                    "isEnabled": true, "startTime": 0, "duration": 2,
-                    "resourceID": "AAAAAAAA-0000-0000-0000-00000000DD01",
-                    "keyframes": [{"id": "K1", "time": 0, "zoom": 1.6, "verticalShift": 0,
-                                   "horizontalShift": 0, "transitionDuration": 0}]},
-                   {"id": "N2", "name": "second", "sortIndex": 1, "kind": "image",
-                    "isEnabled": true, "startTime": 2, "duration": 2,
-                    "resourceID": "AAAAAAAA-0000-0000-0000-00000000DD02",
-                    "keyframes": [{"id": "K2", "time": 0, "zoom": 1.6, "verticalShift": 0,
-                                   "horizontalShift": 0, "transitionDuration": 0}]}
-                 ]},
-                 "imageCuts": [], "disabledAudioTrackIndices": []},
-                {"id": "AAAAAAAA-0000-0000-0000-00000000DD01", "kind": "image",
-                 "filename": "a.png", "displayName": "a", "addedAt": 0,
-                 "pixelWidth": 32, "pixelHeight": 32,
-                 "imageCuts": [], "disabledAudioTrackIndices": []},
-                {"id": "AAAAAAAA-0000-0000-0000-00000000DD02", "kind": "image",
-                 "filename": "b.png", "displayName": "b", "addedAt": 0,
-                 "pixelWidth": 32, "pixelHeight": 32,
-                 "imageCuts": [], "disabledAudioTrackIndices": []}
-            ]}"#;
-        ProjectMetadata::from_json(json).expect("reel fixture")
-    }
-
-    /// A screen plays a composition (rung 43): the slot shows the document
-    /// on the layer's clock, so the picture on the laptop changes when the
-    /// reel's shot changes — and nothing else on the canvas does.
-    #[test]
-    fn a_screen_plays_a_composition() {
-        let (mut engine, _state) = make_engine(
-            reel_fixture(),
-            vec![
-                ("N1".into(), [0, 0, 255, 255], 32),
-                ("N2".into(), [0, 255, 0, 255], 32),
-            ],
-            64 << 20,
-        );
-        let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
-        engine.render(1.0, out.raw(), 128, 128).unwrap();
-        let first = out.read_pixels().unwrap();
-        engine.render(3.0, out.raw(), 128, 128).unwrap();
-        let second = out.read_pixels().unwrap();
-        let has = |px: &[u8], want: [usize; 2]| {
-            px.chunks(4)
-                .any(|p| p[want[0]] > 150 && p[want[1]] < 80 && p[3] == 255)
-        };
-        // BGRA: the first shot is the red channel, the second the green.
-        assert!(
-            has(&first, [2, 1]),
-            "the first shot is on the screen at 1 s"
-        );
-        assert!(!has(&first, [1, 2]), "and the second is not yet");
-        assert!(
-            has(&second, [1, 2]),
-            "the second shot is on the screen at 3 s"
-        );
-        assert!(!has(&second, [2, 1]), "and the first has gone");
-        assert!(
-            engine.stats().misses >= 2,
-            "two different pictures were drawn"
-        );
-    }
-
-    /// A finish word on a screen is the coat over the picture (rung 44):
-    /// `glass` on the laptop's Screen dims the reel a little where the
-    /// coat turns to mirror and lays the key's glance and the world over
-    /// it — so the frame differs from the bare screen's, on the screen
-    /// alone, with every alpha the same. It did not: `glass` has no clear
-    /// coat of its own in the recipe table, and the word mapped to a coat
-    /// of nothing.
-    #[test]
-    fn a_glass_word_on_a_screen_is_the_coat() {
-        let bare = reel_fixture().to_json().expect("json");
-        let anchor = r#""resourceID":"AAAAAAAA-0000-0000-0000-00000000EE01""#;
-        assert_eq!(
-            bare.matches(anchor).count(),
-            1,
-            "the Screen binding: {bare}"
-        );
-        let glass = bare.replace(anchor, &format!(r#"{anchor},"finish":"glass""#));
-        let render = |json: &str| -> Vec<u8> {
-            let meta = ProjectMetadata::from_json(json).expect("reel with a word");
-            let (mut engine, _state) = make_engine(
-                meta,
-                vec![
-                    ("N1".into(), [0, 0, 255, 255], 32),
-                    ("N2".into(), [0, 255, 0, 255], 32),
-                ],
-                64 << 20,
-            );
-            let out = OwnedIoSurface::new_bgra(128, 128).unwrap();
-            engine.render(1.0, out.raw(), 128, 128).unwrap();
-            out.read_pixels().unwrap()
-        };
-        let (plain, coated) = (render(&bare), render(&glass));
-        let differing = plain
-            .chunks_exact(4)
-            .zip(coated.chunks_exact(4))
-            .filter(|(a, b)| (0..3).any(|c| (a[c] as i32 - b[c] as i32).abs() > 3))
-            .count();
-        assert!(
-            differing > 20,
-            "glass over the screen changes its picture: {differing} pixels differ"
-        );
-        let alpha_moved = plain
-            .chunks_exact(4)
-            .zip(coated.chunks_exact(4))
-            .filter(|(a, b)| a[3] != b[3])
-            .count();
-        assert_eq!(alpha_moved, 0, "a coat over a screen changes no alpha");
-    }
-
-    /// A stage on a floor: the shadow and the mirror image spill past the
-    /// bodies, so the frame widens to hold them — and the bodies still
-    /// carry the pixels the placement asks for. Sized for the whole spill,
-    /// they came out at a third of the canvas's height and were scaled up
-    /// soft; sized for the bodies' box, the box is canvas-height at zoom
-    /// 1 and follows a placement taller than the canvas, as a model does.
-    #[test]
-    fn a_floored_stage_keeps_its_bodies_pixels() {
-        fn floored(placed: u32) -> ProjectMetadata {
-            let json = format!(
-                r#"{{
-                "id": "AAAAAAAA-0000-0000-0000-000000000005",
-                "name": "floored", "createdAt": 0, "state": "recorded",
-                "trimStart": 0, "trimEnd": 3, "videoDuration": 3, "subtitles": [],
-                "compositionSettings": {{"canvasWidth": 96, "canvasHeight": 96,
-                                        "backgroundColorHex": "003300"}},
-                "layers": [
-                    {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
-                      "isEnabled": true, "startTime": 0, "keyframes": []}},
-                    {{"id": "STAGE", "name": "Bench", "sortIndex": 1, "kind": "stage",
-                      "floor": "glossy", "isEnabled": true, "startTime": 0, "duration": 3,
-                      "keyframes": [{{"id": "SK", "time": 0, "transitionDuration": 0,
-                        "placement": {{"height": {placed}, "anchor": "center"}},
-                        "camera": {{"yaw": -20, "pitch": 10, "distance": 4.2, "fov": 30}},
-                        "light": {{"yaw": 40, "pitch": 50, "intensity": 1}}}}],
-                      "members": [
-                        {{"id": "M1", "name": "phone", "sortIndex": 0, "kind": "model",
-                          "isEnabled": true, "startTime": 0, "duration": 3,
-                          "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC03",
-                          "keyframes": [{{"id": "MK", "time": 0, "transitionDuration": 0}}]}}
-                      ]}}
-                ],
-                "resources": [
-                    {{"id": "AAAAAAAA-0000-0000-0000-00000000CC03", "kind": "model",
-                      "filename": "", "displayName": "Phone", "addedAt": 0,
-                      "recipe": {{"device": {{"kind": "phone"}}}},
-                      "imageCuts": [], "disabledAudioTrackIndices": []}}
-                ]}}"#,
-                placed = placed,
-            );
-            ProjectMetadata::from_json(&json).expect("floored stage fixture")
-        }
-        // (frame width, frame height, the bodies' box height) of the
-        // stage's cached picture.
-        let drawn = |placed: u32| -> (u32, u32, u32) {
-            let (mut engine, _state) = make_engine(floored(placed), vec![], 64 << 20);
-            let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-            engine.render(1.0, out.raw(), 96, 96).unwrap();
-            let (_, entry) = engine
-                .id_of
-                .iter()
-                .find(|(_, (key, _, _))| key.starts_with("stage"))
-                .map(|(entry, key)| (key.clone(), *entry))
-                .expect("the stage's picture is cached");
-            let cached = &engine.cache[&entry];
-            let (_, _, _, bodies) = cached
-                .content_box
-                .expect("the floor's mirror and shadow spill past the phone");
-            (cached.frame.width, cached.frame.height, bodies)
-        };
-        let (fw, fh, body) = drawn(70);
-        assert!(
-            body >= 85,
-            "at zoom 1 the phone's box is the canvas's height: {body} px in a {fw}x{fh} frame"
-        );
-        assert!(
-            fh > body,
-            "the mirror below the phone is drawn too: {fh} tall for a {body} px body"
-        );
-        let (_, _, tall) = drawn(300);
-        assert!(
-            tall > 250,
-            "placed 300 px tall the phone carries that many: {tall} px"
-        );
-    }
-
-    /// A stage inside a nested composition draws: its members are the
-    /// composition's layers naming it, not the project's. The engine read
-    /// the project's layers for them and drew every nested stage empty —
-    /// a composition of the cube piece was a gradient and nothing else.
-    #[test]
-    fn a_stage_inside_a_composition_draws_its_members() {
-        let json = r#"{
-            "id": "AAAAAAAA-0000-0000-0000-000000000004",
-            "name": "nested stage", "createdAt": 0, "state": "recorded",
-            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
-            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
-                                    "backgroundColorHex": "003300"},
-            "layers": [
-                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
-                 "isEnabled": true, "startTime": 0, "keyframes": []},
-                {"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
-                 "isEnabled": true, "startTime": 0, "duration": 4,
-                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE02",
-                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
-                                "placement": {"mode": "fill"}}]}
-            ],
-            "resources": [
-                {"id": "AAAAAAAA-0000-0000-0000-00000000CC03", "kind": "model",
-                 "filename": "", "displayName": "Phone", "addedAt": 0,
-                 "recipe": {"device": {"kind": "phone"}},
-                 "materials": {"Body": {"colorHex": "FF00FF", "metallic": 0, "roughness": 0.5}},
-                 "imageCuts": [], "disabledAudioTrackIndices": []},
-                {"id": "AAAAAAAA-0000-0000-0000-00000000EE02", "kind": "composition",
-                 "filename": "", "displayName": "Inner", "addedAt": 0, "duration": 4,
-                 "pixelWidth": 96, "pixelHeight": 96,
-                 "composition": {"canvasWidth": 96, "canvasHeight": 96,
-                   "backgroundColorHex": "003300", "layers": [
-                     {"id": "STAGE", "name": "Bench", "sortIndex": 0, "kind": "stage",
-                      "isEnabled": true, "startTime": 0, "duration": 4,
-                      "keyframes": [{"id": "SK", "time": 0, "transitionDuration": 0,
-                        "placement": {"height": 80, "anchor": "center"},
-                        "camera": {"yaw": -20, "pitch": 10, "distance": 4.2, "fov": 30},
-                        "light": {"yaw": 40, "pitch": 50, "intensity": 1}}],
-                      "members": [
-                        {"id": "M1", "name": "phone", "sortIndex": 0, "kind": "model",
-                         "isEnabled": true, "startTime": 0, "duration": 4,
-                         "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC03",
-                         "keyframes": [{"id": "MK", "time": 0, "transitionDuration": 0,
-                                        "camera": {"yaw": 0}}]}
-                      ]}
-                 ]},
-                 "imageCuts": [], "disabledAudioTrackIndices": []}
-            ]}"#;
-        let meta = ProjectMetadata::from_json(json).expect("nested stage fixture");
-        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let px = out.read_pixels().unwrap();
-        let magenta = px
-            .chunks(4)
-            .filter(|p| p[0] > 120 && p[2] > 120 && p[1] < 100)
-            .count();
-        assert!(
-            magenta > 20,
-            "the stage's phone is on the canvas: {magenta} magenta pixels"
-        );
-    }
-
-    /// A nested composition is laid out on ITS OWN canvas. The scene
-    /// builder took the project's settings for every level, so a
-    /// composition of another size had its placements resolved against
-    /// the project's canvas and drawn in its own frame — a phone-shaped
-    /// scene three times the project's height came out three times too
-    /// large, its centred body up near the top.
-    #[test]
-    fn a_nested_composition_is_laid_out_on_its_own_canvas() {
-        let json = r#"{
-            "id": "AAAAAAAA-0000-0000-0000-000000000005",
-            "name": "tall nested", "createdAt": 0, "state": "recorded",
-            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
-            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
-                                    "backgroundColorHex": "003300"},
-            "layers": [
-                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
-                 "isEnabled": true, "startTime": 0, "keyframes": []},
-                {"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
-                 "isEnabled": true, "startTime": 0, "duration": 4,
-                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE03",
-                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
-                                "placement": {"mode": "fit"}}]}
-            ],
-            "resources": [
-                {"id": "AAAAAAAA-0000-0000-0000-00000000CC04", "kind": "model",
-                 "filename": "", "displayName": "Phone", "addedAt": 0,
-                 "recipe": {"device": {"kind": "phone"}},
-                 "materials": {"Body": {"colorHex": "FF00FF", "metallic": 0, "roughness": 0.5}},
-                 "imageCuts": [], "disabledAudioTrackIndices": []},
-                {"id": "AAAAAAAA-0000-0000-0000-00000000EE03", "kind": "composition",
-                 "filename": "", "displayName": "Tall", "addedAt": 0, "duration": 4,
-                 "pixelWidth": 96, "pixelHeight": 288,
-                 "composition": {"canvasWidth": 96, "canvasHeight": 288,
-                   "backgroundColorHex": "003300", "layers": [
-                     {"id": "BODY", "name": "phone", "sortIndex": 0, "kind": "model",
-                      "isEnabled": true, "startTime": 0, "duration": 4,
-                      "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC04",
-                      "keyframes": [{"id": "MK", "time": 0, "transitionDuration": 0,
-                        "placement": {"height": 60, "anchor": "center"},
-                        "camera": {"yaw": 0, "pitch": 0, "distance": 4.2, "fov": 30},
-                        "light": {"yaw": 40, "pitch": 50, "intensity": 1}}]}
-                 ]},
-                 "imageCuts": [], "disabledAudioTrackIndices": []}
-            ]}"#;
-        let meta = ProjectMetadata::from_json(json).expect("tall nested fixture");
-        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let px = out.read_pixels().unwrap();
-        // The 96×288 composition fits the square as a 32×96 strip, and a
-        // body 60 tall on that canvas is 20 tall in the strip, centred.
-        let rows: Vec<usize> = px
-            .chunks(4)
-            .enumerate()
-            .filter(|(_, p)| p[0] > 120 && p[2] > 120 && p[1] < 100)
-            .map(|(i, _)| i / 96)
-            .collect();
-        assert!(!rows.is_empty(), "the body is on the canvas");
-        let (top, bottom) = (*rows.iter().min().unwrap(), *rows.iter().max().unwrap());
-        let height = bottom - top + 1;
-        let centre = (top + bottom) as f64 / 2.0;
-        assert!(
-            (14..=26).contains(&height),
-            "a body 60 tall on a 288 canvas is 20 tall once fitted, not {height} (rows {top}..={bottom})"
-        );
-        assert!(
-            (centre - 47.5).abs() <= 4.0,
-            "a centred body sits at the strip's middle, not row {centre}"
-        );
-    }
-
-    /// A project whose settings colour is green (plus whatever
-    /// `settings_extra` adds), a background layer keyed blue, and a
-    /// full-frame video layer showing a composition of the project's size
-    /// that holds one PLAIN background layer — no colour keyframe, no
-    /// resource — over the plate given.
-    fn plain_background_in_a_composition(settings_extra: &str, plate: &str) -> ProjectMetadata {
-        let json = format!(
-            r#"{{
-            "id": "AAAAAAAA-0000-0000-0000-000000000006",
-            "name": "nested plate", "createdAt": 0, "state": "recorded",
-            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
-            "compositionSettings": {{"canvasWidth": 96, "canvasHeight": 96,
-                                    "backgroundColorHex": "00FF00"{settings_extra}}},
-            "layers": [
-                {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
-                 "isEnabled": true, "startTime": 0,
-                 "keyframes": [{{"id": "BK", "time": 0, "transitionDuration": 0,
-                                "colorHex": "0000FF"}}]}},
-                {{"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
-                 "isEnabled": true, "startTime": 0, "duration": 4,
-                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE04",
-                 "keyframes": [{{"id": "K", "time": 0, "transitionDuration": 0,
-                                "placement": {{"mode": "fill"}}}}]}}
-            ],
-            "resources": [
-                {{"id": "AAAAAAAA-0000-0000-0000-00000000EE04", "kind": "composition",
-                 "filename": "", "displayName": "Inner", "addedAt": 0, "duration": 4,
-                 "pixelWidth": 96, "pixelHeight": 96,
-                 "composition": {{"canvasWidth": 96, "canvasHeight": 96, {plate}
-                   "layers": [
-                     {{"id": "IBG", "name": "plain", "sortIndex": 0, "kind": "background",
-                      "isEnabled": true, "startTime": 0, "keyframes": []}}
-                 ]}},
-                 "imageCuts": [], "disabledAudioTrackIndices": []}}
-            ]}}"#
-        );
-        ProjectMetadata::from_json(&json).expect("nested plate fixture")
-    }
-
-    /// Render that fixture at 1 s: the centre pixel, and how many of the
-    /// 96×96 pixels are exactly `colour` (BGRA).
-    fn plate_census(meta: ProjectMetadata, colour: [u8; 4]) -> ([u8; 4], usize) {
-        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let px = out.read_pixels().unwrap();
-        let count = px.chunks(4).filter(|p| p[..] == colour[..]).count();
-        (pixel(&out, 48, 48), count)
-    }
-
-    /// A plain background layer inside a composition is the COMPOSITION's
-    /// plate, not the project's. The scene builder handed every level the
-    /// project's settings as the layer's fallback, so a composition plated
-    /// yellow with a keyframe-less background layer painted the project's
-    /// green — full-frame on a video layer and on a model's slot alike —
-    /// while the same composition without the layer painted yellow. The
-    /// project's gradient leaked the same way.
-    #[test]
-    fn a_plain_background_layer_in_a_composition_paints_the_compositions_plate() {
-        let gradient = r#", "backgroundGradient": {"kind": "linear", "start": [0, 0],
-            "end": [1, 1], "repeat": "clamp", "stops": [{"colorHex": "00FF00", "at": 0},
-            {"colorHex": "0000FF", "at": 1}]}"#;
-        let meta =
-            plain_background_in_a_composition(gradient, r#""backgroundColorHex": "FFFF00","#);
-        let yellow = [0, 255, 255, 255];
-        let (centre, count) = plate_census(meta, yellow);
-        assert_eq!(centre, yellow, "the composition's own plate, BGRA");
-        assert!(
-            count > 8000,
-            "yellow corner to corner, not the project's colour or gradient: {count}"
-        );
-    }
-
-    /// The same layer in a composition with NO plate paints nothing — a
-    /// title comp over footage shows the footage through a plain
-    /// background layer as it does through none — rather than the
-    /// project's settings colour.
-    #[test]
-    fn a_plain_background_layer_in_a_plateless_composition_paints_nothing() {
-        let meta = plain_background_in_a_composition("", "");
-        let blue = [255, 0, 0, 255];
-        let (centre, count) = plate_census(meta, blue);
-        assert_eq!(
-            centre, blue,
-            "the project's keyed background shows through, BGRA"
-        );
-        assert!(
-            count > 8000,
-            "through the whole frame, not the settings green: {count}"
-        );
-    }
-
-    /// A standing screen keeps its own proportions: the slot's aspect is
-    /// width over height of the surface its uvs span, whatever plane the
-    /// mesh lies in. The two-longest-extents rule read a phone's long side
-    /// as its width, and every portrait screen fitted its picture squeezed
-    /// — the wizard's iPhone and iPad reels included.
-    #[test]
-    fn a_standing_screen_keeps_its_own_proportions() {
-        let (mut engine, _state) = make_engine(model_fixture(0.0), vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let phone = engine.models.values().next().expect("the phone is loaded");
-        let screen = phone
-            .model
-            .materials
-            .iter()
-            .position(|m| m.name == "Screen")
-            .expect("a phone has a Screen");
-        let aspect = phone
-            .gpu
-            .slot_aspect(screen)
-            .expect("the slot has an aspect");
-        assert!(
-            aspect < 0.6,
-            "a phone's screen is taller than it is wide: {aspect}"
-        );
-
-        let (mut engine, _state) = make_engine(reel_fixture(), vec![], 64 << 20);
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let laptop = engine
-            .models
-            .values()
-            .find(|m| m.model.materials.iter().any(|m| m.name == "Deck"))
-            .expect("the laptop is loaded");
-        let screen = laptop
-            .model
-            .materials
-            .iter()
-            .position(|m| m.name == "Screen")
-            .unwrap();
-        let aspect = laptop.gpu.slot_aspect(screen).unwrap();
-        assert!(
-            (1.3..1.8).contains(&aspect),
-            "a laptop's screen is wider than tall: {aspect}"
-        );
-    }
-
-    /// A model placed taller than the canvas is rendered at that size: the
-    /// square it is drawn on follows the placed height rather than the
-    /// canvas's, so a zoom into a device's screen stays sharp to the cut
-    /// instead of scaling a canvas-height picture up.
-    #[test]
-    fn a_model_placed_taller_than_the_canvas_is_drawn_at_that_size() {
-        let mut meta = model_fixture(0.0);
-        if let Some(layers) = meta.layers.as_mut() {
-            layers[1].keyframes[0].placement = Some(promo_model::Placement {
-                height: Some(300.0),
-                width: None,
-                mode: None,
-                anchor: None,
-                offset: None,
-            });
-        }
-        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let (_, entry) = engine
-            .id_of
-            .iter()
-            .find(|(_, (key, _, _))| key.starts_with("model"))
-            .map(|(entry, key)| (key.clone(), *entry))
-            .expect("the body's picture is cached");
-        let frame = &engine.cache[&entry].frame;
-        // The phone stands ~0.6 of its sphere; placed 300 px tall on a 96
-        // canvas its picture must carry the pixels the placement asks for,
-        // not the canvas's 96 scaled up three times.
-        assert!(
-            frame.height > 200,
-            "drawn at the placed size: {} px",
-            frame.height
-        );
-    }
-
-    /// A close camera keeps the whole body. The square the body is drawn
-    /// on used to hold the bounding sphere at the default distance only,
-    /// so nearer than that the body was cut at the square's edge while the
-    /// canvas round it stayed empty. The square grows to hold the sphere
-    /// at the camera in force, and the box cut from it is the body's own.
-    #[test]
-    fn a_close_camera_keeps_the_whole_body() {
-        let mut meta = model_fixture(0.0);
-        if let Some(layers) = meta.layers.as_mut() {
-            let key = &mut layers[1].keyframes[0];
-            let mut camera = key.camera.clone().unwrap();
-            camera.distance = Some(2.0);
-            camera.pitch = Some(0.0);
-            key.camera = Some(camera);
-        }
-        let (mut engine, _state) = make_engine(meta, vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let (_, entry) = engine
-            .id_of
-            .iter()
-            .find(|(_, (key, _, _))| key.starts_with("model"))
-            .map(|(entry, key)| (key.clone(), *entry))
-            .expect("the body's picture is cached");
-        let frame = &engine.cache[&entry].frame;
-        // The square a 96-canvas asks for is 96 px; at distance 2 the
-        // phone stands taller than that. Cut at the old square it came
-        // back 96 tall; whole, it is taller — and not the grown square
-        // itself, which would mean it was cut at the new edge instead.
-        assert!(
-            frame.height > 96,
-            "the body is drawn whole: {} px tall",
-            frame.height
-        );
-        assert!(
-            frame.width < frame.height,
-            "a phone is taller than it is wide"
-        );
-        let (_, grown) = frame_that_holds_the_sphere(
-            ModelView {
-                distance: 2.0,
-                fov: 30.0,
-                ..ModelView::default()
-            },
-            96,
-        );
-        assert!(
-            grown > 96 && frame.height < grown,
-            "{} of {grown}",
-            frame.height
-        );
-        // And a body already at the default distance is left alone.
-        let (same, side) = frame_that_holds_the_sphere(ModelView::default(), 96);
-        assert_eq!(side, 96);
-        assert_eq!(same.fov, ModelView::default().fov);
-    }
-
-    /// A camera change on a model layer's ONLY keyframe reaches the
-    /// canvas. The model's picture is cached under a key that starts with
-    /// "model", and `evict_layer` matched cached ids by the layer id as a
-    /// PREFIX — so replacing the project left the old render in the cache,
-    /// and the app's canvas kept showing it while the inspector's numbers
-    /// moved. Placement edits repainted (the cached picture is placed at
-    /// composite time), which is what made the stale camera look like a
-    /// dead button.
-    #[test]
-    fn a_camera_edit_on_a_model_layer_repaints() {
-        let (mut engine, _state) = make_engine(model_fixture(-35.0), vec![], 64 << 20);
-        let out = OwnedIoSurface::new_bgra(96, 96).unwrap();
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let before = out.read_pixels().unwrap();
-        assert!(
-            before.chunks(4).any(|p| p != [0, 51, 0, 255]),
-            "the body is on the canvas to begin with"
-        );
-        engine.set_project(model_fixture(-145.0));
-        engine.render(1.0, out.raw(), 96, 96).unwrap();
-        let after = out.read_pixels().unwrap();
-        assert_ne!(before, after, "the turned body is a different picture");
-    }
-
     #[test]
     fn set_project_keeps_cache_for_untouched_layers() {
         let meta = tests_support::fixture_meta(64.0);
@@ -8234,13 +7590,675 @@ mod portable_tests {
         [px[i], px[i + 1], px[i + 2], px[i + 3]]
     }
 
+    // Ported from the IOSurface-only suite (review 2026-09-27, P2-27): the
+    // September engine fixes — screens playing compositions, stages and
+    // plates inside compositions, a composition's own canvas, a screen's
+    // proportions, a body's placed size and close camera, a camera edit
+    // repainting — rendered through CPU pixels, so Linux runs them too.
+
+    /// A model layer standing a generated phone, looked at from `yaw`.
+    fn model_fixture(yaw: f64) -> ProjectMetadata {
+        let json = format!(
+            r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-000000000002",
+            "name": "body", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 3, "videoDuration": 3,
+            "subtitles": [],
+            "compositionSettings": {{
+                "canvasWidth": 96, "canvasHeight": 96,
+                "backgroundColorHex": "003300"
+            }},
+            "layers": [
+                {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                  "isEnabled": true, "startTime": 0, "keyframes": []}},
+                {{"id": "BODY", "name": "phone", "sortIndex": 1, "kind": "model",
+                  "isEnabled": true, "startTime": 0, "duration": 3,
+                  "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC01",
+                  "keyframes": [{{"id": "K", "time": 0, "transitionDuration": 0,
+                    "placement": {{"height": 70, "anchor": "center"}},
+                    "camera": {{"yaw": {yaw}, "pitch": 10, "distance": 4.2, "fov": 30}},
+                    "light": {{"yaw": 40, "pitch": 50, "intensity": 1}}}}]}}
+            ],
+            "resources": [
+                {{"id": "AAAAAAAA-0000-0000-0000-00000000CC01", "kind": "model",
+                  "filename": "", "displayName": "Phone", "addedAt": 0,
+                  "recipe": {{"device": {{"kind": "phone"}}}},
+                  "imageCuts": [], "disabledAudioTrackIndices": []}}
+            ]}}"#,
+            yaw = yaw,
+        );
+        ProjectMetadata::from_json(&json).expect("model fixture")
+    }
+
+    /// A laptop whose screen plays a two-shot reel: a composition on the
+    /// Screen slot, red for two seconds then green, on a canvas the
+    /// screen's shape.
+    fn reel_fixture() -> ProjectMetadata {
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000003",
+            "name": "reel", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4,
+            "subtitles": [],
+            "compositionSettings": {
+                "canvasWidth": 128, "canvasHeight": 128,
+                "backgroundColorHex": "003300"
+            },
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "BODY", "name": "laptop", "sortIndex": 1, "kind": "model",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC02",
+                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
+                   "placement": {"height": 100, "anchor": "center"},
+                   "camera": {"yaw": -20, "pitch": 12, "distance": 3.6, "fov": 30}}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000CC02", "kind": "model",
+                 "filename": "", "displayName": "Laptop", "addedAt": 0,
+                 "recipe": {"device": {"kind": "laptop"}},
+                 "materials": {"Screen": {"resourceID": "AAAAAAAA-0000-0000-0000-00000000EE01"}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000EE01", "kind": "composition",
+                 "filename": "", "displayName": "Reel", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 400, "pixelHeight": 250,
+                 "composition": {"canvasWidth": 400, "canvasHeight": 250, "layers": [
+                   {"id": "N1", "name": "first", "sortIndex": 0, "kind": "image",
+                    "isEnabled": true, "startTime": 0, "duration": 2,
+                    "resourceID": "AAAAAAAA-0000-0000-0000-00000000DD01",
+                    "keyframes": [{"id": "K1", "time": 0, "zoom": 1.6, "verticalShift": 0,
+                                   "horizontalShift": 0, "transitionDuration": 0}]},
+                   {"id": "N2", "name": "second", "sortIndex": 1, "kind": "image",
+                    "isEnabled": true, "startTime": 2, "duration": 2,
+                    "resourceID": "AAAAAAAA-0000-0000-0000-00000000DD02",
+                    "keyframes": [{"id": "K2", "time": 0, "zoom": 1.6, "verticalShift": 0,
+                                   "horizontalShift": 0, "transitionDuration": 0}]}
+                 ]},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000DD01", "kind": "image",
+                 "filename": "a.png", "displayName": "a", "addedAt": 0,
+                 "pixelWidth": 32, "pixelHeight": 32,
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000DD02", "kind": "image",
+                 "filename": "b.png", "displayName": "b", "addedAt": 0,
+                 "pixelWidth": 32, "pixelHeight": 32,
+                 "imageCuts": [], "disabledAudioTrackIndices": []}
+            ]}"#;
+        ProjectMetadata::from_json(json).expect("reel fixture")
+    }
+
+    /// A screen plays a composition (rung 43): the slot shows the document
+    /// on the layer's clock, so the picture on the laptop changes when the
+    /// reel's shot changes — and nothing else on the canvas does.
+    #[test]
+    fn a_screen_plays_a_composition() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let (mut engine, _state) = make_cpu_engine(
+            reel_fixture(),
+            vec![
+                ("N1".into(), [0, 0, 255, 255], 32),
+                ("N2".into(), [0, 255, 0, 255], 32),
+            ],
+        );
+        let first = render_and_read(&mut engine, 1.0, 128);
+        let second = render_and_read(&mut engine, 3.0, 128);
+        let has = |px: &[u8], want: [usize; 2]| {
+            px.chunks(4)
+                .any(|p| p[want[0]] > 150 && p[want[1]] < 80 && p[3] == 255)
+        };
+        // BGRA: the first shot is the red channel, the second the green.
+        assert!(
+            has(&first, [2, 1]),
+            "the first shot is on the screen at 1 s"
+        );
+        assert!(!has(&first, [1, 2]), "and the second is not yet");
+        assert!(
+            has(&second, [1, 2]),
+            "the second shot is on the screen at 3 s"
+        );
+        assert!(!has(&second, [2, 1]), "and the first has gone");
+        assert!(
+            engine.stats().misses >= 2,
+            "two different pictures were drawn"
+        );
+    }
+
+    /// A finish word on a screen is the coat over the picture (rung 44):
+    /// `glass` on the laptop's Screen dims the reel a little where the
+    /// coat turns to mirror and lays the key's glance and the world over
+    /// it — so the frame differs from the bare screen's, on the screen
+    /// alone, with every alpha the same. It did not: `glass` has no clear
+    /// coat of its own in the recipe table, and the word mapped to a coat
+    /// of nothing.
+    #[test]
+    fn a_glass_word_on_a_screen_is_the_coat() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let bare = reel_fixture().to_json().expect("json");
+        let anchor = r#""resourceID":"AAAAAAAA-0000-0000-0000-00000000EE01""#;
+        assert_eq!(
+            bare.matches(anchor).count(),
+            1,
+            "the Screen binding: {bare}"
+        );
+        let glass = bare.replace(anchor, &format!(r#"{anchor},"finish":"glass""#));
+        let render = |json: &str| -> Vec<u8> {
+            let meta = ProjectMetadata::from_json(json).expect("reel with a word");
+            let (mut engine, _state) = make_cpu_engine(
+                meta,
+                vec![
+                    ("N1".into(), [0, 0, 255, 255], 32),
+                    ("N2".into(), [0, 255, 0, 255], 32),
+                ],
+            );
+            render_and_read(&mut engine, 1.0, 128)
+        };
+        let (plain, coated) = (render(&bare), render(&glass));
+        let differing = plain
+            .chunks_exact(4)
+            .zip(coated.chunks_exact(4))
+            .filter(|(a, b)| (0..3).any(|c| (a[c] as i32 - b[c] as i32).abs() > 3))
+            .count();
+        assert!(
+            differing > 20,
+            "glass over the screen changes its picture: {differing} pixels differ"
+        );
+        let alpha_moved = plain
+            .chunks_exact(4)
+            .zip(coated.chunks_exact(4))
+            .filter(|(a, b)| a[3] != b[3])
+            .count();
+        assert_eq!(alpha_moved, 0, "a coat over a screen changes no alpha");
+    }
+
+    /// A stage on a floor: the shadow and the mirror image spill past the
+    /// bodies, so the frame widens to hold them — and the bodies still
+    /// carry the pixels the placement asks for. Sized for the whole spill,
+    /// they came out at a third of the canvas's height and were scaled up
+    /// soft; sized for the bodies' box, the box is canvas-height at zoom
+    /// 1 and follows a placement taller than the canvas, as a model does.
+    #[test]
+    fn a_floored_stage_keeps_its_bodies_pixels() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        fn floored(placed: u32) -> ProjectMetadata {
+            let json = format!(
+                r#"{{
+                "id": "AAAAAAAA-0000-0000-0000-000000000005",
+                "name": "floored", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 3, "videoDuration": 3, "subtitles": [],
+                "compositionSettings": {{"canvasWidth": 96, "canvasHeight": 96,
+                                        "backgroundColorHex": "003300"}},
+                "layers": [
+                    {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                      "isEnabled": true, "startTime": 0, "keyframes": []}},
+                    {{"id": "STAGE", "name": "Bench", "sortIndex": 1, "kind": "stage",
+                      "floor": "glossy", "isEnabled": true, "startTime": 0, "duration": 3,
+                      "keyframes": [{{"id": "SK", "time": 0, "transitionDuration": 0,
+                        "placement": {{"height": {placed}, "anchor": "center"}},
+                        "camera": {{"yaw": -20, "pitch": 10, "distance": 4.2, "fov": 30}},
+                        "light": {{"yaw": 40, "pitch": 50, "intensity": 1}}}}],
+                      "members": [
+                        {{"id": "M1", "name": "phone", "sortIndex": 0, "kind": "model",
+                          "isEnabled": true, "startTime": 0, "duration": 3,
+                          "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC03",
+                          "keyframes": [{{"id": "MK", "time": 0, "transitionDuration": 0}}]}}
+                      ]}}
+                ],
+                "resources": [
+                    {{"id": "AAAAAAAA-0000-0000-0000-00000000CC03", "kind": "model",
+                      "filename": "", "displayName": "Phone", "addedAt": 0,
+                      "recipe": {{"device": {{"kind": "phone"}}}},
+                      "imageCuts": [], "disabledAudioTrackIndices": []}}
+                ]}}"#,
+                placed = placed,
+            );
+            ProjectMetadata::from_json(&json).expect("floored stage fixture")
+        }
+        // (frame width, frame height, the bodies' box height) of the
+        // stage's cached picture.
+        let drawn = |placed: u32| -> (u32, u32, u32) {
+            let (mut engine, _state) = make_cpu_engine(floored(placed), vec![]);
+            let _ = render_and_read(&mut engine, 1.0, 96);
+            let (_, entry) = engine
+                .id_of
+                .iter()
+                .find(|(_, (key, _, _))| key.starts_with("stage"))
+                .map(|(entry, key)| (key.clone(), *entry))
+                .expect("the stage's picture is cached");
+            let cached = &engine.cache[&entry];
+            let (_, _, _, bodies) = cached
+                .content_box
+                .expect("the floor's mirror and shadow spill past the phone");
+            (cached.frame.width, cached.frame.height, bodies)
+        };
+        let (fw, fh, body) = drawn(70);
+        assert!(
+            body >= 85,
+            "at zoom 1 the phone's box is the canvas's height: {body} px in a {fw}x{fh} frame"
+        );
+        assert!(
+            fh > body,
+            "the mirror below the phone is drawn too: {fh} tall for a {body} px body"
+        );
+        let (_, _, tall) = drawn(300);
+        assert!(
+            tall > 250,
+            "placed 300 px tall the phone carries that many: {tall} px"
+        );
+    }
+
+    /// A stage inside a nested composition draws: its members are the
+    /// composition's layers naming it, not the project's. The engine read
+    /// the project's layers for them and drew every nested stage empty —
+    /// a composition of the cube piece was a gradient and nothing else.
+    #[test]
+    fn a_stage_inside_a_composition_draws_its_members() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000004",
+            "name": "nested stage", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
+                                    "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE02",
+                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
+                                "placement": {"mode": "fill"}}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000CC03", "kind": "model",
+                 "filename": "", "displayName": "Phone", "addedAt": 0,
+                 "recipe": {"device": {"kind": "phone"}},
+                 "materials": {"Body": {"colorHex": "FF00FF", "metallic": 0, "roughness": 0.5}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000EE02", "kind": "composition",
+                 "filename": "", "displayName": "Inner", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 96, "pixelHeight": 96,
+                 "composition": {"canvasWidth": 96, "canvasHeight": 96,
+                   "backgroundColorHex": "003300", "layers": [
+                     {"id": "STAGE", "name": "Bench", "sortIndex": 0, "kind": "stage",
+                      "isEnabled": true, "startTime": 0, "duration": 4,
+                      "keyframes": [{"id": "SK", "time": 0, "transitionDuration": 0,
+                        "placement": {"height": 80, "anchor": "center"},
+                        "camera": {"yaw": -20, "pitch": 10, "distance": 4.2, "fov": 30},
+                        "light": {"yaw": 40, "pitch": 50, "intensity": 1}}],
+                      "members": [
+                        {"id": "M1", "name": "phone", "sortIndex": 0, "kind": "model",
+                         "isEnabled": true, "startTime": 0, "duration": 4,
+                         "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC03",
+                         "keyframes": [{"id": "MK", "time": 0, "transitionDuration": 0,
+                                        "camera": {"yaw": 0}}]}
+                      ]}
+                 ]},
+                 "imageCuts": [], "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("nested stage fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let px = render_and_read(&mut engine, 1.0, 96);
+        let magenta = px
+            .chunks(4)
+            .filter(|p| p[0] > 120 && p[2] > 120 && p[1] < 100)
+            .count();
+        assert!(
+            magenta > 20,
+            "the stage's phone is on the canvas: {magenta} magenta pixels"
+        );
+    }
+
+    /// A nested composition is laid out on ITS OWN canvas. The scene
+    /// builder took the project's settings for every level, so a
+    /// composition of another size had its placements resolved against
+    /// the project's canvas and drawn in its own frame — a phone-shaped
+    /// scene three times the project's height came out three times too
+    /// large, its centred body up near the top.
+    #[test]
+    fn a_nested_composition_is_laid_out_on_its_own_canvas() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let json = r#"{
+            "id": "AAAAAAAA-0000-0000-0000-000000000005",
+            "name": "tall nested", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
+                                    "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE03",
+                 "keyframes": [{"id": "K", "time": 0, "transitionDuration": 0,
+                                "placement": {"mode": "fit"}}]}
+            ],
+            "resources": [
+                {"id": "AAAAAAAA-0000-0000-0000-00000000CC04", "kind": "model",
+                 "filename": "", "displayName": "Phone", "addedAt": 0,
+                 "recipe": {"device": {"kind": "phone"}},
+                 "materials": {"Body": {"colorHex": "FF00FF", "metallic": 0, "roughness": 0.5}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []},
+                {"id": "AAAAAAAA-0000-0000-0000-00000000EE03", "kind": "composition",
+                 "filename": "", "displayName": "Tall", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 96, "pixelHeight": 288,
+                 "composition": {"canvasWidth": 96, "canvasHeight": 288,
+                   "backgroundColorHex": "003300", "layers": [
+                     {"id": "BODY", "name": "phone", "sortIndex": 0, "kind": "model",
+                      "isEnabled": true, "startTime": 0, "duration": 4,
+                      "resourceID": "AAAAAAAA-0000-0000-0000-00000000CC04",
+                      "keyframes": [{"id": "MK", "time": 0, "transitionDuration": 0,
+                        "placement": {"height": 60, "anchor": "center"},
+                        "camera": {"yaw": 0, "pitch": 0, "distance": 4.2, "fov": 30},
+                        "light": {"yaw": 40, "pitch": 50, "intensity": 1}}]}
+                 ]},
+                 "imageCuts": [], "disabledAudioTrackIndices": []}
+            ]}"#;
+        let meta = ProjectMetadata::from_json(json).expect("tall nested fixture");
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let px = render_and_read(&mut engine, 1.0, 96);
+        // The 96×288 composition fits the square as a 32×96 strip, and a
+        // body 60 tall on that canvas is 20 tall in the strip, centred.
+        let rows: Vec<usize> = px
+            .chunks(4)
+            .enumerate()
+            .filter(|(_, p)| p[0] > 120 && p[2] > 120 && p[1] < 100)
+            .map(|(i, _)| i / 96)
+            .collect();
+        assert!(!rows.is_empty(), "the body is on the canvas");
+        let (top, bottom) = (*rows.iter().min().unwrap(), *rows.iter().max().unwrap());
+        let height = bottom - top + 1;
+        let centre = (top + bottom) as f64 / 2.0;
+        assert!(
+            (14..=26).contains(&height),
+            "a body 60 tall on a 288 canvas is 20 tall once fitted, not {height} (rows {top}..={bottom})"
+        );
+        assert!(
+            (centre - 47.5).abs() <= 4.0,
+            "a centred body sits at the strip's middle, not row {centre}"
+        );
+    }
+
+    /// A project whose settings colour is green (plus whatever
+    /// `settings_extra` adds), a background layer keyed blue, and a
+    /// full-frame video layer showing a composition of the project's size
+    /// that holds one PLAIN background layer — no colour keyframe, no
+    /// resource — over the plate given.
+    fn plain_background_in_a_composition(settings_extra: &str, plate: &str) -> ProjectMetadata {
+        let json = format!(
+            r#"{{
+            "id": "AAAAAAAA-0000-0000-0000-000000000006",
+            "name": "nested plate", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {{"canvasWidth": 96, "canvasHeight": 96,
+                                    "backgroundColorHex": "00FF00"{settings_extra}}},
+            "layers": [
+                {{"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0,
+                 "keyframes": [{{"id": "BK", "time": 0, "transitionDuration": 0,
+                                "colorHex": "0000FF"}}]}},
+                {{"id": "SHOW", "name": "show", "sortIndex": 1, "kind": "video",
+                 "isEnabled": true, "startTime": 0, "duration": 4,
+                 "resourceID": "AAAAAAAA-0000-0000-0000-00000000EE04",
+                 "keyframes": [{{"id": "K", "time": 0, "transitionDuration": 0,
+                                "placement": {{"mode": "fill"}}}}]}}
+            ],
+            "resources": [
+                {{"id": "AAAAAAAA-0000-0000-0000-00000000EE04", "kind": "composition",
+                 "filename": "", "displayName": "Inner", "addedAt": 0, "duration": 4,
+                 "pixelWidth": 96, "pixelHeight": 96,
+                 "composition": {{"canvasWidth": 96, "canvasHeight": 96, {plate}
+                   "layers": [
+                     {{"id": "IBG", "name": "plain", "sortIndex": 0, "kind": "background",
+                      "isEnabled": true, "startTime": 0, "keyframes": []}}
+                 ]}},
+                 "imageCuts": [], "disabledAudioTrackIndices": []}}
+            ]}}"#
+        );
+        ProjectMetadata::from_json(&json).expect("nested plate fixture")
+    }
+
+    /// Render that fixture at 1 s: the centre pixel, and how many of the
+    /// 96×96 pixels are exactly `colour` (BGRA).
+    fn plate_census(meta: ProjectMetadata, colour: [u8; 4]) -> ([u8; 4], usize) {
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let px = render_and_read(&mut engine, 1.0, 96);
+        let count = px.chunks(4).filter(|p| p[..] == colour[..]).count();
+        (pixel_at(&px, 96, 48, 48), count)
+    }
+
+    /// A plain background layer inside a composition is the COMPOSITION's
+    /// plate, not the project's. The scene builder handed every level the
+    /// project's settings as the layer's fallback, so a composition plated
+    /// yellow with a keyframe-less background layer painted the project's
+    /// green — full-frame on a video layer and on a model's slot alike —
+    /// while the same composition without the layer painted yellow. The
+    /// project's gradient leaked the same way.
+    #[test]
+    fn a_plain_background_layer_in_a_composition_paints_the_compositions_plate() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let gradient = r#", "backgroundGradient": {"kind": "linear", "start": [0, 0],
+            "end": [1, 1], "repeat": "clamp", "stops": [{"colorHex": "00FF00", "at": 0},
+            {"colorHex": "0000FF", "at": 1}]}"#;
+        let meta =
+            plain_background_in_a_composition(gradient, r#""backgroundColorHex": "FFFF00","#);
+        let yellow = [0, 255, 255, 255];
+        let (centre, count) = plate_census(meta, yellow);
+        assert_eq!(centre, yellow, "the composition's own plate, BGRA");
+        assert!(
+            count > 8000,
+            "yellow corner to corner, not the project's colour or gradient: {count}"
+        );
+    }
+
+    /// The same layer in a composition with NO plate paints nothing — a
+    /// title comp over footage shows the footage through a plain
+    /// background layer as it does through none — rather than the
+    /// project's settings colour.
+    #[test]
+    fn a_plain_background_layer_in_a_plateless_composition_paints_nothing() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let meta = plain_background_in_a_composition("", "");
+        let blue = [255, 0, 0, 255];
+        let (centre, count) = plate_census(meta, blue);
+        assert_eq!(
+            centre, blue,
+            "the project's keyed background shows through, BGRA"
+        );
+        assert!(
+            count > 8000,
+            "through the whole frame, not the settings green: {count}"
+        );
+    }
+
+    /// A standing screen keeps its own proportions: the slot's aspect is
+    /// width over height of the surface its uvs span, whatever plane the
+    /// mesh lies in. The two-longest-extents rule read a phone's long side
+    /// as its width, and every portrait screen fitted its picture squeezed
+    /// — the wizard's iPhone and iPad reels included.
+    #[test]
+    fn a_standing_screen_keeps_its_own_proportions() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let (mut engine, _state) = make_cpu_engine(model_fixture(0.0), vec![]);
+        let _ = render_and_read(&mut engine, 1.0, 96);
+        let phone = engine.models.values().next().expect("the phone is loaded");
+        let screen = phone
+            .model
+            .materials
+            .iter()
+            .position(|m| m.name == "Screen")
+            .expect("a phone has a Screen");
+        let aspect = phone
+            .gpu
+            .slot_aspect(screen)
+            .expect("the slot has an aspect");
+        assert!(
+            aspect < 0.6,
+            "a phone's screen is taller than it is wide: {aspect}"
+        );
+
+        let (mut engine, _state) = make_cpu_engine(reel_fixture(), vec![]);
+        let _ = render_and_read(&mut engine, 1.0, 96);
+        let laptop = engine
+            .models
+            .values()
+            .find(|m| m.model.materials.iter().any(|m| m.name == "Deck"))
+            .expect("the laptop is loaded");
+        let screen = laptop
+            .model
+            .materials
+            .iter()
+            .position(|m| m.name == "Screen")
+            .unwrap();
+        let aspect = laptop.gpu.slot_aspect(screen).unwrap();
+        assert!(
+            (1.3..1.8).contains(&aspect),
+            "a laptop's screen is wider than tall: {aspect}"
+        );
+    }
+
+    /// A model placed taller than the canvas is rendered at that size: the
+    /// square it is drawn on follows the placed height rather than the
+    /// canvas's, so a zoom into a device's screen stays sharp to the cut
+    /// instead of scaling a canvas-height picture up.
+    #[test]
+    fn a_model_placed_taller_than_the_canvas_is_drawn_at_that_size() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let mut meta = model_fixture(0.0);
+        if let Some(layers) = meta.layers.as_mut() {
+            layers[1].keyframes[0].placement = Some(promo_model::Placement {
+                height: Some(300.0),
+                width: None,
+                mode: None,
+                anchor: None,
+                offset: None,
+            });
+        }
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let _ = render_and_read(&mut engine, 1.0, 96);
+        let (_, entry) = engine
+            .id_of
+            .iter()
+            .find(|(_, (key, _, _))| key.starts_with("model"))
+            .map(|(entry, key)| (key.clone(), *entry))
+            .expect("the body's picture is cached");
+        let frame = &engine.cache[&entry].frame;
+        // The phone stands ~0.6 of its sphere; placed 300 px tall on a 96
+        // canvas its picture must carry the pixels the placement asks for,
+        // not the canvas's 96 scaled up three times.
+        assert!(
+            frame.height > 200,
+            "drawn at the placed size: {} px",
+            frame.height
+        );
+    }
+
+    /// A close camera keeps the whole body. The square the body is drawn
+    /// on used to hold the bounding sphere at the default distance only,
+    /// so nearer than that the body was cut at the square's edge while the
+    /// canvas round it stayed empty. The square grows to hold the sphere
+    /// at the camera in force, and the box cut from it is the body's own.
+    #[test]
+    fn a_close_camera_keeps_the_whole_body() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let mut meta = model_fixture(0.0);
+        if let Some(layers) = meta.layers.as_mut() {
+            let key = &mut layers[1].keyframes[0];
+            let mut camera = key.camera.clone().unwrap();
+            camera.distance = Some(2.0);
+            camera.pitch = Some(0.0);
+            key.camera = Some(camera);
+        }
+        let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+        let _ = render_and_read(&mut engine, 1.0, 96);
+        let (_, entry) = engine
+            .id_of
+            .iter()
+            .find(|(_, (key, _, _))| key.starts_with("model"))
+            .map(|(entry, key)| (key.clone(), *entry))
+            .expect("the body's picture is cached");
+        let frame = &engine.cache[&entry].frame;
+        // The square a 96-canvas asks for is 96 px; at distance 2 the
+        // phone stands taller than that. Cut at the old square it came
+        // back 96 tall; whole, it is taller — and not the grown square
+        // itself, which would mean it was cut at the new edge instead.
+        assert!(
+            frame.height > 96,
+            "the body is drawn whole: {} px tall",
+            frame.height
+        );
+        assert!(
+            frame.width < frame.height,
+            "a phone is taller than it is wide"
+        );
+        let (_, grown) = frame_that_holds_the_sphere(
+            ModelView {
+                distance: 2.0,
+                fov: 30.0,
+                ..ModelView::default()
+            },
+            96,
+        );
+        assert!(
+            grown > 96 && frame.height < grown,
+            "{} of {grown}",
+            frame.height
+        );
+        // And a body already at the default distance is left alone.
+        let (same, side) = frame_that_holds_the_sphere(ModelView::default(), 96);
+        assert_eq!(side, 96);
+        assert_eq!(same.fov, ModelView::default().fov);
+    }
+
+    /// A camera change on a model layer's ONLY keyframe reaches the
+    /// canvas. The model's picture is cached under a key that starts with
+    /// "model", and `evict_layer` matched cached ids by the layer id as a
+    /// PREFIX — so replacing the project left the old render in the cache,
+    /// and the app's canvas kept showing it while the inspector's numbers
+    /// moved. Placement edits repainted (the cached picture is placed at
+    /// composite time), which is what made the stale camera look like a
+    /// dead button.
+    #[test]
+    fn a_camera_edit_on_a_model_layer_repaints() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let (mut engine, _state) = make_cpu_engine(model_fixture(-35.0), vec![]);
+        let before = render_and_read(&mut engine, 1.0, 96);
+        assert!(
+            before.chunks(4).any(|p| p != [0, 51, 0, 255]),
+            "the body is on the canvas to begin with"
+        );
+        engine.set_project(model_fixture(-145.0));
+        let after = render_and_read(&mut engine, 1.0, 96);
+        assert_ne!(before, after, "the turned body is a different picture");
+    }
+
     /// The same assertions as `tests::renders_background_and_video_layer`,
     /// through the portable path. If these two ever disagree, one of the
     /// import arms is wrong.
     #[test]
     fn cpu_pixels_render_the_same_composition() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let meta = tests_support::fixture_meta(64.0);
@@ -8266,8 +8284,7 @@ mod portable_tests {
     /// working alone would be a broken feature.
     #[test]
     fn a_sprite_animates_while_the_layer_moves() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         // A 4x1 sheet of 16px cells: red, green, blue, white. At 1fps the
@@ -8341,8 +8358,7 @@ mod portable_tests {
     /// the wipe.
     #[test]
     fn a_swap_with_a_transition_shows_both_resources_at_once() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let json = r#"{
@@ -8419,8 +8435,7 @@ mod portable_tests {
 
     #[test]
     fn a_keyframe_swaps_the_resource_and_the_cache_notices() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let json = r#"{
@@ -8499,8 +8514,7 @@ mod portable_tests {
     /// colour: x=0 red, x=0.25 exactly green, x=0.5 blue.
     #[test]
     fn a_viewport_windows_the_source_and_ramps() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let json = r#"{
@@ -8571,8 +8585,7 @@ mod portable_tests {
     /// deliberately broken to an assignment, this fails drawing blue.)
     #[test]
     fn a_viewport_windows_the_sprite_cell_not_the_sheet() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let json = r#"{
@@ -8628,8 +8641,7 @@ mod portable_tests {
     /// precision rectangle at 540p proxy blur blown up 2x.
     #[test]
     fn viewport_magnification_escalates_the_tier() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let json = r#"{
@@ -8686,8 +8698,7 @@ mod portable_tests {
     /// deep in the scene build where a unit test on the model cannot see.
     #[test]
     fn palette_names_resolve_to_colours_on_screen() {
-        let Some(_) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(_) = promo_gpu::gpu_for_test() else {
             return;
         };
         let json = r#"{
@@ -8725,8 +8736,7 @@ mod portable_tests {
     /// A padded stride is what a real decoder hands over; the import repacks.
     #[test]
     fn padded_rows_are_repacked() {
-        let Some(ctx) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(ctx) = promo_gpu::gpu_for_test() else {
             return;
         };
         // 2x2 image, rows padded to 12 bytes: [BGRA BGRA | 4 bytes junk]
@@ -8750,8 +8760,7 @@ mod portable_tests {
     /// yet must say so rather than silently rendering nothing.
     #[test]
     fn unimplemented_surface_kinds_are_reported() {
-        let Some(ctx) = GpuContext::shared() else {
-            eprintln!("no GPU adapter; skipping");
+        let Some(ctx) = promo_gpu::gpu_for_test() else {
             return;
         };
         assert!(Compositor::import(ctx, &GpuSurface::DmaBuf { fd: 3 }).is_err());

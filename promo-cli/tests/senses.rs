@@ -4,7 +4,7 @@
 use std::process::Command;
 
 fn gpu_available() -> bool {
-    promo_gpu::GpuContext::shared().is_some()
+    promo_gpu::gpu_for_test().is_some()
 }
 
 /// `promo model` names the slab's slots and the turning cube's clip;
@@ -13,7 +13,6 @@ fn gpu_available() -> bool {
 #[test]
 fn the_model_senses_probe_and_turn() {
     if !gpu_available() {
-        eprintln!("no GPU adapter; skipping");
         return;
     }
     let dir = std::env::temp_dir().join(format!("promo-senses-{}", std::process::id()));

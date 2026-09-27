@@ -50,7 +50,13 @@ jobs:
         run: cargo fmt --all --check
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # lavapipe is installed above, so a pixel test that finds no GPU
+      # adapter here is broken, not skipped: PROMO_REQUIRE_GPU turns the
+      # early return into a failure (it once let ~80 tests pass having drawn
+      # nothing).
       - name: test
+        env:
+          PROMO_REQUIRE_GPU: "1"
         run: |
           set -o pipefail
           cargo test --workspace --no-fail-fast 2>&1 | tee /tmp/test.log

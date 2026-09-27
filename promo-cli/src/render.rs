@@ -1382,8 +1382,7 @@ mod tests {
             )
         };
         std::fs::write(dir.join("metadata.json"), json("rotateRight")).unwrap();
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let project = crate::project::Project::open(&dir).expect("project");
@@ -1447,8 +1446,7 @@ mod tests {
               "keyframes":[{"id":"K","time":0.0,"transitionDuration":0.0,
                 "placement":{"mode":"fill","anchor":"center"}}]}]}"#;
         std::fs::write(dir.join("metadata.json"), json).unwrap();
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let project = crate::project::Project::open(&dir).expect("project");
@@ -1505,8 +1503,7 @@ mod tests {
               "keyframes":[{"id":"K","time":0.0,"transitionDuration":0.0,
                 "placement":{"mode":"fit","anchor":"center"}}]}]}"#;
         std::fs::write(dir.join("metadata.json"), json).unwrap();
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let project = crate::project::Project::open(&dir).expect("project");
@@ -1599,8 +1596,7 @@ mod tests {
     /// unkeyed twin shows the plate.
     #[test]
     fn a_chroma_key_cuts_the_plate_and_keeps_the_subject() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-key-{}", std::process::id()));
@@ -1673,8 +1669,7 @@ mod tests {
     /// is untouched.
     #[test]
     fn image_effects_render_through_the_project() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-fx-{}", std::process::id()));
@@ -1794,8 +1789,7 @@ mod tests {
     /// its depth plus half its side) stands in front of both.
     #[test]
     fn a_stage_orders_its_members_by_depth() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-stage-{}", std::process::id()));
@@ -1937,8 +1931,7 @@ mod tests {
     /// the ground.
     #[test]
     fn a_stage_places_members_side_by_side() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-across-{}", std::process::id()));
@@ -2056,8 +2049,7 @@ mod tests {
     /// pixels.
     #[test]
     fn a_model_placement_height_is_the_models_height() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-modelbox-{}", std::process::id()));
@@ -2094,8 +2086,7 @@ mod tests {
     /// changes between two moments — the recording plays on the screen.
     #[test]
     fn a_video_bound_to_a_slot_plays_on_it() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         if Command::new("ffmpeg").arg("-version").output().is_err() {
@@ -2182,8 +2173,7 @@ mod tests {
     /// on layer time, so the layer at 0.5 s shows the same two faces.
     #[test]
     fn a_clip_keyframe_poses_the_model() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-clip-{}", std::process::id()));
@@ -2236,8 +2226,7 @@ mod tests {
     /// project with the binding dropped shows the slab's own dark screen.
     #[test]
     fn a_model_slot_bound_to_an_image_shows_the_picture() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-slot-{}", std::process::id()));
@@ -2337,8 +2326,7 @@ mod tests {
     /// seek to 0 starts it over.
     #[test]
     fn a_layer_pauses_and_seeks_the_film_it_plays() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-transport-{}", std::process::id()));
@@ -2386,8 +2374,7 @@ mod tests {
     /// clock already is.
     #[test]
     fn a_video_layer_swaps_to_a_composition_through_a_wipe() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-takeover-{}", std::process::id()));
@@ -2443,8 +2430,7 @@ mod tests {
     /// binding paints it the palette's red.
     #[test]
     fn a_model_layer_renders_lit_and_takes_the_palette() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-model-{}", std::process::id()));
@@ -2520,8 +2506,7 @@ mod tests {
     /// units are on their way — and land on the same picture a wipe does.
     #[test]
     fn kinetic_reveals_arrive_mid_walk_and_land() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-kinetic-{}", std::process::id()));
@@ -2575,8 +2560,7 @@ mod tests {
     /// 11/255 darker than the app's.
     #[test]
     fn bt709_video_is_converted_like_the_apps_convert_it() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-709-{}", std::process::id()));
@@ -2638,8 +2622,7 @@ mod tests {
     #[test]
     fn a_rotated_p3_still_renders_upright_and_in_its_colour() {
         use image::ImageEncoder;
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-still-render-{}", std::process::id()));
@@ -2710,8 +2693,7 @@ mod tests {
     /// quarter, ends in the bottom-right one, and is halfway at mid-ramp.
     #[test]
     fn a_caption_travels_between_keyframed_placements() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-capmove-{}", std::process::id()));
@@ -2774,8 +2756,7 @@ mod tests {
     /// its flat twin, and its near edge stays the taller one.
     #[test]
     fn a_caption_with_tilt_keyframes_leans() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-tilt-{}", std::process::id()));
@@ -2848,8 +2829,7 @@ mod tests {
     /// have — and the face stays white.
     #[test]
     fn extruded_type_has_a_side() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-depth-{}", std::process::id()));
@@ -2905,8 +2885,7 @@ mod tests {
     /// the pointer settled, and a click draws its ring for half a second.
     #[test]
     fn a_layer_follows_the_pointer_and_rings_its_clicks() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-follow-{}", std::process::id()));
@@ -2978,8 +2957,7 @@ mod tests {
     /// and the dip is still dark where the fade already shows.
     #[test]
     fn the_newer_transitions_read_mid_way() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-trans-{}", std::process::id()));
@@ -3080,8 +3058,7 @@ mod tests {
     /// is the twin.
     #[test]
     fn a_lut_grades_the_layer_through_the_cube() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-lut-{}", std::process::id()));
@@ -3170,8 +3147,7 @@ mod tests {
     /// subject keeps its colour and coverage.
     #[test]
     fn an_alpha_export_keeps_transparency_and_the_subject() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         if std::process::Command::new("ffmpeg")
@@ -3253,8 +3229,7 @@ mod tests {
     /// CLI's own renderer, not a twin of it.
     #[test]
     fn a_nested_composition_renders_as_its_layers_flattened() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-nest-oracle-{}", std::process::id()));
@@ -3368,8 +3343,7 @@ mod tests {
             eprintln!("ffmpeg unavailable; skipping");
             return;
         };
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let mut renderer = Renderer::new(&project, 160, 120).expect("renderer");
@@ -3396,8 +3370,7 @@ mod tests {
     /// bare colour string does.
     #[test]
     fn a_finish_on_a_binding_changes_the_shading() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-finish-{}", std::process::id()));
@@ -3528,8 +3501,7 @@ mod tests {
     /// while the cube itself still reads as the cube.
     #[test]
     fn a_floor_shows_under_a_stage() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-floor-{}", std::process::id()));
@@ -3663,8 +3635,7 @@ mod tests {
     /// swaps the colour, and the studio preset reads differently again.
     #[test]
     fn a_picture_of_the_world_lights_a_stage() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-pano-{}", std::process::id()));
@@ -3737,8 +3708,7 @@ mod tests {
     /// `gloss` sphere hides it.
     #[test]
     fn a_glass_body_shows_the_body_behind_it() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-glass-{}", std::process::id()));
@@ -3802,8 +3772,7 @@ mod tests {
     /// instant renders the same twice.
     #[test]
     fn a_route_bends_a_member_and_flies_the_camera() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-route-{}", std::process::id()));
@@ -3899,8 +3868,7 @@ mod tests {
     /// body is, and the same instant renders the same twice.
     #[test]
     fn a_morph_flies_out_and_gathers_on_the_word() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-morph-{}", std::process::id()));
@@ -3976,8 +3944,7 @@ mod tests {
     /// screen, and darker under the grazing one once worn.
     #[test]
     fn a_worn_picture_takes_the_light() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-worn-{}", std::process::id()));
@@ -4044,8 +4011,7 @@ mod tests {
     /// as a stage layer holding both — pixel for pixel.
     #[test]
     fn a_stage_layer_renders_as_its_flat_form() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-stagelayer-{}", std::process::id()));
@@ -4154,8 +4120,7 @@ mod tests {
     /// reflection.
     #[test]
     fn a_scene_environment_lights_a_metal() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-env-{}", std::process::id()));
@@ -4227,8 +4192,7 @@ mod tests {
     /// renders the same bytes twice, and a later instant differs.
     #[test]
     fn a_particle_burst_draws_and_is_deterministic() {
-        if GpuContext::shared().is_none() {
-            eprintln!("no GPU adapter; skipping");
+        if promo_gpu::gpu_for_test().is_none() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("promo-particles-{}", std::process::id()));

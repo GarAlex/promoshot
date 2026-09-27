@@ -3716,8 +3716,7 @@ mod tests {
 
     #[test]
     fn a_finish_word_shades_its_own_way() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let plain = SurfaceFinish::default();
@@ -3785,8 +3784,7 @@ mod tests {
     /// the key lifts.
     #[test]
     fn a_soft_source_widens_the_keys_glance() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -3874,8 +3872,7 @@ mod tests {
     /// display — the same pixels away from the highlight.
     #[test]
     fn a_coat_on_a_screen_adds_the_worlds_highlight() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4015,8 +4012,7 @@ mod tests {
     /// The cube itself still reads the same in all three.
     #[test]
     fn a_floor_catches_the_shadow_and_the_mirror() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4149,8 +4145,7 @@ mod tests {
     /// body mirrors — and turning the world half round swaps the colour.
     #[test]
     fn a_picture_of_the_world_is_mirrored() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4245,8 +4240,7 @@ mod tests {
     /// refraction changes.
     #[test]
     fn glass_on_a_stage_refracts_the_body_behind_it() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4360,8 +4354,7 @@ mod tests {
     /// none at 0, about half at 0.5, all at 1.
     #[test]
     fn a_dissolve_takes_the_surface_away_in_cells() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4420,8 +4413,7 @@ mod tests {
     /// black-and-white it is when bound raw.
     #[test]
     fn a_bound_picture_minifies_through_its_mips() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4509,8 +4501,7 @@ mod tests {
     /// about that.
     #[test]
     fn a_worn_picture_takes_the_light_and_a_screen_does_not() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let ctx = GpuContext::new().expect("gpu");
@@ -4595,8 +4586,7 @@ mod tests {
     /// directions, so a wrong-signed tangent frame cannot pass.
     #[test]
     fn a_normal_map_tilts_the_shading() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let (w, h) = (64u32, 64u32);
@@ -4672,8 +4662,7 @@ mod tests {
     /// a metal, and the two halves read differently.
     #[test]
     fn a_metallic_roughness_map_varies_the_finish() {
-        if GpuContext::new().is_err() {
-            eprintln!("no GPU adapter; skipping");
+        if crate::gpu_for_test().is_none() {
             return;
         }
         let (w, h) = (64u32, 64u32);

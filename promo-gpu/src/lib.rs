@@ -33,6 +33,23 @@ pub enum GpuError {
     Readback(String),
 }
 
+/// A test's GPU, or `None` to skip it — except under `PROMO_REQUIRE_GPU=1`,
+/// where a missing adapter FAILS the test. CI sets it: the runners have
+/// lavapipe, and a pixel test that returns early without an adapter passes
+/// having drawn nothing — about eighty did (review 2026-09-27, P2-27).
+pub fn gpu_for_test() -> Option<&'static GpuContext> {
+    match GpuContext::shared() {
+        Some(ctx) => Some(ctx),
+        None if std::env::var("PROMO_REQUIRE_GPU").as_deref() == Ok("1") => {
+            panic!("PROMO_REQUIRE_GPU=1, and there is no GPU adapter")
+        }
+        None => {
+            eprintln!("no GPU adapter; skipping");
+            None
+        }
+    }
+}
+
 /// The core's GPU context: one device/queue shared by compositor and caches.
 pub struct GpuContext {
     pub instance: wgpu::Instance,
