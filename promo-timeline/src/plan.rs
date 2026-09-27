@@ -48,13 +48,36 @@ pub fn frame_count(start: f64, end: f64, fps: f64) -> usize {
     (((end - start) * fps).round() as usize).max(1)
 }
 
-/// What an export writes: the range, the rate, the count.
+/// What an export writes: the range, the rate, the count, the size.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExportPlan {
     pub start: f64,
     pub end: f64,
     pub fps: f64,
     pub count: usize,
+    /// The frame's size in pixels: [`export_size`].
+    pub width: u32,
+    pub height: u32,
+}
+
+/// The size a video export writes: the project's `videoExportWidth` ×
+/// `videoExportHeight` when both are stated (16 or more), the canvas
+/// otherwise — the composition fitted inside with black bars. The apps
+/// always honoured it; headless renders wrote the canvas size whatever
+/// the project said (review 2026-09-27, P2-31).
+pub fn export_size(meta: &ProjectMetadata) -> (u32, u32) {
+    let settings = &meta.composition_settings;
+    let stated = |v: Option<f64>| v.filter(|v| v.is_finite() && *v >= 16.0);
+    match (
+        stated(settings.video_export_width),
+        stated(settings.video_export_height),
+    ) {
+        (Some(w), Some(h)) => (w.round() as u32, h.round() as u32),
+        _ => (
+            settings.canvas_width.max(1.0).round() as u32,
+            settings.canvas_height.max(1.0).round() as u32,
+        ),
+    }
 }
 
 impl ExportPlan {
@@ -79,11 +102,14 @@ pub fn export_plan(
         .unwrap_or_else(|| composition_duration(meta))
         .max(start);
     let fps = export_fps(meta.composition_settings.fps, fps_override);
+    let (width, height) = export_size(meta);
     ExportPlan {
         start,
         end,
         fps,
         count: frame_count(start, end, fps),
+        width,
+        height,
     }
 }
 
@@ -111,6 +137,27 @@ mod tests {
             layers.join(",")
         );
         ProjectMetadata::from_json(&raw).expect("decode")
+    }
+
+    /// The project's export size when both sides are stated, the canvas
+    /// otherwise — the apps' rule (`videoExportSize`).
+    #[test]
+    fn the_size_is_the_projects_export_size_else_the_canvas() {
+        let mut m = meta(None, &[]);
+        assert_eq!(export_size(&m), (320, 180));
+        m.composition_settings.video_export_width = Some(1080.0);
+        assert_eq!(export_size(&m), (320, 180), "one side alone is not a size");
+        m.composition_settings.video_export_height = Some(1920.0);
+        assert_eq!(export_size(&m), (1080, 1920));
+        assert_eq!(
+            (
+                export_plan(&m, None, None, None).width,
+                export_plan(&m, None, None, None).height
+            ),
+            (1080, 1920)
+        );
+        m.composition_settings.video_export_height = Some(8.0);
+        assert_eq!(export_size(&m), (320, 180), "under 16 is not a size");
     }
 
     #[test]
@@ -155,7 +202,9 @@ mod tests {
                 start: 0.0,
                 end: 6.5,
                 fps: 30.0,
-                count: 195
+                count: 195,
+                width: 320,
+                height: 180,
             }
         );
         assert!((plan.frame_time(30) - 1.0).abs() < 1e-12);
@@ -166,7 +215,9 @@ mod tests {
                 start: 1.0,
                 end: 2.5,
                 fps: 24.0,
-                count: 36
+                count: 36,
+                width: 320,
+                height: 180,
             }
         );
         let inverted = export_plan(&m, None, Some(5.0), Some(1.0));

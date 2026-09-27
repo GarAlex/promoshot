@@ -1248,7 +1248,11 @@ fn blit(sheet: &mut [u8], sheet_w: u32, cell: &[u8], cw: u32, ch: u32, x: u32, y
 /// nothing from its licence.
 fn video(project: &Project, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
-    let (w, h) = opts.size(project);
+    // The project's export size unless --size says otherwise — what the
+    // apps export at (a 16:9 canvas into a 1080x1920 file, with bars).
+    let (w, h) = opts
+        .size
+        .unwrap_or_else(|| promo_timeline::export_size(&project.meta));
     let (start, end, fps) = range(project, opts);
     let count = frame_count(start, end, fps);
 

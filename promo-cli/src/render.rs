@@ -836,7 +836,7 @@ pub fn export_video(
     if let Some((bgra, overlay_width, overlay_height)) = overlay {
         renderer.set_overlay(Some((bgra, *overlay_width, *overlay_height)))?;
     }
-    let audio = build_soundtrack(project, end - start)?;
+    let audio = build_soundtrack_between(project, start, end)?;
     let chapters: Vec<(f64, String)> = project
         .meta
         .markers
@@ -931,6 +931,20 @@ pub fn build_soundtrack(
     project: &Project,
     duration: f64,
 ) -> Result<Option<promo_media::AudioBuffer>, String> {
+    build_soundtrack_between(project, 0.0, duration)
+}
+
+/// [`build_soundtrack`] for the timeline's `[start, end)` — the window an
+/// export writes. `promo video --from 5` used to mix sound from zero while
+/// its frames began at 5, so every word landed five seconds early
+/// (review 2026-09-27, P2-31).
+pub fn build_soundtrack_between(
+    project: &Project,
+    start: f64,
+    end: f64,
+) -> Result<Option<promo_media::AudioBuffer>, String> {
+    let start = start.max(0.0);
+    let duration = end;
     use promo_engine::{mix_chunk, MixInput};
     use promo_media::TrackSelection;
     use promo_timeline::{
@@ -941,7 +955,7 @@ pub fn build_soundtrack(
     const SAMPLE_RATE: u32 = 48_000;
     const CHANNELS: u16 = 2;
 
-    if duration <= 0.0 {
+    if duration <= 0.0 || end <= start {
         return Ok(None);
     }
     let registry = Registry::with_defaults();
@@ -1092,7 +1106,7 @@ pub fn build_soundtrack(
         return Ok(None);
     }
 
-    let frames = (duration * SAMPLE_RATE as f64).ceil() as usize;
+    let frames = ((end - start) * SAMPLE_RATE as f64).ceil() as usize;
     let mut output = vec![0.0f32; frames * CHANNELS as usize];
     let mix_inputs: Vec<MixInput> = placed
         .iter()
@@ -1106,7 +1120,7 @@ pub fn build_soundtrack(
         &mut output,
         CHANNELS as usize,
         SAMPLE_RATE as f64,
-        0.0,
+        start,
         &mix_inputs,
     );
 
@@ -1149,6 +1163,54 @@ mod tests {
         let b = ((to * audio.sample_rate as f64) as usize * frame).min(audio.samples.len());
         let slice = &audio.samples[a..b];
         (slice.iter().map(|s| s * s).sum::<f32>() / slice.len().max(1) as f32).sqrt()
+    }
+
+    /// An export's sound is the window it writes (review 2026-09-27,
+    /// P2-31): a voice starting at 1 s is heard from the first sample of
+    /// an export that starts at 1 s. `promo video --from 1` used to mix
+    /// from zero, so the file opened on a second of silence and every word
+    /// landed a second early.
+    #[test]
+    fn a_window_starting_late_hears_what_plays_there() {
+        let dir = std::env::temp_dir().join(format!("promo-window-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        if !tone(&dir.join("Resources/voice.wav"), 440, 1.0) {
+            eprintln!("no ffmpeg; skipping");
+            return;
+        }
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"window","createdAt":0,"state":"recorded","minReaderVersion":18,
+                "trimStart":0,"trimEnd":3,"videoDuration":3,"subtitles":[],
+                "compositionSettings":{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"},
+                "resources":[{"id":"A","kind":"audio","filename":"voice.wav","displayName":"v","addedAt":0,
+                  "duration":1,"imageCuts":[],"disabledAudioTrackIndices":[]}],
+                "layers":[{"id":"L","name":"voice","sortIndex":0,"kind":"audio","isEnabled":true,
+                  "startTime":1,"duration":1,"resourceID":"A","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let late = build_soundtrack_between(&project, 1.0, 2.0)
+            .expect("mixes")
+            .expect("has sound");
+        assert!(
+            (late.duration_s() - 1.0).abs() < 0.01,
+            "{}",
+            late.duration_s()
+        );
+        // ffmpeg's sine plays at one-eighth amplitude: an RMS near 0.088.
+        assert!(
+            rms(&late, 0.05, 0.5) > 0.05,
+            "the voice from the window's start: {}",
+            rms(&late, 0.05, 0.5)
+        );
+        assert!(
+            build_soundtrack_between(&project, 0.0, 1.0)
+                .expect("mixes")
+                .is_none(),
+            "nothing sounds before 1 s, so that window has no track"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The headless soundtrack is the apps' mix: keyframed volume through
