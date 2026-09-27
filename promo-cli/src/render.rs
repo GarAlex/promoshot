@@ -1779,7 +1779,7 @@ mod tests {
         // EVERY platform — the column happened to land in the band on the
         // Mac and beside it with DejaVu Sans on Linux.
         let caption = r#",{"id":"L4","name":"words","sortIndex":3,"kind":"caption","isEnabled":true,"stage":"s",
-            "startTime":0,"duration":2,"captionText":"IIIIII",
+            "startTime":0,"duration":2,"captionText":"III",
             "captionStyle":{"alignment":"center","subtitleFontSize":100,"subtitleColorHex":"FFFFFF","subtitleBackgroundOpacity":0,"leftMargin":10,"rightMargin":10},
             "keyframes":[{"id":"K4","time":0,"depth":3.0,"transitionDuration":0}]}"#;
         std::fs::write(dir.join("metadata.json"), doc(1.0, -1.0, caption)).unwrap();
