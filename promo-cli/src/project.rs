@@ -122,6 +122,15 @@ impl Project {
         self.resolved.iter().map(|r| r.resource.clone()).collect()
     }
 
+    /// How many resources come from files in `Resources/` that nothing
+    /// declared — usable, adopted by their derived ids.
+    pub fn undeclared_resources(&self) -> usize {
+        self.resolved
+            .iter()
+            .filter(|r| r.origin == promo_model::ResourceOrigin::Derived)
+            .count()
+    }
+
     /// True when this resource is declared but its file is gone.
     pub fn is_missing(&self, id: &str) -> bool {
         self.resolved
@@ -189,8 +198,15 @@ impl Project {
         promo_timeline::composition_duration(&self.meta)
     }
 
-    /// Is this layer's media present and openable? `None` = fine.
-    fn media_problem(&self, layer: &promo_model::ProjectLayer) -> Option<Unsupported> {
+    /// Is this layer's media present and openable? `None` = fine. With
+    /// `decoders` off only presence is asked: a host that decodes with its
+    /// own stack (the apps' AVFoundation) is not refused for lacking
+    /// ffmpeg.
+    fn media_problem(
+        &self,
+        layer: &promo_model::ProjectLayer,
+        decoders: bool,
+    ) -> Option<Unsupported> {
         let resource = layer
             .resource_id
             .as_ref()
@@ -207,6 +223,9 @@ impl Project {
         // Actually open a decoder rather than just checking the file exists,
         // so `inspect` can say "ffmpeg not found" or "no video stream"
         // instead of letting the render discover it later.
+        if !decoders {
+            return None;
+        }
         match Registry::with_defaults().open_decoder(&path) {
             Ok(_) => None,
             Err(e) => Some(Unsupported::Undecodable(e.to_string())),
@@ -215,6 +234,16 @@ impl Project {
 
     /// Per-layer verdict: `None` = renderable.
     pub fn unsupported(&self, layer: &promo_model::ProjectLayer) -> Option<Unsupported> {
+        self.unsupported_with(layer, true)
+    }
+
+    /// `unsupported`, asking whether this host's decoders open the file
+    /// (`decoders`) or only whether it is there.
+    pub fn unsupported_with(
+        &self,
+        layer: &promo_model::ProjectLayer,
+        decoders: bool,
+    ) -> Option<Unsupported> {
         // A layer pointing at media the project no longer has renders as
         // nothing, whatever its kind — say so rather than counting it
         // renderable. (Drawing layers were reported renderable for weeks
@@ -298,7 +327,7 @@ impl Project {
             {
                 None
             }
-            ProjectLayerKind::Video => self.media_problem(layer),
+            ProjectLayerKind::Video => self.media_problem(layer, decoders),
             ProjectLayerKind::Image => {
                 let resource = layer.resource_id.as_ref().and_then(|id| self.resource(id));
                 match resource {

@@ -198,9 +198,11 @@ pub fn tools(host: Host) -> Vec<Value> {
         }),
         json!({
             "name": "promo_inspect",
-            "description": "What a project contains — canvas, duration, layers by kind, \
-                resources — and any layer that cannot render, with the reason. Confirm a \
-                composition matches what you meant before rendering it.",
+            "description": "What a project contains — canvas, duration, layers by kind \
+                with their ids, resources (a file found in Resources/ counted as \
+                undeclared) — then any layer whose media is missing or that cannot render, \
+                the resources nothing uses, and `@name` colours no palette defines. Confirm \
+                a composition matches what you meant before rendering it.",
             "inputSchema": { "type": "object",
                 "properties": { "project": project },
                 "required": ["project"] }
