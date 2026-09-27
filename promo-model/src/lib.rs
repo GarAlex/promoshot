@@ -7,6 +7,7 @@ pub mod geometry;
 pub mod inventory;
 pub mod nesting;
 pub mod project;
+pub mod unread;
 
 pub use geometry::{Point, Rect, Size};
 pub use inventory::{

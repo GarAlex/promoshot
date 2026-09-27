@@ -860,6 +860,21 @@ fn command_hint(kind: &str) -> String {
     }
 }
 
+/// Editor commands from their JSON, each refused with what that command
+/// takes (see [`command_hint`]) — one reading for the headless
+/// `promo_apply` and the apps' document, whose refusal used to reach no one
+/// (review 2026-09-27, P2-45).
+pub fn parse_commands(raw: &[Value]) -> Result<Vec<promo_editor::Command>, String> {
+    raw.iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let kind = c.get("kind").and_then(Value::as_str).unwrap_or("?");
+            serde_json::from_value(c.clone())
+                .map_err(|e| format!("commands[{i}] ({kind}): {e} — {}", command_hint(kind)))
+        })
+        .collect()
+}
+
 /// The whole vocabulary through one door (REVIEW-2026-09 P2): a batch of
 /// promo-editor `Command`s applied to the file as ONE atomic group — every
 /// command succeeds or the file is untouched — through the same `Document`
@@ -892,6 +907,7 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
     if raw.is_empty() {
         return Err("`commands` is empty — nothing to apply".into());
     }
+    let commands = parse_commands(raw)?;
     let kinds: Vec<String> = raw
         .iter()
         .map(|c| {
@@ -901,19 +917,6 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
                 .to_string()
         })
         .collect();
-    let commands: Vec<promo_editor::Command> = raw
-        .iter()
-        .enumerate()
-        .map(|(i, c)| {
-            serde_json::from_value(c.clone()).map_err(|e| {
-                format!(
-                    "commands[{i}] ({}): {e} — {}",
-                    kinds[i],
-                    command_hint(&kinds[i])
-                )
-            })
-        })
-        .collect::<Result<_, _>>()?;
 
     let mut document = promo_editor::Document::open(&text)?;
     document
@@ -922,12 +925,19 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let meta = ProjectMetadata::from_json(&document.to_json()?)
         .map_err(|e| format!("the edited document no longer parses: {e}"))?;
     write_metadata(&meta, &meta_path)?;
-    let notes = layout_notes(&meta, None);
-    Ok(format!(
+    Ok(applied_answer(&meta, &kinds))
+}
+
+/// What `promo_apply` answers once its commands landed: how many, which
+/// kinds, and the layout notes of the result — the headless server's words
+/// and the apps' document path's (review 2026-09-27, P2-45).
+pub fn applied_answer(meta: &ProjectMetadata, kinds: &[String]) -> String {
+    let notes = layout_notes(meta, None);
+    format!(
         "applied {} command(s) as one step: {}{notes}",
-        commands.len(),
+        kinds.len(),
         kinds.join(", ")
-    ))
+    )
 }
 
 /// The wizard, for agents (REVIEW-2026-09 A2): pictures and clips in, a

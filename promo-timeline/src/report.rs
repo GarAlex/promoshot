@@ -263,23 +263,19 @@ fn holder(path: &[PathStep]) -> Holder {
     }
 }
 
-/// Keys a bag keeps that someone DOES read: the apps (a narration's
-/// `speech`, a library reference, entry and exit transitions, the audio
-/// focus), the author tools (`handles`), an editor (`$schema`). Derived
-/// from the Swift model's coding keys against this one on 2026-09-27; the
-/// app's suite encodes its own projects through this report and fails if
-/// a key it writes is called unread.
+/// Keys a bag keeps that someone DOES read: the apps' model (the author's
+/// `handles`, a narration's `speech`, a library reference… — the lists the
+/// document's carry also honours) and an editor (`$schema`). The app's
+/// suite encodes its own projects through this report and fails if a key
+/// it writes is called unread. A layer has none: `entryTransition`,
+/// `exitTransition` and `isAudioFocused` are Swift computed properties,
+/// never written or read, so a file that says them is told so.
 fn read_by_someone(holder: Holder, key: &str) -> bool {
+    use promo_model::unread::{APP_PROJECT_KEYS, APP_RESOURCE_KEYS};
     match holder {
-        Holder::Project => matches!(key, "$schema" | "handles"),
-        Holder::TopLayer | Holder::Layer => {
-            matches!(key, "entryTransition" | "exitTransition" | "isAudioFocused")
-        }
-        Holder::Resource => matches!(
-            key,
-            "libraryID" | "motionKeyframes" | "origin" | "speech" | "themePlateID"
-        ),
-        Holder::Other => false,
+        Holder::Project => key == "$schema" || APP_PROJECT_KEYS.contains(&key),
+        Holder::Resource => APP_RESOURCE_KEYS.contains(&key),
+        Holder::TopLayer | Holder::Layer | Holder::Other => false,
     }
 }
 
@@ -912,15 +908,12 @@ mod tests {
     }
 
     /// What the apps and the author tools read out of the bags is not
-    /// "unread": a narration's speech, entry and exit transitions, the
-    /// author's handles, an editor's $schema.
+    /// "unread": a narration's speech, a library reference, the author's
+    /// handles, an editor's $schema.
     #[test]
     fn keys_the_apps_read_are_not_called_unread() {
         let json = project(
-            &layer(
-                r#","entryTransition":{"kind":"fade"},"isAudioFocused":true"#,
-                "",
-            ),
+            &layer("", ""),
             &IMAGE.replace(
                 r#""imageCuts":[]"#,
                 r#""imageCuts":[],"speech":{"text":"hi"},"libraryID":"X""#,
@@ -933,6 +926,23 @@ mod tests {
         );
         let report = run(&json, None);
         assert!(report.is_clean(), "{}", report.text());
+    }
+
+    /// The Swift model's computed names are not keys: a layer that says
+    /// `isAudioFocused` or `entryTransition` is told nothing reads them —
+    /// they passed as "read by the apps" until the carry checked the list.
+    #[test]
+    fn the_apps_computed_names_are_not_keys() {
+        let json = project(
+            &layer(
+                r#","entryTransition":{"kind":"fade"},"isAudioFocused":true"#,
+                "",
+            ),
+            IMAGE,
+        );
+        let text = run(&json, None).text();
+        assert!(text.contains("isAudioFocused"), "{text}");
+        assert!(text.contains("entryTransition"), "{text}");
     }
 
     /// A warning alone still answers ok: the project renders, adjusted.

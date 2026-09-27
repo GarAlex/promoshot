@@ -54,6 +54,15 @@ impl UnknownValue {
     }
 }
 
+/// What every tolerant enum answers, so code can carry an unknown value
+/// without knowing which enum it is (see `unread`).
+pub trait Tolerant: Copy + PartialEq {
+    /// A value this build does not know.
+    fn is_unknown(&self) -> bool;
+    /// What the build does with it: the fallback for an unknown value.
+    fn as_known(self) -> Self;
+}
+
 /// Tolerant string enums: an unknown raw value decodes to `Unknown`, which
 /// BEHAVES as the given fallback everywhere a decision is made (`known()`)
 /// and is written back exactly as it came (mirrors the Swift `init(from:)`
@@ -91,6 +100,15 @@ macro_rules! tolerant_enum {
                     $name::Unknown(_) => $name::$fallback,
                     other => other,
                 }
+            }
+        }
+
+        impl Tolerant for $name {
+            fn is_unknown(&self) -> bool {
+                matches!(self, $name::Unknown(_))
+            }
+            fn as_known(self) -> Self {
+                self.known()
             }
         }
 

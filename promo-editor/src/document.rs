@@ -419,6 +419,12 @@ pub struct Document {
     log: Vec<(u64, Changes)>,
     /// Per-layer revision: bumped whenever a version touches the layer.
     layer_revisions: std::collections::HashMap<String, u64>,
+    /// The file the apps last read this project from (opened, or adopted
+    /// after another writer changed it): what it holds unread is carried
+    /// into every replace and save for what the document has none of —
+    /// the entities that file brought, before the apps' copy hands them in
+    /// (review 2026-09-27, P2-45).
+    unread_source: Option<ProjectMetadata>,
 }
 
 impl Document {
@@ -434,6 +440,7 @@ impl Document {
             redo: Vec::new(),
             log: Vec::new(),
             layer_revisions: std::collections::HashMap::new(),
+            unread_source: None,
         })
     }
 
@@ -644,11 +651,26 @@ impl Document {
     /// model directly while both writers exist. Validated by the format's
     /// own parser; the change log names what differs, so a reader follows
     /// it like any other step. Identical content is not a step.
+    ///
+    /// The one writer that replaces is the apps' Swift model, which cannot
+    /// read everything the document holds: what it dropped — keys the
+    /// format carries unread, enum values it rewrote as their fallback — is
+    /// carried over from the document (review 2026-09-27, P2-45).
     pub fn replace(&mut self, json: &str) -> Result<bool, String> {
-        let meta = ProjectMetadata::from_json(json)
+        let mut meta = ProjectMetadata::from_json(json)
             .map_err(|e| e.to_string())?
             .lifted();
+        self.carry_unread_into(&mut meta);
         if meta == self.meta {
+            return Ok(false);
+        }
+        // A save stamps `updatedAt`; that is not an edit. Taken without a
+        // step, or ⌘Z after a save undid nothing anyone could see — the
+        // timestamp — and the person pressed it again.
+        let mut same_but_time = meta.clone();
+        same_but_time.updated_at = self.meta.updated_at;
+        if same_but_time == self.meta {
+            self.meta.updated_at = meta.updated_at;
             return Ok(false);
         }
         let snapshot = self.to_json()?;
@@ -658,6 +680,44 @@ impl Document {
         self.version += 1;
         self.note(&before);
         Ok(true)
+    }
+
+    /// Takes the unread content of `json` — the file the apps just read the
+    /// project from: the one it was opened from, or one another writer
+    /// changed — as the document's, without a step: nothing the person did
+    /// changed. The file is the latest word on what the apps cannot see, so
+    /// a key it removed goes and a value it changed is its value; what the
+    /// apps read stays theirs. The file is kept as the source for entities
+    /// the document has not got yet. True when the document changed.
+    pub fn absorb_unread(&mut self, json: &str) -> Result<bool, String> {
+        let source = ProjectMetadata::from_json(json)
+            .map_err(|e| e.to_string())?
+            .lifted();
+        let before = self.meta.clone();
+        self.meta.mirror_unread_from(&source);
+        self.unread_source = Some(source);
+        Ok(self.meta != before)
+    }
+
+    /// The file a save writes from a lossy writer's saved form: `json`,
+    /// with what the document carries unread put back, stamped with the
+    /// reader version the result needs — the core's encoder and ladder
+    /// (review 2026-09-27, P2-45: the apps' saves used to be Swift's own
+    /// encoding, which dropped every field Swift does not model).
+    pub fn saved_json_from(&self, json: &str) -> Result<String, String> {
+        let mut meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
+        self.carry_unread_into(&mut meta);
+        meta.min_reader_version = Some(meta.minimum_reader_version());
+        meta.to_json().map_err(|e| e.to_string())
+    }
+
+    /// The document's unread content into a lossy copy, then the last
+    /// file's for whatever the document holds none of.
+    fn carry_unread_into(&self, meta: &mut ProjectMetadata) {
+        meta.carry_unread_from(&self.meta);
+        if let Some(source) = &self.unread_source {
+            meta.carry_unread_from(source);
+        }
     }
 
     pub fn undo(&mut self) -> bool {
@@ -2378,6 +2438,130 @@ mod tests {
             doc.replace("{not json").is_err(),
             "the format's parser gates it"
         );
+    }
+
+    /// The Swift model's copy loses what it cannot read; the document keeps
+    /// it through a replace, takes it in from the file without a step, and
+    /// a save writes it back, stamped (review 2026-09-27, P2-45).
+    #[test]
+    fn what_the_swift_copy_cannot_read_survives_replace_and_save() {
+        let file = serde_json::json!({
+            "id": "P", "name": "P", "createdAt": 0, "state": "recorded", "trimStart": 0,
+            "trimEnd": 0, "videoDuration": 0, "subtitles": [], "futureTop": "kept",
+            "compositionSettings": {},
+            "layers": [{ "id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                         "isEnabled": true, "startTime": 0, "duration": 2,
+                         "futureLayer": 1, "keyframes": [] }]
+        });
+        let mut lossy = file.clone();
+        lossy.as_object_mut().unwrap().remove("futureTop");
+        lossy["layers"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("futureLayer");
+        // Opened from the Swift copy, then given the file's unread keys:
+        // no step for what nobody did.
+        let mut doc = Document::open(&lossy.to_string()).unwrap();
+        assert!(doc.absorb_unread(&file.to_string()).unwrap());
+        assert!(!doc.can_undo(), "absorbing is not an edit");
+        // A Swift-side rename replaces the document: the unread keys stay.
+        lossy["layers"][0]["name"] = serde_json::json!("Renamed");
+        assert!(doc.replace(&lossy.to_string()).unwrap());
+        let now: serde_json::Value = serde_json::from_str(&doc.to_json().unwrap()).unwrap();
+        assert_eq!(now["futureTop"], "kept");
+        assert_eq!(now["layers"][0]["futureLayer"], 1);
+        assert_eq!(now["layers"][0]["name"], "Renamed");
+        // A save's timestamp alone is not a step.
+        let mut saved_later = lossy.clone();
+        saved_later["updatedAt"] = serde_json::json!(812_345_678.0);
+        let steps = doc.can_undo();
+        assert!(
+            !doc.replace(&saved_later.to_string()).unwrap(),
+            "no step for updatedAt"
+        );
+        assert_eq!(doc.can_undo(), steps);
+        // And the save writes them, stamped by the core's ladder.
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&lossy.to_string()).unwrap()).unwrap();
+        assert_eq!(saved["futureTop"], "kept");
+        assert_eq!(saved["layers"][0]["futureLayer"], 1);
+        assert!(saved["minReaderVersion"].as_u64().is_some());
+    }
+
+    /// Another writer changed the file while the app had it open: the
+    /// app's copy reads the new file, and the document takes the file's
+    /// unread content — a key the writer removed stays gone through the
+    /// app's next replace and save, and a layer the writer added keeps its
+    /// unread keys whether the save comes before the app hands the layer
+    /// in or after. A narration's speech the app removes is the app's
+    /// removal (review 2026-09-27, P2-45).
+    #[test]
+    fn a_file_another_writer_changed_is_the_latest_word() {
+        let layer = |id: &str, extra: serde_json::Value| {
+            let mut layer = serde_json::json!({ "id": id, "name": id, "sortIndex": 0,
+                "kind": "image", "isEnabled": true, "startTime": 0, "duration": 2,
+                "keyframes": [] });
+            for (key, value) in extra.as_object().unwrap() {
+                layer[key] = value.clone();
+            }
+            layer
+        };
+        let project = |layers: Vec<serde_json::Value>, speech: bool| {
+            let mut resource = serde_json::json!({ "id": "R", "kind": "audio",
+                "filename": "a.mp3", "displayName": "A", "addedAt": 0 });
+            if speech {
+                resource["speech"] = serde_json::json!({ "text": "hello" });
+            }
+            serde_json::json!({ "id": "P", "name": "P", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                "compositionSettings": {}, "layers": layers, "resources": [resource] })
+        };
+        // Opened: the file has an unread key on L.
+        let file = project(vec![layer("L", serde_json::json!({ "future": 1 }))], true);
+        let app = project(vec![layer("L", serde_json::json!({}))], true);
+        let mut doc = Document::open(&app.to_string()).unwrap();
+        doc.absorb_unread(&file.to_string()).unwrap();
+
+        // Another writer removes L's key and adds M with one of its own.
+        let file2 = project(
+            vec![
+                layer("L", serde_json::json!({})),
+                layer("M", serde_json::json!({ "future": 2 })),
+            ],
+            true,
+        );
+        doc.absorb_unread(&file2.to_string()).unwrap();
+        let app2 = project(
+            vec![
+                layer("L", serde_json::json!({})),
+                layer("M", serde_json::json!({})),
+            ],
+            true,
+        );
+        // A save before the app's copy reached the document.
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&app2.to_string()).unwrap()).unwrap();
+        assert!(saved["layers"][0].get("future").is_none(), "{saved}");
+        assert_eq!(saved["layers"][1]["future"], 2, "{saved}");
+        // The app hands its copy in, then saves.
+        doc.replace(&app2.to_string()).unwrap();
+        let now: serde_json::Value = serde_json::from_str(&doc.to_json().unwrap()).unwrap();
+        assert!(now["layers"][0].get("future").is_none(), "{now}");
+        assert_eq!(now["layers"][1]["future"], 2, "{now}");
+
+        // The app removes the narration's speech: it stays removed.
+        let app3 = project(
+            vec![
+                layer("L", serde_json::json!({})),
+                layer("M", serde_json::json!({})),
+            ],
+            false,
+        );
+        doc.replace(&app3.to_string()).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&app3.to_string()).unwrap()).unwrap();
+        assert!(saved["resources"][0].get("speech").is_none(), "{saved}");
+        assert_eq!(saved["layers"][1]["future"], 2);
     }
     /// A command addressed inside a composition edits the composition's
     /// layers with every rule the document has — rename, retime, delete's
