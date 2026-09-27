@@ -632,7 +632,7 @@ mod tests {
         )
         .unwrap();
         let size = tight.captions[0].style["fontSize"].as_f64().unwrap();
-        assert!(size < 88.0 && size >= 48.0, "{size}");
+        assert!((48.0..88.0).contains(&size), "{size}");
     }
 
     /// Turning is an option: on, the angle alternates; off, none is written.
