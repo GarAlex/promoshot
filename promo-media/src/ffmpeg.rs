@@ -680,6 +680,28 @@ impl FfmpegEncoder {
                 ]);
             }
         }
+        // One colour policy with the apps' export (review 2026-09-27): the
+        // RGB frames convert to YCbCr with the BT.709 matrix — ffmpeg's
+        // default converter uses BT.601 and tags nothing, so reds drifted
+        // toward orange against the app's file — and the stream says so,
+        // so players stop guessing. The index goes first (`+faststart`),
+        // so a shared file plays before it has fully downloaded.
+        // `setparams` stamps the frames themselves: ffmpeg 7+ takes the
+        // encoder's colour from the frames the filters produce, so the
+        // command-line tags alone left primaries and transfer "unknown".
+        command.args([
+            "-vf",
+            "scale=out_color_matrix=bt709:out_range=tv,\
+             setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv",
+            "-colorspace",
+            "bt709",
+            "-color_primaries",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-movflags",
+            "+faststart",
+        ]);
         if audio_temp.is_some() {
             // AAC for compatibility; -shortest so a soundtrack longer than
             // the render cannot extend the file past its last frame.
@@ -858,6 +880,78 @@ mod tests {
         assert!(out.exists(), "ffmpeg never created the output");
         drop(encoder);
         std::fs::remove_file(&out).expect("the abandoned output is closed and deletable");
+    }
+
+    /// One colour policy with the apps' export (review 2026-09-27): the
+    /// stream is converted and TAGGED BT.709, and the index sits before the
+    /// media so a shared file starts playing at once.
+    #[test]
+    fn an_encode_is_tagged_bt709_and_starts_fast() {
+        let dir = std::env::temp_dir().join("promo-media-tests");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let out = dir.join(format!("tagged-{}.mp4", std::process::id()));
+        let spec = crate::EncodeSpec {
+            chapters: Vec::new(),
+            chapters_end: 0.0,
+            codec: crate::VideoCodec::H264,
+            alpha: false,
+            width: 64,
+            height: 64,
+            fps: 30.0,
+            quality: 18,
+            audio: None,
+        };
+        let Ok(mut encoder) = crate::Registry::with_defaults().open_encoder(&out, &spec) else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        for i in 0..30u8 {
+            encoder
+                .write_frame(&[i.wrapping_mul(8); 64 * 64 * 4])
+                .expect("frame in");
+        }
+        encoder.finish().expect("encoded");
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=color_space,color_primaries,color_transfer",
+                "-of",
+                "default=noprint_wrappers=1",
+            ])
+            .arg(&out)
+            .output()
+            .expect("ffprobe");
+        let tags = String::from_utf8_lossy(&probe.stdout);
+        for tag in [
+            "color_space=bt709",
+            "color_primaries=bt709",
+            "color_transfer=bt709",
+        ] {
+            assert!(tags.contains(tag), "missing {tag} in {tags}");
+        }
+        let bytes = std::fs::read(&out).expect("output");
+        let mut order = Vec::new();
+        let mut at = 0usize;
+        while at + 8 <= bytes.len() && order.len() < 8 {
+            let size = u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+                as usize;
+            order.push(String::from_utf8_lossy(&bytes[at + 4..at + 8]).to_string());
+            if size < 8 {
+                break;
+            }
+            at += size;
+        }
+        let moov = order.iter().position(|t| t == "moov");
+        let mdat = order.iter().position(|t| t == "mdat");
+        assert!(
+            moov.is_some() && mdat.is_some() && moov < mdat,
+            "atoms: {order:?}"
+        );
+        let _ = std::fs::remove_file(&out);
     }
 
     /// Builds a clip whose colour changes over time, so a decoded frame can
