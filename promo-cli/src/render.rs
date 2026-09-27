@@ -1786,44 +1786,47 @@ mod tests {
         let project = crate::project::Project::open(&dir).expect("project");
         let mut renderer = Renderer::new(&project, 320, 320).expect("renderer");
         let frame = renderer.frame_bgra(0.5).expect("frame");
-        let count = |keep: &dyn Fn(u8, u8, u8) -> bool| -> usize {
-            (120..200)
-                .flat_map(|y| (60..260).map(move |x| (x, y)))
+        // Read by INTENT, not by a fixed band — the band depended on font
+        // metrics (a caption's box, and so the stage's frame, differs
+        // between Helvetica Neue and DejaVu Sans): the cube is still drawn,
+        // and white glyph pixels stand inside the cube's own box — in front
+        // of it, with the cube showing between the glyphs.
+        let pixels = |keep: &dyn Fn(u8, u8, u8) -> bool| -> Vec<(usize, usize)> {
+            (0..320)
+                .flat_map(|y| (0..320).map(move |x| (x, y)))
                 .filter(|&(x, y)| {
                     let i = (y * 320 + x) * 4;
                     keep(frame[i + 2], frame[i + 1], frame[i])
                 })
-                .count()
+                .collect()
         };
-        let white = count(&|r, g, b| r > 200 && g > 200 && b > 200);
-        // Where white landed in the whole frame, so a miss says whether the
-        // caption was not drawn at all or drawn outside the counted band.
-        let everywhere: Vec<(usize, usize)> = (0..320)
-            .flat_map(|y| (0..320).map(move |x| (x, y)))
-            .filter(|&(x, y)| {
-                let i = (y * 320 + x) * 4;
-                frame[i + 2] > 200 && frame[i + 1] > 200 && frame[i] > 200
-            })
-            .collect();
-        let bbox = everywhere
-            .iter()
-            .fold((320, 320, 0, 0), |(x0, y0, x1, y1), &(x, y)| {
-                (x0.min(x), y0.min(y), x1.max(x), y1.max(y))
-            });
-        let centre_px = {
-            let i = (160 * 320 + 160) * 4;
-            (frame[i + 2], frame[i + 1], frame[i])
+        let bbox = |ps: &[(usize, usize)]| {
+            ps.iter()
+                .fold((320, 320, 0, 0), |(x0, y0, x1, y1), &(x, y)| {
+                    (x0.min(x), y0.min(y), x1.max(x), y1.max(y))
+                })
         };
+        let white = pixels(&|r, g, b| r > 200 && g > 200 && b > 200);
+        let red = pixels(&|r, g, b| r > 120 && g < 80 && b < 80);
+        let cube = bbox(&red);
         assert!(
-            white > 200,
-            "the caption stands in front, white on the scene: {white} px in the band; \
-             {} white px in the frame, bbox {:?}, centre {:?}",
-            everywhere.len(),
-            bbox,
-            centre_px
+            red.len() > 200,
+            "the cube is still drawn: {} red px, bbox {cube:?}; white {} px, bbox {:?}",
+            red.len(),
+            white.len(),
+            bbox(&white)
         );
-        let red = count(&|r, g, b| r > 120 && g < 80 && b < 80);
-        assert!(red > 200, "and the cube shows between its glyphs: {red} px");
+        let on_cube = white
+            .iter()
+            .filter(|&&(x, y)| x >= cube.0 && x <= cube.2 && y >= cube.1 && y <= cube.3)
+            .count();
+        assert!(
+            on_cube > 30,
+            "the caption stands in front of the cube: {on_cube} white px inside its box {cube:?}; \
+             white {} px, bbox {:?}",
+            white.len(),
+            bbox(&white)
+        );
         // A drawing member — a filled green oval — in front the same way.
         let drawing = r#"{"id":"D","kind":"drawing","filename":"","displayName":"Oval","addedAt":0,
             "pixelWidth":320,"pixelHeight":320,
