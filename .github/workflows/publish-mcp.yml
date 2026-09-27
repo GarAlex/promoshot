@@ -5,6 +5,11 @@ name: publish-mcp
 # events raised by that token never start other workflows — so `release:
 # published` alone would sleep through every real release (it did, for
 # v0.2.3). workflow_run on the release workflow is exempt from that rule.
+#
+# The image is built ONCE, by release.yml, from the tag. This workflow used
+# to build it again from main's HEAD (a workflow_run checkout with no ref)
+# and push it over the tag's image: v0.2.74 shipped a later demo commit.
+# Now it only publishes server.json, read from the released commit.
 on:
   workflow_run:
     workflows: [release]
@@ -15,42 +20,23 @@ on:
 
 permissions:
   contents: read
-  id-token: write
-  packages: write
 
 jobs:
-  docker:
+  publish:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Image tag (from server.json — the manifest names the image it publishes)
-        id: tag
-        run: |
-          tag=$(python3 -c "import json; print(json.load(open('server.json'))['packages'][0]['identifier'].split(':')[-1])")
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/garalex/promoshot-mcp:${{ steps.tag.outputs.tag }}
-            ghcr.io/garalex/promoshot-mcp:latest
-
-  publish:
-    needs: docker
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install mcp-publisher
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Install mcp-publisher (pinned, checksum verified)
         run: |
           curl -fsSL -o /tmp/mcp-publisher.tgz \
-            "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz"
+            "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz"
+          echo "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  /tmp/mcp-publisher.tgz" | sha256sum -c -
           tar -xzf /tmp/mcp-publisher.tgz -C /tmp mcp-publisher
           sudo mv /tmp/mcp-publisher /usr/local/bin/mcp-publisher
           mcp-publisher --version || true

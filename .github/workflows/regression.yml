@@ -1,27 +1,32 @@
-# The regression round: the whole truth (`check-all.sh`) on Linux, in the
-# environment the Docker image proves the renderer in — lavapipe for a
-# GPU, Liberation and DejaVu for fonts, ffmpeg for video.
+# The regression round: the whole truth on Linux, in the environment the
+# Docker image renders in — lavapipe for a GPU, Liberation and DejaVu for
+# fonts, ffmpeg for video.
 #
-# NOT on every push, by decision: a slice is several commits and the round
-# belongs to the slice, not the commit. It runs when a release is tagged,
-# and whenever anyone asks for it.
-#
-# It does not gate `release` yet. Gating a build on a suite nobody has
-# watched pass in this environment would block shipping on a discovery,
-# and the first run here IS the discovery: the suite has only ever run on
-# a Mac, where the system fonts and a real GPU are different facts.
+# Runs on every push to main (so a failure is seen the day it lands, not at
+# the next tag), on tags, on demand, and as a reusable workflow. It failed
+# 19 times out of 19 while nothing read it; two things make it readable now:
+# `--no-fail-fast`, so one failing crate no longer hides the rest, and one
+# annotation per failed test, which the check-runs API serves without a
+# token. The toolchain is pinned so a new stable's lints cannot turn it red
+# overnight (4 Sep: 47 new lints, no code change); `latest-stable` watches
+# the next compiler without blocking anything.
 name: regression
 
 on:
-  workflow_dispatch:
   push:
+    branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The Dockerfile's own list: whatever the renderer needs to be real
       # on a machine with no screen and no GPU.
@@ -33,17 +38,39 @@ jobs:
             fonts-liberation fonts-dejavu-core
           fc-list | wc -l
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master, 2026-09
         with:
+          toolchain: 1.96.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
 
       - name: fmt
         run: cargo fmt --all --check
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: test
-        run: cargo test --workspace
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast 2>&1 | tee /tmp/test.log
+      - name: Name every failed test
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          log = pathlib.Path("/tmp/test.log").read_text(errors="replace") if pathlib.Path("/tmp/test.log").exists() else ""
+          def esc(s): return s.replace("%", "%25").replace("\r", "").replace("\n", " / ")
+          failed = re.findall(r"^test (\S+) \.\.\. FAILED$", log, re.M)
+          for name in failed:
+              m = re.search(r"---- " + re.escape(name) + r" stdout ----\n(.*?)(?:\n\n|\n---- |\Z)", log, re.S)
+              lines = [l.strip() for l in (m.group(1) if m else "").splitlines()]
+              keep = [l for l in lines if l and not l.startswith("note:")][:6]
+              print(f"::error title={esc(name)}::{esc(' | '.join(keep))[:1500] or 'failed'}")
+          for crate in re.findall(r"^error: could not compile `([^`]+)`", log, re.M):
+              print(f"::error title=compile {esc(crate)}::could not compile")
+          print(f"::notice title=cargo test::{len(failed)} failed test(s)")
+          PY
 
       # A render, not just a compile: the suite can be green while nothing
       # reaches a frame. LinuxSmoke.promo exists for this.
@@ -64,8 +91,20 @@ jobs:
 
       - name: keep the sheet
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-contact-sheet
           path: /tmp/sheet.png
           if-no-files-found: warn
+
+  latest-stable:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master, 2026-09
+        with:
+          toolchain: stable
+          components: clippy
+      - name: clippy on the next compiler (informational)
+        run: cargo clippy --workspace --all-targets -- -D warnings

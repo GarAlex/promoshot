@@ -4,7 +4,9 @@
 # working promoshot-mcp on stdio with zero host setup — the same
 # environment the first real-Linux run was proved in.
 
-FROM rust:1-bookworm AS build
+# Pinned with the CI gate's toolchain, so the image is built by the compiler
+# the tests ran on.
+FROM rust:1.96-bookworm AS build
 WORKDIR /src
 COPY . .
 RUN cargo build --release -p promo-cli -p promoshot-mcp
@@ -24,5 +26,11 @@ COPY examples /usr/local/share/promoshot/examples
 # Mount your projects here; promo_workspace points at it.
 LABEL io.modelcontextprotocol.server.name="io.github.GarAlex/promoshot"
 ENV PROMOSHOT_WORKSPACE=/projects
+# Not root: a decoder bug in a project someone else made should not run as
+# root, nor write root-owned files into the host's mounted folder. UID 1000
+# is the first user on most Linux hosts; elsewhere pass `--user $(id -u)`.
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin promoshot \
+    && mkdir -p /projects && chown promoshot:promoshot /projects
+USER promoshot
 WORKDIR /projects
 ENTRYPOINT ["promoshot-mcp"]
