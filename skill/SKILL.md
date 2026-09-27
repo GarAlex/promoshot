@@ -8,7 +8,10 @@ description: Author and render PromoShot .promo video projects (App Store shots,
 A PromoShot project is a **folder named `<Name>.promo`**: `metadata.json`
 plus `Resources/` holding the media it names. The file is the interface —
 everything below writes, checks, or renders that file, and a project you
-author here opens in the PromoShot apps unchanged.
+author here opens in the PromoShot apps unchanged — in PromoShot 3.0 and
+later. The App Store's 2.3.1 reads projects up to `minReaderVersion` 17
+and has no `--mcp-stdio`; a project that needs more tells it "Update
+PromoShot to open it". Say so when a person on 2.3.1 cannot open your work.
 
 ## Two modes, and they are not the same job
 

@@ -128,7 +128,16 @@ pub fn keyring_get(provider: &str) -> Result<Option<String>, String> {
     known(provider)?;
     #[cfg(feature = "keyring")]
     {
-        match entry(provider)?.get_password() {
+        // A box with no key store at all (a container, a headless Linux
+        // without a Secret Service) fails when the ENTRY is made, before
+        // `get_password` runs — so that failure must mean "no key here"
+        // too, or `key status` errors in the very Docker image whose keys
+        // come from secrets files, and three tests panic on Linux.
+        let entry = match entry(provider) {
+            Ok(entry) => entry,
+            Err(_) => return Ok(None),
+        };
+        match entry.get_password() {
             Ok(key) => Ok(Some(key)),
             Err(keyring::Error::NoEntry) => Ok(None),
             // No usable store here (a container, a headless box without a

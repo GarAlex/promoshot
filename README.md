@@ -100,6 +100,10 @@ render shells to `promo` (found next to the executable, or on PATH, or via
 Two pieces: the MCP server (tools) and the skill (workflow).
 Neither is vendor-specific. Agents do not find this repo by themselves.
 
+The apps open what this engine writes from PromoShot 3.0 on. The App
+Store's 2.3.1 reads projects up to `minReaderVersion` 17 (no nested
+compositions, no 3D) and cannot be launched with `--mcp-stdio`.
+
 **1. Build — or don't**
 
 ```bash

@@ -22,7 +22,7 @@ promo — render a PromoShot project folder
 USAGE:
     promo validate <project-dir>
     promo schema [--full|--types]
-    promo skill [install [--home DIR] [--dry-run]]
+    promo skill [install [--home DIR | --into DIR] [--dry-run]]
         print the agent skill, or install it for every agent tool found
     promo inspect <project-dir>
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
@@ -191,7 +191,25 @@ fn skill(rest: &[String]) -> Result<(), String> {
         .or_else(home_dir)
         .ok_or("no home folder to install into; pass --home DIR")?;
     let dry = rest.iter().any(|a| a == "--dry-run");
-    for (label, folder) in skill_destinations(&home) {
+    // `--into DIR`: one skills folder of the person's choosing, for a tool
+    // this list does not know or a project's own skills folder.
+    let chosen = rest
+        .iter()
+        .position(|a| a == "--into")
+        .and_then(|i| rest.get(i + 1))
+        .map(PathBuf::from);
+    let destinations = match chosen {
+        Some(dir) => vec![("installed".to_string(), dir)],
+        None => skill_destinations(&home),
+    };
+    if destinations.is_empty() {
+        println!(
+            "no agent tool found under {} — nothing written; `--into DIR` writes to a skills folder you choose",
+            home.display()
+        );
+        return Ok(());
+    }
+    for (label, folder) in destinations {
         let dir = folder.join("promoshot");
         if !dry {
             std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -213,12 +231,20 @@ fn skill_destinations(home: &Path) -> Vec<(String, PathBuf)> {
         .filter(|(_, _, own)| own.is_none())
         .map(|(name, _, _)| *name)
         .collect();
-    let shared = if covered.is_empty() {
-        "shared, for the next tool that reads ~/.agents/skills".to_string()
-    } else {
-        format!("shared, read by {}", covered.join(", "))
-    };
-    let mut out = vec![(shared, home.join(".agents/skills"))];
+    // The shared home only when a tool that reads it is here, or ~/.agents
+    // already exists: no hidden folder for tools a person does not have.
+    let mut out = Vec::new();
+    if !covered.is_empty() {
+        out.push((
+            format!("shared, read by {}", covered.join(", ")),
+            home.join(".agents/skills"),
+        ));
+    } else if home.join(".agents").is_dir() {
+        out.push((
+            "shared, ~/.agents already present".to_string(),
+            home.join(".agents/skills"),
+        ));
+    }
     for (name, _, own) in found {
         if let Some(own) = own {
             out.push((name.to_string(), home.join(own)));
@@ -1216,12 +1242,19 @@ mod tests {
         );
         let bare = home.join("bare");
         std::fs::create_dir_all(&bare).unwrap();
-        let alone = skill_destinations(&bare);
-        assert_eq!(alone.len(), 1);
         assert!(
-            alone[0].0.starts_with("shared, for the next tool"),
+            skill_destinations(&bare).is_empty(),
+            "nothing found, nothing written"
+        );
+        std::fs::create_dir_all(bare.join(".agents")).unwrap();
+        let existing = skill_destinations(&bare);
+        assert_eq!(existing.len(), 1);
+        assert!(
+            existing[0]
+                .0
+                .starts_with("shared, ~/.agents already present"),
             "{}",
-            alone[0].0
+            existing[0].0
         );
         let _ = std::fs::remove_dir_all(&home);
     }

@@ -58,6 +58,11 @@ fn resolving_handles(text: &str, args: &Value) -> Value {
     if by_spelling.is_empty() {
         return args.clone();
     }
+    // The file's pointer keys — the app's `ProjectStore.mintedPointerKeys`,
+    // which the minting door converts — plus the names the TOOLS use for the
+    // same handles: `layer`/`resource` on the scaffolds, `layerID` and
+    // `keyframeID` on promo_apply's commands (missing until 2026-09-27, so
+    // apply by an author's name failed on every adopted project).
     fn pointer(key: &str, parent: Option<&str>) -> bool {
         matches!(
             key,
@@ -70,6 +75,13 @@ fn resolving_handles(text: &str, args: &Value) -> Value {
                 | "imageCutID"
                 | "mediaCutID"
                 | "layerId"
+                | "layerID"
+                | "keyframeID"
+                | "lutResourceID"
+                | "groupID"
+                | "sourceResourceID"
+                | "libraryID"
+                | "themePlateID"
         ) || matches!(
             (parent, key),
             (Some("morph"), "from") | (Some("morph"), "to") | (Some("target"), "member")
@@ -971,6 +983,8 @@ fn open_existing(
 pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let (_, text) = open_existing(args, "project", root)?;
     let meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+    let resolved = resolving_handles(&text, args);
+    let args = &resolved;
     let settings = &meta.composition_settings;
     let canvas = promo_model::Size::new(settings.canvas_width, settings.canvas_height);
     let resources = meta.resources.as_deref().unwrap_or(&[]);
@@ -1323,6 +1337,65 @@ mod tests {
     /// After the app has saved a project, its ids are minted UUIDs and the
     /// author's spellings sit under `handles`. A tool still takes the
     /// spelling. The app's MCPServerTests pin the same case.
+    /// promo_apply's commands name their targets `layerID` / `keyframeID`;
+    /// an adopted project's author names must work there too, and in
+    /// promo_explain. Both resolvers missed these until 2026-09-27.
+    #[test]
+    fn apply_and_explain_take_the_authors_names_on_a_minted_project() {
+        let dir = std::env::temp_dir().join(format!("author-apply-handles-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let deck = "7B1C6C4E-1F8A-5C1C-9E2B-2D6F3A4B5C6D";
+        let words = "8C2D7D5F-2A9B-5D2D-8F3C-3E7A4B5C6D7E";
+        std::fs::write(
+            dir.join("metadata.json"),
+            format!(
+                r#"{{"id":"P","name":"n","createdAt":0,"state":"recorded","trimStart":0,
+                "trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":1280,"canvasHeight":720}},
+                "resources":[],"layers":[
+                {{"id":"{deck}","name":"Deck","sortIndex":0,"kind":"background","isEnabled":true,
+                  "startTime":0,"duration":4,"keyframes":[]}},
+                {{"id":"{words}","name":"Words","sortIndex":1,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":4,"captionText":"hi","keyframes":[]}}],
+                "handles":{{"{deck}":"deck","{words}":"words"}}}}"#
+            ),
+        )
+        .unwrap();
+        let project = dir.display().to_string();
+        let answer = apply(
+            &serde_json::json!({"project": project, "commands": [
+                {"kind": "deleteLayer", "layerID": "words"},
+                {"kind": "upsertKeyframe", "layerID": "deck",
+                 "keyframe": {"id": "k1", "time": 1, "transitionDuration": 0}}
+            ]}),
+            None,
+        )
+        .unwrap();
+        assert!(answer.contains("2 command(s)"), "{answer}");
+        let meta = ProjectMetadata::from_json(
+            &std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+        )
+        .unwrap();
+        let layers = meta.layers.clone().unwrap();
+        assert_eq!(layers.len(), 1, "\"words\" named the caption it deleted");
+        assert_eq!(layers[0].id, deck, "the minted id stays");
+        assert!(
+            layers[0].keyframes.iter().any(|k| k.id == "k1"),
+            "\"deck\" took the keyframe"
+        );
+        let explained = explain(
+            &serde_json::json!({"project": project, "layer": "deck", "time": 1.0}),
+            None,
+        )
+        .unwrap();
+        assert!(
+            explained.contains(deck) || explained.contains("Deck"),
+            "{explained}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_authors_spelling_still_names_a_layer_the_app_has_minted() {
         let dir = std::env::temp_dir().join(format!("author-handles-{}", std::process::id()));
