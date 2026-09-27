@@ -993,14 +993,16 @@ pub fn build_soundtrack_between(
         };
         let Some(path) = path else { continue };
 
-        // The resource's effect chain (rung 21), applied after the tempo.
-        let effects: Option<String> = match &input.source {
+        // The resource's effect chain (rung 21), applied after the tempo;
+        // its normalize is a gain planned from what the chain produced.
+        let chain: Option<&[promo_model::AudioEffect]> = match &input.source {
             AudioSource::Resource(id) => project
                 .resource(id)
-                .and_then(|res| res.audio_effects.as_deref())
-                .and_then(promo_media::effects_chain),
+                .and_then(|res| res.audio_effects.as_deref()),
             AudioSource::VoiceClip(_) => None,
         };
+        let effects: Option<String> = chain.and_then(promo_media::effects_chain);
+        let normalize = chain.and_then(promo_media::loudness::normalize_target);
         let speed = if input.speed.is_finite() {
             input.speed.clamp(0.1, 10.0)
         } else {
@@ -1026,7 +1028,23 @@ pub fn build_soundtrack_between(
                 effects.as_deref(),
             )
             .map_err(|e| format!("{}: {e}", path.display()))?;
-        let Some(audio) = decoded else { continue };
+        let Some(mut audio) = decoded else { continue };
+        // Normalize: the WHOLE resource, through its other effects, to the
+        // target with one static gain — the rule the apps' stems follow,
+        // measured the same way (BS.1770, pauses gated out), never over
+        // just the window this export plays.
+        if let Some(target) = normalize {
+            let gain_db = promo_media::loudness::normalize_gain_db(
+                &audio.samples,
+                CHANNELS as usize,
+                SAMPLE_RATE as f64,
+                target,
+            );
+            let gain = 10f32.powf(gain_db as f32 / 20.0);
+            for sample in &mut audio.samples {
+                *sample *= gain;
+            }
+        }
         let asset_seconds = audio.duration_s() * speed;
 
         let ranges = match &input.included_ranges {
@@ -1209,6 +1227,110 @@ mod tests {
                 .expect("mixes")
                 .is_none(),
             "nothing sounds before 1 s, so that window has no track"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A mono 16-bit WAV of `samples` at 48 kHz.
+    fn write_wav(path: &std::path::Path, samples: &[f32]) {
+        let data: Vec<u8> = samples
+            .iter()
+            .flat_map(|s| ((s.clamp(-1.0, 1.0) * 32767.0).round() as i16).to_le_bytes())
+            .collect();
+        let mut out = Vec::with_capacity(44 + data.len());
+        out.extend_from_slice(b"RIFF");
+        out.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+        out.extend_from_slice(b"WAVEfmt ");
+        out.extend_from_slice(&16u32.to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        out.extend_from_slice(&1u16.to_le_bytes()); // mono
+        out.extend_from_slice(&48_000u32.to_le_bytes());
+        out.extend_from_slice(&96_000u32.to_le_bytes());
+        out.extend_from_slice(&2u16.to_le_bytes());
+        out.extend_from_slice(&16u16.to_le_bytes());
+        out.extend_from_slice(b"data");
+        out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        out.extend_from_slice(&data);
+        std::fs::write(path, out).unwrap();
+    }
+
+    /// Normalize is one loudness on every host (review 2026-09-27, P2-30):
+    /// a quiet narration that speaks a third of the time lands on its
+    /// target as BS.1770 measures it — ffmpeg's loudnorm rode the level
+    /// through the file and the apps planned from an RMS the pauses pulled
+    /// down. Listed before or after a compressor it lands on the same
+    /// target: the gain is planned from what the whole chain produced.
+    #[test]
+    fn narration_with_pauses_lands_on_its_target() {
+        let dir = std::env::temp_dir().join(format!("promo-loudness-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let mut narration = Vec::new();
+        for _ in 0..6 {
+            narration.extend(
+                (0..48_000).map(|i| {
+                    0.03 * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48_000.0).sin()
+                }),
+            );
+            narration.extend(std::iter::repeat_n(0.0f32, 96_000));
+        }
+        write_wav(&dir.join("Resources/voice.wav"), &narration);
+        let mix = |effects: &str| {
+            std::fs::write(
+                dir.join("metadata.json"),
+                format!(
+                    r#"{{"id":"P","name":"level","createdAt":0,"state":"recorded","minReaderVersion":21,
+                    "trimStart":0,"trimEnd":18,"videoDuration":18,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"}},
+                    "resources":[{{"id":"A","kind":"audio","filename":"voice.wav","displayName":"v","addedAt":0,
+                      "duration":18,"imageCuts":[],"disabledAudioTrackIndices":[],"audioEffects":{effects}}}],
+                    "layers":[{{"id":"L","name":"voice","sortIndex":0,"kind":"audio","isEnabled":true,
+                      "startTime":0,"duration":18,"resourceID":"A","keyframes":[]}}]}}"#
+                ),
+            )
+            .unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            build_soundtrack_between(&project, 0.0, 18.0)
+        };
+        let dry = match mix("[]") {
+            Ok(Some(audio)) => audio,
+            other => {
+                eprintln!("no ffmpeg here ({:?}); skipping", other.err());
+                return;
+            }
+        };
+        let lufs = |audio: &promo_media::AudioBuffer| {
+            promo_media::loudness::integrated_lufs(&audio.samples, 2, 48_000.0).unwrap()
+        };
+        assert!(
+            lufs(&dry) < -28.0,
+            "the narration is quiet dry: {}",
+            lufs(&dry)
+        );
+        let normalized = mix(r#"[{"kind":"normalize","targetLufs":-16}]"#)
+            .unwrap()
+            .unwrap();
+        assert!(
+            (lufs(&normalized) + 16.0).abs() < 0.2,
+            "{}",
+            lufs(&normalized)
+        );
+        let compressor = r#"{"kind":"compressor","thresholdDb":-30,"ratio":4}"#;
+        let first = mix(&format!(r#"[{{"kind":"normalize"}},{compressor}]"#))
+            .unwrap()
+            .unwrap();
+        let last = mix(&format!(r#"[{compressor},{{"kind":"normalize"}}]"#))
+            .unwrap()
+            .unwrap();
+        assert!(
+            (lufs(&first) + 16.0).abs() < 0.2,
+            "normalize listed first: {}",
+            lufs(&first)
+        );
+        assert!(
+            (lufs(&last) + 16.0).abs() < 0.2,
+            "normalize listed last: {}",
+            lufs(&last)
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

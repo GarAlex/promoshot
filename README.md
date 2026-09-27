@@ -413,10 +413,12 @@ list (a player's chapter menu); `inspect` lists them all.
 
 ## Audio effects
 
-A video or audio resource may carry `audioEffects` — `normalize`
-(loudness to a target LUFS), `compressor` and one-band `eq` entries,
-applied in order before the mix in every render the core makes. The
-apps' exports and their live preview take the same effects.
+A video or audio resource may carry `audioEffects` — `compressor` and
+one-band `eq` entries, applied in list order before the mix, and
+`normalize`, which moves the whole resource to a target loudness (ITU
+BS.1770 LUFS, pauses gated out) with one static gain at the end of the
+chain. The apps' exports and their live preview take the same effects,
+and the core plans the normalize gain for every host.
 
 ## Chroma key
 

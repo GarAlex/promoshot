@@ -1113,11 +1113,14 @@ impl Default for AudioEffectKind {
     }
 }
 
-/// One effect in a resource's audio chain, applied in order before the
-/// mix: `normalize` (loudness, `targetLufs`, default -16), `compressor`
-/// (`thresholdDb` -18, `ratio` 3, `attackMs` 20, `releaseMs` 250), `eq`
-/// (one band: `frequencyHz`, `widthOctaves` 1, `gainDb`). Headless and
-/// the apps' exports agree by construction — both take the core's mix.
+/// One effect in a resource's audio chain, applied before the mix:
+/// `compressor` (`thresholdDb` -18, `ratio` 3, `attackMs` 20, `releaseMs`
+/// 250) and `eq` (one band: `frequencyHz`, `widthOctaves` 1, `gainDb`) in
+/// list order, then `normalize` (`targetLufs`, default -16) as one static
+/// gain wherever it is listed — the whole resource through the other
+/// effects, measured by `promo_media::loudness`. Headless runs ffmpeg's
+/// filters and the apps AVAudioEngine; the normalize gain is the core's
+/// for both.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioEffect {

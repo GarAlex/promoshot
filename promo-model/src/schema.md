@@ -859,15 +859,18 @@ unknown kind reads as `marker`. No render effect. A project with markers
 carries `minReaderVersion: 20` — an older reader drops the list on save.
 
 Audio effects (rung 21). A video or audio resource may carry
-`"audioEffects": [ ... ]`, applied in order before the mix — the same
-chain for a headless render and the apps' exports, which both take the
-core's mix (the apps' live preview plays the resource dry):
-`{ "kind": "normalize", "targetLufs": -16 }` (loudness),
-`{ "kind": "compressor", "thresholdDb": -18, "ratio": 3, "attackMs": 20,
-"releaseMs": 250 }`, `{ "kind": "eq", "frequencyHz": 1000,
-"widthOctaves": 1, "gainDb": 3 }` (one band per entry). An unknown kind
-reads as `none` and is skipped. A project with any effect carries
-`minReaderVersion: 21`.
+`"audioEffects": [ ... ]`, applied before the mix, compressor and eq in
+list order: `{ "kind": "compressor", "thresholdDb": -18, "ratio": 3,
+"attackMs": 20, "releaseMs": 250 }`, `{ "kind": "eq", "frequencyHz":
+1000, "widthOctaves": 1, "gainDb": 3 }` (one band per entry).
+`{ "kind": "normalize", "targetLufs": -16 }` is one static gain at the
+end of the chain, wherever it sits in the list: the whole resource,
+through its other effects, measured as ITU BS.1770 loudness (pauses
+gated out) and moved to the target, its peak held under -1.5 dBFS and
+the gain within ±24 dB. Headless mixes with ffmpeg's filters and the
+apps with AVAudioEngine, and the core plans the normalize gain for both.
+An unknown kind reads as `none` and is skipped. A project with any
+effect carries `minReaderVersion: 21`.
 
 Chroma key (rung 22). A video or image layer may carry `"chromaKey":
 { "colorHex": "00FF00", "tolerance": 0.3, "softness": 0.1 }`: pixels

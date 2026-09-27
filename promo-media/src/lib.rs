@@ -11,6 +11,7 @@
 
 pub mod conformance;
 pub mod ffmpeg;
+pub mod loudness;
 pub mod lut;
 pub mod proxy;
 pub mod still;
@@ -226,22 +227,19 @@ pub trait AudioReader: Send + Sync {
     }
 }
 
-/// `atempo` handles 0.5–2.0 in one pass, so anything outside that is chained:
-/// 3.0 becomes 2.0 then 1.5. Returns None for a rate near enough to 1 that
-/// the filter would only cost a resample.
 /// The ffmpeg filter chain for a resource's audio effects, in order —
 /// `None` when nothing applies. Numbers are formatted plainly so the chain
-/// is the same string on every host.
+/// is the same string on every host. `normalize` is not in it: its gain is
+/// planned from the chain's output (see [`loudness`]).
 pub fn effects_chain(effects: &[promo_model::AudioEffect]) -> Option<String> {
     use promo_model::AudioEffectKind;
     let mut stages: Vec<String> = Vec::new();
     for effect in effects {
         match effect.kind {
-            AudioEffectKind::None => {}
-            AudioEffectKind::Normalize => {
-                let target = effect.target_lufs.unwrap_or(-16.0).clamp(-70.0, -5.0);
-                stages.push(format!("loudnorm=I={target}:TP=-1.5:LRA=11"));
-            }
+            // Normalize is not a filter: one static gain at the end of the
+            // chain, measured by `loudness` on what the chain produced —
+            // the same gain the apps apply (review 2026-09-27, P2-30).
+            AudioEffectKind::None | AudioEffectKind::Normalize => {}
             AudioEffectKind::Compressor => {
                 let threshold = effect.threshold_db.unwrap_or(-18.0).clamp(-60.0, 0.0);
                 let ratio = effect.ratio.unwrap_or(3.0).clamp(1.0, 20.0);
@@ -269,6 +267,9 @@ pub fn effects_chain(effects: &[promo_model::AudioEffect]) -> Option<String> {
     }
 }
 
+/// `atempo` handles 0.5–2.0 in one pass, so anything outside that is chained:
+/// 3.0 becomes 2.0 then 1.5. Returns None for a rate near enough to 1 that
+/// the filter would only cost a resample.
 pub fn atempo_chain(speed: f64) -> Option<String> {
     if !(speed.is_finite()) || (speed - 1.0).abs() < 1e-6 || speed <= 0.0 {
         return None;
@@ -525,12 +526,13 @@ mod effects_tests {
         assert_eq!(
             effects_chain(&[effect(AudioEffectKind::Normalize), comp, eq]).as_deref(),
             Some(
-                "loudnorm=I=-16:TP=-1.5:LRA=11,\
-                 acompressor=threshold=-18dB:ratio=4:attack=20:release=250,\
+                "acompressor=threshold=-18dB:ratio=4:attack=20:release=250,\
                  equalizer=f=1000:t=o:w=1:g=3"
             )
         );
         assert_eq!(effects_chain(&[effect(AudioEffectKind::Eq)]), None);
+        // Normalize alone is no filter: the mixer applies its gain.
+        assert_eq!(effects_chain(&[effect(AudioEffectKind::Normalize)]), None);
     }
 }
 
