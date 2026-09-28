@@ -420,6 +420,7 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
     wrong_level_warnings(meta, &mut out);
     floor_warnings(meta, &mut out);
     transport_warnings(meta, &mut out);
+    framing_on_model_layers(meta, &mut out);
     swap_warnings(meta, &mut out);
     placement_no_ops(meta, &mut out);
     caption_no_ops(meta, &mut out);
@@ -1441,10 +1442,36 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Report) {
                 }
             }
         }
+        // A camera that aims or flies frames its own shot; one that only
+        // orbits fits its bodies whatever the distance.
+        let frames_itself = stage.keyframes.iter().any(|k| {
+            k.camera
+                .as_ref()
+                .is_some_and(|c| c.target.is_some() || c.motion_path.is_some())
+        });
         for k in &stage.keyframes {
             let Some(camera) = k.camera.as_ref() else {
                 continue;
             };
+            if let Some(word) = camera.framing {
+                if camera.distance.is_some() {
+                    out.breaks(format!(
+                        "stage \"{}\": the keyframe at {}s states both `framing` \"{}\" and a \
+                         `distance`; the distance is used and the word has no effect — keep one",
+                        stage.name,
+                        k.time,
+                        word.as_str()
+                    ));
+                } else if !frames_itself {
+                    out.breaks(format!(
+                        "stage \"{}\": `framing` \"{}\" has no effect — this camera orbits, and an \
+                         orbiting stage fits its bodies whatever the distance; give the camera a \
+                         `target` (\"center\" or a member) so it frames its own shot",
+                        stage.name,
+                        word.as_str()
+                    ));
+                }
+            }
             if let Some(path) = camera.motion_path.as_ref() {
                 let has_route = resources
                     .iter()
@@ -1476,6 +1503,32 @@ fn route_warnings(meta: &ProjectMetadata, out: &mut Report) {
                 }
                 _ => {}
             }
+        }
+    }
+}
+
+/// A framing word on a model layer outside a stage: the layer's picture
+/// is its body's box, fitted by `placement`/`zoom`, so the word sizes
+/// nothing (3D plan §6½, R2).
+fn framing_on_model_layers(meta: &ProjectMetadata, out: &mut Report) {
+    for layer in meta
+        .layers
+        .iter()
+        .flatten()
+        .filter(|l| l.kind == promo_model::ProjectLayerKind::Model && l.stage.is_none())
+    {
+        if let Some(word) = layer
+            .keyframes
+            .iter()
+            .find_map(|k| k.camera.as_ref().and_then(|c| c.framing))
+        {
+            out.breaks(format!(
+                "layer \"{}\": `framing` \"{}\" has no effect on a model layer — its body is \
+                 fitted by `placement`/`zoom` whatever the camera; size it with those, or put it \
+                 in a stage whose camera has a `target`",
+                layer.name,
+                word.as_str()
+            ));
         }
     }
 }
@@ -1970,6 +2023,50 @@ mod tests {
                 "{found:?}"
             );
         }
+    }
+
+    /// A framing word sizes the subject only where the camera frames
+    /// its own shot: on an orbiting stage, beside an explicit distance,
+    /// or on a model layer it does nothing, and says so.
+    #[test]
+    fn a_framing_word_that_does_nothing_is_named() {
+        let stage = |camera: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"P","createdAt":0,"state":"recorded","trimStart":0,
+                   "trimEnd":2,"videoDuration":2,"subtitles":[],"minReaderVersion":48,
+                   "compositionSettings":{{}},
+                   "layers":[{{"id":"S","name":"Desk","sortIndex":0,"kind":"stage",
+                     "isEnabled":true,"startTime":0,"duration":2,"members":[],
+                     "keyframes":[{{"id":"k","time":0,"transitionDuration":0,
+                       "camera":{camera}}}]}}]}}"#
+            ))
+            .expect("fixture")
+        };
+        let said = |meta: &ProjectMetadata| warnings(meta).join("\n");
+        let orbit = said(&stage(r#"{"framing":"wide"}"#));
+        assert!(orbit.contains("this camera orbits"), "{orbit}");
+        let both = said(&stage(
+            r#"{"framing":"wide","distance":5,"target":"center"}"#,
+        ));
+        assert!(both.contains("the distance is used"), "{both}");
+        let fine = said(&stage(r#"{"framing":"wide","target":"center"}"#));
+        assert!(!fine.contains("framing"), "{fine}");
+        let model = ProjectMetadata::from_json(
+            r#"{"id":"P","name":"P","createdAt":0,"state":"recorded","trimStart":0,
+               "trimEnd":2,"videoDuration":2,"subtitles":[],"minReaderVersion":48,
+               "compositionSettings":{},"resources":[{"id":"m","kind":"model",
+               "filename":"m.glb","displayName":"M","addedAt":0}],
+               "layers":[{"id":"L","name":"Phone","sortIndex":0,"kind":"model",
+                 "isEnabled":true,"startTime":0,"duration":2,"resourceID":"m",
+                 "keyframes":[{"id":"k","time":0,"transitionDuration":0,
+                   "camera":{"framing":"closeUp"}}]}]}"#,
+        )
+        .expect("fixture");
+        let on_model = said(&model);
+        assert!(
+            on_model.contains("no effect on a model layer"),
+            "{on_model}"
+        );
     }
 
     #[test]

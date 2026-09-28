@@ -43,6 +43,7 @@ pub fn enums() -> Vec<WireEnum> {
         FrameMaterial::wire(),
         BackgroundFill::wire(),
         ReleaseMoment::wire(),
+        CameraFraming::wire(),
     ]
 }
 

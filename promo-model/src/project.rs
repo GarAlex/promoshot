@@ -1119,6 +1119,41 @@ pub struct Camera {
     /// [x, y, z] }`, stage radii). Ramps between keyframes.
     #[serde(default, skip_serializing_if = "is_none")]
     pub target: Option<CameraTarget>,
+    /// How big the subject is in a camera-framed stage's frame (3D plan
+    /// §6½, R2): `wide`, `medium` or `closeUp`. The engine SOLVES this
+    /// keyframe's distance so the subject's bounding sphere — the target
+    /// member's, or the whole stage's when the camera aims at the centre —
+    /// fills a share of the frame's short side at this field of view, so
+    /// a ramp between two words cannot cut the subject off. An explicit
+    /// `distance` wins. An orbiting stage fits its bodies whatever the
+    /// distance, so the word does nothing there.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub framing: Option<CameraFraming>,
+}
+
+tolerant_enum!(
+    CameraFraming,
+    Medium,
+    [(Wide, "wide"), (Medium, "medium"), (CloseUp, "closeUp")]
+);
+
+impl CameraFraming {
+    /// The share of the frame's short side the subject's sphere fills.
+    pub fn share(self) -> f64 {
+        match self.known() {
+            CameraFraming::Wide => 0.45,
+            CameraFraming::CloseUp => 0.95,
+            _ => 0.7,
+        }
+    }
+
+    /// The camera distance, in units of the SUBJECT's radius, at which
+    /// its sphere fills `share()` of a frame whose short side spans
+    /// `half_tan` (the tangent of half its angle).
+    pub fn subject_distance(self, half_tan: f64) -> f64 {
+        let angle = (self.share() * half_tan.max(1e-6)).atan();
+        1.0 / angle.sin().max(1e-6)
+    }
 }
 
 /// What a moving camera looks at: a name (`center`, `ahead`), a stage
@@ -2621,6 +2656,12 @@ impl ProjectLayerKeyframe {
     /// A seek or a playback state: the consumer's transport (rung 47).
     pub fn needs_rung_47(&self) -> bool {
         self.source_time.is_some() || self.playback.is_some()
+    }
+
+    /// A framing word on the camera (rung 48, the lossless reader: an
+    /// older reader keeps it and draws the stated or default distance).
+    pub fn needs_rung_48(&self) -> bool {
+        self.camera.as_ref().is_some_and(|c| c.framing.is_some())
     }
 }
 
@@ -4546,6 +4587,12 @@ impl ProjectMetadata {
         let all = crate::nesting::all_layers(self);
         if all
             .iter()
+            .any(|l| l.keyframes.iter().any(|k| k.needs_rung_48()))
+        {
+            return crate::LOSSLESS_READER;
+        }
+        if all
+            .iter()
             .any(|l| l.keyframes.iter().any(|k| k.needs_rung_47()))
         {
             return 47;
@@ -5296,6 +5343,34 @@ mod unread_key_tests {
 #[cfg(test)]
 mod forward_compat_tests {
     use super::*;
+
+    /// A framing word (3D plan §6½, R2): the subject's sphere fills the
+    /// word's share of the frame's short side — at 30° vertical on a wide
+    /// frame, a close-up stands about 4.05 subject radii away and a wide
+    /// shot about 8.4 — and the word stamps the lossless reader, 48.
+    #[test]
+    fn a_framing_word_solves_a_distance_and_stamps_48() {
+        let half = (15f64).to_radians().tan();
+        let close = CameraFraming::CloseUp.subject_distance(half);
+        let wide = CameraFraming::Wide.subject_distance(half);
+        assert!((close - 4.05).abs() < 0.01, "{close}");
+        assert!((wide - 8.35).abs() < 0.1, "{wide}");
+        // The sphere at that distance fills exactly the share.
+        let filled = ((1.0 / close).asin().tan()) / half;
+        assert!((filled - 0.95).abs() < 1e-9, "{filled}");
+        let meta = ProjectMetadata::from_json(
+            r#"{"id":"P","name":"P","createdAt":0,"state":"recorded","trimStart":0,
+               "trimEnd":2,"videoDuration":2,"subtitles":[],"compositionSettings":{},
+               "layers":[{"id":"S","name":"S","sortIndex":0,"kind":"stage","isEnabled":true,
+                 "startTime":0,"duration":2,"members":[],
+                 "keyframes":[{"id":"k","time":0,"transitionDuration":0,
+                   "camera":{"framing":"closeUp","target":"center"}}]}]}"#,
+        )
+        .expect("decodes");
+        assert_eq!(meta.minimum_reader_version(), crate::LOSSLESS_READER);
+        let back = meta.to_json().unwrap();
+        assert!(back.contains("\"framing\":\"closeUp\""), "{back}");
+    }
 
     /// The consumer's transport (rung 47) round-trips as written — a seek
     /// and a state — and lifts the ladder; a video layer swapping to a

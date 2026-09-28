@@ -3560,6 +3560,102 @@ impl PreviewEngine {
             });
         }
 
+        // Framing words (3D plan §6½, R2): a keyframe that states a word
+        // and no distance gets the distance at which its subject — the
+        // member it aims at, or the whole stage — fills the word's share of
+        // the frame's short side at that keyframe's field of view. Solved
+        // here, where the stage's size and its members' places are known,
+        // into a copy of the first member's keyframes, so every reader
+        // below (the camera, a route's two ends) sees plain distances and
+        // the move between two words ramps like any other.
+        let framed_copy;
+        let first: &ProjectLayer = if first.keyframes.iter().any(|k| {
+            k.camera
+                .as_ref()
+                .is_some_and(|c| c.framing.is_some() && c.distance.is_none())
+        }) {
+            let original = first;
+            let mut copy = original.clone();
+            let stage_r = (radius * reach).max(1e-3) as f64;
+            let aspect = canvas.width().max(1.0) / canvas.height().max(1.0);
+            let at = |t: f64, select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+                tl::interpolation::layer_interpolated_scalar(original, t, select)
+            };
+            for k in copy.keyframes.iter_mut() {
+                let t = k.time;
+                let Some(cam) = k.camera.as_mut() else {
+                    continue;
+                };
+                let (Some(word), None) = (cam.framing, cam.distance) else {
+                    continue;
+                };
+                let defaults = promo_model::Camera::default();
+                let fov =
+                    at(t, |k| k.camera.as_ref().and_then(|c| c.fov)).unwrap_or(defaults.fov());
+                let yaw = at(t, |k| k.camera.as_ref().and_then(|c| c.yaw))
+                    .unwrap_or(defaults.yaw())
+                    .to_radians();
+                let pitch = at(t, |k| k.camera.as_ref().and_then(|c| c.pitch))
+                    .unwrap_or(defaults.pitch())
+                    .to_radians();
+                let half_short = (fov.clamp(5.0, 120.0) / 2.0).to_radians().tan() * aspect.min(1.0);
+                // The subject's sphere: a member's own, or the stage's.
+                let member_sphere = match cam.target.as_ref() {
+                    Some(promo_model::CameraTarget::Member { member }) => members
+                        .iter()
+                        .find(|m| &m.id == member && m.kind == ProjectLayerKind::Model)
+                        .and_then(|m| {
+                            let loaded = self.models.get(m.resource_id.as_deref()?)?;
+                            let absolute = original.start_time + t;
+                            let local = tl::layer_local_time(m, absolute);
+                            let place = tl::route::member_position(m, local, &resources)
+                                .unwrap_or_else(|| {
+                                    let depth = tl::interpolation::layer_interpolated_scalar(
+                                        m,
+                                        local,
+                                        |k| k.depth,
+                                    )
+                                    .unwrap_or(0.0);
+                                    [0.0, 0.0, depth]
+                                });
+                            let c = loaded.model.bounds_center;
+                            Some((
+                                [
+                                    place[0] * radius as f64 + c[0] as f64,
+                                    place[1] * radius as f64 + c[1] as f64,
+                                    place[2] * radius as f64 + c[2] as f64,
+                                ],
+                                loaded.model.bounds_radius as f64,
+                            ))
+                        }),
+                    _ => None,
+                };
+                let (centre, subject_r) = member_sphere.unwrap_or(([0.0; 3], stage_r));
+                let wanted = word.subject_distance(half_short) * subject_r;
+                // The eye orbits the stage's centre along (yaw, pitch):
+                // the distance along that ray at which the subject's
+                // centre is `wanted` away.
+                let u = [
+                    pitch.cos() * yaw.sin(),
+                    pitch.sin(),
+                    pitch.cos() * yaw.cos(),
+                ];
+                let along = u[0] * centre[0] + u[1] * centre[1] + u[2] * centre[2];
+                let off = centre[0] * centre[0] + centre[1] * centre[1] + centre[2] * centre[2];
+                let disc = along * along - off + wanted * wanted;
+                let eye = if disc > 0.0 {
+                    along + disc.sqrt()
+                } else {
+                    wanted
+                };
+                cam.distance = Some((eye / stage_r).max(1.05));
+            }
+            framed_copy = copy;
+            &framed_copy
+        } else {
+            first
+        };
+
         // The stage's camera and light: the first member's.
         let local = tl::layer_local_time(first, time);
         let scalar = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
@@ -3573,6 +3669,7 @@ impl PreviewEngine {
             fov: scalar(|k| k.camera.as_ref().and_then(|c| c.fov)),
             motion_path: None,
             target: None,
+            framing: None,
         };
         let light = promo_model::Light {
             yaw: scalar(|k| k.light.and_then(|l| l.yaw)),
@@ -3624,6 +3721,7 @@ impl PreviewEngine {
                     fov: s(|k| k.camera.as_ref().and_then(|c| c.fov)),
                     motion_path: None,
                     target: None,
+                    framing: None,
                 }
             };
             // A gaze is in play only when some keyframe states one; without
@@ -4608,6 +4706,7 @@ impl PreviewEngine {
             fov: scalar(|k| k.camera.as_ref().and_then(|c| c.fov)),
             motion_path: None,
             target: None,
+            framing: None,
         };
         let light = promo_model::Light {
             yaw: scalar(|k| k.light.and_then(|l| l.yaw)),

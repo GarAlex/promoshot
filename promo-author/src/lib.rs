@@ -1332,6 +1332,7 @@ fn camera_doc(layer: &ProjectLayer, local: f64) -> Value {
         fov: scalar(|k| k.camera.as_ref().and_then(|c| c.fov)),
         motion_path: None,
         target: None,
+        framing: None,
     };
     let mut doc = json!({
         "yaw": camera.yaw(), "pitch": camera.pitch(), "roll": camera.roll(),

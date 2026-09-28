@@ -250,10 +250,14 @@ a feature's own section rather than the whole 73 KB —
   `fov` change the drawing, not how big it is. To push in, key `zoom` or
   `placement` — in canvas PIXELS, never fractions of the canvas.
   A STAGE whose camera aims (`target`) or flies a route frames its own
-  shot, and there distance does decide what is cut: `promo_validate`
-  names the member, the seconds and the edges when a move cuts it off —
-  run it before rendering a camera move. A push INTO a body until it
-  covers the frame is a flight, not a finding.
+  shot, and there distance decides what is cut. Say the size in words:
+  `"camera": { "framing": "closeUp", "target": "center" }` — `wide`,
+  `medium`, `closeUp` — and the engine solves a distance that keeps the
+  subject whole; a push-in is `wide` at one keyframe, `closeUp` at the
+  next. `promo_validate` names the member, the seconds and the edges
+  when a move still cuts it off — run it before rendering a camera
+  move. A push INTO a body until it covers the frame is a flight, not a
+  finding.
 - **A caption moves by keyed `placement`** — anchor and offset on its
   keyframes; the box travels between them. Its size is its `fontSize`
   (points, never a zoom factor), and shifts do not move a placed caption.

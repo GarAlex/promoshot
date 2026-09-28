@@ -302,6 +302,92 @@ mod tests {
         let _ = std::fs::remove_dir_all(&safe);
     }
 
+    /// Framing words (R2) through the engine: aimed at the centre, `wide`
+    /// shows the phone small and `closeUp` large, both whole — the move
+    /// between them validates clean; aimed at one of two phones, a
+    /// close-up centres THAT phone and fills the frame with it.
+    #[test]
+    fn framing_words_size_the_subject_and_keep_it_whole() {
+        if promo_gpu::GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let write = |name: &str, members: &str, keyframes: &str| {
+            let dir =
+                std::env::temp_dir().join(format!("promo-words-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(dir.join("Resources")).unwrap();
+            std::fs::write(
+                dir.join("Resources/phone.glb"),
+                promo_engine::model::device_glb(promo_engine::model::DeviceKind::Phone),
+            )
+            .unwrap();
+            std::fs::write(
+                dir.join("metadata.json"),
+                format!(
+                    r#"{{"id":"P","name":"Words","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],"minReaderVersion":48,
+                    "compositionSettings":{{"canvasWidth":960,"canvasHeight":540}},
+                    "resources":[{{"id":"ph","kind":"model","filename":"phone.glb",
+                                  "displayName":"Phone","addedAt":0}}],
+                    "layers":[{{"id":"S","name":"Desk","sortIndex":0,"kind":"stage",
+                      "isEnabled":true,"startTime":0,"duration":4,"members":[{members}],
+                      "keyframes":[{keyframes}]}}]}}"#
+                ),
+            )
+            .unwrap();
+            dir
+        };
+        let phone = |id: &str, across: f64| {
+            format!(
+                r#"{{"id":"{id}","name":"Phone {id}","sortIndex":0,"kind":"model","isEnabled":true,
+                   "startTime":0,"duration":4,"resourceID":"ph",
+                   "keyframes":[{{"id":"{id}0","time":0,"transitionDuration":0,
+                                 "stageOffset":[{across},0]}}]}}"#
+            )
+        };
+        let centre = write(
+            "centre",
+            &phone("A", 0.0),
+            r#"{"id":"a","time":0,"transitionDuration":0,"camera":{"framing":"wide","target":"center"}},
+               {"id":"b","time":3,"transitionDuration":3,"camera":{"framing":"closeUp","target":"center"}}"#,
+        );
+        let project = Project::open(&centre).expect("project");
+        assert!(findings(&project).is_empty(), "{:?}", findings(&project));
+        let mut renderer = Renderer::new(&project, 320, 180).expect("renderer");
+        let samples = renderer.framing_samples(&[0.0, 3.5]).expect("samples");
+        let height = |s: &FramingSample| s.hi[1] - s.lo[1];
+        assert_eq!(samples.len(), 2, "{samples:?}");
+        let (wide, close) = (&samples[0], &samples[1]);
+        assert!(height(wide) < 0.55, "wide {wide:?}");
+        assert!(
+            height(close) > 0.7 && close.lo[1] >= 0.0 && close.hi[1] <= 1.0,
+            "close {close:?}"
+        );
+
+        let pair = write(
+            "pair",
+            &format!("{},{}", phone("A", -1.5), phone("B", 1.5)),
+            r#"{"id":"a","time":0,"transitionDuration":0,
+                "camera":{"yaw":0,"pitch":0,"framing":"closeUp","target":{"member":"B"}}}"#,
+        );
+        let project = Project::open(&pair).expect("project");
+        let mut renderer = Renderer::new(&project, 320, 180).expect("renderer");
+        let samples = renderer.framing_samples(&[1.0]).expect("samples");
+        let b = samples
+            .iter()
+            .find(|s| s.member == "B")
+            .expect("B measured");
+        let centre_x = (b.lo[0] + b.hi[0]) / 2.0;
+        assert!((centre_x - 0.5).abs() < 0.08, "B is centred: {b:?}");
+        assert!(
+            height(b) > 0.7 && b.lo[1] >= 0.0 && b.hi[1] <= 1.0,
+            "B fills, whole: {b:?}"
+        );
+        let _ = std::fs::remove_dir_all(&centre);
+        let _ = std::fs::remove_dir_all(&pair);
+    }
+
     /// A box that exactly fills the frame, or brushes an edge by its rim,
     /// is not cut.
     #[test]

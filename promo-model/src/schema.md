@@ -1065,7 +1065,13 @@ value. A stage whose camera has a route or a target frames the shot
 itself: it draws a frame with the CANVAS's aspect, a real camera's
 picture, and the placement scales that — `"placement": { "mode":
 "fill" }` makes it a full-bleed 3D world — where an orbiting camera's
-stage is a square cut to its bodies' box. A helix that spirals in while looking at the vase is a route
+stage is a square cut to its bodies' box. Size such a shot with a
+WORD, not a distance: `"framing": "wide" | "medium" | "closeUp"` on a
+camera keyframe has the engine solve the distance so the subject — the
+member the camera aims at, or the whole stage when it aims at the
+centre — fills 45%, 70% or 95% of the frame's short side at that field
+of view, so a move between two words keeps it whole. An explicit
+`distance` wins; `promo_validate` names any member a move cuts off. A helix that spirals in while looking at the vase is a route
 resource, a camera keyframe with that `motionPath` and `{ "member":
 "<vase>" }`, and nothing else. A project with a route, a camera route or
 a gaze carries `minReaderVersion: 40`.

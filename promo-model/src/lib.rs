@@ -412,6 +412,7 @@ mod schema_doc_tests {
                 fov: Some(30.0),
                 motion_path: None,
                 target: None,
+                framing: None,
             }),
             light: Some(Light {
                 yaw: Some(40.0),

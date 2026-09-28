@@ -375,6 +375,16 @@
             "null"
           ]
         },
+        "framing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraFraming"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "motionPath": {
           "anyOf": [
             {
@@ -418,6 +428,14 @@
         }
       },
       "type": "object"
+    },
+    "CameraFraming": {
+      "enum": [
+        "wide",
+        "medium",
+        "closeUp"
+      ],
+      "type": "string"
     },
     "CameraTarget": {
       "anyOf": [

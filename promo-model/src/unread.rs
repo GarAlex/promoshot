@@ -128,6 +128,9 @@ fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
         keep_opt(&mut keyframe.easing, old.easing, mode);
         carry_placement(&mut keyframe.placement, &old.placement, mode);
         carry_transition(&mut keyframe.transition, &old.transition, mode);
+        if let (Some(camera), Some(old)) = (keyframe.camera.as_mut(), old.camera.as_ref()) {
+            keep_opt(&mut camera.framing, old.framing, mode);
+        }
     }
 }
 
