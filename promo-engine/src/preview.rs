@@ -357,6 +357,21 @@ struct CachedFrame {
     content_box: Option<(u32, u32, u32, u32)>,
 }
 
+/// Where one member of a camera-framed stage lands in the stage's frame at
+/// one instant — the framing probe's record (3D plan §6½, R1). `lo`/`hi`
+/// are the member's box through the camera in frame units: 0..1 is on
+/// screen; anything outside is cut. `behind` is a corner behind the eye.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FramingSample {
+    pub time: f64,
+    pub stage: String,
+    pub member: String,
+    pub member_name: String,
+    pub lo: [f32; 2],
+    pub hi: [f32; 2],
+    pub behind: bool,
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PreviewStats {
     pub hits: u64,
@@ -415,6 +430,9 @@ pub struct PreviewEngine {
     /// evicts the static content that IS reused. They go into `scratch`
     /// instead, which lives exactly one render.
     export_mode: bool,
+    /// The framing probe (3D plan §6½, R1): while set, a stage whose camera
+    /// frames the shot records where each member lands and draws nothing.
+    framing_probe: Option<Vec<FramingSample>>,
     /// Per-time frames for the render in flight (export mode only). Cleared
     /// at the START of the next build, not the end of this one, so a
     /// deferred-fence compose still has live textures while the GPU works.
@@ -505,6 +523,7 @@ impl PreviewEngine {
             preferred_tier: 0,
             transparent_plate: false,
             export_mode: false,
+            framing_probe: None,
             scratch: HashMap::new(),
             raster_scale: 1.0,
             vector: None,
@@ -716,6 +735,22 @@ impl PreviewEngine {
     /// gradient, a resource; a plain one is the plate, and paints nothing.
     pub fn set_transparent_plate(&mut self, on: bool) {
         self.transparent_plate = on;
+    }
+
+    /// Starts or stops the framing probe. While it runs, a render records
+    /// where each member of a camera-framed stage lands — the very view the
+    /// stage would draw with — and draws no stage; `take_framing_samples`
+    /// hands the records over.
+    pub fn set_framing_probe(&mut self, on: bool) {
+        self.framing_probe = if on { Some(Vec::new()) } else { None };
+    }
+
+    /// The framing probe's records so far, emptied.
+    pub fn take_framing_samples(&mut self) -> Vec<FramingSample> {
+        self.framing_probe
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
     }
 
     pub fn set_preferred_tier(&mut self, tier: i32) {
@@ -3351,8 +3386,12 @@ impl PreviewEngine {
         document: &[ProjectLayer],
     ) -> Option<u64> {
         let transient = self.export_mode;
+        let probing = self.framing_probe.is_some();
         let key = (format!("stage\u{1f}{stage}"), quantize(time), tier);
-        if transient {
+        if probing {
+            // A probe measures every instant it is asked; a cached frame
+            // would answer without measuring.
+        } else if transient {
             if let Some(&id) = self.scratch_key.get(&key) {
                 self.hits += 1;
                 return Some(id);
@@ -3462,6 +3501,8 @@ impl PreviewEngine {
                 // A caption's raster, laid out as it would be on the canvas; its
                 // billboard is as tall in the stage as the caption is on the
                 // canvas, in stage diameters.
+                // The probe measures bodies only: no picture is fetched.
+                _ if probing && member.kind != ProjectLayerKind::Video => None,
                 ProjectLayerKind::Caption => {
                     let showing =
                         tl::layer_resource_id(member, time, &resources).map(str::to_string);
@@ -3500,7 +3541,11 @@ impl PreviewEngine {
                     } else {
                         -1.0
                     };
-                    self.frame(&member.id, &showing, source_time, tier, pinned)
+                    if probing {
+                        None
+                    } else {
+                        self.frame(&member.id, &showing, source_time, tier, pinned)
+                    }
                 }
                 _ => None,
             };
@@ -3731,6 +3776,9 @@ impl PreviewEngine {
             let Some(res) = resources.iter().find(|r| r.id == rid).cloned() else {
                 continue;
             };
+            if probing {
+                continue;
+            }
             self.apply_bindings_at(&res, settings, tier, pinned, Some((member, time)), depth);
         }
 
@@ -3791,6 +3839,77 @@ impl PreviewEngine {
                 m[3][2] += item.depth * radius;
             }
             model_matrices.push((item.index, matrices));
+        }
+
+        // The framing probe (3D plan §6½, R1): with the view final and every
+        // body posed, where each member lands in a camera-framed stage's
+        // frame — the canvas's aspect, as `stage_frame_size` draws it —
+        // is recorded, and nothing is drawn. An orbiting stage is cut to
+        // its bodies' box, so nothing of it can leave its frame.
+        if probing {
+            if view.eye.is_some() || view.target.is_some() {
+                let aspect = (canvas.width().max(1.0) / canvas.height().max(1.0)) as f32;
+                for (index, matrices) in &model_matrices {
+                    let member = &members[*index];
+                    let Some(rid) = member.resource_id.as_deref() else {
+                        continue;
+                    };
+                    let Some(loaded) = self.models.get(rid) else {
+                        continue;
+                    };
+                    let (mut lo, mut hi, mut behind) = ([f32::MAX; 2], [f32::MIN; 2], false);
+                    for mesh in &loaded.model.meshes {
+                        let m = matrices
+                            .get(mesh.node)
+                            .copied()
+                            .unwrap_or(promo_gpu::model_pass::IDENTITY);
+                        let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
+                        for p in &mesh.positions {
+                            for k in 0..3 {
+                                min[k] = min[k].min(p[k]);
+                                max[k] = max[k].max(p[k]);
+                            }
+                        }
+                        if min[0] > max[0] {
+                            continue;
+                        }
+                        for corner in 0..8 {
+                            let p = [
+                                if corner & 1 == 0 { min[0] } else { max[0] },
+                                if corner & 2 == 0 { min[1] } else { max[1] },
+                                if corner & 4 == 0 { min[2] } else { max[2] },
+                            ];
+                            let w = [
+                                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+                                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+                            ];
+                            match promo_gpu::model_pass::project_point(&view, aspect, w) {
+                                Some(q) => {
+                                    lo = [lo[0].min(q[0]), lo[1].min(q[1])];
+                                    hi = [hi[0].max(q[0]), hi[1].max(q[1])];
+                                }
+                                None => behind = true,
+                            }
+                        }
+                    }
+                    if lo[0] > hi[0] && !behind {
+                        continue;
+                    }
+                    if let Some(samples) = self.framing_probe.as_mut() {
+                        samples.push(FramingSample {
+                            time,
+                            stage: stage.to_string(),
+                            member: member.id.clone(),
+                            member_name: member.name.clone(),
+                            lo,
+                            hi,
+                            behind,
+                        });
+                    }
+                }
+            }
+            return None;
         }
 
         // Particles in the stage (rung 39): every morph member's cloud for

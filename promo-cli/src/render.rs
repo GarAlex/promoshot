@@ -687,6 +687,27 @@ impl Renderer {
         Ok(())
     }
 
+    /// Where every member of a camera-framed stage lands at each of
+    /// `times`, measured by the engine's framing probe — the view the stage
+    /// draws with, no stage drawn (3D plan §6½, R1).
+    pub fn framing_samples(
+        &mut self,
+        times: &[f64],
+    ) -> Result<Vec<promo_engine::FramingSample>, String> {
+        self.engine.set_framing_probe(true);
+        let mut out = Vec::new();
+        for &time in times {
+            let rendered = self.frame_bgra(time);
+            out.extend(self.engine.take_framing_samples());
+            if let Err(e) = rendered {
+                self.engine.set_framing_probe(false);
+                return Err(e);
+            }
+        }
+        self.engine.set_framing_probe(false);
+        Ok(out)
+    }
+
     /// Renders one frame and returns it as RGBA rows, ready for PNG.
     pub fn frame_rgba(&mut self, time: f64) -> Result<Vec<u8>, String> {
         let mut bgra = self.frame_bgra(time)?;

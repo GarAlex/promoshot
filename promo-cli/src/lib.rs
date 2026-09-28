@@ -8,6 +8,7 @@
 //! app render this right?" stays answerable by diffing two callers of one
 //! implementation.
 
+pub mod framing;
 pub mod inspect;
 pub mod placement;
 pub mod project;

@@ -16,8 +16,9 @@ pub use governor::MemoryGovernor;
 pub use mixer::{mix_chunk, MixInput};
 pub use preview::caption_style;
 pub use preview::{
-    FrameProviderFn, HostSurface, PreviewEngine, PreviewStats, FLAG_COLOR_709, FLAG_PRE_FRAMED,
-    SURFACE_CPU_PIXELS, SURFACE_D3D_HANDLE, SURFACE_DMABUF, SURFACE_IOSURFACE, SURFACE_NONE,
+    FrameProviderFn, FramingSample, HostSurface, PreviewEngine, PreviewStats, FLAG_COLOR_709,
+    FLAG_PRE_FRAMED, SURFACE_CPU_PIXELS, SURFACE_D3D_HANDLE, SURFACE_DMABUF, SURFACE_IOSURFACE,
+    SURFACE_NONE,
 };
 pub use promo_model::core_version;
 
