@@ -250,11 +250,16 @@ a feature's own section rather than the whole 73 KB —
   `fov` change the drawing, not how big it is. To push in, key `zoom` or
   `placement` — in canvas PIXELS, never fractions of the canvas.
   A STAGE whose camera aims (`target`) or flies a route frames its own
-  shot, and there distance decides what is cut. Say the size in words:
+  shot, and there distance decides what is cut. **Say the move, not the
+  numbers:** `promo_apply` with
+  `{"kind": "cameraMove", "layerID": "stage", "move": "pushIn", "at": 1,
+  "duration": 2}` — moves `pushIn`, `pullOut`, `reveal` (in close and
+  turned 30°, out to wide), `orbit` and `rise` (by `degrees`, 90 and 25
+  by default; these also work on a lone model). It writes two ordinary
+  keyframes you can inspect and retime. By hand, say the size in words:
   `"camera": { "framing": "closeUp", "target": "center" }` — `wide`,
   `medium`, `closeUp` — and the engine solves a distance that keeps the
-  subject whole; a push-in is `wide` at one keyframe, `closeUp` at the
-  next. `promo_validate` names the member, the seconds and the edges
+  subject whole. `promo_validate` names the member, the seconds and the edges
   when a move still cuts it off — run it before rendering a camera
   move. A push INTO a body until it covers the frame is a flight, not a
   finding.

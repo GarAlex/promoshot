@@ -100,6 +100,30 @@ pub enum Command {
         /// every other variant should not pay its size.
         keyframe: Box<promo_model::ProjectLayerKeyframe>,
     },
+    /// A camera move as one declaration (3D plan §6½, R3): `pushIn`,
+    /// `pullOut`, `orbit`, `rise` or `reveal`, starting `at` seconds into
+    /// the layer and lasting `duration`. It writes the plain keyframes the
+    /// format already has — a start and an end, the end ramping over the
+    /// whole move — so an editor can show and retime them. Push and pull
+    /// move between framing words (`from`/`to`, wide and close-up by
+    /// default) and need a stage; orbit and rise turn by `degrees`.
+    #[serde(rename_all = "camelCase")]
+    CameraMove {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(rename = "move")]
+        motion: String,
+        at: f64,
+        duration: f64,
+        #[serde(default)]
+        from: Option<promo_model::CameraFraming>,
+        #[serde(default)]
+        to: Option<promo_model::CameraFraming>,
+        #[serde(default)]
+        degrees: Option<f64>,
+        #[serde(default)]
+        target: Option<promo_model::CameraTarget>,
+    },
     #[serde(rename_all = "camelCase")]
     DeleteKeyframe {
         #[serde(rename = "layerID")]
@@ -428,6 +452,150 @@ pub struct Document {
     /// That file as written, for what no struct keeps: a key at any depth
     /// the format does not read (`promo_model::unread::keep_unread`).
     unread_source_json: Option<serde_json::Value>,
+}
+
+/// What a `cameraMove` asks for.
+struct CameraMoveArgs<'a> {
+    motion: &'a str,
+    at: f64,
+    duration: f64,
+    from: Option<promo_model::CameraFraming>,
+    to: Option<promo_model::CameraFraming>,
+    degrees: Option<f64>,
+    target: Option<promo_model::CameraTarget>,
+}
+
+/// The two keyframes a camera move is (3D plan §6½, R3). Each is merged
+/// into a keyframe already at that time, or added; the end ramps over the
+/// whole move. Yaw and pitch start where the camera already is at `at`.
+fn camera_move(layer: &mut promo_model::ProjectLayer, args: CameraMoveArgs) -> Result<(), String> {
+    use promo_model::{CameraFraming as F, ProjectLayerKind as Kind};
+    if !(args.at.is_finite() && args.at >= 0.0) {
+        return Err(format!("bad move start {}", args.at));
+    }
+    if !(args.duration.is_finite() && args.duration > 0.0) {
+        return Err(format!(
+            "a move needs a duration above 0, not {}",
+            args.duration
+        ));
+    }
+    let framed = matches!(args.motion, "pushIn" | "pullOut" | "reveal");
+    if framed && layer.kind != Kind::Stage {
+        return Err(format!(
+            "{} sizes the subject with framing words, which only a stage whose camera \
+             aims can do — \"{}\" is a {:?} layer; push in with `zoom` or `placement`, \
+             or put it in a stage",
+            args.motion, layer.name, layer.kind
+        ));
+    }
+    let now = |select: fn(&promo_model::ProjectLayerKeyframe) -> Option<f64>| {
+        promo_timeline::interpolation::layer_interpolated_scalar(layer, args.at, select)
+    };
+    let defaults = promo_model::Camera::default();
+    let yaw = now(|k| k.camera.as_ref().and_then(|c| c.yaw)).unwrap_or(defaults.yaw());
+    let pitch = now(|k| k.camera.as_ref().and_then(|c| c.pitch)).unwrap_or(defaults.pitch());
+    // An aiming camera: a stage move keeps the target it has, or the
+    // centre — framing words need one.
+    let target = args.target.clone().or_else(|| {
+        layer
+            .keyframes
+            .iter()
+            .rev()
+            .find(|k| k.time <= args.at + 1e-9)
+            .and_then(|k| k.camera.as_ref()?.target.clone())
+    });
+    let target = if framed {
+        target.or(Some(promo_model::CameraTarget::Named("center".into())))
+    } else {
+        target
+    };
+    let blank = promo_model::Camera::default();
+    let (mut start, mut end) = (blank.clone(), blank);
+    match args.motion {
+        "pushIn" => {
+            start.framing = Some(args.from.unwrap_or(F::Wide));
+            end.framing = Some(args.to.unwrap_or(F::CloseUp));
+        }
+        "pullOut" => {
+            start.framing = Some(args.from.unwrap_or(F::CloseUp));
+            end.framing = Some(args.to.unwrap_or(F::Wide));
+        }
+        "reveal" => {
+            // In close, turned away a little; out wide, square on.
+            let turn = args.degrees.unwrap_or(30.0);
+            start.framing = Some(args.from.unwrap_or(F::CloseUp));
+            end.framing = Some(args.to.unwrap_or(F::Wide));
+            start.yaw = Some(yaw - turn);
+            end.yaw = Some(yaw);
+        }
+        "orbit" => {
+            start.yaw = Some(yaw);
+            end.yaw = Some(yaw + args.degrees.unwrap_or(90.0));
+            start.framing = args.from;
+            end.framing = args.to.or(args.from);
+        }
+        "rise" => {
+            start.pitch = Some(pitch);
+            end.pitch = Some((pitch + args.degrees.unwrap_or(25.0)).clamp(-89.0, 89.0));
+            start.framing = args.from;
+            end.framing = args.to.or(args.from);
+        }
+        other => {
+            return Err(format!(
+                "unknown move \"{other}\" — pushIn, pullOut, orbit, rise or reveal"
+            ))
+        }
+    }
+    start.target = target.clone();
+    end.target = target;
+    let mut place = |time: f64, camera: promo_model::Camera, ramp: Option<f64>| {
+        let index = match layer
+            .keyframes
+            .iter()
+            .position(|k| (k.time - time).abs() < 1e-6)
+        {
+            Some(index) => index,
+            None => {
+                let mut id = format!("cam-{time:.2}");
+                while layer.keyframes.iter().any(|k| k.id == id) {
+                    id.push('b');
+                }
+                let blank = serde_json::json!({"id": id, "time": time, "transitionDuration": 0.0});
+                layer
+                    .keyframes
+                    .push(serde_json::from_value(blank).map_err(|e| e.to_string())?);
+                layer.keyframes.len() - 1
+            }
+        };
+        let keyframe = &mut layer.keyframes[index];
+        let merged = keyframe.camera.get_or_insert_with(Default::default);
+        // The move's own fields replace; the rest of the camera stays.
+        if camera.framing.is_some() {
+            merged.framing = camera.framing;
+            merged.distance = None;
+        }
+        if camera.yaw.is_some() {
+            merged.yaw = camera.yaw;
+        }
+        if camera.pitch.is_some() {
+            merged.pitch = camera.pitch;
+        }
+        if camera.target.is_some() {
+            merged.target = camera.target;
+        }
+        if let Some(ramp) = ramp {
+            keyframe.transition_duration = ramp;
+        }
+        Ok::<(), String>(())
+    };
+    place(args.at, start, None)?;
+    place(args.at + args.duration, end, Some(args.duration))?;
+    layer.keyframes.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    Ok(())
 }
 
 impl Document {
@@ -1043,6 +1211,29 @@ impl Document {
                         .partial_cmp(&b.time)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
+            }
+            Command::CameraMove {
+                layer_id,
+                motion,
+                at,
+                duration,
+                from,
+                to,
+                degrees,
+                target,
+            } => {
+                camera_move(
+                    find(layers, layer_id)?,
+                    CameraMoveArgs {
+                        motion,
+                        at: *at,
+                        duration: *duration,
+                        from: *from,
+                        to: *to,
+                        degrees: *degrees,
+                        target: target.clone(),
+                    },
+                )?;
             }
             Command::DeleteKeyframe {
                 layer_id,
@@ -2947,6 +3138,136 @@ mod tests {
         }))
         .unwrap();
         assert!(matches!(cmd, Command::SetMarkers { .. }));
+    }
+
+    const CAMERA_STAGE: &str = r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v","createdAt":0,
+        "state":"recorded","trimStart":0,"trimEnd":6,"videoDuration":6,"subtitles":[],
+        "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+        "resources":[{"id":"M","kind":"model","filename":"b.glb","displayName":"B","addedAt":0}],
+        "layers":[
+          {"id":"S","name":"bench","sortIndex":0,"kind":"stage","isEnabled":true,
+           "startTime":0,"duration":6,
+           "keyframes":[{"id":"K0","time":0,"transitionDuration":0,"camera":{"yaw":10,"pitch":5}}],
+           "members":[
+             {"id":"A","name":"Phone","sortIndex":0,"kind":"model","isEnabled":true,
+              "startTime":0,"duration":6,"resourceID":"M","keyframes":[]}]},
+          {"id":"P","name":"Lone","sortIndex":1,"kind":"model","isEnabled":true,
+           "startTime":0,"duration":6,"resourceID":"M","keyframes":[]}]}"#;
+
+    fn camera_move(json: serde_json::Value) -> Command {
+        serde_json::from_value(json).expect("a cameraMove parses")
+    }
+
+    fn cameras(doc: &Document, id: &str) -> Vec<(f64, f64, promo_model::Camera)> {
+        let layer = doc
+            .meta
+            .layers
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == id)
+            .unwrap();
+        layer
+            .keyframes
+            .iter()
+            .map(|k| {
+                (
+                    k.time,
+                    k.transition_duration,
+                    k.camera.clone().unwrap_or_default(),
+                )
+            })
+            .collect()
+    }
+
+    /// R3: a push-in is two plain keyframes — wide at the start, close-up
+    /// at the end ramping over the whole move, aimed at the centre — and it
+    /// merges into a keyframe already at its start instead of adding one.
+    #[test]
+    fn a_push_in_writes_framing_keyframes_that_merge() {
+        use promo_model::{CameraFraming as F, CameraTarget as T};
+        let mut doc = Document::open(CAMERA_STAGE).unwrap();
+        doc.apply(&camera_move(serde_json::json!({
+            "kind": "cameraMove", "layerID": "S", "move": "pushIn", "at": 0, "duration": 2.5
+        })))
+        .expect("a stage pushes in");
+        let keys = cameras(&doc, "S");
+        assert_eq!(keys.len(), 2, "the start merged into K0: {keys:?}");
+        let (t0, _, c0) = &keys[0];
+        assert_eq!(
+            (*t0, c0.framing, c0.yaw),
+            (0.0, Some(F::Wide), Some(10.0)),
+            "K0 keeps its yaw"
+        );
+        assert_eq!(c0.target, Some(T::Named("center".into())));
+        let (t1, ramp, c1) = &keys[1];
+        assert_eq!((*t1, *ramp, c1.framing), (2.5, 2.5, Some(F::CloseUp)));
+        assert_eq!(
+            c1.distance, None,
+            "framing, not a distance, sizes the subject"
+        );
+    }
+
+    /// Orbit and rise start from where the camera already is at `at` and
+    /// turn by `degrees`; reveal swings in from 30° off; a bad verb, a
+    /// zero duration, and a push on a lone model are refused with the way
+    /// out named.
+    #[test]
+    fn orbit_rise_and_reveal_turn_from_the_current_camera() {
+        use promo_model::CameraFraming as F;
+        let mut doc = Document::open(CAMERA_STAGE).unwrap();
+        doc.apply(&camera_move(serde_json::json!({
+            "kind": "cameraMove", "layerID": "S", "move": "orbit", "at": 1, "duration": 2, "degrees": 120
+        })))
+        .unwrap();
+        let keys = cameras(&doc, "S");
+        assert_eq!(keys[1].2.yaw, Some(10.0));
+        assert_eq!((keys[2].0, keys[2].2.yaw), (3.0, Some(130.0)));
+        doc.apply(&camera_move(serde_json::json!({
+            "kind": "cameraMove", "layerID": "S", "move": "rise", "at": 3, "duration": 1
+        })))
+        .unwrap();
+        let keys = cameras(&doc, "S");
+        assert_eq!(
+            keys.len(),
+            4,
+            "the rise's start merged into the orbit's end"
+        );
+        assert_eq!((keys[2].2.yaw, keys[2].2.pitch), (Some(130.0), Some(5.0)));
+        assert_eq!(keys[3].2.pitch, Some(30.0));
+        doc.apply(&camera_move(serde_json::json!({
+            "kind": "cameraMove", "layerID": "S", "move": "reveal", "at": 4, "duration": 1.5
+        })))
+        .unwrap();
+        let keys = cameras(&doc, "S");
+        let start = &keys.iter().find(|k| k.0 == 4.0).unwrap().2;
+        let end = &keys.iter().find(|k| k.0 == 5.5).unwrap().2;
+        assert_eq!((start.framing, start.yaw), (Some(F::CloseUp), Some(100.0)));
+        assert_eq!((end.framing, end.yaw), (Some(F::Wide), Some(130.0)));
+
+        let refused = |doc: &mut Document, json| doc.apply(&camera_move(json)).unwrap_err();
+        let err = refused(
+            &mut doc,
+            serde_json::json!({
+            "kind": "cameraMove", "layerID": "S", "move": "dolly", "at": 0, "duration": 1}),
+        );
+        assert!(err.contains("pushIn, pullOut"), "{err}");
+        let err = refused(
+            &mut doc,
+            serde_json::json!({
+            "kind": "cameraMove", "layerID": "S", "move": "orbit", "at": 0, "duration": 0}),
+        );
+        assert!(err.contains("duration"), "{err}");
+        let err = refused(
+            &mut doc,
+            serde_json::json!({
+            "kind": "cameraMove", "layerID": "P", "move": "pushIn", "at": 0, "duration": 1}),
+        );
+        assert!(err.contains("zoom") && err.contains("stage"), "{err}");
+        doc.apply(&camera_move(serde_json::json!({
+            "kind": "cameraMove", "layerID": "P", "move": "orbit", "at": 0, "duration": 2
+        })))
+        .expect("a lone model still orbits");
     }
 
     /// A stage layer's members (rung 33) take layer commands by their own

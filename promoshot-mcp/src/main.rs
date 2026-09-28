@@ -1492,6 +1492,7 @@ mod tests {
             "updateLayer",
             "patchResource",
             "upsertKeyframe",
+            "cameraMove",
         ] {
             assert!(text.contains(kind), "descriptor schema lacks `{kind}`");
         }

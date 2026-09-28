@@ -388,6 +388,61 @@ mod tests {
         let _ = std::fs::remove_dir_all(&pair);
     }
 
+    /// R3 end to end: a stage with no camera keyframes, moved only by
+    /// `cameraMove` through promo_apply — a push-in, an orbit, a pull-out
+    /// and a reveal — validates clean, and the push-in's close-up fills
+    /// the frame with the phone whole.
+    #[test]
+    fn camera_moves_through_apply_keep_the_subject_whole() {
+        if promo_gpu::GpuContext::shared().is_none() {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-moves-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        std::fs::write(
+            dir.join("Resources/phone.glb"),
+            promo_engine::model::device_glb(promo_engine::model::DeviceKind::Phone),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"Moves","createdAt":0,"state":"recorded","trimStart":0,
+            "trimEnd":10,"videoDuration":10,"subtitles":[],"minReaderVersion":33,
+            "compositionSettings":{"canvasWidth":960,"canvasHeight":540},
+            "resources":[{"id":"ph","kind":"model","filename":"phone.glb",
+                          "displayName":"Phone","addedAt":0}],
+            "layers":[{"id":"S","name":"Desk","sortIndex":0,"kind":"stage",
+              "isEnabled":true,"startTime":0,"duration":10,"keyframes":[],
+              "members":[{"id":"A","name":"Phone","sortIndex":0,"kind":"model",
+                "isEnabled":true,"startTime":0,"duration":10,"resourceID":"ph",
+                "keyframes":[]}]}]}"#,
+        )
+        .unwrap();
+        let answer = promo_author::apply(
+            &serde_json::json!({ "project": dir.display().to_string(), "commands": [
+                {"kind": "cameraMove", "layerID": "S", "move": "pushIn", "at": 0, "duration": 2},
+                {"kind": "cameraMove", "layerID": "S", "move": "orbit", "at": 2, "duration": 3},
+                {"kind": "cameraMove", "layerID": "S", "move": "pullOut", "at": 5, "duration": 2},
+                {"kind": "cameraMove", "layerID": "S", "move": "reveal", "at": 7, "duration": 2}
+            ]}),
+            None,
+        )
+        .expect("the moves apply");
+        let project = Project::open(&dir).expect("project");
+        assert!(frames_its_own_shots(&project), "{answer}");
+        assert!(findings(&project).is_empty(), "{:?}", findings(&project));
+        let mut renderer = Renderer::new(&project, 320, 180).expect("renderer");
+        let close = &renderer.framing_samples(&[2.0]).expect("samples")[0];
+        let height = close.hi[1] - close.lo[1];
+        assert!(
+            height > 0.7 && close.lo[1] >= 0.0 && close.hi[1] <= 1.0,
+            "the push-in ends close and whole: {close:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A box that exactly fills the frame, or brushes an edge by its rim,
     /// is not cut.
     #[test]
