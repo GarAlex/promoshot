@@ -261,8 +261,9 @@ a feature's own section rather than the whole 73 KB —
   `medium`, `closeUp` — and the engine solves a distance that keeps the
   subject whole. `promo_validate` names the member, the seconds and the edges
   when a move still cuts it off — run it before rendering a camera
-  move. A push INTO a body until it covers the frame is a flight, not a
-  finding.
+  move; `promo_explain` at one moment gives each member's `inFrame`
+  (`whole`, `cut` with its edges, `fillsFrame`). A push INTO a body
+  until it covers the frame is a flight, not a finding.
 - **A caption moves by keyed `placement`** — anchor and offset on its
   keyframes; the box travels between them. Its size is its `fontSize`
   (points, never a zoom factor), and shifts do not move a placed caption.

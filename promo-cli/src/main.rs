@@ -611,9 +611,7 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
     // A camera that frames its own shot and comes too close cuts its
     // subject off; the engine measures it here rather than a render later
     // (3D plan §6½, R1).
-    for finding in promo_cli::framing::findings(project) {
-        report.warn(finding);
-    }
+    promo_cli::framing::report_into(&mut report, project);
     report
 }
 

@@ -686,7 +686,9 @@ pub fn tools(host: Host) -> Vec<Value> {
                 bracketing the moment, transitions and fades. A model or stage adds its \
                 camera (after its 1.05-radii floor) and light, and each slot's binding \
                 with where it lands on the canvas and how much of the frame it covers — \
-                measured by rendering, so no calibration renders are needed; a layer \
+                measured by rendering, so no calibration renders are needed; a stage \
+                whose camera aims or flies says per member `inFrame` (whole, cut and \
+                which edges, fillsFrame, behindCamera) and its `framing` word; a layer \
                 showing a composition adds that composition's layers at the moment, \
                 mapped onto the canvas. Per project: timing problems and validate's \
                 warnings. Defaults to the composition's midpoint.",

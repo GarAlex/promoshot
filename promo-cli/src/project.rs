@@ -59,7 +59,15 @@ impl Project {
         let meta_path = dir.join("metadata.json");
         let text = std::fs::read_to_string(&meta_path)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
-        let mut meta = ProjectMetadata::from_json(&text)
+        Self::from_text(dir, &text)
+    }
+
+    /// The project in `dir` as `text` says — the metadata a caller already
+    /// holds (the app's validate hands the core the file it read), its
+    /// media from the folder.
+    pub fn from_text(dir: &Path, text: &str) -> Result<Self, String> {
+        let meta_path = dir.join("metadata.json");
+        let mut meta = ProjectMetadata::from_json(text)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
         // Attached layers become plain numbers before anything reads them, so
         // the renderer never has to know the difference.

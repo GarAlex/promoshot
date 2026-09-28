@@ -160,6 +160,72 @@ pub fn summarize(samples: &[FramingSample]) -> Vec<String> {
     out
 }
 
+/// The engine's framing samples for `project` at `times`.
+fn probe(project: &Project, times: &[f64]) -> Result<Vec<FramingSample>, String> {
+    let canvas = &project.meta.composition_settings;
+    let (cw, ch) = (canvas.canvas_width.max(1.0), canvas.canvas_height.max(1.0));
+    // Small: the probe draws no stage, and the view does not depend on the
+    // output size — only on the canvas's shape.
+    let h = 180u32;
+    let w = ((h as f64 * cw / ch).round() as u32).clamp(16, 4096);
+    let mut renderer = Renderer::new(project, w, h)?;
+    renderer.framing_samples(times)
+}
+
+/// Where each member of a camera-framed stage stands at `time`, for
+/// `promo_explain`: member id → `{state, cut, edges, box}`. `state` is
+/// `whole`, `cut` (part of it past an edge — the finding `validate`
+/// makes), `fillsFrame` (past every edge: a flight into it) or
+/// `behindCamera`; `box` is its bounds in fractions of the stage's own
+/// frame, 0,0 top left. Empty when no camera frames its own shot.
+pub fn in_frame(
+    project: &Project,
+    time: f64,
+) -> Result<std::collections::BTreeMap<String, serde_json::Value>, String> {
+    let mut out = std::collections::BTreeMap::new();
+    if !frames_its_own_shots(project) {
+        return Ok(out);
+    }
+    for sample in probe(project, &[time])? {
+        let (outside, edges) = cut(&sample);
+        let state = match state(&sample) {
+            _ if sample.behind => "behindCamera",
+            State::Covers => "fillsFrame",
+            State::Partial => "cut",
+            State::In => "whole",
+        };
+        let round = |v: f32| ((v as f64) * 1000.0).round() / 1000.0;
+        let mut doc = serde_json::json!({
+            "state": state,
+            "cut": round(outside.clamp(0.0, 1.0)),
+            "edges": edges,
+        });
+        if !sample.behind {
+            doc["box"] = serde_json::json!({
+                "left": round(sample.lo[0]), "top": round(sample.lo[1]),
+                "right": round(sample.hi[0]), "bottom": round(sample.hi[1]),
+            });
+        }
+        if state == "cut" {
+            doc["why"] = serde_json::json!(
+                "the camera is too close for this field of view: a larger `distance`, a \
+                 wider `fov`, a wider `framing` word, or aim so it stays in frame"
+            );
+        }
+        out.insert(sample.member, doc);
+    }
+    Ok(out)
+}
+
+/// The framing findings added to a validation report as warnings — the
+/// one call `promo validate` and the app's `promo_validate` (through the
+/// FFI's report) both make, so the two doors cannot disagree.
+pub fn report_into(report: &mut promo_timeline::report::Report, project: &Project) {
+    for finding in findings(project) {
+        report.warn(finding);
+    }
+}
+
 /// The findings for `project`: none when no camera frames its own shot,
 /// and none when no GPU is available to run the engine (the check is the
 /// engine's own view, not a guess at it).
@@ -167,16 +233,7 @@ pub fn findings(project: &Project) -> Vec<String> {
     if !frames_its_own_shots(project) {
         return Vec::new();
     }
-    let canvas = &project.meta.composition_settings;
-    let (cw, ch) = (canvas.canvas_width.max(1.0), canvas.canvas_height.max(1.0));
-    // Small: the probe draws no stage, and the view does not depend on the
-    // output size — only on the canvas's shape.
-    let h = 180u32;
-    let w = ((h as f64 * cw / ch).round() as u32).clamp(16, 4096);
-    let Ok(mut renderer) = Renderer::new(project, w, h) else {
-        return Vec::new();
-    };
-    let Ok(mut samples) = renderer.framing_samples(&moments(project)) else {
+    let Ok(mut samples) = probe(project, &moments(project)) else {
         return Vec::new();
     };
     // A stage is named as the person named it, not by its id.
@@ -294,6 +351,22 @@ mod tests {
             found[0].contains("top") && found[0].contains("bottom"),
             "{}",
             found[0]
+        );
+        // explain says the same of one moment: cut at the end, whole at
+        // the start, the edges and the reason on the member itself.
+        let explain = |dir: &std::path::Path, time: f64| -> serde_json::Value {
+            let args = serde_json::json!({ "project": dir.display().to_string(), "time": time });
+            serde_json::from_str(&crate::placement::explain(&args, None).unwrap()).unwrap()
+        };
+        let end = explain(&close, 3.5);
+        let member = &end["layers"][0]["members"][0]["inFrame"];
+        assert_eq!(member["state"], "cut", "{end}");
+        assert!(member["edges"].to_string().contains("top"), "{member}");
+        assert!(member["why"].is_string(), "{member}");
+        let start = explain(&close, 0.0);
+        assert_eq!(
+            start["layers"][0]["members"][0]["inFrame"]["state"], "whole",
+            "{start}"
         );
         let safe = project(5.0);
         let quiet = findings(&Project::open(&safe).expect("project"));
@@ -433,6 +506,17 @@ mod tests {
         let project = Project::open(&dir).expect("project");
         assert!(frames_its_own_shots(&project), "{answer}");
         assert!(findings(&project).is_empty(), "{:?}", findings(&project));
+        let explained: serde_json::Value = serde_json::from_str(
+            &crate::placement::explain(
+                &serde_json::json!({ "project": dir.display().to_string(), "time": 2.0 }),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let stage = &explained["layers"][0];
+        assert_eq!(stage["camera"]["framing"], "closeUp", "{stage}");
+        assert_eq!(stage["members"][0]["inFrame"]["state"], "whole", "{stage}");
         let mut renderer = Renderer::new(&project, 320, 180).expect("renderer");
         let close = &renderer.framing_samples(&[2.0]).expect("samples")[0];
         let height = close.hi[1] - close.lo[1];

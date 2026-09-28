@@ -1362,6 +1362,21 @@ fn camera_doc(layer: &ProjectLayer, local: f64) -> Value {
     {
         doc["target"] = serde_json::to_value(target).unwrap_or(Value::Null);
     }
+    // A framing word (R2) sizes the subject: the engine solves the
+    // distance from it, so the number above is not what draws.
+    if let Some(word) = layer
+        .keyframes
+        .iter()
+        .filter(|k| k.time <= local + 1e-9)
+        .max_by(by_time)
+        .and_then(|k| k.camera.as_ref()?.framing)
+    {
+        doc["framing"] = serde_json::to_value(word).unwrap_or(Value::Null);
+        doc["distanceNote"] = json!(
+            "solved by the engine from `framing` — the distance above is the stored one, \
+             not what draws"
+        );
+    }
     if let Some(route) = layer
         .keyframes
         .iter()

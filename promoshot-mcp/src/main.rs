@@ -378,8 +378,13 @@ where
             // A model showing something on a slot: where it lands is the
             // renderer's to measure (review 2026-09-27, P2-36), so the CLI —
             // which renders — answers instead, and a failed measurement
-            // still leaves the project-only answer.
-            if !answer.contains("\"shows\"") {
+            // still leaves the project-only answer. So is whether each
+            // member of a stage whose camera aims or flies is in frame
+            // (3D plan §6½, R1): a camera `target` or `route` asks for it.
+            if !["\"shows\"", "\"target\"", "\"route\""]
+                .iter()
+                .any(|key| answer.contains(key))
+            {
                 return Ok(answer);
             }
             let project = fenced_project(args, config)?;

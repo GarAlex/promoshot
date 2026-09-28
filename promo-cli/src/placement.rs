@@ -121,7 +121,9 @@ pub fn slot_placements(project: &Project, time: f64) -> Result<Vec<SlotPlacement
 pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let text = promo_author::explain(args, root)?;
     let mut answer: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if !shows_on_a_slot(&answer["layers"]) {
+    let slots = shows_on_a_slot(&answer["layers"]);
+    let aims = aims_or_flies(&answer["layers"]);
+    if !slots && !aims {
         return Ok(text);
     }
     let raw = args
@@ -133,11 +135,60 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
         dir = dir.parent().map(Path::to_path_buf).unwrap_or(dir);
     }
     let time = answer["time"].as_f64().unwrap_or(0.0);
-    match Project::open(&dir).and_then(|project| slot_placements(&project, time)) {
-        Ok(placements) => place_slots(&mut answer["layers"], &placements),
-        Err(why) => answer["slotPlacement"] = json!(format!("not measured: {why}")),
+    let project = Project::open(&dir);
+    if slots {
+        match project
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|project| slot_placements(project, time))
+        {
+            Ok(placements) => place_slots(&mut answer["layers"], &placements),
+            Err(why) => answer["slotPlacement"] = json!(format!("not measured: {why}")),
+        }
+    }
+    // A stage whose camera frames its own shot: whether each member is in
+    // frame NOW, from the engine's framing probe — the moment `validate`
+    // looks at across the whole film (3D plan §6½, R1).
+    if aims {
+        match project
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|project| crate::framing::in_frame(project, time))
+        {
+            Ok(framed) => mark_in_frame(&mut answer["layers"], &framed),
+            Err(why) => answer["inFrame"] = json!(format!("not measured: {why}")),
+        }
     }
     serde_json::to_string_pretty(&answer).map_err(|e| e.to_string())
+}
+
+/// Does any stage here (compositions included) have a camera that aims or
+/// flies a route — one that frames its own shot?
+fn aims_or_flies(layers: &Value) -> bool {
+    layers.as_array().is_some_and(|layers| {
+        layers.iter().any(|layer| {
+            let camera = &layer["camera"];
+            (layer["members"].is_array()
+                && (camera.get("target").is_some() || camera.get("route").is_some()))
+                || aims_or_flies(&layer["inside"]["layers"])
+        })
+    })
+}
+
+fn mark_in_frame(layers: &mut Value, framed: &std::collections::BTreeMap<String, Value>) {
+    let Some(layers) = layers.as_array_mut() else {
+        return;
+    };
+    for layer in layers {
+        if let Some(members) = layer["members"].as_array_mut() {
+            for member in members {
+                if let Some(doc) = member["id"].as_str().and_then(|id| framed.get(id)) {
+                    member["inFrame"] = doc.clone();
+                }
+            }
+        }
+        mark_in_frame(&mut layer["inside"]["layers"], framed);
+    }
 }
 
 /// Does any layer here (members and compositions included) show something
