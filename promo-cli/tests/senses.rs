@@ -89,7 +89,7 @@ fn the_device_bodies_write_and_probe() {
     let dir = std::env::temp_dir().join(format!("promo-devices-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let bin = env!("CARGO_BIN_EXE_promo");
-    for kind in ["phone", "tablet", "laptop"] {
+    for kind in ["phone", "tablet", "tablet-portrait", "laptop"] {
         let out = dir.join(format!("{kind}.glb"));
         let wrote = Command::new(bin)
             .args(["device", kind, "--out", out.to_str().unwrap(), "--json"])

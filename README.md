@@ -464,7 +464,7 @@ from the theme; a scene `environment` (studio, sunset, night; rung
 picture of the world the bodies mirror) is what metals mirror; a file's
 normal map and metallic-roughness
 texture are honoured. Rung 29. Built-in device bodies
-(phone, tablet, laptop; `promo device`) ship as generated `.glb` files
+(phone, tablet, tablet-portrait, laptop; `promo device`) ship as generated `.glb` files
 with `Body` and `Screen` slots, so the device shot is a model too. A
 model can also be a `recipe` the engine builds at load instead of a file
 — text as a body first: real type in the 3D world with `Face` and `Side`

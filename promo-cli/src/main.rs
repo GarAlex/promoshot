@@ -32,7 +32,7 @@ USAGE:
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
     promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
     promo model   <file.glb> [--json]
-    promo device  <phone|tablet|laptop> --out <file.glb> [--json]
+    promo device  <phone|tablet|tablet-portrait|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
 
 AUTHORING — the MCP tools' own functions, so the defaults and checks match:
@@ -667,13 +667,14 @@ fn model_probe(file: &Path, opts: &Options) -> Result<String, String> {
     Ok(out.trim_end().to_string())
 }
 
-/// A built-in device body — phone, tablet or laptop — written as a `.glb`
+/// A built-in device body — phone, tablet, tablet-portrait or laptop — written as a `.glb`
 /// with `Body` and `Screen` slots (the laptop a `Deck` too), the same
 /// bytes the app and the MCP put into a project's Resources.
 fn device(kind: &str, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
-    let kind = promo_engine::model::DeviceKind::parse(kind)
-        .ok_or_else(|| format!("device: `{kind}` is not phone, tablet or laptop"))?;
+    let kind = promo_engine::model::DeviceKind::parse(kind).ok_or_else(|| {
+        format!("device: `{kind}` is not phone, tablet, tablet-portrait or laptop")
+    })?;
     let bytes = promo_engine::model::device_glb(kind);
     std::fs::write(out, &bytes).map_err(|e| format!("{}: {e}", out.display()))?;
     let model = promo_engine::model::Model::from_glb(&bytes).map_err(|e| e.to_string())?;

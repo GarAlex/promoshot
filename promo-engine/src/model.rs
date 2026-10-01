@@ -837,8 +837,8 @@ pub fn sample_slab_glb() -> Vec<u8> {
     )
 }
 
-/// The built-in device bodies (3D plan P4): a phone, a tablet and a
-/// laptop, each with a `Body` slot and a `Screen` slot — the laptop with a
+/// The built-in device bodies (3D plan P4): a phone, a tablet (landscape,
+/// and upright as `tablet-portrait`) and a laptop, each with a `Body` slot and a `Screen` slot — the laptop with a
 /// `Deck` too — generated with rounded corners and a bezel so a
 /// screenshot or a recording on the screen reads as the product. What
 /// the device frames were, as models: the tilt that was baked is a
@@ -847,6 +847,10 @@ pub fn sample_slab_glb() -> Vec<u8> {
 pub enum DeviceKind {
     Phone,
     Tablet,
+    /// The tablet standing upright, built so (not turned): its Screen's
+    /// picture stays upright and its shape is the iPad's 3:4, the shape an
+    /// iPad listing's screenshots are.
+    TabletPortrait,
     Laptop,
 }
 
@@ -855,6 +859,7 @@ impl DeviceKind {
         match name.trim().to_ascii_lowercase().as_str() {
             "phone" => Some(DeviceKind::Phone),
             "tablet" => Some(DeviceKind::Tablet),
+            "tablet-portrait" => Some(DeviceKind::TabletPortrait),
             "laptop" => Some(DeviceKind::Laptop),
             _ => None,
         }
@@ -864,11 +869,17 @@ impl DeviceKind {
         match self {
             DeviceKind::Phone => "phone",
             DeviceKind::Tablet => "tablet",
+            DeviceKind::TabletPortrait => "tablet-portrait",
             DeviceKind::Laptop => "laptop",
         }
     }
 
-    pub const ALL: [DeviceKind; 3] = [DeviceKind::Phone, DeviceKind::Tablet, DeviceKind::Laptop];
+    pub const ALL: [DeviceKind; 4] = [
+        DeviceKind::Phone,
+        DeviceKind::Tablet,
+        DeviceKind::TabletPortrait,
+        DeviceKind::Laptop,
+    ];
 }
 
 /// A device body as a `.glb`.
@@ -908,8 +919,15 @@ pub fn device_glb(kind: DeviceKind) -> Vec<u8> {
             );
             ([-w, -h, -d], [w, h, d + 0.001])
         }
-        DeviceKind::Tablet => {
-            let (w, h, d) = (0.64f32, 0.45f32, 0.028f32);
+        DeviceKind::Tablet | DeviceKind::TabletPortrait => {
+            // Upright, the screen is the iPad's 3:4 (201.5 x 267.6 mm, 0.753)
+            // inside the same bezel: a turned landscape body would be 0.68
+            // and letterbox every iPad screenshot.
+            let (w, h, d) = if kind == DeviceKind::TabletPortrait {
+                (0.492f32, 0.64f32, 0.028f32)
+            } else {
+                (0.64f32, 0.45f32, 0.028f32)
+            };
             geo.rounded_slab(w, h, d, 0.05, [0.0; 3], &mut body_idx);
             geo.rounded_plate(
                 w - 0.04,
@@ -2250,6 +2268,40 @@ mod tests {
                 / screen.indices.len() as f32;
             if kind != DeviceKind::Laptop {
                 assert!(z > 0.0, "{}: screen at z {z}", kind.name());
+            }
+            // An upright tablet's screen is the iPad's 3:4, and its picture
+            // stands upright: u runs along +X, v down Y (an iPad listing's
+            // screenshots land 1:1, not letterboxed or sideways).
+            if kind == DeviceKind::TabletPortrait {
+                // The body and the screen share one vertex buffer: the
+                // screen is the vertices its triangles use.
+                let used: Vec<([f32; 3], [f32; 2])> = screen
+                    .indices
+                    .iter()
+                    .map(|&i| (screen.positions[i as usize], screen.uvs[i as usize]))
+                    .collect();
+                let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+                for (p, _) in &used {
+                    for k in 0..2 {
+                        lo[k] = lo[k].min(p[k]);
+                        hi[k] = hi[k].max(p[k]);
+                    }
+                }
+                let aspect = (hi[0] - lo[0]) / (hi[1] - lo[1]);
+                assert!(
+                    (aspect - 201.5 / 267.6).abs() < 0.01,
+                    "screen aspect {aspect}"
+                );
+                let left = used
+                    .iter()
+                    .min_by(|a, b| a.0[0].total_cmp(&b.0[0]))
+                    .unwrap();
+                let top = used
+                    .iter()
+                    .max_by(|a, b| a.0[1].total_cmp(&b.0[1]))
+                    .unwrap();
+                assert!(left.1[0] < 0.05, "the left edge is u 0: {left:?}");
+                assert!(top.1[1] < 0.05, "the top edge is v 0: {top:?}");
             }
         }
     }

@@ -1160,7 +1160,7 @@ fn recipe_warnings(meta: &ProjectMetadata, out: &mut Report) {
                 if !device.is_known() {
                     out.breaks(format!(
                         "resource \"{}\": device recipe kind \"{}\" is not a body — phone, \
-                         tablet or laptop",
+                         tablet, tablet-portrait or laptop",
                         resource.display_name, device.kind
                     ));
                 }

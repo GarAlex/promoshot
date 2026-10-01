@@ -267,6 +267,10 @@ a feature's own section rather than the whole 73 KB —
 - **A caption moves by keyed `placement`** — anchor and offset on its
   keyframes; the box travels between them. Its size is its `fontSize`
   (points, never a zoom factor), and shifts do not move a placed caption.
+  A caption the app saved keeps its words and style on a caption
+  RESOURCE, which wins over the layer's own fields (`promo_explain` says
+  `styleLivesOn`): `promo_upsert_layer` and `updateLayer` write there for
+  you; hand-editing the layer's `captionStyle` in metadata.json does not.
 
 - **Ids are unique strings.** Short mnemonics — "bg", "clip", "k0" — are
   fine and are the handles the tools take; the apps keep them as written.
@@ -334,12 +338,14 @@ is for; the schema section says how to write it.
   canvas and the share of the frame it covers, measured by rendering —
   never fit a camera law from probe renders.
 - **Devices** (`model`) — no file and no tool: a model resource whose
-  recipe is `{ "device": { "kind": "phone" } }` (tablet, laptop) is
+  recipe is `{ "device": { "kind": "phone" } }` (`tablet` lies
+  landscape, `tablet-portrait` stands upright for iPad shots, `laptop`) is
   built at load with `Body` and `Screen` slots, and a `Deck` on the
   laptop. The picture goes on `Screen` — an image, a video or a
   composition — and the accent on `Body`. Build a screen's picture to
   its shape: the phone's is 0.46 wide for its height, the tablet's
-  1.46, the laptop's 1.65. A MAXIMUM CLOSE-UP on a screen — the frame
+  1.46, the upright tablet's 0.75 (an iPad screenshot's 3:4), the
+  laptop's 1.65. A MAXIMUM CLOSE-UP on a screen — the frame
   covered by the picture, looking straight at it — is one pose per
   body, no measuring: the orbit's `distance` at its floor of 1.05 and
   the field that covers, `"camera": { "yaw": 0, "pitch": 0, "distance":

@@ -104,7 +104,9 @@ pub(crate) fn label(name: &str) -> &'static str {
 /// engine's own device recipe. The app links its shared library's model.
 pub(crate) fn recipe_kind(name: &str) -> &'static str {
     match name {
-        "iPad" => "tablet",
+        // Upright, as an iPad listing's screenshots are: the landscape
+        // tablet letterboxed a 3:4 reel into its 1.46 screen.
+        "iPad" => "tablet-portrait",
         "mac" => "laptop",
         _ => "phone",
     }

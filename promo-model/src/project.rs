@@ -1035,7 +1035,8 @@ pub struct ExtrudeShape {
     pub depth: f64,
 }
 
-/// A built-in device body: `phone`, `tablet` or `laptop`.
+/// A built-in device body: `phone`, `tablet` (landscape),
+/// `tablet-portrait` (upright, an iPad's 3:4 screen) or `laptop`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceBody {
@@ -1043,7 +1044,7 @@ pub struct DeviceBody {
 }
 
 impl DeviceBody {
-    pub const KINDS: [&'static str; 3] = ["phone", "tablet", "laptop"];
+    pub const KINDS: [&'static str; 4] = ["phone", "tablet", "tablet-portrait", "laptop"];
     pub fn is_known(&self) -> bool {
         Self::KINDS.contains(&self.kind.as_str())
     }
