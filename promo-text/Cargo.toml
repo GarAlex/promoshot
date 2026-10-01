@@ -11,10 +11,12 @@ workspace = true
 [dependencies]
 promo-model = { path = "../promo-model" }
 # Shaping + layout + system font discovery. The one honest way to put text on
-# a frame without a platform text stack.
-cosmic-text = "0.12"
-# Glyph outlines for text as a 3D body — the same version cosmic-text's
-# shaper derefs to, so a face is one type.
+# a frame without a platform text stack. 0.15+ for variable fonts: the
+# system's rounded design drew Regular at every weight on 0.12.
+cosmic-text = "0.19"
+# Glyph outlines for text as a 3D body, and a variable face's weight axis
+# (the system's rounded design is one variable file) — parsed from the
+# font's own bytes.
 ttf-parser = "0.21"
 
 [dev-dependencies]

@@ -266,6 +266,13 @@ fn snap_weight(fonts: &FontSystem, family: &ResolvedFamily, want: Weight, italic
     } else {
         slanted.into_iter().copied().collect()
     };
+    // A variable face draws any weight its `wght` axis spans — the system's
+    // rounded design is ONE such file, which the database lists once, at
+    // its default 400. Snapping to that listed weight made every rounded
+    // headline Regular; the axis is the real list.
+    if let Some(range) = pool.iter().find_map(|face| weight_axis(fonts, face.id)) {
+        return Weight((want.0 as f32).clamp(range.0, range.1).round() as u16);
+    }
     let heavier_first = want.0 > 500;
     pool.iter()
         .map(|face| face.weight)
@@ -277,6 +284,21 @@ fn snap_weight(fonts: &FontSystem, family: &ResolvedFamily, want: Weight, italic
             (distance, tie)
         })
         .unwrap_or(want)
+}
+
+/// The `wght` axis of a variable face, as (min, max); `None` for a face
+/// with one weight.
+fn weight_axis(fonts: &FontSystem, id: cosmic_text::fontdb::ID) -> Option<(f32, f32)> {
+    fonts
+        .db()
+        .with_face_data(id, |data, index| {
+            let face = ttf_parser::Face::parse(data, index).ok()?;
+            face.variation_axes()
+                .into_iter()
+                .find(|axis| axis.tag == ttf_parser::Tag::from_bytes(b"wght"))
+                .map(|axis| (axis.min_value, axis.max_value))
+        })
+        .flatten()
 }
 
 /// Distance from every pixel to the nearest covered one, by two chamfer
@@ -475,7 +497,7 @@ pub fn reveal_layout(
         } else {
             Style::Normal
         });
-    buffer.set_text(text, attrs, Shaping::Advanced);
+    buffer.set_text(text, &attrs, Shaping::Advanced, None);
     buffer.shape_until_scroll(true);
 
     let padding = style.padding;
@@ -817,6 +839,7 @@ pub fn outlines(
         x: f32,
         y: f32,
         size: f32,
+        weight: Weight,
     }
     let mut fonts = font_system().lock().ok()?;
     let resolved = resolve_family(&mut fonts, family);
@@ -835,7 +858,7 @@ pub fn outlines(
             .family(family)
             .weight(if bold { Weight::BOLD } else { Weight::NORMAL })
             .style(if italic { Style::Italic } else { Style::Normal });
-        buffer.set_text(text, attrs, Shaping::Advanced);
+        buffer.set_text(text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(true);
         let mut placed = Vec::new();
         for run in buffer.layout_runs() {
@@ -846,6 +869,7 @@ pub fn outlines(
                     x: g.x + g.x_offset,
                     y: run.line_y + g.y - g.y_offset,
                     size: g.font_size,
+                    weight: g.font_weight,
                 });
             }
         }
@@ -853,10 +877,20 @@ pub fn outlines(
     };
     let mut contours: Vec<Vec<[f32; 2]>> = Vec::new();
     for g in placed {
-        let Some(font) = fonts.get_font(g.font_id) else {
+        let Some(index) = fonts.db().face(g.font_id).map(|info| info.index) else {
             continue;
         };
-        let face = font.rustybuzz();
+        let Some(font) = fonts.get_font(g.font_id, g.weight) else {
+            continue;
+        };
+        let Ok(mut face) = ttf_parser::Face::parse(font.data(), index) else {
+            continue;
+        };
+        // A variable face (the system's rounded design is one file) draws
+        // the weight the layout chose, not its default instance.
+        if face.is_variable() {
+            face.set_variation(ttf_parser::Tag::from_bytes(b"wght"), g.weight.0 as f32);
+        }
         let scale = g.size / face.units_per_em() as f32;
         let mut flat = Flattener {
             contours: Vec::new(),
@@ -1107,7 +1141,7 @@ fn rasterize_inner(
         (style.font_size * style.line_height) as f32,
     );
     let mut buffer = Buffer::new(&mut fonts, metrics);
-    buffer.set_size(&mut fonts, Some(text_width as f32), None);
+    buffer.set_size(Some(text_width as f32), None);
 
     let family = match &resolved {
         ResolvedFamily::Named(name) => Family::Name(name),
@@ -1128,7 +1162,7 @@ fn rasterize_inner(
         } else {
             Style::Normal
         });
-    buffer.set_text(&mut fonts, text, attrs, Shaping::Advanced);
+    buffer.set_text(text, &attrs, Shaping::Advanced, None);
     buffer.shape_until_scroll(&mut fonts, true);
 
     // Letter spacing is not a shaping feature here — cosmic-text has none —
@@ -2249,6 +2283,41 @@ mod smoothing_tests {
                 "{}",
                 named(&mut fonts, "monospaced")
             );
+        }
+
+        /// The system's rounded design is ONE variable file the font
+        /// database lists once, at 400. Snapped to that listing, every
+        /// rounded headline drew Regular whatever weight it asked for (a
+        /// demo agent's report, 2026-10-01); the weight axis is the real
+        /// list, so heavy draws heavier than regular — and stays rounded.
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn rounded_draws_the_weight_it_asks_for() {
+            let ink = |weight: u16| {
+                let style = TextStyle {
+                    font_family: Some("rounded".into()),
+                    font_size: 72.0,
+                    weight: Some(weight),
+                    background_rgba: [0, 0, 0, 0],
+                    ..TextStyle::default()
+                };
+                let raster =
+                    rasterize("Rounded Headline 42", 1920.0, 1080.0, &style).expect("rendered");
+                raster.rgba.chunks(4).filter(|p| p[3] > 128).count()
+            };
+            let (regular, heavy) = (ink(400), ink(800));
+            assert!(
+                heavy as f64 > regular as f64 * 1.4,
+                "heavy {heavy} vs regular {regular}"
+            );
+            let fonts = font_system().lock().unwrap();
+            let resolved = ResolvedFamily::Named(".SF NS Rounded".into());
+            if has_family(&fonts, ".SF NS Rounded") {
+                assert_eq!(
+                    snap_weight(&fonts, &resolved, Weight(800), false),
+                    Weight(800)
+                );
+            }
         }
 
         /// A curated face that is absent takes the first INSTALLED stand-in,
