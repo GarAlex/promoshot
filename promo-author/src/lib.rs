@@ -423,6 +423,10 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
         }
     };
 
+    // A caption update's words and style, written once the layer borrow
+    // ends — onto the caption resource the layer shows, where the
+    // renderer reads them (promo_editor::document::write_caption).
+    let mut caption_edit: Option<(Option<Value>, Value)> = None;
     let layers = meta.layers.get_or_insert_with(Vec::new);
     let next_sort = layers.iter().map(|l| l.sort_index + 1).max().unwrap_or(0);
     let layer_id = wanted_id.unwrap_or_else(mint);
@@ -472,33 +476,29 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
                 resource.frame = Some(parsed);
             }
             if kind_name == "caption" {
-                if let Some(words) = args.get("captionText").and_then(Value::as_str) {
-                    layers[i].caption_text = Some(words.to_string());
+                let words = args
+                    .get("captionText")
+                    .and_then(Value::as_str)
+                    .map(|words| json!(words));
+                let mut style = serde_json::Map::new();
+                if let Some(rule) = &placement {
+                    style.insert(
+                        "placement".into(),
+                        serde_json::to_value(rule).map_err(|e| e.to_string())?,
+                    );
                 }
-                let typography = ["fontSize", "tracking", "weight", "lineHeight"]
-                    .iter()
-                    .any(|key| args.get(*key).is_some());
-                if placement.is_some() || typography {
-                    let mut style = layers[i].caption_style.take().unwrap_or_default();
-                    if let Some(rule) = &placement {
-                        style.placement = Some(rule.clone());
+                for key in ["fontSize", "tracking", "lineHeight"] {
+                    if let Some(number) = args.get(key).and_then(Value::as_f64) {
+                        style.insert(key.into(), json!(number));
                     }
-                    if let Some(size) = args.get("fontSize").and_then(Value::as_f64) {
-                        style.font_size = Some(size);
-                    }
-                    if let Some(step) = args.get("tracking").and_then(Value::as_f64) {
-                        style.tracking = Some(step);
-                    }
-                    if let Some(multiple) = args.get("lineHeight").and_then(Value::as_f64) {
-                        style.line_height = Some(multiple);
-                    }
-                    if let Some(weight) = args.get("weight") {
-                        style.weight = Some(
-                            serde_json::from_value(weight.clone())
-                                .map_err(|_| WEIGHT_NAMES.to_string())?,
-                        );
-                    }
-                    layers[i].caption_style = Some(style);
+                }
+                if let Some(weight) = args.get("weight") {
+                    let _: promo_model::SubtitleFontWeight = serde_json::from_value(weight.clone())
+                        .map_err(|_| WEIGHT_NAMES.to_string())?;
+                    style.insert("weight".into(), weight.clone());
+                }
+                if words.is_some() || !style.is_empty() {
+                    caption_edit = Some((words, Value::Object(style)));
                 }
             } else if let Some(rule) = &placement {
                 // Placement MERGES into the earliest keyframe; every other
@@ -582,6 +582,10 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
             layers.push(layer);
         }
     }
+    if let Some((words, style)) = caption_edit {
+        promo_editor::document::write_caption(&mut meta, &layer_id, words.as_ref(), Some(&style))?;
+    }
+    let layers = meta.layers.get_or_insert_with(Vec::new);
 
     // The boilerplate arithmetic: composition and background cover the show.
     let end = layers
@@ -1236,11 +1240,29 @@ fn layer_doc(
     let brief = |k: &&promo_model::ProjectLayerKeyframe| json!({ "id": k.id, "time": k.time, "transitionDuration": k.transition_duration });
     let default_gain = resource.map(|r| r.effective_volume()).unwrap_or(1.0);
     let caption = if layer.kind == ProjectLayerKind::Caption {
-        Some(json!({
-            "text": layer.caption_text,
-            "placement": layer.caption_style.as_ref().and_then(|s| s.placement.clone()),
-            "fontSize": layer.caption_style.as_ref().and_then(|s| s.font_size),
-        }))
+        // What draws: the caption resource the layer shows wins over the
+        // layer's own copy, as in every renderer.
+        let home = resource.filter(|r| r.kind == promo_model::ProjectResourceKind::Caption);
+        let text = home
+            .and_then(|r| r.caption_text.clone())
+            .or_else(|| layer.caption_text.clone());
+        let style = home
+            .and_then(|r| r.caption_style.clone())
+            .or_else(|| layer.caption_style.clone());
+        let mut doc = json!({
+            "text": text,
+            "placement": style.as_ref().and_then(|s| s.placement.clone()),
+            "fontSize": style.as_ref().and_then(|s| s.font_size),
+            "fontFamily": style.as_ref().and_then(|s| s.font_family),
+            "weight": style.as_ref().and_then(|s| s.weight),
+        });
+        if let Some(home) = home {
+            doc["styleLivesOn"] = json!(format!(
+                "resource {} — promo_upsert_layer and updateLayer write there",
+                home.id
+            ));
+        }
+        Some(doc)
     } else {
         None
     };
@@ -2399,6 +2421,83 @@ mod tests {
         assert_eq!(captions[0].caption_text.as_deref(), Some("second"));
         assert!((meta.video_duration - 7.0).abs() < 1e-9, "re-stretched");
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The report (2026-10-01): a caption the app saved keeps its words
+    /// and style on a caption resource, which wins; promo_upsert_layer
+    /// wrote the layer's copy and the render never changed. Now the size
+    /// and words reach the resource, the resource's own font stays, and
+    /// explain says what draws and where it lives.
+    #[test]
+    fn upsert_restyles_an_app_saved_caption() {
+        let root = scratch();
+        let dir = root.join("AppCaption.promo");
+        init(
+            &json!({"project": dir.to_string_lossy(), "canvas": "1280x720"}),
+            None,
+        )
+        .unwrap();
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "caption", "id": "title",
+                    "captionText": "old", "fontSize": 40}),
+            None,
+            &measured,
+        )
+        .unwrap();
+        // What the app's open does: copy onto a caption resource, keep the
+        // layer's copy.
+        let mut meta = read(&dir);
+        meta.resources.get_or_insert_with(Vec::new).push(
+            serde_json::from_value(json!({"id": "R", "kind": "caption", "filename": "",
+                "displayName": "title", "addedAt": 0, "captionText": "Hello",
+                "captionStyle": {"fontSize": 60, "fontFamily": "rounded"}}))
+            .unwrap(),
+        );
+        meta.layers
+            .as_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|l| l.id == "title")
+            .unwrap()
+            .resource_id = Some("R".into());
+        write_metadata(&meta, &dir.join("metadata.json")).unwrap();
+
+        upsert_layer(
+            &json!({"project": dir.to_string_lossy(), "kind": "caption", "id": "title",
+                    "captionText": "New words", "fontSize": 88, "weight": "heavy"}),
+            None,
+            &measured,
+        )
+        .unwrap();
+        let meta = read(&dir);
+        let layer = meta
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "title")
+            .unwrap();
+        let style = meta.caption_style_for(layer).unwrap();
+        assert_eq!(meta.caption_text_for(layer).as_deref(), Some("New words"));
+        assert_eq!(style.font_size, Some(88.0));
+        assert!(style.weight.is_some());
+        assert!(style.font_family.is_some(), "the resource's font stays");
+
+        let answer: Value = serde_json::from_str(
+            &explain(
+                &json!({"project": dir.to_string_lossy(), "layer": "title"}),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let caption = &answer["layers"][0]["caption"];
+        assert_eq!(caption["text"], "New words", "{answer}");
+        assert_eq!(caption["fontSize"], 88.0);
+        assert!(caption["styleLivesOn"]
+            .as_str()
+            .unwrap()
+            .contains("resource R"));
     }
 
     /// Short ids are the author's vocabulary and the tools are authors:

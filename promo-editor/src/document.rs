@@ -337,6 +337,113 @@ fn extend_background_over_content(meta: &mut ProjectMetadata) {
     }
 }
 
+/// Writes a caption layer's words and style where the renderer reads them.
+///
+/// The app keeps a caption's text and style on a caption RESOURCE (it
+/// moves them there on open) and every renderer reads the resource first,
+/// so a write onto the layer's own fields was silently shadowed — an
+/// agent's restyle "took" and never drew (report 2026-10-01). Here `text`
+/// replaces the words (null clears them) and `style` is a JSON merge patch
+/// over the style in effect; both land on the caption resource the layer
+/// shows, forked first when another layer shows it too, so one layer's
+/// edit never restyles another. A layer with no caption resource keeps
+/// them on itself, as before.
+pub fn write_caption(
+    meta: &mut ProjectMetadata,
+    layer_id: &str,
+    text: Option<&serde_json::Value>,
+    style: Option<&serde_json::Value>,
+) -> Result<(), String> {
+    fn find_mut<'a>(
+        layers: &'a mut [promo_model::ProjectLayer],
+        id: &str,
+    ) -> Option<&'a mut promo_model::ProjectLayer> {
+        for layer in layers.iter_mut() {
+            if layer.id == id {
+                return Some(layer);
+            }
+            if let Some(found) = layer.members.as_mut().and_then(|m| find_mut(m, id)) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    let words = |value: &serde_json::Value| -> Result<Option<String>, String> {
+        match value {
+            serde_json::Value::Null => Ok(None),
+            serde_json::Value::String(text) => Ok(Some(text.clone())),
+            other => Err(format!("captionText must be a string, not {other}")),
+        }
+    };
+    let layer = find_mut(meta.layers.get_or_insert_with(Vec::new), layer_id)
+        .ok_or_else(|| format!("no layer with id {layer_id}"))?
+        .clone();
+    let effective = meta.caption_style_for(&layer);
+    let restyled = |base: Option<promo_model::SubtitleStyle>| match style {
+        None => Ok(base),
+        Some(patch) => {
+            let mut wire =
+                serde_json::to_value(base.unwrap_or_default()).map_err(|e| e.to_string())?;
+            merge_patch(&mut wire, patch);
+            serde_json::from_value::<promo_model::SubtitleStyle>(wire)
+                .map(Some)
+                .map_err(|e| format!("captionStyle rejected by the format: {e}"))
+        }
+    };
+    let shown = layer.resource_id.clone().filter(|id| {
+        meta.resources
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .any(|r| r.id == *id && r.kind == promo_model::ProjectResourceKind::Caption)
+    });
+    let Some(mut home) = shown else {
+        let new_style = restyled(layer.caption_style.clone())?;
+        let target =
+            find_mut(meta.layers.get_or_insert_with(Vec::new), layer_id).expect("found above");
+        if let Some(text) = text {
+            target.caption_text = words(text)?;
+        }
+        target.caption_style = new_style;
+        return Ok(());
+    };
+    let shared = promo_model::nesting::all_layers(meta)
+        .iter()
+        .any(|other| other.id != layer_id && other.resource_id.as_deref() == Some(home.as_str()));
+    let resources = meta.resources.get_or_insert_with(Vec::new);
+    if shared {
+        let original = resources
+            .iter()
+            .find(|r| r.id == home)
+            .expect("found above")
+            .clone();
+        let mut id = format!("{home}-{layer_id}");
+        while resources.iter().any(|r| r.id == id) {
+            id.push('b');
+        }
+        resources.push(promo_model::ProjectResource {
+            id: id.clone(),
+            ..original
+        });
+        home = id;
+    }
+    let new_style = restyled(effective)?;
+    let resource = resources
+        .iter_mut()
+        .find(|r| r.id == home)
+        .expect("the caption's home");
+    if let Some(text) = text {
+        resource.caption_text = words(text)?;
+    }
+    resource.caption_style = new_style;
+    if shared {
+        find_mut(meta.layers.get_or_insert_with(Vec::new), layer_id)
+            .expect("found above")
+            .resource_id = Some(home);
+    }
+    Ok(())
+}
+
 fn merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
     match patch {
         serde_json::Value::Object(entries) => {
@@ -1028,11 +1135,27 @@ impl Document {
         inner.layers = Some(composition.layers.clone());
         inner.composition_settings.canvas_width = composition.canvas_width;
         inner.composition_settings.canvas_height = composition.canvas_height;
+        // The project's own layers ride along as a stand-in composition,
+        // so a command asking who else shows a resource (a caption forks
+        // before an edit when another layer shows it) sees them too.
+        const OUTSIDE: &str = "\u{0}outside";
+        let mut outside = meta.resources.as_ref().expect("resources")[index].clone();
+        outside.id = OUTSIDE.into();
+        if let Some(c) = outside.composition.as_mut() {
+            c.layers = meta.layers.clone().unwrap_or_default();
+        }
+        inner.resources.get_or_insert_with(Vec::new).push(outside);
         Self::run(&mut inner, command)?;
         promo_timeline::resolve_attachments(&mut inner);
         let mut updated = composition;
         updated.layers = inner.layers.unwrap_or_default();
-        meta.resources.as_mut().expect("resources")[index].composition = Some(updated);
+        // What the command did to the project's resources (a caption's
+        // words live on its resource) is the project's; the composition
+        // itself is the updated one.
+        let mut resources = inner.resources.unwrap_or_default();
+        resources.retain(|r| r.id != OUTSIDE);
+        resources[index].composition = Some(updated);
+        meta.resources = Some(resources);
         let problems = promo_model::nesting::problems(meta);
         if let Some(problem) = problems
             .iter()
@@ -1479,9 +1602,19 @@ impl Document {
                         ("sortIndex", "moveLayer owns the order"),
                     ],
                 )?;
+                // A caption's words and style go where the renderer reads
+                // them — its caption resource when it shows one — not onto
+                // a layer copy the resource shadows.
+                let mut patch = patch.clone();
+                let caption = patch.as_object_mut().map(|entries| {
+                    (
+                        entries.remove("captionText"),
+                        entries.remove("captionStyle"),
+                    )
+                });
                 let layer = find(layers, layer_id)?;
                 let mut wire = serde_json::to_value(&*layer).map_err(|e| e.to_string())?;
-                merge_patch(&mut wire, patch);
+                merge_patch(&mut wire, &patch);
                 let patched: promo_model::ProjectLayer = serde_json::from_value(wire)
                     .map_err(|e| format!("patch rejected by the format: {e}"))?;
                 if let Some(resource_id) = &patched.resource_id {
@@ -1496,6 +1629,11 @@ impl Document {
                     }
                 }
                 *find(meta.layers.get_or_insert_with(Vec::new), layer_id)? = patched;
+                if let Some((text, style)) = caption {
+                    if text.is_some() || style.is_some() {
+                        write_caption(meta, layer_id, text.as_ref(), style.as_ref())?;
+                    }
+                }
             }
             Command::InComposition { .. } => {
                 unreachable!("dispatched to run_in_composition before the layer borrow")
@@ -3138,6 +3276,143 @@ mod tests {
         }))
         .unwrap();
         assert!(matches!(cmd, Command::SetMarkers { .. }));
+    }
+
+    /// A project as the app saves it: each caption's words and style
+    /// copied onto a caption resource (which wins), the layer keeping a
+    /// stale copy. "Pair" is one resource two layers show.
+    const APP_CAPTIONS: &str = r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v","createdAt":0,
+        "state":"recorded","trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+        "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080},
+        "resources":[
+          {"id":"R","kind":"caption","filename":"","displayName":"Title","addedAt":0,
+           "captionText":"Hello","captionStyle":{"fontSize":60,"fontFamily":"rounded"}},
+          {"id":"Pair","kind":"caption","filename":"","displayName":"Both","addedAt":0,
+           "captionText":"Twice","captionStyle":{"fontSize":30}},
+          {"id":"C","kind":"composition","filename":"","displayName":"Inner","addedAt":0,
+           "composition":{"canvasWidth":1920,"canvasHeight":1080,"layers":[
+             {"id":"N","name":"Nested","sortIndex":0,"kind":"caption","isEnabled":true,
+              "startTime":0,"duration":4,"resourceID":"R","keyframes":[]}]}}],
+        "layers":[
+          {"id":"T","name":"Title","sortIndex":0,"kind":"caption","isEnabled":true,
+           "startTime":0,"duration":4,"resourceID":"R","captionText":"stale",
+           "captionStyle":{"fontSize":40},"keyframes":[]},
+          {"id":"A","name":"A","sortIndex":1,"kind":"caption","isEnabled":true,
+           "startTime":0,"duration":4,"resourceID":"Pair","keyframes":[]},
+          {"id":"B","name":"B","sortIndex":2,"kind":"caption","isEnabled":true,
+           "startTime":0,"duration":4,"resourceID":"Pair","keyframes":[]},
+          {"id":"Own","name":"Own","sortIndex":3,"kind":"caption","isEnabled":true,
+           "startTime":0,"duration":4,"captionText":"mine","keyframes":[]}]}"#;
+
+    fn drawn(doc: &Document, id: &str) -> (Option<String>, promo_model::SubtitleStyle) {
+        let meta = doc.meta();
+        let layer = meta
+            .layers
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == id)
+            .unwrap();
+        (
+            meta.caption_text_for(layer),
+            meta.caption_style_for(layer).unwrap_or_default(),
+        )
+    }
+
+    /// The report: an app-saved caption restyled through updateLayer drew
+    /// unchanged, because the edit landed on the layer's copy and the
+    /// caption resource wins. Now the edit reaches what draws — merged
+    /// over the style in effect, so the resource's own font stays — and a
+    /// caption with no resource still keeps its words on itself.
+    #[test]
+    fn a_caption_edit_reaches_what_draws() {
+        let mut doc = Document::open(APP_CAPTIONS).unwrap();
+        doc.apply(&Command::UpdateLayer {
+            layer_id: "T".into(),
+            patch: serde_json::json!({
+                "name": "Headline", "captionText": "Hi there",
+                "captionStyle": {"fontSize": 96, "weight": "heavy"}
+            }),
+        })
+        .expect("a caption restyles");
+        let (text, style) = drawn(&doc, "T");
+        assert_eq!(text.as_deref(), Some("Hi there"));
+        assert_eq!(style.font_size, Some(96.0));
+        assert_eq!(
+            style.font_family.map(|f| format!("{f:?}")),
+            Some("Rounded".into())
+        );
+        assert!(style.weight.is_some());
+        let layers = doc.meta().layers.as_ref().unwrap();
+        assert_eq!(
+            layers[0].name, "Headline",
+            "the rest of the patch is the layer's"
+        );
+
+        doc.apply(&Command::UpdateLayer {
+            layer_id: "Own".into(),
+            patch: serde_json::json!({"captionText": "still mine"}),
+        })
+        .unwrap();
+        let own = doc
+            .meta()
+            .layers
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "Own")
+            .unwrap();
+        assert_eq!(own.caption_text.as_deref(), Some("still mine"));
+    }
+
+    /// One layer's restyle never restyles another showing the same
+    /// caption resource: the edited layer gets its own copy first.
+    #[test]
+    fn a_shared_caption_forks_before_an_edit() {
+        let mut doc = Document::open(APP_CAPTIONS).unwrap();
+        doc.apply(&Command::UpdateLayer {
+            layer_id: "A".into(),
+            patch: serde_json::json!({"captionStyle": {"fontSize": 80}}),
+        })
+        .unwrap();
+        assert_eq!(drawn(&doc, "A").1.font_size, Some(80.0));
+        assert_eq!(drawn(&doc, "B").1.font_size, Some(30.0), "B is untouched");
+        assert_eq!(
+            drawn(&doc, "A").0.as_deref(),
+            Some("Twice"),
+            "the words came along"
+        );
+        let layers = doc.meta().layers.as_ref().unwrap();
+        assert_ne!(layers[1].resource_id, layers[2].resource_id);
+    }
+
+    /// A caption inside a composition: the resource it shows is the
+    /// project's, and the edit made from inside is kept — a command run in
+    /// a composition used to write back only the composition's layers.
+    #[test]
+    fn a_caption_edit_inside_a_composition_is_kept() {
+        let mut doc = Document::open(APP_CAPTIONS).unwrap();
+        doc.apply(&Command::InComposition {
+            resource_id: "C".into(),
+            command: Box::new(Command::UpdateLayer {
+                layer_id: "N".into(),
+                patch: serde_json::json!({"captionText": "from inside"}),
+            }),
+        })
+        .unwrap();
+        let resources = doc.meta().resources.as_ref().unwrap();
+        let homes: Vec<_> = resources
+            .iter()
+            .filter(|r| r.caption_text.as_deref() == Some("from inside"))
+            .collect();
+        assert_eq!(homes.len(), 1, "{resources:?}");
+        assert_ne!(homes[0].id, "R", "T shows R too, so N forked");
+        assert_eq!(drawn(&doc, "T").0.as_deref(), Some("Hello"));
+        let nested = &resources.iter().find(|r| r.id == "C").unwrap().composition;
+        assert_eq!(
+            nested.as_ref().unwrap().layers[0].resource_id.as_deref(),
+            Some(homes[0].id.as_str())
+        );
     }
 
     const CAMERA_STAGE: &str = r#"{"id":"AAAAAAAA-0000-0000-0000-00000000AAAA","name":"v","createdAt":0,
