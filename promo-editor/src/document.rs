@@ -225,6 +225,14 @@ pub enum Command {
         #[serde(rename = "layerID")]
         layer_id: String,
         patch: serde_json::Value,
+        /// Set for an AUTHOR's command (an agent's promo_apply, through
+        /// `promo_author::parse_commands`): `captionText` and
+        /// `captionStyle` then go where the renderer reads them — the
+        /// caption resource the layer shows ([`write_caption`]). Never on
+        /// the wire: the apps' own edits arrive as literal layer diffs
+        /// and land literally.
+        #[serde(skip)]
+        author: bool,
     },
     /// The merge-patch twin of [`Command::UpdateResource`]: trims, speed,
     /// loop, a frame, speech text — only the fields named change, and the
@@ -1592,7 +1600,11 @@ impl Document {
                     );
                 }
             },
-            Command::UpdateLayer { layer_id, patch } => {
+            Command::UpdateLayer {
+                layer_id,
+                patch,
+                author,
+            } => {
                 checked_patch(
                     patch,
                     &[
@@ -1606,7 +1618,7 @@ impl Document {
                 // them — its caption resource when it shows one — not onto
                 // a layer copy the resource shadows.
                 let mut patch = patch.clone();
-                let caption = patch.as_object_mut().map(|entries| {
+                let caption = patch.as_object_mut().filter(|_| *author).map(|entries| {
                     (
                         entries.remove("captionText"),
                         entries.remove("captionStyle"),
@@ -3333,6 +3345,7 @@ mod tests {
                 "name": "Headline", "captionText": "Hi there",
                 "captionStyle": {"fontSize": 96, "weight": "heavy"}
             }),
+            author: true,
         })
         .expect("a caption restyles");
         let (text, style) = drawn(&doc, "T");
@@ -3352,6 +3365,7 @@ mod tests {
         doc.apply(&Command::UpdateLayer {
             layer_id: "Own".into(),
             patch: serde_json::json!({"captionText": "still mine"}),
+            author: true,
         })
         .unwrap();
         let own = doc
@@ -3365,6 +3379,26 @@ mod tests {
         assert_eq!(own.caption_text.as_deref(), Some("still mine"));
     }
 
+    /// The apps' own edits arrive as literal layer diffs (Swift's
+    /// layerCommands) and must land literally — the same command an agent
+    /// sends is a caption write only when parsed as an author's.
+    #[test]
+    fn an_apps_layer_diff_stays_literal() {
+        let mut doc = Document::open(APP_CAPTIONS).unwrap();
+        let wire: Command = serde_json::from_value(serde_json::json!({
+            "kind": "updateLayer", "layerID": "T", "patch": {"captionStyle": {"fontSize": 12}}
+        }))
+        .unwrap();
+        doc.apply(&wire).unwrap();
+        let layer = &doc.meta().layers.as_ref().unwrap()[0];
+        assert_eq!(layer.caption_style.as_ref().unwrap().font_size, Some(12.0));
+        assert_eq!(
+            drawn(&doc, "T").1.font_size,
+            Some(60.0),
+            "the resource is untouched"
+        );
+    }
+
     /// One layer's restyle never restyles another showing the same
     /// caption resource: the edited layer gets its own copy first.
     #[test]
@@ -3373,6 +3407,7 @@ mod tests {
         doc.apply(&Command::UpdateLayer {
             layer_id: "A".into(),
             patch: serde_json::json!({"captionStyle": {"fontSize": 80}}),
+            author: true,
         })
         .unwrap();
         assert_eq!(drawn(&doc, "A").1.font_size, Some(80.0));
@@ -3397,6 +3432,7 @@ mod tests {
             command: Box::new(Command::UpdateLayer {
                 layer_id: "N".into(),
                 patch: serde_json::json!({"captionText": "from inside"}),
+                author: true,
             }),
         })
         .unwrap();

@@ -871,11 +871,25 @@ fn command_hint(kind: &str) -> String {
 /// `promo_apply` and the apps' document, whose refusal used to reach no one
 /// (review 2026-09-27, P2-45).
 pub fn parse_commands(raw: &[Value]) -> Result<Vec<promo_editor::Command>, String> {
+    // An author's commands: a caption's words and style go where the
+    // renderer reads them (promo_editor::document::write_caption) — the
+    // apps' own literal layer diffs never come through here.
+    fn as_author(command: &mut promo_editor::Command) {
+        match command {
+            promo_editor::Command::UpdateLayer { author, .. } => *author = true,
+            promo_editor::Command::InComposition { command, .. } => as_author(command),
+            _ => {}
+        }
+    }
     raw.iter()
         .enumerate()
         .map(|(i, c)| {
             let kind = c.get("kind").and_then(Value::as_str).unwrap_or("?");
             serde_json::from_value(c.clone())
+                .map(|mut command| {
+                    as_author(&mut command);
+                    command
+                })
                 .map_err(|e| format!("commands[{i}] ({kind}): {e} — {}", command_hint(kind)))
         })
         .collect()
@@ -2498,6 +2512,24 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("resource R"));
+
+        // promo_apply's updateLayer is an author's command too.
+        apply(
+            &json!({"project": dir.to_string_lossy(), "commands": [
+                {"kind": "updateLayer", "layerID": "title", "patch": {"captionStyle": {"fontSize": 50}}}
+            ]}),
+            None,
+        )
+        .unwrap();
+        let meta = read(&dir);
+        let layer = meta
+            .layers
+            .as_deref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "title")
+            .unwrap();
+        assert_eq!(meta.caption_style_for(layer).unwrap().font_size, Some(50.0));
     }
 
     /// Short ids are the author's vocabulary and the tools are authors:
