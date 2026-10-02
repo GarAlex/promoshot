@@ -870,6 +870,20 @@ fn command_hint(kind: &str) -> String {
 /// takes (see [`command_hint`]) — one reading for the headless
 /// `promo_apply` and the apps' document, whose refusal used to reach no one
 /// (review 2026-09-27, P2-45).
+/// Seconds between 1970-01-01 and 2001-01-01, the apps' reference date.
+const REFERENCE_EPOCH_OFFSET: f64 = 978_307_200.0;
+
+/// Now as `createdAt` reads it: seconds since 2001-01-01, the apps' own
+/// clock (Swift's `timeIntervalSinceReferenceDate`). Unix seconds here put
+/// every CLI-made show 31 years in the future in the app — "Created Oct 1,
+/// 2057" (seen 2026-10-01).
+fn reference_seconds_now() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64() - REFERENCE_EPOCH_OFFSET)
+        .unwrap_or(0.0)
+}
+
 pub fn parse_commands(raw: &[Value]) -> Result<Vec<promo_editor::Command>, String> {
     // An author's commands: a caption's words and style go where the
     // renderer reads them (promo_editor::document::write_caption) — the
@@ -1041,10 +1055,7 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "Show".into())
         });
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0);
+    let created_at = reference_seconds_now();
     let mut spec = json!({ "name": name, "createdAt": created_at, "slides": slides });
     for key in [
         "kind",
@@ -2530,6 +2541,23 @@ mod tests {
             .find(|l| l.id == "title")
             .unwrap();
         assert_eq!(meta.caption_style_for(layer).unwrap().font_size, Some(50.0));
+    }
+
+    /// `createdAt` is on the apps' clock (seconds since 2001), not Unix
+    /// time: a show made now reads as made now, not in 2057.
+    #[test]
+    fn created_at_is_on_the_apps_clock() {
+        let now = reference_seconds_now();
+        let unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        assert!((unix - now - 978_307_200.0).abs() < 5.0, "{now} vs {unix}");
+        // 2026 is about 25.75 years after 2001.
+        assert!(
+            now > 25.0 * 365.0 * 86400.0 && now < 40.0 * 365.0 * 86400.0,
+            "{now}"
+        );
     }
 
     /// Short ids are the author's vocabulary and the tools are authors:
