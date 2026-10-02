@@ -78,7 +78,10 @@ pub fn speak(
                 plan.providers().join(", ")
             )
         } else {
-            format!("blocked — no key for {}", missing.join(", "))
+            format!(
+                "no key for {} — those would get silent placeholders of their estimated length",
+                missing.join(", ")
+            )
         };
         return Ok(format!(
             "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}",
@@ -89,7 +92,11 @@ pub fn speak(
             plan.pending.len()
         ));
     }
-    if !missing.is_empty() {
+    // No key for a provider: unless asked not to, its narrations get silent
+    // placeholders of their estimated length — the film times right today
+    // and is voiced on the next call with a key.
+    let placeholders = args.get("placeholder").and_then(Value::as_bool) != Some(false);
+    if !missing.is_empty() && !placeholders {
         return Err(format!(
             "nothing was synthesized: {} narration(s) pending, but no key for {} — {}",
             plan.pending.len(),
@@ -101,9 +108,23 @@ pub fn speak(
     let mut persist = |doc: &Value| {
         std::fs::write(&meta_path, doc.to_string()).map_err(|e| format!("write: {e}"))
     };
-    let report = promo_speech::settle(&mut doc, &resources_dir, synth, measure, &mut persist)?;
+    let mut report = promo_speech::placehold(&mut doc, &resources_dir, &missing, &mut persist)?;
+    report.extend(promo_speech::settle_except(
+        &mut doc,
+        &resources_dir,
+        synth,
+        measure,
+        &mut persist,
+        &missing,
+    )?);
     if report.is_empty() {
         return Ok("no narration scripts with text — nothing to do".into());
+    }
+    if !missing.is_empty() {
+        report.push(format!(
+            "silent until voiced: {}",
+            promo_speech::keys::missing_key_message(&missing[0])
+        ));
     }
     Ok(report.join("\n"))
 }
@@ -280,8 +301,10 @@ mod tests {
     }
 
     /// `check: true` tells an agent whether narration is possible before
-    /// it plans one — per provider, never the key — and a walk that
-    /// would need a missing key refuses BEFORE buying anything.
+    /// it plans one — per provider, never the key. With no key the walk
+    /// spends nothing: it writes a silent placeholder of the estimated
+    /// length (or, asked `placeholder: false`, refuses), and the next walk
+    /// with a key voices it and clears the mark.
     #[test]
     fn check_answers_readiness_and_a_missing_key_refuses_before_spending() {
         let root = std::env::temp_dir().join(format!("mcp-speak-check-{}", std::process::id()));
@@ -316,11 +339,11 @@ mod tests {
         )
         .unwrap();
         assert!(
-            blocked.contains("1 pending — blocked — no key for openai"),
+            blocked.contains("1 pending — no key for openai — those would get silent placeholders"),
             "{blocked}"
         );
         let err = speak(
-            &json!({ "project": dir.to_string_lossy() }),
+            &json!({ "project": dir.to_string_lossy(), "placeholder": false }),
             Some(&root),
             &Never,
             &no_keys,
@@ -329,6 +352,33 @@ mod tests {
         .unwrap_err();
         assert!(err.starts_with("nothing was synthesized"), "{err}");
         assert!(err.contains("key set openai"), "{err}");
+        // The default: a silent stand-in, nothing spent, still owed.
+        let placed = speak(
+            &json!({ "project": dir.to_string_lossy() }),
+            Some(&root),
+            &Never,
+            &no_keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        assert!(placed.contains("V1: silent placeholder"), "{placed}");
+        assert!(placed.contains("key set openai"), "{placed}");
+        let doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        let resource = &doc["resources"][0];
+        assert_eq!(resource["speech"]["placeholder"], true);
+        assert!(
+            resource["speech"].get("renderedHash").is_none(),
+            "no receipt: still owed"
+        );
+        let seconds = resource["duration"].as_f64().unwrap();
+        assert!(
+            seconds > 0.8 && seconds < 2.0,
+            "\"Hello there\" ≈ 1.1 s, got {seconds}"
+        );
+        let bytes = std::fs::read(dir.join("Resources/voice.mp3")).unwrap();
+        assert_eq!(&bytes[..2], &[0xFF, 0xFB], "a real (silent) mp3");
         let keys = FixedKeys(vec![("openai".into(), "sk-secret".into())]);
         let ready = speak(
             &json!({ "project": dir.to_string_lossy(), "check": true }),
@@ -362,6 +412,13 @@ mod tests {
         assert!(
             settled.contains("1 settled, 0 pending — nothing to synthesize"),
             "{settled}"
+        );
+        let doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        assert!(
+            doc["resources"][0]["speech"].get("placeholder").is_none(),
+            "the real take clears the mark"
         );
         let _ = std::fs::remove_dir_all(&root);
     }

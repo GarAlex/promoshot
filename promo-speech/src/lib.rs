@@ -9,18 +9,23 @@
 //! `/run/secrets/OPENAI_API_KEY`) for a container or a CI box that has
 //! no keyring — never an environment variable holding the key. A key
 //! travels in a request header, never a URL; nothing here stores or logs
-//! one. Without a key an agent CANNOT
-//! narrate: the honest fallback is a recorded file dropped into
-//! Resources/ and referenced like any audio.
+//! one. Without a key a narration gets a silent placeholder of its
+//! estimated length ([`placehold`], [`estimate`]): marked, receipt-less,
+//! voiced by the next walk with a key; a recorded file dropped into
+//! Resources/ is the other honest route.
 
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::Path;
 
+pub mod estimate;
 pub mod keys;
 pub mod stress;
 pub mod voices;
 
+pub use estimate::{
+    calibration, estimate, silent_mp3, silent_mp3_seconds, voice_language, Estimate,
+};
 pub use keys::{
     secrets_path, FixedKeys, KeySource, KeyStatus, KeyStore, SystemKeys, PROVIDERS, SECRETS,
     SERVICE,
@@ -405,6 +410,19 @@ pub fn settle(
     measure: &dyn Fn(&Path) -> Result<f64, String>,
     persist: &mut dyn FnMut(&Value) -> Result<(), String>,
 ) -> Result<Vec<String>, String> {
+    settle_except(doc, resources_dir, synth, measure, persist, &[])
+}
+
+/// [`settle`], leaving the narrations of the providers in `skip` alone —
+/// the ones a walk had no key for, which [`placehold`] stood in for.
+pub fn settle_except(
+    doc: &mut Value,
+    resources_dir: &Path,
+    synth: &dyn Synth,
+    measure: &dyn Fn(&Path) -> Result<f64, String>,
+    persist: &mut dyn FnMut(&Value) -> Result<(), String>,
+    skip: &[String],
+) -> Result<Vec<String>, String> {
     std::fs::create_dir_all(resources_dir).map_err(|e| e.to_string())?;
     let count = doc
         .get("resources")
@@ -435,6 +453,9 @@ pub fn settle(
             report.push(format!("{id}: reused ({seconds:.2}s) — receipt holds"));
             continue;
         }
+        if skip.contains(&script.provider) {
+            continue;
+        }
         let destination = resources_dir.join(&script.filename);
         let print = fingerprint(&script.provider, &script.voice, &script.words);
         let audio = synth.synthesize(&script.provider, &script.voice, &script.words)?;
@@ -454,6 +475,10 @@ pub fn settle(
             resource["speech"]["renderedHash"] = json!(print);
             resource["speech"]["provider"] = json!(script.provider);
             resource["speech"]["voiceID"] = json!(script.voice);
+            // A real take: whatever stood in for it is gone.
+            if let Some(speech) = resource["speech"].as_object_mut() {
+                speech.remove("placeholder");
+            }
         }
         persist(doc)?;
         report.push(format!("{id}: generated ({seconds:.2}s)"));
@@ -463,6 +488,86 @@ pub fn settle(
             "{} narration(s), {spent} newly synthesized",
             report.len()
         ));
+    }
+    Ok(report)
+}
+
+/// Silent stand-ins for the pending narrations of `providers` — the ones
+/// with no key: each gets a silent MP3 of its estimated length (the
+/// project's own takes in that voice calibrate it), `speech.placeholder:
+/// true`, and NO receipt, so the walk still owes it and voices it the
+/// moment a key exists. A narration whose real take is in hand (receipt
+/// holds, file there) is never touched. The cut times against the right
+/// length today; validate says what is silent.
+pub fn placehold(
+    doc: &mut Value,
+    resources_dir: &Path,
+    providers: &[String],
+    persist: &mut dyn FnMut(&Value) -> Result<(), String>,
+) -> Result<Vec<String>, String> {
+    std::fs::create_dir_all(resources_dir).map_err(|e| e.to_string())?;
+    let count = doc
+        .get("resources")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let mut report = Vec::new();
+    for index in 0..count {
+        let Some(script) = script(index, &doc["resources"][index]) else {
+            continue;
+        };
+        if !providers.contains(&script.provider) {
+            continue;
+        }
+        let print = fingerprint(&script.provider, &script.voice, &script.words);
+        let destination = resources_dir.join(&script.filename);
+        if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
+            continue;
+        }
+        if script.filename.contains('/')
+            || script.filename.contains('\\')
+            || script.filename.starts_with('.')
+        {
+            return Err(format!(
+                "{}: filename \"{}\" must be a plain file name inside Resources/",
+                script.id, script.filename
+            ));
+        }
+        let calibration = estimate::calibration(doc, &script.provider, &script.voice);
+        let language = estimate::voice_language(&script.voice);
+        let guess = estimate::estimate(&script.words, language.as_deref(), calibration);
+        std::fs::write(&destination, estimate::silent_mp3(guess.seconds))
+            .map_err(|e| format!("{}: write: {e}", script.id))?;
+        let seconds = estimate::silent_mp3_seconds(guess.seconds);
+        {
+            let resource = &mut doc["resources"][index];
+            resource["filename"] = json!(script.filename);
+            resource["duration"] = json!(seconds);
+            resource["kind"] = json!("audio");
+            if let Some(object) = resource.as_object_mut() {
+                object.remove("trimStart");
+                object.remove("trimEnd");
+                object.remove("trimKeyframes");
+            }
+            resource["speech"]["provider"] = json!(script.provider);
+            resource["speech"]["voiceID"] = json!(script.voice);
+            resource["speech"]["placeholder"] = json!(true);
+            if let Some(speech) = resource["speech"].as_object_mut() {
+                speech.remove("renderedHash");
+            }
+        }
+        let how = if calibration == 1.0 {
+            "estimated".to_string()
+        } else {
+            format!("estimated, calibrated ×{calibration:.2} from this voice's takes")
+        };
+        report.push(format!(
+            "{}: silent placeholder ({seconds:.2}s, {how}) — no {} key; it is voiced on the next promo_speak with one",
+            script.id, script.provider
+        ));
+    }
+    if !report.is_empty() {
+        persist(doc)?;
     }
     Ok(report)
 }

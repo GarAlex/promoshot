@@ -746,7 +746,8 @@ pub fn tools(host: Host) -> Vec<Value> {
                  never re-synthesized. This spends the person's own API credit, with the key \
                  they added in Settings → Narration — ask with `check: true` first: it spends \
                  nothing and says which keys are present (never the keys) and what a real call \
-                 would synthesize."
+                 would synthesize. A provider with no key gets a silent placeholder of the \
+                 estimated length (speech.placeholder: true) that exports silent until voiced."
             } else {
                 "Synthesize narration for every resource whose speech.text says something, \
                  spending the PERSON'S OWN provider key from the OS keyring (`promoshot-mcp key \
@@ -754,16 +755,20 @@ pub fn tools(host: Host) -> Vec<Value> {
                  or /run/secrets/OPENAI_API_KEY), matching each script's provider (default \
                  openai/alloy). Unchanged text is reused by receipt, never billed twice. Keys \
                  are checked for EVERY pending narration before anything is bought, and each \
-                 bought receipt is written back at once. Without a key an agent CANNOT narrate \
-                 — record a voice file into Resources/ and reference it as an ordinary audio \
-                 resource instead."
+                 bought receipt is written back at once. A provider with NO key gets a silent \
+                 placeholder of the estimated length (speech.placeholder: true, no receipt): \
+                 time the cut against it; the next call with a key voices it. It exports \
+                 silent and promo_validate says so; `placeholder: false` refuses instead."
             },
             "inputSchema": { "type": "object",
                 "properties": { "project": project,
                     "check": { "type": "boolean", "description":
                         "Spend nothing: report where each needed provider's key comes from \
                          (never the key) and what a real call would synthesize — ready, blocked, \
-                         or nothing to do. With no project, the keys alone." } },
+                         or nothing to do. With no project, the keys alone." },
+                    "placeholder": { "type": "boolean", "description":
+                        "Default true: a provider with no key gets a silent placeholder of the \
+                         estimated length. false: refuse instead, writing nothing." } },
                 "required": [] }
         }),
     ];

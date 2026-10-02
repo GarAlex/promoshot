@@ -219,9 +219,16 @@ ready, blocked, or nothing to do. A real call checks every pending
 narration's key BEFORE buying anything, and writes each receipt back
 the moment it is paid for. Unchanged text is reused by receipt, never
 billed twice.
-**Without a key an agent cannot narrate** — do not pretend: record or
-obtain a voice file, drop it into `Resources/`, and reference it as an
-ordinary audio resource.
+**Without a key a narration gets a SILENT PLACEHOLDER**: `promo_speak`
+writes a silent MP3 of the estimated length (syllables, pauses and
+numbers counted per writing system, calibrated by this project's own
+takes in that voice), marks `speech.placeholder: true` and keeps no
+receipt — so time the cut against it, and the next `promo_speak` with a
+key voices it at nearly the same length. It exports silent:
+`promo_validate` names every placeholder. Never present a placeholder as
+spoken narration; `placeholder: false` refuses instead. A recorded voice
+file in `Resources/`, referenced as an ordinary audio resource, is the
+other honest route.
 
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`, and the authoring tools as verbs taking the

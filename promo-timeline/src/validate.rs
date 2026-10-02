@@ -60,6 +60,7 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
     environment_warnings(meta, &mut out);
     particle_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
+    placeholder_narration_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -456,6 +457,34 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
 
 /// Every finding's message, breaks and warnings alike, in reading order —
 /// the list the editor's banner shows and the older callers print.
+/// A narration standing in as silence (`speech.placeholder`): its length
+/// is an estimate and it exports SILENT until it is voiced — said, so
+/// nobody ships a mute film thinking it speaks.
+fn placeholder_narration_warnings(meta: &ProjectMetadata, out: &mut Report) {
+    for resource in meta.resources.as_deref().unwrap_or(&[]) {
+        let Some(speech) = resource.extra.get("speech") else {
+            continue;
+        };
+        if speech
+            .get("placeholder")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        {
+            continue;
+        }
+        let provider = speech
+            .get("provider")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("openai");
+        out.warn(format!(
+            "narration \"{}\" is a silent placeholder (estimated {:.1}s) — it exports silent \
+             until voiced: add a {provider} key and run promo_speak (or generate it in the app)",
+            resource.display_name,
+            resource.duration.unwrap_or(0.0)
+        ));
+    }
+}
+
 pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
     findings(meta).messages()
 }
@@ -1895,6 +1924,39 @@ fn duration_rule_warnings(meta: &ProjectMetadata, out: &mut Report) {
 
 #[cfg(test)]
 mod tests {
+    /// A silent stand-in narration warns that it exports silent; a voiced
+    /// one (placeholder mark gone) says nothing.
+    #[test]
+    fn a_placeholder_narration_warns_that_it_is_silent() {
+        let doc = |placeholder: bool| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"n","createdAt":0,"state":"recorded","trimStart":0,
+                "trimEnd":0,"videoDuration":0,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":180}},
+                "resources":[{{"id":"V","kind":"audio","filename":"v.mp3","displayName":"Intro",
+                  "addedAt":0,"duration":2.5,
+                  "speech":{{"text":"Hello","provider":"openai","voiceID":"alloy"{}}}}}],
+                "layers":[]}}"#,
+                if placeholder {
+                    r#","placeholder":true"#
+                } else {
+                    ""
+                }
+            ))
+            .unwrap()
+        };
+        let found = warnings(&doc(true));
+        assert!(
+            found.iter().any(|w| w
+                .contains("narration \"Intro\" is a silent placeholder (estimated 2.5s)")
+                && w.contains("openai key")),
+            "{found:?}"
+        );
+        assert!(!warnings(&doc(false))
+            .iter()
+            .any(|w| w.contains("placeholder")));
+    }
+
     use super::*;
 
     fn project(layers: &str, extra: &str) -> ProjectMetadata {
