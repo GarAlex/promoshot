@@ -1239,6 +1239,27 @@ impl Document {
         false
     }
 
+    /// Takes the newest step back and FORGETS it: the document returns to
+    /// the snapshot before that step, exactly as `undo` would, but nothing
+    /// is pushed for redo — the step leaves no trace in either history.
+    /// What an app's "try a few, then cancel" session needs: a cancelled
+    /// trial must not come back on the next Redo. The redo line is
+    /// untouched (it was already cleared by the step being withdrawn).
+    /// False with nothing to withdraw.
+    pub fn withdraw(&mut self) -> bool {
+        let Some(snapshot) = self.undo.last() else {
+            return false;
+        };
+        let Ok(meta) = ProjectMetadata::from_json(snapshot) else {
+            return false;
+        };
+        self.undo.pop();
+        let before = std::mem::replace(&mut self.meta, meta);
+        self.version += 1;
+        self.note(&before);
+        true
+    }
+
     pub fn redo(&mut self) -> bool {
         let Some(snapshot) = self.redo.pop() else {
             return false;
@@ -2091,6 +2112,50 @@ mod tests {
             !doc.can_redo(),
             "a new command forks history; stale redo must die"
         );
+    }
+
+    /// A withdrawn step is gone from both lines: the document is exactly
+    /// the one before it, Undo reaches the step before that, and Redo has
+    /// nothing to bring back. Merged writes withdraw as the one step they
+    /// joined.
+    #[test]
+    fn withdraw_returns_the_exact_document_and_leaves_no_redo() {
+        let mut doc = doc();
+        let slide = layer_id(&doc, 1);
+        doc.apply(&command(serde_json::json!(
+            {"kind": "renameLayer", "layerID": slide, "name": "Kept"})))
+            .unwrap();
+        let kept = doc.to_json().unwrap();
+        for (n, name) in ["A", "B", "C"].iter().enumerate() {
+            doc.apply_group_merging(
+                &[command(serde_json::json!(
+                    {"kind": "renameLayer", "layerID": slide, "name": name}))],
+                n > 0,
+            )
+            .unwrap();
+        }
+        let version = doc.version();
+        assert!(doc.withdraw());
+        assert_eq!(
+            doc.to_json().unwrap(),
+            kept,
+            "back to before the first trial"
+        );
+        assert_eq!(doc.version(), version + 1, "a version bump readers follow");
+        assert!(!doc.can_redo(), "a withdrawn step never comes back");
+        assert!(
+            doc.changes_since(version).layers.contains(&slide),
+            "the change log names what moved"
+        );
+        assert!(doc.undo(), "the step before is still there");
+        assert_eq!(doc.to_json().unwrap(), self::doc().to_json().unwrap());
+        assert!(!doc.withdraw(), "nothing left to withdraw");
+        assert!(
+            doc.can_redo(),
+            "the undone rename's redo line is left alone"
+        );
+        assert!(doc.redo());
+        assert_eq!(doc.to_json().unwrap(), kept);
     }
 
     /// A command that misses is an error and a no-op — the document,
