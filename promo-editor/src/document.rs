@@ -583,11 +583,12 @@ pub struct Document {
     /// Canonical-JSON snapshots taken BEFORE each applied command.
     undo: Vec<String>,
     redo: Vec<String>,
-    /// The redo line the newest undo step cleared when it landed — what
-    /// `withdraw` puts back, so a withdrawn step leaves history exactly as
-    /// it found it. `None` once an undo, a redo or a merge after an undo
-    /// leaves the newest step no longer the one that cleared it.
-    redo_before_newest: Option<Vec<String>>,
+    /// The redo line the newest new step cleared when it landed, with the
+    /// undo line's length right after it — what `withdraw` puts back, so a
+    /// withdrawn step leaves history exactly as it found it. An undo and
+    /// redo of that step (a held compare) bring the length back and keep
+    /// it valid; a newer step replaces it; a merge after an undo drops it.
+    redo_before_newest: Option<(usize, Vec<String>)>,
     /// (version reached, what that bump touched), newest last.
     log: Vec<(u64, Changes)>,
     /// Per-layer revision: bumped whenever a version touches the layer.
@@ -1037,7 +1038,7 @@ impl Document {
     /// redo line it forks off kept aside for `withdraw`.
     fn push_step(&mut self, snapshot: String) {
         self.undo.push(snapshot);
-        self.redo_before_newest = Some(std::mem::take(&mut self.redo));
+        self.redo_before_newest = Some((self.undo.len(), std::mem::take(&mut self.redo)));
     }
 
     /// Applies several commands as ONE undo step — what a single user
@@ -1245,7 +1246,6 @@ impl Document {
         if let Ok(current) = self.to_json() {
             if let Ok(meta) = ProjectMetadata::from_json(&snapshot) {
                 self.redo.push(current);
-                self.redo_before_newest = None;
                 let before = std::mem::replace(&mut self.meta, meta);
                 self.version += 1;
                 self.note(&before);
@@ -1277,8 +1277,12 @@ impl Document {
         let Ok(meta) = ProjectMetadata::from_json(snapshot) else {
             return false;
         };
+        let depth = self.undo.len();
         self.undo.pop();
-        self.redo = self.redo_before_newest.take().unwrap_or_default();
+        self.redo = match self.redo_before_newest.take() {
+            Some((at, line)) if at == depth => line,
+            _ => Vec::new(),
+        };
         let before = std::mem::replace(&mut self.meta, meta);
         self.version += 1;
         self.note(&before);
@@ -1292,7 +1296,6 @@ impl Document {
         if let Ok(current) = self.to_json() {
             if let Ok(meta) = ProjectMetadata::from_json(&snapshot) {
                 self.undo.push(current);
-                self.redo_before_newest = None;
                 let before = std::mem::replace(&mut self.meta, meta);
                 self.version += 1;
                 self.note(&before);
@@ -2221,16 +2224,27 @@ mod tests {
         assert!(doc.undo() && doc.undo());
         assert!(!doc.can_undo(), "the undo line is as long as before");
 
-        // After an undo and redo of the trial, withdraw still leaves a
-        // consistent history (the kept line is dropped, never misplaced).
+        // An undo and redo of the trial in between (a held compare) keep
+        // the line: withdraw still puts the undone rename back on Redo.
         let mut doc = self::doc();
         doc.apply(&rename("Only")).unwrap();
         assert!(doc.undo());
         doc.apply(&rename("Trial")).unwrap();
         assert!(doc.undo() && doc.redo());
         assert!(doc.withdraw());
-        assert!(!doc.can_redo());
         assert_eq!(doc.to_json().unwrap(), self::doc().to_json().unwrap());
+        assert!(doc.redo(), "the rename is still redoable after a compare");
+        assert!(doc.to_json().unwrap().contains("Only"));
+
+        // A newer step on top replaces the kept line: withdrawing it
+        // restores the empty line it found, never an older one.
+        let mut doc = self::doc();
+        doc.apply(&rename("Undone")).unwrap();
+        assert!(doc.undo());
+        doc.apply(&rename("Trial")).unwrap();
+        doc.apply(&rename("Newer")).unwrap();
+        assert!(doc.withdraw());
+        assert!(!doc.can_redo(), "the newer step found no redo line");
     }
 
     /// A command that misses is an error and a no-op — the document,
