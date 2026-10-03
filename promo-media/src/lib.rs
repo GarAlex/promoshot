@@ -9,6 +9,7 @@
 //! pixels today and a zero-copy platform surface later without touching a
 //! single caller.
 
+pub mod activity;
 pub mod conformance;
 pub mod ffmpeg;
 pub mod loudness;
@@ -104,6 +105,16 @@ pub trait DecoderBackend: Send + Sync {
 /// with this, so a placement resolves against the picture people see.
 pub fn probe_stream(path: &Path) -> Result<VideoInfo, MediaError> {
     ffmpeg::probe_stream(path)
+}
+
+/// Where a screen recording's picture changed (see [`activity`]), decoded
+/// with ffmpeg: the headless host's twin of the apps feeding the same
+/// meter from AVAssetReader.
+pub fn measure_activity(
+    path: &Path,
+    options: activity::MeterOptions,
+) -> Result<promo_model::ActivityTrack, MediaError> {
+    ffmpeg::measure_activity(path, options)
 }
 
 /// Interleaved f32 PCM, and what it is.

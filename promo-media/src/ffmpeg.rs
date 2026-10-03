@@ -329,6 +329,101 @@ pub(crate) fn probe_stream(path: &Path) -> Result<VideoInfo, MediaError> {
     probe(path)
 }
 
+/// The activity meter over a whole file, for `promo_media::measure_activity`.
+///
+/// ffmpeg does the resampling the meter would otherwise do: `fps` picks
+/// the frame showing at each `i / rate`, `scale` area-averages it straight
+/// to the analysis size, and only luma crosses the pipe — a few hundred KB
+/// a second for any source, so an hour of 4K measures as fast as ffmpeg
+/// can decode it. Frame `i` is pushed at `i / rate`, source seconds from
+/// the first frame.
+pub(crate) fn measure_activity(
+    path: &Path,
+    options: crate::activity::MeterOptions,
+) -> Result<promo_model::ActivityTrack, MediaError> {
+    let info = probe(path)?;
+    if info.width == 0 || info.height == 0 {
+        return Err(MediaError::Unsupported(format!(
+            "{}: no video stream",
+            path.display()
+        )));
+    }
+    let rate = if options.rate.is_finite() && options.rate > 0.0 {
+        options.rate
+    } else {
+        10.0
+    };
+    let mut meter = crate::activity::ActivityMeter::new(info.width, info.height, options);
+    let (aw, ah) = meter.analysis_size();
+    let mut child = Command::new("ffmpeg")
+        .args(["-v", "error", "-nostdin"])
+        .arg("-i")
+        .arg(crate::tool_path(path))
+        .args([
+            "-an",
+            "-vf",
+            &format!("fps={rate},scale={aw}:{ah}:flags=area,format=gray"),
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "gray",
+            "-",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .spawn()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => {
+                MediaError::ToolMissing("ffmpeg", "not found on PATH — install it".into())
+            }
+            _ => MediaError::Backend(format!("ffmpeg: {e}")),
+        })?;
+    // stderr drains on its own thread: a chatty decoder filling the pipe
+    // would otherwise stall the frames we are waiting for.
+    let mut stderr = child.stderr.take().expect("piped");
+    let errors = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text);
+        text
+    });
+    let mut stdout = child.stdout.take().expect("piped");
+    let mut frame = vec![0u8; aw * ah];
+    let mut index = 0u64;
+    loop {
+        let mut filled = 0;
+        while filled < frame.len() {
+            match stdout.read(&mut frame[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(e) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(MediaError::Backend(format!("ffmpeg read: {e}")));
+                }
+            }
+        }
+        // A short last frame is a truncated stream, not a picture.
+        if filled < frame.len() {
+            break;
+        }
+        meter.push(index as f64 / rate, &frame, aw, ah, aw);
+        index += 1;
+    }
+    let status = child
+        .wait()
+        .map_err(|e| MediaError::Backend(format!("ffmpeg: {e}")))?;
+    let errors = errors.join().unwrap_or_default();
+    if !status.success() && index == 0 {
+        return Err(MediaError::Backend(format!(
+            "ffmpeg could not decode {}: {}",
+            path.display(),
+            errors.trim()
+        )));
+    }
+    Ok(meter.finish())
+}
+
 /// Display rotation, if the container carries one.
 fn probe_rotation(path: &Path) -> i32 {
     let Ok(output) = Command::new("ffprobe")

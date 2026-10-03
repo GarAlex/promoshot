@@ -34,6 +34,10 @@ USAGE:
     promo model   <file.glb> [--json]
     promo device  <phone|tablet|tablet-portrait|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
+    promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
+                  [--masks auto|phone|desktop|none]
+        where a screen recording's picture changed, as the resource's
+        `activity` JSON (what Auto zoom plans from)
 
 AUTHORING — the MCP tools' own functions, so the defaults and checks match:
     promo init            <project-dir> --args '{\"canvas\":\"1920x1080\"}'
@@ -125,6 +129,11 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     // agent tool found under the home folder. No project either.
     if command == "skill" {
         return skill(rest).map(|()| ExitCode::SUCCESS);
+    }
+    // Media senses take a FILE and a verb, not a project.
+    if command == "media" {
+        println!("{}", media(rest)?);
+        return Ok(ExitCode::SUCCESS);
     }
     let dir = rest
         .first()
@@ -670,6 +679,69 @@ fn model_probe(file: &Path, opts: &Options) -> Result<String, String> {
 /// A built-in device body — phone, tablet, tablet-portrait or laptop — written as a `.glb`
 /// with `Body` and `Screen` slots (the laptop a `Deck` too), the same
 /// bytes the app and the MCP put into a project's Resources.
+/// `promo media activity <video>`: the activity meter the apps feed from
+/// AVAssetReader, fed from ffmpeg — the way to try it on real recordings,
+/// and the headless host's way to fill a resource's `activity`. Prints the
+/// track as the format stores it.
+fn media(rest: &[String]) -> Result<String, String> {
+    use promo_media::activity::{Masks, MeterOptions};
+    let usage = "media: expected `media activity <video> [--rate <n>] [--pointer <pointer.json>] \
+                 [--masks auto|phone|desktop|none]`";
+    let (verb, file) = match rest {
+        [verb, file, ..] if !file.starts_with("--") => (verb.as_str(), file),
+        _ => return Err(usage.into()),
+    };
+    if verb != "activity" {
+        return Err(format!("media: unknown verb `{verb}`\n{usage}"));
+    }
+    let mut options = MeterOptions::default();
+    let mut i = 2;
+    while i < rest.len() {
+        let flag = rest[i].as_str();
+        let value = rest
+            .get(i + 1)
+            .ok_or_else(|| format!("{flag}: expected a value"))?;
+        match flag {
+            "--rate" => {
+                let rate = parse_f64(value, flag)?;
+                if !(rate > 0.0 && rate <= 120.0) {
+                    return Err(format!(
+                        "--rate: expected 0–120 frames a second, got {rate}"
+                    ));
+                }
+                options.rate = rate;
+            }
+            // The recorder's track as it sits beside the file, or a whole
+            // resource object that carries one under `pointer`.
+            "--pointer" => {
+                let text = std::fs::read_to_string(value)
+                    .map_err(|e| format!("--pointer {value}: {e}"))?;
+                let json: serde_json::Value =
+                    serde_json::from_str(&text).map_err(|e| format!("--pointer {value}: {e}"))?;
+                let track = json.get("pointer").cloned().unwrap_or(json);
+                options.pointer = Some(
+                    serde_json::from_value(track)
+                        .map_err(|e| format!("--pointer {value}: not a pointer track: {e}"))?,
+                );
+            }
+            "--masks" => {
+                options.masks = match value.as_str() {
+                    "auto" => Masks::Auto,
+                    "phone" => Masks::Phone,
+                    "desktop" => Masks::Desktop,
+                    "none" => Masks::None,
+                    other => return Err(format!("--masks: unknown `{other}`")),
+                }
+            }
+            other => return Err(format!("media activity: unknown option `{other}`\n{usage}")),
+        }
+        i += 2;
+    }
+    let track =
+        promo_media::measure_activity(Path::new(file), options).map_err(|e| e.to_string())?;
+    serde_json::to_string_pretty(&track).map_err(|e| e.to_string())
+}
+
 fn device(kind: &str, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let kind = promo_engine::model::DeviceKind::parse(kind).ok_or_else(|| {
