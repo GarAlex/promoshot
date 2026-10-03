@@ -1661,6 +1661,148 @@ mod tests {
         assert!(track.scrolls.is_empty());
     }
 
+    /// A third of the screen changes at once without the whole screen
+    /// changing — a list reloading, a sheet dimming what is behind it: a
+    /// screen change, short of a cut, and no zoom-worthy event.
+    #[test]
+    fn a_large_partial_change_is_a_screen_change() {
+        // Many small pieces at once, as rows reload: no single box is
+        // large, so only the frame's share of change can tell.
+        let scene = |t: f64| {
+            let mut c = ui(320, 200, 4);
+            if t >= 2.0 {
+                for row in 0..5 {
+                    for col in 0..5 {
+                        // Cell-aligned 40×24 tiles: ~37% of the cells,
+                        // above the screen-change share, below a cut.
+                        c.rect(8 + col * 64, 8 + row * 40, 40, 24, 110);
+                    }
+                }
+            }
+            c
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 4.0, scene);
+        assert_eq!(track.cuts, vec![2.0], "{track:?}");
+        assert!(track.events.is_empty(), "{:?}", track.events);
+    }
+
+    /// A change that sweeps across half the screen over a second, a strip
+    /// at a time (a panel wiping in, a big title collapsing as content
+    /// slides under it): no single frame is large, the burst is. The
+    /// whole screen's business — a screen change, not a box to zoom into.
+    #[test]
+    fn a_burst_that_sweeps_half_the_screen_is_a_screen_change() {
+        // A band of its own content lands every frame, each band unlike
+        // the last, so no shift explains it: a sweep, not a scroll.
+        let scene = |t: f64| {
+            let mut c = ui(320, 200, 7);
+            let bands = if t >= 1.0 {
+                (((t - 1.0) * 10.0).round() as usize + 1).min(7)
+            } else {
+                0
+            };
+            for b in 0..bands {
+                let y = 40 + b * 16;
+                c.rect(0, y, 320, 16, 30);
+                let mut rng = Rng(100 + b as u64);
+                let mut x = 4;
+                while x < 300 {
+                    let len = rng.range(10, 60) as usize;
+                    c.rect(x, y + 4 + (b % 3) * 2, len, 4, 220);
+                    x += len + rng.range(6, 20) as usize;
+                }
+            }
+            c
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 3.0, scene);
+        assert!(track.events.is_empty(), "{:?}", track.events);
+        assert!(!track.cuts.is_empty(), "{track:?}");
+    }
+
+    /// The highlight of the tap that opens a new screen, a few frames
+    /// before it, is the transition, not action to zoom into; so is the
+    /// new screen settling just after.
+    #[test]
+    fn a_tap_just_before_a_new_screen_is_its_transition() {
+        let scene = |t: f64| {
+            if t < 2.0 {
+                let mut c = ui(320, 200, 5);
+                if t >= 1.7 {
+                    c.rect(40, 80, 60, 20, 120);
+                }
+                c
+            } else {
+                let mut c = Canvas::new(320, 200, 40);
+                c.rect(30, 30, 200, 100, 180);
+                if (2.3..2.5).contains(&t) {
+                    c.rect(250, 150, 30, 20, 200);
+                }
+                c
+            }
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 4.0, scene);
+        assert_eq!(track.cuts, vec![2.0], "{track:?}");
+        assert!(track.events.is_empty(), "{:?}", track.events);
+    }
+
+    /// A scroll indicator appears along the right edge and fades: a thin
+    /// strip at the side is not action.
+    #[test]
+    fn a_scroll_indicator_strip_is_not_action() {
+        let scene = |t: f64| {
+            let mut c = ui(320, 200, 6);
+            if (1.0..1.6).contains(&t) {
+                c.rect(314, 40, 4, 120, 90);
+            }
+            c
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 3.0, scene);
+        assert!(track.events.is_empty(), "{:?}", track.events);
+    }
+
+    /// Rows shimmer into place as a scroll comes to rest: part of the
+    /// scroll, not a burst of action.
+    #[test]
+    fn settling_after_a_scroll_is_part_of_it() {
+        let scene = |t: f64| {
+            if t < 1.0 {
+                list_screen(0.0)
+            } else if t < 1.6 {
+                list_screen((t - 1.0) * 120.0)
+            } else {
+                let mut c = list_screen(72.0);
+                if (1.7..1.9).contains(&t) {
+                    c.rect(40, 100, 50, 6, 30);
+                }
+                c
+            }
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 3.0, scene);
+        assert!(!track.scrolls.is_empty(), "{track:?}");
+        assert!(track.events.is_empty(), "{:?}", track.events);
+    }
+
+    /// A change of its own well after a scroll is action again.
+    #[test]
+    fn a_tap_well_after_a_scroll_is_action() {
+        let scene = |t: f64| {
+            if t < 1.0 {
+                list_screen(0.0)
+            } else if t < 1.6 {
+                list_screen((t - 1.0) * 120.0)
+            } else {
+                let mut c = list_screen(72.0);
+                if (3.0..3.3).contains(&t) {
+                    c.rect(40, 100, 50, 16, 30);
+                }
+                c
+            }
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 4.0, scene);
+        assert_eq!(track.events.len(), 1, "{:?}", track.events);
+        assert_eq!(track.events[0][0], 3.0);
+    }
+
     /// The status-bar clock ticks every second on a phone: nothing.
     #[test]
     fn a_phone_status_bar_clock_is_ignored() {
