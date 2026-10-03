@@ -453,9 +453,11 @@ is for; the schema section says how to write it.
   cursor track, and `follow` on the layer keeps the viewport on it.
 - **Auto zoom** (`pointer`) — on a screen recording, `promo_apply` with
   `{"kind": "autoZoom", "layerID": "screen"}` (`amount` subtle | normal |
-  strong, `pace` calm | normal | brisk) eases in on each click, pause of
-  the pointer or measured burst of activity, holds, and eases out or pans
-  on. It writes ordinary viewport keyframes tagged `auto` — retime or
+  strong, `pace` calm | normal | brisk, `skip` a list of `[start, end]`
+  recording seconds to leave wide, `activity` a measured activity track
+  to store on the recording in the same step) eases in on each click,
+  pause of the pointer or measured burst of activity, holds, and eases
+  out or pans on. It writes ordinary viewport keyframes tagged `auto` — retime or
   delete them like any other; a re-plan replaces only the untouched ones,
   and never zooms past the recording's own pixels. It turns `follow` off
   (follow would override it); `"remove": true` takes it all back off.

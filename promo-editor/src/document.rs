@@ -662,6 +662,7 @@ fn auto_zoom(meta: &mut ProjectMetadata, layer_id: &str, args: AutoZoomArgs) -> 
     }
     let mut updated = layer.clone();
     autozoom::remove_plan(&mut updated);
+    let replaced = updated.keyframes.len() < layer.keyframes.len();
     if args.remove {
         updated.auto_zoom = None;
     } else {
@@ -677,15 +678,26 @@ fn auto_zoom(meta: &mut ProjectMetadata, layer_id: &str, args: AutoZoomArgs) -> 
         }
         updated.auto_zoom = Some(settings);
         let plan = autozoom::plan(meta, &updated, &autozoom::PlanOptions::for_layer(&updated))?;
-        updated.keyframes.extend(plan.keyframes);
-        updated.keyframes.sort_by(|a, b| {
-            a.time
-                .partial_cmp(&b.time)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        // Follow wins over keyframed viewports in every renderer: left on,
-        // the plan would be written and never seen.
-        updated.follow = None;
+        if plan.keyframes.is_empty() {
+            if !replaced {
+                // Succeeding here would turn Follow off and put nothing in
+                // its place: the command would look like it did nothing,
+                // or worse. Said plainly, the document untouched.
+                return Err(
+                    "Nothing to zoom to: no clicks, pauses or activity worth a closeup.".into(),
+                );
+            }
+        } else {
+            updated.keyframes.extend(plan.keyframes);
+            updated.keyframes.sort_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            // Follow wins over keyframed viewports in every renderer: left
+            // on, the plan would be written and never seen.
+            updated.follow = None;
+        }
     }
     *find(meta.layers.get_or_insert_with(Vec::new), layer_id).expect("found above") = updated;
     Ok(())
@@ -3925,6 +3937,34 @@ mod auto_zoom_tests {
         assert_eq!(l.keyframes, original);
         assert!(l.auto_zoom.is_none());
         assert!(doc.meta().minimum_reader_version() < 48);
+    }
+
+    /// A pointer track that never clicks, rests or travels gives no
+    /// closeup: refused, so Follow is not traded for nothing.
+    #[test]
+    fn a_recording_with_nothing_worth_a_closeup_is_refused() {
+        let mut doc = doc_with(json!({
+            "pointer": {"samples": [[0.0, 0.5, 0.5], [1.0, 0.52, 0.5]], "clicks": []}
+        }));
+        let json = doc.to_json().unwrap();
+        let err = doc
+            .apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap_err();
+        assert!(err.starts_with("Nothing to zoom to:"), "{err}");
+        assert_eq!(doc.to_json().unwrap(), json);
+        assert!(layer(&doc).follow.is_some(), "Follow kept");
+
+        // A re-plan that now finds nothing (everything skipped) still takes
+        // the old plan off: that is a change, not a no-op.
+        let mut doc = doc_with(json!({}));
+        doc.apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap();
+        doc.apply(&command(
+            json!({"kind": "autoZoom", "layerID": "L", "skip": [[0.0, 20.0]]}),
+        ))
+        .unwrap();
+        assert!(closeups(&doc).is_empty());
+        assert!(layer(&doc).auto_zoom.is_some());
     }
 
     #[test]

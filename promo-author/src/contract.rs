@@ -591,7 +591,9 @@ pub fn tools(host: Host) -> Vec<Value> {
                 transition, a trim is patchResource; cameraMove {{layerID, move: pushIn|pullOut|\
                 reveal|orbit|rise, at, duration, degrees?, from?/to? framing}} writes a \
                 camera move as two keyframes; autoZoom {{layerID, amount?: subtle|normal|\
-                strong, pace?: calm|normal|brisk, skip?, remove?}} plans a screen \
+                strong, pace?: calm|normal|brisk, skip?: [[start, end]] source seconds left wide, \
+                activity?: a measured activity track stored on the recording in the same \
+                step, remove?}} plans a screen \
                 recording's zooms from its clicks and measured activity into tagged \
                 viewport keyframes (a re-plan keeps what a person edited); setMarkers \
                 replaces the timeline's \

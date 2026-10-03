@@ -158,6 +158,10 @@ const MIN_ACTIVITY_WEIGHT: f64 = 0.15;
 /// A click's interest: from a beat before it until its result has shown.
 const CLICK_BEFORE: f64 = 0.3;
 const CLICK_AFTER: f64 = 0.9;
+/// The least an activity event is looked at for: a meter reports a
+/// popover appearing or one keystroke as a single frame, and what it
+/// changed stays worth seeing for about as long as a click's result.
+const ACTIVITY_MIN: f64 = CLICK_AFTER;
 /// A click's interest box, unit source coordinates per axis.
 const CLICK_BOX: f64 = 0.1;
 /// A dwell: the pointer resting this long within `REST_RADIUS`, after
@@ -253,9 +257,10 @@ pub fn plan(
     }
     let interest = deduplicated(interest);
 
-    let cuts: Vec<f64> = activity
+    let mut cuts: Vec<f64> = activity
         .map(|a| a.cuts.iter().flat_map(|&c| clock.instants(c)).collect())
         .unwrap_or_default();
+    cuts.extend(clock.seams());
     let scrolls: Vec<(f64, f64)> = activity
         .map(|a| {
             a.scrolls
@@ -497,6 +502,21 @@ impl<'a> Clock<'a> {
         out
     }
 
+    /// Where a looping layer jumps back to its start: a new picture as
+    /// surely as a measured cut, so the plan treats each seam as one.
+    fn seams(&self) -> Vec<f64> {
+        let Some(period) = self.period else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        let mut k = 1.0;
+        while k * period < self.end - EPS && k < 10_000.0 {
+            out.push(k * period);
+            k += 1.0;
+        }
+        out
+    }
+
     fn instants(&self, source: f64) -> Vec<f64> {
         if self.still {
             return vec![source];
@@ -657,7 +677,7 @@ fn activity_interest(track: &ActivityTrack) -> Vec<Interest> {
             let (w, h) = (e[4].clamp(0.0, 1.0), e[5].clamp(0.0, 1.0));
             Interest {
                 t0: e[0],
-                t1: e[1],
+                t1: e[1].max(e[0] + ACTIVITY_MIN),
                 rect: [e[2].clamp(0.0, 1.0 - w), e[3].clamp(0.0, 1.0 - h), w, h],
                 weight: e[6].min(1.0),
                 click: false,
@@ -774,7 +794,10 @@ impl Barriers {
     }
 
     /// The earliest a zoom-in may start ramping for an action starting at
-    /// `start`: after any wide span and any scroll that ended before it.
+    /// `start`: after any wide span and any scroll that ended before it,
+    /// and after the cut that brought its screen in — a ramp begun before
+    /// the cut would move over the old screen toward a spot that only
+    /// means something on the new one.
     fn floor(&self, start: f64) -> f64 {
         let wide = self
             .wide
@@ -786,7 +809,8 @@ impl Barriers {
             .iter()
             .filter(|&&(_, s1)| s1 <= start + EPS)
             .map(|&(_, s1)| s1);
-        wide.chain(scroll).fold(0.0, f64::max)
+        let cut = self.cuts.iter().copied().filter(|&c| c <= start + EPS);
+        wide.chain(scroll).chain(cut).fold(0.0, f64::max)
     }
 
     /// The first cut after an action: where its hold must end.
@@ -1084,15 +1108,22 @@ fn timed(shots: &[Cluster], barriers: &Barriers, pace: &Pace, end: f64) -> Vec<P
             continue;
         }
         let cap = barriers.hold_cap(shot.start, action_end, pace.ramp_out);
-        let hold_end = (action_end + LINGER).max(arrival + pace.min_hold).min(cap);
+        let mut hold_end = (action_end + LINGER).max(arrival + pace.min_hold).min(cap);
+        // A pull-out that cannot finish before the layer ends reads as a
+        // glitch, not a move: the closeup rides to the last frame — unless
+        // a cut, a scroll or a wide span comes first. Riding through one
+        // would hold a window on a screen it was never chosen for, so the
+        // hold ends early enough for the pull-out to finish in time.
+        let free_to_end = cap >= end - EPS;
+        let to_end = free_to_end && hold_end + pace.ramp_out > end - EPS;
+        if !free_to_end {
+            hold_end = hold_end.min(end - pace.ramp_out);
+        }
         if hold_end < action_end - EPS {
             // It cannot show the action and still be wide in time for a
             // span that must be.
             continue;
         }
-        // A pull-out that cannot finish before the layer ends reads as a
-        // glitch, not a move: the closeup rides to the last frame.
-        let to_end = hold_end + pace.ramp_out > end - EPS;
         if let (Some(p), Some(last)) = (previous, placed.last_mut()) {
             *last = p;
         }
@@ -1628,6 +1659,103 @@ mod tests {
                 "spans the cut: {shot:?}"
             );
         }
+    }
+
+    fn spans(shot: &Shot, t: f64) -> bool {
+        shot.start < t - 1e-9 && shot.end > t + 1e-9
+    }
+
+    /// The last-frame hold gives way to a cut or a scroll near the end:
+    /// the closeup leaves in time to be wide by the last frame.
+    #[test]
+    fn a_late_cut_or_scroll_beats_the_hold_to_the_end() {
+        let p = project_with(
+            json!({"pointer": {"samples": [[0.0, 0.5, 0.5]], "clicks": [[18.0, 0.2, 0.2]]},
+                   "activity": {"meter": 1, "rate": 10, "events": [], "cuts": [19.3]}}),
+            json!({}),
+        );
+        let plan = planned(&p);
+        assert_eq!(plan.shots.len(), 1, "{:?}", plan.shots);
+        assert!(!spans(&plan.shots[0], 19.3), "{:?}", plan.shots[0]);
+        assert_eq!(plan.keyframes.last().unwrap().viewport, Some(FULL));
+        assert!(plan.keyframes.iter().all(|k| k.time <= 20.0 + 1e-9));
+        let l = applied(&p, &plan);
+        assert!(is_full(at(&l, 20.0)), "wide by the last frame");
+
+        let p = project_with(
+            json!({"pointer": {"samples": [[0.0, 0.5, 0.5]], "clicks": [[17.8, 0.2, 0.2]]},
+                   "activity": {"meter": 1, "rate": 10, "events": [],
+                                "scrolls": [[19.2, 19.9]]}}),
+            json!({}),
+        );
+        let plan = planned(&p);
+        assert_eq!(plan.shots.len(), 1, "{:?}", plan.shots);
+        assert!(plan.shots[0].end <= 19.2 + 1e-9, "{:?}", plan.shots[0]);
+        assert_eq!(plan.keyframes.last().unwrap().viewport, Some(FULL));
+    }
+
+    /// An action just after a cut: the zoom-in starts on the new screen.
+    #[test]
+    fn a_zoom_in_never_starts_before_the_cut_that_brought_its_screen() {
+        let p = project_with(
+            json!({"pointer": {"samples": [[0.0, 0.5, 0.5]], "clicks": [[5.2, 0.2, 0.2]]},
+                   "activity": {"meter": 1, "rate": 10, "events": [], "cuts": [5.0]}}),
+            json!({}),
+        );
+        let plan = planned(&p);
+        assert_eq!(plan.shots.len(), 1, "{:?}", plan.shots);
+        assert!(!spans(&plan.shots[0], 5.0), "{:?}", plan.shots[0]);
+        let closeup = plan
+            .keyframes
+            .iter()
+            .find(|k| k.viewport == Some(plan.shots[0].window))
+            .unwrap();
+        assert!(
+            closeup.time - closeup.transition_duration >= 5.0 - 1e-9,
+            "ramps on the new screen: {closeup:?}"
+        );
+        let l = applied(&p, &plan);
+        assert!(is_full(at(&l, 4.99)), "the old screen stays wide");
+    }
+
+    /// A meter at 10 fps reports a popover or a keystroke as one frame.
+    #[test]
+    fn a_one_frame_burst_still_earns_a_closeup() {
+        let p = project_with(
+            json!({"activity": {"meter": 1, "rate": 10, "events": [
+                [3.0, 3.0, 0.1, 0.1, 0.1, 0.1, 1.0],
+                [12.0, 12.1, 0.7, 0.7, 0.1, 0.1, 1.0]
+            ]}}),
+            json!({}),
+        );
+        let plan = planned(&p);
+        assert_eq!(plan.shots.len(), 2, "{:?}", plan.shots);
+        assert!(contains(plan.shots[0].window, 0.15, 0.15));
+        assert!(contains(plan.shots[1].window, 0.75, 0.75));
+        assert!((plan.shots[0].start - 2.9).abs() < 1e-9);
+    }
+
+    /// A looping layer jumps back to its start at every seam: a cut.
+    #[test]
+    fn a_loop_seam_is_a_cut() {
+        let p = project_with(
+            json!({"duration": 5.0,
+                   "pointer": {"samples": [[0.0, 0.5, 0.5]], "clicks": [[2.0, 0.2, 0.2]]}}),
+            json!({"duration": 16.0, "beyondEnd": "loop"}),
+        );
+        let plan = planned(&p);
+        assert!(plan.shots.len() >= 3, "one per pass: {:?}", plan.shots);
+        for shot in &plan.shots {
+            for seam in [5.0, 10.0, 15.0] {
+                assert!(!spans(shot, seam), "spans the seam at {seam}: {shot:?}");
+            }
+        }
+        assert!(
+            plan.keyframes
+                .iter()
+                .all(|k| k.easing != Some(Easing::EaseInOut) || k.viewport == Some(FULL)),
+            "no pan between the same window either side of a seam"
+        );
     }
 
     #[test]
