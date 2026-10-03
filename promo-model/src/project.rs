@@ -1719,6 +1719,66 @@ pub struct Follow {
     pub click_color_hex: Option<String>,
 }
 
+/// Auto zoom on a screen recording: the camera eases in to where the
+/// action is, holds, and eases back out — or pans straight to the next
+/// action when it comes soon. Planned by `promo-timeline`'s `autozoom`
+/// into ordinary viewport keyframes; this is only what a re-plan reads.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoZoom {
+    /// How far in; default normal.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub amount: Option<AutoZoomAmount>,
+    /// How quickly the camera moves and how long it holds; default normal.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub pace: Option<AutoZoomPace>,
+    /// Source-time spans `[t0, t1]` a person removed a zoom from: a re-plan
+    /// leaves them wide.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skip: Vec<[f64; 2]>,
+}
+
+tolerant_enum!(
+    AutoZoomAmount,
+    Normal,
+    [(Subtle, "subtle"), (Normal, "normal"), (Strong, "strong")]
+);
+
+tolerant_enum!(
+    AutoZoomPace,
+    Normal,
+    [(Calm, "calm"), (Normal, "normal"), (Brisk, "brisk")]
+);
+
+/// Where a recording's picture changed, condensed for planning: a few KB
+/// for minutes of video. Times are source seconds, boxes unit source
+/// coordinates `[x, y, w, h]`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityTrack {
+    /// The meter's version: a newer meter re-measures rather than trust an
+    /// older track.
+    #[serde(default)]
+    pub meter: u32,
+    /// Frames analysed per second.
+    #[serde(default)]
+    pub rate: f64,
+    /// `[t0, t1, x, y, w, h, weight]` per burst of local change; weight is
+    /// how much changed, 0–1.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<[f64; 7]>,
+    /// Instants where most of the picture changed at once — a new screen.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cuts: Vec<f64>,
+    /// `[t0, t1]` spans where the content scrolled or panned as a whole.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scrolls: Vec<[f64; 2]>,
+    /// Boxes that kept changing on their own (a playing video, a clock, a
+    /// spinner) and were left out of `events`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ambient: Vec<[f64; 4]>,
+}
+
 /// Per-layer image effects (rung 24), on this layer's own pixels and
 /// nobody else's: a blur (Gaussian, or directional when `blurAngle` is
 /// given), a glow (the bright parts, blurred and added back), a vignette
@@ -2662,7 +2722,7 @@ impl ProjectLayerKeyframe {
     /// A framing word on the camera (rung 48, the lossless reader: an
     /// older reader keeps it and draws the stated or default distance).
     pub fn needs_rung_48(&self) -> bool {
-        self.camera.as_ref().is_some_and(|c| c.framing.is_some())
+        self.camera.as_ref().is_some_and(|c| c.framing.is_some()) || self.auto.is_some()
     }
 }
 
@@ -2881,6 +2941,13 @@ pub struct ProjectLayerKeyframe {
     /// `promo-timeline`'s `layer_viewport` owns clamping and the rule.
     #[serde(default, skip_serializing_if = "is_none")]
     pub viewport: Option<[f64; 4]>,
+    /// Written by Auto zoom: a signature of the viewport keyframe it planned
+    /// (time, window, ramp, easing as written). A re-plan replaces only
+    /// keyframes whose values still match their signature; one a person has
+    /// edited no longer matches and stays theirs. Ignorable: a reader that
+    /// does not know it sees an ordinary viewport keyframe.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub auto: Option<String>,
     /// Where and how big the drawn box is, as a rule resolved at every read
     /// (see `Placement`). Wins over raw `zoom`/shifts on the same keyframe.
     /// Reader-gated: an older save would drop the field and bake nothing in
@@ -3359,6 +3426,11 @@ pub struct ProjectLayer {
     /// Follow the pointer of the recording this layer shows (rung 26).
     #[serde(default, skip_serializing_if = "is_none")]
     pub follow: Option<Follow>,
+    /// Auto zoom's settings for this layer: what a re-plan reads. It renders
+    /// nothing itself — the zooms are the ordinary viewport keyframes it
+    /// wrote (each tagged `auto`).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub auto_zoom: Option<AutoZoom>,
     /// A stage (rung 30): every layer naming the same stage is drawn
     /// through ONE camera into ONE depth buffer — models turned in place,
     /// 2D layers as billboards at their keyframes' `depth` — and the
@@ -3936,6 +4008,11 @@ pub struct ProjectResource {
     /// `follow` rule. Written by the recorder; absent for everything else.
     #[serde(default, skip_serializing_if = "is_none")]
     pub pointer: Option<PointerTrack>,
+    /// Where the picture changed while this was recorded, measured once
+    /// from the pixels (`promo-media`'s activity meter) so Auto zoom can
+    /// re-plan without decoding again. Absent until measured.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub activity: Option<ActivityTrack>,
     /// A MODEL resource's material slots, by the names the file exports,
     /// each bound to a colour or a resource (rung 29). Slots left out
     /// keep the file's own material.
@@ -4035,6 +4112,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     pointer: Option<PointerTrack>,
     #[serde(default)]
+    activity: Option<ActivityTrack>,
+    #[serde(default)]
     materials: Option<std::collections::BTreeMap<String, MaterialBinding>>,
     #[serde(default)]
     clips: Option<Vec<ModelClip>>,
@@ -4112,6 +4191,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             pixel_height: w.pixel_height,
             video_natural_height: w.video_natural_height,
             pointer: w.pointer,
+            activity: w.activity,
             materials: w.materials,
             recipe: w.recipe,
             clips: w.clips,
@@ -4257,6 +4337,7 @@ impl ProjectResource {
             pixel_height: None,
             video_natural_height: None,
             pointer: None,
+            activity: None,
             materials: None,
             recipe: None,
             particles: None,
@@ -4588,7 +4669,8 @@ impl ProjectMetadata {
         let all = crate::nesting::all_layers(self);
         if all
             .iter()
-            .any(|l| l.keyframes.iter().any(|k| k.needs_rung_48()))
+            .any(|l| l.auto_zoom.is_some() || l.keyframes.iter().any(|k| k.needs_rung_48()))
+            || resources.iter().any(|r| r.activity.is_some())
         {
             return crate::LOSSLESS_READER;
         }

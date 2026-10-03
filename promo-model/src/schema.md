@@ -948,6 +948,22 @@ not keyframes — re-trim the recording and it stays true; it wins over
 keyframed viewports while present. A project using either carries
 `minReaderVersion: 26`.
 
+Auto zoom. The camera eases in to where a screen recording's action is,
+holds, and eases back out, or pans straight to the next action when it
+comes soon. It is planned into ordinary viewport keyframes, each tagged
+`"auto": "<signature>"` (the time, window, ramp and easing it wrote); a
+re-plan replaces only tagged keyframes that still match their signature,
+so one a person edited stays theirs, and keyframes without the tag are
+never touched. The layer keeps what a re-plan reads:
+`"autoZoom": { "amount": "subtle" | "normal" | "strong", "pace": "calm" |
+"normal" | "brisk", "skip": [[t0, t1], …] }` (skip: source-time spans
+left wide). The resource may carry what was measured from its pixels:
+`"activity": { "meter": 1, "rate": 10, "events": [[t0, t1, x, y, w, h,
+weight], …], "cuts": [t, …], "scrolls": [[t0, t1], …], "ambient":
+[[x, y, w, h], …] }` — bursts of local change, instants where most of the
+picture changed (a new screen), spans where the content scrolled, and
+boxes that kept changing on their own and were left out.
+
 Image effects (rung 24). A layer may carry `"effects": { "blur": 12,
 "blurAngle": 45, "glow": 0.6, "glowRadius": 24, "glowThreshold": 0.6,
 "vignette": 0.5, "vignetteSoftness": 0.5, "grain": 0.2, "sharpen": 0.5 }`,

@@ -452,6 +452,7 @@ mod schema_doc_tests {
             }),
             easing: Some(Easing::EaseInOut),
             viewport: Some([0.25, 0.25, 0.5, 0.5]),
+            auto: Some("3f9a1c07".into()),
             placement: Some(Placement {
                 height: Some(620.0),
                 width: Some(900.0),
@@ -507,6 +508,11 @@ mod schema_doc_tests {
                 smoothing: Some(0.35),
                 clicks: Some(true),
                 click_color_hex: Some("@accent".into()),
+            }),
+            auto_zoom: Some(AutoZoom {
+                amount: Some(AutoZoomAmount::Strong),
+                pace: Some(AutoZoomPace::Brisk),
+                skip: vec![[2.0, 3.5]],
             }),
             effects: Some(LayerEffects {
                 blur: Some(6.0),
@@ -655,6 +661,14 @@ mod schema_doc_tests {
             pointer: Some(PointerTrack {
                 samples: vec![[0.0, 0.5, 0.5], [1.0, 0.6, 0.4]],
                 clicks: vec![[0.8, 0.6, 0.4]],
+            }),
+            activity: Some(ActivityTrack {
+                meter: 1,
+                rate: 10.0,
+                events: vec![[1.0, 1.6, 0.4, 0.3, 0.2, 0.1, 0.8]],
+                cuts: vec![4.0],
+                scrolls: vec![[5.0, 6.0]],
+                ambient: vec![[0.0, 0.0, 1.0, 0.05]],
             }),
             pixel_width: Some(1170.0),
             pixel_height: Some(2532.0),

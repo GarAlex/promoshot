@@ -44,6 +44,8 @@ pub fn enums() -> Vec<WireEnum> {
         BackgroundFill::wire(),
         ReleaseMoment::wire(),
         CameraFraming::wire(),
+        AutoZoomAmount::wire(),
+        AutoZoomPace::wire(),
     ]
 }
 

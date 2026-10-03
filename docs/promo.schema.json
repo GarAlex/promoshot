@@ -1,5 +1,64 @@
 {
   "$defs": {
+    "ActivityTrack": {
+      "properties": {
+        "ambient": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "cuts": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "events": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 7,
+            "minItems": 7,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "meter": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rate": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "scrolls": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "Anchor": {
       "enum": [
         "topLeft",
@@ -85,6 +144,59 @@
         "normalize",
         "compressor",
         "eq"
+      ],
+      "type": "string"
+    },
+    "AutoZoom": {
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutoZoomAmount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutoZoomPace"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skip": {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "AutoZoomAmount": {
+      "enum": [
+        "subtle",
+        "normal",
+        "strong"
+      ],
+      "type": "string"
+    },
+    "AutoZoomPace": {
+      "enum": [
+        "calm",
+        "normal",
+        "brisk"
       ],
       "type": "string"
     },
@@ -2179,6 +2291,16 @@
             "null"
           ]
         },
+        "autoZoom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutoZoom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "beyondEnd": {
           "anyOf": [
             {
@@ -2453,6 +2575,12 @@
     "ProjectLayerKeyframe": {
       "additionalProperties": true,
       "properties": {
+        "auto": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "blur": {
           "format": "double",
           "type": [
@@ -2799,6 +2927,16 @@
     "ProjectResource": {
       "additionalProperties": true,
       "properties": {
+        "activity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActivityTrack"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "addedAt": {
           "format": "double",
           "type": "number"
