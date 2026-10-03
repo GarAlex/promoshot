@@ -583,6 +583,11 @@ pub struct Document {
     /// Canonical-JSON snapshots taken BEFORE each applied command.
     undo: Vec<String>,
     redo: Vec<String>,
+    /// The redo line the newest undo step cleared when it landed — what
+    /// `withdraw` puts back, so a withdrawn step leaves history exactly as
+    /// it found it. `None` once an undo, a redo or a merge after an undo
+    /// leaves the newest step no longer the one that cleared it.
+    redo_before_newest: Option<Vec<String>>,
     /// (version reached, what that bump touched), newest last.
     log: Vec<(u64, Changes)>,
     /// Per-layer revision: bumped whenever a version touches the layer.
@@ -858,6 +863,7 @@ impl Document {
             version: 0,
             undo: Vec::new(),
             redo: Vec::new(),
+            redo_before_newest: None,
             log: Vec::new(),
             layer_revisions: std::collections::HashMap::new(),
             unread_source: None,
@@ -1021,11 +1027,17 @@ impl Document {
         // must not wait for the app to do it.
         promo_timeline::resolve_attachments(&mut edited);
         let before = std::mem::replace(&mut self.meta, edited);
-        self.undo.push(snapshot);
-        self.redo.clear();
+        self.push_step(snapshot);
         self.version += 1;
         self.note(&before);
         Ok(())
+    }
+
+    /// A new undo step: the snapshot before it on the undo line, and the
+    /// redo line it forks off kept aside for `withdraw`.
+    fn push_step(&mut self, snapshot: String) {
+        self.undo.push(snapshot);
+        self.redo_before_newest = Some(std::mem::take(&mut self.redo));
     }
 
     /// Applies several commands as ONE undo step — what a single user
@@ -1058,9 +1070,13 @@ impl Document {
         promo_timeline::resolve_attachments(&mut edited);
         let before = std::mem::replace(&mut self.meta, edited);
         if !merge_with_last || self.undo.is_empty() {
-            self.undo.push(snapshot);
+            self.push_step(snapshot);
+        } else if !self.redo.is_empty() {
+            // Joining a step below an undone one: the newest step is no
+            // longer the one whose cleared redo line is kept.
+            self.redo.clear();
+            self.redo_before_newest = None;
         }
-        self.redo.clear();
         self.version += 1;
         self.note(&before);
         Ok(())
@@ -1150,8 +1166,7 @@ impl Document {
         }
         let snapshot = self.to_json()?;
         let before = std::mem::replace(&mut self.meta, meta);
-        self.undo.push(snapshot);
-        self.redo.clear();
+        self.push_step(snapshot);
         self.version += 1;
         self.note(&before);
         Ok(true)
@@ -1230,6 +1245,7 @@ impl Document {
         if let Ok(current) = self.to_json() {
             if let Ok(meta) = ProjectMetadata::from_json(&snapshot) {
                 self.redo.push(current);
+                self.redo_before_newest = None;
                 let before = std::mem::replace(&mut self.meta, meta);
                 self.version += 1;
                 self.note(&before);
@@ -1243,10 +1259,18 @@ impl Document {
     /// the snapshot before that step, exactly as `undo` would, but nothing
     /// is pushed for redo — the step leaves no trace in either history.
     /// What an app's "try a few, then cancel" session needs: a cancelled
-    /// trial must not come back on the next Redo. The redo line is
-    /// untouched (it was already cleared by the step being withdrawn).
-    /// False with nothing to withdraw.
+    /// trial must not come back on the next Redo. The redo line the step
+    /// cleared when it landed comes back, so both lines are exactly as
+    /// they were before it.
+    ///
+    /// Refused (false, nothing changed) with nothing to withdraw, and
+    /// while the redo line is not empty: the newest step was undone, and
+    /// what sits on top of the undo line is an older step whose later
+    /// state Redo still points at.
     pub fn withdraw(&mut self) -> bool {
+        if !self.redo.is_empty() {
+            return false;
+        }
         let Some(snapshot) = self.undo.last() else {
             return false;
         };
@@ -1254,6 +1278,7 @@ impl Document {
             return false;
         };
         self.undo.pop();
+        self.redo = self.redo_before_newest.take().unwrap_or_default();
         let before = std::mem::replace(&mut self.meta, meta);
         self.version += 1;
         self.note(&before);
@@ -1267,6 +1292,7 @@ impl Document {
         if let Ok(current) = self.to_json() {
             if let Ok(meta) = ProjectMetadata::from_json(&snapshot) {
                 self.undo.push(current);
+                self.redo_before_newest = None;
                 let before = std::mem::replace(&mut self.meta, meta);
                 self.version += 1;
                 self.note(&before);
@@ -2149,13 +2175,62 @@ mod tests {
         );
         assert!(doc.undo(), "the step before is still there");
         assert_eq!(doc.to_json().unwrap(), self::doc().to_json().unwrap());
-        assert!(!doc.withdraw(), "nothing left to withdraw");
+        assert!(!doc.withdraw(), "nothing to withdraw while redo waits");
         assert!(
             doc.can_redo(),
             "the undone rename's redo line is left alone"
         );
         assert!(doc.redo());
         assert_eq!(doc.to_json().unwrap(), kept);
+    }
+
+    /// A withdrawn step puts back the redo line it forked off: rename,
+    /// undo (Redo waits), a trial, withdraw — Redo brings the rename back.
+    /// With a redo line waiting, withdraw is refused and changes nothing.
+    #[test]
+    fn withdraw_restores_the_redo_line_and_is_refused_while_redo_waits() {
+        let mut doc = doc();
+        let slide = layer_id(&doc, 1);
+        let rename = |name: &str| {
+            command(serde_json::json!(
+                {"kind": "renameLayer", "layerID": slide, "name": name}))
+        };
+        doc.apply(&rename("First")).unwrap();
+        doc.apply(&rename("Second")).unwrap();
+        assert!(doc.undo());
+        let before = doc.to_json().unwrap();
+        let version = doc.version();
+        assert!(!doc.withdraw(), "refused while the redo line waits");
+        assert_eq!(doc.to_json().unwrap(), before, "nothing changed");
+        assert_eq!(doc.version(), version, "no version bump");
+        assert!(doc.can_redo() && doc.can_undo(), "both lines untouched");
+
+        // A trial over it, merged twice, then withdrawn.
+        doc.apply_group_merging(&[rename("Trial A")], false)
+            .unwrap();
+        doc.apply_group_merging(&[rename("Trial B")], true).unwrap();
+        assert!(!doc.can_redo(), "the trial forked history");
+        assert!(doc.withdraw());
+        assert_eq!(doc.to_json().unwrap(), before);
+        assert!(doc.can_redo(), "the redo line the trial cleared is back");
+        assert!(doc.redo());
+        assert!(
+            doc.to_json().unwrap().contains("Second"),
+            "Redo brings the undone rename back"
+        );
+        assert!(doc.undo() && doc.undo());
+        assert!(!doc.can_undo(), "the undo line is as long as before");
+
+        // After an undo and redo of the trial, withdraw still leaves a
+        // consistent history (the kept line is dropped, never misplaced).
+        let mut doc = self::doc();
+        doc.apply(&rename("Only")).unwrap();
+        assert!(doc.undo());
+        doc.apply(&rename("Trial")).unwrap();
+        assert!(doc.undo() && doc.redo());
+        assert!(doc.withdraw());
+        assert!(!doc.can_redo());
+        assert_eq!(doc.to_json().unwrap(), self::doc().to_json().unwrap());
     }
 
     /// A command that misses is an error and a no-op — the document,
