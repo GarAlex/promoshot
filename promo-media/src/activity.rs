@@ -20,17 +20,27 @@
 //!   floor measured from the recording itself (a low percentile of the
 //!   cell differences, frame by frame and smoothed), never below
 //!   [`ABS_FLOOR`] luma levels, so H.264 shimmer is not action;
-//! - a KEYBOARD (phone portrait): a full-width panel that changes at the
-//!   bottom of the picture in one run of frames. The action while it is up
-//!   is the text field above, so events inside it are dropped until a
-//!   second such run takes it away;
 //! - a SCROLL: a large change that a whole-content shift explains (row or
 //!   column mean profiles find the shift, the pixels confirm it). The
-//!   frame makes no events — scrolling is a reason to stay wide;
+//!   frame makes no events — scrolling is a reason to stay wide. Large
+//!   changes just before a confirmed shift are its onset, and for a moment
+//!   after the last one its momentum settling; only a confirmed shift
+//!   extends that moment, so a feed video that starts playing as the list
+//!   stops is not one endless scroll;
 //! - a CUT: most unmasked cells changed at once — a new screen. No events;
 //! - otherwise the changed cells, minus AMBIENT ones (cells that keep
 //!   changing on their own: a playing video, a spinner, a seconds clock),
 //!   group into 8-connected components that link over time into events.
+//!
+//! A KEYBOARD (phone portrait) slides up over a few frames, and a sliding
+//! panel reads frame by frame as a shift or as one big change. So it is
+//! judged over the whole run of moving frames instead: when the picture
+//! settles, it is compared with the picture from before the run, and a
+//! full-width panel of keyboard height at the bottom, with a solid top edge
+//! and nothing above it changed, is a keyboard. The run's frames are still
+//! held back, so they are rewritten into no scroll and no events inside the
+//! panel; while it is up, events inside it are dropped (the action is the
+//! text field above, not the keys), until a run that takes it away.
 //!
 //! Ambient needs the future as well as the past (a video that has just
 //! started is ambient from its first frame), so frames are held back about
@@ -86,8 +96,9 @@ const SCROLL_MIN_CELLS: usize = 12;
 /// The shifted picture must leave at most this share of the unshifted
 /// difference for the shift to explain the change.
 const SCROLL_EXPLAINED: f32 = 0.4;
-/// Scrolling frames this close join into one span, and a large change this
-/// soon after a scroll is its momentum settling rather than an event.
+/// Scrolling frames this close join into one span, and a large change (short
+/// of a cut) this soon after a confirmed shift is its momentum settling
+/// rather than an event.
 const SCROLL_JOIN_S: f64 = 0.35;
 
 /// Ambient is judged in buckets of this many seconds: "changed in this
@@ -96,9 +107,17 @@ const SCROLL_JOIN_S: f64 = 0.35;
 const AMBIENT_BUCKET_S: f64 = 1.0;
 /// A cell is ambient when, over this many buckets before OR after the
 /// frame, it changed in at least [`AMBIENT_MIN_CHANGED`] (and at least
-/// three quarters) of the buckets that were measured.
+/// three quarters) of the buckets that were measured…
 const AMBIENT_WINDOW: i64 = 4;
 const AMBIENT_MIN_CHANGED: u32 = 3;
+/// …and either changed in at least this share of the measured frames (a
+/// video, a spinner: busy all the time)…
+const AMBIENT_BUSY_SHARE: f32 = 0.5;
+/// …or ticked: at most this many changed frames in any second (a seconds
+/// clock flips once, maybe smeared over two). A person tapping one control
+/// again and again changes it in bursts — press, release, a fade — with
+/// idle frames between: neither busy nor a tick, so it stays action.
+const AMBIENT_TICK_MAX: u16 = 2;
 /// A cell is reported as an ambient box once it was ambient this long.
 const AMBIENT_REPORT_S: f64 = 1.0;
 
@@ -123,17 +142,41 @@ const ENERGY_SCALE: f64 = 24.0;
 /// smaller one are one event.
 const MERGE_OVERLAP: f64 = 0.6;
 
-/// A keyboard row has at least this share of its cells changed…
+/// A frame is MOVING — part of a run a keyboard may arrive or leave in —
+/// when at least this share of the unmasked cells (and at least
+/// [`SCROLL_MIN_CELLS`]) changed: a panel's top edge moving a couple of
+/// pixels is a whole cell row, a key press is less.
+const KEYBOARD_RUN_FRACTION: f32 = 0.015;
+/// A run longer than this is not a keyboard arriving (iOS animates it in
+/// about 0.3 s, eased): a long scroll is not compared, however it ends.
+const KEYBOARD_MAX_RUN_S: f64 = 0.8;
+/// Compared with the picture before the run, a cell row belongs to the
+/// panel when at least this share of it changed; up to
+/// [`KEYBOARD_GAP_ROWS`] quieter rows in a row are tolerated (white keys
+/// over a white app change only round their labels)…
+const KEYBOARD_ROW_LOW: f32 = 0.25;
+const KEYBOARD_GAP_ROWS: usize = 2;
+/// …the row at its top edge changed nearly whole — a panel brings its own
+/// backdrop, where a list scrolled in a bottom pane leaves its margins
+/// alike…
+const KEYBOARD_EDGE_SHARE: f32 = 0.8;
+/// …and at least this share of the panel's cells changed.
 const KEYBOARD_ROW_FRACTION: f32 = 0.5;
-/// …and the panel is this tall, as a share of the picture: iPhone
-/// keyboards with the suggestion bar are 35–45%.
+/// The panel is this tall, as a share of the picture: iPhone keyboards
+/// with the suggestion bar are 35–45%.
 const KEYBOARD_MIN_HEIGHT: f32 = 0.22;
 const KEYBOARD_MAX_HEIGHT: f32 = 0.52;
-/// Changes above the panel in the same frame (the text field lighting up)
-/// may be at most this share of the panel's.
+/// Changes above the panel over the run (the text field lighting up) may
+/// be at most this share of the panel's. A sheet dims what is above it, so
+/// it fails here and its buttons stay action.
 const KEYBOARD_ABOVE_SHARE: f32 = 0.25;
-/// The share of a shown keyboard's cells a cut must change to take it away.
+/// The share of a shown keyboard's cells a run (or a cut) must change to
+/// take it away.
 const KEYBOARD_CUT_SHARE: f32 = 0.6;
+
+/// Pushes further than this from zero are a host bug, not a recording
+/// (thirty years): ignored, so bucket arithmetic cannot overflow.
+const MAX_TIME_S: f64 = 1e9;
 
 /// iPhone portrait: the status bar's share of the height from the top, and
 /// the home indicator's from the bottom. In landscape the status bar is
@@ -217,16 +260,23 @@ struct FrameRecord {
     bucket: i64,
     kind: FrameKind,
     /// Changed cells after masks, with how far each cleared the floor.
+    /// Only a [`FrameKind::Normal`] frame makes events of them.
     changed: Vec<(u32, f32)>,
+    /// When a later shift made this frame its onset: the time of that
+    /// shift. The changes are kept, so a keyboard run that turns out to
+    /// have caused the shift can give the frame back (a tap on the text
+    /// field just before the keyboard is the very event).
+    onset_of: Option<f64>,
 }
 
-/// Which cells changed during one second of one screen (an epoch is the
-/// stretch between cuts: a new screen starts its ambient history afresh).
+/// How often each cell changed during one second of one screen (an epoch
+/// is the stretch between cuts: a new screen starts its ambient history
+/// afresh).
 struct Bucket {
     epoch: u32,
     index: i64,
     frames: u32,
-    changed: Vec<bool>,
+    changed: Vec<u16>,
 }
 
 /// An event while it may still grow. Boxes are cells, `[x0, y0, x1, y1)`.
@@ -242,8 +292,22 @@ struct Event {
 struct Keyboard {
     /// The top cell row of the keyboard while it is up.
     shown_top: Option<usize>,
-    /// The highest top seen in the current run of panel frames.
-    run_top: Option<usize>,
+    /// The run of moving frames in progress.
+    run: Option<Run>,
+    /// The run went on too long to be a keyboard: wait for a still frame.
+    stale: bool,
+}
+
+/// A run of moving frames, and what to put back if a keyboard caused it.
+struct Run {
+    /// The picture before the run.
+    reference: Vec<u8>,
+    /// Its time: the run's frames are the ones after it.
+    t0: f64,
+    /// The scroll spans, and the last confirmed shift, as they were.
+    scrolls: usize,
+    last_span: Option<[f64; 2]>,
+    last_shift_t: Option<f64>,
 }
 
 /// See the module documentation.
@@ -262,7 +326,7 @@ pub struct ActivityMeter {
     column_sums: Vec<u32>,
     noise: Option<f32>,
     keyboard: Keyboard,
-    last_scroll_t: Option<f64>,
+    last_shift_t: Option<f64>,
     last_cut_t: Option<f64>,
     epoch: u32,
     buckets: VecDeque<Bucket>,
@@ -330,7 +394,7 @@ impl ActivityMeter {
             column_sums: Vec::new(),
             noise: None,
             keyboard: Keyboard::default(),
-            last_scroll_t: None,
+            last_shift_t: None,
             last_cut_t: None,
             epoch: 0,
             buckets: VecDeque::new(),
@@ -351,14 +415,15 @@ impl ActivityMeter {
     /// One luma frame at source time `t`, any size (`stride` bytes per
     /// row); a frame of another aspect is stretched to the source's. Frames
     /// must arrive in time order: one at or before the last is ignored, as
-    /// is a buffer too short for its stated size — a host bug must not
-    /// read out of bounds or invent a cut.
+    /// is a buffer too short for its stated size, or a time no recording
+    /// has — a host bug must not read out of bounds or invent a cut.
     pub fn push(&mut self, t: f64, luma: &[u8], width: usize, height: usize, stride: usize) {
         if width == 0
             || height == 0
             || stride < width
             || luma.len() < (height - 1) * stride + width
             || !t.is_finite()
+            || t.abs() > MAX_TIME_S
             || self.prev_t.is_some_and(|p| t <= p)
         {
             return;
@@ -457,38 +522,36 @@ impl ActivityMeter {
         let broad: Vec<bool> = (0..n).map(|i| !mask[i] && diffs[i] > floor).collect();
         let mut changed: Vec<bool> = (0..n).map(|i| !mask[i] && diffs[i] > frame_floor).collect();
         let broad_count = broad.iter().filter(|c| **c).count();
+        let cut_sized = broad_count as f32 >= CUT_FRACTION * unmasked as f32;
 
-        let band = if self.phone_portrait {
-            self.keyboard_band(&broad)
+        // A keyboard that just left still clears this frame: its last
+        // slide is not an event either.
+        let hidden_top = if self.phone_portrait {
+            self.keyboard_step(prev_t, t, broad_count, unmasked, cut_sized, floor)
         } else {
             None
         };
-        let kind = if let Some(top) = band {
-            self.keyboard.run_top = Some(self.keyboard.run_top.map_or(top, |r| r.min(top)));
-            self.clear_rows_from(&mut changed, top);
-            FrameKind::Normal
-        } else {
-            if let Some(top) = self.keyboard.run_top.take() {
-                self.keyboard.shown_top = match self.keyboard.shown_top {
-                    None => Some(top),
-                    Some(_) => None,
-                };
-            }
-            let large = broad_count >= SCROLL_MIN_CELLS
-                && broad_count as f32 >= SCROLL_MIN_FRACTION * unmasked as f32;
-            let settling = self
-                .last_scroll_t
+        let large = broad_count >= SCROLL_MIN_CELLS
+            && broad_count as f32 >= SCROLL_MIN_FRACTION * unmasked as f32;
+        let shifted = large && self.explained_by_shift(&broad);
+        // Settling is measured from the last CONFIRMED shift and never
+        // renews itself: otherwise any sustained change after a scroll (a
+        // feed video starting) would stretch the span without end. And a
+        // change the size of a cut is a new screen, however soon.
+        let settling = large
+            && !cut_sized
+            && self
+                .last_shift_t
                 .is_some_and(|s| t - s <= SCROLL_JOIN_S + 1e-9);
-            if large && (settling || self.explained_by_shift(&broad)) {
-                FrameKind::Scroll
-            } else if broad_count as f32 >= CUT_FRACTION * unmasked as f32 {
-                FrameKind::Cut
-            } else {
-                if let Some(top) = self.keyboard.shown_top {
-                    self.clear_rows_from(&mut changed, top);
-                }
-                FrameKind::Normal
+        let kind = if shifted || settling {
+            FrameKind::Scroll
+        } else if cut_sized {
+            FrameKind::Cut
+        } else {
+            if let Some(top) = hidden_top.or(self.keyboard.shown_top) {
+                self.clear_rows_from(&mut changed, top);
             }
+            FrameKind::Normal
         };
 
         let bucket = (t / AMBIENT_BUCKET_S).floor() as i64;
@@ -499,6 +562,7 @@ impl ActivityMeter {
             bucket,
             kind,
             changed: Vec::new(),
+            onset_of: None,
         };
         match kind {
             FrameKind::Cut => {
@@ -523,23 +587,26 @@ impl ActivityMeter {
                 // edge on the screen shimmers into an "event". Changed
                 // frames just before a scroll are its onset — the mirror
                 // of the settling rule after it. They are still held back,
-                // so this rewrites what they will make.
+                // so this rewrites what they will make. Only a confirmed
+                // shift has an onset; settling frames only extend the span.
                 let mut onset = prev_t;
-                for held in self.pending.iter_mut().rev() {
-                    if held.t < t - SCROLL_JOIN_S - 1e-9 {
-                        break;
+                if shifted {
+                    for held in self.pending.iter_mut().rev() {
+                        if held.t < t - SCROLL_JOIN_S - 1e-9 {
+                            break;
+                        }
+                        if held.kind == FrameKind::Normal && !held.changed.is_empty() {
+                            held.kind = FrameKind::Scroll;
+                            held.onset_of = Some(t);
+                            onset = onset.min(held.t - held.dt);
+                        }
                     }
-                    if held.kind == FrameKind::Normal && !held.changed.is_empty() {
-                        held.kind = FrameKind::Scroll;
-                        held.changed.clear();
-                        onset = onset.min(held.t - held.dt);
-                    }
+                    self.last_shift_t = Some(t);
                 }
                 match self.scrolls.last_mut() {
                     Some(span) if onset - span[1] <= SCROLL_JOIN_S + 1e-9 => span[1] = t,
                     _ => self.scrolls.push([onset, t]),
                 }
-                self.last_scroll_t = Some(t);
             }
             FrameKind::Normal => {
                 self.noise = Some(match self.noise {
@@ -560,14 +627,15 @@ impl ActivityMeter {
                             epoch,
                             index: bucket,
                             frames: 0,
-                            changed: vec![false; n],
+                            changed: vec![0; n],
                         });
                         self.buckets.back_mut().expect("just pushed")
                     }
                 };
                 bucket_slot.frames += 1;
                 for &(i, _) in &record.changed {
-                    bucket_slot.changed[i as usize] = true;
+                    let count = &mut bucket_slot.changed[i as usize];
+                    *count = count.saturating_add(1);
                 }
             }
         }
@@ -576,13 +644,18 @@ impl ActivityMeter {
 
     /// Mean absolute difference per cell between `prev` and `cur`.
     fn cell_diffs(&self) -> Vec<f32> {
+        self.cell_diffs_between(&self.prev, &self.cur)
+    }
+
+    /// Mean absolute difference per cell between two analysis pictures.
+    fn cell_diffs_between(&self, before: &[u8], after: &[u8]) -> Vec<f32> {
         let (aw, ah, cw) = (self.aw, self.ah, self.cw);
         let mut sums = vec![0u32; self.cw * self.ch];
         let mut counts = vec![0u32; self.cw * self.ch];
         for y in 0..ah {
             let row = (y / CELL) * cw;
-            let p = &self.prev[y * aw..(y + 1) * aw];
-            let c = &self.cur[y * aw..(y + 1) * aw];
+            let p = &before[y * aw..(y + 1) * aw];
+            let c = &after[y * aw..(y + 1) * aw];
             for x in 0..aw {
                 let i = row + x / CELL;
                 sums[i] += p[x].abs_diff(c[x]) as u32;
@@ -623,31 +696,164 @@ impl ActivityMeter {
         }
     }
 
-    /// The top cell row of a full-width panel that changed at the bottom of
-    /// a phone portrait picture, if this frame shows one of keyboard height
-    /// with little else changing.
-    fn keyboard_band(&self, broad: &[bool]) -> Option<usize> {
-        let cw = self.cw;
-        let open_row = |cy: usize| (0..cw).any(|cx| !self.static_mask[cy * cw + cx]);
-        let bottom = (0..self.ch).rev().find(|&cy| open_row(cy))?;
-        let row_share = |cy: usize| {
-            let changed = (0..cw).filter(|&cx| broad[cy * cw + cx]).count();
-            changed as f32 / cw as f32
-        };
-        let mut top = bottom;
-        if row_share(bottom) < KEYBOARD_ROW_FRACTION {
+    /// Follows runs of moving frames on a phone portrait picture, and when
+    /// one settles, decides whether a keyboard came or went in it. Returns
+    /// the top row of a keyboard that has just gone, whose last slide this
+    /// frame still is.
+    fn keyboard_step(
+        &mut self,
+        prev_t: f64,
+        t: f64,
+        broad_count: usize,
+        unmasked: usize,
+        cut_sized: bool,
+        floor: f32,
+    ) -> Option<usize> {
+        if cut_sized {
+            // A new screen is not a keyboard; the cut rule judges whether
+            // it took a shown one away.
+            self.keyboard.run = None;
+            self.keyboard.stale = false;
             return None;
         }
-        while top > 0 && open_row(top - 1) && row_share(top - 1) >= KEYBOARD_ROW_FRACTION {
-            top -= 1;
+        let moving = broad_count >= SCROLL_MIN_CELLS
+            && broad_count as f32 >= KEYBOARD_RUN_FRACTION * unmasked as f32;
+        if moving {
+            if self.keyboard.stale {
+                return None;
+            }
+            match &self.keyboard.run {
+                Some(run) if t - run.t0 > KEYBOARD_MAX_RUN_S + 1e-9 => {
+                    self.keyboard.run = None;
+                    self.keyboard.stale = true;
+                }
+                Some(_) => {}
+                None => {
+                    self.keyboard.run = Some(Run {
+                        reference: self.prev.clone(),
+                        t0: prev_t,
+                        scrolls: self.scrolls.len(),
+                        last_span: self.scrolls.last().copied(),
+                        last_shift_t: self.last_shift_t,
+                    })
+                }
+            }
+            return None;
+        }
+        self.keyboard.stale = false;
+        let run = self.keyboard.run.take()?;
+        // The run has settled: what did it change, all told?
+        let since: Vec<bool> = self
+            .cell_diffs_between(&run.reference, &self.cur)
+            .into_iter()
+            .zip(&self.static_mask)
+            .map(|(d, &masked)| !masked && d > floor)
+            .collect();
+        match self.keyboard.shown_top {
+            None => {
+                let top = self.panel_top(&since, &run.reference, &self.cur)?;
+                self.keyboard.shown_top = Some(top);
+                self.forget_run(run, top);
+                None
+            }
+            Some(top) => {
+                let n = since.len();
+                let band_cells = (top * self.cw..n)
+                    .filter(|&i| !self.static_mask[i])
+                    .count()
+                    .max(1);
+                let band_changed = since[top * self.cw..].iter().filter(|c| **c).count();
+                let above = since[..top * self.cw].iter().filter(|c| **c).count();
+                let gone = band_changed as f32 >= KEYBOARD_CUT_SHARE * band_cells as f32
+                    && above as f32 <= KEYBOARD_ABOVE_SHARE * band_changed as f32;
+                if !gone {
+                    return None;
+                }
+                self.keyboard.shown_top = None;
+                self.forget_run(run, top);
+                Some(top)
+            }
+        }
+    }
+
+    /// The top cell row of a keyboard-shaped panel in `since` (the cells a
+    /// run changed from `before` to `after`): full-width rows from the
+    /// bottom up, a solid top edge, keyboard height, next to nothing
+    /// changed above it, and new content — a list scrolled in a bottom pane
+    /// is all of that but the old picture shifted.
+    fn panel_top(&self, since: &[bool], before: &[u8], after: &[u8]) -> Option<usize> {
+        let cw = self.cw;
+        let open_row = |cy: usize| (0..cw).any(|cx| !self.static_mask[cy * cw + cx]);
+        let row_share = |cy: usize| {
+            let changed = since[cy * cw..(cy + 1) * cw].iter().filter(|c| **c).count();
+            changed as f32 / cw as f32
+        };
+        let bottom = (0..self.ch).rev().find(|&cy| open_row(cy))?;
+        if row_share(bottom) < KEYBOARD_ROW_LOW {
+            return None;
+        }
+        let (mut top, mut gap, mut cy) = (bottom, 0, bottom);
+        while cy > 0 && open_row(cy - 1) {
+            cy -= 1;
+            if row_share(cy) >= KEYBOARD_ROW_LOW {
+                top = cy;
+                gap = 0;
+            } else {
+                gap += 1;
+                if gap > KEYBOARD_GAP_ROWS {
+                    break;
+                }
+            }
+        }
+        // The edge row may be cut by the panel's top mid-cell: the row
+        // under it counts too.
+        let edge = row_share(top).max(if top < bottom {
+            row_share(top + 1)
+        } else {
+            0.0
+        });
+        if edge < KEYBOARD_EDGE_SHARE {
+            return None;
         }
         let height = ((bottom + 1 - top) * CELL) as f32 / self.ah as f32;
         if !(KEYBOARD_MIN_HEIGHT..=KEYBOARD_MAX_HEIGHT).contains(&height) {
             return None;
         }
-        let inside = broad[top * cw..].iter().filter(|c| **c).count();
-        let above = broad[..top * cw].iter().filter(|c| **c).count();
-        (above as f32 <= KEYBOARD_ABOVE_SHARE * inside as f32).then_some(top)
+        let inside = since[top * cw..(bottom + 1) * cw]
+            .iter()
+            .filter(|c| **c)
+            .count();
+        if (inside as f32) < KEYBOARD_ROW_FRACTION * ((bottom + 1 - top) * cw) as f32 {
+            return None;
+        }
+        let above = since[..top * cw].iter().filter(|c| **c).count();
+        if above as f32 > KEYBOARD_ABOVE_SHARE * inside as f32 {
+            return None;
+        }
+        let region = [0, top * CELL, self.aw, ((bottom + 1) * CELL).min(self.ah)];
+        (!self.shift_explains(before, after, region)).then_some(top)
+    }
+
+    /// A keyboard came or went in `run`: its frames were the panel sliding,
+    /// not a scroll and not events inside it. They are still held back, so
+    /// this rewrites what they will make, and puts the scroll spans back.
+    fn forget_run(&mut self, run: Run, top: usize) {
+        let from = (top * self.cw) as u32;
+        for held in self.pending.iter_mut() {
+            let in_run = held.t > run.t0 + 1e-9;
+            if in_run || held.onset_of.is_some_and(|s| s > run.t0 + 1e-9) {
+                held.kind = FrameKind::Normal;
+                held.onset_of = None;
+                if in_run {
+                    held.changed.retain(|&(i, _)| i < from);
+                }
+            }
+        }
+        self.scrolls.truncate(run.scrolls);
+        if let (Some(span), Some(last)) = (run.last_span, self.scrolls.last_mut()) {
+            *last = span;
+        }
+        self.last_shift_t = run.last_shift_t;
     }
 
     fn clear_rows_from(&self, changed: &mut [bool], top: usize) {
@@ -675,7 +881,16 @@ impl ActivityMeter {
             (cx1 * CELL).min(self.aw),
             (cy1 * CELL).min(self.ah),
         ];
+        self.shift_explains(&self.prev, &self.cur, region)
+    }
+
+    /// Whether `after` is `before` shifted, over `region` (analysis px,
+    /// `[x0, y0, x1, y1)`).
+    fn shift_explains(&self, before: &[u8], after: &[u8], region: [usize; 4]) -> bool {
         let [x0, y0, x1, y1] = region;
+        if x1 <= x0 || y1 <= y0 {
+            return false;
+        }
         let aw = self.aw;
         let rows = |frame: &[u8]| -> Vec<f32> {
             (y0..y1)
@@ -696,8 +911,8 @@ impl ActivityMeter {
                 })
                 .collect()
         };
-        let vertical = best_shift(&rows(&self.prev), &rows(&self.cur));
-        let horizontal = best_shift(&columns(&self.prev), &columns(&self.cur));
+        let vertical = best_shift(&rows(before), &rows(after));
+        let horizontal = best_shift(&columns(before), &columns(after));
         let mut candidates = Vec::new();
         if let Some((s, ratio)) = vertical {
             candidates.push((ratio, 0isize, s));
@@ -707,7 +922,7 @@ impl ActivityMeter {
         }
         candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
         candidates.into_iter().any(|(_, dx, dy)| {
-            let (shifted, still) = shifted_error(&self.prev, &self.cur, aw, region, dx, dy);
+            let (shifted, still) = shifted_error(before, after, aw, region, dx, dy);
             still > 0.0 && shifted <= SCROLL_EXPLAINED * still
         })
     }
@@ -773,9 +988,23 @@ impl ActivityMeter {
                 })
                 .collect();
             let ambient = |cell: usize, window: &[&Bucket]| {
-                let measured = window.iter().filter(|b| b.frames > 0).count() as u32;
-                let changed = window.iter().filter(|b| b.changed[cell]).count() as u32;
-                changed >= AMBIENT_MIN_CHANGED && changed * 4 >= measured * 3
+                let (mut measured, mut frames, mut changed, mut changed_frames) = (0, 0, 0, 0);
+                let mut most = 0u16;
+                for b in window.iter().filter(|b| b.frames > 0) {
+                    measured += 1;
+                    frames += b.frames;
+                    let count = b.changed[cell];
+                    if count > 0 {
+                        changed += 1;
+                        changed_frames += count as u32;
+                        most = most.max(count);
+                    }
+                }
+                if changed < AMBIENT_MIN_CHANGED || changed * 4 < measured * 3 {
+                    return false;
+                }
+                let busy = changed_frames as f32 >= AMBIENT_BUSY_SHARE * frames as f32;
+                busy || most <= AMBIENT_TICK_MAX
             };
             for &(i, e) in &record.changed {
                 let i = i as usize;
@@ -1007,24 +1236,35 @@ fn union(a: [usize; 4], b: [usize; 4]) -> [usize; 4] {
 
 /// Folds events that are one burst seen twice: close in time, boxes mostly
 /// overlapping. Sorted by start.
+///
+/// A sweep, not a search from the top after every fold: a long busy
+/// recording has thousands of events, and only those starting within
+/// [`LINK_GAP_S`] of one's end can fold into it. A fold keeps the earlier
+/// start, so the order holds; an event that grew may now reach one before
+/// it, so sweeps repeat until one folds nothing.
 fn merge_events(mut events: Vec<Event>) -> Vec<Event> {
     let area = |b: [usize; 4]| ((b[2] - b[0]) * (b[3] - b[1])) as f64;
+    let overlapping = |a: &Event, b: &Event| {
+        let gap = b.t0.max(a.t0) - a.t1.min(b.t1);
+        if gap > LINK_GAP_S + 1e-9 {
+            return false;
+        }
+        let ix = a.cells[2].min(b.cells[2]) as f64 - a.cells[0].max(b.cells[0]) as f64;
+        let iy = a.cells[3].min(b.cells[3]) as f64 - a.cells[1].max(b.cells[1]) as f64;
+        ix > 0.0 && iy > 0.0 && ix * iy >= MERGE_OVERLAP * area(a.cells).min(area(b.cells))
+    };
+    events.sort_by(|a, b| a.t0.total_cmp(&b.t0).then(a.cells.cmp(&b.cells)));
     loop {
-        events.sort_by(|a, b| a.t0.total_cmp(&b.t0).then(a.cells.cmp(&b.cells)));
         let mut merged = false;
-        'outer: for i in 0..events.len() {
-            for j in i + 1..events.len() {
-                let (a, b) = (&events[i], &events[j]);
-                let gap = b.t0.max(a.t0) - a.t1.min(b.t1);
-                if gap > LINK_GAP_S + 1e-9 {
-                    continue;
+        let mut i = 0;
+        while i < events.len() {
+            let mut j = i + 1;
+            while j < events.len() {
+                // Sorted by start: nothing from here on is close enough.
+                if events[j].t0 - events[i].t1 > LINK_GAP_S + 1e-9 {
+                    break;
                 }
-                let ix = a.cells[2].min(b.cells[2]) as f64 - a.cells[0].max(b.cells[0]) as f64;
-                let iy = a.cells[3].min(b.cells[3]) as f64 - a.cells[1].max(b.cells[1]) as f64;
-                if ix <= 0.0 || iy <= 0.0 {
-                    continue;
-                }
-                if ix * iy >= MERGE_OVERLAP * area(a.cells).min(area(b.cells)) {
+                if overlapping(&events[i], &events[j]) {
                     let b = events.remove(j);
                     let a = &mut events[i];
                     a.t0 = a.t0.min(b.t0);
@@ -1032,9 +1272,13 @@ fn merge_events(mut events: Vec<Event>) -> Vec<Event> {
                     a.cells = union(a.cells, b.cells);
                     a.energy += b.energy;
                     merged = true;
-                    break 'outer;
+                    // It grew: its neighbours are worth a second look.
+                    j = i + 1;
+                } else {
+                    j += 1;
                 }
             }
+            i += 1;
         }
         if !merged {
             return events;
@@ -1244,6 +1488,18 @@ mod tests {
     /// blend neighbouring rows, as a scaler does with a sub-pixel move).
     fn list_screen(offset: f64) -> Canvas {
         let (w, h) = (320usize, 400usize);
+        let mut c = Canvas::new(w, h, 240);
+        c.rect(0, 0, w, 48, 190);
+        c.rect(12, 18, 90, 10, 40);
+        list_pane(&mut c, 48, offset);
+        c
+    }
+
+    /// The list of [`list_screen`] scrolled `offset` px, drawn from row
+    /// `y0` to the bottom of a 320 px wide canvas.
+    fn list_pane(c: &mut Canvas, y0: usize, offset: f64) {
+        let w = 320usize;
+        assert_eq!(c.w, w);
         let mut rng = Rng(5);
         let list_h = 1200;
         let mut list = Canvas::new(w, list_h, 240);
@@ -1257,19 +1513,15 @@ mod tests {
             list.rect(0, y + item - 1, w, 1, 200);
             y += item;
         }
-        let mut c = Canvas::new(w, h, 240);
-        c.rect(0, 0, w, 48, 190);
-        c.rect(12, 18, 90, 10, 40);
         let (whole, frac) = (offset.floor() as usize, offset.fract());
-        for yy in 48..h {
-            let a = (yy - 48 + whole) * w;
+        for yy in y0..c.h {
+            let a = (yy - y0 + whole) * w;
             let b = a + w;
             for x in 0..w {
                 let v = list.px[a + x] as f64 * (1.0 - frac) + list.px[b + x] as f64 * frac;
                 c.px[yy * w + x] = v.round() as u8;
             }
         }
-        c
     }
 
     /// A list scrolls under a fixed header for a second: one span, no
@@ -1506,6 +1758,250 @@ mod tests {
         feed(&mut meter, 0.0, &other);
         feed(&mut meter, 0.1, &c);
         assert!(meter.finish().cuts.is_empty());
+    }
+
+    /// The list from [`a_scrolling_list_is_a_scroll_span`]: scrolled 1.0–2.0.
+    fn scrolled_list(t: f64) -> Canvas {
+        let steps = ((t.clamp(1.0, 2.0) - 1.0) * 10.0).round();
+        list_screen(steps * 9.0)
+    }
+
+    /// A feed video starts playing as the list stops: the scroll ends with
+    /// its settling, the video is ambient, and a tap long after is an
+    /// event — settling must not renew itself on the video's change.
+    #[test]
+    fn a_video_starting_after_a_scroll_does_not_stretch_it() {
+        let scene = |t: f64| {
+            let mut c = scrolled_list(t);
+            if t >= 2.1 {
+                let mut rng = Rng(77 + (t * 10.0).round() as u64);
+                for y in 150..290 {
+                    for x in 40..280 {
+                        c.px[y * 320 + x] = rng.range(0, 255) as u8;
+                    }
+                }
+            }
+            if (7.0..7.3).contains(&t) {
+                c.rect(20, 330, 40, 20, 90);
+            }
+            c
+        };
+        let track = measure((1280, 1600), MeterOptions::default(), 10.0, scene);
+        assert_eq!(track.scrolls.len(), 1, "{track:?}");
+        assert_eq!(track.scrolls[0][0], 1.0, "{track:?}");
+        assert!(track.scrolls[0][1] <= 2.4, "{track:?}");
+        let tap = track
+            .events
+            .iter()
+            .find(|e| e[0] == 7.0 && inside(e, 20.0 / 320.0, 330.0 / 400.0, 0.125, 0.05));
+        assert!(tap.is_some(), "{:?}", track.events);
+        assert_eq!(track.ambient.len(), 1, "{:?}", track.ambient);
+        let a = track.ambient[0];
+        assert!(a[0] <= 0.125 + 1e-9 && a[2] >= 0.75 - 1e-9, "{a:?}");
+    }
+
+    /// A new screen 0.3 s after a scroll stopped is a cut, not settling.
+    #[test]
+    fn a_cut_right_after_a_scroll_is_a_cut() {
+        let scene = |t: f64| {
+            if t >= 2.3 {
+                let mut c = Canvas::new(320, 400, 30);
+                c.rect(40, 60, 200, 160, 200);
+                c
+            } else {
+                scrolled_list(t)
+            }
+        };
+        let track = measure((1280, 1600), MeterOptions::default(), 4.0, scene);
+        assert_eq!(track.cuts, vec![2.3], "{track:?}");
+        assert_eq!(track.scrolls, vec![[1.0, 2.0]], "{track:?}");
+        assert!(track.events.is_empty(), "{:?}", track.events);
+    }
+
+    /// A phone screen whose keyboard slides up over `frames` frames from
+    /// 1.0, takes six keystrokes 1.6–2.8 (a key pops, a letter lands in
+    /// the field), slides away over as many frames from 3.5, and then a
+    /// button where the keyboard was is tapped at 4.5.
+    fn keyboard_scene(frames: usize) -> (impl Fn(f64) -> Canvas, f64, usize, usize) {
+        let (w, h) = analysis_size(PHONE.0, PHONE.1);
+        let kb_top = (h as f64 * 0.58) as usize;
+        let field_y = (h as f64 * 0.3) as usize;
+        let tap_y = (h as f64 * 0.75) as usize;
+        let scene = move |t: f64| {
+            let step = |from: f64| {
+                let k = ((t - from) * 10.0).round() as i64 + 1;
+                (k as f64 / frames as f64).clamp(0.0, 1.0)
+            };
+            let shown = if t < 1.0 - 1e-9 {
+                0.0
+            } else if t < 3.5 - 1e-9 {
+                step(1.0)
+            } else {
+                1.0 - step(3.5)
+            };
+            let mut c = ui(w, h, 2);
+            c.rect(20, field_y - 6, w - 40, 24, 252);
+            if t >= 1.6 - 1e-9 {
+                let typed = (((t.min(2.8) - 1.6) / 0.2 + 1e-9).floor() as usize + 1).min(6);
+                for k in 0..typed {
+                    c.rect(30 + k * 10, field_y, 6, 10, 30);
+                }
+            }
+            if shown > 0.0 {
+                let top = h - ((h - kb_top) as f64 * shown).round() as usize;
+                c.rect(0, top, w, h - top, 200);
+                for row in 0..4 {
+                    for col in 0..10 {
+                        c.rect(4 + col * 31, top + 30 + row * 52, 26, 40, 250);
+                    }
+                }
+                if (1.6..2.8).contains(&t) {
+                    // The key under the finger pops while it is down.
+                    let typed = ((t - 1.6) / 0.2 + 1e-9).floor() as usize;
+                    c.rect(4 + (typed % 10) * 31, top + 30 + 52, 26, 40, 120);
+                }
+            }
+            if (4.5..4.8).contains(&t) {
+                c.rect(120, tap_y, 80, 30, 90);
+            }
+            c
+        };
+        (scene, kb_top as f64 / h as f64, field_y, tap_y)
+    }
+
+    /// A keyboard arrives in one frame or slides in over several, and
+    /// leaves the same way: while it is up the events are the text field's,
+    /// none inside it; the slide is neither a scroll nor an event; and once
+    /// it has gone, a tap where it was is action again.
+    #[test]
+    fn a_keyboard_sliding_in_and_out_is_not_action() {
+        let (w, h) = analysis_size(PHONE.0, PHONE.1);
+        for frames in [1, 2, 3, 5] {
+            let (scene, kb, field_y, tap_y) = keyboard_scene(frames);
+            let track = measure(PHONE, MeterOptions::default(), 6.0, scene);
+            let label = format!("{frames}-frame slide: {track:?}");
+            assert!(track.scrolls.is_empty(), "{label}");
+            assert!(track.cuts.is_empty(), "{label}");
+            for e in track.events.iter().filter(|e| e[0] < 4.0) {
+                assert!(
+                    e[3] + e[5] <= kb + 1e-9,
+                    "inside the keyboard: {e:?}; {label}"
+                );
+            }
+            let field = track
+                .events
+                .iter()
+                .find(|e| inside(e, 30.0 / w as f64, field_y as f64 / h as f64, 0.1, 0.0));
+            assert!(field.is_some(), "{label}");
+            let tap = track.events.iter().find(|e| {
+                e[0] == 4.5 && inside(e, 120.0 / w as f64, tap_y as f64 / h as f64, 0.25, 0.04)
+            });
+            assert!(tap.is_some(), "{label}");
+        }
+    }
+
+    /// A list in the bottom half of a phone screen flicked for a few
+    /// frames is a scroll, not a keyboard: a tap in that pane later is
+    /// still an event.
+    #[test]
+    fn a_flicked_bottom_pane_is_not_a_keyboard() {
+        let (w, h) = analysis_size(PHONE.0, PHONE.1);
+        let pane = h / 2;
+        let scene = |t: f64| {
+            let mut c = ui(w, h, 12);
+            let steps = ((t.clamp(1.0, 1.3) - 1.0) * 10.0).round();
+            list_pane(&mut c, pane, steps * 12.0);
+            if (3.0..3.3).contains(&t) {
+                c.rect(120, pane + 150, 80, 30, 90);
+            }
+            c
+        };
+        let track = measure(PHONE, MeterOptions::default(), 5.0, scene);
+        assert!(!track.scrolls.is_empty(), "{track:?}");
+        let tap = track.events.iter().find(|e| {
+            e[0] == 3.0
+                && inside(
+                    e,
+                    120.0 / w as f64,
+                    (pane + 150) as f64 / h as f64,
+                    0.25,
+                    0.04,
+                )
+        });
+        assert!(tap.is_some(), "{:?}", track.events);
+    }
+
+    /// Someone taps the same button again and again (a stepper, a like
+    /// button) for five seconds: that is the action, not ambient.
+    #[test]
+    fn tapping_one_control_again_and_again_is_action() {
+        let scene = |t: f64| {
+            let mut c = ui(320, 200, 1);
+            let phase = (t - 1.0).rem_euclid(0.6);
+            if (1.0..6.0).contains(&t) && phase < 0.25 - 1e-9 {
+                c.rect(100, 60, 24, 16, 120);
+            }
+            c
+        };
+        let track = measure(DESKTOP, MeterOptions::default(), 8.0, scene);
+        assert!(track.ambient.is_empty(), "{:?}", track.ambient);
+        let (bx, by, bw, bh) = (100.0 / 320.0, 60.0 / 200.0, 24.0 / 320.0, 16.0 / 200.0);
+        let covered: f64 = track
+            .events
+            .iter()
+            .filter(|e| inside(e, bx, by, bw, bh))
+            .map(|e| e[1] - e[0])
+            .sum();
+        assert!(covered >= 4.0, "{:?}", track.events);
+    }
+
+    /// Thousands of events fold in one pass over their neighbours, and
+    /// what comes out folds no further.
+    #[test]
+    fn merging_many_events_folds_duplicates_and_nothing_else() {
+        let mut events = Vec::new();
+        for k in 0..4000usize {
+            let x = (k * 7) % 30;
+            let event = Event {
+                t0: k as f64 * 0.7,
+                t1: k as f64 * 0.7 + 0.1,
+                cells: [x, 2, x + 3, 5],
+                energy: 1.0,
+            };
+            if k % 4 == 0 {
+                events.push(Event {
+                    t0: event.t0 + 0.05,
+                    ..event.clone()
+                });
+            }
+            events.push(event);
+        }
+        assert_eq!(events.len(), 5000);
+        let merged = merge_events(events);
+        assert_eq!(merged.len(), 4000);
+        assert!(merged.windows(2).all(|p| p[0].t0 <= p[1].t0));
+        assert!(merged.iter().all(|e| e.energy == 1.0 || e.energy == 2.0));
+        let doubled = merged.iter().filter(|e| e.energy == 2.0).count();
+        assert_eq!(doubled, 1000);
+    }
+
+    /// Times no recording has are a host bug: ignored, not an overflow.
+    #[test]
+    fn absurd_times_are_ignored() {
+        let mut meter = ActivityMeter::new(DESKTOP.0, DESKTOP.1, MeterOptions::default());
+        let c = ui(320, 200, 9);
+        let mut other = c.clone();
+        other.rect(0, 0, 320, 200, 0);
+        feed(&mut meter, 0.0, &c);
+        feed(&mut meter, 1e19, &other);
+        feed(&mut meter, 2e19, &c);
+        feed(&mut meter, -3e19, &other);
+        feed(&mut meter, 0.1, &c);
+        let track = meter.finish();
+        assert!(
+            track.cuts.is_empty() && track.events.is_empty(),
+            "{track:?}"
+        );
     }
 
     #[test]

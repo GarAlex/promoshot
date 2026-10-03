@@ -676,9 +676,6 @@ fn model_probe(file: &Path, opts: &Options) -> Result<String, String> {
     Ok(out.trim_end().to_string())
 }
 
-/// A built-in device body — phone, tablet, tablet-portrait or laptop — written as a `.glb`
-/// with `Body` and `Screen` slots (the laptop a `Deck` too), the same
-/// bytes the app and the MCP put into a project's Resources.
 /// `promo media activity <video>`: the activity meter the apps feed from
 /// AVAssetReader, fed from ffmpeg — the way to try it on real recordings,
 /// and the headless host's way to fill a resource's `activity`. Prints the
@@ -742,6 +739,9 @@ fn media(rest: &[String]) -> Result<String, String> {
     serde_json::to_string_pretty(&track).map_err(|e| e.to_string())
 }
 
+/// A built-in device body — phone, tablet, tablet-portrait or laptop — written as a `.glb`
+/// with `Body` and `Screen` slots (the laptop a `Deck` too), the same
+/// bytes the app and the MCP put into a project's Resources.
 fn device(kind: &str, opts: &Options) -> Result<String, String> {
     let out = opts.out()?;
     let kind = promo_engine::model::DeviceKind::parse(kind).ok_or_else(|| {

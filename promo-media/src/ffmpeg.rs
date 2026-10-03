@@ -414,9 +414,12 @@ pub(crate) fn measure_activity(
         .wait()
         .map_err(|e| MediaError::Backend(format!("ffmpeg: {e}")))?;
     let errors = errors.join().unwrap_or_default();
-    if !status.success() && index == 0 {
+    // A failure part way through (a corrupt or truncated stream) is still
+    // a failure: the track would be stored as covering the whole resource,
+    // and Auto zoom would plan the unmeasured rest as calm.
+    if !status.success() {
         return Err(MediaError::Backend(format!(
-            "ffmpeg could not decode {}: {}",
+            "ffmpeg could not decode {} (after {index} frames): {}",
             path.display(),
             errors.trim()
         )));
