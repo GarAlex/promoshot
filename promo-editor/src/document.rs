@@ -124,6 +124,35 @@ pub enum Command {
         #[serde(default)]
         target: Option<promo_model::CameraTarget>,
     },
+    /// Auto zoom on a screen recording (`promo_timeline::autozoom`): the
+    /// camera eases in to where the action is — clicks, pauses of the
+    /// pointer, what the activity meter measured — holds, and eases out or
+    /// pans to the next action. It writes ordinary viewport keyframes,
+    /// each tagged `auto`, replacing the ones it wrote before; keyframes a
+    /// person wrote or edited are kept and planned around. `amount`
+    /// (subtle|normal|strong) and `pace` (calm|normal|brisk) default to
+    /// what the layer last used; `skip` replaces the source-time spans
+    /// left wide; `activity` is stored on the layer's recording in the
+    /// same step. The layer's `follow` is cleared — it would override every
+    /// keyframed viewport. `remove: true` takes Auto zoom's keyframes and
+    /// settings off the layer instead. Refused, changing nothing, when
+    /// there is nothing to zoom to or the recording is too small to zoom
+    /// into without blurring.
+    #[serde(rename_all = "camelCase")]
+    AutoZoom {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(default)]
+        amount: Option<promo_model::AutoZoomAmount>,
+        #[serde(default)]
+        pace: Option<promo_model::AutoZoomPace>,
+        #[serde(default)]
+        skip: Option<Vec<[f64; 2]>>,
+        #[serde(default)]
+        activity: Option<Box<promo_model::ActivityTrack>>,
+        #[serde(default)]
+        remove: bool,
+    },
     #[serde(rename_all = "camelCase")]
     DeleteKeyframe {
         #[serde(rename = "layerID")]
@@ -567,6 +596,99 @@ pub struct Document {
     /// That file as written, for what no struct keeps: a key at any depth
     /// the format does not read (`promo_model::unread::keep_unread`).
     unread_source_json: Option<serde_json::Value>,
+}
+
+/// What an `autoZoom` asks for.
+struct AutoZoomArgs<'a> {
+    amount: Option<promo_model::AutoZoomAmount>,
+    pace: Option<promo_model::AutoZoomPace>,
+    skip: Option<&'a [[f64; 2]]>,
+    activity: Option<&'a promo_model::ActivityTrack>,
+    remove: bool,
+}
+
+/// Auto zoom as one step: the measured activity stored, the old plan
+/// taken off, the new one planned against what remains and written in.
+/// The planner is the authority on what it may replace
+/// (`autozoom::remove_plan`), so a removal and a re-plan can never
+/// disagree about whose keyframe is whose.
+fn auto_zoom(meta: &mut ProjectMetadata, layer_id: &str, args: AutoZoomArgs) -> Result<(), String> {
+    use promo_timeline::autozoom;
+    fn find<'a>(
+        layers: &'a mut [promo_model::ProjectLayer],
+        id: &str,
+    ) -> Option<&'a mut promo_model::ProjectLayer> {
+        layers.iter_mut().find_map(|layer| {
+            if layer.id == id {
+                return Some(layer);
+            }
+            layer.members.as_mut()?.iter_mut().find(|m| m.id == id)
+        })
+    }
+    let layer = find(meta.layers.get_or_insert_with(Vec::new), layer_id)
+        .ok_or_else(|| format!("no layer with id {layer_id}"))?
+        .clone();
+    if let Some(skip) = args.skip {
+        if let Some(bad) = skip
+            .iter()
+            .find(|s| !(s[0].is_finite() && s[1].is_finite() && s[0] >= 0.0 && s[1] > s[0]))
+        {
+            return Err(format!(
+                "skip span {bad:?} must be [start, end] in the recording's seconds, \
+                 0 or later, end after start"
+            ));
+        }
+    }
+    if let Some(activity) = args.activity {
+        let finite = |v: &[f64]| v.iter().all(|x| x.is_finite());
+        if !activity.rate.is_finite()
+            || !activity.events.iter().all(|e| finite(e))
+            || !finite(&activity.cuts)
+            || !activity.scrolls.iter().all(|s| finite(s))
+            || !activity.ambient.iter().all(|a| finite(a))
+        {
+            return Err("activity carries a value that is not a number".into());
+        }
+        let resource_id = layer
+            .resource_id
+            .clone()
+            .ok_or_else(|| format!("layer {layer_id} shows no recording to measure"))?;
+        meta.resources
+            .get_or_insert_with(Vec::new)
+            .iter_mut()
+            .find(|r| r.id == resource_id)
+            .ok_or_else(|| format!("no resource with id {resource_id}"))?
+            .activity = Some(activity.clone());
+    }
+    let mut updated = layer.clone();
+    autozoom::remove_plan(&mut updated);
+    if args.remove {
+        updated.auto_zoom = None;
+    } else {
+        let mut settings = layer.auto_zoom.clone().unwrap_or_default();
+        if let Some(amount) = args.amount {
+            settings.amount = Some(amount);
+        }
+        if let Some(pace) = args.pace {
+            settings.pace = Some(pace);
+        }
+        if let Some(skip) = args.skip {
+            settings.skip = skip.to_vec();
+        }
+        updated.auto_zoom = Some(settings);
+        let plan = autozoom::plan(meta, &updated, &autozoom::PlanOptions::for_layer(&updated))?;
+        updated.keyframes.extend(plan.keyframes);
+        updated.keyframes.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        // Follow wins over keyframed viewports in every renderer: left on,
+        // the plan would be written and never seen.
+        updated.follow = None;
+    }
+    *find(meta.layers.get_or_insert_with(Vec::new), layer_id).expect("found above") = updated;
+    Ok(())
 }
 
 /// What a `cameraMove` asks for.
@@ -1366,6 +1488,26 @@ impl Document {
                     },
                 )?;
             }
+            Command::AutoZoom {
+                layer_id,
+                amount,
+                pace,
+                skip,
+                activity,
+                remove,
+            } => {
+                auto_zoom(
+                    meta,
+                    layer_id,
+                    AutoZoomArgs {
+                        amount: *amount,
+                        pace: *pace,
+                        skip: skip.as_deref(),
+                        activity: activity.as_deref(),
+                        remove: *remove,
+                    },
+                )?;
+            }
             Command::DeleteKeyframe {
                 layer_id,
                 keyframe_id,
@@ -1860,6 +2002,10 @@ mod tests {
             "updateLayer",
             "patchResource",
             "patchSettings",
+            "cameraMove",
+            "autoZoom",
+            "setMarkers",
+            "inComposition",
         ] {
             assert!(
                 text.contains(&format!("\"{kind}\"")),
@@ -3634,5 +3780,222 @@ mod tests {
                 layer_id: "Z".into()
             })
             .is_err());
+    }
+}
+
+#[cfg(test)]
+mod auto_zoom_tests {
+    use super::*;
+    use promo_timeline::autozoom::is_planned;
+    use serde_json::json;
+
+    /// A 4K recording with two clicks on a 720p canvas, its layer following
+    /// the pointer, plus a person's own full-frame keyframe and a zoom.
+    fn doc_with(resource: serde_json::Value) -> Document {
+        let mut r = json!({
+            "id": "R", "kind": "video", "filename": "r.mov", "displayName": "Rec",
+            "addedAt": 0, "duration": 20.0, "pixelWidth": 3840.0, "pixelHeight": 2160.0,
+            "pointer": {"samples": [[0.0, 0.5, 0.5]], "clicks": [[3.0, 0.2, 0.2], [12.0, 0.8, 0.7]]}
+        });
+        if let (Some(a), serde_json::Value::Object(b)) = (r.as_object_mut(), resource) {
+            a.extend(b);
+        }
+        let p = json!({
+            "id": "P", "name": "p", "createdAt": 0, "state": "recorded", "trimStart": 0,
+            "trimEnd": 0, "videoDuration": 0, "subtitles": [], "minReaderVersion": 48,
+            "compositionSettings": {"canvasWidth": 1280, "canvasHeight": 720},
+            "resources": [r],
+            "layers": [{
+                "id": "L", "name": "Screen", "sortIndex": 0, "kind": "video",
+                "isEnabled": true, "startTime": 0, "duration": 20.0, "resourceID": "R",
+                "follow": {"zoom": 2.0},
+                "keyframes": [
+                    {"id": "mine", "time": 0, "transitionDuration": 0, "viewport": [0, 0, 1, 1]},
+                    {"id": "size", "time": 0, "transitionDuration": 0, "zoom": 1.0}
+                ]
+            }]
+        });
+        Document::open(&p.to_string()).unwrap()
+    }
+
+    fn command(value: serde_json::Value) -> Command {
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn layer(doc: &Document) -> &promo_model::ProjectLayer {
+        &doc.meta().layers.as_ref().unwrap()[0]
+    }
+
+    fn closeups(doc: &Document) -> Vec<promo_model::ProjectLayerKeyframe> {
+        layer(doc)
+            .keyframes
+            .iter()
+            .filter(|k| k.viewport.is_some_and(|v| v[2] < 1.0))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn auto_zoom_writes_tagged_keyframes_and_turns_follow_off() {
+        let mut doc = doc_with(json!({}));
+        let before = promo_timeline::validate::findings(doc.meta()).messages();
+        doc.apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap();
+        let l = layer(&doc);
+        assert!(l.follow.is_none(), "follow would hide every planned move");
+        assert!(l.auto_zoom.is_some());
+        let planned: Vec<_> = l.keyframes.iter().filter(|k| k.auto.is_some()).collect();
+        assert!(planned.len() >= 4, "{planned:?}");
+        assert!(planned.iter().all(|k| is_planned(k)));
+        assert_eq!(closeups(&doc).len(), 2, "one closeup per click");
+        assert!(
+            l.keyframes.iter().any(|k| k.id == "mine")
+                && l.keyframes.iter().any(|k| k.id == "size"),
+            "the person's keyframes stay"
+        );
+        assert!(
+            l.keyframes.windows(2).all(|w| w[0].time <= w[1].time),
+            "time order"
+        );
+        assert_eq!(doc.meta().minimum_reader_version(), 48);
+        let after = promo_timeline::validate::findings(doc.meta());
+        assert!(after.renders_as_written(), "{:?}", after.messages());
+        assert_eq!(after.messages(), before, "no new findings");
+        // The file round-trips with every tag intact.
+        let reopened = Document::open(&doc.to_json().unwrap()).unwrap();
+        assert_eq!(reopened.meta().layers, doc.meta().layers);
+    }
+
+    #[test]
+    fn a_re_plan_keeps_what_a_person_edited_and_replaces_the_rest() {
+        let mut doc = doc_with(json!({}));
+        doc.apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap();
+        let mut nudged = closeups(&doc)[1].clone();
+        nudged.viewport = Some([0.3, 0.3, 0.5, 0.5]);
+        doc.apply(&Command::UpsertKeyframe {
+            layer_id: "L".into(),
+            keyframe: Box::new(nudged.clone()),
+        })
+        .unwrap();
+        // The full frames it leaves from and returns to: its way in and out.
+        let track: Vec<promo_model::ProjectLayerKeyframe> = layer(&doc)
+            .keyframes
+            .iter()
+            .filter(|k| k.viewport.is_some())
+            .cloned()
+            .collect();
+        let at = track.iter().position(|k| k.id == nudged.id).unwrap();
+        let (way_in, way_out) = (track[at - 1].clone(), track[at + 1].clone());
+        doc.apply(&command(
+            json!({"kind": "autoZoom", "layerID": "L", "amount": "strong"}),
+        ))
+        .unwrap();
+        let l = layer(&doc);
+        let kept = l.keyframes.iter().find(|k| k.id == nudged.id).unwrap();
+        assert_eq!(kept, &nudged, "the edit survives as written");
+        let shots = closeups(&doc);
+        assert_eq!(shots.len(), 2);
+        let replanned = shots.iter().find(|k| k.id != nudged.id).unwrap();
+        assert!(is_planned(replanned));
+        assert!(
+            (replanned.viewport.unwrap()[2] - 0.4).abs() < 1e-4,
+            "the untouched closeup follows the new amount: {:?}",
+            replanned.viewport
+        );
+        for k in [&way_in, &way_out] {
+            assert!(
+                l.keyframes.contains(k),
+                "the edited move keeps its way in and out: {k:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn remove_takes_off_only_auto_zoom_s_own() {
+        let mut doc = doc_with(json!({}));
+        let original = layer(&doc).keyframes.clone();
+        doc.apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap();
+        doc.apply(&command(
+            json!({"kind": "autoZoom", "layerID": "L", "remove": true}),
+        ))
+        .unwrap();
+        let l = layer(&doc);
+        assert_eq!(l.keyframes, original);
+        assert!(l.auto_zoom.is_none());
+        assert!(doc.meta().minimum_reader_version() < 48);
+    }
+
+    #[test]
+    fn a_refusal_changes_nothing() {
+        let mut doc = doc_with(json!({"pointer": null}));
+        let json = doc.to_json().unwrap();
+        let err = doc
+            .apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap_err();
+        assert!(err.contains("Nothing to zoom to yet"), "{err}");
+        assert_eq!(doc.version(), 0);
+        assert_eq!(doc.to_json().unwrap(), json);
+
+        let mut doc = doc_with(json!({"pixelWidth": 1280.0, "pixelHeight": 720.0}));
+        let err = doc
+            .apply(&command(json!({"kind": "autoZoom", "layerID": "L"})))
+            .unwrap_err();
+        assert!(err.contains("too small to zoom"), "{err}");
+        assert!(layer(&doc).follow.is_some(), "untouched");
+
+        let err = doc
+            .apply(&command(json!({"kind": "autoZoom", "layerID": "nope"})))
+            .unwrap_err();
+        assert!(err.contains("no layer"), "{err}");
+    }
+
+    #[test]
+    fn measured_activity_and_skip_land_in_the_same_step() {
+        let mut doc = doc_with(json!({"pointer": null}));
+        doc.apply(&command(json!({
+            "kind": "autoZoom", "layerID": "L", "skip": [[10.0, 12.0]],
+            "activity": {"meter": 1, "rate": 10,
+                "events": [[3.0, 4.0, 0.1, 0.1, 0.2, 0.1, 0.8], [11.0, 11.5, 0.6, 0.6, 0.1, 0.1, 0.9]]}
+        })))
+        .unwrap();
+        assert!(doc.meta().resources.as_ref().unwrap()[0].activity.is_some());
+        let l = layer(&doc);
+        assert_eq!(l.auto_zoom.as_ref().unwrap().skip, vec![[10.0, 12.0]]);
+        assert_eq!(
+            closeups(&doc).len(),
+            1,
+            "the burst inside the skip span stays wide"
+        );
+        assert!(doc.undo());
+        assert!(
+            doc.meta().resources.as_ref().unwrap()[0].activity.is_none(),
+            "one undo takes both back"
+        );
+        let err = doc
+            .apply(&command(
+                json!({"kind": "autoZoom", "layerID": "L", "skip": [[5.0, 2.0]]}),
+            ))
+            .unwrap_err();
+        assert!(err.contains("skip span"), "{err}");
+    }
+
+    #[test]
+    fn settings_carry_over_from_one_plan_to_the_next() {
+        let mut doc = doc_with(json!({}));
+        doc.apply(&command(
+            json!({"kind": "autoZoom", "layerID": "L", "amount": "subtle"}),
+        ))
+        .unwrap();
+        doc.apply(&command(
+            json!({"kind": "autoZoom", "layerID": "L", "pace": "brisk"}),
+        ))
+        .unwrap();
+        let settings = layer(&doc).auto_zoom.clone().unwrap();
+        assert_eq!(settings.amount, Some(promo_model::AutoZoomAmount::Subtle));
+        assert_eq!(settings.pace, Some(promo_model::AutoZoomPace::Brisk));
+        let w = closeups(&doc)[0].viewport.unwrap();
+        assert!((w[2] - 1.0 / 1.4).abs() < 1e-4, "{w:?}");
     }
 }

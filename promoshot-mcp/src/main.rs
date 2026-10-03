@@ -1498,6 +1498,7 @@ mod tests {
             "patchResource",
             "upsertKeyframe",
             "cameraMove",
+            "autoZoom",
         ] {
             assert!(text.contains(kind), "descriptor schema lacks `{kind}`");
         }

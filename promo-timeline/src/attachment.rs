@@ -896,6 +896,7 @@ mod tests {
             chroma_key: None,
             effects: None,
             follow: None,
+            auto_zoom: None,
             stage: None,
             members: None,
             floor: None,

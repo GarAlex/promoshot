@@ -590,7 +590,11 @@ pub fn tools(host: Host) -> Vec<Value> {
                 \"duration\": 0.5}}}}, a swap is upsertKeyframe with resourceID and a \
                 transition, a trim is patchResource; cameraMove {{layerID, move: pushIn|pullOut|\
                 reveal|orbit|rise, at, duration, degrees?, from?/to? framing}} writes a \
-                camera move as two keyframes; setMarkers replaces the timeline's \
+                camera move as two keyframes; autoZoom {{layerID, amount?: subtle|normal|\
+                strong, pace?: calm|normal|brisk, skip?, remove?}} plans a screen \
+                recording's zooms from its clicks and measured activity into tagged \
+                viewport keyframes (a re-plan keeps what a person edited); setMarkers \
+                replaces the timeline's \
                 markers and chapters whole. Every command succeeds or nothing is \
                 written.{undoable} The schema of `commands` IS the editor's Command enum."),
             "inputSchema": { "type": "object",

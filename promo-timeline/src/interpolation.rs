@@ -138,7 +138,7 @@ fn placement_aspect(
 /// FRAMED texture into cells, so a framed sheet is already wrong further
 /// down; compensating here would stack a second correction on the first and
 /// bury the real defect.
-fn effective_frame(
+pub(crate) fn effective_frame(
     layer: &ProjectLayer,
     time: f64,
     resource: Option<&promo_model::ProjectResource>,

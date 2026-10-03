@@ -8,6 +8,7 @@
 
 pub mod attachment;
 pub mod audio;
+pub mod autozoom;
 pub mod caption;
 pub mod follow;
 pub mod frame;
