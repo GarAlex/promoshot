@@ -591,6 +591,7 @@ struct Item {
 }
 
 fn centred_box(x: f64, y: f64, side: f64) -> [f64; 4] {
+    let side = side.min(1.0);
     let x0 = (x - side / 2.0).clamp(0.0, 1.0 - side);
     let y0 = (y - side / 2.0).clamp(0.0, 1.0 - side);
     [x0, y0, side, side]
@@ -952,7 +953,11 @@ fn clusters(
         start: item.l0,
         end: item.l1,
         rect: item.rect,
-        zoom: target.min(fit_zoom(item.rect)).min(free_zoom),
+        // Never below 1: a box wider than the frame (a whole-width row
+        // changing) fits no window, and a window larger than the source
+        // has nowhere to be placed. Such a cluster ends under the minimum
+        // zoom and is dropped, after it has absorbed its neighbours.
+        zoom: target.min(fit_zoom(item.rect)).min(free_zoom).max(1.0),
         wx: (item.rect[0] + item.rect[2] / 2.0) * item.weight,
         wy: (item.rect[1] + item.rect[3] / 2.0) * item.weight,
         weight: item.weight,
@@ -1452,6 +1457,22 @@ mod tests {
         let w = plan.shots[0].window;
         assert!(contains(w, 0.1, 0.1) && contains(w, 0.3, 0.2), "{w:?}");
         assert!((plan.shots[0].start - 2.9).abs() < 1e-9);
+    }
+
+    /// A change as wide as the frame (a whole row of a list, a slider's
+    /// track) fits no window: it is no zoom, and no panic. Found on the
+    /// first real iPhone recording, where the window came out larger than
+    /// the source and the clamp that places it had min above max.
+    #[test]
+    fn a_change_wider_than_the_frame_is_no_zoom() {
+        let p = project_with(
+            json!({"activity": {"meter": 1, "rate": 10, "events": [
+                [3.0, 4.0, 0.03, 0.6, 0.95, 0.1, 0.99],
+                [8.0, 9.0, 0.0, 0.1, 1.0, 0.8, 1.0]
+            ]}}),
+            json!({}),
+        );
+        assert!(planned(&p).shots.is_empty());
     }
 
     #[test]

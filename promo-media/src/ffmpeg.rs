@@ -84,6 +84,18 @@ impl FfmpegDecoder {
         })
     }
 
+    /// The rate frames come out of the reader at, and so what one frame's
+    /// count is worth in seconds. The stream's nominal rate when it is a
+    /// real one; a variable-rate stream's nominal rate is only a timebase
+    /// (600 for a simulator recording) and is walked at 60.
+    fn walk_fps(&self) -> f64 {
+        match self.info.nominal_fps {
+            f if f > 0.0 && f <= 120.0 => f,
+            f if f > 120.0 => 60.0,
+            _ => 30.0,
+        }
+    }
+
     fn frame_bytes(&self) -> usize {
         (self.info.width * self.info.height * 4) as usize
     }
@@ -108,10 +120,17 @@ impl FfmpegDecoder {
                 "rawvideo",
                 "-pix_fmt",
                 "bgra",
-                // Honour the display rotation rather than emitting the stored
-                // orientation — the conformance rule every backend must meet.
+                // A constant rate out, whatever comes in: the reader dates
+                // each frame by counting (`walk_fps`), and a screen
+                // recording is variable-rate — frames only when the picture
+                // changed, a nominal rate of 600 — so counting the frames
+                // ffmpeg passes through dated a frame 52 s after its real
+                // time. The fps filter repeats or drops to the walk rate,
+                // which makes the count exact. Then honour the display
+                // rotation rather than emitting the stored orientation —
+                // the conformance rule every backend must meet.
                 "-vf",
-                "scale=iw:ih",
+                &format!("fps={},scale=iw:ih", self.walk_fps()),
                 "-",
             ])
             .stdout(Stdio::piped())
@@ -169,11 +188,7 @@ impl FfmpegDecoder {
                 "ffmpeg produced a truncated frame".into(),
             ));
         }
-        let fps = if self.info.nominal_fps > 0.0 {
-            self.info.nominal_fps
-        } else {
-            30.0
-        };
+        let fps = self.walk_fps();
         let reader = self.reader.as_mut().expect("reader");
         self.current_pts = Some(reader.start_s + reader.frames_read as f64 / fps);
         reader.frames_read += 1;
@@ -236,12 +251,7 @@ impl VideoDecoder for FfmpegDecoder {
         }
 
         // Walk forward to the frame that covers `want`.
-        let fps = if self.info.nominal_fps > 0.0 {
-            self.info.nominal_fps
-        } else {
-            30.0
-        };
-        let step = 1.0 / fps;
+        let step = 1.0 / self.walk_fps();
         loop {
             match self.current_pts {
                 None => {
@@ -1232,6 +1242,95 @@ mod tests {
             first, again,
             "the same timestamp must decode to the same frame after a rewind"
         );
+    }
+
+    /// A variable-rate clip, as a screen recorder writes one: one second of
+    /// red at 30 fps, two seconds of green at 600/63 fps, three of blue at
+    /// 30, in a 1/600 timescale. Frame gaps of 20 and 63 ticks share no
+    /// rate, so the nominal rate comes out as the timebase itself — 600,
+    /// exactly what a simulator recording reports.
+    fn variable_rate_fixture() -> Option<PathBuf> {
+        let dir = std::env::temp_dir().join("promo-media-tests");
+        std::fs::create_dir_all(&dir).ok()?;
+        let path = dir.join("clip-vfr600.mp4");
+        if path.is_file() {
+            return Some(path);
+        }
+        let partial = dir.join(format!("clip-vfr600.{}.partial.mp4", std::process::id()));
+        let status = Command::new("ffmpeg")
+            .args(["-v", "error", "-y"])
+            .args(["-f", "lavfi", "-i", "color=red:s=64x48:r=30:d=1"])
+            .args(["-f", "lavfi", "-i", "color=green:s=64x48:r=600/63:d=2"])
+            .args(["-f", "lavfi", "-i", "color=blue:s=64x48:r=30:d=3"])
+            .args([
+                "-filter_complex",
+                "[0:v][1:v][2:v]concat=n=3:v=1[v]",
+                "-map",
+                "[v]",
+                "-fps_mode",
+                "vfr",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-video_track_timescale",
+                "600",
+            ])
+            .arg(&partial)
+            .status()
+            .ok()?;
+        if !status.success() {
+            return None;
+        }
+        std::fs::rename(&partial, &path).ok()?;
+        Some(path)
+    }
+
+    /// Dating frames by counting at the nominal rate put a variable-rate
+    /// clip's frames seconds away from their real times once the reader
+    /// walked forward: a render of a screen recording showed a screen from
+    /// half a minute later. Found rendering Auto zoom on a simulator
+    /// recording.
+    #[test]
+    fn a_variable_rate_clip_decodes_at_its_real_times() {
+        let Some(path) = variable_rate_fixture() else {
+            eprintln!("ffmpeg unavailable; skipping");
+            return;
+        };
+        let mut decoder = FfmpegDecoder::open(&path).expect("open");
+        assert!(
+            decoder.info().nominal_fps > 120.0,
+            "the fixture must report a timebase as its rate, not {}",
+            decoder.info().nominal_fps
+        );
+        // Bytes are BGRA; the first pixel's dominant channel names the
+        // colour.
+        let mut colour_at = |t: f64| {
+            let (data, _, _) = pixels(&decoder.frame_at(t).unwrap().unwrap());
+            let (b, g, r) = (data[0] as i32, data[1] as i32, data[2] as i32);
+            if r > g && r > b {
+                "red"
+            } else if g > r && g > b {
+                "green"
+            } else {
+                "blue"
+            }
+        };
+        // One forward walk down one reader, the way a render asks: steps
+        // under SEEK_AHEAD_LIMIT_S, so nothing re-seeks and every frame's
+        // time comes from the count.
+        for step in 1..22 {
+            let t = step as f64 * 0.25;
+            let expected = if t < 1.0 {
+                "red"
+            } else if t < 3.1 {
+                // The last green frame starts at 2.995 and lasts 0.105.
+                "green"
+            } else {
+                "blue"
+            };
+            assert_eq!(colour_at(t), expected, "at {t} s");
+        }
     }
 
     #[test]

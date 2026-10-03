@@ -89,6 +89,37 @@ const CUT_FRACTION: f32 = 0.55;
 /// A push animation or a dissolve spans frames: cuts this close are one.
 const CUT_MERGE_S: f64 = 0.5;
 
+/// A frame whose LOCAL change, after ambient and keyboard cells are taken
+/// out, covers this share of the picture is a screen change too, though
+/// short of a cut: a list that reloads, a sheet that dims what is behind
+/// it, a large title collapsing as the content scrolls. A change that big
+/// is the whole screen's business — nothing to zoom into. Judged when the
+/// frame is processed (the keyboard has been decided by then), so a
+/// keyboard sliding up never counts.
+const GLOBAL_FRACTION: f32 = 0.28;
+
+/// Around a screen change the picture is still moving: the tap that
+/// caused it highlights just before, the new screen settles just after.
+/// Neither is action to zoom into — the screen is already changing.
+const TRANSITION_BEFORE_S: f64 = 0.4;
+const TRANSITION_AFTER_S: f64 = 0.7;
+
+/// Thin strips along the left and right edges are scroll indicators
+/// appearing and fading, not action.
+const EDGE_STRIP_WIDTH: f64 = 0.045;
+
+/// A scroll starts with a finger landing and ends with the content
+/// settling (rows shimmering into place, a bar's blur catching up): short
+/// bursts this close to a scroll belong to it.
+const SCROLL_BEFORE_S: f64 = 0.3;
+const SCROLL_AFTER_S: f64 = 0.6;
+
+/// A burst whose box covers this share of the picture is the whole
+/// screen's business, like [`GLOBAL_FRACTION`] over time rather than in
+/// one frame: it counts as a screen change, and what happens beside it
+/// is its transition.
+const BIG_EVENT_AREA: f64 = 0.35;
+
 /// A frame is only tested for a scroll when at least this share of the
 /// unmasked cells (and at least [`SCROLL_MIN_CELLS`]) changed.
 const SCROLL_MIN_FRACTION: f32 = 0.10;
@@ -267,6 +298,8 @@ struct FrameRecord {
     /// have caused the shift can give the frame back (a tap on the text
     /// field just before the keyboard is the very event).
     onset_of: Option<f64>,
+    /// Cells the frame could see (not masked), for the global-change share.
+    unmasked: u32,
 }
 
 /// How often each cell changed during one second of one screen (an epoch
@@ -334,6 +367,9 @@ pub struct ActivityMeter {
     open: Vec<Event>,
     done: Vec<Event>,
     cuts: Vec<f64>,
+    /// Screen changes found when a frame was processed (see
+    /// [`GLOBAL_FRACTION`]); merged with `cuts` at the end.
+    late_cuts: Vec<f64>,
     scrolls: Vec<[f64; 2]>,
     ambient_seconds: Vec<f64>,
 }
@@ -402,6 +438,7 @@ impl ActivityMeter {
             open: Vec::new(),
             done: Vec::new(),
             cuts: Vec::new(),
+            late_cuts: Vec::new(),
             scrolls: Vec::new(),
             ambient_seconds: vec![0.0; cw * ch],
         }
@@ -443,6 +480,50 @@ impl ActivityMeter {
         self.done.append(&mut self.open);
         let events = merge_events(std::mem::take(&mut self.done));
         let ambient = self.ambient_boxes();
+        let big = |e: &Event| {
+            let [_, _, w, h] = self.unit_box(e.cells);
+            w * h >= BIG_EVENT_AREA
+        };
+        let mut all_cuts: Vec<f64> = self
+            .cuts
+            .iter()
+            .chain(&self.late_cuts)
+            .copied()
+            .chain(events.iter().filter(|e| big(e)).map(|e| e.t0))
+            .collect();
+        all_cuts.sort_by(f64::total_cmp);
+        let mut cuts: Vec<f64> = Vec::new();
+        for c in all_cuts {
+            if cuts
+                .last()
+                .is_none_or(|&last| c - last > CUT_MERGE_S + 1e-9)
+            {
+                cuts.push(c);
+            }
+        }
+        let in_transition = |t0: f64, t1: f64| {
+            cuts.iter().any(|&c| {
+                t1 >= c - TRANSITION_BEFORE_S - 1e-9 && t0 <= c + TRANSITION_AFTER_S + 1e-9
+            })
+        };
+        let near_scroll = |t0: f64, t1: f64| {
+            self.scrolls
+                .iter()
+                .any(|s| t1 >= s[0] - SCROLL_BEFORE_S - 1e-9 && t0 <= s[1] + SCROLL_AFTER_S + 1e-9)
+        };
+        let events: Vec<&Event> = events
+            .iter()
+            .filter(|e| {
+                let [x, _, w, h] = self.unit_box(e.cells);
+                let strip = w <= EDGE_STRIP_WIDTH && h >= 2.0 * w && (x <= 0.01 || x + w >= 0.99);
+                // A long burst that merely touches a transition or a
+                // scroll is kept: only what lives inside one is its own
+                // motion.
+                let short = e.t1 - e.t0 <= 1.0 + 1e-9;
+                let transitional = short && (in_transition(e.t0, e.t1) || near_scroll(e.t0, e.t1));
+                !strip && !transitional && !big(e)
+            })
+            .collect();
         ActivityTrack {
             meter: METER_VERSION,
             rate: self.rate,
@@ -461,7 +542,7 @@ impl ActivityMeter {
                     ]
                 })
                 .collect(),
-            cuts: self.cuts.iter().map(|&t| round_time(t)).collect(),
+            cuts: cuts.iter().map(|&t| round_time(t)).collect(),
             scrolls: self
                 .scrolls
                 .iter()
@@ -563,6 +644,7 @@ impl ActivityMeter {
             kind,
             changed: Vec::new(),
             onset_of: None,
+            unmasked: unmasked as u32,
         };
         match kind {
             FrameKind::Cut => {
@@ -1018,6 +1100,13 @@ impl ActivityMeter {
         }
         for i in ambient_cells {
             self.ambient_seconds[i] += record.dt;
+        }
+
+        let local = active.iter().filter(|a| **a).count();
+        if local as f32 >= GLOBAL_FRACTION * record.unmasked.max(1) as f32 {
+            self.late_cuts.push(t);
+            self.done.append(&mut self.open);
+            return;
         }
 
         for (cells, energy) in components(&active, &excess, self.cw, self.ch) {
