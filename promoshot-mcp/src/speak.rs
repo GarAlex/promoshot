@@ -151,15 +151,28 @@ pub fn speak(
     if report.is_empty() {
         return Ok("no narration scripts with text — nothing to do".into());
     }
-    let guesses = promo_speech::take_local_guesses();
+    let mut guesses = promo_speech::take_local_guesses();
     if !guesses.is_empty() {
+        // Unsure guesses first: they are wrong most of the time.
+        guesses.sort_by_key(|g| !g.unsure);
+        let unsure = guesses.iter().filter(|g| g.unsure).count();
         report.push(format!(
-            "guessed {} word(s) the dictionary lacks — listen, and pin or correct any in \
+            "guessed {} word(s) the dictionary lacks{} — listen, and pin or correct any in \
              Resources/pronunciations.dict (these lines, as is or edited), then promo_speak again:",
-            guesses.len()
+            guesses.len(),
+            if unsure > 0 {
+                format!(", {unsure} unsure (check those by ear first)")
+            } else {
+                String::new()
+            }
         ));
-        for (word, arpabet, _) in guesses {
-            report.push(format!("  {}  {arpabet}", word.to_uppercase()));
+        for g in guesses {
+            let mark = if g.unsure {
+                "   # unsure: check by ear"
+            } else {
+                ""
+            };
+            report.push(format!("  {}  {}{mark}", g.word.to_uppercase(), g.arpabet));
         }
     }
     if !missing.is_empty() {

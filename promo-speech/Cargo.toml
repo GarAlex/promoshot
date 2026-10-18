@@ -16,7 +16,7 @@ ureq = "2"
 keyring = { version = "4", optional = true }
 # Local voices: https://github.com/GarAlex/local-tts, pinned to a release
 # tag. Pulls in ONNX Runtime (statically linked, MIT), so it is opt-in.
-local-tts-core = { git = "https://github.com/GarAlex/local-tts", tag = "v0.5.1", features = ["download"], optional = true }
+local-tts-core = { git = "https://github.com/GarAlex/local-tts", tag = "v0.6.0", features = ["download"], optional = true }
 
 [features]
 # The OS keyring as the key store. On by default for the server; the

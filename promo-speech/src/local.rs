@@ -248,7 +248,7 @@ enum Engine {
 type Cache = HashMap<(String, Option<(PathBuf, std::time::SystemTime)>), Engine>;
 
 /// (word as written, ARPAbet, how it was guessed), each word once.
-type Guesses = Vec<(String, String, &'static str)>;
+type Guesses = Vec<crate::LocalGuess>;
 
 /// Words the dictionary lacked that local takes guessed since the last
 /// [`take_guesses`]: (word as written, ARPAbet, how it was guessed).
@@ -332,8 +332,13 @@ pub fn synthesize(voice: &str, text: &str, lexicon: Option<&Path>) -> Result<Vec
     };
     let mut all = guessed().lock().unwrap_or_else(|e| e.into_inner());
     for guess in guesses {
-        if !all.iter().any(|(word, _, _)| *word == guess.word) {
-            all.push((guess.word, guess.arpabet, guess.method));
+        if !all.iter().any(|g| g.word == guess.word) {
+            all.push(crate::LocalGuess {
+                unsure: guess.unsure(),
+                word: guess.word,
+                arpabet: guess.arpabet,
+                method: guess.method,
+            });
         }
     }
     wav(&audio.samples, audio.sample_rate)

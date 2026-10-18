@@ -96,9 +96,20 @@ pub fn synthesize_local(
     }
 }
 
+/// A word a local take guessed: as written, its ARPAbet (a ready
+/// pronunciations.dict line), how, and whether the guesser was unsure —
+/// unsure guesses are wrong most of the time and worth checking by ear.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LocalGuess {
+    pub word: String,
+    pub arpabet: String,
+    pub method: &'static str,
+    pub unsure: bool,
+}
+
 /// Names the dictionary lacked that local takes guessed since the last
 /// call: (word as written, ARPAbet, method). Empty without local voices.
-pub fn take_local_guesses() -> Vec<(String, String, &'static str)> {
+pub fn take_local_guesses() -> Vec<LocalGuess> {
     #[cfg(feature = "local")]
     {
         local::take_guesses()
