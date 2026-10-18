@@ -14,6 +14,9 @@ serde_json.workspace = true
 sha2 = "0.10"
 ureq = "2"
 keyring = { version = "4", optional = true }
+# Local voices: https://github.com/GarAlex/local-tts, pinned to a release
+# tag. Pulls in ONNX Runtime (statically linked, MIT), so it is opt-in.
+local-tts-core = { git = "https://github.com/GarAlex/local-tts", tag = "v0.2.0", features = ["download"], optional = true }
 
 [features]
 # The OS keyring as the key store. On by default for the server; the
@@ -21,3 +24,6 @@ keyring = { version = "4", optional = true }
 # the key in — and iOS has no use for a second store.
 default = ["keyring"]
 keyring = ["dep:keyring"]
+# The keyless `local` provider: narration synthesized on this machine from
+# installed voice packages (Apache-2.0 weights), no key, no network.
+local = ["dep:local-tts-core"]

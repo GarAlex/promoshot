@@ -247,7 +247,8 @@ with it. `promo_explain` answers why a layer is where it is at a time, and
 `promo_diff` what changed since a project was last looked at;
 `promo_transcribe` drafts captions from speech. `promo_voices`
 lists a provider's voices and `promo_speak` synthesizes narration with the
-person's own provider key, reusing unchanged text by receipt. The authoring tools answer
+person's own provider key — or with no key at all, from local voices —
+reusing unchanged text by receipt. The authoring tools answer
 with an inline thumbnail of the composition, so a misplaced layer is caught
 at the moment it happens. The tools write ordinary `metadata.json`
 through the format's own parser — the schema stays the source of truth, and
@@ -296,6 +297,39 @@ moment it is paid for, so a failure part-way never makes the next call
 pay twice. Keys travel in request headers, never URLs, and nothing logs
 them.
 
+### Local voices — no key
+
+Provider `local` narrates on this machine with
+[local-tts](https://github.com/GarAlex/local-tts): English voices with
+Apache-2.0 weights, so the audio is yours to publish (a system voice like
+macOS's is licensed for personal use only). No key, no account, nothing
+spent; after a one-time download, no network. Install a voice package once:
+
+```bash
+promoshot-mcp voices list                      # packages, sizes, licences, what is installed
+promoshot-mcp voices install kokoro-en-q8      # 92 MB, the best English voice
+promoshot-mcp voices install kitten-nano-en    # 31 MB, 8 voices
+```
+
+Every file comes from its pinned upstream URL (Hugging Face or GitHub at a
+fixed commit) and is checked against its SHA-256 before the package
+appears. Packages live in `~/Library/Application Support/PromoShot/Voices`
+on macOS, `~/.local/share/promoshot/voices` on Linux, or wherever
+`PROMOSHOT_VOICES` points; `PROMOSHOT_VOICES_MIRROR` names a mirror tried first.
+
+A script then says `"speech": {"text": "…", "provider": "local", "voiceID":
+"kokoro-en-q8/af_heart"}` (`promo_voices` with provider `local` lists the
+ids); its takes are `.wav`. The English dictionary refuses words it does not
+know rather than guessing — a product name, mostly. Spell those once per
+project in `Resources/pronunciations.dict`, CMU format:
+
+```text
+PROMOSHOT  P R OW1 M OW0 SH AA2 T
+```
+
+Editing that file does not by itself re-voice takes whose text is unchanged;
+change the text, or delete the take's file.
+
 ### Docker
 
 The image is the whole render environment — server, CLI, ffmpeg, a
@@ -317,6 +351,16 @@ docker build -t promoshot-mcp .
   }
 }
 ```
+
+For keyless narration, give the image a voices volume and install a package
+into it once; every later run reads it:
+
+```bash
+docker run --rm -v promoshot-voices:/voices --entrypoint promoshot-mcp \
+  promoshot-mcp voices install kokoro-en-q8
+```
+
+and add `"-v", "promoshot-voices:/voices"` to the `args` above.
 
 Projects live under the mount; `promo_workspace` answers `/projects`. All
 the [examples](examples/) are baked in, so the image proves itself with no

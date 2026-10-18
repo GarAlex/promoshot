@@ -48,6 +48,18 @@ fn main() {
     // `promoshot-mcp key …` is the person's door to the keyring, not a
     // server session: handled and done before any stdio framing.
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some("voices") {
+        match speak::voices_command(&argv[1..]) {
+            Ok(answer) => {
+                println!("{answer}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        }
+    }
     if argv.first().map(String::as_str) == Some("key") {
         match speak::key_command(&argv[1..], &mut std::io::stdin()) {
             Ok(answer) => {

@@ -23,6 +23,9 @@ COPY --from=build /src/target/release/promoshot-mcp /usr/local/bin/
 # mounts — start with the one that teaches the product:
 #   promo_render_still on /usr/local/share/promoshot/examples/ProductCard.promo
 COPY examples /usr/local/share/promoshot/examples
+# Local voice packages (`promoshot-mcp voices install …`) live on a volume,
+# not in the image: mount one at /voices and install into it once.
+ENV PROMOSHOT_VOICES=/voices
 # Mount your projects here; promo_workspace points at it.
 LABEL io.modelcontextprotocol.server.name="io.github.GarAlex/promoshot"
 ENV PROMOSHOT_WORKSPACE=/projects
@@ -30,7 +33,7 @@ ENV PROMOSHOT_WORKSPACE=/projects
 # root, nor write root-owned files into the host's mounted folder. UID 1000
 # is the first user on most Linux hosts; elsewhere pass `--user $(id -u)`.
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin promoshot \
-    && mkdir -p /projects && chown promoshot:promoshot /projects
+    && mkdir -p /projects /voices && chown promoshot:promoshot /projects /voices
 USER promoshot
 WORKDIR /projects
 ENTRYPOINT ["promoshot-mcp"]

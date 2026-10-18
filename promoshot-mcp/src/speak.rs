@@ -19,6 +19,24 @@ pub fn live() -> LiveSynth {
     }
 }
 
+/// A walk's synth for one project: local takes read the project's own
+/// pronunciations (`Resources/pronunciations.dict`); every other provider
+/// goes to `inner` unchanged.
+struct ProjectSynth<'a> {
+    inner: &'a dyn Synth,
+    lexicon: std::path::PathBuf,
+}
+
+impl Synth for ProjectSynth<'_> {
+    fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String> {
+        if promo_speech::is_keyless(provider) {
+            promo_speech::synthesize_local(voice, text, Some(&self.lexicon))
+        } else {
+            self.inner.synthesize(provider, voice, text)
+        }
+    }
+}
+
 /// The whole tool: read the document raw (every unknown key preserved),
 /// check that every pending narration's provider has a key BEFORE a
 /// request goes out, settle each narration writing the document back
@@ -37,13 +55,12 @@ pub fn speak(
     let check = args.get("check").and_then(Value::as_bool) == Some(true);
     let Some(project) = args.get("project").and_then(Value::as_str) else {
         if check {
-            return Ok(key_report(
-                keys,
-                promo_speech::PROVIDERS
-                    .iter()
-                    .map(|p| p.to_string())
-                    .collect(),
-            ));
+            let mut providers: Vec<String> = promo_speech::PROVIDERS
+                .iter()
+                .map(|p| p.to_string())
+                .collect();
+            providers.push(promo_speech::LOCAL.into());
+            return Ok(key_report(keys, providers, &local_installed_note()));
         }
         return Err("`project` is required (or `check: true` alone, for the keys)".into());
     };
@@ -68,6 +85,16 @@ pub fn speak(
 
     let plan = promo_speech::plan(&doc, &resources_dir, measure);
     let missing = promo_speech::missing_keys(&plan, keys);
+    let blockers = promo_speech::local_blockers(&plan);
+    // The first reason a provider cannot speak: a missing key, or for
+    // `local` the voice package that is not installed.
+    let why = |provider: &str| {
+        if promo_speech::is_keyless(provider) {
+            blockers.join("; ")
+        } else {
+            promo_speech::keys::missing_key_message(provider)
+        }
+    };
     if check {
         let verdict = if plan.pending.is_empty() {
             "nothing to synthesize".to_string()
@@ -79,13 +106,13 @@ pub fn speak(
             )
         } else {
             format!(
-                "no key for {} — those would get silent placeholders of their estimated length",
-                missing.join(", ")
+                "{} — those would get silent placeholders of their estimated length",
+                blocked_phrase(&missing)
             )
         };
         return Ok(format!(
             "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}",
-            key_report(keys, plan.providers()),
+            key_report(keys, plan.providers(), &blockers),
             dir.display(),
             plan.settled + plan.pending.len(),
             plan.settled,
@@ -98,10 +125,10 @@ pub fn speak(
     let placeholders = args.get("placeholder").and_then(Value::as_bool) != Some(false);
     if !missing.is_empty() && !placeholders {
         return Err(format!(
-            "nothing was synthesized: {} narration(s) pending, but no key for {} — {}",
+            "nothing was synthesized: {} narration(s) pending, but {} — {}",
             plan.pending.len(),
-            missing.join(", "),
-            promo_speech::keys::missing_key_message(&missing[0])
+            blocked_phrase(&missing),
+            why(&missing[0])
         ));
     }
 
@@ -109,10 +136,14 @@ pub fn speak(
         std::fs::write(&meta_path, doc.to_string()).map_err(|e| format!("write: {e}"))
     };
     let mut report = promo_speech::placehold(&mut doc, &resources_dir, &missing, &mut persist)?;
+    let synth = ProjectSynth {
+        inner: synth,
+        lexicon: resources_dir.join("pronunciations.dict"),
+    };
     report.extend(promo_speech::settle_except(
         &mut doc,
         &resources_dir,
-        synth,
+        &synth,
         measure,
         &mut persist,
         &missing,
@@ -121,22 +152,30 @@ pub fn speak(
         return Ok("no narration scripts with text — nothing to do".into());
     }
     if !missing.is_empty() {
-        report.push(format!(
-            "silent until voiced: {}",
-            promo_speech::keys::missing_key_message(&missing[0])
-        ));
+        report.push(format!("silent until voiced: {}", why(&missing[0])));
     }
     Ok(report.join("\n"))
 }
 
 /// Where each provider's key comes from — never the key. One line.
-fn key_report(keys: &dyn promo_speech::KeyStore, providers: Vec<String>) -> String {
+fn key_report(
+    keys: &dyn promo_speech::KeyStore,
+    providers: Vec<String>,
+    local_blockers: &[String],
+) -> String {
     if providers.is_empty() {
         return "narration keys: none needed".into();
     }
     let parts: Vec<String> = providers
         .iter()
         .map(|provider| match keys.key(provider) {
+            _ if promo_speech::is_keyless(provider) => {
+                if local_blockers.is_empty() {
+                    format!("{provider} — no key needed, voices installed")
+                } else {
+                    format!("{provider} — no key needed; {}", local_blockers.join("; "))
+                }
+            }
             Some((_, promo_speech::KeySource::Keyring)) => format!("{provider} — OS keyring"),
             Some((_, promo_speech::KeySource::SecretsFile)) => {
                 format!("{provider} — secrets file")
@@ -146,6 +185,100 @@ fn key_report(keys: &dyn promo_speech::KeyStore, providers: Vec<String>) -> Stri
         })
         .collect();
     format!("narration keys: {}", parts.join("; "))
+}
+
+/// "no key for openai, google; local voice not installed" — the providers
+/// a walk cannot voice, keyed ones by their missing key.
+fn blocked_phrase(missing: &[String]) -> String {
+    let keyed: Vec<&str> = missing
+        .iter()
+        .map(String::as_str)
+        .filter(|p| !promo_speech::is_keyless(p))
+        .collect();
+    let mut parts = Vec::new();
+    if !keyed.is_empty() {
+        parts.push(format!("no key for {}", keyed.join(", ")));
+    }
+    if missing.iter().any(|p| promo_speech::is_keyless(p)) {
+        parts.push("local voice not installed".to_string());
+    }
+    parts.join("; ")
+}
+
+/// For a keys-only report: nothing to say when a local voice is
+/// installed, else how to install one.
+fn local_installed_note() -> Vec<String> {
+    let dir = promo_speech::local::voices_dir();
+    if promo_speech::local::catalog::installed(&dir).is_empty() {
+        vec![format!(
+            "no voice package installed in {} (`promoshot-mcp voices install kokoro-en-q8`)",
+            dir.display()
+        )]
+    } else {
+        Vec::new()
+    }
+}
+
+/// `promoshot-mcp voices list|install|remove [package]` — the person's
+/// door to the local voice packages, like `key` is to the keyring. An
+/// install fetches every file from its pinned upstream URL and checks its
+/// SHA-256 before the package appears; `PROMOSHOT_VOICES` picks the folder.
+pub fn voices_command(args: &[String]) -> Result<String, String> {
+    use promo_speech::local::{catalog, voices_dir};
+    let usage = "usage: promoshot-mcp voices list | install <package> | remove <package>";
+    let dir = voices_dir();
+    match (
+        args.first().map(String::as_str),
+        args.get(1).map(String::as_str),
+    ) {
+        (Some("list") | None, None) => {
+            let installed = catalog::installed(&dir);
+            let mut lines = vec![format!("voice packages in {}:", dir.display())];
+            for package in catalog::catalog() {
+                lines.push(format!(
+                    "  {:<16} {:<4} {:>4.0} MB  {}  {}",
+                    package.id,
+                    if installed.contains(&package.id) {
+                        "✓"
+                    } else {
+                        "-"
+                    },
+                    package.download_bytes() as f64 / 1e6,
+                    package.title,
+                    package.license
+                ));
+            }
+            lines.push("voices: `promo_voices` with provider local; install: `promoshot-mcp voices install <package>`".into());
+            Ok(lines.join("\n"))
+        }
+        (Some("install"), Some(id)) => {
+            let mirror = std::env::var("PROMOSHOT_VOICES_MIRROR").ok();
+            let mut shown = 0u64;
+            let path = catalog::install(
+                id,
+                &dir,
+                mirror.as_deref().filter(|m| !m.is_empty()),
+                &mut |done, total| {
+                    let percent = (done * 100).checked_div(total).unwrap_or(0).min(100);
+                    if percent >= shown + 10 {
+                        shown = percent;
+                        eprintln!("{id}: {percent}% of {:.0} MB", total as f64 / 1e6);
+                    }
+                },
+                &std::sync::atomic::AtomicBool::new(false),
+            )?;
+            Ok(format!(
+                "{id}: installed and verified in {}",
+                path.display()
+            ))
+        }
+        (Some("remove"), Some(id)) => Ok(if catalog::remove(id, &dir)? {
+            format!("{id}: removed")
+        } else {
+            format!("{id}: not installed")
+        }),
+        _ => Err(usage.into()),
+    }
 }
 
 /// `promo_voices`: a provider's roster, one line per voice — id, name,

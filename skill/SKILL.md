@@ -230,6 +230,19 @@ spoken narration; `placeholder: false` refuses instead. A recorded voice
 file in `Resources/`, referenced as an ordinary audio resource, is the
 other honest route.
 
+**Local voices need no key** (headless only, for now): provider `local`,
+voiceID `<package>/<speaker>` — `kokoro-en-q8/af_heart` is the default and
+the best; `kitten-nano-en/Luna` and seven others are smaller. English only.
+The audio is the person's to publish (Apache-2.0 weights), and nothing is
+spent. A package must be installed once by the person —
+`promoshot-mcp voices install kokoro-en-q8`; `promo_speak {"check": true}`
+says when one is missing, and `promo_voices {"provider": "local"}` marks
+each voice installed or not. A word the dictionary lacks (a product name)
+fails with that word named: add it to the project's
+`Resources/pronunciations.dict` in CMU format (`PROMOSHOT  P R OW1 M OW0
+SH AA2 T`) or write it as words, then call `promo_speak` again. Symbols
+like `&`, `…` and digits inside words (`MP4`) need spelling out too.
+
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`, and the authoring tools as verbs taking the
 tool's arguments as `--args '<json>'`), and `promo_workspace` names a

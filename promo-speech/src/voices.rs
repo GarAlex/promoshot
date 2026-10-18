@@ -35,8 +35,10 @@ impl Voice {
 /// listing endpoint — so asking for a key first refused a question the
 /// binary could already answer. It was the only tool in 600 logged calls
 /// that failed every time it was called.
+///
+/// The local roster is the installed packages on this machine: no key.
 pub fn roster_needs_key(provider: &str) -> bool {
-    provider != "openai"
+    provider != "openai" && !crate::is_keyless(provider)
 }
 
 /// OpenAI's fixed roster (no listing endpoint).
@@ -67,6 +69,10 @@ pub fn openai_roster() -> Vec<Voice> {
 pub fn voices_with_key(provider: &str, key: &str) -> Result<Vec<Voice>, String> {
     match provider {
         "openai" => Ok(openai_roster()),
+        #[cfg(feature = "local")]
+        crate::LOCAL => Ok(crate::local::roster()),
+        #[cfg(not(feature = "local"))]
+        crate::LOCAL => Err(crate::LOCAL_UNBUILT.into()),
         "elevenlabs" => {
             let answer = get_json(
                 "https://api.elevenlabs.io/v1/voices",

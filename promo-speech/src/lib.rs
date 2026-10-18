@@ -20,6 +20,8 @@ use std::path::Path;
 
 pub mod estimate;
 pub mod keys;
+#[cfg(feature = "local")]
+pub mod local;
 pub mod stress;
 pub mod voices;
 
@@ -47,6 +49,53 @@ pub fn fingerprint(provider: &str, voice: &str, text: &str) -> String {
         .collect()
 }
 
+/// The keyless provider: voices synthesized on this machine by local-tts
+/// (the `local` feature). Its takes are WAV.
+pub const LOCAL: &str = "local";
+
+/// The voice a `local` script gets when it names none.
+pub const LOCAL_DEFAULT_VOICE: &str = "kokoro-en-q8/af_heart";
+
+/// Does this provider need the person's key? Only `local` does not.
+pub fn is_keyless(provider: &str) -> bool {
+    provider == LOCAL
+}
+
+/// Why a `local` voice cannot be spoken by this build on this machine, or
+/// None when it can.
+pub fn local_unavailable(voice: &str) -> Option<String> {
+    #[cfg(feature = "local")]
+    {
+        local::unavailable(voice)
+    }
+    #[cfg(not(feature = "local"))]
+    {
+        let _ = voice;
+        Some(LOCAL_UNBUILT.into())
+    }
+}
+
+#[cfg(not(feature = "local"))]
+pub(crate) const LOCAL_UNBUILT: &str =
+    "this build has no local voices (promo-speech was built without its `local` feature)";
+
+/// One local take as WAV bytes, reading the project's extra pronunciations.
+pub fn synthesize_local(
+    voice: &str,
+    text: &str,
+    lexicon: Option<&Path>,
+) -> Result<Vec<u8>, String> {
+    #[cfg(feature = "local")]
+    {
+        local::synthesize(voice, text, lexicon)
+    }
+    #[cfg(not(feature = "local"))]
+    {
+        let _ = (voice, text, lexicon);
+        Err(LOCAL_UNBUILT.into())
+    }
+}
+
 /// Something that turns words into audio bytes for a provider and voice.
 pub trait Synth {
     fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String>;
@@ -59,6 +108,9 @@ pub struct LiveSynth<K: KeyStore> {
 
 impl<K: KeyStore> Synth for LiveSynth<K> {
     fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String> {
+        if is_keyless(provider) {
+            return synthesize_local(voice, text, None);
+        }
         let (key, _) = self
             .keys
             .key(provider)
@@ -262,6 +314,7 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
 pub struct Pending {
     pub id: String,
     pub provider: String,
+    pub voice: String,
 }
 
 /// What a walk over `doc` would find: how many narrations are already
@@ -312,29 +365,52 @@ fn script(index: usize, resource: &Value) -> Option<Script> {
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(|| format!("R{index}"));
+    let provider = speech
+        .get("provider")
+        .and_then(Value::as_str)
+        .unwrap_or("openai")
+        .to_string();
+    // The extension follows what the provider sends: WAV from a local
+    // voice, MP3 from the others — a take never sits under the wrong name.
+    let extension = if is_keyless(&provider) { "wav" } else { "mp3" };
     let filename = match resource.get("filename").and_then(Value::as_str) {
-        Some(name) if !name.is_empty() => name.to_string(),
-        _ => format!("narration-{id}.mp3"),
+        Some(name) if !name.is_empty() => with_audio_extension(name, extension),
+        _ => format!("narration-{id}.{extension}"),
+    };
+    let default_voice = if is_keyless(&provider) {
+        LOCAL_DEFAULT_VOICE
+    } else {
+        "alloy"
     };
     Some(Script {
         id,
         words,
-        provider: speech
-            .get("provider")
-            .and_then(Value::as_str)
-            .unwrap_or("openai")
-            .to_string(),
         voice: speech
             .get("voiceID")
             .and_then(Value::as_str)
-            .unwrap_or("alloy")
+            .unwrap_or(default_voice)
             .to_string(),
+        provider,
         receipt: speech
             .get("renderedHash")
             .and_then(Value::as_str)
             .map(str::to_string),
         filename,
     })
+}
+
+/// `name` with a `.mp3`/`.wav` extension swapped for `extension`; any
+/// other name (a recorded `.m4a`) is the person's and is left alone.
+fn with_audio_extension(name: &str, extension: &str) -> String {
+    match name.rsplit_once('.') {
+        Some((stem, ext))
+            if (ext.eq_ignore_ascii_case("mp3") || ext.eq_ignore_ascii_case("wav"))
+                && !ext.eq_ignore_ascii_case(extension) =>
+        {
+            format!("{stem}.{extension}")
+        }
+        _ => name.to_string(),
+    }
 }
 
 fn is_settled(
@@ -375,6 +451,7 @@ pub fn plan(
             pending.push(Pending {
                 id: script.id,
                 provider: script.provider,
+                voice: script.voice,
             });
         }
     }
@@ -384,11 +461,35 @@ pub fn plan(
 /// The providers a plan needs that `keys` has no key for — checked BEFORE
 /// a single request goes out, so a walk never buys two narrations and
 /// then stops at a third for want of a key.
+///
+/// `local` needs no key; it is "missing" when a pending local voice's
+/// package is not installed (or this build has no local voices), and
+/// [`local_blockers`] says which.
 pub fn missing_keys(plan: &Plan, keys: &dyn KeyStore) -> Vec<String> {
     plan.providers()
         .into_iter()
-        .filter(|provider| keys.key(provider).is_none())
+        .filter(|provider| {
+            if is_keyless(provider) {
+                !local_blockers(plan).is_empty()
+            } else {
+                keys.key(provider).is_none()
+            }
+        })
         .collect()
+}
+
+/// Why the plan's pending local narrations cannot be spoken yet, each
+/// reason once — empty when all of them can.
+pub fn local_blockers(plan: &Plan) -> Vec<String> {
+    let mut reasons: Vec<String> = Vec::new();
+    for pending in plan.pending.iter().filter(|p| is_keyless(&p.provider)) {
+        if let Some(reason) = local_unavailable(&pending.voice) {
+            if !reasons.contains(&reason) {
+                reasons.push(reason);
+            }
+        }
+    }
+    reasons
 }
 
 /// The receipt walk, the app's rule mirrored field for field: every
@@ -460,6 +561,22 @@ pub fn settle_except(
         let print = fingerprint(&script.provider, &script.voice, &script.words);
         let audio = synth.synthesize(&script.provider, &script.voice, &script.words)?;
         std::fs::write(&destination, &audio).map_err(|e| format!("{id}: write: {e}"))?;
+        // A silent stand-in this walk wrote under another name (an .mp3
+        // before a local .wav take) is the walk's own file: it goes.
+        {
+            let resource = &doc["resources"][index];
+            if resource["speech"]["placeholder"] == json!(true) {
+                if let Some(previous) = resource["filename"].as_str() {
+                    if previous != script.filename
+                        && !previous.contains('/')
+                        && !previous.contains('\\')
+                        && !previous.starts_with('.')
+                    {
+                        let _ = std::fs::remove_file(resources_dir.join(previous));
+                    }
+                }
+            }
+        }
         let seconds = measure(&destination)?;
         spent += 1;
         {
@@ -533,6 +650,10 @@ pub fn placehold(
                 script.id, script.filename
             ));
         }
+        // The stand-in is a silent MP3 whatever the provider will send, so
+        // it is named as one; the real take renames it.
+        let filename = with_audio_extension(&script.filename, "mp3");
+        let destination = resources_dir.join(&filename);
         let calibration = estimate::calibration(doc, &script.provider, &script.voice);
         let language = estimate::voice_language(&script.voice);
         let guess = estimate::estimate(&script.words, language.as_deref(), calibration);
@@ -541,7 +662,7 @@ pub fn placehold(
         let seconds = estimate::silent_mp3_seconds(guess.seconds);
         {
             let resource = &mut doc["resources"][index];
-            resource["filename"] = json!(script.filename);
+            resource["filename"] = json!(filename);
             resource["duration"] = json!(seconds);
             resource["kind"] = json!("audio");
             if let Some(object) = resource.as_object_mut() {
@@ -561,9 +682,18 @@ pub fn placehold(
         } else {
             format!("estimated, calibrated ×{calibration:.2} from this voice's takes")
         };
+        let owed = if is_keyless(&script.provider) {
+            "its local voice is not installed; it is voiced on the next promo_speak once it is"
+                .to_string()
+        } else {
+            format!(
+                "no {} key; it is voiced on the next promo_speak with one",
+                script.provider
+            )
+        };
         report.push(format!(
-            "{}: silent placeholder ({seconds:.2}s, {how}) — no {} key; it is voiced on the next promo_speak with one",
-            script.id, script.provider
+            "{}: silent placeholder ({seconds:.2}s, {how}) — {owed}",
+            script.id
         ));
     }
     if !report.is_empty() {
@@ -702,6 +832,38 @@ mod tests {
             { "id": "Q", "kind": "caption", "filename": "", "displayName": "quiet", "addedAt": 0,
               "speech": { "text": "   " } }
         ] })
+    }
+
+    #[test]
+    fn a_local_take_is_wav_and_replaces_its_silent_stand_in() {
+        let dir = std::env::temp_dir().join(format!("speech-local-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut doc = json!({ "resources": [
+            { "id": "L", "kind": "audio", "displayName": "L", "addedAt": 0,
+              "speech": { "text": "Hello there", "provider": "local" } }
+        ] });
+        let mut persist = |_: &Value| Ok(());
+        // No voice installed yet: the stand-in is a silent MP3, named as one.
+        placehold(&mut doc, &dir, &["local".to_string()], &mut persist).unwrap();
+        assert_eq!(doc["resources"][0]["filename"], "narration-L.mp3");
+        assert!(dir.join("narration-L.mp3").is_file());
+        assert_eq!(
+            doc["resources"][0]["speech"]["voiceID"],
+            LOCAL_DEFAULT_VOICE
+        );
+        // The real take is WAV under its own name, and the stand-in goes.
+        settle(&mut doc, &dir, &Fake, &|_| Ok(1.5), &mut persist).unwrap();
+        assert_eq!(doc["resources"][0]["filename"], "narration-L.wav");
+        assert!(dir.join("narration-L.wav").is_file());
+        assert!(!dir.join("narration-L.mp3").exists());
+        assert!(doc["resources"][0]["speech"].get("placeholder").is_none());
+        // A cloud provider's take goes back to .mp3; a recording stays as named.
+        assert_eq!(
+            with_audio_extension("narration-L.wav", "mp3"),
+            "narration-L.mp3"
+        );
+        assert_eq!(with_audio_extension("take.m4a", "wav"), "take.m4a");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

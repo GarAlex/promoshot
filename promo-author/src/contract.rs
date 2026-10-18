@@ -732,12 +732,16 @@ pub fn tools(host: Host) -> Vec<Value> {
                  (openai's fixed roster; elevenlabs and google list live) — with the person's \
                  own key: the OS keyring (`promoshot-mcp key set <provider>`), else a secrets \
                  file (OPENAI_API_KEY_FILE, or /run/secrets/OPENAI_API_KEY) where there is no \
-                 keyring. Use before promo_speak to pick a voiceID."
+                 keyring. `local` needs NO key: voices synthesized on this machine from \
+                 installed packages (ids like kokoro-en-q8/af_heart; ones not installed say \
+                 so — the person runs `promoshot-mcp voices install <package>`). Use before \
+                 promo_speak to pick a voiceID."
             },
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "provider": { "type": "string", "enum": ["openai", "elevenlabs", "google"],
+                    "provider": { "type": "string",
+                        "enum": ["openai", "elevenlabs", "google", "local"],
                         "description": if app { "Default: the provider chosen in Settings" }
                             else { "Default openai" } }
                 }
@@ -764,7 +768,12 @@ pub fn tools(host: Host) -> Vec<Value> {
                  bought receipt is written back at once. A provider with NO key gets a silent \
                  placeholder of the estimated length (speech.placeholder: true, no receipt): \
                  time the cut against it; the next call with a key voices it. It exports \
-                 silent and promo_validate says so; `placeholder: false` refuses instead."
+                 silent and promo_validate says so; `placeholder: false` refuses instead. \
+                 Provider `local` (voiceID like kokoro-en-q8/af_heart) spends nothing and \
+                 needs no key: English voices synthesized on this machine, Apache-2.0, safe to \
+                 publish; takes are .wav. A word the dictionary lacks (a product name) fails \
+                 with its name — spell it once in Resources/pronunciations.dict (CMU format: \
+                 `PROMOSHOT  P R OW1 M OW0 SH AA2 T`) or write it as words."
             },
             "inputSchema": { "type": "object",
                 "properties": { "project": project,
