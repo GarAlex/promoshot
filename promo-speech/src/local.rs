@@ -82,14 +82,56 @@ const KITTEN: [(&str, &str); 8] = [
     ("Leo", "male"),
 ];
 
-/// The speakers a package offers, each with a line of detail.
-fn speakers(package: &str) -> Vec<(&'static str, &'static str)> {
+/// Kokoro's upstream grades, best first — the roster's order.
+const GRADES: [&str; 13] = [
+    "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F+", "F",
+];
+
+/// The speakers a package offers, each with a line of detail; Kokoro's
+/// best-graded first.
+fn speakers(package: &str) -> Vec<(String, String)> {
     match package {
-        "kokoro-en-q8" => vec![("af_heart", "warm female, US English — the best quality")],
-        "kitten-nano-en" => KITTEN.to_vec(),
-        "inflect-nano-en" => vec![("default", "male, small and fast")],
+        "kokoro-en-q8" => {
+            let mut voices = local_tts_core::kokoro::voices();
+            voices.sort_by_key(|v| {
+                (
+                    GRADES
+                        .iter()
+                        .position(|g| *g == v.grade)
+                        .unwrap_or(GRADES.len()),
+                    v.name.clone(),
+                )
+            });
+            voices
+                .into_iter()
+                .map(|v| {
+                    let accent = if v.accent == "gb" {
+                        "British (read with American pronunciation)"
+                    } else {
+                        "American"
+                    };
+                    (v.name, format!("{} {accent}, grade {}", v.gender, v.grade))
+                })
+                .collect()
+        }
+        "kitten-nano-en" => KITTEN
+            .iter()
+            .map(|(name, detail)| (name.to_string(), detail.to_string()))
+            .collect(),
+        "inflect-nano-en" => vec![("default".into(), "male, small and fast".into())],
         _ => Vec::new(),
     }
+}
+
+/// Is this speaker's file in the installed package? Only Kokoro's voices
+/// are separate files; a package installed before they were pinned has
+/// af_heart alone until it is installed again.
+fn speaker_installed(package: &str, speaker: &str) -> bool {
+    package != "kokoro-en-q8"
+        || voices_dir()
+            .join(package)
+            .join(format!("{speaker}.bin"))
+            .is_file()
 }
 
 /// `package/speaker` from a voice id, the package's speaker defaulted.
@@ -106,11 +148,15 @@ pub fn split_voice(voice: &str) -> Result<(String, String), String> {
         ));
     }
     let speaker = if speaker.is_empty() {
-        known[0].0.to_string()
+        if package == "kokoro-en-q8" {
+            local_tts_core::kokoro::DEFAULT_VOICE.to_string()
+        } else {
+            known[0].0.clone()
+        }
     } else if known.iter().any(|(name, _)| *name == speaker) {
         speaker
     } else {
-        let names: Vec<&str> = known.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&str> = known.iter().map(|(n, _)| n.as_str()).collect();
         return Err(format!(
             "local voice `{voice}`: {package} has {}",
             names.join(", ")
@@ -122,15 +168,25 @@ pub fn split_voice(voice: &str) -> Result<(String, String), String> {
 /// Why `voice` cannot be spoken here yet — its package not installed —
 /// or None when it can.
 pub fn unavailable(voice: &str) -> Option<String> {
-    let (package, _) = match split_voice(voice) {
+    let (package, speaker) = match split_voice(voice) {
         Ok(parts) => parts,
         Err(e) => return Some(e),
     };
-    if catalog::installed(&voices_dir()).contains(&package.as_str()) {
-        None
-    } else {
+    if !catalog::installed(&voices_dir()).contains(&package.as_str()) {
         Some(not_installed(&package))
+    } else if !speaker_installed(&package, &speaker) {
+        Some(needs_update(&package, &speaker))
+    } else {
+        None
     }
+}
+
+fn needs_update(package: &str, speaker: &str) -> String {
+    format!(
+        "local voice `{package}/{speaker}` is newer than the installed {package} — the person \
+         runs `promoshot-mcp voices install {package}` once to add it (only the new voices are \
+         downloaded)"
+    )
 }
 
 fn not_installed(package: &str) -> String {
@@ -148,8 +204,9 @@ pub fn roster() -> Vec<crate::Voice> {
     catalog::catalog()
         .iter()
         .flat_map(|package| {
-            let ready = installed.contains(&package.id);
+            let present = installed.contains(&package.id);
             speakers(package.id).into_iter().map(move |(speaker, detail)| {
+                let ready = present && speaker_installed(package.id, &speaker);
                 let mut attributes = std::collections::BTreeMap::new();
                 attributes.insert("package".into(), package.id.to_string());
                 attributes.insert("license".into(), package.license.to_string());
@@ -163,6 +220,11 @@ pub fn roster() -> Vec<crate::Voice> {
                     language: Some("en".into()),
                     detail: Some(if ready {
                         detail.to_string()
+                    } else if present {
+                        format!(
+                            "{detail} — not in this install (`promoshot-mcp voices install {}` adds it)",
+                            package.id
+                        )
                     } else {
                         format!(
                             "{detail} — not installed ({:.0} MB: `promoshot-mcp voices install {}`)",
@@ -320,5 +382,13 @@ mod tests {
                 .count(),
             8
         );
+        let kokoro: Vec<&str> = roster
+            .iter()
+            .filter(|v| v.id.starts_with("kokoro-en-q8/"))
+            .map(|v| v.name.as_str())
+            .collect();
+        assert_eq!(kokoro.len(), 28);
+        assert_eq!(&kokoro[..2], ["af_heart", "af_bella"], "best grades first");
+        assert!(split_voice("kokoro-en-q8/bm_george").is_ok());
     }
 }

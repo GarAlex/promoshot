@@ -232,7 +232,10 @@ other honest route.
 
 **Local voices need no key** (headless only, for now): provider `local`,
 voiceID `<package>/<speaker>` — `kokoro-en-q8/af_heart` is the default and
-the best; `kitten-nano-en/Luna` and seven others are smaller. English only.
+the best, with 27 more Kokoro voices (`af_bella` next; `am_michael` and
+`am_puck` for a male voice; `bf_emma`, `bm_george` British, read with
+American pronunciation); `promo_voices` lists them graded, best first.
+`kitten-nano-en/Luna` and seven others are smaller. English only.
 The audio is the person's to publish (Apache-2.0 weights), and nothing is
 spent. A package must be installed once by the person —
 `promoshot-mcp voices install kokoro-en-q8`; `promo_speak {"check": true}`

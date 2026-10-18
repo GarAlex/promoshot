@@ -307,7 +307,7 @@ spent; after a one-time download, no network. Install a voice package once:
 
 ```bash
 promoshot-mcp voices list                      # packages, sizes, licences, what is installed
-promoshot-mcp voices install kokoro-en-q8      # 92 MB, the best English voice
+promoshot-mcp voices install kokoro-en-q8      # 106 MB: 28 voices, US and UK, the best English
 promoshot-mcp voices install kitten-nano-en    # 31 MB, 8 voices
 ```
 
@@ -318,8 +318,11 @@ on macOS, `~/.local/share/promoshot/voices` on Linux, or wherever
 `PROMOSHOT_VOICES` points; `PROMOSHOT_VOICES_MIRROR` names a mirror tried first.
 
 A script then says `"speech": {"text": "…", "provider": "local", "voiceID":
-"kokoro-en-q8/af_heart"}` (`promo_voices` with provider `local` lists the
-ids); its takes are `.wav`. The English dictionary refuses words it does not
+"kokoro-en-q8/af_heart"}`; `promo_voices` with provider `local` lists every
+id with upstream's listening grade, best first (`af_heart`, `af_bella`,
+`af_nicole`, `bf_emma`, …). British voices read with American
+pronunciation. Running the install again over an older Kokoro package adds
+the voices it lacks without downloading the model again. Takes are `.wav`. The English dictionary refuses words it does not
 know rather than guessing — a product name, mostly. Spell those once per
 project in `Resources/pronunciations.dict`, CMU format:
 

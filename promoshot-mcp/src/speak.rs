@@ -233,12 +233,15 @@ pub fn voices_command(args: &[String]) -> Result<String, String> {
     ) {
         (Some("list") | None, None) => {
             let installed = catalog::installed(&dir);
+            let outdated = catalog::outdated(&dir);
             let mut lines = vec![format!("voice packages in {}:", dir.display())];
             for package in catalog::catalog() {
                 lines.push(format!(
                     "  {:<16} {:<4} {:>4.0} MB  {}  {}",
                     package.id,
-                    if installed.contains(&package.id) {
+                    if outdated.contains(&package.id) {
+                        "↑"
+                    } else if installed.contains(&package.id) {
                         "✓"
                     } else {
                         "-"
@@ -246,6 +249,12 @@ pub fn voices_command(args: &[String]) -> Result<String, String> {
                     package.download_bytes() as f64 / 1e6,
                     package.title,
                     package.license
+                ));
+            }
+            if !outdated.is_empty() {
+                lines.push(format!(
+                    "↑ = installed, with new voices to add: `promoshot-mcp voices install {}`",
+                    outdated.join(" / ")
                 ));
             }
             lines.push("voices: `promo_voices` with provider local; install: `promoshot-mcp voices install <package>`".into());
