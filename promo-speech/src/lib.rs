@@ -96,6 +96,19 @@ pub fn synthesize_local(
     }
 }
 
+/// Names the dictionary lacked that local takes guessed since the last
+/// call: (word as written, ARPAbet, method). Empty without local voices.
+pub fn take_local_guesses() -> Vec<(String, String, &'static str)> {
+    #[cfg(feature = "local")]
+    {
+        local::take_guesses()
+    }
+    #[cfg(not(feature = "local"))]
+    {
+        Vec::new()
+    }
+}
+
 /// Something that turns words into audio bytes for a provider and voice.
 pub trait Synth {
     fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String>;
@@ -413,13 +426,34 @@ fn with_audio_extension(name: &str, extension: &str) -> String {
     }
 }
 
+/// The receipt a take is bought under: the shared fingerprint of
+/// provider|voice|text — and, for a local voice in a project that spells
+/// words in `Resources/pronunciations.dict`, that file's hash too, so
+/// editing a pronunciation re-voices the project's local takes (they cost
+/// nothing). Cloud receipts are exactly the apps' fingerprint.
+fn receipt(script: &Script, resources_dir: &Path) -> String {
+    if is_keyless(&script.provider) {
+        if let Ok(lexicon) = std::fs::read(resources_dir.join("pronunciations.dict")) {
+            use sha2::Digest;
+            let hash = sha2::Sha256::digest(&lexicon);
+            let short: String = hash[..8].iter().map(|b| format!("{b:02x}")).collect();
+            return fingerprint(
+                &script.provider,
+                &format!("{}#lexicon:{short}", script.voice),
+                &script.words,
+            );
+        }
+    }
+    fingerprint(&script.provider, &script.voice, &script.words)
+}
+
 fn is_settled(
     script: &Script,
     resources_dir: &Path,
     measure: &dyn Fn(&Path) -> Result<f64, String>,
 ) -> Option<f64> {
     let destination = resources_dir.join(&script.filename);
-    let print = fingerprint(&script.provider, &script.voice, &script.words);
+    let print = receipt(script, resources_dir);
     if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
         return measure(&destination).ok();
     }
@@ -558,7 +592,7 @@ pub fn settle_except(
             continue;
         }
         let destination = resources_dir.join(&script.filename);
-        let print = fingerprint(&script.provider, &script.voice, &script.words);
+        let print = receipt(&script, resources_dir);
         let audio = synth.synthesize(&script.provider, &script.voice, &script.words)?;
         std::fs::write(&destination, &audio).map_err(|e| format!("{id}: write: {e}"))?;
         // A silent stand-in this walk wrote under another name (an .mp3
@@ -636,7 +670,7 @@ pub fn placehold(
         if !providers.contains(&script.provider) {
             continue;
         }
-        let print = fingerprint(&script.provider, &script.voice, &script.words);
+        let print = receipt(&script, resources_dir);
         let destination = resources_dir.join(&script.filename);
         if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
             continue;

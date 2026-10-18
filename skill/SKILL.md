@@ -241,9 +241,11 @@ spent. A package must be installed once by the person —
 `promoshot-mcp voices install kokoro-en-q8`; `promo_speak {"check": true}`
 says when one is missing, and `promo_voices {"provider": "local"}` marks
 each voice installed or not. A word the dictionary lacks (a product name)
-fails with that word named: add it to the project's
-`Resources/pronunciations.dict` in CMU format (`PROMOSHOT  P R OW1 M OW0
-SH AA2 T`) or write it as words, then call `promo_speak` again. Symbols
+is GUESSED, and `promo_speak` lists each guess as a lexicon line: listen, and
+if one is wrong put the corrected line in the project's
+`Resources/pronunciations.dict` (CMU format: `PROMOSHOT  P R OW1 M OW0 SH
+AA2 T`), then call `promo_speak` again — editing that file re-voices the
+project's local takes. Symbols
 like `&`, `…` and digits inside words (`MP4`) need spelling out too.
 
 The `promo` CLI is the same contract (`promo schema | validate | inspect |

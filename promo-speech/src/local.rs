@@ -247,6 +247,21 @@ enum Engine {
 /// Loaded engines, by package and lexicon: a model loads once per server.
 type Cache = HashMap<(String, Option<(PathBuf, std::time::SystemTime)>), Engine>;
 
+/// (word as written, ARPAbet, how it was guessed), each word once.
+type Guesses = Vec<(String, String, &'static str)>;
+
+/// Words the dictionary lacked that local takes guessed since the last
+/// [`take_guesses`]: (word as written, ARPAbet, how it was guessed).
+fn guessed() -> &'static Mutex<Guesses> {
+    static GUESSED: OnceLock<Mutex<Guesses>> = OnceLock::new();
+    GUESSED.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// The guesses local takes made since the last call, each word once.
+pub fn take_guesses() -> Guesses {
+    std::mem::take(&mut *guessed().lock().unwrap_or_else(|e| e.into_inner()))
+}
+
 fn cache() -> &'static Mutex<Cache> {
     static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -283,6 +298,13 @@ pub fn synthesize(voice: &str, text: &str, lexicon: Option<&Path>) -> Result<Vec
                 CompactEnglish::load(&root, CompactKind::Inflect).map_err(|e| e.to_string())?,
             ),
         };
+        // A name the dictionary lacks is guessed, not refused; every guess
+        // is reported (take_guesses) so it can be checked and pinned.
+        match &mut engine {
+            Engine::Kokoro(e) => e.set_fallback(true),
+            Engine::Compact(e) => e.set_fallback(true),
+        }
+        .map_err(|e| e.to_string())?;
         if let Some((path, _)) = &lexicon {
             match &mut engine {
                 Engine::Kokoro(e) => e.add_lexicon(path),
@@ -298,11 +320,22 @@ pub fn synthesize(voice: &str, text: &str, lexicon: Option<&Path>) -> Result<Vec
         speaker: &speaker,
         duration_scale: 1.0,
     };
-    let audio = match engines.get_mut(&key).expect("inserted above") {
+    let engine = engines.get_mut(&key).expect("inserted above");
+    let audio = match engine {
         Engine::Kokoro(e) => e.synthesize(&request),
         Engine::Compact(e) => e.synthesize(&request),
     }
     .map_err(|e| explain(&e.to_string()))?;
+    let guesses = match engine {
+        Engine::Kokoro(e) => e.take_guesses(),
+        Engine::Compact(e) => e.take_guesses(),
+    };
+    let mut all = guessed().lock().unwrap_or_else(|e| e.into_inner());
+    for guess in guesses {
+        if !all.iter().any(|(word, _, _)| *word == guess.word) {
+            all.push((guess.word, guess.arpabet, guess.method));
+        }
+    }
     wav(&audio.samples, audio.sample_rate)
 }
 

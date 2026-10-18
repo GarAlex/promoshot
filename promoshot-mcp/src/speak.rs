@@ -151,6 +151,17 @@ pub fn speak(
     if report.is_empty() {
         return Ok("no narration scripts with text — nothing to do".into());
     }
+    let guesses = promo_speech::take_local_guesses();
+    if !guesses.is_empty() {
+        report.push(format!(
+            "guessed {} word(s) the dictionary lacks — listen, and pin or correct any in \
+             Resources/pronunciations.dict (these lines, as is or edited), then promo_speak again:",
+            guesses.len()
+        ));
+        for (word, arpabet, _) in guesses {
+            report.push(format!("  {}  {arpabet}", word.to_uppercase()));
+        }
+    }
     if !missing.is_empty() {
         report.push(format!("silent until voiced: {}", why(&missing[0])));
     }

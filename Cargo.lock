@@ -1852,8 +1852,8 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "local-tts-core"
-version = "0.3.0"
-source = "git+https://github.com/GarAlex/local-tts?tag=v0.3.0#2341b8c831fa1f6a39d8211fc9baded7a95f55f9"
+version = "0.4.0"
+source = "git+https://github.com/GarAlex/local-tts?tag=v0.4.0#dde9a30c02999125713300e90d394e4bc06bd147"
 dependencies = [
  "cc",
  "hound",

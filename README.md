@@ -330,8 +330,11 @@ project in `Resources/pronunciations.dict`, CMU format:
 PROMOSHOT  P R OW1 M OW0 SH AA2 T
 ```
 
-Editing that file does not by itself re-voice takes whose text is unchanged;
-change the text, or delete the take's file.
+Words the dictionary lacks are otherwise guessed — split at capitals into
+known words (YouTube, ChatGPT), spelled when an acronym (API), or guessed by
+a small model trained on the dictionary — and `promo_speak` lists every guess
+as a ready-to-paste line. Pin or correct one in that file and call
+`promo_speak` again: editing it re-voices the project's local takes.
 
 ### Docker
 
