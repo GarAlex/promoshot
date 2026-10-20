@@ -22,6 +22,8 @@ This is the authoring subset; `promo_schema_full` is the whole format.
   A layer: `id`, `name`, `sortIndex`, `kind`, `isEnabled: true`,
   `startTime`, `duration` (seconds on the output timeline), usually a
   `resourceID`, and `keyframes`.
+- Cutting to music: times may say `{"beats": 2}`, `{"bar": 5}`… on a song's
+  `beatGrid` — `promo_schema_full {"topics": ["beats"]}`.
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
   `Resources/`), `displayName`, `addedAt: 0`, `imageCuts: []`,
   `disabledAudioTrackIndices: []`; videos also carry `duration`,

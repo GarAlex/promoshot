@@ -522,7 +522,7 @@ fn slot<'a>(
     }
 }
 
-fn fields(entity: Entity) -> &'static [&'static str] {
+fn fields_of(entity: Entity) -> &'static [&'static str] {
     match entity {
         Entity::Layer => LAYER_TIME_FIELDS,
         Entity::Keyframe => KEYFRAME_TIME_FIELDS,
@@ -537,7 +537,7 @@ pub fn lift(root: &mut Value) -> Result<bool, String> {
     let mut lifted = false;
     each_entity(root, &mut |entity, object, at| {
         let mut found: Vec<(&str, MusicalTime)> = Vec::new();
-        for key in fields(entity) {
+        for key in fields_of(entity) {
             let Some((holder, leaf)) = slot(object, key) else {
                 continue;
             };
@@ -607,6 +607,44 @@ pub fn fold(root: &mut Value) -> bool {
         Ok(())
     });
     changed
+}
+
+/// Copies every time field and side map of `from` — the same document,
+/// resolved — into `into`, entity by entity (layers and keyframes by id
+/// path), leaving every other key of `into` as it is. What lets a host hand
+/// back the file with resolved numbers and nothing else touched: keys
+/// below the bags, which a trip through the model would not keep, stay.
+pub fn copy_times(from: &Value, into: &mut Value) {
+    let mut found: std::collections::HashMap<String, Map<String, Value>> = Default::default();
+    let mut source = from.clone();
+    let _ = each_entity(&mut source, &mut |entity, object, at| {
+        let mut fields = Map::new();
+        for key in fields_of(entity).iter().chain(["timeSpecs"].iter()) {
+            let value = match slot(object, key) {
+                Some((holder, leaf)) => holder.get(leaf).cloned().unwrap_or(Value::Null),
+                None => continue,
+            };
+            fields.insert((*key).to_string(), value);
+        }
+        found.insert(at.to_string(), fields);
+        Ok(())
+    });
+    let _ = each_entity(into, &mut |_, object, at| {
+        let Some(fields) = found.get(at) else {
+            return Ok(());
+        };
+        for (key, value) in fields {
+            let Some((holder, leaf)) = slot(object, key) else {
+                continue;
+            };
+            if value.is_null() {
+                holder.remove(leaf);
+            } else {
+                holder.insert(leaf.to_string(), value.clone());
+            }
+        }
+        Ok(())
+    });
 }
 
 // ---------------------------------------------------------------- the new fields

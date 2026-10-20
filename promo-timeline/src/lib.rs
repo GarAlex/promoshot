@@ -9,6 +9,7 @@
 pub mod attachment;
 pub mod audio;
 pub mod autozoom;
+pub mod beats;
 pub mod caption;
 pub mod follow;
 pub mod frame;
@@ -18,6 +19,7 @@ pub mod layout;
 pub mod layout_check;
 pub mod mapping;
 pub mod motion;
+pub mod musical;
 pub mod plan;
 pub mod report;
 pub mod reveal;
@@ -28,13 +30,14 @@ pub mod transport;
 pub mod validate;
 pub mod viewport;
 
-pub use attachment::{resolve_attachments, run_containing, runs, AttachmentProblem};
+pub use attachment::{run_containing, runs, AttachmentProblem};
 pub use audio::{
     amplitude_for_fraction, audio_focus_intervals, audio_inputs, duck_gate, gain_ramp_segments,
     layer_gain, level_points, merge_intervals, placed_segments, sample_automation, scaled_segments,
     AudioInput, AudioSource, GainRampSegment, PlacedSegment, ScaledSegment, VolumePoint,
     DUCK_FACTOR, DUCK_RAMP,
 };
+pub use beats::Grid;
 pub use frame::{bake_slab, framed_pixel_size, rotate_bgra, slab_geometry, SlabGeometry};
 pub use gradient::layer_background_gradient;
 pub use interpolation::{
@@ -57,6 +60,7 @@ pub use mapping::{
     VideoSegment,
 };
 pub use motion::{path_document_polyline, path_polyline, point_along, point_along_range, Polyline};
+pub use musical::{resolve_timing, BeatGrids, ResolvedTime, TimingProblem, TimingReport};
 pub use plan::{
     composition_duration, export_fps, export_plan, export_size, frame_count, look_times,
     ExportPlan, DEFAULT_FPS, MAX_FPS,

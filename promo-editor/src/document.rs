@@ -1171,10 +1171,10 @@ impl Document {
         let snapshot = self.to_json()?;
         let mut edited = self.meta.clone();
         Self::run(&mut edited, command)?;
-        // Anchored layers follow what moved — the Mac reconciles after
-        // every edit through the same resolver; a document the core owns
-        // must not wait for the app to do it.
-        promo_timeline::resolve_attachments(&mut edited);
+        // Anchored layers and musical values follow what moved — the Mac
+        // reconciles after every edit through the same resolver; a
+        // document the core owns must not wait for the app to do it.
+        promo_timeline::resolve_timing(&mut edited, &Default::default());
         let before = std::mem::replace(&mut self.meta, edited);
         self.push_step(snapshot);
         self.version += 1;
@@ -1216,7 +1216,7 @@ impl Document {
         for command in commands {
             Self::run(&mut edited, command)?;
         }
-        promo_timeline::resolve_attachments(&mut edited);
+        promo_timeline::resolve_timing(&mut edited, &Default::default());
         let before = std::mem::replace(&mut self.meta, edited);
         if !merge_with_last || self.undo.is_empty() {
             self.push_step(snapshot);
@@ -1491,7 +1491,9 @@ impl Document {
         }
         inner.resources.get_or_insert_with(Vec::new).push(outside);
         Self::run(&mut inner, command)?;
-        promo_timeline::resolve_attachments(&mut inner);
+        // The composition's own clock, never the project's.
+        inner.composition_settings.beat_clock = composition.beat_clock.clone();
+        promo_timeline::resolve_timing(&mut inner, &Default::default());
         let mut updated = composition;
         updated.layers = inner.layers.unwrap_or_default();
         // What the command did to the project's resources (a caption's

@@ -217,8 +217,23 @@ pub fn report(meta: &ProjectMetadata, context: &Context) -> Report {
 pub fn file_report(json: &str, listing: Option<&[String]>) -> Result<Report, String> {
     let mut meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
     let mut out = Report::default();
-    for problem in crate::resolve_attachments(&mut meta) {
-        out.warn(problem.to_string());
+    // One pass for musical values and attachments alike; grids stated on
+    // the resources (analysis joins in slice 5).
+    let timing = crate::resolve_timing(&mut meta, &crate::BeatGrids::default());
+    for problem in &timing.problems {
+        if problem.is_break() {
+            out.breaks(problem.to_string());
+        } else {
+            out.warn(problem.to_string());
+        }
+    }
+    for resource in &timing.missing_grids {
+        out.warn(
+            crate::TimingProblem::MissingGrid {
+                resource: resource.clone(),
+            }
+            .to_string(),
+        );
     }
     for problem in promo_model::nesting::problems(&meta) {
         // A composition inside itself, or nested past the cap, cannot be

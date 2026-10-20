@@ -567,10 +567,14 @@ mod schema_doc_tests {
                 }),
             }),
             keyframes: vec![full_keyframe()],
-            // Musical time and the beat fields: documented with their
-            // behaviour (docs/BEAT-SYNC.md S10), not before it.
+            // The app form's side map, never written; the beat fields below
+            // are documented with their behaviour (docs/BEAT-SYNC.md).
             time_specs: None,
-            beat_clock: None,
+            beat_clock: Some(musical::BeatClock {
+                resource_id: Some("R".into()),
+                start_time: None,
+                extra: serde_json::Map::new(),
+            }),
             after: None,
             pulse: None,
             shake: None,
@@ -699,7 +703,12 @@ mod schema_doc_tests {
             }),
             palette: None,
             looped: Some(true),
-            beat_grid: None,
+            beat_grid: Some(musical::BeatGrid {
+                bpm: 128.0,
+                offset: Some(0.469),
+                time_signature: Some([4, 4]),
+                extra: serde_json::Map::new(),
+            }),
             provenance: None,
             extra: serde_json::Map::new(),
         }
@@ -757,7 +766,12 @@ mod schema_doc_tests {
             gif_export_fps: 10.0,
             video_export_width: None,
             video_export_height: None,
-            beat_clock: None,
+            beat_clock: Some(musical::BeatClock {
+                resource_id: Some("R".into()),
+                start_time: Some(0.0),
+                extra: serde_json::Map::new(),
+            }),
+            // Parsed but not acted on until their slices (docs/BEAT-SYNC.md).
             sequence: None,
             flash: None,
             extra: serde_json::Map::new(),

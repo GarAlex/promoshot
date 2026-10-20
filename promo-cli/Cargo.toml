@@ -35,3 +35,5 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 [dev-dependencies]
 # Test pictures carry a real Display P3 profile.
 moxcms = "0.8"
+# The editor document is one of the loaders the beat tests hold together.
+promo-editor = { path = "../promo-editor" }

@@ -1238,7 +1238,7 @@ fn document(
     let mut meta = promo_model::ProjectMetadata::from_json(&document.to_string())
         .map_err(|e| format!("authored an invalid project: {e}"))?;
     if resolve {
-        promo_timeline::resolve_attachments(&mut meta);
+        promo_timeline::resolve_timing(&mut meta, &Default::default());
     }
     // The features decide the gate, asked of the model rather than
     // restated here.

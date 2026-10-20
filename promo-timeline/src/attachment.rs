@@ -157,7 +157,9 @@ fn missing_neighbour(from: TimingReference, layer: &ProjectLayer) -> AttachmentP
 /// bounded by the number of layers, and anything still unresolved at the end
 /// is a cycle — two neighbours each waiting on the other. Those are named and
 /// left with their stored values, so the project still plays.
-pub fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProblem> {
+/// Crate-private: every loader resolves through
+/// [`crate::musical::resolve_timing`], which runs this inside its loop.
+pub(crate) fn resolve_attachments(project: &mut ProjectMetadata) -> Vec<AttachmentProblem> {
     let resources = project.resources.clone().unwrap_or_default();
     let Some(layers) = project.layers.as_mut() else {
         return Vec::new();

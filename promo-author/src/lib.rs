@@ -1147,7 +1147,10 @@ fn open_existing(
 /// resolver's problems and validate's warnings. JSON, machine-first.
 pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let (_, text) = open_existing(args, "project", root)?;
-    let meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+    let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+    // The project the renderer draws: musical values and attachments
+    // resolved to the seconds it uses.
+    let timing = promo_timeline::resolve_timing(&mut meta, &Default::default());
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
     let settings = &meta.composition_settings;
@@ -1176,11 +1179,7 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
     for layer in layers.iter().filter(|l| only.is_none_or(|id| l.id == id)) {
         docs.push(layer_doc(layer, time, settings, resources, None, 0));
     }
-    let mut timing_copy = meta.clone();
-    let timing_problems: Vec<String> = promo_timeline::resolve_attachments(&mut timing_copy)
-        .iter()
-        .map(|p| format!("{p:?}"))
-        .collect();
+    let timing_problems: Vec<String> = timing.problems.iter().map(|p| p.to_string()).collect();
     let out = json!({
         "time": time,
         "canvas": { "width": settings.canvas_width, "height": settings.canvas_height },

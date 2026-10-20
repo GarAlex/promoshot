@@ -1,8 +1,8 @@
 # Beat sync: implementation design
 
-Status: slice 1 built (2026-10-20); the rest is design. Where building
-slice 1 changed the design, the "Slice 1 as built" notes under §9 say what
-and why. Covers the request in
+Status: slices 1 and 2 built (2026-10-20); the rest is design. Where
+building changed the design, the "Slice 1 as built" and "Slice 2 as built"
+notes under §9 say what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
 Owner decisions: the format grows in one direction only, the apps open,
 render and save without flattening, and seconds come from the core.
@@ -579,6 +579,54 @@ the text above, and why:
   and the docs teach what renders. The entries land with S2/S10; the
   kitchen-sink doc test leaves the new fields unset until then. schema.md's
   one version statement names no number, so it needed no bump.
+
+**Slice 2 as built** (2026-10-20):
+- **The grid is closed-form only** (`promo-timeline/src/beats.rs`): beat
+  index k at `clock + (offset + k·60/bpm)/speed`, a bar = the time
+  signature's numerator in beats, `snap` to the nearest beat or bar start
+  with ties going earlier. The piecewise form for detected grids comes with
+  the tracker (S4) behind the same methods. Exact indices are carried from a
+  musical start to the lengths measured from it, so a stated grid's
+  numbers are the closed form's bits (AC3, pinned as `to_bits` literals;
+  run on macOS and in `rust:1.96-bookworm` under Docker — linux/arm64 on
+  this machine, not x86_64).
+- **`BeatGrids` is a map of `BeatGrid` by resource id** (what an analysis
+  will fill in S4/S5); a resource's own `beatGrid` wins over it.
+- **Edits settle first.** Before resolving, any spec whose field no longer
+  holds its `seconds` is dropped — the save's fold rule, applied up front —
+  so a Swift drag or a headless edit is never resolved back.
+- **The loop** (§2.2 step 3) is starts, musical durations and keyframe
+  times, then the attachment resolver, repeated until no number moves
+  (layer count + 1 rounds). `sequence` and `after` join it in S3.
+  Attachments still run at the top level only, as before; compositions get
+  the musical pass with their own clock. Stage members resolve against
+  their stage's scope.
+- **A missing grid is a warning plus a refusal to render**, not a break:
+  until S5 analyses audio there is no other way to get a grid, so validate
+  says "has no beat grid yet" and the CLI's `still`, `frames`, `video` and
+  `gif` refuse with the same advice. In the app, the editor's video, image
+  and GIF exports and the app's MCP render tools refuse with a sentence
+  (`PromoTiming.exportWaitsForGrids`) — the minimal form of S8's guard.
+- **Problems** are `TimingProblem` (`is_break()`): no clock (warn, per
+  value), a bad clock resource, a position where a length is required, the
+  clock's own audio layer starting on its beat, a position as a duration
+  that ends before the start (breaks).
+- **The app's resolve carries what Swift cannot read.** Swift's encoding
+  has no `beatClock` or `beatGrid`, so `promo_project_resolve_timing` took
+  a second argument, `source` (the core document's JSON, else the file as
+  opened), whose unread fields are carried in before resolving — in place
+  of the design's `promo_doc_resolved_json(doc, json, dir)`.
+  `PromoTiming.reconcile` copies back every field of a layer that carries
+  `timeSpecs`, and runs when a layer does (top-level layers; members and
+  composition layers get their seconds from `promo_project_opened`).
+- **`promo_project_opened` resolves**, then copies only the time fields
+  and side maps of the resolved project back into the lifted file
+  (`musical::copy_times`), so keys below the bags survive the trip.
+- **`explain` explains the resolved project**, as §2.1 said.
+- **JSON text is not bit-exact across the FFI**: serde_json's default float
+  parser can land one ulp off the shortest representation another encoder
+  printed, so a number that crossed Swift's encoder is equal only within
+  fold's 1e-4. Bit identity is a property of the core's own arithmetic.
 
 **S2 — Grid and resolution pass (override grids only)**
 - `promo-timeline/src/beats.rs` (`Grid`), `musical.rs` `resolve_timing` (steps 1–4 and 6), `resolve_attachments` made `pub(crate)`, and every caller moved.

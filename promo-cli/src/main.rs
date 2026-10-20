@@ -173,6 +173,21 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         });
     }
 
+    // A render lays out on the beats; with a clock whose audio has no grid
+    // it would lay out on the nominal 120 BPM instead — so it waits.
+    if matches!(command, "still" | "frames" | "video" | "gif") && !project.missing_grids.is_empty()
+    {
+        return Err(format!(
+            "not rendering: the beat clock's audio {} has no beat grid yet — set \
+             \"beatGrid\": {{\"bpm\": …}} on the resource (promo validate says the same)",
+            project
+                .missing_grids
+                .iter()
+                .map(|id| format!("\"{id}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     let answer = match command {
         "inspect" => inspect(&project, &opts),
         "proxy" => build_proxies(&project, &opts),

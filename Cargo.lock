@@ -2543,6 +2543,7 @@ dependencies = [
  "image",
  "moxcms",
  "promo-author",
+ "promo-editor",
  "promo-engine",
  "promo-gpu",
  "promo-media",

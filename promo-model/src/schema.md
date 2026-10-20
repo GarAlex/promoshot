@@ -96,7 +96,7 @@ high.
 
 The rest is in sections headed by the words each answers to, and
 `promo_schema_full {"topics": [...]}` takes any of them: keyframes,
-placement, timing, transitions, swaps, motion, viewport, captions, type,
+placement, timing, beats, transitions, swaps, motion, viewport, captions, type,
 reveal, backgrounds, palette, frames, look, masks, drawings, media, and
 each feature by its own word.
 
@@ -268,6 +268,57 @@ A keyframe animates a layer over its LOCAL time:
   producers for one number; the anchor wins and promo_validate says
   so, as it also names a fitContent with no resource and a
   fitDependents nothing is anchored to.
+
+## Beats — beats, bars, beat, bar, snap, beatClock, beatGrid, bpm, tempo, music
+
+Times can be musical. These fields take an object in place of seconds:
+a layer's `startTime`, `duration`, `fadeIn`, `fadeOut` and the
+`duration` of its `transitionIn`/`transitionOut`, and a keyframe's `time`
+and `transitionDuration`.
+
+- Lengths: `{"beats": 4}`, `{"bars": 2}` — fractions are fine
+  (`{"beats": 0.5}`), never below 0.
+- Positions on the grid, 1-based: `{"beat": 17}`, `{"bar": 5}`; beat 1 is
+  the first downbeat, and `{"beat": 0}` is the pickup before it.
+- `{"snap": "beat", "near": 12.3}` — the grid point nearest 12.3 s
+  (`"downbeat"` and `"bar"` both mean bar starts); a tie goes earlier.
+
+Exactly one key (`snap` with `near`); anything else is refused with its
+path. Seconds stay the default, and one project may mix both.
+
+Where each lands:
+- `startTime`: a position is the point; a length counts from beat 1, so
+  `{"beats": 4}` starts where `{"beat": 5}` does.
+- `duration`: a length counts along the grid from the layer's start; a
+  position is where the layer ENDS (`{"bar": 9}` = "until bar 9").
+- `fadeIn`, `transitionIn.duration`: a length forward from the start;
+  `fadeOut`, `transitionOut.duration`: back from the end. Lengths only —
+  a position there breaks, and the stored seconds stand.
+- A keyframe's `time`: a length counts from the layer's start, a position
+  is that point on the grid (both become layer-local seconds);
+  `transitionDuration` is a length back from the keyframe.
+
+Whose beats: `compositionSettings.beatClock` —
+`{ "resourceID": "<audio>", "startTime": 0 }`, the audio resource whose
+grid counts and the output time of its second 0. Without `startTime`, the
+clock follows the first enabled audio layer that plays the resource,
+through its trim and speed. A composition resource's own
+`composition.beatClock` is its clock — a nested composition never counts
+its parent's — and a layer's own `beatClock` overrides for that layer.
+
+The grid: `beatGrid` on the audio resource —
+`{ "bpm": 128, "offset": 0.469, "timeSignature": [4, 4] }`: the tempo, the
+first downbeat in the audio's own seconds (0 when absent), and beats per
+bar first. Beat k (0 is beat 1) sits at
+`clock + (offset + k × 60/bpm) / speed` — plain arithmetic, the same
+seconds on every machine. The grid is stated, never detected, for now.
+
+Without a clock, musical values resolve against 120 BPM with beat 1 at
+0 s, and promo_validate names every one. A clock whose audio has no
+`beatGrid` lays out the same way, validate names it, and a render waits
+until the grid is stated. Every tool writes the resolved seconds where the
+renderers read them and keeps the musical value in the file; set a field
+to seconds and that one value is plain seconds from then on.
 
 ## Transitions — transition, transitionIn, transitionOut, fade, fadeIn, fadeOut, wipe, dissolve, opacity, edge
 

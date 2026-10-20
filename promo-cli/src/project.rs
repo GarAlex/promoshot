@@ -17,6 +17,9 @@ pub struct Project {
     /// render commands; `validate` reports them with everything else instead
     /// of letting them scroll past in stderr.
     pub attachment_problems: Vec<String>,
+    /// Beat clocks whose audio has no grid: the nominal grid stood in, and
+    /// no render starts until one is stated (docs/BEAT-SYNC.md §2.3).
+    pub missing_grids: Vec<String>,
 }
 
 /// Why a layer cannot be rendered by this tool.
@@ -69,12 +72,16 @@ impl Project {
         let meta_path = dir.join("metadata.json");
         let mut meta = ProjectMetadata::from_json(text)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
-        // Attached layers become plain numbers before anything reads them, so
-        // the renderer never has to know the difference.
-        let attachment_problems: Vec<String> = promo_timeline::resolve_attachments(&mut meta)
-            .into_iter()
+        // Attached layers and musical values become plain numbers before
+        // anything reads them, so the renderer never has to know the
+        // difference.
+        let timing = promo_timeline::resolve_timing(&mut meta, &Default::default());
+        let attachment_problems: Vec<String> = timing
+            .problems
+            .iter()
             .map(|problem| problem.to_string())
             .collect();
+        let missing_grids = timing.missing_grids;
         // Nested compositions: a composition that contains itself, or nests
         // deeper than the cap, cannot be rendered by recursion — refuse the
         // file, as a decode failure would. Lesser problems (a nested layer
@@ -92,6 +99,7 @@ impl Project {
             meta,
             resolved,
             attachment_problems,
+            missing_grids,
         })
     }
 
@@ -104,6 +112,7 @@ impl Project {
             meta,
             resolved,
             attachment_problems: self.attachment_problems.clone(),
+            missing_grids: self.missing_grids.clone(),
         }
     }
 
