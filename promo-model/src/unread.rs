@@ -115,8 +115,26 @@ fn carry_frame(into: &mut Option<ResourceFrame>, from: &Option<ResourceFrame>, m
     }
 }
 
+/// A field this model types that the apps' model does not read yet (the
+/// beat-sync fields, docs/BEAT-SYNC.md): Fill puts it back where the copy
+/// lacks it, Mirror takes the source's as it is, absence included.
+fn carry_field<T: Clone>(into: &mut Option<T>, from: &Option<T>, mode: Mode) {
+    match mode {
+        Mode::Fill => {
+            if into.is_none() {
+                into.clone_from(from);
+            }
+        }
+        Mode::Mirror => into.clone_from(from),
+    }
+}
+
 fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, &[], mode);
+    carry_field(&mut into.beat_clock, &from.beat_clock, mode);
+    carry_field(&mut into.after, &from.after, mode);
+    carry_field(&mut into.pulse, &from.pulse, mode);
+    carry_field(&mut into.shake, &from.shake, mode);
     keep_opt(&mut into.blend_mode, from.blend_mode, mode);
     carry_transition(&mut into.transition_in, &from.transition_in, mode);
     carry_transition(&mut into.transition_out, &from.transition_out, mode);
@@ -136,6 +154,13 @@ fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
 
 fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, APP_RESOURCE_KEYS, mode);
+    carry_field(&mut into.beat_grid, &from.beat_grid, mode);
+    carry_field(&mut into.provenance, &from.provenance, mode);
+    if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
+        carry_field(&mut composition.beat_clock, &old.beat_clock, mode);
+        carry_field(&mut composition.sequence, &old.sequence, mode);
+        carry_field(&mut composition.flash, &old.flash, mode);
+    }
     carry_frame(&mut into.frame, &from.frame, mode);
     for cut in &mut into.media_cuts {
         if let Some(old) = from.media_cuts.iter().find(|c| c.id == cut.id) {
@@ -193,6 +218,11 @@ impl ProjectMetadata {
             &[],
             mode,
         );
+        let settings = &mut self.composition_settings;
+        let old = &from.composition_settings;
+        carry_field(&mut settings.beat_clock, &old.beat_clock, mode);
+        carry_field(&mut settings.sequence, &old.sequence, mode);
+        carry_field(&mut settings.flash, &old.flash, mode);
         let old_layers = layers_by_id(from);
         carry_layers(
             self.layers.as_deref_mut().unwrap_or(&mut []),

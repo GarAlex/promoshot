@@ -5,6 +5,7 @@
 
 pub mod geometry;
 pub mod inventory;
+pub mod musical;
 pub mod nesting;
 pub mod project;
 pub mod unread;
@@ -14,6 +15,7 @@ pub use geometry::{Point, Rect, Size};
 pub use inventory::{
     derived_id, effective_resources, layers_with_missing_media, ResolvedResource, ResourceOrigin,
 };
+pub use musical::{MusicalTime, SnapUnit, TimeSpec, TimeSpecs, TimeValue};
 pub use project::*;
 
 /// The newest `minReaderVersion` this build opens for WRITING — the
@@ -29,7 +31,10 @@ pub use project::*;
 /// rung of its own (review 2026-09-27, P3-44). A new rung is for what an
 /// older reader cannot decode (a strict kind) or would contradict by
 /// editing around it.
-pub const READER_VERSION: i64 = 48;
+///
+/// 49 is musical time (`musical`): a time field may hold `{"beats": 4}`,
+/// which a reader before it cannot decode.
+pub const READER_VERSION: i64 = 49;
 
 /// The first reader that keeps what it does not read (see
 /// [`READER_VERSION`]). A file carrying content its writer did not read,
@@ -460,6 +465,8 @@ mod schema_doc_tests {
                 anchor: Some(Anchor::BottomRight),
                 offset: Some([0.0, -40.0]),
             }),
+            // The app form's side map, never written to a file.
+            time_specs: None,
             extra: Default::default(),
         }
     }
@@ -560,6 +567,13 @@ mod schema_doc_tests {
                 }),
             }),
             keyframes: vec![full_keyframe()],
+            // Musical time and the beat fields: documented with their
+            // behaviour (docs/BEAT-SYNC.md S10), not before it.
+            time_specs: None,
+            beat_clock: None,
+            after: None,
+            pulse: None,
+            shake: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -679,9 +693,14 @@ mod schema_doc_tests {
                 canvas_height: 1080.0,
                 background_color_hex: Some("0E1726".into()),
                 layers: vec![],
+                beat_clock: None,
+                sequence: None,
+                flash: None,
             }),
             palette: None,
             looped: Some(true),
+            beat_grid: None,
+            provenance: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -738,6 +757,9 @@ mod schema_doc_tests {
             gif_export_fps: 10.0,
             video_export_width: None,
             video_export_height: None,
+            beat_clock: None,
+            sequence: None,
+            flash: None,
             extra: serde_json::Map::new(),
         }
     }

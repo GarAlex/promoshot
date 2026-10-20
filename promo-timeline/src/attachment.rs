@@ -920,6 +920,11 @@ mod tests {
             releases: Vec::new(),
             duration_rule: None,
             keyframes: Vec::new(),
+            time_specs: None,
+            beat_clock: None,
+            after: None,
+            pulse: None,
+            shake: None,
             extra: Default::default(),
         }
     }

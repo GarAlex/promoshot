@@ -1901,6 +1901,7 @@ pub struct LayerTransition {
     #[serde(default, skip_serializing_if = "is_none")]
     pub from: Option<TransitionEdge>,
     /// Seconds. A transition longer than the layer is clamped to it.
+    #[schemars(with = "crate::musical::SecondsOrMusical")]
     pub duration: f64,
     #[serde(default, skip_serializing_if = "is_none")]
     pub easing: Option<Easing>,
@@ -2380,6 +2381,14 @@ pub struct CompositionSettings {
     pub gif_export_fps: f64,
     pub video_export_width: Option<f64>,
     pub video_export_height: Option<f64>,
+    /// Which audio's beat grid drives musical time values
+    /// (`crate::musical`), and where its source second 0 sits.
+    pub beat_clock: Option<crate::musical::BeatClock>,
+    /// Layers laid back to back, each for a length — parsed and kept;
+    /// resolved from slice 3.
+    pub sequence: Option<Vec<crate::musical::SequenceEntry>>,
+    /// Flashes on the beat grid — parsed and kept; expanded from slice 6.
+    pub flash: Option<crate::musical::OneOrMany<crate::musical::Flash>>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra` (review
     /// 2026-09-27, P2-44).
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -2448,6 +2457,9 @@ impl Default for CompositionSettings {
             gif_export_fps: 10.0,
             video_export_width: None,
             video_export_height: None,
+            beat_clock: None,
+            sequence: None,
+            flash: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -2500,6 +2512,9 @@ struct CompositionSettingsWire {
     gif_export_fps: Option<f64>,
     video_export_width: Option<f64>,
     video_export_height: Option<f64>,
+    beat_clock: Option<crate::musical::BeatClock>,
+    sequence: Option<Vec<crate::musical::SequenceEntry>>,
+    flash: Option<crate::musical::OneOrMany<crate::musical::Flash>>,
     #[serde(flatten)]
     extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -2595,6 +2610,9 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             gif_export_fps: w.gif_export_fps.unwrap_or(dflt.gif_export_fps),
             video_export_width: w.video_export_width,
             video_export_height: w.video_export_height,
+            beat_clock: w.beat_clock,
+            sequence: w.sequence,
+            flash: w.flash,
             extra: w.extra,
         })
     }
@@ -2658,6 +2676,12 @@ impl Serialize for CompositionSettings {
             video_export_width: &'a Option<f64>,
             #[serde(skip_serializing_if = "is_none")]
             video_export_height: &'a Option<f64>,
+            #[serde(skip_serializing_if = "is_none")]
+            beat_clock: &'a Option<crate::musical::BeatClock>,
+            #[serde(skip_serializing_if = "is_none")]
+            sequence: &'a Option<Vec<crate::musical::SequenceEntry>>,
+            #[serde(skip_serializing_if = "is_none")]
+            flash: &'a Option<crate::musical::OneOrMany<crate::musical::Flash>>,
             #[serde(flatten)]
             extra: &'a serde_json::Map<String, serde_json::Value>,
         }
@@ -2704,6 +2728,9 @@ impl Serialize for CompositionSettings {
             gif_export_fps: self.gif_export_fps,
             video_export_width: &self.video_export_width,
             video_export_height: &self.video_export_height,
+            beat_clock: &self.beat_clock,
+            sequence: &self.sequence,
+            flash: &self.flash,
             extra: &self.extra,
         }
         .serialize(s)
@@ -2744,6 +2771,7 @@ pub struct ProjectLayerKeyframe {
     /// When `wait` is set this is also where the last resolve LEFT it, which
     /// is what lets a wait cost no reader version: a reader that knows
     /// nothing of waiting sees a plain number and draws the last good answer.
+    #[schemars(with = "crate::musical::SecondsOrMusical")]
     pub time: f64,
     /// Hold here until one of the layer's `releases` fires.
     ///
@@ -2909,6 +2937,7 @@ pub struct ProjectLayerKeyframe {
     /// logged tool calls. Its two legacy siblings have defaulted since they
     /// were written; a layer keyframe now matches them at the same 0.5 s.
     #[serde(default = "default_transition")]
+    #[schemars(with = "crate::musical::SecondsOrMusical")]
     pub transition_duration: f64,
     /// The share of the gap from the PREVIOUS keyframe spent moving, as a
     /// percentage: 100 starts moving immediately and arrives exactly here,
@@ -2954,6 +2983,10 @@ pub struct ProjectLayerKeyframe {
     /// its place. Image and video layers (sprites included).
     #[serde(default, skip_serializing_if = "is_none")]
     pub placement: Option<Placement>,
+    /// What this keyframe's musical time fields said before resolution —
+    /// see `ProjectLayer::time_specs`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub time_specs: Option<crate::musical::TimeSpecs>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra` (review
     /// 2026-09-27, P2-44: a keyframe field a newer build wrote was dropped by
     /// every re-encode here).
@@ -3368,8 +3401,10 @@ pub struct ProjectLayer {
     pub sort_index: i64,
     pub kind: ProjectLayerKind,
     pub is_enabled: bool,
+    #[schemars(with = "crate::musical::SecondsOrMusical")]
     pub start_time: f64,
     #[serde(default, skip_serializing_if = "is_none")]
+    #[schemars(with = "Option<crate::musical::SecondsOrMusical>")]
     pub duration: Option<f64>,
     /// Seconds of ramp from transparent at the layer's start, and to
     /// transparent at its end. Four opacity keyframes per fading layer was
@@ -3382,8 +3417,10 @@ pub struct ProjectLayer {
     /// layer runs to the end of the project, which the layer itself cannot
     /// see.
     #[serde(default, skip_serializing_if = "is_none")]
+    #[schemars(with = "Option<crate::musical::SecondsOrMusical>")]
     pub fade_in: Option<f64>,
     #[serde(default, skip_serializing_if = "is_none")]
+    #[schemars(with = "Option<crate::musical::SecondsOrMusical>")]
     pub fade_out: Option<f64>,
     /// How the layer enters and leaves, when a plain fade is not it.
     ///
@@ -3524,6 +3561,23 @@ pub struct ProjectLayer {
     /// fewer hold rather than a shift that mis-pairs everything after it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub releases: Vec<LayerRelease>,
+    /// What this layer's musical time fields said before resolution put
+    /// numbers there (`crate::musical`): the app form's side map, which a
+    /// save folds back into the fields and never writes.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub time_specs: Option<crate::musical::TimeSpecs>,
+    /// This layer's own beat clock, over the composition's.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub beat_clock: Option<crate::musical::BeatClock>,
+    /// Start when another layer ends (by id), optionally offset.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub after: Option<crate::musical::After>,
+    /// A punch on the beat grid — parsed and kept; expanded from slice 6.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub pulse: Option<crate::musical::OneOrMany<crate::musical::Pulse>>,
+    /// A shake on the beat grid — parsed and kept; expanded from slice 6.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub shake: Option<crate::musical::OneOrMany<crate::musical::Shake>>,
     #[serde(default)]
     pub keyframes: Vec<ProjectLayerKeyframe>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
@@ -3915,6 +3969,16 @@ pub struct Composition {
     pub background_color_hex: Option<String>,
     #[serde(default)]
     pub layers: Vec<ProjectLayer>,
+    /// The composition's own beat clock — a nested composition never
+    /// inherits its parent's, since it may be placed at several times.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub beat_clock: Option<crate::musical::BeatClock>,
+    /// Layers laid back to back (see `CompositionSettings::sequence`).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub sequence: Option<Vec<crate::musical::SequenceEntry>>,
+    /// Flashes on the beat grid — parsed and kept; expanded from slice 6.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub flash: Option<crate::musical::OneOrMany<crate::musical::Flash>>,
 }
 
 /// `audioGain` (0…4) collapses into `volume` (0…1) when `volume` is absent,
@@ -4043,6 +4107,12 @@ pub struct ProjectResource {
     pub frame: Option<ResourceFrame>,
     #[serde(skip_serializing_if = "is_none")]
     pub looped: Option<bool>,
+    /// A beat grid stated by hand on an audio resource: no detection.
+    #[serde(skip_serializing_if = "is_none")]
+    pub beat_grid: Option<crate::musical::BeatGrid>,
+    /// Where the resource came from (tool, licence, prompt, cost).
+    #[serde(skip_serializing_if = "is_none")]
+    pub provenance: Option<crate::musical::Provenance>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -4125,6 +4195,10 @@ struct ProjectResourceWire {
     frame: Option<ResourceFrame>,
     #[serde(default)]
     looped: Option<bool>,
+    #[serde(default)]
+    beat_grid: Option<crate::musical::BeatGrid>,
+    #[serde(default)]
+    provenance: Option<crate::musical::Provenance>,
     /// Unknown keys captured on decode; the conversion below carries them
     /// into the model so encode preserves them.
     #[serde(flatten)]
@@ -4198,6 +4272,8 @@ impl<'de> Deserialize<'de> for ProjectResource {
             bounds_radius: w.bounds_radius,
             frame: w.frame,
             looped: w.looped,
+            beat_grid: w.beat_grid,
+            provenance: w.provenance,
             extra: w.extra,
         })
     }
@@ -4346,6 +4422,8 @@ impl ProjectResource {
             bounds_radius: None,
             frame: None,
             looped: None,
+            beat_grid: None,
+            provenance: None,
             extra: Default::default(),
         }
     }
@@ -4655,6 +4733,16 @@ impl ProjectMetadata {
             layers.iter().any(|l| l.keyframes.iter().any(pick))
         };
 
+        // 49 is musical time (`crate::musical`): an older reader decodes a
+        // time field as a number and cannot open a file with `{"beats": 4}`
+        // there — and `sequence`, `after` and the beat generators derive
+        // numbers an older writer would edit around and contradict. Only a
+        // musical value a save KEEPS counts: one a person edited to seconds
+        // folds flat.
+        if crate::musical::needs_musical_reader(self) {
+            return crate::musical::MUSICAL_READER;
+        }
+
         // 48 is the lossless reader (`crate::LOSSLESS_READER`): from it
         // every writer keeps what it does not read, so a field added from
         // here that an older reader may simply ignore returns 48 in this
@@ -4671,6 +4759,7 @@ impl ProjectMetadata {
             .iter()
             .any(|l| l.auto_zoom.is_some() || l.keyframes.iter().any(|k| k.needs_rung_48()))
             || resources.iter().any(|r| r.activity.is_some())
+            || crate::musical::carries_ignorable_beat_fields(self)
         {
             return crate::LOSSLESS_READER;
         }
@@ -5159,8 +5248,20 @@ impl ProjectMetadata {
         1
     }
 
+    /// Decodes a project — the file form or the app form. A musical value
+    /// in a time field (`{"beats": 4}`) is lifted aside into its entity's
+    /// `timeSpecs` first (`crate::musical::lift`); a file with none decodes
+    /// exactly as it always has, straight from the text.
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json)
+        let plain = serde_json::from_str(json);
+        if plain.is_ok() {
+            return plain;
+        }
+        match lifted_value(json) {
+            Some(Ok(value)) => serde_json::from_value(value),
+            Some(Err(message)) => Err(serde::de::Error::custom(message)),
+            None => plain,
+        }
     }
 
     /// Every key in `json` that the model does not read (review 2026-09-27,
@@ -5193,6 +5294,13 @@ impl ProjectMetadata {
             }
         }
         let mut out = Vec::new();
+        // A musical value is read — it is lifted aside, as `from_json` does.
+        let lifted = match lifted_value(json) {
+            Some(Ok(value)) => Some(value.to_string()),
+            Some(Err(message)) => return Err(serde::de::Error::custom(message)),
+            None => None,
+        };
+        let json = lifted.as_deref().unwrap_or(json);
         let mut de = serde_json::Deserializer::from_str(json);
         let meta: ProjectMetadata = serde_ignored::deserialize(&mut de, |path| {
             let mut path_steps = Vec::new();
@@ -5276,7 +5384,24 @@ impl ProjectMetadata {
         Ok(out)
     }
 
+    /// The FILE form: every musical value whose field still holds what it
+    /// resolved to goes back at its field, and no `timeSpecs` is written
+    /// (`crate::musical::fold`). A project with no side map encodes exactly
+    /// as it always has.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        if !crate::musical::carries_specs(self) {
+            return serde_json::to_string(self);
+        }
+        let mut value = serde_json::to_value(self)?;
+        crate::musical::fold(&mut value);
+        serde_json::to_string(&value)
+    }
+
+    /// The APP form: numbers in every time field, each musical value's spec
+    /// and resolved seconds beside it in `timeSpecs`. What the FFI hands the
+    /// apps (their decoders read numbers) and what the editor's history
+    /// snapshots hold, so an undo keeps the resolved seconds.
+    pub fn to_app_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 
@@ -5329,6 +5454,18 @@ impl ProjectMetadata {
         self.caption_resource_named(showing)
             .and_then(|resource| resource.caption_style.clone())
             .or_else(|| layer.caption_style.clone())
+    }
+}
+
+/// `json` with its musical values lifted aside, when it holds any: `None`
+/// for text that is not JSON or holds none, an error naming the path of a
+/// malformed one.
+fn lifted_value(json: &str) -> Option<Result<serde_json::Value, String>> {
+    let mut value: serde_json::Value = serde_json::from_str(json).ok()?;
+    match crate::musical::lift(&mut value) {
+        Ok(true) => Some(Ok(value)),
+        Ok(false) => None,
+        Err(message) => Some(Err(message)),
     }
 }
 

@@ -59,6 +59,38 @@
       },
       "type": "object"
     },
+    "After": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/AfterSpec"
+        }
+      ]
+    },
+    "AfterSpec": {
+      "additionalProperties": true,
+      "properties": {
+        "layer": {
+          "type": "string"
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "layer"
+      ],
+      "type": "object"
+    },
     "Anchor": {
       "enum": [
         "topLeft",
@@ -323,6 +355,58 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "BeatClock": {
+      "additionalProperties": true,
+      "properties": {
+        "resourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startTime": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "BeatGrid": {
+      "additionalProperties": true,
+      "properties": {
+        "bpm": {
+          "format": "double",
+          "type": "number"
+        },
+        "offset": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "timeSignature": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bpm"
+      ],
       "type": "object"
     },
     "BeyondEnd": {
@@ -635,6 +719,16 @@
             "null"
           ]
         },
+        "beatClock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BeatClock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "canvasHeight": {
           "format": "double",
           "type": "number"
@@ -643,12 +737,31 @@
           "format": "double",
           "type": "number"
         },
+        "flash": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OneOrMany"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "layers": {
           "default": [],
           "items": {
             "$ref": "#/$defs/ProjectLayer"
           },
           "type": "array"
+        },
+        "sequence": {
+          "items": {
+            "$ref": "#/$defs/SequenceEntry"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         }
       },
       "required": [
@@ -688,6 +801,17 @@
             "null"
           ]
         },
+        "beatClock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BeatClock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "canvasHeight": {
           "default": null,
           "format": "double",
@@ -708,6 +832,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/SceneEnvironment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "flash": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OneOrMany"
             },
             {
               "type": "null"
@@ -761,6 +896,16 @@
           "default": null,
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "sequence": {
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/SequenceEntry"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -1228,6 +1373,44 @@
       ],
       "type": "object"
     },
+    "Flash": {
+      "additionalProperties": true,
+      "properties": {
+        "blendMode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "colorHex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "every": true,
+        "on": true,
+        "opacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "range": true
+      },
+      "type": "object"
+    },
     "Follow": {
       "properties": {
         "clickColorHex": {
@@ -1524,8 +1707,7 @@
     "LayerTransition": {
       "properties": {
         "duration": {
-          "format": "double",
-          "type": "number"
+          "$ref": "#/$defs/TimeValue"
         },
         "easing": {
           "anyOf": [
@@ -1734,6 +1916,76 @@
         "pathResourceID"
       ],
       "type": "object"
+    },
+    "MusicalTime": {
+      "additionalProperties": false,
+      "properties": {
+        "bar": {
+          "type": "number"
+        },
+        "bars": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "beat": {
+          "type": "number"
+        },
+        "beats": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "near": {
+          "type": "number"
+        },
+        "snap": {
+          "enum": [
+            "beat",
+            "downbeat",
+            "bar"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "OneOrMany": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Flash"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/Flash"
+        }
+      ]
+    },
+    "OneOrMany2": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Pulse"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/Pulse"
+        }
+      ]
+    },
+    "OneOrMany3": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Shake"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/Shake"
+        }
+      ]
     },
     "PaletteColor": {
       "properties": {
@@ -2285,6 +2537,16 @@
             }
           ]
         },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/After"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "audioFocus": {
           "type": [
             "boolean",
@@ -2295,6 +2557,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/AutoZoom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "beatClock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BeatClock"
             },
             {
               "type": "null"
@@ -2358,10 +2630,13 @@
           ]
         },
         "duration": {
-          "format": "double",
-          "type": [
-            "number",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "durationRule": {
@@ -2385,17 +2660,23 @@
           ]
         },
         "fadeIn": {
-          "format": "double",
-          "type": [
-            "number",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "fadeOut": {
-          "format": "double",
-          "type": [
-            "number",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "floor": {
@@ -2505,6 +2786,16 @@
         "name": {
           "type": "string"
         },
+        "pulse": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OneOrMany2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "releases": {
           "items": {
             "$ref": "#/$defs/LayerRelease"
@@ -2515,6 +2806,16 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "shake": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OneOrMany3"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "sortIndex": {
@@ -2528,8 +2829,16 @@
           ]
         },
         "startTime": {
-          "format": "double",
-          "type": "number"
+          "$ref": "#/$defs/TimeValue"
+        },
+        "timeSpecs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TimeSpec"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "timing": {
           "anyOf": [
@@ -2836,8 +3145,16 @@
           ]
         },
         "time": {
-          "format": "double",
-          "type": "number"
+          "$ref": "#/$defs/TimeValue"
+        },
+        "timeSpecs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TimeSpec"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "tintAmount": {
           "format": "double",
@@ -2857,9 +3174,8 @@
           ]
         },
         "transitionDuration": {
-          "default": 0.5,
-          "format": "double",
-          "type": "number"
+          "$ref": "#/$defs/TimeValue",
+          "default": 0.5
         },
         "transitionPercent": {
           "format": "double",
@@ -2961,6 +3277,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/BackgroundStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "beatGrid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BeatGrid"
             },
             {
               "type": "null"
@@ -3146,6 +3472,16 @@
             }
           ]
         },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "recipe": {
           "anyOf": [
             {
@@ -3265,6 +3601,93 @@
         "particles"
       ],
       "type": "string"
+    },
+    "Provenance": {
+      "additionalProperties": true,
+      "properties": {
+        "cost": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Pulse": {
+      "additionalProperties": true,
+      "properties": {
+        "amount": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "decay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "every": true,
+        "on": true,
+        "property": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "range": true
+      },
+      "type": "object"
     },
     "Rect": {
       "maxItems": 2,
@@ -3463,6 +3886,75 @@
             "null"
           ]
         }
+      },
+      "type": "object"
+    },
+    "SequenceEntry": {
+      "additionalProperties": true,
+      "properties": {
+        "bars": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "beats": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "layer": {
+          "type": "string"
+        },
+        "seconds": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "layer"
+      ],
+      "type": "object"
+    },
+    "Shake": {
+      "additionalProperties": true,
+      "properties": {
+        "amplitude": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "decay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "every": true,
+        "on": true,
+        "range": true
       },
       "type": "object"
     },
@@ -4014,6 +4506,44 @@
         }
       },
       "type": "object"
+    },
+    "TimeSpec": {
+      "properties": {
+        "label": {
+          "default": "",
+          "type": "string"
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seconds": {
+          "format": "double",
+          "type": "number"
+        },
+        "spec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "TimeValue": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/MusicalTime"
+        }
+      ]
     },
     "TimingAnchor": {
       "properties": {

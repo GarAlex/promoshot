@@ -45,6 +45,24 @@ pub enum Command {
         #[serde(default)]
         duration: Option<f64>,
     },
+    /// One time field as seconds or as a musical value (`{"beats": 4}`,
+    /// `{"bar": 9}`, `{"snap": "beat", "near": 12.3}` — docs/BEAT-SYNC.md
+    /// §1): the one door for setting a musical value. `field` is a layer's
+    /// `startTime`, `duration`, `fadeIn`, `fadeOut`,
+    /// `transitionIn.duration` or `transitionOut.duration`, or with
+    /// `keyframeID` a keyframe's `time` or `transitionDuration`. Seconds
+    /// set the number and drop the spec; a musical value keeps the field's
+    /// number until the beat grid resolves it. A length field refuses a
+    /// position.
+    #[serde(rename_all = "camelCase")]
+    SetTime {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        #[serde(default, rename = "keyframeID")]
+        keyframe_id: Option<String>,
+        field: String,
+        value: promo_model::TimeValue,
+    },
     #[serde(rename_all = "camelCase")]
     SetLayerAudioFocus {
         #[serde(rename = "layerID")]
@@ -853,6 +871,132 @@ fn camera_move(layer: &mut promo_model::ProjectLayer, args: CameraMoveArgs) -> R
     Ok(())
 }
 
+/// `SetTime`: one time field of a layer, or of one of its keyframes, as
+/// seconds or as a musical value.
+fn set_time(
+    layer: &mut promo_model::ProjectLayer,
+    keyframe_id: Option<&str>,
+    field: &str,
+    value: &promo_model::TimeValue,
+) -> Result<(), String> {
+    use promo_model::musical;
+    use promo_model::TimeValue;
+    let fields = if keyframe_id.is_some() {
+        musical::KEYFRAME_TIME_FIELDS
+    } else {
+        musical::LAYER_TIME_FIELDS
+    };
+    if !fields.contains(&field) {
+        return Err(format!(
+            "{field} is not a time field here — one of {}",
+            fields.join(", ")
+        ));
+    }
+    // Positions name a point on the grid; only these fields are points.
+    let takes_position = matches!(field, "startTime" | "duration" | "time");
+    let (number, entry) = match value {
+        TimeValue::Seconds(n) => {
+            if !n.is_finite() || *n < 0.0 {
+                return Err(format!("bad {field} {n}"));
+            }
+            if field == "duration" && *n <= 0.0 {
+                return Err(format!("bad duration {n}"));
+            }
+            (Some(*n), None)
+        }
+        TimeValue::Musical(m) => {
+            if !m.is_length() && !takes_position {
+                return Err(format!(
+                    "{field} is a length — it takes beats or bars, not a position ({})",
+                    m.canonical_text()
+                ));
+            }
+            (None, Some(*m))
+        }
+    };
+    match keyframe_id {
+        Some(id) => {
+            let keyframe = layer
+                .keyframes
+                .iter_mut()
+                .find(|k| k.id == id)
+                .ok_or_else(|| format!("layer {} has no keyframe {id}", layer.id))?;
+            match (number, entry) {
+                (Some(n), _) => {
+                    musical::set_keyframe_number(keyframe, field, n);
+                    musical::forget(&mut keyframe.time_specs, field);
+                }
+                (None, Some(m)) => {
+                    let current = musical::keyframe_number(keyframe, field).unwrap_or(0.0);
+                    keyframe
+                        .time_specs
+                        .get_or_insert_with(Default::default)
+                        .insert(
+                            field.to_string(),
+                            promo_model::TimeSpec::musical(&m, current),
+                        );
+                }
+                (None, None) => unreachable!(),
+            }
+        }
+        None => match (number, entry) {
+            (Some(n), _) => {
+                if !musical::set_layer_number(layer, field, n) {
+                    return Err(format!("layer {} has no {field} to set", layer.id));
+                }
+                musical::forget(&mut layer.time_specs, field);
+            }
+            (None, Some(m)) => {
+                // Until the grid resolves it, the field keeps the number
+                // it holds — so the spec stands at the next save.
+                let current = match musical::layer_number(layer, field) {
+                    Some(n) => n,
+                    None => {
+                        if !musical::set_layer_number(layer, field, 0.0) {
+                            return Err(format!("layer {} has no {field} to set", layer.id));
+                        }
+                        0.0
+                    }
+                };
+                layer
+                    .time_specs
+                    .get_or_insert_with(Default::default)
+                    .insert(
+                        field.to_string(),
+                        promo_model::TimeSpec::musical(&m, current),
+                    );
+            }
+            (None, None) => unreachable!(),
+        },
+    }
+    Ok(())
+}
+
+/// A layer patch's time fields drop what they said before: the entry in
+/// the layer's `timeSpecs` for every time field the patch names.
+fn forget_patched_times(wire: &mut serde_json::Value, patch: &serde_json::Value) {
+    let Some(patch) = patch.as_object() else {
+        return;
+    };
+    let named = |key: &str| match key.split_once('.') {
+        Some((parent, leaf)) => patch
+            .get(parent)
+            .is_some_and(|p| p.is_null() || p.get(leaf).is_some()),
+        None => patch.contains_key(key),
+    };
+    let Some(specs) = wire.get_mut("timeSpecs").and_then(|v| v.as_object_mut()) else {
+        return;
+    };
+    for key in promo_model::musical::LAYER_TIME_FIELDS {
+        if named(key) {
+            specs.remove(*key);
+        }
+    }
+    if specs.is_empty() {
+        wire.as_object_mut().map(|o| o.remove("timeSpecs"));
+    }
+}
+
 impl Document {
     pub fn open(json: &str) -> Result<Self, String> {
         // A flat stage (rung 30) is read forever and written no more: the
@@ -977,7 +1121,7 @@ impl Document {
             copy.layers = None;
             copy.resources = None;
             copy.composition_settings = Default::default();
-            copy.to_json().unwrap_or_default()
+            copy.to_app_json().unwrap_or_default()
         };
         changes.project = rest(before) != rest(after);
         changes
@@ -1003,8 +1147,12 @@ impl Document {
         &self.meta
     }
 
+    /// The document in the APP form — numbers in every time field, each
+    /// musical value beside its number in `timeSpecs` — which is what the
+    /// apps decode and what the history snapshots hold. A file is written
+    /// through [`Document::saved_json_from`], which folds.
     pub fn to_json(&self) -> Result<String, String> {
-        self.meta.to_json().map_err(|e| e.to_string())
+        self.meta.to_app_json().map_err(|e| e.to_string())
     }
 
     pub fn can_undo(&self) -> bool {
@@ -1212,19 +1360,24 @@ impl Document {
         let mut meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
         self.carry_unread_into(&mut meta);
         meta.min_reader_version = Some(meta.minimum_reader_version());
-        let written = meta.to_json().map_err(|e| e.to_string())?;
         // Below the bags: a key the format does not read, at any depth, as
         // the file held it (the lossless reader, review 2026-09-27, P3-44).
         let Some(source) = &self.unread_source_json else {
-            return Ok(written);
+            // The file form: musical values folded back (`to_json`).
+            return meta.to_json().map_err(|e| e.to_string());
         };
+        let written = meta.to_app_json().map_err(|e| e.to_string())?;
         let mut value: serde_json::Value =
             serde_json::from_str(&written).map_err(|e| e.to_string())?;
         let kept = promo_model::unread::keep_unread(&mut value, source);
+        // Then the file form: a musical value whose number nobody edited
+        // goes back at its field, and `timeSpecs` never reaches the file
+        // (docs/BEAT-SYNC.md §1.3).
+        let folded = promo_model::musical::fold(&mut value);
         // What it carries unread, a reader before the lossless one would
         // drop: the stamp keeps such readers out (rung 48).
         let raised = promo_model::unread::floor_stamp(&mut value, source);
-        if !kept && !raised {
+        if !kept && !folded && !raised {
             return Ok(written);
         }
         serde_json::to_string(&value).map_err(|e| e.to_string())
@@ -1418,6 +1571,21 @@ impl Document {
                 let layer = find(layers, layer_id)?;
                 layer.start_time = *start_time;
                 layer.duration = *duration;
+                promo_model::musical::forget(&mut layer.time_specs, "startTime");
+                promo_model::musical::forget(&mut layer.time_specs, "duration");
+            }
+            Command::SetTime {
+                layer_id,
+                keyframe_id,
+                field,
+                value,
+            } => {
+                set_time(
+                    find(layers, layer_id)?,
+                    keyframe_id.as_deref(),
+                    field,
+                    value,
+                )?;
             }
             Command::SetLayerAudioFocus { layer_id, focus } => {
                 find(layers, layer_id)?.audio_focus = Some(*focus);
@@ -1830,7 +1998,13 @@ impl Document {
                 });
                 let layer = find(layers, layer_id)?;
                 let mut wire = serde_json::to_value(&*layer).map_err(|e| e.to_string())?;
+                // A time field the patch names says what it says now: its
+                // old musical value goes, and a musical value in the patch
+                // moves aside like a file's (`promo_model::musical::lift`).
+                forget_patched_times(&mut wire, &patch);
                 merge_patch(&mut wire, &patch);
+                promo_model::musical::lift_layer(&mut wire)
+                    .map_err(|e| format!("patch rejected by the format: {e}"))?;
                 let patched: promo_model::ProjectLayer = serde_json::from_value(wire)
                     .map_err(|e| format!("patch rejected by the format: {e}"))?;
                 if let Some(resource_id) = &patched.resource_id {
@@ -2046,6 +2220,7 @@ mod tests {
             "renameLayer",
             "setLayerEnabled",
             "setLayerTiming",
+            "setTime",
             "setLayerAudioFocus",
             "setLayerMediaCut",
             "setLayerImageCut",
@@ -4191,5 +4366,172 @@ mod auto_zoom_tests {
         assert_eq!(settings.pace, Some(promo_model::AutoZoomPace::Brisk));
         let w = closeups(&doc)[0].viewport.unwrap();
         assert!((w[2] - 1.0 / 1.4).abs() < 1e-4, "{w:?}");
+    }
+
+    /// A file in musical time, as an agent writes it (docs/BEAT-SYNC.md).
+    fn musical_file() -> serde_json::Value {
+        serde_json::json!({ "id": "P", "name": "P", "createdAt": 0,
+            "state": "recorded", "trimStart": 0, "trimEnd": 8, "videoDuration": 8,
+            "subtitles": [], "compositionSettings": {"beatClock": {"resourceID": "song"}},
+            "futureTop": "kept",
+            "layers": [{ "id": "L", "name": "L", "sortIndex": 0, "kind": "image",
+                         "isEnabled": true, "startTime": {"beat": 1}, "duration": {"beats": 2},
+                         "fadeIn": {"beats": 0.5}, "after": "M",
+                         "keyframes": [{ "id": "K", "time": {"beats": 1},
+                                         "transitionDuration": 0.5 }] },
+                       { "id": "M", "name": "M", "sortIndex": 1, "kind": "image",
+                         "isEnabled": true, "startTime": 4, "duration": 2,
+                         "keyframes": [] }] })
+    }
+
+    fn saved(doc: &Document) -> serde_json::Value {
+        let json = doc.to_json().unwrap();
+        serde_json::from_str(&doc.saved_json_from(&json).unwrap()).unwrap()
+    }
+
+    /// A headless edit to a time field is seconds, even when the seconds
+    /// equal the unresolved placeholder a musical value left there: the
+    /// command drops the spec, so the save does not fold it back.
+    #[test]
+    fn headless_edit_clears_the_spec() {
+        let mut doc = Document::open(&musical_file().to_string()).unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerTiming", "layerID": "L", "startTime": 0.0, "duration": 3.0
+        })))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "updateLayer", "layerID": "L", "patch": { "fadeIn": 0.0 }
+        })))
+        .unwrap();
+        let file = saved(&doc);
+        assert_eq!(file["layers"][0]["startTime"], 0.0);
+        assert_eq!(file["layers"][0]["duration"], 3.0);
+        assert_eq!(file["layers"][0]["fadeIn"], 0.0);
+        // What no command touched stays musical.
+        assert_eq!(
+            file["layers"][0]["keyframes"][0]["time"],
+            serde_json::json!({"beats": 1})
+        );
+        assert_eq!(file["minReaderVersion"], 49);
+        // A patch may itself say beats: it lands as a musical value.
+        doc.apply(&command(serde_json::json!({
+            "kind": "updateLayer", "layerID": "M", "patch": { "fadeOut": {"bars": 1} }
+        })))
+        .unwrap();
+        assert_eq!(
+            saved(&doc)["layers"][1]["fadeOut"],
+            serde_json::json!({"bars": 1})
+        );
+        let err = doc
+            .apply(&command(serde_json::json!({
+                "kind": "updateLayer", "layerID": "M", "patch": { "fadeOut": {"bras": 1} }
+            })))
+            .unwrap_err();
+        assert!(err.contains("unknown key \"bras\""), "{err}");
+    }
+
+    /// `setTime` is the door for a musical value: it writes the spec, a
+    /// length field refuses a position, and seconds flatten the one field.
+    #[test]
+    fn set_time_writes_and_clears_a_musical_value() {
+        let mut doc = Document::open(&musical_file().to_string()).unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "setTime", "layerID": "M", "field": "duration", "value": {"beats": 4}
+        })))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "setTime", "layerID": "L", "keyframeID": "K", "field": "time", "value": 0.75
+        })))
+        .unwrap();
+        let file = saved(&doc);
+        assert_eq!(
+            file["layers"][1]["duration"],
+            serde_json::json!({"beats": 4})
+        );
+        assert_eq!(file["layers"][0]["keyframes"][0]["time"], 0.75);
+        assert_eq!(
+            file["layers"][0]["duration"],
+            serde_json::json!({"beats": 2})
+        );
+        let label = &doc.meta().layers.as_ref().unwrap()[1]
+            .time_specs
+            .as_ref()
+            .unwrap()["duration"]
+            .label;
+        assert_eq!(label, "4 beats");
+        // A malformed value never becomes a command.
+        assert!(serde_json::from_value::<Command>(serde_json::json!({
+            "kind": "setTime", "layerID": "M", "field": "startTime", "value": {"beets": 3}
+        }))
+        .is_err());
+        for (field, value) in [
+            ("fadeIn", serde_json::json!({"bar": 3})),
+            ("sortIndex", serde_json::json!(1)),
+        ] {
+            assert!(
+                doc.apply(&command(serde_json::json!({
+                    "kind": "setTime", "layerID": "M", "field": field, "value": value
+                })))
+                .is_err(),
+                "{field} {value}"
+            );
+        }
+        // Undo walks back through app-form snapshots: the spec is still
+        // beside its number.
+        assert!(doc.undo());
+        // ...and the number the spec resolved to, not a placeholder.
+        assert_eq!(doc.meta().layers.as_ref().unwrap()[1].duration, Some(2.0));
+        assert_eq!(
+            saved(&doc)["layers"][0]["keyframes"][0]["time"],
+            serde_json::json!({"beats": 1})
+        );
+        assert!(doc.undo());
+        assert_eq!(saved(&doc)["layers"][1]["duration"], 2.0);
+        assert!(doc.redo());
+        assert_eq!(
+            saved(&doc)["layers"][1]["duration"],
+            serde_json::json!({"beats": 4})
+        );
+    }
+
+    /// The apps' save: the Swift copy (the app form, without the fields
+    /// it cannot read) goes in, the file form comes out — every unread key
+    /// and beat field back, every unedited spec folded back, no side map;
+    /// an edited value is the only one flattened.
+    #[test]
+    fn the_apps_save_folds_after_keeping_what_it_cannot_read() {
+        let file = musical_file();
+        let opened = ProjectMetadata::from_json(&file.to_string()).unwrap();
+        let mut lossy: serde_json::Value =
+            serde_json::from_str(&opened.to_app_json().unwrap()).unwrap();
+        lossy.as_object_mut().unwrap().remove("futureTop");
+        lossy["compositionSettings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("beatClock");
+        lossy["layers"][0].as_object_mut().unwrap().remove("after");
+        let mut doc = Document::open(&lossy.to_string()).unwrap();
+        doc.absorb_unread(&file.to_string()).unwrap();
+        lossy["layers"][0]["fadeIn"] = serde_json::json!(0.4);
+        let out: serde_json::Value =
+            serde_json::from_str(&doc.saved_json_from(&lossy.to_string()).unwrap()).unwrap();
+        assert_eq!(out["futureTop"], "kept");
+        assert_eq!(
+            out["compositionSettings"]["beatClock"],
+            file["compositionSettings"]["beatClock"]
+        );
+        assert_eq!(out["layers"][0]["after"], "M");
+        assert_eq!(
+            out["layers"][0]["startTime"],
+            file["layers"][0]["startTime"]
+        );
+        assert_eq!(out["layers"][0]["duration"], file["layers"][0]["duration"]);
+        assert_eq!(
+            out["layers"][0]["keyframes"][0]["time"],
+            file["layers"][0]["keyframes"][0]["time"]
+        );
+        assert_eq!(out["layers"][0]["fadeIn"], 0.4);
+        assert!(!out.to_string().contains("timeSpecs"));
+        assert_eq!(out["minReaderVersion"], 49);
     }
 }

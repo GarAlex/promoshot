@@ -447,6 +447,18 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
             if let Some(name) = args.get("name").and_then(Value::as_str) {
                 layers[i].name = name.to_string();
             }
+            // Seconds set here are seconds: a musical value the field held
+            // goes (`promo_model::musical::forget`).
+            let specs = &mut layers[i].time_specs;
+            if start_time.is_some() {
+                promo_model::musical::forget(specs, "startTime");
+            }
+            if explicit_duration.or(probed_duration).is_some() {
+                promo_model::musical::forget(specs, "duration");
+            }
+            if fade_in.is_some() {
+                promo_model::musical::forget(specs, "fadeIn");
+            }
             if let Some(t) = start_time {
                 layers[i].start_time = t;
             }
@@ -704,6 +716,7 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
             let k = &mut layer.keyframes[i];
             if let Some(t) = time {
                 k.time = t;
+                promo_model::musical::forget(&mut k.time_specs, "time");
             }
             if let Some(rule) = placement {
                 k.placement = Some(rule);
