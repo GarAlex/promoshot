@@ -311,7 +311,12 @@ The grid: `beatGrid` on the audio resource —
 first downbeat in the audio's own seconds (0 when absent), and beats per
 bar first. Beat k (0 is beat 1) sits at
 `clock + (offset + k × 60/bpm) / speed` — plain arithmetic, the same
-seconds on every machine. The grid is stated, never detected, for now.
+seconds on every machine. Resolution counts on `beatGrid`; to measure a
+song, `promo beats <song>` (promo_beats) answers its tempo, beats,
+downbeats, sections and a confidence — on a project, cached by content in
+`Resources/.beats/` and the answer from then on (`--refresh` measures
+again). Its `bpm` and `offset` are what `beatGrid` takes; a confidence
+under 0.5 is a guess worth checking by ear.
 
 Back to back, without computing a start: `compositionSettings.sequence`
 (or a composition's own `sequence`) is a list —

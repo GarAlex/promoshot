@@ -808,6 +808,67 @@ pub struct BeatGrid {
     pub extra: Map<String, Value>,
 }
 
+/// A beat tracker's answer for one audio file (docs/BEAT-SYNC.md §3.3): the
+/// cache file's shape, the CLI's `promo beats --json` and the MCP
+/// `promo_beats` answer. Every time is in the audio's own seconds.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BeatAnalysis {
+    pub tracker_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<BeatSource>,
+    pub duration: f64,
+    pub bpm: f64,
+    /// The first downbeat.
+    pub offset: f64,
+    pub time_signature: [u32; 2],
+    /// `uniform` when the beats fit one steady tempo exactly (the beats are
+    /// then that arithmetic grid), else `tracked`.
+    pub grid: String,
+    pub confidence: f64,
+    pub beats: Vec<f64>,
+    pub downbeats: Vec<f64>,
+    pub sections: Vec<BeatSection>,
+}
+
+/// The file an analysis is of: its name, the first 32 hex digits of the
+/// SHA-256 of its bytes (the cache key), its size.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BeatSource {
+    pub filename: String,
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+/// A stretch of bars with one character.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BeatSection {
+    pub index: u32,
+    /// `intro`, `outro`, `drop`, or `section` — best effort.
+    pub label: String,
+    pub start: f64,
+    pub end: f64,
+    /// 1-based.
+    pub start_bar: u32,
+    pub bars: u32,
+    /// 0 (the quietest section) to 1 (the loudest).
+    pub energy: f64,
+}
+
+impl BeatAnalysis {
+    /// The analysis as a stated grid — what resolution counts beats on.
+    pub fn grid(&self) -> BeatGrid {
+        BeatGrid {
+            bpm: self.bpm,
+            offset: Some(self.offset),
+            time_signature: Some(self.time_signature),
+            extra: Map::new(),
+        }
+    }
+}
+
 /// Where a resource came from — the tool, model, licence, prompt and cost
 /// — for credits and AI labels. Every field optional.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]

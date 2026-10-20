@@ -146,3 +146,65 @@ fn a_render_waits_for_a_missing_grid() {
     assert!(!said.contains("no beat grid"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[path = "../../promo-media/tests/support/click_track.rs"]
+mod click_track;
+
+/// `promo beats` answers the tracker's JSON for a file, and for a project
+/// analyses the beat clock's song once, caches it and answers from the
+/// cache after that.
+#[test]
+fn promo_beats_json_shape() {
+    let (samples, _) = click_track::click_track(128.0, 12.0, 44_100.0, None);
+    let dir = folder("beats-cli", &beat_project(None));
+    let song = dir.join("Resources/song.m4a");
+    // A WAV under the resource's name: the tracker reads it by content.
+    std::fs::write(&song, click_track::wav(&samples, 1, 44_100)).unwrap();
+    let promo = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_promo"))
+            .arg("beats")
+            .args(args)
+            .output()
+            .expect("run promo");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let file: Value = serde_json::from_str(&promo(&[song.to_str().unwrap(), "--json"])).unwrap();
+    for key in [
+        "trackerVersion",
+        "source",
+        "duration",
+        "bpm",
+        "offset",
+        "timeSignature",
+        "grid",
+        "confidence",
+        "beats",
+        "downbeats",
+        "sections",
+    ] {
+        assert!(file.get(key).is_some(), "no `{key}`: {file}");
+    }
+    assert!((file["bpm"].as_f64().unwrap() - 128.0).abs() < 0.05);
+    assert_eq!(file["source"]["sha256"].as_str().unwrap().len(), 32);
+    assert!(file.get("fromCache").is_none(), "a bare file has no cache");
+
+    let first: Value = serde_json::from_str(&promo(&[dir.to_str().unwrap(), "--json"])).unwrap();
+    assert_eq!(first["fromCache"], false);
+    let key = first["source"]["sha256"].as_str().unwrap();
+    assert!(dir.join(format!("Resources/.beats/{key}.json")).exists());
+    let again: Value = serde_json::from_str(&promo(&[dir.to_str().unwrap(), "--json"])).unwrap();
+    assert_eq!(again["fromCache"], true);
+    assert_eq!(again["beats"], first["beats"]);
+    let text = promo(&[dir.to_str().unwrap(), "--resource", "song"]);
+    assert!(
+        text.starts_with("128.0") && text.contains(" BPM, 4/4, "),
+        "{text}"
+    );
+    assert!(text.contains("from the project's cache"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

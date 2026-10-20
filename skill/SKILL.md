@@ -136,6 +136,11 @@ its defaults are the source of the first, the person of the second.
      captions land on those boundaries.
    - `promo_media_scenes` — scene-change cuts and the shots between
      them; the cut list when the footage has no silence gaps.
+   - `promo_beats` (headless) — a song's tempo, beats, downbeats and
+     sections; on a project it is cached in `Resources/.beats/` and stays
+     the answer. Put its `bpm` and `offset` in the song's `beatGrid`, point
+     `compositionSettings.beatClock` at it, and times can say
+     `{"beats": 2}` (promo_schema_full topic `beats`).
    - `promo_transcribe` — a transcript with timings, the draft captions
      are cut from (headless it needs whisper-cli + WHISPER_MODEL; the
      app uses Apple's recognizer; without either, captions are typed).

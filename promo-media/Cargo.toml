@@ -17,3 +17,8 @@ thiserror.workspace = true
 # engine) converts a P3 screenshot to sRGB the way ImageIO does in the apps.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
 moxcms = "0.8"
+# The beat tracker (beats.rs): every transcendental from libm, so a beat
+# lands on the same bit on every machine; the cache keyed by SHA-256.
+libm = "0.2"
+sha2 = "0.10"
+serde_json.workspace = true

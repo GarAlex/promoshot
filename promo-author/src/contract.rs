@@ -69,6 +69,12 @@ pub struct Difference {
 /// the two lists disagree on is drift, and the contract's test fails on it.
 pub const HOST_DIFFERENCES: &[Difference] = &[
     Difference {
+        tool: "promo_beats",
+        aspect: Aspect::Tool,
+        only: Host::Headless,
+        why: "the app analyses audio through its own decoder (BEAT-SYNC slice 8)",
+    },
+    Difference {
         tool: "promo_open",
         aspect: Aspect::Tool,
         only: Host::App,
@@ -435,6 +441,23 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "minSeconds": { "type": "number", "description": "Default 0.35" }
                 },
                 "required": ["file"] }
+        }),
+        json!({
+            "name": "promo_beats",
+            "description": "Ears for music: tempo, beats, downbeats, sections, confidence \
+                (song seconds). `file`, or `project` + `resource` (default: the beat \
+                clock's song): cached in Resources/.beats/, authoritative; `refresh` \
+                redoes it. Its bpm/offset go in the song's `beatGrid`.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "file": { "type": "string" },
+                    "project": { "type": "string" },
+                    "resource": { "type": "string" },
+                    "meter": { "type": "integer" },
+                    "bpmHint": { "type": "number" },
+                    "refresh": { "type": "boolean" }
+                },
+                "required": [] }
         }),
         json!({
             "name": "promo_media_scenes",
@@ -868,6 +891,8 @@ pub fn annotations(host: Host, name: &str) -> Value {
         "promo_media_probe" => ("Facts about a media file", true, false, true, false),
         "promo_media_silences" => ("Where a recording goes quiet", true, false, true, false),
         "promo_media_scenes" => ("Where a clip cuts", true, false, true, false),
+        // Writes the analysis into a project's cache, and only there.
+        "promo_beats" => ("The beats of a song", false, false, true, false),
         "promo_transcribe" => ("Words from a recording", true, false, true, false),
         "promo_voices" => ("A provider's voices", true, false, true, true),
         "promo_media_filmstrip" => ("A contact sheet of a clip", false, false, true, false),

@@ -37,3 +37,5 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 moxcms = "0.8"
 # The editor document is one of the loaders the beat tests hold together.
 promo-editor = { path = "../promo-editor" }
+# The beat fixtures are synthesized with libm, as in promo-media's tests.
+libm = "0.2"

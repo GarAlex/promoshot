@@ -2541,6 +2541,7 @@ name = "promo-cli"
 version = "0.3.10"
 dependencies = [
  "image",
+ "libm",
  "moxcms",
  "promo-author",
  "promo-editor",
@@ -2597,9 +2598,12 @@ name = "promo-media"
 version = "0.3.10"
 dependencies = [
  "image",
+ "libm",
  "moxcms",
  "promo-gpu",
  "promo-model",
+ "serde_json",
+ "sha2 0.10.9",
  "thiserror 2.0.20",
 ]
 

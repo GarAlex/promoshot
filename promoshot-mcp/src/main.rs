@@ -381,6 +381,31 @@ where
             media_fence(args, config)?;
             media::scenes(args)
         }
+        "promo_beats" => {
+            let target = if args.get("project").is_some() {
+                fenced_project(args, config)?
+            } else {
+                media_fence(args, config)?;
+                args.get("file")
+                    .and_then(Value::as_str)
+                    .ok_or("`file` (an audio file) or `project` is required")?
+                    .to_string()
+            };
+            let mut argv = vec!["beats".to_string(), target, "--json".into()];
+            if let Some(id) = args.get("resource").and_then(Value::as_str) {
+                argv.extend(["--resource".into(), id.to_string()]);
+            }
+            if let Some(n) = args.get("meter").and_then(Value::as_u64) {
+                argv.extend(["--meter".into(), n.to_string()]);
+            }
+            if let Some(bpm) = args.get("bpmHint").and_then(Value::as_f64) {
+                argv.extend(["--bpm-hint".into(), bpm.to_string()]);
+            }
+            if args.get("refresh").and_then(Value::as_bool) == Some(true) {
+                argv.push("--refresh".into());
+            }
+            run(config, &argv)
+        }
         "promo_transcribe" => {
             media_fence(args, config)?;
             media::transcribe(args)
@@ -906,6 +931,7 @@ mod tests {
                 "promo_media_turntable",
                 "promo_media_filmstrip",
                 "promo_media_silences",
+                "promo_beats",
                 "promo_media_scenes",
                 "promo_transcribe",
                 "promo_init",
@@ -1090,20 +1116,85 @@ mod tests {
             .to_string()
             .len();
         assert!(
-            bytes < 45_000,
+            // 45,000 until promo_beats (BEAT-SYNC slice 4) joined at 0.7 KB,
+            // its prose already cut to the bone.
+            bytes < 46_000,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
         // And the ceiling is not met by dropping tools or their prose.
         let tools = Value::Array(contract::tools(Host::Headless));
         let tools = tools.as_array().unwrap();
-        assert_eq!(tools.len(), 26);
+        assert_eq!(tools.len(), 27);
         assert!(
             tools
                 .iter()
                 .all(|t| t["description"].as_str().is_some_and(|d| d.len() > 40)),
             "every tool still says what it is for"
         );
+    }
+
+    /// AC5: the headless server lists `promo_beats`, read as touching
+    /// nothing but a project's cache, and the app's list does not (its own
+    /// decoder comes in a later slice).
+    #[test]
+    fn tools_list_includes_promo_beats() {
+        let req = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let answer = handle(&req, &config(), &never).unwrap();
+        let tools = answer["result"]["tools"].as_array().unwrap();
+        let beats = tools
+            .iter()
+            .find(|t| t["name"] == "promo_beats")
+            .expect("promo_beats is offered");
+        for key in ["file", "project", "resource", "meter", "bpmHint", "refresh"] {
+            assert!(
+                beats["inputSchema"]["properties"].get(key).is_some(),
+                "promo_beats takes `{key}`"
+            );
+        }
+        assert_eq!(beats["annotations"]["destructiveHint"], false);
+        assert!(!contract::tools(Host::App)
+            .iter()
+            .any(|t| t["name"] == "promo_beats"));
+    }
+
+    /// AC5: `promo_beats` asks the CLI's tracker, file or project, with the
+    /// options it was given, and hands its JSON back as the answer.
+    #[test]
+    fn promo_beats_returns_the_analysis() {
+        let dir = std::env::temp_dir().join(format!("mcp-beats-{}.promo", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let analysis = r#"{"trackerVersion":1,"bpm":128.0,"beats":[0.25,0.71875]}"#;
+        let call = |arguments: Value| {
+            let seen = std::cell::RefCell::new(Vec::new());
+            let req = serde_json::json!({ "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+                "params": { "name": "promo_beats", "arguments": arguments } });
+            let answer = handle(&req, &config(), &|_: &Config, argv: &[String]| {
+                seen.borrow_mut().push(argv.to_vec());
+                Ok(analysis.to_string())
+            })
+            .unwrap();
+            let argv = seen.borrow().first().cloned();
+            (answer, argv)
+        };
+        let (answer, argv) = call(serde_json::json!({ "file": "/tmp/song.wav", "bpmHint": 120 }));
+        let argv = argv.expect("the CLI was asked");
+        assert_eq!(argv[..3], ["beats", "/tmp/song.wav", "--json"]);
+        assert!(
+            argv.windows(2).any(|w| w == ["--bpm-hint", "120"]),
+            "{argv:?}"
+        );
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("\"bpm\":128.0"), "{text}");
+        let (_, argv) = call(serde_json::json!({
+            "project": dir.display().to_string(), "resource": "song", "refresh": true,
+            "meter": 3 }));
+        let argv = argv.unwrap();
+        assert_eq!(argv[0], "beats");
+        assert!(argv.windows(2).any(|w| w == ["--resource", "song"]));
+        assert!(argv.windows(2).any(|w| w == ["--meter", "3"]));
+        assert!(argv.contains(&"--refresh".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

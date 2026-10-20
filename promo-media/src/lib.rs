@@ -10,6 +10,7 @@
 //! single caller.
 
 pub mod activity;
+pub mod beats;
 pub mod conformance;
 pub mod ffmpeg;
 pub mod loudness;

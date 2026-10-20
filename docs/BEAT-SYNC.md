@@ -1,6 +1,6 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 3 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 4 built (2026-10-20); the rest is design. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +627,52 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 4 as built** (2026-10-20):
+- **The tracker** is `promo-media/src/beats.rs` as §3.2 lays it out —
+  `BeatMeter` fed in chunks, its own 64-tap Blackman-windowed sinc
+  resampler (256 fractional phases, each normalised), its own radix-2 FFT,
+  every transcendental from `libm`, sequential `f64` reductions — with
+  these differences:
+  - **Beats are placed on their attack in the waveform.** After the DP and
+    its parabola, each beat moves within ±60 ms to the sample where the
+    next 5 ms most outweigh the 20 ms before. A 23 ms frame and a log
+    band's early rise put frame-level beats up to 2 ms off on the
+    fixtures; on the attack they are within 0.7 ms, and the uniform fit
+    runs on those.
+  - **Edge trimming uses half the MEDIAN beat strength** (the smoothed
+    score's peak within two frames), not half the RMS: accented downbeats
+    made every plain beat after the last downbeat look weak.
+  - **Section features are standardised over a floor** — 1 dB, 5 % bass
+    share, 100 Hz centroid — so a feature that does not move cannot turn
+    its noise into change, and a boundary keeps four bars from either end
+    as well as from other boundaries (a song's last bar is not a section).
+  - **Confidence** is `2 × (on / (on + off) − 0.5)`, clamped: the envelope
+    on the beats against halfway between them.
+- **The wire types** (`BeatAnalysis`, `BeatSource`, `BeatSection`) are in
+  `promo_model::musical`; `BeatAnalysis::grid()` is the stated grid it
+  implies. Nothing resolves on an analysis yet (S5 puts it in the load
+  path); today its `bpm` and `offset` go into `beatGrid` by hand.
+- **Fixtures are synthesized in the tests**, not committed: a noise click
+  and a 180 Hz thump on every beat, a 55 Hz bass note on every downbeat,
+  first downbeat 0.25 s, all `libm`. The loud section is on the 128 BPM
+  track, bars 9–16 — the design put it on 64 BPM, but 30 s at 64 BPM is
+  only eight bars. One golden is committed
+  (`promo-media/tests/golden/click-128.json`) and matches on macOS and in
+  `rust:1.96-bookworm` (linux/arm64), in debug and release.
+- **The cache** is `Resources/.beats/<first 32 hex of SHA-256>.json`
+  (`beats::{cache_path, load_cached, store, analysis_for}`), authoritative
+  once written; `refresh` replaces it. A WAV is read directly; anything
+  else goes through ffmpeg at its own rate and channels. No (path, size,
+  mtime) memo yet.
+- **`promo beats <audio | project> [--resource id] [--json] [--meter n]
+  [--bpm-hint n] [--refresh]`**: on a project, the named audio resource,
+  else the beat clock's, else the only one; `--json` adds `fromCache` in
+  project mode.
+- **`promo_beats` is headless only** (a `HOST_DIFFERENCES` entry: the app
+  analyses through its own decoder in S8). The tool surface ceiling
+  (`the_tool_surface_stays_small`) rose from 45,000 to 46,000 bytes for
+  it. The skill teaches it (and the app's bundled copy follows).
 
 **Slice 3 as built** (2026-10-20):
 - **Derived entries.** A start the sequence or `after` placed, and a length

@@ -34,6 +34,12 @@ USAGE:
     promo model   <file.glb> [--json]
     promo device  <phone|tablet|tablet-portrait|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
+    promo beats   <audio-file | project-dir> [--resource <id>] [--json]
+                  [--meter <n>] [--bpm-hint <n>] [--refresh]
+        the beats of a song: tempo, beats, downbeats, sections, confidence.
+        On a project, the clock's (or the named) audio resource — the
+        analysis is cached in Resources/.beats/ and is the answer from then
+        on; --refresh analyses again
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -129,6 +135,11 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     // agent tool found under the home folder. No project either.
     if command == "skill" {
         return skill(rest).map(|()| ExitCode::SUCCESS);
+    }
+    // Beats take a song or a project, with options of their own.
+    if command == "beats" {
+        println!("{}", beats(rest)?);
+        return Ok(ExitCode::SUCCESS);
     }
     // Media senses take a FILE and a verb, not a project.
     if command == "media" {
@@ -413,6 +424,132 @@ fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
+}
+
+/// `promo beats`: the tracker on one audio file, or on a project's audio
+/// resource through the project's cache.
+fn beats(args: &[String]) -> Result<String, String> {
+    use promo_media::beats::{self, BeatOptions};
+    let mut path: Option<PathBuf> = None;
+    let mut resource: Option<String> = None;
+    let mut json = false;
+    let mut refresh = false;
+    let mut options = BeatOptions::default();
+    let mut i = 0;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let value = || {
+            args.get(i + 1)
+                .cloned()
+                .ok_or_else(|| format!("{flag}: expected a value"))
+        };
+        match flag {
+            "--json" => json = true,
+            "--refresh" => refresh = true,
+            "--resource" => {
+                resource = Some(value()?);
+                i += 1;
+            }
+            "--meter" => {
+                let n = parse_f64(&value()?, flag)?.round();
+                if !(1.0..=16.0).contains(&n) {
+                    return Err("--meter: beats per bar, 1 to 16".into());
+                }
+                options.meter = n as u32;
+                i += 1;
+            }
+            "--bpm-hint" => {
+                options.bpm_hint = Some(parse_f64(&value()?, flag)?);
+                i += 1;
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("beats: unknown option `{other}`\n\n{USAGE}"))
+            }
+            other => path = Some(PathBuf::from(other)),
+        }
+        i += 1;
+    }
+    let path =
+        path.ok_or_else(|| format!("beats: expected an audio file or a project\n\n{USAGE}"))?;
+    let (analysis, cached) = if path.is_dir() {
+        let text = std::fs::read_to_string(path.join("metadata.json"))
+            .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
+        let meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
+        let audio: Vec<&promo_model::ProjectResource> = meta
+            .resources
+            .iter()
+            .flatten()
+            .filter(|r| r.kind == promo_model::ProjectResourceKind::Audio)
+            .collect();
+        let wanted = resource.clone().or_else(|| {
+            meta.composition_settings
+                .beat_clock
+                .as_ref()
+                .and_then(|c| c.resource_id.clone())
+        });
+        let chosen = match wanted {
+            Some(id) => audio
+                .iter()
+                .find(|r| r.id == id)
+                .ok_or_else(|| format!("beats: no audio resource `{id}` in the project"))?,
+            None if audio.len() == 1 => &audio[0],
+            None => {
+                return Err(format!(
+                    "beats: name the song with --resource — the project's audio is {}",
+                    audio
+                        .iter()
+                        .map(|r| format!("`{}`", r.id))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+            }
+        };
+        let file = path.join("Resources").join(&chosen.filename);
+        let (analysis, cached) = beats::analysis_for(&path, &file, options, refresh)?;
+        (analysis, Some(cached))
+    } else {
+        (beats::analyse_file(&path, options)?, None)
+    };
+    if json {
+        let mut value = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
+        if let Some(cached) = cached {
+            value["fromCache"] = serde_json::json!(cached);
+        }
+        return Ok(value.to_string());
+    }
+    let sections: Vec<String> = analysis
+        .sections
+        .iter()
+        .map(|s| {
+            format!(
+                "{} bars {}–{}",
+                s.label,
+                s.start_bar,
+                s.start_bar + s.bars - 1
+            )
+        })
+        .collect();
+    Ok(format!(
+        "{:.3} BPM, {}/{}, first downbeat {:.3} s, {} grid, confidence {:.2} — {} beats, {} bars{}{}",
+        analysis.bpm,
+        analysis.time_signature[0],
+        analysis.time_signature[1],
+        analysis.offset,
+        analysis.grid,
+        analysis.confidence,
+        analysis.beats.len(),
+        analysis.downbeats.len(),
+        if sections.is_empty() {
+            String::new()
+        } else {
+            format!("; sections: {}", sections.join(", "))
+        },
+        match cached {
+            Some(true) => " (from the project's cache)",
+            Some(false) => " (analysed now, cached in the project)",
+            None => "",
+        }
+    ))
 }
 
 #[derive(Default)]
