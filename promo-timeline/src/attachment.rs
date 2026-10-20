@@ -927,6 +927,7 @@ mod tests {
             after: None,
             pulse: None,
             shake: None,
+            generated_by: None,
             extra: Default::default(),
         }
     }

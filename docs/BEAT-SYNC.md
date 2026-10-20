@@ -1,6 +1,6 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 5 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 6 built (2026-10-20); the rest is design. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +627,46 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 6 as built** (2026-10-20):
+- **Expansion** is `promo-timeline/src/beat_effects.rs`, the last step of
+  `resolve_timing` (after the fades, on the final numbers), and its
+  settling the first step: unedited generated content goes before anything
+  resolves, so a new grid or a moved layer re-times it, and a second pass
+  changes nothing.
+- **Signatures** (`musical::signature`) are 16 hex digits of FNV-1a over
+  the entity's JSON with numbers quantised to 1e-5, leaving out `id`,
+  `auto`, `timeSpecs`, `generatedBy` and `sortIndex` — so a value that went
+  through Swift's encoder and back hashes the same. Keyframes are tagged
+  `auto: "beat:<sig>"` (beside Auto zoom's own tags), the flash layer and
+  drawing `generatedBy: "flash:<n>:<sig>"`. `musical::strip_generated` is
+  the one rule, called by `fold` at save and by the settling step.
+- **Ids**: `beat-<layer>-pulse<n>-<k>-{base,peak,rest}`,
+  `beat-<layer>-shake<n>-<k>-{hit,back,settle,rest}`, and `beat-flash-<n>`
+  for the flash layer and its drawing (a rect over the canvas). A pulse
+  over keyed motion gets its `base` key one frame before the peak, ramping
+  from the person's previous key on that track.
+- **Shake** directions are one of eight, from a splitmix64 of the layer's
+  id and the beat index — no trigonometry, no RNG crate.
+- **Section ranges** read `BeatGrids.sections`, filled by the CLI's open
+  from the analysis; in the apps (no cache read yet, S8) a section range is
+  a break.
+- **Flash** is the composition's only; `Composition.flash` stays parsed and
+  not expanded. The design's choice of a deleted-flash test: a generated
+  drawing whose layer is gone means the layer was deleted.
+- **The apps** get generated content from `promo_project_opened` (which now
+  resolves any file that needs the musical reader, not only one with
+  musical values, and copies generated keyframes, layers and resources into
+  the file's own form — `musical::copy_generated`). `PromoTiming.reconcile`
+  replaces a layer's beat keyframes with the core's and, when the project
+  shows a flash layer, its `beat-flash-` layers and drawings. Swift keeps no
+  `generatedBy`; the core carries it by id (`unread::carry_field`), and an
+  edited flash layer's mismatched signature makes it the person's at save.
+- **Engine-input parity**: generated content is ordinary keyframes and an
+  ordinary drawing layer, so no new engine input; `BeatEffectsTests` holds
+  the preview and the image export to the same pixels on a downbeat and off
+  it, and `BeatEffectsCrossPathTests` (Mac) the app's video export to the
+  core's own export, which resolves the generators from the file itself.
 
 **Slice 5 as built** (2026-10-20):
 - **The CLI's open measures** (`Project::open_with` / `from_text_with`):

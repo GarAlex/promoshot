@@ -9,6 +9,7 @@
 pub mod attachment;
 pub mod audio;
 pub mod autozoom;
+pub mod beat_effects;
 pub mod beats;
 pub mod caption;
 pub mod follow;

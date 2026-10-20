@@ -3572,12 +3572,16 @@ pub struct ProjectLayer {
     /// Start when another layer ends (by id), optionally offset.
     #[serde(default, skip_serializing_if = "is_none")]
     pub after: Option<crate::musical::After>,
-    /// A punch on the beat grid — parsed and kept; expanded from slice 6.
+    /// A punch on the beat grid, expanded into owned keyframes.
     #[serde(default, skip_serializing_if = "is_none")]
     pub pulse: Option<crate::musical::OneOrMany<crate::musical::Pulse>>,
-    /// A shake on the beat grid — parsed and kept; expanded from slice 6.
+    /// A shake on the beat grid, expanded into owned keyframes.
     #[serde(default, skip_serializing_if = "is_none")]
     pub shake: Option<crate::musical::OneOrMany<crate::musical::Shake>>,
+    /// Set on a layer a beat generator made (`flash:<n>:<signature>`):
+    /// regenerated on every load, never saved unless a person edited it.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub generated_by: Option<String>,
     #[serde(default)]
     pub keyframes: Vec<ProjectLayerKeyframe>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
@@ -4113,6 +4117,10 @@ pub struct ProjectResource {
     /// Where the resource came from (tool, licence, prompt, cost).
     #[serde(skip_serializing_if = "is_none")]
     pub provenance: Option<crate::musical::Provenance>,
+    /// Set on a resource a beat generator made — see
+    /// `ProjectLayer::generated_by`.
+    #[serde(skip_serializing_if = "is_none")]
+    pub generated_by: Option<String>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -4199,6 +4207,8 @@ struct ProjectResourceWire {
     beat_grid: Option<crate::musical::BeatGrid>,
     #[serde(default)]
     provenance: Option<crate::musical::Provenance>,
+    #[serde(default)]
+    generated_by: Option<String>,
     /// Unknown keys captured on decode; the conversion below carries them
     /// into the model so encode preserves them.
     #[serde(flatten)]
@@ -4274,6 +4284,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             looped: w.looped,
             beat_grid: w.beat_grid,
             provenance: w.provenance,
+            generated_by: w.generated_by,
             extra: w.extra,
         })
     }
@@ -4424,6 +4435,7 @@ impl ProjectResource {
             looped: None,
             beat_grid: None,
             provenance: None,
+            generated_by: None,
             extra: Default::default(),
         }
     }

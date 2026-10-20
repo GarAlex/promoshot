@@ -2695,6 +2695,12 @@
             }
           ]
         },
+        "generatedBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "type": "string"
         },
@@ -3383,6 +3389,12 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "generatedBy": {
+          "type": [
+            "string",
+            "null"
           ]
         },
         "id": {

@@ -153,6 +153,7 @@ impl Project {
             };
             match measured {
                 Ok(found) if found.bpm > 0.0 => {
+                    grids.sections.insert(id.clone(), found.sections.clone());
                     grids.by_resource.insert(id, found.grid());
                 }
                 Ok(_) => problems.push(format!(

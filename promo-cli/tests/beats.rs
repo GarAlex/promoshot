@@ -432,3 +432,53 @@ fn missing_ffmpeg_reports_a_break() {
     assert!(said.contains("could not be measured"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A white flash on every downbeat, rendered by the CLI: the frame on a
+/// downbeat is lit, the frame on an off-beat is not — read off the pixels.
+#[test]
+fn flash_brightens_each_downbeat_frame() {
+    let file = json!({
+        "id": "P", "name": "Flash", "createdAt": 0, "state": "recorded",
+        "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+        "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90, "fps": 30,
+                                "beatClock": {"resourceID": "song", "startTime": 0},
+                                "flash": {"on": "downbeat", "colorHex": "FFFFFF",
+                                          "opacity": 0.8, "duration": {"beats": 0.5}}},
+        "layers": [{"id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+                    "isEnabled": true, "startTime": 0, "duration": 4,
+                    "keyframes": [{"id": "g", "time": 0, "colorHex": "000000"}]}],
+        "resources": [{"id": "song", "kind": "audio", "filename": "song.wav",
+                       "displayName": "Song", "addedAt": 0, "beatGrid": {"bpm": 120}}]
+    });
+    let dir = folder("flash", &file);
+    let brightness = |time: f64| {
+        let out = dir.join(format!("still-{time}.png"));
+        let run = Command::new(env!("CARGO_BIN_EXE_promo"))
+            .args(["still"])
+            .arg(&dir)
+            .args(["--out"])
+            .arg(&out)
+            .args(["--time", &time.to_string()])
+            .output()
+            .expect("run promo");
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        let picture = image::open(&out).expect("a still").to_rgb8();
+        let pixel = picture.get_pixel(80, 45);
+        (u32::from(pixel[0]) + u32::from(pixel[1]) + u32::from(pixel[2])) / 3
+    };
+    for downbeat in [0.0, 2.0] {
+        let lit = brightness(downbeat);
+        assert!(
+            (190..=215).contains(&lit),
+            "the downbeat at {downbeat} s is {lit}, not lit"
+        );
+    }
+    for off in [1.0, 1.5, 3.0] {
+        assert!(brightness(off) < 10, "the off-beat at {off} s is lit");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

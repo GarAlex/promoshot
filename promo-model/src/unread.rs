@@ -135,6 +135,7 @@ fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
     carry_field(&mut into.after, &from.after, mode);
     carry_field(&mut into.pulse, &from.pulse, mode);
     carry_field(&mut into.shake, &from.shake, mode);
+    carry_field(&mut into.generated_by, &from.generated_by, mode);
     keep_opt(&mut into.blend_mode, from.blend_mode, mode);
     carry_transition(&mut into.transition_in, &from.transition_in, mode);
     carry_transition(&mut into.transition_out, &from.transition_out, mode);
@@ -156,6 +157,7 @@ fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode
     carry_map(&mut into.extra, &from.extra, APP_RESOURCE_KEYS, mode);
     carry_field(&mut into.beat_grid, &from.beat_grid, mode);
     carry_field(&mut into.provenance, &from.provenance, mode);
+    carry_field(&mut into.generated_by, &from.generated_by, mode);
     if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
         carry_field(&mut composition.beat_clock, &old.beat_clock, mode);
         carry_field(&mut composition.sequence, &old.sequence, mode);

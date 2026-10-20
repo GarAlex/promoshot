@@ -41,6 +41,9 @@ use crate::beats::Grid;
 #[derive(Debug, Clone, Default)]
 pub struct BeatGrids {
     pub by_resource: BTreeMap<String, BeatGrid>,
+    /// An analysis's sections, by resource id — what a generator's
+    /// `{"section": …}` range names.
+    pub sections: BTreeMap<String, Vec<musical::BeatSection>>,
 }
 
 /// A musical value and the seconds it resolved to.
@@ -121,6 +124,11 @@ pub enum TimingProblem {
         layer: String,
         target: String,
     },
+    /// A beat generator that cannot be expanded as written.
+    Generator {
+        layer: String,
+        why: String,
+    },
 }
 
 impl TimingProblem {
@@ -138,6 +146,7 @@ impl TimingProblem {
                 | TimingProblem::AfterWins { .. }
                 | TimingProblem::AfterCircular { .. }
                 | TimingProblem::FollowsAnOpenEnd { .. }
+                | TimingProblem::Generator { .. }
         )
     }
 }
@@ -199,6 +208,7 @@ impl std::fmt::Display for TimingProblem {
                 "layer \"{layer}\" starts after a layer that (through others) starts after \
                  it — none of them can be placed, and each keeps its stored start"
             ),
+            Self::Generator { layer, why } => write!(f, "layer \"{layer}\": {why}"),
             Self::FollowsAnOpenEnd { layer, target } => write!(
                 f,
                 "layer \"{layer}\" follows \"{target}\", which never ends — give \
@@ -222,6 +232,8 @@ pub struct TimingReport {
 /// and is named in the report.
 pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingReport {
     let mut report = TimingReport::default();
+    // Generated content as written goes first — it is made again at the end.
+    crate::beat_effects::settle(meta);
     let resources = meta.resources.clone().unwrap_or_default();
 
     // A value someone edited stands as seconds, as a save would fold it;
@@ -287,6 +299,39 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             .into_iter()
             .map(TimingProblem::Attachment),
     );
+    // The generators, on the final numbers.
+    let fps = meta
+        .composition_settings
+        .fps
+        .filter(|f| *f > 0.0)
+        .unwrap_or(30.0);
+    let end = crate::composition_duration(meta);
+    let settings = meta.composition_settings.clone();
+    {
+        let sections = scope
+            .clock_resource
+            .as_ref()
+            .and_then(|id| grids.sections.get(id))
+            .map(Vec::as_slice);
+        expand_scope(
+            meta.layers.as_deref_mut().unwrap_or(&mut []),
+            &scope,
+            fps,
+            sections,
+            end,
+            &settings,
+            &mut report,
+        );
+        let flash = crate::beat_effects::Context {
+            grid: scope.grid,
+            fps,
+            sections,
+            end,
+        };
+        report
+            .problems
+            .extend(crate::beat_effects::expand_flash(meta, &flash));
+    }
 
     // Each composition: its own clock, never its parent's — it may be
     // placed at several times. No attachments run inside (as before).
@@ -316,10 +361,55 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         );
         report.problems.extend(plan.problems.iter().cloned());
         report.problems.extend(late);
+        let sections = scope
+            .clock_resource
+            .as_ref()
+            .and_then(|id| grids.sections.get(id))
+            .map(Vec::as_slice);
+        let end = composition
+            .layers
+            .iter()
+            .filter_map(|l| l.duration.map(|d| l.start_time + d))
+            .fold(0.0, f64::max);
+        expand_scope(
+            &mut composition.layers,
+            &scope,
+            fps,
+            sections,
+            end,
+            &settings,
+            &mut report,
+        );
     }
     report.missing_grids.sort();
     report.missing_grids.dedup();
     report
+}
+
+/// Each layer's `pulse` and `shake`, stage members included, on its grid.
+fn expand_scope(
+    layers: &mut [ProjectLayer],
+    scope: &Scope,
+    fps: f64,
+    sections: Option<&[musical::BeatSection]>,
+    end: f64,
+    settings: &promo_model::CompositionSettings,
+    report: &mut TimingReport,
+) {
+    for layer in layers {
+        let ctx = crate::beat_effects::Context {
+            grid: scope.grid_of(layer),
+            fps,
+            sections,
+            end,
+        };
+        report
+            .problems
+            .extend(crate::beat_effects::expand_layer(layer, &ctx, settings));
+        if let Some(members) = layer.members.as_mut() {
+            expand_scope(members, scope, fps, sections, end, settings, report);
+        }
+    }
 }
 
 /// Drops every spec whose field no longer holds its resolved seconds, and
@@ -771,6 +861,8 @@ struct Scope {
     clock_layer: Option<String>,
     /// Layers with a `beatClock` of their own, by id.
     overrides: BTreeMap<String, Grid>,
+    /// The resource the scope's clock counts.
+    clock_resource: Option<String>,
 }
 
 impl Scope {
@@ -787,6 +879,7 @@ impl Scope {
             missing: Vec::new(),
             clock_layer: None,
             overrides: BTreeMap::new(),
+            clock_resource: clock.and_then(|c| c.resource_id.clone()),
         };
         if let Some(clock) = clock {
             let (grid, layer) = scope.grid_for(clock, layers, resources, grids);
@@ -913,6 +1006,7 @@ impl Scope {
             missing: Vec::new(),
             clock_layer: self.clock_layer.clone(),
             overrides: self.overrides.clone(),
+            clock_resource: self.clock_resource.clone(),
         }
     }
 }

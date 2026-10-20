@@ -96,7 +96,8 @@ high.
 
 The rest is in sections headed by the words each answers to, and
 `promo_schema_full {"topics": [...]}` takes any of them: keyframes,
-placement, timing, beats, transitions, swaps, motion, viewport, captions, type,
+placement, timing, beats, beat effects, transitions, swaps, motion, viewport,
+captions, type,
 reveal, backgrounds, palette, frames, look, masks, drawings, media, and
 each feature by its own word.
 
@@ -343,6 +344,40 @@ measured (no file, or a compressed one and no ffmpeg) lays out the same
 way, validate names it as a break, and a render waits for a grid. Every tool writes the resolved seconds where the
 renderers read them and keeps the musical value in the file; set a field
 to seconds and that one value is plain seconds from then on.
+
+## Beat effects — pulse, shake, flash, punch, generator, onbeat
+
+Three generators make keyframes on the beat grid of a layer's clock
+(see beats), so an edit punches, shakes or flashes in time:
+
+- `pulse` on a layer: `{"every": "downbeat", "property": "viewport",
+  "amount": 0.04, "decay": {"beats": 0.5}, "range": {"bar": 9, "bars": 4}}`.
+  `property` is `viewport` (the window tightens by 1/(1+amount) about its
+  centre: a zoom punch), `placement` (the box's height or width grows by
+  1+amount, or the zoom of a layer placed by zoom) or `opacity` (plus
+  amount, within 0..1). On each grid point the value peaks one frame after
+  the beat and eases back over `decay` (half a beat by default).
+- `shake` on a layer: `{"on": "beat", "amplitude": 8, "decay": {"beats":
+  0.25}}` — the layer kicks `amplitude` px out, half back, a quarter, then
+  home, in a direction fixed by the layer and the beat.
+- `flash` in `compositionSettings`: `{"on": "downbeat", "colorHex": "FFFFFF",
+  "opacity": 0.6, "duration": {"beats": 0.25}, "blendMode": "screen"}` — a
+  full-canvas colour over everything, up to `opacity` on each grid point,
+  gone over `duration`.
+
+`every` and `on` mean the same: `beat`, `downbeat`, `bar`, or
+`{"beats": n}` for every nth beat. `range` limits the points:
+`{"bar": 9, "bars": 4}`, `{"beat": 17, "beats": 8}`, `{"section": "drop"}`
+(a label or index from promo_beats), or `{"from": …, "to": …}` (seconds or
+beat positions); always inside the layer's own window. Each takes one
+object or a list. Over keyframes of its own a pulse follows them.
+
+What they make are ordinary keyframes (and, for a flash, one drawing layer
+with its drawing) — every renderer draws them, explain and the apps show
+them — tagged as the generator's, made again on every open (so a new song
+re-times them) and never written to the file. Edit one generated keyframe
+and it is yours: it stays, and that grid point is left alone. Edit the
+flash layer, or delete it, and the flash generator goes with it.
 
 ## Transitions — transition, transitionIn, transitionOut, fade, fadeIn, fadeOut, wipe, dissolve, opacity, edge
 

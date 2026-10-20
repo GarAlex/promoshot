@@ -582,8 +582,27 @@ mod schema_doc_tests {
                 ))),
                 extra: serde_json::Map::new(),
             })),
-            pulse: None,
-            shake: None,
+            pulse: Some(musical::OneOrMany::One(musical::Pulse {
+                every: Some(serde_json::json!("downbeat")),
+                on: None,
+                property: Some("viewport".into()),
+                amount: Some(0.04),
+                decay: Some(musical::TimeValue::Musical(musical::MusicalTime::Beats(
+                    0.5,
+                ))),
+                range: None,
+                extra: serde_json::Map::new(),
+            })),
+            shake: Some(musical::OneOrMany::Many(vec![musical::Shake {
+                every: None,
+                on: Some(serde_json::json!("beat")),
+                amplitude: Some(8.0),
+                decay: None,
+                range: Some(serde_json::json!({"section": "drop"})),
+                extra: serde_json::Map::new(),
+            }])),
+            // Bookkeeping a generator writes, never authored.
+            generated_by: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -716,6 +735,7 @@ mod schema_doc_tests {
                 extra: serde_json::Map::new(),
             }),
             provenance: None,
+            generated_by: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -785,8 +805,18 @@ mod schema_doc_tests {
                 duration: None,
                 extra: serde_json::Map::new(),
             }]),
-            // Parsed but not acted on until its slice (docs/BEAT-SYNC.md).
-            flash: None,
+            flash: Some(musical::OneOrMany::One(musical::Flash {
+                every: None,
+                on: Some(serde_json::json!("downbeat")),
+                color_hex: Some("FFFFFF".into()),
+                opacity: Some(0.6),
+                duration: Some(musical::TimeValue::Musical(musical::MusicalTime::Beats(
+                    0.25,
+                ))),
+                blend_mode: Some("screen".into()),
+                range: Some(serde_json::json!({"bar": 9, "bars": 4})),
+                extra: serde_json::Map::new(),
+            })),
             extra: serde_json::Map::new(),
         }
     }

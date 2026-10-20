@@ -463,10 +463,20 @@ pub fn layer_keeps_musical(layer: &ProjectLayer) -> bool {
 /// Whether any entity of the project carries a side map at all — the
 /// encoder's cue that the file form differs from the app form.
 pub fn carries_specs(meta: &ProjectMetadata) -> bool {
+    let generated =
+        |k: &ProjectLayerKeyframe| k.auto.as_deref().is_some_and(|a| a.starts_with(BEAT_TAG));
     crate::nesting::all_layers(meta).iter().any(|l| {
         // Stage members are in the walk, after their stage.
-        l.time_specs.is_some() || l.keyframes.iter().any(|k| k.time_specs.is_some())
-    })
+        l.time_specs.is_some()
+            || l.generated_by.is_some()
+            || l.keyframes
+                .iter()
+                .any(|k| k.time_specs.is_some() || generated(k))
+    }) || meta
+        .resources
+        .iter()
+        .flatten()
+        .any(|r| r.generated_by.is_some())
 }
 
 // ---------------------------------------------------------------- lift and fold
@@ -677,7 +687,255 @@ pub fn fold(root: &mut Value) -> bool {
         Ok(())
     });
     apply_detaches(root, detached);
-    changed
+    let stripped = strip_generated(root);
+    changed || stripped
+}
+
+/// The tag on a keyframe a beat generator wrote: `auto` = `beat:<signature>`.
+pub const BEAT_TAG: &str = "beat:";
+
+/// A generated entity's signature: 16 hex digits of a 64-bit FNV-1a over
+/// its JSON as written — numbers quantized to 1e-5, so a value that went
+/// through another encoder and back hashes the same — leaving out what is
+/// identity or bookkeeping rather than a value a person edits (`id`,
+/// `auto`, `timeSpecs`, `generatedBy`, a layer's `sortIndex`).
+pub fn signature(value: &Value) -> String {
+    fn canonical(value: &Value, top: bool, out: &mut String) {
+        match value {
+            Value::Object(map) => {
+                out.push('{');
+                for (key, v) in map {
+                    if top
+                        && ["id", "auto", "timeSpecs", "generatedBy", "sortIndex"]
+                            .contains(&key.as_str())
+                    {
+                        continue;
+                    }
+                    out.push_str(key);
+                    out.push(':');
+                    canonical(v, false, out);
+                    out.push(',');
+                }
+                out.push('}');
+            }
+            Value::Array(items) => {
+                out.push('[');
+                for v in items {
+                    canonical(v, false, out);
+                    out.push(',');
+                }
+                out.push(']');
+            }
+            Value::Number(n) => {
+                let q = (n.as_f64().unwrap_or(0.0) * 1e5).round() as i64;
+                out.push_str(&q.to_string());
+            }
+            other => out.push_str(&other.to_string()),
+        }
+    }
+    let mut text = String::new();
+    canonical(value, true, &mut text);
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Whether a keyframe (as JSON) is a beat generator's, as it wrote it.
+pub fn is_unedited_beat_keyframe(keyframe: &Value) -> Option<bool> {
+    let tag = keyframe.get("auto")?.as_str()?.strip_prefix(BEAT_TAG)?;
+    Some(tag == signature(keyframe))
+}
+
+/// Whether a layer or resource (as JSON) is a beat generator's, as it wrote
+/// it: `generatedBy` = `<generator>:<n>:<signature>`.
+pub fn is_unedited_generated(entity: &Value) -> Option<bool> {
+    let tag = entity.get("generatedBy")?.as_str()?;
+    let sig = tag.rsplit(':').next()?;
+    Some(sig == signature(entity))
+}
+
+/// The flash generator a `generatedBy` names: its index.
+pub fn flash_index(generated_by: &str) -> Option<usize> {
+    let mut parts = generated_by.split(':');
+    (parts.next()? == "flash").then_some(())?;
+    parts.next()?.parse().ok()
+}
+
+/// Beat-generated content out of the file form: an unedited generated
+/// keyframe, layer or resource goes (it regenerates on the next load); an
+/// edited one stays as the person's, its tag gone — and an edited or
+/// deleted flash layer takes its generator with it, so the edit sticks.
+pub fn strip_generated(root: &mut Value) -> bool {
+    let mut changed = false;
+    // Keyframes, wherever layers live.
+    let _ = each_entity(root, &mut |entity, object, _| {
+        if entity != Entity::Layer {
+            return Ok(());
+        }
+        if let Some(Value::Array(keyframes)) = object.get_mut("keyframes") {
+            let before = keyframes.len();
+            keyframes.retain(|k| is_unedited_beat_keyframe(k) != Some(true));
+            changed |= keyframes.len() != before;
+            for keyframe in keyframes.iter_mut() {
+                if is_unedited_beat_keyframe(keyframe) == Some(false) {
+                    keyframe.as_object_mut().map(|o| o.remove("auto"));
+                    changed = true;
+                }
+            }
+        }
+        Ok(())
+    });
+    // Generated layers and resources, per scope.
+    let mut retired: Vec<(Option<String>, usize)> = Vec::new();
+    let mut scope_lists: Vec<(Option<String>, &mut Vec<Value>)> = Vec::new();
+    let Some(top) = root.as_object_mut() else {
+        return changed;
+    };
+    let mut resource_flash: Vec<(Option<String>, usize, bool)> = Vec::new();
+    if let Some(Value::Array(resources)) = top.get_mut("resources") {
+        for resource in resources.iter_mut() {
+            if let Some(n) = resource
+                .get("generatedBy")
+                .and_then(Value::as_str)
+                .and_then(flash_index)
+            {
+                resource_flash.push((None, n, is_unedited_generated(resource) == Some(true)));
+            }
+        }
+    }
+    if let Some(Value::Array(layers)) = top.get_mut("layers") {
+        scope_lists.push((None, layers));
+    }
+    for (scope, layers) in scope_lists {
+        let mut seen = Vec::new();
+        layers.retain_mut(|layer| {
+            let Some(tag) = layer.get("generatedBy").and_then(Value::as_str) else {
+                return true;
+            };
+            changed = true;
+            let n = flash_index(tag);
+            if let Some(n) = n {
+                seen.push(n);
+            }
+            if is_unedited_generated(layer) == Some(true) {
+                return false;
+            }
+            // A person's now: the tag goes, and so does its generator.
+            if let Some(n) = n {
+                retired.push((scope.clone(), n));
+            }
+            layer.as_object_mut().map(|o| o.remove("generatedBy"));
+            true
+        });
+        // A generated resource whose layer is gone: the layer was deleted.
+        for (_, n, _) in resource_flash.iter().filter(|(s, _, _)| *s == scope) {
+            if !seen.contains(n) {
+                retired.push((scope.clone(), *n));
+            }
+        }
+    }
+    if let Some(Value::Array(resources)) = top.get_mut("resources") {
+        resources.retain_mut(|resource| {
+            let Some(tag) = resource.get("generatedBy").and_then(Value::as_str) else {
+                return true;
+            };
+            changed = true;
+            if is_unedited_generated(resource) == Some(true) {
+                return false;
+            }
+            let _ = tag;
+            resource.as_object_mut().map(|o| o.remove("generatedBy"));
+            true
+        });
+    }
+    if retired.is_empty() {
+        return changed;
+    }
+    let mut indices: Vec<usize> = retired.into_iter().map(|(_, n)| n).collect();
+    indices.sort_unstable();
+    indices.dedup();
+    if let Some(settings) = top
+        .get_mut("compositionSettings")
+        .and_then(Value::as_object_mut)
+    {
+        match settings.get_mut("flash") {
+            Some(Value::Array(list)) => {
+                for n in indices.iter().rev() {
+                    if *n < list.len() {
+                        list.remove(*n);
+                    }
+                }
+                if list.is_empty() {
+                    settings.remove("flash");
+                }
+            }
+            Some(_) if indices.contains(&0) => {
+                settings.remove("flash");
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Replaces `into`'s beat-generated content with `from`'s (the same
+/// document, resolved): generated keyframes per layer by id path, and
+/// generated layers and resources — leaving every other key of `into` as
+/// it is.
+pub fn copy_generated(from: &Value, into: &mut Value) {
+    let mut generated: std::collections::HashMap<String, Vec<Value>> = Default::default();
+    let mut source = from.clone();
+    let _ = each_entity(&mut source, &mut |entity, object, at| {
+        if entity == Entity::Layer {
+            let keys: Vec<Value> = object
+                .get("keyframes")
+                .and_then(Value::as_array)
+                .map(|ks| {
+                    ks.iter()
+                        .filter(|k| is_unedited_beat_keyframe(k).is_some())
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            generated.insert(at.to_string(), keys);
+        }
+        Ok(())
+    });
+    let _ = each_entity(into, &mut |entity, object, at| {
+        if entity != Entity::Layer {
+            return Ok(());
+        }
+        let Some(keys) = generated.get(at) else {
+            return Ok(());
+        };
+        if let Some(Value::Array(keyframes)) = object.get_mut("keyframes") {
+            keyframes.retain(|k| is_unedited_beat_keyframe(k).is_none());
+            keyframes.extend(keys.iter().cloned());
+        }
+        Ok(())
+    });
+    for list in ["layers", "resources"] {
+        let made: Vec<Value> = from
+            .get(list)
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|v| v.get("generatedBy").is_some())
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Some(Value::Array(items)) = into.get_mut(list) {
+            items.retain(|v| v.get("generatedBy").is_none());
+            items.extend(made);
+        } else if !made.is_empty() {
+            into[list] = Value::Array(made);
+        }
+    }
 }
 
 /// What a hand edit does to a sequence.
