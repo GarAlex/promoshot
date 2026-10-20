@@ -70,6 +70,9 @@ OPTIONS:
     --cap <n>      Refuse rather than render more than n frames
     --size <WxH>   Output size (default: the project's canvas size)
     --json         Machine output: one JSON object on stdout (errors too)
+    --no-analyse   A beat clock's song with no beatGrid is read from the
+                   project's cache (Resources/.beats/) only — by default it
+                   is analysed on open and the analysis cached
 
     `validate` decodes the project and reports, first, anything that will not
     render or has no effect — a field nothing reads, a value that does
@@ -170,7 +173,12 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         println!("{answer}");
         return Ok(ExitCode::SUCCESS);
     }
-    let project = Project::open(Path::new(dir))?;
+    let analysis = if opts.no_analyse {
+        promo_cli::project::Analysis::CacheOnly
+    } else {
+        promo_cli::project::Analysis::Allowed
+    };
+    let project = Project::open_with(Path::new(dir), analysis)?;
 
     // One report, printed once — text or JSON — and with --strict the exit
     // code says whether it had anything in it.
@@ -555,6 +563,9 @@ fn beats(args: &[String]) -> Result<String, String> {
 #[derive(Default)]
 struct Options {
     json: bool,
+    /// Read a beat clock's song from the project's cache only, never
+    /// analysing it on the way in.
+    no_analyse: bool,
     /// `validate`: exit 1 when anything is reported, not only on a decode
     /// failure — for a script or an agent that gates on the exit code.
     strict: bool,
@@ -599,6 +610,11 @@ impl Options {
                 }
                 "--strict" => {
                     opts.strict = true;
+                    i += 1;
+                    continue;
+                }
+                "--no-analyse" => {
+                    opts.no_analyse = true;
                     i += 1;
                     continue;
                 }
@@ -740,25 +756,31 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
     let raw = std::fs::read_to_string(project.dir.join("metadata.json")).unwrap_or_default();
     // The CLI opens every file below with a decoder instead of trusting a
     // listing, which also catches a file that is there but cannot be read.
-    let mut report = promo_timeline::report::file_report(&raw, None).unwrap_or_else(|_| {
-        // The open decoded this very file a moment ago; if it has changed
-        // under us since, report on what was opened.
-        let mut report = promo_timeline::report::Report::default();
-        for problem in &project.attachment_problems {
-            report.warn(problem.clone());
-        }
-        report.findings.extend(
-            promo_timeline::report::report(
-                &project.meta,
-                &promo_timeline::report::Context {
-                    layout: true,
-                    ..Default::default()
-                },
-            )
-            .findings,
-        );
-        report
-    });
+    let mut report = promo_timeline::report::file_report_with(&raw, None, &project.grids)
+        .unwrap_or_else(|_| {
+            // The open decoded this very file a moment ago; if it has changed
+            // under us since, report on what was opened.
+            let mut report = promo_timeline::report::Report::default();
+            for problem in &project.attachment_problems {
+                report.warn(problem.clone());
+            }
+            report.findings.extend(
+                promo_timeline::report::report(
+                    &project.meta,
+                    &promo_timeline::report::Context {
+                        layout: true,
+                        ..Default::default()
+                    },
+                )
+                .findings,
+            );
+            report
+        });
+    // A beat clock whose song could not be measured lays out on a stand-in
+    // tempo: nothing renders as written.
+    for problem in &project.grid_problems {
+        report.breaks(problem.clone());
+    }
     // A layer whose media is gone. `inspect` has always reported these and
     // `validate` did not, so a project with a hole in it came back "ok" and
     // then rendered the hole.

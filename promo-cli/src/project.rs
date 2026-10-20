@@ -20,6 +20,21 @@ pub struct Project {
     /// Beat clocks whose audio has no grid: the nominal grid stood in, and
     /// no render starts until one is stated (docs/BEAT-SYNC.md §2.3).
     pub missing_grids: Vec<String>,
+    /// The grids measured for beat clocks whose song states none: the
+    /// project's cache, or a fresh analysis stored there.
+    pub grids: promo_timeline::BeatGrids,
+    /// Why a clock's song could not be measured — a missing file, no
+    /// ffmpeg for a compressed format. `validate` reports each as a break.
+    pub grid_problems: Vec<String>,
+}
+
+/// Whether opening a project may analyse a song it has no grid for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Analysis {
+    /// Read the cache, analyse and store what it lacks.
+    Allowed,
+    /// Read the cache only (`--no-analyse`).
+    CacheOnly,
 }
 
 /// Why a layer cannot be rendered by this tool.
@@ -59,23 +74,118 @@ pub fn plain_filename(name: &str) -> bool {
 
 impl Project {
     pub fn open(dir: &Path) -> Result<Self, String> {
+        Self::open_with(dir, Analysis::Allowed)
+    }
+
+    pub fn open_with(dir: &Path, analysis: Analysis) -> Result<Self, String> {
         let meta_path = dir.join("metadata.json");
         let text = std::fs::read_to_string(&meta_path)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
-        Self::from_text(dir, &text)
+        Self::from_text_with(dir, &text, analysis)
+    }
+
+    /// The grid of every beat clock's song that states none, measured: the
+    /// project's cache first — authoritative once written — then a fresh
+    /// analysis, stored there (or only used, when the folder is read-only).
+    /// Each song that cannot be measured is named, with why.
+    fn measure_grids(
+        dir: &Path,
+        meta: &ProjectMetadata,
+        analysis: Analysis,
+    ) -> (promo_timeline::BeatGrids, Vec<String>) {
+        use promo_media::beats::{self, BeatOptions};
+        let mut ids: Vec<String> = Vec::new();
+        let mut note = |clock: &Option<promo_model::musical::BeatClock>| {
+            if let Some(id) = clock.as_ref().and_then(|c| c.resource_id.clone()) {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        };
+        note(&meta.composition_settings.beat_clock);
+        for resource in meta.resources.iter().flatten() {
+            if let Some(composition) = &resource.composition {
+                note(&composition.beat_clock);
+            }
+        }
+        for layer in promo_model::nesting::all_layers(meta) {
+            note(&layer.beat_clock);
+        }
+        let mut grids = promo_timeline::BeatGrids::default();
+        let mut problems = Vec::new();
+        for id in ids {
+            let Some(resource) = meta.resources.iter().flatten().find(|r| r.id == id) else {
+                continue;
+            };
+            if resource.beat_grid.is_some()
+                || resource.kind != promo_model::ProjectResourceKind::Audio
+                || !plain_filename(&resource.filename)
+            {
+                continue;
+            }
+            let file = dir.join("Resources").join(&resource.filename);
+            if !file.is_file() {
+                problems.push(format!(
+                    "the beat clock's song \"{id}\" has no file in Resources/ ({}) — its beats \
+                     cannot be measured",
+                    resource.filename
+                ));
+                continue;
+            }
+            let options = BeatOptions {
+                meter: 4,
+                bpm_hint: None,
+            };
+            let measured = match analysis {
+                Analysis::CacheOnly => beats::load_cached(dir, &file).ok_or_else(String::new),
+                Analysis::Allowed => match beats::analysis_for(dir, &file, options, false) {
+                    Ok((found, _)) => Ok(found),
+                    // A folder the analysis cannot be stored in still
+                    // gets its beats, measured for this open only.
+                    Err(stored) => beats::analyse_file(&file, options).map_err(|e| {
+                        if e.is_empty() {
+                            stored
+                        } else {
+                            e
+                        }
+                    }),
+                },
+            };
+            match measured {
+                Ok(found) if found.bpm > 0.0 => {
+                    grids.by_resource.insert(id, found.grid());
+                }
+                Ok(_) => problems.push(format!(
+                    "the beat clock's song \"{id}\" has no beat the tracker can find — set \
+                     \"beatGrid\": {{\"bpm\": …}} on it"
+                )),
+                Err(why) if why.is_empty() => {}
+                Err(why) => problems.push(format!(
+                    "the beats of the clock's song \"{id}\" could not be measured: {why} — set \
+                     \"beatGrid\": {{\"bpm\": …}} on it, or make ffmpeg available"
+                )),
+            }
+        }
+        (grids, problems)
     }
 
     /// The project in `dir` as `text` says — the metadata a caller already
     /// holds (the app's validate hands the core the file it read), its
     /// media from the folder.
     pub fn from_text(dir: &Path, text: &str) -> Result<Self, String> {
+        Self::from_text_with(dir, text, Analysis::Allowed)
+    }
+
+    pub fn from_text_with(dir: &Path, text: &str, analysis: Analysis) -> Result<Self, String> {
         let meta_path = dir.join("metadata.json");
         let mut meta = ProjectMetadata::from_json(text)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
+        // A beat clock's song with no stated grid is measured first.
+        let (grids, grid_problems) = Self::measure_grids(dir, &meta, analysis);
         // Attached layers and musical values become plain numbers before
         // anything reads them, so the renderer never has to know the
         // difference.
-        let timing = promo_timeline::resolve_timing(&mut meta, &Default::default());
+        let timing = promo_timeline::resolve_timing(&mut meta, &grids);
         let attachment_problems: Vec<String> = timing
             .problems
             .iter()
@@ -100,6 +210,8 @@ impl Project {
             resolved,
             attachment_problems,
             missing_grids,
+            grids,
+            grid_problems,
         })
     }
 
@@ -113,6 +225,8 @@ impl Project {
             resolved,
             attachment_problems: self.attachment_problems.clone(),
             missing_grids: self.missing_grids.clone(),
+            grids: self.grids.clone(),
+            grid_problems: self.grid_problems.clone(),
         }
     }
 

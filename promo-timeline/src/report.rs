@@ -215,11 +215,21 @@ pub fn report(meta: &ProjectMetadata, context: &Context) -> Report {
 /// resolution and the nesting walk found, then [`report`] with the raw
 /// text, the folder listing when there is one, and the captions measured.
 pub fn file_report(json: &str, listing: Option<&[String]>) -> Result<Report, String> {
+    file_report_with(json, listing, &crate::BeatGrids::default())
+}
+
+/// [`file_report`] with the beat grids a caller measured — the CLI's open
+/// analyses each beat clock's song (or reads its cache), and validate must
+/// count the beats a render counts.
+pub fn file_report_with(
+    json: &str,
+    listing: Option<&[String]>,
+    grids: &crate::BeatGrids,
+) -> Result<Report, String> {
     let mut meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
     let mut out = Report::default();
-    // One pass for musical values and attachments alike; grids stated on
-    // the resources (analysis joins in slice 5).
-    let timing = crate::resolve_timing(&mut meta, &crate::BeatGrids::default());
+    // One pass for musical values and attachments alike.
+    let timing = crate::resolve_timing(&mut meta, grids);
     for problem in &timing.problems {
         if problem.is_break() {
             out.breaks(problem.to_string());

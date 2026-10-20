@@ -311,12 +311,13 @@ The grid: `beatGrid` on the audio resource —
 first downbeat in the audio's own seconds (0 when absent), and beats per
 bar first. Beat k (0 is beat 1) sits at
 `clock + (offset + k × 60/bpm) / speed` — plain arithmetic, the same
-seconds on every machine. Resolution counts on `beatGrid`; to measure a
-song, `promo beats <song>` (promo_beats) answers its tempo, beats,
-downbeats, sections and a confidence — on a project, cached by content in
-`Resources/.beats/` and the answer from then on (`--refresh` measures
-again). Its `bpm` and `offset` are what `beatGrid` takes; a confidence
-under 0.5 is a guess worth checking by ear.
+seconds on every machine. No `beatGrid`, and promo measures the song when
+it opens the project: tempo, beats and downbeats, cached by content in
+`Resources/.beats/` and the answer from then on — so swapping the song's
+file re-times the whole edit. `promo beats <song>` (promo_beats) shows that
+analysis (with sections and a confidence; `--refresh` measures again); a
+confidence under 0.5 is a guess worth checking by ear, and stating
+`beatGrid` overrides it.
 
 Back to back, without computing a start: `compositionSettings.sequence`
 (or a composition's own `sequence`) is a list —
@@ -337,9 +338,9 @@ leaves the sequence; change only its length and its entry becomes that
 many seconds; move an `after` layer and its `after` goes.
 
 Without a clock, musical values resolve against 120 BPM with beat 1 at
-0 s, and promo_validate names every one. A clock whose audio has no
-`beatGrid` lays out the same way, validate names it, and a render waits
-until the grid is stated. Every tool writes the resolved seconds where the
+0 s, and promo_validate names every one. A clock whose song cannot be
+measured (no file, or a compressed one and no ffmpeg) lays out the same
+way, validate names it as a break, and a render waits for a grid. Every tool writes the resolved seconds where the
 renderers read them and keeps the musical value in the file; set a field
 to seconds and that one value is plain seconds from then on.
 

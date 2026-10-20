@@ -1,6 +1,6 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 4 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 5 built (2026-10-20); the rest is design. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +627,31 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 5 as built** (2026-10-20):
+- **The CLI's open measures** (`Project::open_with` / `from_text_with`):
+  every beat clock's song — the composition settings', a composition's, a
+  layer's — that states no `beatGrid` gets its grid from the project's cache,
+  else a fresh analysis that is stored there (or only used, when the folder
+  cannot be written). `--no-analyse` reads the cache only. A render waits
+  only for a song that could not be measured.
+- **A song that cannot be measured is a break** in `validate` (no file in
+  `Resources/`, a compressed format with no ffmpeg, no beat found), beside
+  slice 2's "has no beat grid yet" warning. `report::file_report_with`
+  takes the grids, so validate counts the beats a render counts.
+- **The apps still read stated grids only**: `promo_project_opened` and
+  the app's re-resolve do not read the cache yet (S8 brings the app's own
+  analysis and the cache together), so a project the CLI analysed opens in
+  the app on the nominal grid with "missing grid" until then.
+- **The hash memo** is in `beats::source_of`: one hash per (path, size,
+  modification time) per process, counted by `beats::files_hashed` for its
+  test.
+- **AC1 and AC2** render through the CLI's video path and read the frames
+  back with ffmpeg (centre pixel of each frame, scaled to 16×9, nearest of
+  sixteen colours). Every cut is within one frame of both the detected and
+  the true beat. The 64 BPM song is 30 s of 32 beats. The first slide
+  starts on beat 1 at 0.25 s, so the show runs to 30.25 s; the design's
+  "32 beats = 30.0 s" holds for the length, not the end time.
 
 **Slice 4 as built** (2026-10-20):
 - **The tracker** is `promo-media/src/beats.rs` as §3.2 lays it out —

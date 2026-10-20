@@ -1090,19 +1090,60 @@ pub fn analyse_file(path: &Path, options: BeatOptions) -> Result<BeatAnalysis, B
 
 /// The file's name, the first 32 hex digits of the SHA-256 of its bytes,
 /// and its size.
+///
+/// Hashing a song is the slow part of finding its cache, so the process
+/// remembers each answer by (path, size, modification time): a file that
+/// changed in either is hashed again.
 pub fn source_of(path: &Path) -> Result<BeatSource, BeatError> {
     use sha2::Digest;
+    use std::sync::atomic::Ordering;
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let stamp = std::fs::metadata(path)
+        .ok()
+        .and_then(|m| Some((m.len(), m.modified().ok()?)));
+    let memo_key = stamp.map(|(size, modified)| (path.to_path_buf(), size, modified));
+    if let Some(key) = &memo_key {
+        if let Some((sha256, bytes)) = memo().lock().ok().and_then(|m| m.get(key).cloned()) {
+            return Ok(BeatSource {
+                filename,
+                sha256,
+                bytes,
+            });
+        }
+    }
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    HASHED.fetch_add(1, Ordering::Relaxed);
     let digest = sha2::Sha256::digest(&bytes);
     let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
-    Ok(BeatSource {
-        filename: path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default(),
+    let source = BeatSource {
+        filename,
         sha256: hex[..32].to_string(),
         bytes: bytes.len() as u64,
-    })
+    };
+    if let (Some(key), Ok(mut memo)) = (memo_key, memo().lock()) {
+        memo.insert(key, (source.sha256.clone(), source.bytes));
+    }
+    Ok(source)
+}
+
+type MemoKey = (PathBuf, u64, std::time::SystemTime);
+
+fn memo() -> &'static std::sync::Mutex<std::collections::HashMap<MemoKey, (String, u64)>> {
+    static MEMO: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<MemoKey, (String, u64)>>,
+    > = std::sync::OnceLock::new();
+    MEMO.get_or_init(Default::default)
+}
+
+static HASHED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// How many times this process has hashed a file's bytes — what the memo
+/// saves, for the tests that hold it to that.
+pub fn files_hashed() -> usize {
+    HASHED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Where an analysis of content `key` lives in a project:
