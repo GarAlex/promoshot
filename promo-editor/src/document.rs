@@ -1575,6 +1575,13 @@ impl Document {
                 layer.duration = *duration;
                 promo_model::musical::forget(&mut layer.time_specs, "startTime");
                 promo_model::musical::forget(&mut layer.time_specs, "duration");
+                // A start stated outright is the layer's own: the rule that
+                // placed it — `after`, the sequence — goes (a hand edit
+                // detaches, docs/BEAT-SYNC.md §5).
+                layer.after = None;
+                if let Some(entries) = meta.composition_settings.sequence.as_mut() {
+                    entries.retain(|e| e.layer != *layer_id);
+                }
             }
             Command::SetTime {
                 layer_id,
@@ -2007,8 +2014,19 @@ impl Document {
                 merge_patch(&mut wire, &patch);
                 promo_model::musical::lift_layer(&mut wire)
                     .map_err(|e| format!("patch rejected by the format: {e}"))?;
-                let patched: promo_model::ProjectLayer = serde_json::from_value(wire)
+                let mut patched: promo_model::ProjectLayer = serde_json::from_value(wire)
                     .map_err(|e| format!("patch rejected by the format: {e}"))?;
+                // A start stated outright detaches the layer from the rule
+                // that placed it, unless the patch names that rule itself.
+                let states_start = patch.get("startTime").is_some();
+                if states_start && patch.get("after").is_none() {
+                    patched.after = None;
+                }
+                if states_start && patch.get("sequence").is_none() {
+                    if let Some(entries) = meta.composition_settings.sequence.as_mut() {
+                        entries.retain(|e| e.layer != *layer_id);
+                    }
+                }
                 if let Some(resource_id) = &patched.resource_id {
                     let known = meta
                         .resources

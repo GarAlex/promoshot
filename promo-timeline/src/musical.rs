@@ -26,7 +26,9 @@
 
 use std::collections::BTreeMap;
 
-use promo_model::musical::{self, BeatClock, BeatGrid, MusicalTime, TimeSpecs};
+use promo_model::musical::{
+    self, After, BeatClock, BeatGrid, MusicalTime, SequenceEntry, TimeSpec, TimeSpecs, TimeValue,
+};
 use promo_model::{
     ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, ProjectResourceKind,
 };
@@ -89,6 +91,36 @@ pub enum TimingProblem {
         layer: String,
         spec: String,
     },
+    /// `after` or a `sequence` entry names a layer the scope does not hold.
+    UnknownLayer {
+        layer: String,
+        field: String,
+        id: String,
+    },
+    /// A layer listed twice in one sequence: the first listing counts.
+    InSequenceTwice {
+        layer: String,
+    },
+    /// A sequenced layer that also says `after` or `timing.start`: the
+    /// sequence places it.
+    SequenceWins {
+        layer: String,
+        over: String,
+    },
+    /// A layer with both `after` and `timing.start`: `after` places it.
+    AfterWins {
+        layer: String,
+    },
+    /// Layers each starting after the other: none of them can be placed,
+    /// and each keeps its stored start.
+    AfterCircular {
+        layer: String,
+    },
+    /// `after` (or the sequence) follows a layer that never ends.
+    FollowsAnOpenEnd {
+        layer: String,
+        target: String,
+    },
 }
 
 impl TimingProblem {
@@ -100,6 +132,12 @@ impl TimingProblem {
                 | TimingProblem::PositionForLength { .. }
                 | TimingProblem::ClockOnItsOwnBeat { .. }
                 | TimingProblem::EndsBeforeItStarts { .. }
+                | TimingProblem::UnknownLayer { .. }
+                | TimingProblem::InSequenceTwice { .. }
+                | TimingProblem::SequenceWins { .. }
+                | TimingProblem::AfterWins { .. }
+                | TimingProblem::AfterCircular { .. }
+                | TimingProblem::FollowsAnOpenEnd { .. }
         )
     }
 }
@@ -137,6 +175,35 @@ impl std::fmt::Display for TimingProblem {
                 "layer \"{layer}\": duration {spec} ends at or before its start — the \
                  stored seconds stand"
             ),
+            Self::UnknownLayer { layer, field, id } => write!(
+                f,
+                "layer \"{layer}\": {field} names \"{id}\", which is no layer here — \
+                 ids are the layers' own, in the same composition"
+            ),
+            Self::InSequenceTwice { layer } => write!(
+                f,
+                "layer \"{layer}\" is in the sequence twice — the first place counts"
+            ),
+            Self::SequenceWins { layer, over } => write!(
+                f,
+                "layer \"{layer}\" is in the sequence and also has {over} — the sequence \
+                 places it; remove one"
+            ),
+            Self::AfterWins { layer } => write!(
+                f,
+                "layer \"{layer}\" has both after and timing.start — after places it; \
+                 remove one"
+            ),
+            Self::AfterCircular { layer } => write!(
+                f,
+                "layer \"{layer}\" starts after a layer that (through others) starts after \
+                 it — none of them can be placed, and each keeps its stored start"
+            ),
+            Self::FollowsAnOpenEnd { layer, target } => write!(
+                f,
+                "layer \"{layer}\" follows \"{target}\", which never ends — give \
+                 \"{target}\" a duration"
+            ),
         }
     }
 }
@@ -157,20 +224,30 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
     let mut report = TimingReport::default();
     let resources = meta.resources.clone().unwrap_or_default();
 
-    // A value someone edited stands as seconds, as a save would fold it.
-    settle_edits(meta.layers.as_deref_mut().unwrap_or(&mut []));
+    // A value someone edited stands as seconds, as a save would fold it;
+    // a sequenced or `after` layer someone moved leaves its rule.
+    settle_edits(
+        meta.layers.as_deref_mut().unwrap_or(&mut []),
+        &mut meta.composition_settings.sequence,
+    );
     for resource in meta.resources.iter_mut().flatten() {
         if let Some(composition) = resource.composition.as_mut() {
-            settle_edits(&mut composition.layers);
+            settle_edits(&mut composition.layers, &mut composition.sequence);
         }
     }
 
-    // The project's scope: the musical pass and the attachments, until
-    // neither moves anything. Each round can only settle what the last one
-    // made known, so the layer count plus one bounds it.
+    // The project's scope: the musical pass, `sequence` and `after`, and
+    // the attachments, until none of them moves anything. Each round can
+    // only settle what the last one made known, so the layer count plus one
+    // bounds it.
     let clock = meta.composition_settings.beat_clock.clone();
     let rounds = meta.layers.as_ref().map_or(0, Vec::len) + 1;
+    let plan = Plan::new(
+        meta.layers.as_deref().unwrap_or(&[]),
+        meta.composition_settings.sequence.as_deref(),
+    );
     let mut attachment_problems = Vec::new();
+    let mut late = Vec::new();
     for _ in 0..rounds {
         let before = numbers(meta.layers.as_deref().unwrap_or(&[]));
         let scope = Scope::new(
@@ -179,8 +256,14 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             &resources,
             grids,
         );
-        positions_and_lengths(meta.layers.as_deref_mut().unwrap_or(&mut []), &scope);
+        let layers = meta.layers.as_deref_mut().unwrap_or(&mut []);
+        positions_and_lengths(layers, &scope);
+        late = plan.place(layers, &scope);
+        // A layer the sequence or `after` places is no attachment's: its
+        // start anchor sits out the attachment pass, and comes back.
+        let held = plan.hold_start_anchors(meta.layers.as_deref_mut().unwrap_or(&mut []));
         attachment_problems = crate::attachment::resolve_attachments(meta);
+        Plan::restore_start_anchors(meta.layers.as_deref_mut().unwrap_or(&mut []), held);
         if numbers(meta.layers.as_deref().unwrap_or(&[])) == before {
             break;
         }
@@ -197,6 +280,8 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         "layers",
         &mut report,
     );
+    report.problems.extend(plan.problems.iter().cloned());
+    report.problems.extend(late);
     report.problems.extend(
         attachment_problems
             .into_iter()
@@ -211,8 +296,17 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             continue;
         };
         let clock = composition.beat_clock.clone();
-        let scope = Scope::new(clock.as_ref(), &composition.layers, &resources, grids);
-        positions_and_lengths(&mut composition.layers, &scope);
+        let plan = Plan::new(&composition.layers, composition.sequence.as_deref());
+        let mut late = Vec::new();
+        for _ in 0..composition.layers.len() + 1 {
+            let before = numbers(&composition.layers);
+            let scope = Scope::new(clock.as_ref(), &composition.layers, &resources, grids);
+            positions_and_lengths(&mut composition.layers, &scope);
+            late = plan.place(&mut composition.layers, &scope);
+            if numbers(&composition.layers) == before {
+                break;
+            }
+        }
         let scope = Scope::new(clock.as_ref(), &composition.layers, &resources, grids);
         finish(
             &mut composition.layers,
@@ -220,46 +314,434 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             &format!("resources[{id}].composition.layers"),
             &mut report,
         );
+        report.problems.extend(plan.problems.iter().cloned());
+        report.problems.extend(late);
     }
     report.missing_grids.sort();
     report.missing_grids.dedup();
     report
 }
 
-/// Drops every spec whose field no longer holds its resolved seconds.
-fn settle_edits(layers: &mut [ProjectLayer]) {
-    for layer in layers {
-        let numbers: Vec<(String, Option<f64>)> = layer
-            .time_specs
-            .iter()
-            .flatten()
-            .map(|(key, _)| (key.clone(), musical::layer_number(layer, key)))
-            .collect();
-        retain_held(&mut layer.time_specs, &numbers);
-        for keyframe in &mut layer.keyframes {
-            let numbers: Vec<(String, Option<f64>)> = keyframe
+/// Drops every spec whose field no longer holds its resolved seconds, and
+/// every derived entry: a rule's number is worked out again each pass, and
+/// one someone moved detaches its layer from the rule — `after` goes, a
+/// sequenced start leaves the sequence, a sequenced length becomes that
+/// many seconds (docs/BEAT-SYNC.md §1.3, the save's fold rule).
+fn settle_edits(layers: &mut [ProjectLayer], sequence: &mut Option<Vec<SequenceEntry>>) {
+    fn walk(layers: &mut [ProjectLayer], detaches: &mut Vec<(String, Option<f64>)>) {
+        for layer in layers {
+            let numbers: Vec<(String, Option<f64>)> = layer
                 .time_specs
                 .iter()
                 .flatten()
-                .map(|(key, _)| (key.clone(), musical::keyframe_number(keyframe, key)))
+                .map(|(key, _)| (key.clone(), musical::layer_number(layer, key)))
                 .collect();
-            retain_held(&mut keyframe.time_specs, &numbers);
+            let start_moved = layer
+                .time_specs
+                .as_ref()
+                .and_then(|m| m.get("startTime"))
+                .filter(|e| e.rule.is_some())
+                .map(|e| {
+                    (
+                        e.rule.clone().unwrap_or_default(),
+                        !e.stands(Some(layer.start_time)),
+                    )
+                });
+            match &start_moved {
+                Some((rule, true)) if rule == "after" => layer.after = None,
+                Some((rule, true)) if rule == "sequence" => {
+                    detaches.push((layer.id.clone(), None));
+                }
+                _ => {
+                    let resized = layer
+                        .time_specs
+                        .as_ref()
+                        .and_then(|m| m.get("duration"))
+                        .filter(|e| e.rule.as_deref() == Some("sequence"))
+                        .is_some_and(|e| !e.stands(layer.duration));
+                    if resized {
+                        if let Some(seconds) = layer.duration {
+                            detaches.push((layer.id.clone(), Some(seconds)));
+                        }
+                    }
+                }
+            }
+            retain_held(&mut layer.time_specs, &numbers);
+            for keyframe in &mut layer.keyframes {
+                let numbers: Vec<(String, Option<f64>)> = keyframe
+                    .time_specs
+                    .iter()
+                    .flatten()
+                    .map(|(key, _)| (key.clone(), musical::keyframe_number(keyframe, key)))
+                    .collect();
+                retain_held(&mut keyframe.time_specs, &numbers);
+            }
+            if let Some(members) = layer.members.as_mut() {
+                walk(members, detaches);
+            }
         }
-        if let Some(members) = layer.members.as_mut() {
-            settle_edits(members);
+    }
+    let mut detaches = Vec::new();
+    walk(layers, &mut detaches);
+    let Some(entries) = sequence.as_mut() else {
+        return;
+    };
+    for (id, seconds) in detaches {
+        match seconds {
+            None => entries.retain(|e| e.layer != id),
+            Some(seconds) => {
+                for entry in entries.iter_mut().filter(|e| e.layer == id) {
+                    *entry = SequenceEntry {
+                        layer: id.clone(),
+                        beats: None,
+                        bars: None,
+                        seconds: Some(seconds),
+                        duration: None,
+                        extra: Default::default(),
+                    };
+                }
+            }
         }
     }
 }
 
+/// Keeps the specs that still hold; drops every derived entry (the pass
+/// derives it again) and every spec someone edited.
 fn retain_held(specs: &mut Option<TimeSpecs>, numbers: &[(String, Option<f64>)]) {
     let Some(map) = specs.as_mut() else { return };
     for (key, number) in numbers {
-        if map.get(key).is_some_and(|entry| !entry.holds(*number)) {
+        if map
+            .get(key)
+            .is_some_and(|entry| entry.rule.is_some() || !entry.holds(*number))
+        {
             map.remove(key);
         }
     }
     if map.is_empty() {
         *specs = None;
+    }
+}
+
+fn find<'a>(layers: &'a [ProjectLayer], id: &str) -> Option<&'a ProjectLayer> {
+    for layer in layers {
+        if layer.id == id {
+            return Some(layer);
+        }
+        if let Some(found) = layer.members.as_deref().and_then(|m| find(m, id)) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn find_mut<'a>(layers: &'a mut [ProjectLayer], id: &str) -> Option<&'a mut ProjectLayer> {
+    for layer in layers {
+        if layer.id == id {
+            return Some(layer);
+        }
+        if let Some(found) = layer.members.as_deref_mut().and_then(|m| find_mut(m, id)) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn name_of(layers: &[ProjectLayer], id: &str) -> String {
+    find(layers, id).map_or_else(|| id.to_string(), |l| l.name.clone())
+}
+
+/// Writes a start a rule derived, with its entry.
+fn place_start(layer: &mut ProjectLayer, rule: &str, seconds: f64) {
+    layer.start_time = seconds;
+    layer
+        .time_specs
+        .get_or_insert_with(Default::default)
+        .insert("startTime".into(), TimeSpec::derived(rule, seconds));
+}
+
+type Link = (String, String, Option<TimeValue>);
+
+/// What `sequence` and `after` say for one scope, checked once: the
+/// members in order, the `after` links, the layers they place, and what
+/// cannot be honoured (docs/BEAT-SYNC.md §5).
+struct Plan {
+    sequence: Vec<SequenceEntry>,
+    afters: Vec<Link>,
+    placed: std::collections::BTreeSet<String>,
+    problems: Vec<TimingProblem>,
+}
+
+impl Plan {
+    fn new(layers: &[ProjectLayer], sequence: Option<&[SequenceEntry]>) -> Plan {
+        let mut plan = Plan {
+            sequence: Vec::new(),
+            afters: Vec::new(),
+            placed: Default::default(),
+            problems: Vec::new(),
+        };
+        for entry in sequence.unwrap_or(&[]) {
+            if find(layers, &entry.layer).is_none() {
+                plan.problems.push(TimingProblem::UnknownLayer {
+                    layer: entry.layer.clone(),
+                    field: "the sequence".into(),
+                    id: entry.layer.clone(),
+                });
+            } else if plan.placed.contains(&entry.layer) {
+                plan.problems.push(TimingProblem::InSequenceTwice {
+                    layer: name_of(layers, &entry.layer),
+                });
+            } else {
+                plan.placed.insert(entry.layer.clone());
+                plan.sequence.push(entry.clone());
+            }
+        }
+        fn walk(layers: &[ProjectLayer], out: &mut Vec<Link>) {
+            for layer in layers {
+                match &layer.after {
+                    Some(After::Layer(id)) => out.push((layer.id.clone(), id.clone(), None)),
+                    Some(After::Spec(spec)) => {
+                        out.push((layer.id.clone(), spec.layer.clone(), spec.offset))
+                    }
+                    None => {}
+                }
+                if let Some(members) = layer.members.as_deref() {
+                    walk(members, out);
+                }
+            }
+        }
+        let mut links = Vec::new();
+        walk(layers, &mut links);
+        for (id, target, offset) in links {
+            let name = name_of(layers, &id);
+            if plan.placed.contains(&id) {
+                plan.problems.push(TimingProblem::SequenceWins {
+                    layer: name,
+                    over: "after".into(),
+                });
+            } else if find(layers, &target).is_none() {
+                plan.problems.push(TimingProblem::UnknownLayer {
+                    layer: name,
+                    field: "after".into(),
+                    id: target,
+                });
+            } else {
+                plan.afters.push((id, target, offset));
+            }
+        }
+        // A chain of `after` that comes back to where it started places
+        // nobody: each of its layers keeps its stored start.
+        let next: std::collections::BTreeMap<String, String> = plan
+            .afters
+            .iter()
+            .map(|(id, target, _)| (id.clone(), target.clone()))
+            .collect();
+        let circular: Vec<String> = plan
+            .afters
+            .iter()
+            .filter(|(id, _, _)| {
+                let mut at = id.clone();
+                for _ in 0..=next.len() {
+                    match next.get(&at) {
+                        Some(target) if target == id => return true,
+                        Some(target) => at = target.clone(),
+                        None => return false,
+                    }
+                }
+                false
+            })
+            .map(|(id, _, _)| id.clone())
+            .collect();
+        for id in &circular {
+            plan.problems.push(TimingProblem::AfterCircular {
+                layer: name_of(layers, id),
+            });
+        }
+        plan.afters.retain(|(id, _, _)| !circular.contains(id));
+        for (id, _, _) in &plan.afters {
+            plan.placed.insert(id.clone());
+        }
+        // A start anchor beside them is overruled, and said so.
+        fn anchors(layers: &[ProjectLayer], plan: &mut Plan) {
+            for layer in layers {
+                if layer.timing.as_ref().is_some_and(|t| t.start.is_some()) {
+                    if plan.sequence.iter().any(|e| e.layer == layer.id) {
+                        plan.problems.push(TimingProblem::SequenceWins {
+                            layer: layer.name.clone(),
+                            over: "timing.start".into(),
+                        });
+                    } else if plan.afters.iter().any(|(id, _, _)| *id == layer.id) {
+                        plan.problems.push(TimingProblem::AfterWins {
+                            layer: layer.name.clone(),
+                        });
+                    }
+                }
+                if let Some(members) = layer.members.as_deref() {
+                    anchors(members, plan);
+                }
+            }
+        }
+        anchors(layers, &mut plan);
+        plan
+    }
+
+    /// Places every sequenced and `after` layer on the numbers as they
+    /// stand; what cannot be placed this round is returned.
+    fn place(&self, layers: &mut [ProjectLayer], scope: &Scope) -> Vec<TimingProblem> {
+        let mut late = Vec::new();
+        // The sequence: back to back, each for its length.
+        let mut previous: Option<(f64, f64, String)> = None;
+        for (index, entry) in self.sequence.iter().enumerate() {
+            let name = name_of(layers, &entry.layer);
+            let Some(layer) = find_mut(layers, &entry.layer) else {
+                continue;
+            };
+            let grid = scope.grid_of(layer);
+            let clocked = !scope.clockless_for(layer);
+            let (start, first) = if index == 0 {
+                // The first member's own start opens the sequence: a beat
+                // as written, or a number snapped to the nearest beat when
+                // a clock counts.
+                if spec_of(&layer.time_specs, "startTime").is_some() || !clocked {
+                    (layer.start_time, start_index(layer, &grid, scope))
+                } else {
+                    let first = grid.snap(musical::SnapUnit::Beat, layer.start_time);
+                    let start = grid.time_at(first);
+                    layer.start_time = start;
+                    (start, first)
+                }
+            } else {
+                match previous.take() {
+                    Some((end, end_index, _)) => {
+                        place_start(layer, "sequence", end);
+                        (end, end_index)
+                    }
+                    None => break,
+                }
+            };
+            let stated = |beats: f64| Some((grid.time_at(first + beats), first + beats));
+            let seconds = |s: f64| {
+                let end = start + s;
+                if clocked {
+                    let snapped = grid.snap(musical::SnapUnit::Beat, end);
+                    if grid.time_at(snapped) > start {
+                        return Some((grid.time_at(snapped), snapped));
+                    }
+                }
+                Some((end, grid.index_at(end)))
+            };
+            let length = if let Some(n) = entry.beats {
+                stated(n)
+            } else if let Some(n) = entry.bars {
+                stated(grid.bars(n))
+            } else if let Some(s) = entry.seconds {
+                seconds(s)
+            } else {
+                match entry.duration {
+                    Some(TimeValue::Seconds(s)) => seconds(s),
+                    Some(TimeValue::Musical(m)) => match grid.length(&m) {
+                        Some(beats) => stated(beats),
+                        None => {
+                            let at = grid.position(&m);
+                            Some((grid.time_at(at), at))
+                        }
+                    },
+                    None => None,
+                }
+            };
+            let end = match length {
+                Some((end, end_index)) => {
+                    let duration = end - start;
+                    layer.duration = Some(duration);
+                    layer
+                        .time_specs
+                        .get_or_insert_with(Default::default)
+                        .insert("duration".into(), TimeSpec::derived("sequence", duration));
+                    Some((end, end_index))
+                }
+                // No length in the entry: the layer's own duration.
+                None => layer
+                    .duration
+                    .map(|d| (start + d, grid.index_at(start + d))),
+            };
+            match end {
+                Some((end, end_index)) => previous = Some((end, end_index, name)),
+                None => {
+                    if let Some(next) = self.sequence.get(index + 1) {
+                        late.push(TimingProblem::FollowsAnOpenEnd {
+                            layer: name_of(layers, &next.layer),
+                            target: name,
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+        // `after`: start where the named layer ends, plus the offset.
+        for (id, target, offset) in &self.afters {
+            let Some(followed) = find(layers, target) else {
+                continue;
+            };
+            let Some(end) = followed.duration.map(|d| followed.start_time + d) else {
+                late.push(TimingProblem::FollowsAnOpenEnd {
+                    layer: name_of(layers, id),
+                    target: followed.name.clone(),
+                });
+                continue;
+            };
+            let Some(layer) = find_mut(layers, id) else {
+                continue;
+            };
+            let grid = scope.grid_of(layer);
+            let start = match offset {
+                None => end,
+                Some(TimeValue::Seconds(n)) => end + n,
+                Some(TimeValue::Musical(m)) => match grid.length(m) {
+                    Some(beats) => grid.time_at(grid.index_at(end) + beats),
+                    None => {
+                        late.push(TimingProblem::PositionForLength {
+                            layer: layer.name.clone(),
+                            field: "after.offset".into(),
+                            spec: m.canonical_text(),
+                        });
+                        end
+                    }
+                },
+            };
+            place_start(layer, "after", start);
+        }
+        late
+    }
+
+    /// Takes the start anchor off every layer this plan places, for the
+    /// attachment pass; [`Plan::restore_start_anchors`] puts it back.
+    fn hold_start_anchors(
+        &self,
+        layers: &mut [ProjectLayer],
+    ) -> Vec<(String, promo_model::LayerTiming)> {
+        let mut held = Vec::new();
+        for id in &self.placed {
+            if let Some(layer) = find_mut(layers, id) {
+                if let Some(timing) = layer.timing.clone().filter(|t| t.start.is_some()) {
+                    layer.timing = timing.end.map(|end| promo_model::LayerTiming {
+                        start: None,
+                        end: Some(end),
+                    });
+                    held.push((id.clone(), timing));
+                }
+            }
+        }
+        held
+    }
+
+    fn restore_start_anchors(
+        layers: &mut [ProjectLayer],
+        held: Vec<(String, promo_model::LayerTiming)>,
+    ) {
+        for (id, timing) in held {
+            if let Some(layer) = find_mut(layers, &id) {
+                layer.timing = Some(timing);
+            }
+        }
     }
 }
 
@@ -601,6 +1083,14 @@ fn finish(layers: &mut [ProjectLayer], scope: &Scope, at: &str, report: &mut Tim
         // The report: every value as written and as resolved.
         for (key, entry) in layer.time_specs.iter().flatten() {
             let Some(spec) = entry.spec.clone() else {
+                // A derived start or length: listed by its rule.
+                if let Some(rule) = entry.rule.clone() {
+                    report.resolved.push(ResolvedTime {
+                        at: format!("{here}.{key}"),
+                        spec: rule,
+                        seconds: musical::layer_number(layer, key).unwrap_or(entry.seconds),
+                    });
+                }
                 continue;
             };
             if clockless {

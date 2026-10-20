@@ -336,7 +336,27 @@ impl TimeSpec {
     /// Whether the spec still stands at a field holding `number`: the
     /// number is the one it resolved to, so nobody edited it.
     pub fn holds(&self, number: Option<f64>) -> bool {
-        self.spec.is_some() && number.is_some_and(|n| (n - self.seconds).abs() <= EPSILON)
+        self.spec.is_some() && self.stands(number)
+    }
+
+    /// Whether the field still holds the seconds this entry resolved to —
+    /// for a spec or a rule alike.
+    pub fn stands(&self, number: Option<f64>) -> bool {
+        number.is_some_and(|n| (n - self.seconds).abs() <= EPSILON)
+    }
+
+    /// The entry for a number a rule derived (`sequence`, `after`).
+    pub fn derived(rule: &str, seconds: f64) -> TimeSpec {
+        TimeSpec {
+            spec: None,
+            rule: Some(rule.to_string()),
+            seconds,
+            label: match rule {
+                "sequence" => "in the sequence".into(),
+                "after" => "after a layer".into(),
+                other => other.into(),
+            },
+        }
     }
 
     /// The spec, decoded — `None` for a rule entry or unreadable text.
@@ -408,8 +428,15 @@ pub fn set_keyframe_number(keyframe: &mut ProjectLayerKeyframe, key: &str, numbe
 /// Forgets what `key` said: the field now holds plain seconds. What every
 /// command that sets a time field calls, so a headless edit to the
 /// placeholder number of an unresolved file does not fold back.
+///
+/// A DERIVED entry (`sequence`, `after`) stays: it is not a value to
+/// forget but a rule's answer, and the next resolution compares the new
+/// number against it — a moved start detaches its layer from the rule.
 pub fn forget(specs: &mut Option<TimeSpecs>, key: &str) {
     if let Some(map) = specs.as_mut() {
+        if map.get(key).is_some_and(|e| e.rule.is_some()) {
+            return;
+        }
         map.remove(key);
         if map.is_empty() {
             *specs = None;
@@ -584,7 +611,10 @@ pub fn lift_layer(layer: &mut Value) -> Result<bool, String> {
 /// when anything changed.
 pub fn fold(root: &mut Value) -> bool {
     let mut changed = false;
-    let _ = each_entity(root, &mut |_, object, _| {
+    // Sequenced layers someone moved or resized, by scope: the sequence
+    // lives on the scope, beside the layers.
+    let mut detached: Vec<(Option<String>, Detach)> = Vec::new();
+    let _ = each_entity(root, &mut |entity, object, at| {
         let Some(specs) = object.remove("timeSpecs") else {
             return Ok(());
         };
@@ -592,6 +622,46 @@ pub fn fold(root: &mut Value) -> bool {
         let Ok(specs) = serde_json::from_value::<TimeSpecs>(specs) else {
             return Ok(());
         };
+        if entity == Entity::Layer {
+            let scope = scope_of(at);
+            let id = object
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let number = |object: &Map<String, Value>, key: &str| {
+                slot_ref(object, key).and_then(Value::as_f64)
+            };
+            let start_moved = specs
+                .get("startTime")
+                .filter(|e| e.rule.is_some())
+                .map(|e| {
+                    (
+                        e.rule.clone().unwrap_or_default(),
+                        !e.stands(number(object, "startTime")),
+                    )
+                });
+            if let Some((rule, true)) = &start_moved {
+                // A hand-placed start: the rule that placed it goes.
+                if rule == "after" {
+                    object.remove("after");
+                } else if rule == "sequence" {
+                    detached.push((scope.clone(), Detach::Leave(id.clone())));
+                }
+            }
+            let start_stood = !matches!(start_moved, Some((_, true)));
+            if let Some(entry) = specs
+                .get("duration")
+                .filter(|e| e.rule.as_deref() == Some("sequence"))
+            {
+                let now = number(object, "duration");
+                if start_stood && !entry.stands(now) {
+                    if let Some(seconds) = now {
+                        detached.push((scope, Detach::Seconds(id, seconds)));
+                    }
+                }
+            }
+        }
         for (key, entry) in &specs {
             let Some(value) = entry.value() else {
                 continue;
@@ -606,7 +676,62 @@ pub fn fold(root: &mut Value) -> bool {
         }
         Ok(())
     });
+    apply_detaches(root, detached);
     changed
+}
+
+/// What a hand edit does to a sequence.
+enum Detach {
+    /// The member's start moved: it leaves the sequence.
+    Leave(String),
+    /// Only its length moved: its entry becomes that many seconds.
+    Seconds(String, f64),
+}
+
+/// The scope a layer path lives in: `None` for the project's layers, the
+/// composition resource's id for its layers.
+fn scope_of(at: &str) -> Option<String> {
+    let rest = at.strip_prefix("resources[")?;
+    Some(rest[..rest.find(']')?].to_string())
+}
+
+fn slot_ref<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
+    match key.split_once('.') {
+        Some((parent, leaf)) => object.get(parent)?.get(leaf),
+        None => object.get(key),
+    }
+}
+
+/// Applies the sequence detaches fold found.
+fn apply_detaches(root: &mut Value, detached: Vec<(Option<String>, Detach)>) {
+    for (scope, detach) in detached {
+        let list = match &scope {
+            None => root
+                .get_mut("compositionSettings")
+                .and_then(|s| s.get_mut("sequence")),
+            Some(id) => root
+                .get_mut("resources")
+                .and_then(Value::as_array_mut)
+                .and_then(|r| {
+                    r.iter_mut()
+                        .find(|r| r.get("id").and_then(Value::as_str) == Some(id.as_str()))
+                })
+                .and_then(|r| r.get_mut("composition"))
+                .and_then(|c| c.get_mut("sequence")),
+        };
+        let Some(Value::Array(entries)) = list else {
+            continue;
+        };
+        let named = |e: &Value, id: &str| e.get("layer").and_then(Value::as_str) == Some(id);
+        match detach {
+            Detach::Leave(id) => entries.retain(|e| !named(e, &id)),
+            Detach::Seconds(id, seconds) => {
+                for entry in entries.iter_mut().filter(|e| named(e, &id)) {
+                    *entry = serde_json::json!({ "layer": id, "seconds": seconds });
+                }
+            }
+        }
+    }
 }
 
 /// Copies every time field and side map of `from` — the same document,

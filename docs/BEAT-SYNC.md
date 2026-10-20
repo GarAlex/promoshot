@@ -1,8 +1,8 @@
 # Beat sync: implementation design
 
-Status: slices 1 and 2 built (2026-10-20); the rest is design. Where
-building changed the design, the "Slice 1 as built" and "Slice 2 as built"
-notes under §9 say what and why. Covers the request in
+Status: slices 1 to 3 built (2026-10-20); the rest is design. Where
+building changed the design, the "Slice N as built" notes under §9 say
+what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
 Owner decisions: the format grows in one direction only, the apps open,
 render and save without flattening, and seconds come from the core.
@@ -627,6 +627,42 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 3 as built** (2026-10-20):
+- **Derived entries.** A start the sequence or `after` placed, and a length
+  the sequence set, carry `timeSpecs` entries with `rule` and no `spec`.
+  They are re-derived every pass: resolution drops them first, and one
+  whose number moved detaches its layer — the same rule `fold` applies at
+  save (a moved start leaves the sequence or loses `after`; a resized
+  sequenced layer's entry becomes `{"layer": id, "seconds": n}`), so a
+  Swift drag is never resolved back. `musical::forget` keeps derived
+  entries, so a command's new number is compared against them.
+- **Commands detach outright.** `SetLayerTiming`, an `UpdateLayer` patch
+  naming `startTime` (unless it also names the rule) and the author tools'
+  layer upsert with a `startTime` drop `after` and the sequence membership
+  directly: a document opened headless is never resolved first (opening
+  edits nothing), so there may be no derived entry to compare against.
+  The author upsert drops `after` only; sequence membership through that
+  tool waits for the save's fold.
+- **Who places a layer:** the sequence, then `after`, then a start anchor.
+  The overruled `timing.start` sits out the attachment pass (held and
+  restored around it), and each overrule is a break that says who won.
+- **The first member's start** is its own: a musical start as written, or
+  a number snapped to the nearest beat when a clock counts — re-snapped on
+  every pass, not a derived entry, so moving the first member moves the
+  whole sequence.
+- **Cycles of `after`** are found up front (following each chain), not by
+  the loop running out: every layer on the circle is named and keeps its
+  stored start; a layer following one of them still resolves.
+- **A member with no length** keeps its own duration; one that never ends
+  stops the sequence there, and the next member is named.
+- **An entry's length wins over the layer's own** `duration`, musical or
+  not, and the file then holds the sequence's number there (as a derived
+  start does). To keep a layer's own musical length, list it with no
+  length: `{"layer": "s4"}`.
+- **The apps re-resolve every scope** (slice-2 gap closed):
+  `PromoTiming.reconcile` copies the core's answer into stage members and
+  composition layers too, and runs when any of them carries `timeSpecs`.
 
 **S2 — Grid and resolution pass (override grids only)**
 - `promo-timeline/src/beats.rs` (`Grid`), `musical.rs` `resolve_timing` (steps 1–4 and 6), `resolve_attachments` made `pub(crate)`, and every caller moved.

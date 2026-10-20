@@ -269,7 +269,7 @@ A keyframe animates a layer over its LOCAL time:
   so, as it also names a fitContent with no resource and a
   fitDependents nothing is anchored to.
 
-## Beats — beats, bars, beat, bar, snap, beatClock, beatGrid, bpm, tempo, music
+## Beats — beats, bars, beat, bar, snap, beatClock, beatGrid, bpm, tempo, music, sequence, after
 
 Times can be musical. These fields take an object in place of seconds:
 a layer's `startTime`, `duration`, `fadeIn`, `fadeOut` and the
@@ -312,6 +312,24 @@ first downbeat in the audio's own seconds (0 when absent), and beats per
 bar first. Beat k (0 is beat 1) sits at
 `clock + (offset + k × 60/bpm) / speed` — plain arithmetic, the same
 seconds on every machine. The grid is stated, never detected, for now.
+
+Back to back, without computing a start: `compositionSettings.sequence`
+(or a composition's own `sequence`) is a list —
+`[{"layer": "s1", "beats": 4}, {"layer": "s2", "bars": 1},
+{"layer": "s3", "seconds": 2}, {"layer": "s4", "duration": {"beats": 2}},
+{"layer": "s5"}]` — each layer starting where the one before ends and
+lasting its entry's length (none keeps its own `duration`). The first
+layer's own `startTime` opens the sequence. With a beat clock, every cut
+lands on the grid: a start in seconds snaps to the nearest beat, and so
+does a `seconds` length's end. A layer's `after`: `"s1"` starts it where
+layer s1 ends, `{"layer": "s1", "offset": 0.5}` (or `{"beats": 1}`) a
+little later — by id, anywhere in the stack, and chains follow through.
+Ids are the same composition's. A layer in the sequence that also has
+`after` or `timing.start`, a layer listed twice, an unknown id, and a
+circle of `after` are breaks — the sequence wins, then `after`, and a
+circle keeps its stored starts. Move a sequenced layer by hand and it
+leaves the sequence; change only its length and its entry becomes that
+many seconds; move an `after` layer and its `after` goes.
 
 Without a clock, musical values resolve against 120 BPM with beat 1 at
 0 s, and promo_validate names every one. A clock whose audio has no

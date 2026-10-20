@@ -575,7 +575,13 @@ mod schema_doc_tests {
                 start_time: None,
                 extra: serde_json::Map::new(),
             }),
-            after: None,
+            after: Some(musical::After::Spec(musical::AfterSpec {
+                layer: "L0".into(),
+                offset: Some(musical::TimeValue::Musical(musical::MusicalTime::Beats(
+                    1.0,
+                ))),
+                extra: serde_json::Map::new(),
+            })),
             pulse: None,
             shake: None,
             extra: serde_json::Map::new(),
@@ -771,8 +777,15 @@ mod schema_doc_tests {
                 start_time: Some(0.0),
                 extra: serde_json::Map::new(),
             }),
-            // Parsed but not acted on until their slices (docs/BEAT-SYNC.md).
-            sequence: None,
+            sequence: Some(vec![musical::SequenceEntry {
+                layer: "L".into(),
+                beats: Some(4.0),
+                bars: None,
+                seconds: None,
+                duration: None,
+                extra: serde_json::Map::new(),
+            }]),
+            // Parsed but not acted on until its slice (docs/BEAT-SYNC.md).
             flash: None,
             extra: serde_json::Map::new(),
         }

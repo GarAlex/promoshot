@@ -461,6 +461,8 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
             }
             if let Some(t) = start_time {
                 layers[i].start_time = t;
+                // Stated outright: `after` no longer places it.
+                layers[i].after = None;
             }
             if let Some(d) = explicit_duration.or(probed_duration) {
                 layers[i].duration = Some(d);
