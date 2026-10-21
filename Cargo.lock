@@ -1874,8 +1874,8 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "local-tts-core"
-version = "0.6.0"
-source = "git+https://github.com/GarAlex/local-tts?tag=v0.6.0#23ccd8e3d9f434b0bcef7f1a1c577091f236edb8"
+version = "0.7.0"
+source = "git+https://github.com/GarAlex/local-tts?tag=v0.7.0#61efef0c129dff71c4ff93e0639ce290aeb674ca"
 dependencies = [
  "cc",
  "flate2",

@@ -20,7 +20,7 @@
 use local_tts_core::{
     compact_english::{CompactEnglish, CompactKind},
     kokoro::Kokoro,
-    Language, SynthesisRequest, Synthesizer,
+    Language, SynthesisRequest, Synthesizer, TimedSynthesizer,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -270,6 +270,28 @@ fn cache() -> &'static Mutex<Cache> {
 /// One local take as WAV bytes. `lexicon`, when the file exists, adds its
 /// pronunciations for this take's engine.
 pub fn synthesize(voice: &str, text: &str, lexicon: Option<&Path>) -> Result<Vec<u8>, String> {
+    run(voice, text, lexicon, false).map(|(wav, _)| wav)
+}
+
+/// [`synthesize`], and each spoken word's time from the voice's own
+/// duration predictor (local-tts 0.7): Kokoro and Kitten report them, the
+/// same request, the same audio; a voice that cannot (Inflect) answers its
+/// audio with no words, and the take is aligned instead. The words are the
+/// engine's normalized ones ("forty", "nine", "dollars").
+pub fn synthesize_timed(
+    voice: &str,
+    text: &str,
+    lexicon: Option<&Path>,
+) -> Result<(Vec<u8>, Option<Vec<local_tts_core::SpokenWord>>), String> {
+    run(voice, text, lexicon, true)
+}
+
+fn run(
+    voice: &str,
+    text: &str,
+    lexicon: Option<&Path>,
+    timed: bool,
+) -> Result<(Vec<u8>, Option<Vec<local_tts_core::SpokenWord>>), String> {
     let (package, speaker) = split_voice(voice)?;
     let root = voices_dir().join(&package);
     if !catalog::installed(&voices_dir()).contains(&package.as_str()) {
@@ -321,11 +343,25 @@ pub fn synthesize(voice: &str, text: &str, lexicon: Option<&Path>) -> Result<Vec
         duration_scale: 1.0,
     };
     let engine = engines.get_mut(&key).expect("inserted above");
-    let audio = match engine {
-        Engine::Kokoro(e) => e.synthesize(&request),
-        Engine::Compact(e) => e.synthesize(&request),
-    }
-    .map_err(|e| explain(&e.to_string()))?;
+    let timed = if timed {
+        match engine {
+            Engine::Kokoro(e) => e.synthesize_timed(&request).ok(),
+            Engine::Compact(e) => e.synthesize_timed(&request).ok(),
+        }
+    } else {
+        None
+    };
+    let (audio, words) = match timed {
+        Some(t) => (t.audio, Some(t.words)),
+        None => (
+            match engine {
+                Engine::Kokoro(e) => e.synthesize(&request),
+                Engine::Compact(e) => e.synthesize(&request),
+            }
+            .map_err(|e| explain(&e.to_string()))?,
+            None,
+        ),
+    };
     let guesses = match engine {
         Engine::Kokoro(e) => e.take_guesses(),
         Engine::Compact(e) => e.take_guesses(),
@@ -341,7 +377,7 @@ pub fn synthesize(voice: &str, text: &str, lexicon: Option<&Path>) -> Result<Vec
             });
         }
     }
-    wav(&audio.samples, audio.sample_rate)
+    Ok((wav(&audio.samples, audio.sample_rate)?, words))
 }
 
 /// The engine's refusal, with where the fix goes in a project.

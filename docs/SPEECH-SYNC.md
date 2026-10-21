@@ -1,6 +1,6 @@
 # Speech timing and speech sync: implementation design
 
-Status: slices 1 to 3 built (2026-10-21); where building changed the design,
+Status: slices 1 to 4 built (2026-10-21); where building changed the design,
 the "Slice N as built" notes under §10 say what and why. Modelled on
 `docs/BEAT-SYNC.md`, including its "as built" notes, and reusing its
 machinery wherever it fits. Owner requirements: one word-timing format for
@@ -954,6 +954,43 @@ criteria.
   - `local_take_writes_local_timing`
   - `lexicon_edit_retimes_local_take`
   - **AC3**: `local_timing_agrees_with_alignment`. Over 20 corpus lines with Kokoro q8 and Kitten, word starts within 60 ms median and 120 ms p95 of the S5 aligner, and every sentence boundary within 40 ms. It runs where the packages are installed and skips with a note otherwise. It lands in S5 when the aligner exists; S4 lands `durations_sum_to_samples` and `timed_audio_equals_untimed_audio`.
+
+**Slice 4 as built** (2026-10-21) — local-tts v0.7.0
+(https://github.com/GarAlex/local-tts/releases/tag/v0.7.0, commit 61efef0):
+- **§3.2 as written, with these differences.**
+  - The extra Kokoro output is an `Identity` node from
+    `/encoder/Clip_output_0` to a new output `durations` (float), appended
+    to the graph with its `ValueInfoProto`. The tensor itself stays where
+    it was.
+  - The patched session's audio is **bit-identical to the unpatched
+    file's** on F32, Q8 and Q4 (`timed_audio_equals_untimed_audio` loads
+    both sessions; `Kokoro::load_unpatched` is a hidden test door). Risk 3
+    did not happen.
+  - Measured: 600 samples a frame on every Kokoro export, and on Kitten.
+    Timing still uses each chunk's exact samples ÷ frames.
+- **Kitten is not bit-reproducible, before or after.** Its graph draws
+  noise, so two plain calls differ sample by sample (they already did in
+  0.6). What its test pins is the same length and the same words on every
+  call. The design's "byte-identical for every family" holds for Kokoro
+  only.
+- **Spans.** `PhonemeWord { spoken, range }` (byte ranges in the phoneme
+  string, after the trim and the IPA vowel expansion).
+  `chunks_with_offsets` places each chunk. A word that two chunks split (a
+  spelled acronym's letters may be split) is merged back by its index.
+  Inflect answers "timing not supported for Inflect".
+- **PromoShot.** `promo-speech` pins `tag = "v0.7.0"`.
+  `local::synthesize_timed` falls back to the untimed audio when a voice
+  cannot time itself. `synthesize_local_timed` gives `Spoken` with
+  `source: local:<voice>`, confidence 0.97 and no chars, so the §2.5 word
+  alignment maps the engine's normalized words. `LiveSynth` and the MCP
+  server's `ProjectSynth` (with the project's lexicon) call it.
+- **Tests:** in local-tts, `crates/tts-core/tests/timing.rs` (ignored
+  without packages, as the repo's model tests are) and unit tests for the
+  offsets, the patch and the spacing map. In promoshot-mcp,
+  `local_take_writes_local_timing` and `lexicon_edit_retimes_local_take`.
+  These run where kokoro-en-q8 is installed (`PROMOSHOT_VOICES`) and skip
+  with a note otherwise; here they ran on APFS clones of the local-tts
+  repo's own packages. AC3 lands with S5.
 
 **S5 — The aligner, the CLI and MCP.**
 - Build: `promo-media/src/dsp.rs` (shared with beats; the beats goldens stay byte-identical), `words.rs`, `Project::open_with` aligning missing takes, the full `promo words`, MCP `promo_words`, `--transcribe` (multipart, opt-in, with `check`).

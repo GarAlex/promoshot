@@ -99,6 +99,44 @@ pub fn synthesize_local(
     }
 }
 
+/// One local take with the words its voice said and when (Kokoro, Kitten:
+/// their own duration predictors), mapped onto the script later like any
+/// source's (`timing::record`): source `local:<voice>`, confidence 0.97 —
+/// the predictor's frames are 25 ms and coarticulation blurs the edges.
+pub fn synthesize_local_timed(
+    voice: &str,
+    text: &str,
+    lexicon: Option<&Path>,
+) -> Result<Take, String> {
+    #[cfg(feature = "local")]
+    {
+        let (audio, words) = local::synthesize_timed(voice, text, lexicon)?;
+        Ok(Take {
+            audio,
+            spoken: words.filter(|w| !w.is_empty()).map(|words| Spoken {
+                words: words
+                    .into_iter()
+                    .map(|w| promo_model::speech::SpokenWord {
+                        text: w.text,
+                        start: promo_model::speech::round_us(w.start),
+                        end: Some(promo_model::speech::round_us(w.end)),
+                        chars: None,
+                    })
+                    .collect(),
+                source: promo_model::speech::TimingSource::Local(voice.to_string()),
+                confidence: 0.97,
+                against: text.to_string(),
+            }),
+            note: None,
+        })
+    }
+    #[cfg(not(feature = "local"))]
+    {
+        let _ = (voice, text, lexicon);
+        Err(LOCAL_UNBUILT.into())
+    }
+}
+
 /// A word a local take guessed: as written, its ARPAbet (a ready
 /// pronunciations.dict line), how, and whether the guesser was unsure —
 /// unsure guesses are wrong most of the time and worth checking by ear.
@@ -157,10 +195,7 @@ impl<K: KeyStore> Synth for LiveSynth<K> {
 
     fn synthesize_timed(&self, provider: &str, voice: &str, text: &str) -> Result<Take, String> {
         if is_keyless(provider) {
-            return self.synthesize(provider, voice, text).map(|audio| Take {
-                audio,
-                ..Take::default()
-            });
+            return synthesize_local_timed(voice, text, None);
         }
         let (key, _) = self
             .keys

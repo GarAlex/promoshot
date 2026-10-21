@@ -45,11 +45,7 @@ impl Synth for ProjectSynth<'_> {
         text: &str,
     ) -> Result<promo_speech::Take, String> {
         if promo_speech::is_keyless(provider) {
-            self.synthesize(provider, voice, text)
-                .map(|audio| promo_speech::Take {
-                    audio,
-                    ..Default::default()
-                })
+            promo_speech::synthesize_local_timed(voice, text, Some(&self.lexicon))
         } else {
             self.inner.synthesize_timed(provider, voice, text)
         }
@@ -540,6 +536,137 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(records[0].path()).unwrap()).unwrap();
         assert_eq!(record["source"], "provider:elevenlabs");
         assert_eq!(record["words"][2]["start"], 1.4);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Seconds of a mono 16-bit WAV, from its header — the local takes'
+    /// measure in these tests (ffprobe in production).
+    fn wav_seconds(path: &Path) -> Result<f64, String> {
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let rate = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as f64;
+        let data = u32::from_le_bytes(bytes[40..44].try_into().unwrap()) as f64;
+        Ok(data / 2.0 / rate)
+    }
+
+    /// The local voices these tests need, or None (and a note) when this
+    /// machine has none installed: `PROMOSHOT_VOICES`, else the default
+    /// folder, must hold kokoro-en-q8.
+    fn local_voices() -> Option<std::path::PathBuf> {
+        let dir = promo_speech::local::voices_dir();
+        let ok = promo_speech::local::catalog::installed(&dir).contains(&"kokoro-en-q8");
+        if !ok {
+            eprintln!(
+                "skipped: kokoro-en-q8 is not installed in {}",
+                dir.display()
+            );
+        }
+        ok.then_some(dir)
+    }
+
+    fn local_project(dir: &Path, text: &str) {
+        project_with_script(dir);
+        let path = dir.join("metadata.json");
+        let mut doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        doc["resources"][0]["filename"] = json!("voice.wav");
+        doc["resources"][0]["speech"] =
+            json!({ "text": text, "provider": "local", "voiceID": "kokoro-en-q8/af_heart" });
+        std::fs::write(&path, doc.to_string()).unwrap();
+    }
+
+    fn the_record(dir: &Path) -> Value {
+        let doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        let file = dir
+            .join("Resources")
+            .join(doc["resources"][0]["filename"].as_str().unwrap());
+        let text = doc["resources"][0]["speech"]["text"].as_str().unwrap();
+        let found = promo_model::word_cache::lookup(dir, &file, text).expect("a record");
+        assert!(!found.stale);
+        serde_json::to_value(found.timing).unwrap()
+    }
+
+    /// A local take is timed by its voice's own predictor (local-tts 0.7):
+    /// the record is the take's, mapped onto the script — "$49.99" one
+    /// script word over the six the voice said.
+    #[test]
+    fn local_take_writes_local_timing() {
+        if local_voices().is_none() {
+            return;
+        }
+        let root = std::env::temp_dir().join(format!("mcp-local-timed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Local.promo");
+        local_project(&dir, "Save $49.99 today. Then relax.");
+        let answer = speak(
+            &json!({ "project": dir.to_string_lossy() }),
+            Some(&root),
+            &live(),
+            &FixedKeys(vec![]),
+            &wav_seconds,
+        )
+        .unwrap();
+        assert!(
+            answer.contains("timed by local:kokoro-en-q8/af_heart (5 words)"),
+            "{answer}"
+        );
+        let record = the_record(&dir);
+        assert_eq!(record["source"], "local:kokoro-en-q8/af_heart");
+        assert_eq!(record["confidence"], 0.97);
+        let words = record["words"].as_array().unwrap();
+        assert_eq!(words[1]["text"], "$49.99");
+        assert!(
+            words.iter().all(|w| w.get("interpolated").is_none()),
+            "{words:?}"
+        );
+        // "$49.99" spans the six words said for it: longer than "Save".
+        let span = |w: &Value| w["end"].as_f64().unwrap() - w["start"].as_f64().unwrap();
+        assert!(span(&words[1]) > 3.0 * span(&words[0]), "{words:?}");
+        assert_eq!(record["sentences"].as_array().unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A pronunciation edit is part of a local take's receipt: the take is
+    /// re-voiced, so its bytes and its timing are new, and the old
+    /// record goes with the old bytes.
+    #[test]
+    fn lexicon_edit_retimes_local_take() {
+        if local_voices().is_none() {
+            return;
+        }
+        let root = std::env::temp_dir().join(format!("mcp-local-lexicon-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Lexicon.promo");
+        local_project(&dir, "Meet Zorblat today.");
+        let call = || {
+            speak(
+                &json!({ "project": dir.to_string_lossy() }),
+                Some(&root),
+                &live(),
+                &FixedKeys(vec![]),
+                &wav_seconds,
+            )
+            .unwrap()
+        };
+        call();
+        let first = the_record(&dir);
+        // A long, slow spelling of the name: the word after it moves.
+        std::fs::write(
+            dir.join("Resources/pronunciations.dict"),
+            "ZORBLAT  Z AO1 R B L AE2 T AH0 N AH0 M AH0 R AH0\n",
+        )
+        .unwrap();
+        let second_answer = call();
+        assert!(second_answer.contains("V1: generated"), "{second_answer}");
+        let second = the_record(&dir);
+        assert_ne!(first["audio"]["sha256"], second["audio"]["sha256"]);
+        let start = |r: &Value| r["words"][2]["start"].as_f64().unwrap();
+        assert!(start(&second) > start(&first) + 0.2, "{first} {second}");
+        let left: Vec<_> = std::fs::read_dir(dir.join("Resources/.words"))
+            .unwrap()
+            .collect();
+        assert_eq!(left.len(), 1, "the old take's record went with its bytes");
         let _ = std::fs::remove_dir_all(&root);
     }
 
