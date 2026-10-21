@@ -426,3 +426,60 @@ fn an_edited_value_is_not_resolved_back() {
     assert_eq!(a.duration, Some(1.25));
     assert!(a.time_specs.is_none(), "the edit flattened the value");
 }
+
+/// A measured song counts on its own beat list — the one `promo beats`
+/// prints — tracked or steady: slides of one beat each start exactly on
+/// the listed beats, beat 1 on the first downbeat, and past the list's end
+/// the measured period carries on.
+#[test]
+fn cuts_land_on_the_listed_beats() {
+    // A player speeding up: the gaps shrink from 0.6 s to 0.45 s.
+    let mut beats = vec![0.31];
+    for k in 0..12 {
+        beats.push(beats[k] + 0.6 - 0.0125 * k as f64);
+    }
+    let analysis: promo_model::musical::BeatAnalysis = serde_json::from_value(json!({
+        "trackerVersion": 2, "duration": 30.0, "bpm": 120.0, "offset": beats[1],
+        "timeSignature": [4, 4], "grid": "tracked", "confidence": 0.8,
+        "beats": beats, "downbeats": [beats[1]], "sections": []
+    }))
+    .unwrap();
+    let mut analyses = std::collections::BTreeMap::new();
+    analyses.insert("song".to_string(), analysis);
+    let grids = BeatGrids::from_analyses(&analyses);
+    let sequence: Vec<Value> = (1..=10)
+        .map(|k| json!({"layer": format!("s{k}"), "beats": 1}))
+        .collect();
+    let layers: Vec<Value> = (1..=10)
+        .map(|k| {
+            let mut extra = json!({});
+            if k == 1 {
+                extra = json!({"startTime": {"beat": 1}});
+            }
+            image(&format!("s{k}"), k, extra)
+        })
+        .collect();
+    let file = project(
+        json!({"beatClock": {"resourceID": "song", "startTime": 0}, "sequence": sequence}),
+        Value::Array(layers),
+        json!([song(Value::Null)]),
+    );
+    let mut meta = ProjectMetadata::from_json(&file.to_string()).unwrap();
+    resolve_timing(&mut meta, &grids);
+    for (k, beat) in beats.iter().enumerate().take(11).skip(1) {
+        let l = layer(&meta, &format!("s{k}"));
+        assert!(
+            (l.start_time - beat).abs() < 1e-9,
+            "slide {k} starts at {}, the listed beat is {beat}",
+            l.start_time
+        );
+    }
+    // Past the list: the measured period (0.5 s at 120 BPM) on from it.
+    let mut far = file.clone();
+    far["layers"][0]["startTime"] = json!({"beat": 14});
+    let mut meta = ProjectMetadata::from_json(&far.to_string()).unwrap();
+    resolve_timing(&mut meta, &grids);
+    let start = layer(&meta, "s1").start_time;
+    // Beat 14 is list entry 14 (beat 1 is entry 1): two past the last.
+    assert!((start - (beats[12] + 1.0)).abs() < 1e-9, "{start}");
+}

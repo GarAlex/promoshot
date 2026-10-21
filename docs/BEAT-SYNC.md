@@ -629,6 +629,45 @@ the text above, and why:
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
 
+**After the field test** (2026-10-20, a real ACE-Step chiptune loop, asked
+for 124 BPM): tracker version 2.
+- **Why it locked wrong:** the tempo came from the envelope's
+  autocorrelation at the beat lag alone, where a loop's busy eighth-note
+  arpeggios and sixteenth hats blur the pulse; its strongest periodicity was
+  the BAR (1.93 s), which the old search, limited to 0.2–2 s and one lag,
+  could not credit to the beat inside it. The dynamic programme then
+  followed hats and arpeggios beat by beat (gaps 0.41–0.59 s), the
+  uniform fit refused that jitter, and the "tracked" beats went out while
+  the timing pass counted on an even grid at the median tempo — two lists,
+  up to 123 ms apart. A hint only re-centred an octave-wide prior, so it
+  could not move a peak that strong.
+- **Now:** each candidate period scores the autocorrelation at its 1st,
+  2nd and 4th multiple (beat, half bar, bar) and is refined on the 4th; a
+  hint is a ±5% window around itself, its half and double. One steady grid
+  is fitted to the whole envelope (period within 1% and phase, smoothed
+  envelope) and stands when it explains the onsets nearly as well as the
+  free track (both judged by the strongest onset within two frames); its
+  attacks set the phase, and the exact line only when they agree to 4 ms
+  (a click, a drum machine). The confidence compares the beats with the
+  sixteenths between them, not the eighths. Sections add onset density and
+  timbre (the log-band spectrum's shape) to loudness, bass and centroid,
+  need two bars a side, and may be two bars long in a song under sixteen.
+  An older tracker's cached answer is measured again.
+- **One list:** a measured song's grid is LISTED (`Grid::listed`): beat k
+  is the analysis's k-th beat, so cuts land on the printed beats, steady
+  or tracked (`resolved_cuts_are_the_printed_beats`, `cuts_land_on_the_listed_beats`).
+- **The real loop:** before 121.265 BPM, tracked, confidence 0.22, 47
+  beats up to 123 ms off the grid the cuts used, one section; after
+  124.529 BPM, one uniform grid (the low-band kicks fit 124.59), confidence
+  0.64, 46 beats, cuts exactly on them, sections bars 1–2 and 3–11. A 12 s
+  excerpt is `fixtures/beats/milo-loop.wav`
+  (`the_real_generated_loop_fits_its_tempo`).
+- **`promo_slideshow` with `music`** (classic): the song copied in as the
+  beat clock with an audio layer, the slides a `sequence` of
+  `beatsPerSlide` (a number or a list cycled) from the first downbeat
+  (`startOn`), each caption riding its picture by `timing`; the show runs
+  the song's length (the host's probe; else the beats at 120 BPM).
+
 **Slice 10 as built** (2026-10-20):
 - **Recipe.** schema-quick.md's fifth recipe, "beat-cut stills slideshow",
   is `examples/BeatCut.promo` byte for byte (`the_examples_are_the_recipes`;

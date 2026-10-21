@@ -220,3 +220,132 @@ fn cache_is_never_silently_reanalysed() {
     assert_eq!(beats::load_cached(&dir, &song).unwrap().bpm, fresh.bpm);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn analyse_with(samples: &[f32], rate: f64, options: BeatOptions) -> BeatAnalysis {
+    let mut meter = BeatMeter::new(1, rate, options).unwrap();
+    meter.push(samples);
+    meter.finish()
+}
+
+/// A loop busy with eighth-note arpeggios and sixteenth-note hats still
+/// fits one exact grid on its kicks, at its tempo, with confidence (the
+/// first tracker followed the hats and arpeggios: a wandering track and a
+/// confidence of 0.2 on real generated chiptune).
+#[test]
+fn a_busy_loop_fits_one_grid_on_its_pulse() {
+    let (samples, truth) = support::click_track::busy_loop(124.0, 24.0, 44_100.0);
+    let found = analyse(&samples, 1, 44_100.0);
+    assert!((found.bpm - 124.0).abs() < 0.1, "found {}", found.bpm);
+    assert_eq!(found.grid, "uniform");
+    assert!(found.confidence > 0.5, "confidence {}", found.confidence);
+    for &t in &found.beats {
+        let off = nearest(&truth, t);
+        assert!(off < 0.010, "a beat at {t} is {off} s from a kick");
+    }
+}
+
+/// The hint constrains the search: eighth notes all alike read as 140 BPM
+/// (the faster pulse, nearer the default 120); told 70, the tracker counts
+/// the beat at 70 — and a hint of 140 keeps 140.
+#[test]
+fn the_hint_moves_the_tempo_to_the_pulse_it_names() {
+    let samples = support::click_track::even_eighths(70.0, 24.0, 44_100.0);
+    let plain = analyse(&samples, 1, 44_100.0);
+    assert!((plain.bpm - 140.0).abs() < 0.2, "unhinted: {}", plain.bpm);
+    let hinted = analyse_with(
+        &samples,
+        44_100.0,
+        BeatOptions {
+            meter: 4,
+            bpm_hint: Some(70.0),
+        },
+    );
+    assert!((hinted.bpm - 70.0).abs() < 0.2, "hinted 70: {}", hinted.bpm);
+    let hinted = analyse_with(
+        &samples,
+        44_100.0,
+        BeatOptions {
+            meter: 4,
+            bpm_hint: Some(140.0),
+        },
+    );
+    assert!(
+        (hinted.bpm - 140.0).abs() < 0.2,
+        "hinted 140: {}",
+        hinted.bpm
+    );
+}
+
+/// Music whose tempo really moves keeps its tracked beats — one grid would
+/// drift off them — and they follow the player.
+#[test]
+fn a_gliding_tempo_keeps_its_tracked_beats() {
+    let (samples, truth) = support::click_track::gliding_kicks(110.0, 130.0, 24.0, 44_100.0);
+    let found = analyse(&samples, 1, 44_100.0);
+    assert_eq!(found.grid, "tracked", "bpm {}", found.bpm);
+    let on = found
+        .beats
+        .iter()
+        .filter(|&&t| nearest(&truth, t) < 0.015)
+        .count();
+    assert!(
+        on * 10 >= found.beats.len() * 9,
+        "{on} of {} beats on a kick",
+        found.beats.len()
+    );
+}
+
+/// An arrangement that changes at one loudness, one centroid, one bass and
+/// one onset density — two tones becoming one at bar 9 — is a section
+/// boundary: the timbre alone says so.
+#[test]
+fn an_arrangement_change_at_one_loudness_is_a_section() {
+    let samples = support::click_track::arrangement_change(120.0, 44_100.0);
+    let found = analyse(&samples, 1, 44_100.0);
+    let starts: Vec<u32> = found.sections.iter().map(|s| s.start_bar).collect();
+    assert!(
+        starts.contains(&9),
+        "sections start at bars {starts:?}: {:?} downbeats {:?}",
+        found.sections,
+        found.downbeats
+    );
+    assert_eq!(found.sections.len(), 2, "{:?}", found.sections);
+}
+
+/// A real generated loop (ACE-Step, Apache-2.0; asked for 124 BPM): the
+/// first tracker heard 121 BPM on a wandering track with confidence 0.22.
+/// It is one steady grid near 124.6 BPM — the kicks in the low band agree —
+/// with confidence, and the printed beats are that grid.
+#[test]
+fn the_real_generated_loop_fits_its_tempo() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/beats/milo-loop.wav"
+    );
+    let found = beats::analyse_file(std::path::Path::new(path), BeatOptions::default()).unwrap();
+    assert_eq!(found.grid, "uniform");
+    assert!((124.0..125.2).contains(&found.bpm), "bpm {}", found.bpm);
+    assert!(found.confidence >= 0.55, "confidence {}", found.confidence);
+    let step = 60.0 / found.bpm;
+    for (k, &t) in found.beats.iter().enumerate() {
+        let on_grid = found.beats[0] + k as f64 * step;
+        assert!(
+            (t - on_grid).abs() < 0.001,
+            "beat {k} at {t} is off its grid"
+        );
+    }
+    // The hint agrees, and its half is the half.
+    let hinted = beats::analyse_file(
+        std::path::Path::new(path),
+        BeatOptions {
+            meter: 4,
+            bpm_hint: Some(124.0),
+        },
+    )
+    .unwrap();
+    assert!(
+        (hinted.bpm - found.bpm).abs() < 0.3,
+        "hinted {}",
+        hinted.bpm
+    );
+}

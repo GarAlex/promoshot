@@ -155,7 +155,10 @@ its defaults are the source of the first, the person of the second.
    `body: "slab"`; `arrangement`, `turns`, `angle`, `material`), a
    headline per shot in the room it leaves. A `caption` on any slide
    becomes its words (the listing's headline, a lower third otherwise);
-   `narration: true` adds a draft voice per slide for `promo_speak`. The
+   `narration: true` adds a draft voice per slide for `promo_speak`;
+   `music` (a song) cuts a classic show to its beats — `beatsPerSlide` (a
+   number, or a list cycled), `startOn` downbeat or beat — the beat-cut
+   recipe's shape. The
    answer carries the glance like every authoring tool — then refine it
    with the tools below. `promo_init` lays the folder, canvas, palette,
    background; `promo_upsert_layer` adds an image/video/caption with a

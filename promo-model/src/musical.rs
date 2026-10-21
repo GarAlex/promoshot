@@ -1066,6 +1066,11 @@ pub struct BeatGrid {
     pub extra: Map<String, Value>,
 }
 
+/// The beat tracker's version (`promo_media::beats`): bumped whenever the
+/// analysis of the same samples could change. A cached analysis from an
+/// older one is measured again.
+pub const TRACKER_VERSION: u32 = 2;
+
 /// A beat tracker's answer for one audio file (docs/BEAT-SYNC.md §3.3): the
 /// cache file's shape, the CLI's `promo beats --json` and the MCP
 /// `promo_beats` answer. Every time is in the audio's own seconds.

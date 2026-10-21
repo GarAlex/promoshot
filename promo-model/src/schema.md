@@ -315,12 +315,13 @@ bar first. Beat k (0 is beat 1) sits at
 seconds on every machine. No `beatGrid`, and promo measures the song when
 it opens the project: tempo, beats and downbeats, cached by content in
 `Resources/.beats/` and the answer from then on — so swapping the song's
-file re-times the whole edit. The apps measure into the same cache when
-they open the project, and find it for a song referenced from their shared
-library too, so the CLI and the apps count the same beats. `promo beats <song>` (promo_beats) shows that
-analysis (with sections and a confidence; `--refresh` measures again); a
-confidence under 0.5 is a guess worth checking by ear, and stating
-`beatGrid` overrides it.
+file re-times the whole edit. The apps share that cache. `promo beats
+<song>` (promo_beats) shows the analysis: its beats — one steady grid, or
+the tracked beats of a tempo that moves; cuts land on exactly those — its
+sections (loudness, bass, brightness, busyness, timbre) and a confidence.
+Under 0.5 is a guess worth checking by ear; `--bpm-hint` (`bpmHint`) keeps
+the tempo near the number, its half or double, `--refresh` measures again,
+and a stated `beatGrid` overrides it all.
 
 Back to back, without computing a start: `compositionSettings.sequence`
 (or a composition's own `sequence`) is a list —
@@ -347,10 +348,8 @@ measured (no file, or a compressed one and no ffmpeg) lays out the same
 way, validate names it as a break, and a render waits for a grid. Every
 tool writes the resolved seconds where the renderers read them and keeps
 the musical value in the file; set a field to seconds and that one value
-is plain seconds from then on. The apps' editors show each musical value's
-words beside its seconds and snap a layer's start or end to the nearest
-beat, downbeat or bar — writing `{"beat": n}` or `{"bar": n}` (an end as
-the position its duration runs to), the same values a file states by hand.
+is plain seconds from then on. The apps' editors snap a layer's start or
+end to a beat or bar, writing `{"beat": n}` or `{"bar": n}`.
 
 ## Beat effects — pulse, shake, flash, punch, generator, onbeat
 

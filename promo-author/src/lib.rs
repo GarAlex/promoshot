@@ -1099,19 +1099,185 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
         spec["canvasHeight"] = json!(h);
     }
     let kind = spec["kind"].as_str().unwrap_or("classic").to_string();
+    let music = beat_music(args, &kind)?;
     let spec: promo_editor::author::AuthorSpec =
         serde_json::from_value(spec).map_err(|e| format!("slideshow: {e}"))?;
-    let authored = promo_editor::author::author(&spec)?;
+    let mut authored = promo_editor::author::author(&spec)?;
+    let mut cut = String::new();
+    if let Some(music) = music {
+        let (text, said) = cut_to_music(&authored, &dir, &music, probe)?;
+        authored = text;
+        cut = said;
+    }
     let meta = ProjectMetadata::from_json(&authored)
         .map_err(|e| format!("the show the wizard wrote no longer parses: {e}"))?;
     // (the stamp is computed by `write_metadata`)
     write_metadata(&meta, &meta_path)?;
     Ok(format!(
-        "authored a {kind} show at {}: {} slide(s), {:.1}s — refine with the tools, or open it",
+        "authored a {kind} show at {}: {} slide(s), {:.1}s{cut} — refine with the tools, or open it",
         dir.display(),
         wanted.len(),
         meta.video_duration
     ))
+}
+
+/// What `music`, `beatsPerSlide` and `startOn` ask of a show.
+struct BeatMusic {
+    file: PathBuf,
+    beats: Vec<f64>,
+    start_on: String,
+}
+
+fn beat_music(args: &Value, kind: &str) -> Result<Option<BeatMusic>, String> {
+    let Some(file) = args.get("music") else {
+        if args.get("beatsPerSlide").is_some() || args.get("startOn").is_some() {
+            return Err("beatsPerSlide and startOn cut a show to `music` — name the song".into());
+        }
+        return Ok(None);
+    };
+    let file = file
+        .as_str()
+        .ok_or("`music` is the path of an audio file")?;
+    if kind != "classic" {
+        return Err(format!(
+            "music cuts a classic show (one slide at a time on the beat), not a {kind} one"
+        ));
+    }
+    let file = PathBuf::from(file);
+    if !file.exists() {
+        return Err(format!("music: file {} does not exist", file.display()));
+    }
+    let beats = match args.get("beatsPerSlide") {
+        None => vec![2.0],
+        Some(Value::Number(n)) => vec![n.as_f64().unwrap_or(0.0)],
+        Some(Value::Array(list)) if !list.is_empty() => {
+            list.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()
+        }
+        Some(_) => return Err("beatsPerSlide is a number of beats, or a list cycled".into()),
+    };
+    if beats.iter().any(|b| !(b.is_finite() && *b > 0.0)) {
+        return Err("beatsPerSlide: every length is more than 0 beats".into());
+    }
+    let start_on = args
+        .get("startOn")
+        .map(|v| {
+            v.as_str()
+                .filter(|s| matches!(*s, "downbeat" | "beat"))
+                .map(str::to_string)
+                .ok_or("startOn is \"downbeat\" (default) or \"beat\"")
+        })
+        .transpose()?
+        .unwrap_or_else(|| "downbeat".into());
+    Ok(Some(BeatMusic {
+        file,
+        beats,
+        start_on,
+    }))
+}
+
+/// The authored classic show cut to a song, the beat-cut recipe's shape:
+/// the song copied in as an audio resource that an audio layer plays from
+/// 0 s, `compositionSettings.beatClock` on it, the slides in a `sequence`
+/// of `beatsPerSlide` (cycled), the first from the first downbeat (or
+/// beat), each caption riding its picture (`timing` on the layer below it).
+/// The show runs the song's length (the probe's, else the slides' beats at
+/// 120 BPM); the beats themselves are measured when the project opens.
+fn cut_to_music(
+    authored: &str,
+    dir: &Path,
+    music: &BeatMusic,
+    probe: Probe,
+) -> Result<(String, String), String> {
+    let mut doc: Value =
+        serde_json::from_str(authored).map_err(|e| format!("the wizard's show: {e}"))?;
+    let info = probe(&music.file, true);
+    let filename = copy_into_resources(dir, &music.file)?;
+    let song = mint();
+    let mut layers = doc["layers"].as_array().cloned().unwrap_or_default();
+    layers.sort_by(|a, b| {
+        a["sortIndex"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .total_cmp(&b["sortIndex"].as_f64().unwrap_or(0.0))
+    });
+    let slides: Vec<usize> = layers
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| matches!(l["kind"].as_str(), Some("image" | "video")))
+        .map(|(i, _)| i)
+        .collect();
+    let mut sequence = Vec::new();
+    let mut total_beats = 0.0;
+    for (n, &i) in slides.iter().enumerate() {
+        let beats = music.beats[n % music.beats.len()];
+        total_beats += beats;
+        sequence.push(json!({ "layer": layers[i]["id"], "beats": beats }));
+        if n == 0 {
+            layers[i]["startTime"] = if music.start_on == "beat" {
+                json!({ "beat": 1 })
+            } else {
+                json!({ "bar": 1 })
+            };
+        }
+    }
+    // A caption arrives and leaves with the picture under it.
+    for i in 1..layers.len() {
+        if layers[i]["kind"] == "caption"
+            && matches!(layers[i - 1]["kind"].as_str(), Some("image" | "video"))
+        {
+            layers[i]["timing"] = json!({
+                "start": { "from": "previousStart", "offset": 0 },
+                "end": { "from": "previousEnd", "offset": 0 }
+            });
+        }
+    }
+    let total = info
+        .duration
+        .filter(|d| *d > 0.0)
+        .unwrap_or(total_beats * 0.5 + 2.0);
+    for layer in &mut layers {
+        if layer["kind"] == "background" {
+            layer["duration"] = json!(total);
+        }
+    }
+    let top = layers
+        .iter()
+        .filter_map(|l| l["sortIndex"].as_i64())
+        .max()
+        .unwrap_or(0);
+    let display = music
+        .file
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Music".into());
+    layers.push(json!({
+        "id": mint(), "name": "Music", "sortIndex": top + 1, "kind": "audio",
+        "isEnabled": true, "startTime": 0, "duration": total, "resourceID": song,
+        "keyframes": []
+    }));
+    doc["layers"] = Value::Array(layers);
+    let mut resource = json!({
+        "id": song, "kind": "audio", "filename": filename, "displayName": display,
+        "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": []
+    });
+    if let Some(d) = info.duration {
+        resource["duration"] = json!(d);
+    }
+    doc["resources"]
+        .as_array_mut()
+        .ok_or("the wizard's show has no resources")?
+        .push(resource);
+    doc["compositionSettings"]["beatClock"] = json!({ "resourceID": song });
+    doc["compositionSettings"]["sequence"] = Value::Array(sequence);
+    doc["trimEnd"] = json!(total);
+    doc["videoDuration"] = json!(total);
+    let said = format!(
+        ", cut to {filename}: {} slide(s) on its beats ({} beats), from its first {}",
+        slides.len(),
+        total_beats,
+        music.start_on
+    );
+    Ok((doc.to_string(), said))
 }
 
 /// The fenced, existing project: its folder and its metadata text.

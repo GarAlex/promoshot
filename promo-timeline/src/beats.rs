@@ -10,8 +10,13 @@
 //! `k + 0.5`. A bar is `meter` beats, and bar `n` starts at beat index
 //! `(n − 1) · meter`.
 //!
-//! Detected grids with drifting tempo (slice 4) will add a piecewise form
-//! behind the same methods.
+//! A song's measured beats are a LISTED grid: beat `k` is the analysis's
+//! own beat — the very list `promo beats` prints and caches — linear
+//! between two of them and extrapolated at the measured period past the
+//! ends. So a cut on beat 17 lands on the 17th beat the analysis names,
+//! whether its beats are one steady grid or a tracked, drifting one.
+
+use std::sync::Arc;
 
 use promo_model::musical::{BeatGrid, MusicalTime, SnapUnit};
 
@@ -19,7 +24,7 @@ use promo_model::musical::{BeatGrid, MusicalTime, SnapUnit};
 /// otherwise: 120 BPM, 4/4, beat 1 at 0 s.
 pub const NOMINAL_BPM: f64 = 120.0;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Grid {
     /// Output time of the audio's source second 0.
     pub clock: f64,
@@ -30,6 +35,10 @@ pub struct Grid {
     pub speed: f64,
     /// Beats per bar.
     pub meter: u32,
+    /// A measured song's beats in its own seconds, and which of them is
+    /// beat 1 (the first downbeat) — `None` for a stated grid, which is
+    /// the closed form above.
+    pub listed: Option<(Arc<[f64]>, usize)>,
 }
 
 impl Grid {
@@ -41,6 +50,7 @@ impl Grid {
             bpm: NOMINAL_BPM,
             speed: 1.0,
             meter: 4,
+            listed: None,
         }
     }
 
@@ -68,6 +78,56 @@ impl Grid {
                 1.0
             },
             meter,
+            listed: None,
+        }
+    }
+
+    /// A measured song's beats (source seconds, at least two), beat 1 the
+    /// one at `first`, placed by its clock: the listed form. `bpm` is the
+    /// period past either end. Falls back to the closed form on a list too
+    /// short to be one.
+    pub fn listed(
+        beats: &[f64],
+        first: usize,
+        bpm: f64,
+        meter: u32,
+        clock: f64,
+        speed: f64,
+    ) -> Grid {
+        let offset = beats.get(first).copied().unwrap_or(0.0);
+        let mut grid = Grid::stated(
+            &BeatGrid {
+                bpm,
+                offset: Some(offset),
+                time_signature: Some([meter, 4]),
+                extra: Default::default(),
+            },
+            clock,
+            speed,
+        );
+        if beats.len() >= 2 && first < beats.len() && beats.iter().all(|b| b.is_finite()) {
+            grid.listed = Some((Arc::from(beats), first));
+        }
+        grid
+    }
+
+    /// The source second of beat index `index` (0 is beat 1).
+    fn source_at(&self, index: f64) -> f64 {
+        match &self.listed {
+            None => self.offset + index * self.period(),
+            Some((beats, first)) => {
+                let j = index + *first as f64;
+                let last = beats.len() - 1;
+                if j <= 0.0 {
+                    beats[0] + j * self.period()
+                } else if j >= last as f64 {
+                    beats[last] + (j - last as f64) * self.period()
+                } else {
+                    let i = j.floor() as usize;
+                    let f = j - i as f64;
+                    beats[i] + (beats[i + 1] - beats[i]) * f
+                }
+            }
         }
     }
 
@@ -78,13 +138,35 @@ impl Grid {
 
     /// The output time of beat index `index`.
     pub fn time_at(&self, index: f64) -> f64 {
-        self.clock + (self.offset + index * self.period()) / self.speed
+        self.clock + self.source_at(index) / self.speed
     }
 
     /// The (fractional) beat index at output time `t` — the inverse of
     /// [`Grid::time_at`].
     pub fn index_at(&self, t: f64) -> f64 {
-        ((t - self.clock) * self.speed - self.offset) / self.period()
+        let source = (t - self.clock) * self.speed;
+        match &self.listed {
+            None => (source - self.offset) / self.period(),
+            Some((beats, first)) => {
+                let last = beats.len() - 1;
+                let j = if source <= beats[0] {
+                    (source - beats[0]) / self.period()
+                } else if source >= beats[last] {
+                    last as f64 + (source - beats[last]) / self.period()
+                } else {
+                    // The segment holding it: the last beat at or before.
+                    let i = beats.partition_point(|&b| b <= source) - 1;
+                    let gap = beats[i + 1] - beats[i];
+                    i as f64
+                        + if gap > 0.0 {
+                            (source - beats[i]) / gap
+                        } else {
+                            0.0
+                        }
+                };
+                j - *first as f64
+            }
+        }
     }
 
     /// Beats in `bars` bars.

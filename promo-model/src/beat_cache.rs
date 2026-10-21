@@ -102,11 +102,15 @@ pub fn cache_path(project: &Path, key: &str) -> PathBuf {
         .join(format!("{key}.json"))
 }
 
-/// The project's cached analysis of `audio`, by content, when there is one.
+/// The project's cached analysis of `audio`, by content, when there is one
+/// made by this tracker or a later one. An older tracker's answer is not
+/// the answer any more — it is measured again (and replaced) like a song
+/// never analysed; anything else in the cache is authoritative.
 pub fn load_cached(project: &Path, audio: &Path) -> Option<crate::musical::BeatAnalysis> {
     let key = source_of(audio).ok()?.sha256;
     let text = std::fs::read_to_string(cache_path(project, &key)).ok()?;
-    serde_json::from_str(&text).ok()
+    let analysis: crate::musical::BeatAnalysis = serde_json::from_str(&text).ok()?;
+    (analysis.tracker_version >= crate::musical::TRACKER_VERSION).then_some(analysis)
 }
 
 /// Writes `analysis` (of `audio`) into the project's cache, `source` filled

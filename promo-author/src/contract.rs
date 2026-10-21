@@ -687,6 +687,14 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "canvas": { "type": "string", "description":
                         "\"1920x1080\" (ignored for appStore — the store decides)" },
                     "backgroundColorHex": { "type": "string" },
+                    "music": { "type": "string", "description":
+                        "classic: a song to cut to — copied in as the beat clock; the \
+                         slides become a sequence on its measured beats" },
+                    "beatsPerSlide": { "type": ["number", "array"], "items": { "type": "number" },
+                        "description": "With music: beats a slide (default 2), or a list cycled" },
+                    "startOn": { "type": "string", "enum": ["downbeat", "beat"],
+                        "description": "With music: the first slide on the first downbeat \
+                            (default) or beat" },
                     "slides": { "type": "array", "minItems": 1, "items": {
                         "type": "object",
                         "properties": {

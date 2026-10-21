@@ -750,3 +750,190 @@ fn beat_cut_recipe_validates_and_renders() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// ONE beat list: the cuts a project resolves land on the very beats
+/// `promo beats` prints and caches — a steady song's grid and a gliding
+/// one's tracked beats alike.
+#[test]
+fn resolved_cuts_are_the_printed_beats() {
+    for (name, gliding) in [("steady", false), ("gliding", true)] {
+        let dir = folder(&format!("one-list-{name}"), &json!({}));
+        let (samples, _) = if gliding {
+            click_track::gliding_kicks(110.0, 130.0, 20.0, 44_100.0)
+        } else {
+            click_track::click_track(110.0, 20.0, 44_100.0, None)
+        };
+        std::fs::write(
+            dir.join("Resources/song.wav"),
+            click_track::wav(&samples, 1, 44_100),
+        )
+        .unwrap();
+        let mut layers = Vec::new();
+        let mut sequence = Vec::new();
+        for k in 1..=12 {
+            let mut layer = json!({"id": format!("s{k}"), "name": format!("S{k}"),
+                                   "sortIndex": k, "kind": "caption", "isEnabled": true,
+                                   "startTime": 0, "duration": 1, "captionText": "x",
+                                   "keyframes": []});
+            if k == 1 {
+                layer["startTime"] = json!({"beat": 1});
+            }
+            layers.push(layer);
+            sequence.push(json!({"layer": format!("s{k}"), "beats": 1}));
+        }
+        let metadata = json!({
+            "id": "P", "name": "One list", "createdAt": 0, "state": "recorded",
+            "minReaderVersion": 49,
+            "trimStart": 0, "trimEnd": 20, "videoDuration": 20, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90, "fps": 30,
+                                    "beatClock": {"resourceID": "song", "startTime": 0},
+                                    "sequence": sequence},
+            "layers": layers,
+            "resources": [{"id": "song", "kind": "audio", "filename": "song.wav",
+                           "displayName": "Song", "addedAt": 0, "duration": 20}]
+        });
+        std::fs::write(dir.join("metadata.json"), metadata.to_string()).unwrap();
+        let printed: Value =
+            serde_json::from_str(&promo_in(&dir, &["beats", dir.to_str().unwrap(), "--json"]))
+                .unwrap();
+        assert_eq!(
+            printed["grid"],
+            if gliding { "tracked" } else { "uniform" },
+            "{name}"
+        );
+        let beats: Vec<f64> = printed["beats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b.as_f64().unwrap())
+            .collect();
+        let first = beats
+            .iter()
+            .position(|&b| b == printed["offset"].as_f64().unwrap())
+            .expect("the first downbeat is a printed beat");
+        for k in 1..=12usize {
+            let (start, _) = life(&dir, &format!("s{k}"));
+            let beat = beats[first + k - 1];
+            assert!(
+                (start - beat).abs() < 1e-6,
+                "{name}: slide {k} starts at {start}, the printed beat is {beat}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// `promo slideshow` with `music`: the beat-cut recipe's shape — the song
+/// the beat clock, an audio layer playing it, the slides a sequence of
+/// `beatsPerSlide` cycled from the first downbeat, a caption riding its
+/// picture — and the cuts land on the beats `promo beats` prints.
+#[test]
+fn a_slideshow_cut_to_music() {
+    let base = std::env::temp_dir().join(format!("promo-beats-show-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let mut slides = Vec::new();
+    for k in 0..4 {
+        let file = base.join(format!("p{k}.png"));
+        image::RgbImage::from_pixel(64, 36, image::Rgb([40 * k as u8, 90, 200]))
+            .save(&file)
+            .unwrap();
+        let mut slide = json!({"file": file});
+        if k == 0 {
+            slide["caption"] = json!("Hello");
+        }
+        slides.push(slide);
+    }
+    let song = base.join("song.wav");
+    let (samples, _) = click_track::click_track(120.0, 12.0, 44_100.0, None);
+    std::fs::write(&song, click_track::wav(&samples, 1, 44_100)).unwrap();
+    let dir = base.join("Show.promo");
+    let args = json!({"music": song, "beatsPerSlide": [2, 1], "slides": slides});
+    let said = promo_in(
+        &dir,
+        &[
+            "slideshow",
+            dir.to_str().unwrap(),
+            "--args",
+            &args.to_string(),
+        ],
+    );
+    assert!(said.contains("on its beats"), "{said}");
+    let file: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap()).unwrap();
+    let settings = &file["compositionSettings"];
+    let clock = settings["beatClock"]["resourceID"].as_str().unwrap();
+    let audio = file["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == clock)
+        .expect("the clock is a resource");
+    assert_eq!(audio["kind"], "audio");
+    assert!(dir
+        .join("Resources")
+        .join(audio["filename"].as_str().unwrap())
+        .exists());
+    let layers = file["layers"].as_array().unwrap();
+    assert!(layers
+        .iter()
+        .any(|l| l["kind"] == "audio" && l["resourceID"] == clock));
+    let lengths: Vec<f64> = settings["sequence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["beats"].as_f64().unwrap())
+        .collect();
+    assert_eq!(lengths, [2.0, 1.0, 2.0, 1.0], "cycled");
+    let first = settings["sequence"][0]["layer"].as_str().unwrap();
+    let opening = layers.iter().find(|l| l["id"] == first).unwrap();
+    assert_eq!(opening["startTime"], json!({"bar": 1}));
+    let caption = layers.iter().find(|l| l["kind"] == "caption").unwrap();
+    assert_eq!(caption["timing"]["start"]["from"], "previousStart");
+
+    let validate = promo_in(&dir, &["validate", dir.to_str().unwrap()]);
+    assert!(validate.starts_with("ok"), "{validate}");
+    let printed: Value =
+        serde_json::from_str(&promo_in(&dir, &["beats", dir.to_str().unwrap(), "--json"])).unwrap();
+    let beats: Vec<f64> = printed["beats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b.as_f64().unwrap())
+        .collect();
+    let downbeat = beats
+        .iter()
+        .position(|&b| b == printed["offset"].as_f64().unwrap())
+        .unwrap();
+    let mut at = downbeat;
+    for (n, entry) in settings["sequence"].as_array().unwrap().iter().enumerate() {
+        let (start, _) = life(&dir, entry["layer"].as_str().unwrap());
+        assert!(
+            (start - beats[at]).abs() < 1e-6,
+            "slide {n} starts at {start}, the beat is {}",
+            beats[at]
+        );
+        at += lengths[n] as usize;
+    }
+    let (caption_start, _) = life(&dir, caption["id"].as_str().unwrap());
+    let (picture_start, _) = life(&dir, first);
+    assert!(
+        (caption_start - picture_start).abs() < 1e-9,
+        "the caption rides its picture"
+    );
+
+    // Not every show is cut to music.
+    let refused = Command::new(env!("CARGO_BIN_EXE_promo"))
+        .args(["slideshow"])
+        .arg(base.join("Store.promo"))
+        .args([
+            "--args",
+            &json!({"music": song, "kind": "appStore", "slides": [{"file": base.join("p0.png")}]})
+                .to_string(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("classic"));
+    let _ = std::fs::remove_dir_all(&base);
+}

@@ -47,6 +47,10 @@ pub struct BeatGrids {
     pub sections: BTreeMap<String, Vec<musical::BeatSection>>,
     /// An analysis's confidence, by resource id: under 0.5 is a warning.
     pub confidence: BTreeMap<String, f64>,
+    /// An analysis's beats (the song's seconds) and which is beat 1, by
+    /// resource id — the list a clock counts on, so the cuts land on the
+    /// beats `promo beats` prints.
+    pub beats: BTreeMap<String, (Vec<f64>, usize)>,
 }
 
 impl BeatGrids {
@@ -58,6 +62,22 @@ impl BeatGrids {
             grids.by_resource.insert(id.clone(), analysis.grid());
             grids.sections.insert(id.clone(), analysis.sections.clone());
             grids.confidence.insert(id.clone(), analysis.confidence);
+            if analysis.beats.len() >= 2 {
+                // Beat 1 is the first downbeat — the beat nearest it.
+                let first = analysis
+                    .beats
+                    .iter()
+                    .enumerate()
+                    .min_by(|a, b| {
+                        (a.1 - analysis.offset)
+                            .abs()
+                            .total_cmp(&(b.1 - analysis.offset).abs())
+                    })
+                    .map_or(0, |(k, _)| k);
+                grids
+                    .beats
+                    .insert(id.clone(), (analysis.beats.clone(), first));
+            }
         }
         grids
     }
@@ -439,7 +459,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             &mut report,
         );
         let flash = crate::beat_effects::Context {
-            grid: scope.grid,
+            grid: scope.grid.clone(),
             fps,
             sections,
             end,
@@ -542,7 +562,7 @@ fn findings(
     let Some(id) = scope.clock_resource.clone() else {
         return;
     };
-    let grid = scope.grid;
+    let grid = scope.grid.clone();
     report.clocks.push(BeatClockInfo {
         scope: name.into(),
         resource: id.clone(),
@@ -1341,6 +1361,21 @@ impl Scope {
                 }
             }
         };
+        if resource.beat_grid.is_none() {
+            if let (Some((beats, first)), Some(measured)) =
+                (grids.beats.get(id), grids.by_resource.get(id))
+            {
+                let meter = measured
+                    .time_signature
+                    .map(|[beats, _]| beats)
+                    .filter(|b| *b > 0)
+                    .unwrap_or(4);
+                return (
+                    Grid::listed(beats, *first, measured.bpm, meter, origin, speed),
+                    placed_by,
+                );
+            }
+        }
         let stated = resource
             .beat_grid
             .as_ref()
@@ -1356,7 +1391,10 @@ impl Scope {
 
     /// The grid one layer resolves against: its own clock, or the scope's.
     fn grid_of(&self, layer: &ProjectLayer) -> Grid {
-        self.overrides.get(&layer.id).copied().unwrap_or(self.grid)
+        self.overrides
+            .get(&layer.id)
+            .cloned()
+            .unwrap_or_else(|| self.grid.clone())
     }
 
     /// Whether this layer resolves against no clock at all.
@@ -1373,7 +1411,7 @@ impl Scope {
     /// The same clock for a stage's members, with nothing to report twice.
     fn for_members(&self) -> Scope {
         Scope {
-            grid: self.grid,
+            grid: self.grid.clone(),
             clockless: self.clockless,
             problems: Vec::new(),
             missing: Vec::new(),

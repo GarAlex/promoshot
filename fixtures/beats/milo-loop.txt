@@ -1,0 +1,5 @@
+milo-loop.wav — 12 s (2–14 s) of a chiptune loop generated with ACE-Step
+(Apache-2.0, per the song's provenance), requested at 124 BPM; mono,
+22.05 kHz, 16-bit. The beat tracker's regression fixture for busy generated
+loops (arpeggios and hats on the off-beats): promo-media/tests/beats.rs,
+the_real_generated_loop_fits_its_tempo.
