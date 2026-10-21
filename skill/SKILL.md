@@ -141,8 +141,10 @@ its defaults are the source of the first, the person of the second.
      the answer (the app measures into the same cache when it opens the
      project). Point `compositionSettings.beatClock` at the song and times
      can say `{"beats": 2}` — cut a slideshow to it with the beat-cut
-     recipe. State a `beatGrid` only to override a measure you checked by
-     ear (confidence under 0.5); promo_schema_full topic `beats`.
+     recipe. A `bpmHint` is kept on the song for every later measure
+     (`clearHint` drops it); state a `beatGrid` only to override a measure
+     you checked by ear — it sets tempo and offset, the sections stay
+     measured. promo_schema_full topic `beats`.
    - `promo_transcribe` — a transcript with timings, the draft captions
      are cut from (headless it needs whisper-cli + WHISPER_MODEL; the
      app uses Apple's recognizer; without either, captions are typed).

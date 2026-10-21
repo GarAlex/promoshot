@@ -243,7 +243,7 @@ white flash marks bar 2. No `beatGrid`: promo measures the song on open
 
 ```json
 {"id":"beatcut","name":"Beat Cut","createdAt":0,"state":"recorded",
- "minReaderVersion":49,"trimStart":0,"trimEnd":5,"videoDuration":5,
+ "minReaderVersion":49,"trimStart":0,"trimEnd":4.25,"videoDuration":4.25,
  "subtitles":[],
  "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
    "backgroundColorHex":"000000",
@@ -269,7 +269,7 @@ white flash marks bar 2. No `beatGrid`: promo measures the song on open
    "pixelWidth":320,"pixelHeight":180}],
  "layers":[
   {"id":"music","name":"Music","sortIndex":0,"kind":"audio",
-   "isEnabled":true,"startTime":0,"duration":5,"resourceID":"song",
+   "isEnabled":true,"startTime":0,"duration":{"bar":3},"resourceID":"song",
    "keyframes":[]},
   {"id":"s1","name":"Still 1","sortIndex":1,"kind":"image",
    "isEnabled":true,"startTime":{"beat":1},"duration":1,"resourceID":"p1",

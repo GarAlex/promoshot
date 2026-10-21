@@ -401,6 +401,9 @@ where
             if let Some(bpm) = args.get("bpmHint").and_then(Value::as_f64) {
                 argv.extend(["--bpm-hint".into(), bpm.to_string()]);
             }
+            if args.get("clearHint").and_then(Value::as_bool) == Some(true) {
+                argv.push("--clear-hint".into());
+            }
             if args.get("refresh").and_then(Value::as_bool) == Some(true) {
                 argv.push("--refresh".into());
             }
@@ -1146,7 +1149,15 @@ mod tests {
             .iter()
             .find(|t| t["name"] == "promo_beats")
             .expect("promo_beats is offered");
-        for key in ["file", "project", "resource", "meter", "bpmHint", "refresh"] {
+        for key in [
+            "file",
+            "project",
+            "resource",
+            "meter",
+            "bpmHint",
+            "clearHint",
+            "refresh",
+        ] {
             assert!(
                 beats["inputSchema"]["properties"].get(key).is_some(),
                 "promo_beats takes `{key}`"

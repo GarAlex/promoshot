@@ -773,9 +773,13 @@ fn frame_of(t: f64) -> usize {
 /// The analysis of mono samples at [`RATE`] lasting `duration` seconds.
 pub fn analyse(x: &[f64], duration: f64, options: BeatOptions) -> BeatAnalysis {
     let meter = options.meter.max(1);
+    let hint = options
+        .bpm_hint
+        .filter(|h| h.is_finite() && *h >= 20.0 && *h <= 400.0);
     let empty = BeatAnalysis {
         tracker_version: TRACKER_VERSION,
         source: None,
+        bpm_hint: hint,
         duration: round_us(duration),
         bpm: 0.0,
         offset: 0.0,
@@ -961,6 +965,7 @@ pub fn analyse(x: &[f64], duration: f64, options: BeatOptions) -> BeatAnalysis {
     BeatAnalysis {
         tracker_version: TRACKER_VERSION,
         source: None,
+        bpm_hint: hint,
         duration: round_us(duration),
         bpm: (60.0 / beat_period * 1000.0).round() / 1000.0,
         offset: round_us(downbeats.first().copied().unwrap_or(0.0)),
@@ -1368,7 +1373,7 @@ pub fn analysis_for(
     refresh: bool,
 ) -> Result<(BeatAnalysis, bool), BeatError> {
     if !refresh {
-        if let Some(cached) = load_cached(project, audio) {
+        if let Some(cached) = load_cached(project, audio, options.bpm_hint) {
             return Ok((cached, true));
         }
     }

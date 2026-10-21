@@ -151,11 +151,15 @@ fn span(
                 _ => false,
             })
             .ok_or_else(|| format!("range names section {section}, which the song has not"))?;
-        let first = grid.bars(f64::from(found.start_bar) - 1.0);
-        (
-            grid.time_at(first),
-            grid.time_at(first + grid.bars(f64::from(found.bars))),
-        )
+        // From the song's own seconds, onto the nearest bar starts of the
+        // grid that counts — the analysis's own downbeats, or a hand grid
+        // whose bars sit a little elsewhere: sections are where the music
+        // changes, whoever counts its tempo.
+        let bar_at = |source: f64| {
+            let t = grid.clock + source / grid.speed;
+            grid.time_at(grid.snap(promo_model::musical::SnapUnit::Bar, t))
+        };
+        (bar_at(found.start), bar_at(found.end))
     } else if range.get("from").is_some() || range.get("to").is_some() {
         (
             value_time("from")?.unwrap_or(f64::NEG_INFINITY),

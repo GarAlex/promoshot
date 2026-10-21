@@ -35,11 +35,12 @@ USAGE:
     promo device  <phone|tablet|tablet-portrait|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
     promo beats   <audio-file | project-dir> [--resource <id>] [--json]
-                  [--meter <n>] [--bpm-hint <n>] [--refresh]
+                  [--meter <n>] [--bpm-hint <n> | --clear-hint] [--refresh]
         the beats of a song: tempo, beats, downbeats, sections, confidence.
         On a project, the clock's (or the named) audio resource — the
         analysis is cached in Resources/.beats/ and is the answer from then
-        on; --refresh analyses again
+        on; --refresh analyses again. On a project --bpm-hint is kept on the
+        song (its bpmHint) for every later measure; --clear-hint drops it
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -472,6 +473,7 @@ fn beats(args: &[String]) -> Result<String, String> {
     let mut resource: Option<String> = None;
     let mut json = false;
     let mut refresh = false;
+    let mut clear_hint = false;
     let mut options = BeatOptions::default();
     let mut i = 0;
     while i < args.len() {
@@ -484,6 +486,7 @@ fn beats(args: &[String]) -> Result<String, String> {
         match flag {
             "--json" => json = true,
             "--refresh" => refresh = true,
+            "--clear-hint" => clear_hint = true,
             "--resource" => {
                 resource = Some(value()?);
                 i += 1;
@@ -509,10 +512,13 @@ fn beats(args: &[String]) -> Result<String, String> {
     }
     let path =
         path.ok_or_else(|| format!("beats: expected an audio file or a project\n\n{USAGE}"))?;
+    if clear_hint && options.bpm_hint.is_some() {
+        return Err("beats: --bpm-hint and --clear-hint say opposite things".into());
+    }
     let (analysis, cached) = if path.is_dir() {
         let text = std::fs::read_to_string(path.join("metadata.json"))
             .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
-        let meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
+        let mut meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
         let audio: Vec<&promo_model::ProjectResource> = meta
             .resources
             .iter()
@@ -542,7 +548,29 @@ fn beats(args: &[String]) -> Result<String, String> {
                 ))
             }
         };
-        let file = path.join("Resources").join(&chosen.filename);
+        let file = promo_model::beat_cache::song_file(&path, chosen);
+        // The hint is the song's: a new one is kept on it (bpmHint), so
+        // every later measure — any tool's — hears the same tempo; none
+        // given, the kept one steers this measure too.
+        let chosen_id = chosen.id.clone();
+        let kept = chosen.bpm_hint;
+        let wanted_hint = if clear_hint {
+            None
+        } else {
+            options.bpm_hint.or(kept)
+        };
+        if wanted_hint != kept {
+            if let Some(resource) = meta
+                .resources
+                .iter_mut()
+                .flatten()
+                .find(|r| r.id == chosen_id)
+            {
+                resource.bpm_hint = wanted_hint;
+            }
+            promo_author::write_metadata(&meta, &path.join("metadata.json"))?;
+        }
+        options.bpm_hint = wanted_hint;
         let (analysis, cached) = beats::analysis_for(&path, &file, options, refresh)?;
         (analysis, Some(cached))
     } else {
@@ -568,8 +596,12 @@ fn beats(args: &[String]) -> Result<String, String> {
         })
         .collect();
     Ok(format!(
-        "{:.3} BPM, {}/{}, first downbeat {:.3} s, {} grid, confidence {:.2} — {} beats, {} bars{}{}",
+        "{:.3} BPM{}, {}/{}, first downbeat {:.3} s, {} grid, confidence {:.2} — {} beats, {} bars{}{}",
         analysis.bpm,
+        analysis
+            .bpm_hint
+            .map(|h| format!(" (hint {h} BPM)"))
+            .unwrap_or_default(),
         analysis.time_signature[0],
         analysis.time_signature[1],
         analysis.offset,

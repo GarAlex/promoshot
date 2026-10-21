@@ -3306,6 +3306,13 @@
             "null"
           ]
         },
+        "bpmHint": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "captionStyle": {
           "anyOf": [
             {

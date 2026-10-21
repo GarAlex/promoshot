@@ -111,7 +111,7 @@ fn bars_beats_names_a_time_on_the_grid() {
     );
     assert_eq!(
         bars_beats(&meta, &grids, "a", 0.0).as_deref(),
-        Some("bar 0 · beat 4.5")
+        Some("0.5 beats before bar 1")
     );
 }
 

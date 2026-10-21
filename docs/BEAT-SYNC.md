@@ -629,6 +629,36 @@ the text above, and why:
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
 
+**After the 0.3.13 field test** (2026-10-20, MiloBeat2 and its hint/grid
+variants):
+- **Tracked cuts off the printed beats (up to 258 ms):** the CLI's open
+  (`Project::measure_grids` — validate, render, inspect, the headless MCP)
+  built its `BeatGrids` by hand and never filled the beat lists, so a
+  tracked song resolved on the closed form at its median tempo; explain and
+  the apps used `BeatGrids::from_analyses` and were right, which is why the
+  0.3.13 test (through explain) passed. The CLI now uses the one
+  constructor. `tracked_cuts_land_on_printed_beats_in_the_field_shape`
+  checks the render path's resolve in the report's exact shape.
+- **Hand grids keep the measure:** every clock song is measured (or read
+  from the cache), a stated one for its sections; a section range snaps the
+  section's own seconds onto the counting grid's bars; `HandGridDrifts`
+  says how far a hand tempo's beats come from the song's, and inspect shows
+  the measured tempo. The apps measure a stated-grid song too
+  (`unmeasuredSongs`), and adopt the flash it makes possible.
+- **`bpmHint` on the song:** `promo beats --bpm-hint` keeps it,
+  `--clear-hint` drops it (MCP `clearHint`); every measure — CLI, MCP, the
+  apps' meter — uses it; the cache key carries it (`<sha>-hint118.json`),
+  and the analysis records it (`bpmHint`).
+- **No negative beats:** an off-grid edge names a pickup ("the pickup 2
+  beats before beat 1") or, before the song plays, where the song starts and
+  its first beat; bars·beats says "1.5 beats before bar 1". A one-beat slide
+  of a tracked song is measured against its own beat (it was the first).
+- **The blank tail:** the original MiloBeat stored `videoDuration` 23.744
+  from its first, wrong tempo; re-timed, its content ends at 23.173. That
+  is authoring, not resolution: validate now names any end past the last
+  picture, with the gap and the number to set. The beat-cut recipe ends on
+  its content (music to bar 3, 4.25 s).
+
 **After the field test** (2026-10-20, a real ACE-Step chiptune loop, asked
 for 124 BPM): tracker version 2.
 - **Why it locked wrong:** the tempo came from the envelope's

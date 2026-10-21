@@ -231,3 +231,34 @@ fn pulse_and_internal_key_warnings() {
         "{said:?}"
     );
 }
+
+/// A grid point before beat 1 is named from the music, never as a negative
+/// beat: inside the song, the pickup so many beats before beat 1; before
+/// the song plays at all, where it starts and its first beat.
+#[test]
+fn points_before_beat_one_are_named_from_the_music() {
+    // The song plays from 1.5 s; 120 BPM, beat 1 a second into it (2.5 s).
+    let file = project(
+        json!([caption("early", 0.2, 3.0), caption("pickup", 1.9, 1.0)]),
+        song(json!({"beatGrid": {"bpm": 120, "offset": 1.0}})),
+        json!({"beatClock": {"resourceID": "song", "startTime": 1.5}}),
+    );
+    let said = warnings(&file, &BeatGrids::default());
+    assert!(said.iter().all(|m| !m.contains("beat -")), "{said:?}");
+    let early = said
+        .iter()
+        .find(|m| m.contains("\"early\" at 0.20s"))
+        .expect("the early edge is named");
+    assert!(
+        early.contains("before the song starts (at 1.50 s; its first beat is at 1.50 s)"),
+        "{early}"
+    );
+    let pickup = said
+        .iter()
+        .find(|m| m.contains("\"pickup\" at 1.90s"))
+        .expect("the pickup edge is named");
+    assert!(
+        pickup.contains("the pickup 1 beat before beat 1, at 2.00 s"),
+        "{pickup}"
+    );
+}

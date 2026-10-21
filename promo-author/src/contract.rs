@@ -444,10 +444,10 @@ pub fn tools(host: Host) -> Vec<Value> {
         }),
         json!({
             "name": "promo_beats",
-            "description": "Ears for music: tempo, beats, downbeats, sections, confidence \
-                (song seconds). `file`, or `project` + `resource` (default: the beat \
-                clock's song): cached in Resources/.beats/, authoritative; `refresh` \
-                redoes it. Its bpm/offset go in the song's `beatGrid`.",
+            "description": "Ears for music: tempo, beats, downbeats, sections, confidence. \
+                `file`, or `project` + `resource` (default: the clock's song), cached in \
+                Resources/.beats/; `refresh` redoes it. `bpmHint` is kept on the song \
+                (`clearHint` drops it).",
             "inputSchema": { "type": "object",
                 "properties": {
                     "file": { "type": "string" },
@@ -455,6 +455,7 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "resource": { "type": "string" },
                     "meter": { "type": "integer" },
                     "bpmHint": { "type": "number" },
+                    "clearHint": { "type": "boolean" },
                     "refresh": { "type": "boolean" }
                 },
                 "required": [] }

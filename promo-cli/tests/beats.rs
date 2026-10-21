@@ -684,7 +684,8 @@ fn beat_cut_recipe_validates_and_renders() {
     let said = promo_in(&dir, &["validate", dir.to_str().unwrap()]);
     assert!(said.starts_with("ok"), "{said}");
     assert!(
-        said.contains("layers[s4].startTime   sequence    → 3.250 s"),
+        said.lines()
+            .any(|l| l.contains("layers[s4].startTime") && l.ends_with("→ 3.250 s")),
         "{said}"
     );
     assert!(
@@ -936,4 +937,249 @@ fn a_slideshow_cut_to_music() {
     assert!(!refused.status.success());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("classic"));
     let _ = std::fs::remove_dir_all(&base);
+}
+
+/// The field report's shape (MiloBeat2, hinted to 118): the song starts
+/// 1.5 s in (the clock follows its audio layer), its analysis is a tracked
+/// one written by `promo beats --bpm-hint --refresh`, the slides are a
+/// 2-2-1-1-4-4 sequence from bar 2 and an end card follows by `after`.
+/// The render path's own resolve (`validate --json`, what `video` uses) puts
+/// every cut on a printed beat — 0.3.13 put them on an even grid at the
+/// median tempo, up to 258 ms off.
+#[test]
+fn tracked_cuts_land_on_printed_beats_in_the_field_shape() {
+    let dir = folder("field-shape", &json!({}));
+    let (samples, _) = click_track::gliding_kicks(110.0, 130.0, 22.0, 44_100.0);
+    std::fs::write(
+        dir.join("Resources/track.wav"),
+        click_track::wav(&samples, 1, 44_100),
+    )
+    .unwrap();
+    let pattern = [2, 2, 1, 1, 4, 4, 2, 2, 1, 1, 4, 4];
+    let mut layers = vec![
+        json!({"id": "music", "name": "Music", "sortIndex": 0, "kind": "audio",
+               "isEnabled": true, "startTime": 1.5, "duration": 22, "resourceID": "track",
+               "keyframes": []}),
+        json!({"id": "intro", "name": "Intro", "sortIndex": 1, "kind": "caption",
+               "isEnabled": true, "startTime": 0, "duration": {"bar": 2},
+               "captionText": "Intro", "keyframes": []}),
+    ];
+    let mut sequence = Vec::new();
+    for (k, beats) in pattern.iter().enumerate() {
+        let mut layer = json!({"id": format!("c{k:02}"), "name": format!("Cut {k}"),
+                               "sortIndex": k + 2, "kind": "caption", "isEnabled": true,
+                               "startTime": 0, "duration": 1, "captionText": "x",
+                               "keyframes": []});
+        if k == 0 {
+            layer["startTime"] = json!({"bar": 2});
+        }
+        layers.push(layer);
+        sequence.push(json!({"layer": format!("c{k:02}"), "beats": beats}));
+    }
+    layers.push(
+        json!({"id": "end", "name": "End", "sortIndex": 40, "kind": "caption",
+                       "isEnabled": true, "startTime": 0, "duration": {"bars": 1},
+                       "after": format!("c{:02}", pattern.len() - 1),
+                       "captionText": "End", "keyframes": []}),
+    );
+    let metadata = json!({
+        "id": "P", "name": "Field shape", "createdAt": 0, "state": "recorded",
+        "minReaderVersion": 49,
+        "trimStart": 0, "trimEnd": 24, "videoDuration": 24, "subtitles": [],
+        "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90, "fps": 30,
+                                "beatClock": {"resourceID": "track"},
+                                "sequence": sequence},
+        "layers": layers,
+        "resources": [{"id": "track", "kind": "audio", "filename": "track.wav",
+                       "displayName": "Track", "addedAt": 0, "duration": 22}]
+    });
+    std::fs::write(dir.join("metadata.json"), metadata.to_string()).unwrap();
+    let printed: Value = serde_json::from_str(&promo_in(
+        &dir,
+        &[
+            "beats",
+            dir.to_str().unwrap(),
+            "--bpm-hint",
+            "120",
+            "--refresh",
+            "--json",
+        ],
+    ))
+    .unwrap();
+    assert_eq!(printed["grid"], "tracked");
+    let beats: Vec<f64> = printed["beats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| 1.5 + b.as_f64().unwrap())
+        .collect();
+    let validated: Value = serde_json::from_str(&promo_in(
+        &dir,
+        &["validate", dir.to_str().unwrap(), "--json"],
+    ))
+    .unwrap();
+    let starts: Vec<(String, f64)> = validated["resolvedTimes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| {
+            let at = r["at"].as_str().unwrap();
+            at.ends_with(".startTime") && (at.contains("[c") || at.contains("[end]"))
+        })
+        .map(|r| {
+            (
+                r["at"].as_str().unwrap().to_string(),
+                r["seconds"].as_f64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(starts.len(), pattern.len() + 1, "{validated}");
+    for (at, t) in &starts {
+        let nearest = beats
+            .iter()
+            .copied()
+            .min_by(|a, b| (a - t).abs().total_cmp(&(b - t).abs()))
+            .unwrap();
+        assert!(
+            (t - nearest).abs() < 0.001,
+            "{at} resolves to {t}, the nearest printed beat is {nearest}"
+        );
+    }
+    // explain (another reader) agrees with the render path.
+    let (start, _) = life(&dir, "c04");
+    let from_validate = starts
+        .iter()
+        .find(|(at, _)| at.contains("[c04]"))
+        .unwrap()
+        .1;
+    assert!((start - from_validate).abs() < 1e-9);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The hint is the song's: `--bpm-hint` keeps it on the resource
+/// (`bpmHint`), every later measure without the flag hears it, a hinted and
+/// an unhinted analysis sit side by side in the cache, and `--clear-hint`
+/// drops it.
+#[test]
+fn the_bpm_hint_is_kept_on_the_song() {
+    let dir = folder("kept-hint", &json!({}));
+    let samples = click_track::even_eighths(70.0, 16.0, 44_100.0);
+    std::fs::write(
+        dir.join("Resources/song.wav"),
+        click_track::wav(&samples, 1, 44_100),
+    )
+    .unwrap();
+    let metadata = json!({
+        "id": "P", "name": "Hint", "createdAt": 0, "state": "recorded",
+        "trimStart": 0, "trimEnd": 16, "videoDuration": 16, "subtitles": [],
+        "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90,
+                                "beatClock": {"resourceID": "song", "startTime": 0}},
+        "layers": [{"id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+                    "isEnabled": true, "startTime": 0, "duration": 16, "keyframes": []}],
+        "resources": [{"id": "song", "kind": "audio", "filename": "song.wav",
+                       "displayName": "Song", "addedAt": 0, "duration": 16}]
+    });
+    std::fs::write(dir.join("metadata.json"), metadata.to_string()).unwrap();
+    let measure = |extra: &[&str]| -> Value {
+        let mut args = vec!["beats", dir.to_str().unwrap(), "--json"];
+        args.extend_from_slice(extra);
+        serde_json::from_str(&promo_in(&dir, &args)).unwrap()
+    };
+    let hint = |dir: &Path| -> Value {
+        let file: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        file["resources"][0]["bpmHint"].clone()
+    };
+    let plain = measure(&[]);
+    assert!(
+        (plain["bpm"].as_f64().unwrap() - 140.0).abs() < 0.3,
+        "{plain}"
+    );
+    let hinted = measure(&["--bpm-hint", "70"]);
+    assert!(
+        (hinted["bpm"].as_f64().unwrap() - 70.0).abs() < 0.3,
+        "{hinted}"
+    );
+    assert_eq!(hinted["bpmHint"], 70.0);
+    assert_eq!(hint(&dir), 70.0, "kept on the song");
+    let again = measure(&[]);
+    assert_eq!(
+        again["bpm"], hinted["bpm"],
+        "a measure without the flag hears it"
+    );
+    assert_eq!(again["fromCache"], true);
+    let text = promo_in(&dir, &["beats", dir.to_str().unwrap()]);
+    assert!(text.contains("(hint 70 BPM)"), "{text}");
+    let files = std::fs::read_dir(dir.join("Resources/.beats"))
+        .unwrap()
+        .count();
+    assert_eq!(files, 2, "the hinted and unhinted analyses are two answers");
+    // validate counts on the hinted measure too.
+    let validated: Value = serde_json::from_str(&promo_in(
+        &dir,
+        &["validate", dir.to_str().unwrap(), "--json"],
+    ))
+    .unwrap();
+    assert!((validated["beatClocks"][0]["bpm"].as_f64().unwrap() - 70.0).abs() < 0.3);
+    let cleared = measure(&["--clear-hint"]);
+    assert!(hint(&dir).is_null(), "cleared");
+    assert!(
+        (cleared["bpm"].as_f64().unwrap() - 140.0).abs() < 0.3,
+        "{cleared}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A hand-set beatGrid overrides tempo and offset only: the song is still
+/// measured for its sections, so a flash ranged over a section stands
+/// (0.3.13: NOT OK, "no analysis to have sections"); a hand tempo that
+/// differs from the measure says how far its beats come from the song's.
+#[test]
+fn a_hand_grid_keeps_the_measured_sections() {
+    for (bpm, drifts) in [(120.0, false), (119.0, true)] {
+        let dir = folder(&format!("hand-grid-{bpm}"), &json!({}));
+        let samples = click_track::arrangement_change(120.0, 44_100.0);
+        std::fs::write(
+            dir.join("Resources/song.wav"),
+            click_track::wav(&samples, 1, 44_100),
+        )
+        .unwrap();
+        let metadata = json!({
+            "id": "P", "name": "Hand grid", "createdAt": 0, "state": "recorded",
+            "minReaderVersion": 49,
+            "trimStart": 0, "trimEnd": 32, "videoDuration": 32, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90, "fps": 30,
+                                    "beatClock": {"resourceID": "song", "startTime": 0},
+                                    "flash": {"on": "downbeat", "range": {"section": 1}}},
+            "layers": [{"id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+                        "isEnabled": true, "startTime": 0, "duration": 32,
+                        "keyframes": []}],
+            "resources": [{"id": "song", "kind": "audio", "filename": "song.wav",
+                           "displayName": "Song", "addedAt": 0, "duration": 32.75,
+                           "beatGrid": {"bpm": bpm, "offset": 0.25}}]
+        });
+        std::fs::write(dir.join("metadata.json"), metadata.to_string()).unwrap();
+        let said = promo_in(&dir, &["validate", dir.to_str().unwrap()]);
+        assert!(said.starts_with("ok"), "{bpm}: {said}");
+        assert!(!said.contains("no analysis"), "{bpm}: {said}");
+        assert_eq!(said.contains("the song measures"), drifts, "{bpm}: {said}");
+        // The flash lights the second section only — from bar 9 (16.25 s).
+        let explained: Value = serde_json::from_str(
+            &promo_author::explain(&json!({"project": dir, "time": 20.0}), None).unwrap(),
+        )
+        .unwrap();
+        let flash = explained["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| {
+                l["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("beat-flash"))
+            })
+            .cloned();
+        assert!(flash.is_some(), "{bpm}: the flash was made: {explained}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

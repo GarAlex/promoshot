@@ -1991,7 +1991,9 @@ fn editable(text: &str, dir: &Path) -> Result<(), String> {
     }
 }
 
-fn write_metadata(meta: &ProjectMetadata, path: &Path) -> Result<(), String> {
+/// Writes a project's metadata the way every authoring tool does: stamped,
+/// keeping what the file held unread.
+pub fn write_metadata(meta: &ProjectMetadata, path: &Path) -> Result<(), String> {
     let mut stamped = meta.clone();
     stamped.min_reader_version = Some(stamped.minimum_reader_version());
     let mut json = stamped.to_json().map_err(|e| e.to_string())?;

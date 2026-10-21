@@ -1080,6 +1080,9 @@ pub struct BeatAnalysis {
     pub tracker_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<BeatSource>,
+    /// The tempo hint it was measured with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bpm_hint: Option<f64>,
     pub duration: f64,
     pub bpm: f64,
     /// The first downbeat.
@@ -1288,6 +1291,7 @@ pub fn carries_ignorable_beat_fields(meta: &ProjectMetadata) -> bool {
             .any(|l| l.beat_clock.is_some())
         || meta.resources.iter().flatten().any(|r| {
             r.beat_grid.is_some()
+                || r.bpm_hint.is_some()
                 || r.provenance.is_some()
                 || r.composition
                     .as_ref()

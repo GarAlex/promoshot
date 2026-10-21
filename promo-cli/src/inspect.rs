@@ -122,9 +122,16 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                     .unwrap_or_else(|| "analysis".into()),
                 _ => "none — 120 BPM stand-in".into(),
             };
+            // A hand grid's measure: the tempo the song itself keeps.
+            let measured = (c.source == "beatGrid")
+                .then(|| analysis.map(|(a, _)| a.bpm))
+                .flatten();
             serde_json::json!({
                 "scope": c.scope, "resource": c.resource, "source": source,
                 "bpm": c.bpm, "meter": c.meter, "offset": c.offset, "clock": c.clock,
+                "measuredBpm": measured,
+                "bpmHint": analysis.and_then(|(a, _)| a.bpm_hint),
+                "grid": analysis.map(|(a, _)| a.grid.clone()),
                 "confidence": analysis.map(|(a, _)| a.confidence),
                 "beats": analysis.map(|(a, _)| a.beats.len()),
                 "bars": analysis.map(|(a, _)| a.downbeats.len()),
@@ -282,6 +289,16 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                 _ => String::new(),
             }
         ));
+        if let Some(h) = clock["bpmHint"].as_f64() {
+            out.push_str(&format!("      measured with the song's hint, {h} BPM\n"));
+        }
+        if let Some(m) = clock["measuredBpm"].as_f64() {
+            if (m - clock["bpm"].as_f64().unwrap_or(m)).abs() > 1e-6 {
+                out.push_str(&format!(
+                    "      the song itself measures {m} BPM — the hand grid differs\n"
+                ));
+            }
+        }
         for section in clock["sections"].as_array().into_iter().flatten() {
             out.push_str(&format!(
                 "      {} — bars {}–{}, energy {:.2}\n",

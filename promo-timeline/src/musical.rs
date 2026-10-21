@@ -190,8 +190,20 @@ pub enum TimingProblem {
         edge: &'static str,
         at: f64,
         off: f64,
-        beat: i64,
-        nearest: f64,
+        /// The nearest grid point in words — "beat 3 at 1.25 s", a pickup
+        /// before beat 1, or a point before the song starts; never a
+        /// negative beat number.
+        nearest: String,
+    },
+    /// A hand-set `beatGrid` whose tempo differs from the song's measured
+    /// one: by the end of the timeline its beats are `drift` seconds from
+    /// the song's.
+    HandGridDrifts {
+        resource: String,
+        stated: f64,
+        measured: f64,
+        drift: f64,
+        at: f64,
     },
     /// A layer shorter than one beat of its clock.
     ShorterThanABeat {
@@ -302,13 +314,25 @@ impl std::fmt::Display for TimingProblem {
                 edge,
                 at,
                 off,
-                beat,
                 nearest,
             } => write!(
                 f,
                 "layer \"{layer}\" at {at:.2}s: {edge} {:.2} s off the beat grid — nearest is \
-                 beat {beat} at {nearest:.2} s",
+                 {nearest}",
                 off.abs()
+            ),
+            Self::HandGridDrifts {
+                resource,
+                stated,
+                measured,
+                drift,
+                at,
+            } => write!(
+                f,
+                "the beatGrid on \"{resource}\" says {stated} BPM, the song measures {measured} \
+                 BPM — by {at:.2} s its beats are {:.1} ms from the song's; drop the grid to \
+                 count the measured beats, or state the measured tempo",
+                drift * 1000.0
             ),
             Self::ShorterThanABeat {
                 layer,
@@ -358,6 +382,9 @@ pub struct TimingReport {
     pub resolved: Vec<ResolvedTime>,
     /// Clock resources with no grid: the nominal grid stood in.
     pub missing_grids: Vec<String>,
+    /// Clock resources that state their grid but have no measure yet —
+    /// their sections (a generator's `range`) wait for one.
+    pub unmeasured: Vec<String>,
     /// Every scope's beat clock.
     pub clocks: Vec<BeatClockInfo>,
 }
@@ -541,7 +568,37 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
     }
     report.missing_grids.sort();
     report.missing_grids.dedup();
+    report.unmeasured.sort();
+    report.unmeasured.dedup();
     report
+}
+
+/// A grid point in the words a person reads: "beat 3 at 1.25 s" from beat 1
+/// on, "the pickup 2 beats before beat 1, at 0.73 s" inside the song before
+/// its first downbeat, and for a point before the song even plays, where
+/// the song starts and its first beat — never a negative beat number.
+pub(crate) fn grid_point_words(grid: &Grid, index: f64, half_frame: f64) -> String {
+    let at = grid.time_at(index);
+    let song = grid.clock;
+    if at + half_frame < song {
+        let mut first = grid.index_at(song).ceil();
+        if grid.time_at(first) + half_frame < song {
+            first += 1.0;
+        }
+        return format!(
+            "a point before the song starts (at {song:.2} s; its first beat is at {:.2} s)",
+            grid.time_at(first)
+        );
+    }
+    if index < 0.0 {
+        let n = -index;
+        return format!(
+            "the pickup {} beat{} before beat 1, at {at:.2} s",
+            n,
+            if n == 1.0 { "" } else { "s" }
+        );
+    }
+    format!("beat {} at {at:.2} s", index as i64 + 1)
 }
 
 /// What a reader of a beat-cut edit wants to hear: a visual layer's edge off
@@ -592,8 +649,11 @@ fn findings(
             let mut edges = vec![("starts", layer.start_time)];
             if let Some(d) = layer.duration {
                 edges.push(("ends", layer.start_time + d));
-                let beat = grid.time_at(1.0) - grid.time_at(0.0);
-                if d + 1e-9 < beat {
+                // The beat where the layer plays — a measured song's beats
+                // are not all one length — and half a frame of give.
+                let here = grid.index_at(layer.start_time).floor();
+                let beat = grid.time_at(here + 1.0) - grid.time_at(here);
+                if d + half_frame < beat {
                     report.problems.push(TimingProblem::ShorterThanABeat {
                         layer: layer.name.clone(),
                         length: d,
@@ -612,8 +672,7 @@ fn findings(
                         edge,
                         at,
                         off,
-                        beat: index as i64 + 1,
-                        nearest,
+                        nearest: grid_point_words(&grid, index, half_frame),
                     });
                 }
             }
@@ -628,6 +687,45 @@ fn findings(
                     resource: id.clone(),
                     ends,
                     timeline,
+                });
+            }
+        }
+        // A hand grid against the song's measure: how far apart their beats
+        // come by the end of the timeline.
+        if let (Some(stated), Some((beats, first)), Some(measured)) = (
+            song.beat_grid.as_ref(),
+            grids.beats.get(&id),
+            grids.by_resource.get(&id),
+        ) {
+            let song_grid = Grid::listed(
+                beats,
+                *first,
+                measured.bpm,
+                grid.meter,
+                grid.clock,
+                grid.speed,
+            );
+            let mut worst: Option<(f64, f64)> = None;
+            let mut k = grid.index_at(grid.clock).ceil().max(0.0);
+            loop {
+                let t = grid.time_at(k);
+                if t > timeline + half_frame || k > 100_000.0 {
+                    break;
+                }
+                let theirs = song_grid.time_at(song_grid.index_at(t).round());
+                let apart = (t - theirs).abs();
+                if worst.is_none_or(|(w, _)| apart > w) {
+                    worst = Some((apart, t));
+                }
+                k += 1.0;
+            }
+            if let Some((drift, at)) = worst.filter(|(d, _)| *d > 0.005) {
+                report.problems.push(TimingProblem::HandGridDrifts {
+                    resource: id.clone(),
+                    stated: stated.bpm,
+                    measured: measured.bpm,
+                    drift,
+                    at,
                 });
             }
         }
@@ -880,6 +978,20 @@ pub fn bars_beats(
     let meter = f64::from(grid.meter);
     // Rounded to a microbeat, so a value resolved onto a beat reads as it.
     let index = (grid.index_at(seconds) * 1e6).round() / 1e6;
+    // Before beat 1: how far before it, never a bar 0 or a negative beat.
+    if index < 0.0 {
+        let n = -index;
+        let n = if (n - n.round()).abs() < 1e-3 {
+            format!("{}", n.round() as i64)
+        } else {
+            let text = format!("{n:.2}");
+            text.trim_end_matches('0').to_string()
+        };
+        return Some(format!(
+            "{n} beat{} before bar 1",
+            if n == "1" { "" } else { "s" }
+        ));
+    }
     let bar = (index / meter).floor();
     let beat = index - bar * meter + 1.0;
     let beat = if (beat - beat.round()).abs() < 1e-3 {
@@ -1241,6 +1353,8 @@ struct Scope {
     clockless: bool,
     problems: Vec<TimingProblem>,
     missing: Vec<String>,
+    /// Clock songs stating a grid with no analysis to give sections.
+    unmeasured: Vec<String>,
     /// The layer that places the clock's audio, by id.
     clock_layer: Option<String>,
     /// Layers with a `beatClock` of their own, by id.
@@ -1263,6 +1377,7 @@ impl Scope {
             clockless: clock.is_none(),
             problems: Vec::new(),
             missing: Vec::new(),
+            unmeasured: Vec::new(),
             clock_layer: None,
             overrides: BTreeMap::new(),
             clock_resource: clock.and_then(|c| c.resource_id.clone()),
@@ -1376,6 +1491,9 @@ impl Scope {
                 );
             }
         }
+        if resource.beat_grid.is_some() && !grids.by_resource.contains_key(id) {
+            self.unmeasured.push(id.into());
+        }
         let stated = resource
             .beat_grid
             .as_ref()
@@ -1415,6 +1533,7 @@ impl Scope {
             clockless: self.clockless,
             problems: Vec::new(),
             missing: Vec::new(),
+            unmeasured: Vec::new(),
             clock_layer: self.clock_layer.clone(),
             overrides: self.overrides.clone(),
             clock_resource: self.clock_resource.clone(),
@@ -1503,6 +1622,7 @@ fn positions_and_lengths(layers: &mut [ProjectLayer], scope: &Scope) {
 fn finish(layers: &mut [ProjectLayer], scope: &Scope, at: &str, report: &mut TimingReport) {
     report.problems.extend(scope.problems.iter().cloned());
     report.missing_grids.extend(scope.missing.iter().cloned());
+    report.unmeasured.extend(scope.unmeasured.iter().cloned());
     for layer in layers.iter_mut() {
         let here = format!("{at}[{}]", layer.id);
         let grid = scope.grid_of(layer);

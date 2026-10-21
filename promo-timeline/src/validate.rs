@@ -61,6 +61,7 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
     particle_warnings(meta, &mut out);
     stage_warnings(meta, &mut out);
     placeholder_narration_warnings(meta, &mut out);
+    trailing_blank_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -483,6 +484,60 @@ fn placeholder_narration_warnings(meta: &ProjectMetadata, out: &mut Report) {
             resource.duration.unwrap_or(0.0)
         ));
     }
+}
+
+/// The project running on past everything it shows: the composition's end
+/// (its stored length, or a background's) more than half a frame after the
+/// last picture, caption or drawing ends — seconds of nothing, usually a
+/// stored length from before the music re-timed the edit.
+fn trailing_blank_warnings(meta: &ProjectMetadata, out: &mut Report) {
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    let visible = |l: &&promo_model::ProjectLayer| {
+        l.is_enabled
+            && l.generated_by.is_none()
+            && !matches!(
+                l.kind,
+                ProjectLayerKind::Background | ProjectLayerKind::Audio
+            )
+    };
+    // An open-ended picture lasts to the end, whatever the end is.
+    if layers.iter().filter(visible).any(|l| l.duration.is_none()) {
+        return;
+    }
+    let content = layers
+        .iter()
+        .filter(visible)
+        .filter_map(|l| l.duration.map(|d| l.start_time + d))
+        .fold(f64::NEG_INFINITY, f64::max);
+    if !content.is_finite() {
+        return;
+    }
+    let end = crate::composition_duration(meta);
+    let half_frame = 0.5
+        / meta
+            .composition_settings
+            .fps
+            .filter(|f| *f > 0.0)
+            .unwrap_or(30.0);
+    if end <= content + half_frame {
+        return;
+    }
+    let music = layers
+        .iter()
+        .filter(|l| l.is_enabled && l.kind == ProjectLayerKind::Audio)
+        .filter_map(|l| l.duration.map(|d| l.start_time + d))
+        .fold(f64::NEG_INFINITY, f64::max);
+    let song = if music.is_finite() {
+        format!(" and its sound at {music:.2} s")
+    } else {
+        String::new()
+    };
+    out.warn(format!(
+        "the project runs to {end:.2} s, but its last picture ends at {content:.2} s{song} — \
+         {:.2} s of nothing at the end; end it with the content (videoDuration and trimEnd \
+         {content:.3}), or let the last slide run to the end",
+        end - content
+    ));
 }
 
 pub fn warnings(meta: &ProjectMetadata) -> Vec<String> {
@@ -3026,7 +3081,14 @@ mod palette_tests {
         for (index, recipe) in recipes.iter().enumerate() {
             let meta = promo_model::ProjectMetadata::from_json(recipe)
                 .unwrap_or_else(|e| panic!("recipe {index} does not decode: {e}"));
-            let found = warnings(&meta);
+            // A sequenced recipe's slides sit where its song's beats put
+            // them, so how its end meets its content is checked once the
+            // beats are measured (beat_cut_recipe_validates_and_renders).
+            let sequenced = meta.composition_settings.sequence.is_some();
+            let found: Vec<String> = warnings(&meta)
+                .into_iter()
+                .filter(|w| !(sequenced && w.contains("of nothing at the end")))
+                .collect();
             assert!(
                 found.is_empty(),
                 "recipe {index} ({}) warns: {found:?}",
@@ -3152,6 +3214,52 @@ mod palette_tests {
         assert!(
             found.iter().any(|w| w.contains("not a resource")),
             "{found:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod trailing_blank_tests {
+    use super::*;
+
+    fn project(video_duration: f64) -> ProjectMetadata {
+        ProjectMetadata::from_json(
+            &serde_json::json!({
+                "id": "P", "name": "P", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": video_duration, "videoDuration": video_duration,
+                "subtitles": [],
+                "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90, "fps": 30},
+                "layers": [
+                    {"id": "bg", "name": "Ground", "sortIndex": 0, "kind": "background",
+                     "isEnabled": true, "startTime": 0, "duration": video_duration,
+                     "keyframes": []},
+                    {"id": "a", "name": "A", "sortIndex": 1, "kind": "caption",
+                     "isEnabled": true, "startTime": 0, "duration": 3,
+                     "captionText": "x", "keyframes": []}
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap()
+    }
+
+    /// The project running past everything it shows is named, with the
+    /// gap and where to end; one that ends with its content says nothing.
+    #[test]
+    fn a_blank_tail_is_named() {
+        let said = warnings(&project(3.57));
+        assert!(
+            said.iter().any(|w| w.contains(
+                "the project runs to 3.57 s, but its last picture ends at 3.00 s — 0.57 s of \
+                 nothing at the end"
+            )),
+            "{said:?}"
+        );
+        assert!(
+            !warnings(&project(3.01))
+                .iter()
+                .any(|w| w.contains("of nothing")),
+            "within half a frame"
         );
     }
 }

@@ -746,6 +746,7 @@ mod schema_doc_tests {
                 time_signature: Some([4, 4]),
                 extra: serde_json::Map::new(),
             }),
+            bpm_hint: Some(128.0),
             generated_by: None,
             extra: serde_json::Map::new(),
         }

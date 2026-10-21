@@ -217,7 +217,10 @@ fn cache_is_never_silently_reanalysed() {
         beats::analysis_for(&dir, &song, BeatOptions::default(), true).unwrap();
     assert!(!from_cache);
     assert!((fresh.bpm - 96.0).abs() < 0.05);
-    assert_eq!(beats::load_cached(&dir, &song).unwrap().bpm, fresh.bpm);
+    assert_eq!(
+        beats::load_cached(&dir, &song, None).unwrap().bpm,
+        fresh.bpm
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

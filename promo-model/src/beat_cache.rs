@@ -102,26 +102,46 @@ pub fn cache_path(project: &Path, key: &str) -> PathBuf {
         .join(format!("{key}.json"))
 }
 
-/// The project's cached analysis of `audio`, by content, when there is one
-/// made by this tracker or a later one. An older tracker's answer is not
-/// the answer any more — it is measured again (and replaced) like a song
-/// never analysed; anything else in the cache is authoritative.
-pub fn load_cached(project: &Path, audio: &Path) -> Option<crate::musical::BeatAnalysis> {
-    let key = source_of(audio).ok()?.sha256;
+/// The cache key of a song's analysis: its content's, and the tempo hint
+/// it was measured with — a hinted and an unhinted analysis of one file
+/// are two answers, and neither overwrites the other.
+pub fn cache_key(sha256: &str, hint: Option<f64>) -> String {
+    match hint.filter(|h| h.is_finite() && (20.0..=400.0).contains(h)) {
+        None => sha256.to_string(),
+        Some(h) => {
+            let text = format!("{:.3}", h);
+            let text = text.trim_end_matches('0').trim_end_matches('.');
+            format!("{sha256}-hint{text}")
+        }
+    }
+}
+
+/// The project's cached analysis of `audio` measured with `hint` (none:
+/// unhinted), by content, when there is one made by this tracker or a
+/// later one. An older tracker's answer is not the answer any more — it is
+/// measured again (and replaced) like a song never analysed; anything else
+/// in the cache is authoritative.
+pub fn load_cached(
+    project: &Path,
+    audio: &Path,
+    hint: Option<f64>,
+) -> Option<crate::musical::BeatAnalysis> {
+    let key = cache_key(&source_of(audio).ok()?.sha256, hint);
     let text = std::fs::read_to_string(cache_path(project, &key)).ok()?;
     let analysis: crate::musical::BeatAnalysis = serde_json::from_str(&text).ok()?;
     (analysis.tracker_version >= crate::musical::TRACKER_VERSION).then_some(analysis)
 }
 
 /// Writes `analysis` (of `audio`) into the project's cache, `source` filled
-/// in, and returns what was written.
+/// in, under the key of the hint it was measured with, and returns what
+/// was written.
 pub fn store(
     project: &Path,
     audio: &Path,
     mut analysis: crate::musical::BeatAnalysis,
 ) -> Result<crate::musical::BeatAnalysis, String> {
     let source = source_of(audio)?;
-    let path = cache_path(project, &source.sha256);
+    let path = cache_path(project, &cache_key(&source.sha256, analysis.bpm_hint));
     analysis.source = Some(source);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -131,11 +151,24 @@ pub fn store(
     Ok(analysis)
 }
 
-/// The project's songs a beat clock counts and that state no `beatGrid` —
-/// the settings', a composition's, a layer's clock — by resource id, with
-/// their files (`song_file`: `Resources/`, or the shared library's folder
-/// for a library reference). The cache itself stays the project's.
-pub fn clock_songs(dir: &Path, meta: &ProjectMetadata) -> Vec<(String, PathBuf)> {
+/// A song a beat clock counts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClockSong {
+    pub id: String,
+    /// Its bytes (`song_file`).
+    pub file: PathBuf,
+    /// The tempo hint the resource keeps (`bpmHint`).
+    pub hint: Option<f64>,
+    /// It states its own `beatGrid` — the analysis is for its sections.
+    pub stated: bool,
+}
+
+/// The project's songs a beat clock counts — the settings', a
+/// composition's, a layer's clock — with their files (`song_file`:
+/// `Resources/`, or the shared library's folder for a library reference),
+/// their hints, and whether they state their grid. The cache itself stays
+/// the project's.
+pub fn clock_songs(dir: &Path, meta: &ProjectMetadata) -> Vec<ClockSong> {
     let mut ids: Vec<String> = Vec::new();
     let mut note = |clock: &Option<crate::musical::BeatClock>| {
         if let Some(id) = clock.as_ref().and_then(|c| c.resource_id.clone()) {
@@ -161,22 +194,25 @@ pub fn clock_songs(dir: &Path, meta: &ProjectMetadata) -> Vec<(String, PathBuf)>
                 && !resource.filename.contains('\\')
                 && resource.filename != ".."
                 && resource.filename != ".";
-            (resource.beat_grid.is_none()
-                && resource.kind == crate::ProjectResourceKind::Audio
-                && plain)
-                .then(|| (id, song_file(dir, resource)))
+            (resource.kind == crate::ProjectResourceKind::Audio && plain).then(|| ClockSong {
+                file: song_file(dir, resource),
+                hint: resource.bpm_hint,
+                stated: resource.beat_grid.is_some(),
+                id,
+            })
         })
         .collect()
 }
 
-/// The cached analysis of every clock song that has one — what a reader
-/// that never analyses counts beats on.
+/// The cached analysis of every clock song that has one (with the song's
+/// hint) — what a reader that never analyses counts beats on, and where a
+/// stated grid's song keeps its sections.
 pub fn cached_analyses(
     dir: &Path,
     meta: &ProjectMetadata,
 ) -> BTreeMap<String, crate::musical::BeatAnalysis> {
     clock_songs(dir, meta)
         .into_iter()
-        .filter_map(|(id, file)| Some((id, load_cached(dir, &file)?)))
+        .filter_map(|song| Some((song.id, load_cached(dir, &song.file, song.hint)?)))
         .collect()
 }

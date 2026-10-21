@@ -103,51 +103,31 @@ impl Project {
         std::collections::BTreeMap<String, (promo_model::musical::BeatAnalysis, String)>,
     ) {
         use promo_media::beats::{self, BeatOptions};
-        let mut ids: Vec<String> = Vec::new();
-        let mut note = |clock: &Option<promo_model::musical::BeatClock>| {
-            if let Some(id) = clock.as_ref().and_then(|c| c.resource_id.clone()) {
-                if !ids.contains(&id) {
-                    ids.push(id);
-                }
-            }
-        };
-        note(&meta.composition_settings.beat_clock);
-        for resource in meta.resources.iter().flatten() {
-            if let Some(composition) = &resource.composition {
-                note(&composition.beat_clock);
-            }
-        }
-        for layer in promo_model::nesting::all_layers(meta) {
-            note(&layer.beat_clock);
-        }
-        let mut grids = promo_timeline::BeatGrids::default();
         let mut problems = Vec::new();
         let mut analyses = std::collections::BTreeMap::new();
-        for id in ids {
-            let Some(resource) = meta.resources.iter().flatten().find(|r| r.id == id) else {
-                continue;
-            };
-            if resource.beat_grid.is_some()
-                || resource.kind != promo_model::ProjectResourceKind::Audio
-                || !plain_filename(&resource.filename)
-            {
-                continue;
-            }
-            let file = dir.join("Resources").join(&resource.filename);
+        // Every clock song — one that states its grid too: its analysis is
+        // where its sections come from — measured with the hint it keeps.
+        for song in promo_model::beat_cache::clock_songs(dir, meta) {
+            let id = song.id.clone();
+            let file = song.file.clone();
             if !file.is_file() {
-                problems.push(format!(
-                    "the beat clock's song \"{id}\" has no file in Resources/ ({}) — its beats \
-                     cannot be measured",
-                    resource.filename
-                ));
+                if !song.stated {
+                    problems.push(format!(
+                        "the beat clock's song \"{id}\" has no file in Resources/ ({}) — its \
+                         beats cannot be measured",
+                        file.file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default()
+                    ));
+                }
                 continue;
             }
             let options = BeatOptions {
                 meter: 4,
-                bpm_hint: None,
+                bpm_hint: song.hint,
             };
             let measured = match analysis {
-                Analysis::CacheOnly => beats::load_cached(dir, &file)
+                Analysis::CacheOnly => beats::load_cached(dir, &file, song.hint)
                     .map(|found| (found, "cache"))
                     .ok_or_else(String::new),
                 Analysis::Allowed => match beats::analysis_for(dir, &file, options, false) {
@@ -162,11 +142,12 @@ impl Project {
             };
             match measured {
                 Ok((found, source)) if found.bpm > 0.0 => {
-                    grids.sections.insert(id.clone(), found.sections.clone());
-                    grids.confidence.insert(id.clone(), found.confidence);
-                    grids.by_resource.insert(id.clone(), found.grid());
                     analyses.insert(id, (found, source.to_string()));
                 }
+                // A stated grid stands without a measure; only its
+                // sections wait for one (and the timing pass says so where
+                // a range names one).
+                _ if song.stated => {}
                 Ok(_) => problems.push(format!(
                     "the beat clock's song \"{id}\" has no beat the tracker can find — set \
                      \"beatGrid\": {{\"bpm\": …}} on it"
@@ -178,6 +159,14 @@ impl Project {
                 )),
             }
         }
+        // The one constructor every reader uses, so the CLI's render and
+        // validate count the same listed beats as explain and the apps.
+        let found: std::collections::BTreeMap<String, promo_model::musical::BeatAnalysis> =
+            analyses
+                .iter()
+                .map(|(id, (analysis, _))| (id.clone(), analysis.clone()))
+                .collect();
+        let grids = promo_timeline::BeatGrids::from_analyses(&found);
         (grids, problems, analyses)
     }
 

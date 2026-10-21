@@ -4114,6 +4114,11 @@ pub struct ProjectResource {
     /// A beat grid stated by hand on an audio resource: no detection.
     #[serde(skip_serializing_if = "is_none")]
     pub beat_grid: Option<crate::musical::BeatGrid>,
+    /// The tempo the song's beat analysis is steered toward (a window
+    /// around it, its half and double) — kept so every later measure, by
+    /// any tool, hears the same tempo.
+    #[serde(skip_serializing_if = "is_none")]
+    pub bpm_hint: Option<f64>,
     /// Where the resource came from (tool, licence, prompt, cost).
     #[serde(skip_serializing_if = "is_none")]
     pub provenance: Option<crate::musical::Provenance>,
@@ -4206,6 +4211,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     beat_grid: Option<crate::musical::BeatGrid>,
     #[serde(default)]
+    bpm_hint: Option<f64>,
+    #[serde(default)]
     provenance: Option<crate::musical::Provenance>,
     #[serde(default)]
     generated_by: Option<String>,
@@ -4283,6 +4290,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             frame: w.frame,
             looped: w.looped,
             beat_grid: w.beat_grid,
+            bpm_hint: w.bpm_hint,
             provenance: w.provenance,
             generated_by: w.generated_by,
             extra: w.extra,
@@ -4434,6 +4442,7 @@ impl ProjectResource {
             frame: None,
             looped: None,
             beat_grid: None,
+            bpm_hint: None,
             provenance: None,
             generated_by: None,
             extra: Default::default(),
