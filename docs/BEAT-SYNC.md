@@ -1,7 +1,7 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 10 built (2026-10-20); the design is complete. What
-is left out is listed under "Slice 9 as built" (not built). Where
+Status: slices 1 to 10 built (2026-10-20), and slice 9's last editors
+(2026-10-21, "Slice 9 completed"); the design is complete. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -721,6 +721,64 @@ for 124 BPM): tracker version 2.
   (`startOn`), each caption riding its picture by `timing`; the show runs
   the song's length (the host's probe; else the beats at 120 BPM).
 
+**Slice 9 completed** (2026-10-21) — the editors slice 9 left out, the
+same on the Mac and the iPhone (the views adapt by the space they get):
+- **"Set BPM…"** on an audio resource's Beats section: tempo, first
+  downbeat and meter written as the song's `beatGrid`, the measure shown
+  beside it ("Measured · 120.0 BPM · 4/4 · confidence 1.00"), and "Use
+  Measured" clearing the grid. A **tempo hint** field keeps `bpmHint` on the
+  song and measures it again (`setBeatGrid`, `setBPMHint` in
+  `BeatSyncViews.swift`; the model's write, the core's re-resolve).
+- **"Length in Beats…"** (beats, bars or half-beats), **"Start on Bar or
+  Beat…"** and **"Use Seconds"** join the snap in each time row's Beats
+  menu; all are one `setTime` step (`setLayerTime`, `flattenLayerTime`).
+- **Ruler ticks** — the core's: `promo_timeline::musical::beat_ticks`
+  (FFI `promo_project_beat_ticks`) lists a scope's beats from its song's
+  start, the bar starts with their numbers and the analysis's section
+  starts on the bar a section range snaps to. The ruler draws them in a
+  band under its time ticks (beats light, bars strong and numbered where
+  there is room, sections named); the list view gets a ruler of its own
+  when a clock counts. Not from the resolve output, as §6.3 had it: a
+  scope's ticks are their own question.
+- **Drag snapping** — the core's: `snap_time` (FFI
+  `promo_project_snap_time`) puts an output time on the nearest beat or bar
+  start of the dragged layer's grid. A layer's move lands its start, a
+  start handle keeps the end, an end handle keeps the start
+  (`TimelineBeatSnap.apply`); a keyframe diamond lands on the grid while it
+  is dragged (`KeyframeLaneEditing.snapTime`). The timeline's metronome
+  menu picks beats, bars or free dragging (kept per person); ⌥ on the Mac
+  drags freely. The clock's own audio layer never snaps. A drag still
+  writes seconds, which flattens a musical value (§1.3). The project is
+  encoded once per drag (`BeatSnapper`), the core asked per move.
+- **Scopes.** `layer_grid` finds a composition's layers and counts them on
+  the composition's own clock; the apps ask a projection's parent (the
+  composition's clock lives in the core document only, the analyses under
+  the parent's folder). A stage's members count on the project's clock and
+  a beat step on a stage projection is the parent's step (`applyCoreStep`
+  routes it, the rows lowered again), so the Beats rows, snaps and ticks
+  work in a composition's and a stage's editor too.
+- **The app's `promo_beats`** — the twin: AVFoundation decodes, the core
+  analyses and caches; which song and which hint (`beat_cache::
+  choose_song`, `wanted_hint`, FFI `promo_beats_plan`) and the answer's
+  JSON (`beats_answer` with `fromCache`, `inUse`, `beatGrid`, `driftMs`,
+  FFI `promo_beats_answer`) are the core's, the CLI's too. A new hint is
+  kept on the song through `promo_apply` (the open document's history when
+  the project is open). The `HOST_DIFFERENCES` entry is gone.
+- **Tests:** `ticks_list_beats_and_numbered_bars_from_the_song_start`,
+  `ticks_label_the_songs_sections_on_their_bars`,
+  `a_dragged_time_snaps_to_the_nearest_grid_point`,
+  `members_and_composition_layers_snap_on_their_scopes_clock`
+  (promo-timeline/tests/snap.rs), `set_time_reaches_members_and_composition_layers`
+  (promo-editor), `ticks_and_drag_snaps_through_the_ffi`,
+  `beats_plan_and_answer_are_the_clis` (promo-ffi); Swift
+  `testSetLengthInBeatsWritesAMusicalValue`,
+  `testBeatValueEditorReadsAndWritesTheCoresForms`,
+  `testSetBPMWritesTheGridAndUseMeasuredClearsIt`,
+  `testTheBPMHintIsKeptOnTheSong`, `testDragSnapsOnTheCoresGrid`,
+  `testRulerTicksAreTheCores`, `testMembersAndCompositionLayersHaveBeatRows`
+  (BeatEditingTests), `testPromoBeatsMeasuresCachesAndKeepsTheHint`,
+  `testPromoBeatsNamesAHandGridInUse` (BeatsToolTests).
+
 **Slice 10 as built** (2026-10-20):
 - **Recipe.** schema-quick.md's fifth recipe, "beat-cut stills slideshow",
   is `examples/BeatCut.promo` byte for byte (`the_examples_are_the_recipes`;
@@ -765,7 +823,7 @@ for 124 BPM): tracker version 2.
    `musical_file_stamps_49`, `ignorable_beat_fields_stamp_48`.
 5. `promo_beats` — `tools_list_includes_promo_beats`,
    `promo_beats_returns_the_analysis` (promoshot-mcp), `promo_beats_json_shape`
-   (CLI); the apps list it as headless-only (ServerContractTests).
+   (CLI); the app serves its twin (`BeatsToolTests`, ServerContractTests).
 6. Schema docs cover every new key — `schema_md_mentions_every_authorable_wire_field`
    (the kitchen sink carries every beat field),
    `every_quick_schema_recipe_validates_clean`.
@@ -785,10 +843,10 @@ for 124 BPM): tracker version 2.
   nearest beat, downbeat or bar). All in `ReVoice/Views/BeatSyncViews.swift`,
   shared by both apps; the editors place them as they place their other
   rows (Mac inspector column, iPhone sheet).
-- **Not built (later slices):** "Set BPM…", "Length in beats…", "Use
-  seconds", ruler ticks and drag snapping on the timeline, the app's
-  `promo_beats` MCP twin, and beat rows for a stage member or a
-  composition's layer (their own scope).
+- **Not built then:** "Set BPM…", "Length in beats…", "Use seconds",
+  ruler ticks and drag snapping, the app's `promo_beats`, and beat rows
+  for a stage member or a composition's layer — all built since ("Slice 9
+  completed").
 - **Snap is the core's** (`promo_timeline::musical::snap_edge` and
   `bars_beats`, FFI `promo_project_beat_snap` / `promo_project_bars_beats`
   instead of the design's `promo_project_time_spec_for`): a start snaps to
@@ -1001,8 +1059,8 @@ for 124 BPM): tracker version 2.
   [--bpm-hint n] [--refresh]`**: on a project, the named audio resource,
   else the beat clock's, else the only one; `--json` adds `fromCache` in
   project mode.
-- **`promo_beats` is headless only** (a `HOST_DIFFERENCES` entry: the app
-  analyses through its own decoder in S8). The tool surface ceiling
+- **`promo_beats` was headless only** at first (a `HOST_DIFFERENCES`
+  entry, gone since "Slice 9 completed": the app serves it). The tool surface ceiling
   (`the_tool_surface_stays_small`) rose from 45,000 to 46,000 bytes for
   it. The skill teaches it (and the app's bundled copy follows).
 

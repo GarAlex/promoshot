@@ -4510,6 +4510,64 @@ mod auto_zoom_tests {
         assert!((duration - 2.4).abs() < 1e-9, "a group too: {duration}");
     }
 
+    /// `setTime` on a stage's member and, through `inComposition`, on a
+    /// composition's layer: each resolves on its scope's clock and the
+    /// measured grids — the composition's own clock, never the project's.
+    #[test]
+    fn set_time_reaches_members_and_composition_layers() {
+        let mut file = musical_file();
+        file["resources"] = serde_json::json!([
+            {"id": "song", "kind": "audio", "filename": "song.m4a", "displayName": "Song",
+             "addedAt": 0, "duration": 30},
+            {"id": "comp", "kind": "composition", "filename": "", "displayName": "C",
+             "addedAt": 0, "composition": {"canvasWidth": 100, "canvasHeight": 100,
+                "beatClock": {"resourceID": "song", "startTime": 1},
+                "layers": [{"id": "C1", "name": "C1", "sortIndex": 0, "kind": "image",
+                            "isEnabled": true, "startTime": 0, "duration": 1,
+                            "keyframes": []}]}}]);
+        file["layers"][1]["kind"] = serde_json::json!("stage");
+        file["layers"][1]["members"] = serde_json::json!([{"id": "S1", "name": "S1",
+            "sortIndex": 0, "kind": "image", "isEnabled": true, "startTime": 4,
+            "duration": 1, "keyframes": []}]);
+        let mut doc = Document::open(&file.to_string()).unwrap();
+        let mut grids = promo_timeline::BeatGrids::default();
+        grids.by_resource.insert(
+            "song".into(),
+            serde_json::from_value(serde_json::json!({"bpm": 100})).unwrap(),
+        );
+        doc.set_beat_grids(grids);
+        doc.apply(&command(serde_json::json!({
+            "kind": "setTime", "layerID": "S1", "field": "duration", "value": {"beats": 2}
+        })))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "inComposition", "resourceID": "comp", "command": {
+                "kind": "setTime", "layerID": "C1", "field": "startTime", "value": {"bar": 2}}
+        })))
+        .unwrap();
+        let meta = doc.meta();
+        let member = &meta.layers.as_ref().unwrap()[1].members.as_ref().unwrap()[0];
+        let length = member.duration.unwrap();
+        assert!((length - 1.2).abs() < 1e-9, "2 beats at 100 BPM: {length}");
+        let inner = &meta.resources.as_ref().unwrap()[1]
+            .composition
+            .as_ref()
+            .unwrap()
+            .layers[0];
+        // Bar 2 at 100 BPM is 2.4 s into the song, which starts at the
+        // composition's 1 s.
+        assert!(
+            (inner.start_time - 3.4).abs() < 1e-9,
+            "the composition's clock: {}",
+            inner.start_time
+        );
+        let file = saved(&doc);
+        assert_eq!(
+            file["resources"][1]["composition"]["layers"][0]["startTime"],
+            serde_json::json!({"bar": 2})
+        );
+    }
+
     /// `setTime` is the door for a musical value: it writes the spec, a
     /// length field refuses a position, and seconds flatten the one field.
     #[test]

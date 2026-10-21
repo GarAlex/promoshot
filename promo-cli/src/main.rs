@@ -512,8 +512,9 @@ fn beats(args: &[String]) -> Result<String, String> {
     }
     let path =
         path.ok_or_else(|| format!("beats: expected an audio file or a project\n\n{USAGE}"))?;
+    let beats_err = |e: String| format!("beats: {e}");
     if clear_hint && options.bpm_hint.is_some() {
-        return Err("beats: --bpm-hint and --clear-hint say opposite things".into());
+        promo_model::beat_cache::wanted_hint(None, options.bpm_hint, true).map_err(beats_err)?;
     }
     // A song that states its own grid counts on that grid, not the measure.
     let mut stated: Option<promo_model::musical::BeatGrid> = None;
@@ -521,35 +522,8 @@ fn beats(args: &[String]) -> Result<String, String> {
         let text = std::fs::read_to_string(path.join("metadata.json"))
             .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
         let mut meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
-        let audio: Vec<&promo_model::ProjectResource> = meta
-            .resources
-            .iter()
-            .flatten()
-            .filter(|r| r.kind == promo_model::ProjectResourceKind::Audio)
-            .collect();
-        let wanted = resource.clone().or_else(|| {
-            meta.composition_settings
-                .beat_clock
-                .as_ref()
-                .and_then(|c| c.resource_id.clone())
-        });
-        let chosen = match wanted {
-            Some(id) => audio
-                .iter()
-                .find(|r| r.id == id)
-                .ok_or_else(|| format!("beats: no audio resource `{id}` in the project"))?,
-            None if audio.len() == 1 => &audio[0],
-            None => {
-                return Err(format!(
-                    "beats: name the song with --resource — the project's audio is {}",
-                    audio
-                        .iter()
-                        .map(|r| format!("`{}`", r.id))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
-            }
-        };
+        let chosen =
+            promo_model::beat_cache::choose_song(&meta, resource.as_deref()).map_err(beats_err)?;
         let file = promo_model::beat_cache::song_file(&path, chosen);
         // The hint is the song's: a new one is kept on it (bpmHint), so
         // every later measure — any tool's — hears the same tempo; none
@@ -557,11 +531,8 @@ fn beats(args: &[String]) -> Result<String, String> {
         let chosen_id = chosen.id.clone();
         let kept = chosen.bpm_hint;
         stated = chosen.beat_grid.clone();
-        let wanted_hint = if clear_hint {
-            None
-        } else {
-            options.bpm_hint.or(kept)
-        };
+        let wanted_hint = promo_model::beat_cache::wanted_hint(kept, options.bpm_hint, clear_hint)
+            .map_err(beats_err)?;
         if wanted_hint != kept {
             if let Some(resource) = meta
                 .resources
@@ -579,47 +550,14 @@ fn beats(args: &[String]) -> Result<String, String> {
     } else {
         (beats::analyse_file(&path, options)?, None)
     };
-    // The hand grid in use against the measure: its beats (in the song's
-    // seconds) to the nearest measured beat, the worst over the song.
-    let drift = stated.as_ref().map(|grid| {
-        let period = 60.0 / grid.bpm.max(1e-6);
-        let mut t = grid.offset.unwrap_or(0.0);
-        while t - period >= 0.0 {
-            t -= period;
-        }
-        let mut worst: f64 = 0.0;
-        // Only where the song has measured beats to compare with.
-        let (first, last) = match (analysis.beats.first(), analysis.beats.last()) {
-            (Some(&a), Some(&b)) => (a - period / 2.0, b + period / 2.0),
-            _ => (0.0, -1.0),
-        };
-        while t <= last {
-            if t < first {
-                t += period;
-                continue;
-            }
-            let near = analysis
-                .beats
-                .iter()
-                .map(|b| (b - t).abs())
-                .fold(f64::INFINITY, f64::min);
-            worst = worst.max(near);
-            t += period;
-        }
-        worst
-    });
     if json {
-        let mut value = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
-        if let Some(cached) = cached {
-            value["fromCache"] = serde_json::json!(cached);
-        }
-        if let (Some(grid), Some(drift)) = (&stated, drift) {
-            value["inUse"] = serde_json::json!("beatGrid");
-            value["beatGrid"] = serde_json::to_value(grid).map_err(|e| e.to_string())?;
-            value["driftMs"] = serde_json::json!((drift * 10_000.0).round() / 10.0);
-        }
-        return Ok(value.to_string());
+        return Ok(
+            promo_model::beat_cache::beats_answer(&analysis, cached, stated.as_ref())?.to_string(),
+        );
     }
+    let drift = stated
+        .as_ref()
+        .map(|grid| promo_model::beat_cache::hand_grid_drift(&analysis, grid));
     if let (Some(grid), Some(drift)) = (&stated, drift) {
         return Ok(format!(
             "{:.3} BPM from the song's hand beatGrid (first downbeat {:.3} s) — the grid in use; \

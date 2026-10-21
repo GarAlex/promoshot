@@ -1138,8 +1138,7 @@ mod tests {
     }
 
     /// AC5: the headless server lists `promo_beats`, read as touching
-    /// nothing but a project's cache, and the app's list does not (its own
-    /// decoder comes in a later slice).
+    /// nothing but a project's cache — and the app lists it too.
     #[test]
     fn tools_list_includes_promo_beats() {
         let req = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
@@ -1164,7 +1163,8 @@ mod tests {
             );
         }
         assert_eq!(beats["annotations"]["destructiveHint"], false);
-        assert!(!contract::tools(Host::App)
+        // The app serves its twin (its own decoder, the core's answer).
+        assert!(contract::tools(Host::App)
             .iter()
             .any(|t| t["name"] == "promo_beats"));
     }

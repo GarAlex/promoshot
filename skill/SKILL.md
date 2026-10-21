@@ -136,7 +136,7 @@ its defaults are the source of the first, the person of the second.
      captions land on those boundaries.
    - `promo_media_scenes` — scene-change cuts and the shots between
      them; the cut list when the footage has no silence gaps.
-   - `promo_beats` (headless) — a song's tempo, beats, downbeats and
+   - `promo_beats` — a song's tempo, beats, downbeats and
      sections; on a project it is cached in `Resources/.beats/` and stays
      the answer (the app measures into the same cache when it opens the
      project). Point `compositionSettings.beatClock` at the song and times

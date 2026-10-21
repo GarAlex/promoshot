@@ -216,3 +216,107 @@ pub fn cached_analyses(
         .filter_map(|song| Some((song.id, load_cached(dir, &song.file, song.hint)?)))
         .collect()
 }
+
+/// The song a `promo beats` of a project measures: the one named, else the
+/// beat clock's, else the project's only audio — both hosts' rule, in the
+/// CLI's words.
+pub fn choose_song<'a>(
+    meta: &'a ProjectMetadata,
+    resource: Option<&str>,
+) -> Result<&'a ProjectResource, String> {
+    let audio: Vec<&ProjectResource> = meta
+        .resources
+        .iter()
+        .flatten()
+        .filter(|r| r.kind == crate::ProjectResourceKind::Audio)
+        .collect();
+    let wanted = resource.map(str::to_string).or_else(|| {
+        meta.composition_settings
+            .beat_clock
+            .as_ref()
+            .and_then(|c| c.resource_id.clone())
+    });
+    match wanted {
+        Some(id) => audio
+            .iter()
+            .find(|r| r.id == id)
+            .copied()
+            .ok_or_else(|| format!("no audio resource `{id}` in the project")),
+        None if audio.len() == 1 => Ok(audio[0]),
+        None => Err(format!(
+            "name the song with --resource — the project's audio is {}",
+            audio
+                .iter()
+                .map(|r| format!("`{}`", r.id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+/// The hint a measure uses and the song keeps (`bpmHint`): a new one
+/// given, none when cleared, else the one it kept — so every later measure,
+/// any tool's, hears the same tempo.
+pub fn wanted_hint(
+    kept: Option<f64>,
+    given: Option<f64>,
+    clear: bool,
+) -> Result<Option<f64>, String> {
+    if clear && given.is_some() {
+        return Err("--bpm-hint and --clear-hint say opposite things".into());
+    }
+    Ok(if clear { None } else { given.or(kept) })
+}
+
+/// How far a hand grid's beats come from the measured ones (seconds): the
+/// worst, over the song where it has measured beats to compare with.
+pub fn hand_grid_drift(
+    analysis: &crate::musical::BeatAnalysis,
+    grid: &crate::musical::BeatGrid,
+) -> f64 {
+    let period = 60.0 / grid.bpm.max(1e-6);
+    let mut t = grid.offset.unwrap_or(0.0);
+    while t - period >= 0.0 {
+        t -= period;
+    }
+    let mut worst: f64 = 0.0;
+    let (first, last) = match (analysis.beats.first(), analysis.beats.last()) {
+        (Some(&a), Some(&b)) => (a - period / 2.0, b + period / 2.0),
+        _ => (0.0, -1.0),
+    };
+    while t <= last {
+        if t < first {
+            t += period;
+            continue;
+        }
+        let near = analysis
+            .beats
+            .iter()
+            .map(|b| (b - t).abs())
+            .fold(f64::INFINITY, f64::min);
+        worst = worst.max(near);
+        t += period;
+    }
+    worst
+}
+
+/// `promo_beats`' JSON on both hosts: the analysis, `fromCache` for a
+/// project's song, and — when the song states its own grid — that grid as
+/// the one in use, with how far it drifts from the measure (`driftMs`).
+pub fn beats_answer(
+    analysis: &crate::musical::BeatAnalysis,
+    from_cache: Option<bool>,
+    stated: Option<&crate::musical::BeatGrid>,
+) -> Result<serde_json::Value, String> {
+    let mut value = serde_json::to_value(analysis).map_err(|e| e.to_string())?;
+    if let Some(cached) = from_cache {
+        value["fromCache"] = serde_json::json!(cached);
+    }
+    if let Some(grid) = stated {
+        let drift = hand_grid_drift(analysis, grid);
+        value["inUse"] = serde_json::json!("beatGrid");
+        value["beatGrid"] = serde_json::to_value(grid).map_err(|e| e.to_string())?;
+        value["driftMs"] = serde_json::json!((drift * 10_000.0).round() / 10.0);
+    }
+    Ok(value)
+}

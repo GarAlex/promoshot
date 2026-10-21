@@ -903,28 +903,202 @@ pub enum Edge {
     End,
 }
 
-/// The grid a project-scope layer (or a stage's member) counts on, or why
-/// it has none.
+/// The grid a layer counts on — a project-scope layer, a stage's member, or
+/// a composition's layer (on the composition's own clock) — or why it has
+/// none.
 fn layer_grid<'a>(
     meta: &'a ProjectMetadata,
     grids: &BeatGrids,
     layer_id: &str,
 ) -> Result<(&'a ProjectLayer, Grid), String> {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
     let layers = meta.layers.as_deref().unwrap_or(&[]);
-    let layer =
-        find(layers, layer_id).ok_or_else(|| format!("no layer \"{layer_id}\" in the project"))?;
-    let scope = Scope::new(
-        meta.composition_settings.beat_clock.as_ref(),
-        layers,
-        meta.resources.as_deref().unwrap_or(&[]),
-        grids,
-    );
-    if scope.clockless_for(layer) {
-        return Err(
-            "the project has no beat clock — choose the music that counts the beats".into(),
+    if let Some(layer) = find(layers, layer_id) {
+        let scope = Scope::new(
+            meta.composition_settings.beat_clock.as_ref(),
+            layers,
+            resources,
+            grids,
         );
+        if scope.clockless_for(layer) {
+            return Err(
+                "the project has no beat clock — choose the music that counts the beats".into(),
+            );
+        }
+        return Ok((layer, scope.grid_of(layer)));
     }
-    Ok((layer, scope.grid_of(layer)))
+    for resource in resources {
+        let Some(composition) = resource.composition.as_ref() else {
+            continue;
+        };
+        let Some(layer) = find(&composition.layers, layer_id) else {
+            continue;
+        };
+        let scope = Scope::new(
+            composition.beat_clock.as_ref(),
+            &composition.layers,
+            resources,
+            grids,
+        );
+        if scope.clockless_for(layer) {
+            return Err(format!(
+                "the composition \"{}\" has no beat clock — choose the music that counts its beats",
+                resource.display_name
+            ));
+        }
+        return Ok((layer, scope.grid_of(layer)));
+    }
+    Err(format!("no layer \"{layer_id}\" in the project"))
+}
+
+/// The grid a scope counts on: the project's (`composition` None) or a
+/// composition's own, by its resource id; `None` when the scope has no
+/// clock.
+fn scope_grid(
+    meta: &ProjectMetadata,
+    grids: &BeatGrids,
+    composition: Option<&str>,
+) -> Result<Option<(Grid, Option<String>)>, String> {
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let (clock, layers) = match composition {
+        None => (
+            meta.composition_settings.beat_clock.as_ref(),
+            meta.layers.as_deref().unwrap_or(&[]),
+        ),
+        Some(id) => {
+            let composition = resources
+                .iter()
+                .find(|r| r.id == id)
+                .and_then(|r| r.composition.as_ref())
+                .ok_or_else(|| format!("no composition \"{id}\" in the project"))?;
+            (
+                composition.beat_clock.as_ref(),
+                composition.layers.as_slice(),
+            )
+        }
+    };
+    let Some(clock) = clock else {
+        return Ok(None);
+    };
+    let scope = Scope::new(Some(clock), layers, resources, grids);
+    Ok(Some((scope.grid, scope.clock_resource)))
+}
+
+/// One bar start on a ruler: its output second and its 1-based number.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BarTick {
+    pub seconds: f64,
+    pub bar: i64,
+}
+
+/// Where a song's section starts on a ruler, snapped onto the grid's bar
+/// start as a section range is, and its words ("intro", "drop",
+/// "section 3").
+#[derive(Debug, Clone, PartialEq)]
+pub struct SectionTick {
+    pub seconds: f64,
+    pub label: String,
+}
+
+/// A scope's beat clock as a ruler draws it, over output seconds
+/// `[from, to]`: every beat (bar starts among them), the bar starts with
+/// their numbers, and the song's section starts.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct BeatTicks {
+    pub beats: Vec<f64>,
+    pub bars: Vec<BarTick>,
+    pub sections: Vec<SectionTick>,
+}
+
+/// The most beats one ruler asks for — a long song zoomed all the way out
+/// is still a few thousand.
+pub const MAX_TICKS: usize = 20_000;
+
+/// The ticks of a scope's clock between `from` and `to` (output seconds of
+/// that scope: a composition's are its own), from the song's start on —
+/// nothing before the music plays. `Ok(None)` when the scope counts no
+/// clock; never more than [`MAX_TICKS`] beats.
+pub fn beat_ticks(
+    meta: &ProjectMetadata,
+    grids: &BeatGrids,
+    composition: Option<&str>,
+    from: f64,
+    to: f64,
+) -> Result<Option<BeatTicks>, String> {
+    let Some((grid, resource)) = scope_grid(meta, grids, composition)? else {
+        return Ok(None);
+    };
+    let mut ticks = BeatTicks::default();
+    if !(from.is_finite() && to.is_finite()) || to < from {
+        return Ok(Some(ticks));
+    }
+    let meter = i64::from(grid.meter.max(1));
+    let low = from.max(grid.clock);
+    let mut index = grid.index_at(low).ceil();
+    // The ceiling of an index a hair under a beat: take the beat itself.
+    if grid.time_at(index - 1.0) >= low - 1e-9 {
+        index -= 1.0;
+    }
+    while ticks.beats.len() < MAX_TICKS {
+        let at = grid.time_at(index);
+        if at > to + 1e-9 {
+            break;
+        }
+        ticks.beats.push(at);
+        let k = index as i64;
+        if k >= 0 && k % meter == 0 {
+            ticks.bars.push(BarTick {
+                seconds: at,
+                bar: k / meter + 1,
+            });
+        }
+        index += 1.0;
+    }
+    if let Some(sections) = resource.as_ref().and_then(|id| grids.sections.get(id)) {
+        for section in sections {
+            let t = grid.clock + section.start / grid.speed;
+            let at = grid.time_at(grid.snap(SnapUnit::Bar, t));
+            if at < from - 1e-9 || at > to + 1e-9 {
+                continue;
+            }
+            ticks.sections.push(SectionTick {
+                seconds: at,
+                label: if section.label == "section" || section.label.is_empty() {
+                    format!("section {}", section.index)
+                } else {
+                    section.label.clone()
+                },
+            });
+        }
+    }
+    Ok(Some(ticks))
+}
+
+/// Output time `seconds` on the nearest beat (`Beat`) or bar start of the
+/// grid `layer_id` counts on — where a drag of one of its edges, or of one
+/// of its keyframes (at the layer's start plus the key's time), lands.
+/// The value is the position it lands on (`{"beat": n}`, `{"bar": n}`).
+pub fn snap_time(
+    meta: &ProjectMetadata,
+    grids: &BeatGrids,
+    layer_id: &str,
+    seconds: f64,
+    unit: SnapUnit,
+) -> Result<Snapped, String> {
+    if !seconds.is_finite() {
+        return Err("the time to snap is not a number".into());
+    }
+    let (_, grid) = layer_grid(meta, grids, layer_id)?;
+    let index = grid.snap(unit, seconds);
+    let value = match unit {
+        SnapUnit::Beat => MusicalTime::Beat(index + 1.0),
+        SnapUnit::Downbeat | SnapUnit::Bar => MusicalTime::Bar(index / f64::from(grid.meter) + 1.0),
+    };
+    Ok(Snapped {
+        label: value.label(),
+        seconds: grid.time_at(index),
+        value,
+    })
 }
 
 /// The start of `layer_id` on the nearest beat (`Beat`) or bar start

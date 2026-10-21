@@ -69,12 +69,6 @@ pub struct Difference {
 /// the two lists disagree on is drift, and the contract's test fails on it.
 pub const HOST_DIFFERENCES: &[Difference] = &[
     Difference {
-        tool: "promo_beats",
-        aspect: Aspect::Tool,
-        only: Host::Headless,
-        why: "the app analyses audio through its own decoder (BEAT-SYNC slice 8)",
-    },
-    Difference {
         tool: "promo_open",
         aspect: Aspect::Tool,
         only: Host::App,
