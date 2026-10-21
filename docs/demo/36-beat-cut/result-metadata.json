@@ -1,601 +1,606 @@
 {
-  "id": "beatcut-promo",
-  "name": "Three apps. One beat.",
-  "createdAt": 0,
-  "state": "recorded",
-  "minReaderVersion": 49,
-  "trimStart": 0,
-  "trimEnd": 0,
-  "videoDuration": 0,
-  "subtitles": [],
-  "compositionSettings": {
-    "canvasWidth": 1920,
-    "canvasHeight": 1080,
-    "fps": 30,
-    "backgroundColorHex": "0A0B1A",
-    "backgroundGradient": {
-      "kind": "radial",
-      "start": [
-        0.5,
-        0.42
-      ],
-      "end": [
-        1.1,
-        1.1
-      ],
-      "stops": [
-        {
-          "colorHex": "232457",
-          "at": 0
-        },
-        {
-          "colorHex": "0F1030",
-          "at": 0.55
-        },
-        {
-          "colorHex": "05050D",
-          "at": 1
-        }
-      ]
-    },
-    "videoCornerRadius": 22,
-    "videoBorderWidth": 2,
-    "videoBorderColorHex": "3B3F8F",
-    "videoShadowColorHex": "6C63FF",
-    "videoShadowOpacity": 0.34,
-    "videoShadowRadius": 54,
-    "videoShadowOffset": [
-      0,
-      0
-    ],
-    "beatClock": {
-      "resourceID": "song",
-      "startTime": 0
-    },
-    "flash": {
-      "on": "downbeat",
-      "range": {
-        "bar": 9,
-        "bars": 1
-      },
-      "colorHex": "FFFFFF",
-      "opacity": 0.9,
-      "duration": {
-        "beats": 1
-      },
-      "blendMode": "screen"
-    }
-  },
-  "resources": [
-    {
-      "id": "lumen_1",
-      "kind": "image",
-      "filename": "ui_lumen_1.png",
-      "displayName": "UI lumen_1",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "pulse_1",
-      "kind": "image",
-      "filename": "ui_pulse_1.png",
-      "displayName": "UI pulse_1",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "verse_1",
-      "kind": "image",
-      "filename": "ui_verse_1.png",
-      "displayName": "UI verse_1",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "lumen_2",
-      "kind": "image",
-      "filename": "ui_lumen_2.png",
-      "displayName": "UI lumen_2",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "pulse_2",
-      "kind": "image",
-      "filename": "ui_pulse_2.png",
-      "displayName": "UI pulse_2",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "verse_2",
-      "kind": "image",
-      "filename": "ui_verse_2.png",
-      "displayName": "UI verse_2",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "lumen_4",
-      "kind": "image",
-      "filename": "ui_lumen_4.png",
-      "displayName": "UI lumen_4",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "lumen_5",
-      "kind": "image",
-      "filename": "ui_lumen_5.png",
-      "displayName": "UI lumen_5",
-      "addedAt": 0,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "pixelWidth": 1216,
-      "pixelHeight": 760
-    },
-    {
-      "id": "song",
-      "kind": "audio",
-      "filename": "lift_song.wav",
-      "displayName": "Lift Song",
-      "addedAt": 0,
-      "duration": 28.875011,
-      "imageCuts": [],
-      "disabledAudioTrackIndices": [],
-      "mediaCuts": [],
-      "provenance": {
-        "tool": "ffmpeg",
-        "license": "CC0-1.0",
-        "prompt": "Our own track, generated with ffmpeg"
-      }
-    }
+ "id": "beatcut",
+ "name": "Three Apps One Beat",
+ "createdAt": 0,
+ "state": "recorded",
+ "minReaderVersion": 49,
+ "trimStart": 0,
+ "trimEnd": 28.380136,
+ "videoDuration": 28.380136,
+ "subtitles": [],
+ "compositionSettings": {
+  "canvasWidth": 1920,
+  "canvasHeight": 1080,
+  "palette": [
+   {
+    "name": "ink",
+    "colorHex": "07080F"
+   },
+   {
+    "name": "night",
+    "colorHex": "1B1640"
+   },
+   {
+    "name": "text",
+    "colorHex": "F4F5FF"
+   }
   ],
-  "layers": [
+  "backgroundColorHex": "@ink",
+  "backgroundGradient": {
+   "kind": "radial",
+   "start": [
+    0.5,
+    0.4
+   ],
+   "end": [
+    1.05,
+    1.1
+   ],
+   "stops": [
     {
-      "id": "bg",
-      "name": "Background",
-      "sortIndex": 0,
-      "kind": "background",
-      "isEnabled": true,
-      "startTime": 0,
-      "keyframes": []
+     "colorHex": "@night",
+     "at": 0
     },
     {
-      "id": "music",
-      "name": "Music",
-      "sortIndex": 1,
-      "kind": "audio",
-      "isEnabled": true,
-      "startTime": 0,
-      "duration": {
-        "bar": 16
-      },
-      "fadeOut": 0.08,
-      "resourceID": "song",
-      "keyframes": []
-    },
-    {
-      "id": "title",
-      "name": "Title",
-      "sortIndex": 2,
-      "kind": "caption",
-      "isEnabled": true,
-      "startTime": {
-        "beat": 1
-      },
-      "duration": {
-        "bar": 3
-      },
-      "transitionIn": {
-        "kind": "zoom",
-        "duration": {
-          "beats": 0.25
-        }
-      },
-      "captionText": "Lumen · Pulse · Verse",
-      "captionStyle": {
-        "alignment": "center",
-        "fontSize": 116,
-        "fontFamily": "system",
-        "weight": "heavy",
-        "tracking": -1.4,
-        "textColorHex": "FFFFFF",
-        "backgroundOpacity": 0,
-        "placement": {
-          "anchor": "center"
-        },
-        "shadowColorHex": "000000",
-        "shadowOpacity": 0.5,
-        "shadowRadius": 30
-      },
-      "keyframes": []
-    },
-    {
-      "id": "shots",
-      "name": "Screenshots",
-      "sortIndex": 3,
-      "kind": "image",
-      "isEnabled": true,
-      "startTime": {
-        "bar": 3
-      },
-      "duration": {
-        "bar": 15
-      },
-      "resourceID": "lumen_1",
-      "keyframes": [
-        {
-          "id": "cut0",
-          "time": {
-            "beat": 9
-          },
-          "resourceID": "lumen_1",
-          "placement": {
-            "height": 760,
-            "anchor": "center"
-          }
-        },
-        {
-          "id": "cut1",
-          "time": {
-            "beat": 11
-          },
-          "resourceID": "pulse_1"
-        },
-        {
-          "id": "cut2",
-          "time": {
-            "beat": 13
-          },
-          "resourceID": "verse_1"
-        },
-        {
-          "id": "cut3",
-          "time": {
-            "beat": 15
-          },
-          "resourceID": "lumen_2"
-        },
-        {
-          "id": "cut4",
-          "time": {
-            "beat": 17
-          },
-          "resourceID": "pulse_2"
-        },
-        {
-          "id": "cut5",
-          "time": {
-            "beat": 19
-          },
-          "resourceID": "verse_2"
-        },
-        {
-          "id": "cut6",
-          "time": {
-            "beat": 21
-          },
-          "resourceID": "lumen_4"
-        },
-        {
-          "id": "cut7",
-          "time": {
-            "beat": 23
-          },
-          "resourceID": "lumen_5"
-        },
-        {
-          "id": "cut8",
-          "time": {
-            "beat": 25
-          },
-          "resourceID": "lumen_1"
-        },
-        {
-          "id": "cut9",
-          "time": {
-            "beat": 27
-          },
-          "resourceID": "pulse_1"
-        },
-        {
-          "id": "cut10",
-          "time": {
-            "beat": 29
-          },
-          "resourceID": "verse_1"
-        },
-        {
-          "id": "cut11",
-          "time": {
-            "beat": 31
-          },
-          "resourceID": "lumen_2"
-        },
-        {
-          "id": "cut12",
-          "time": {
-            "beat": 33
-          },
-          "resourceID": "pulse_2"
-        },
-        {
-          "id": "cut13",
-          "time": {
-            "beat": 34
-          },
-          "resourceID": "verse_2"
-        },
-        {
-          "id": "cut14",
-          "time": {
-            "beat": 35
-          },
-          "resourceID": "lumen_4"
-        },
-        {
-          "id": "cut15",
-          "time": {
-            "beat": 36
-          },
-          "resourceID": "lumen_5"
-        },
-        {
-          "id": "cut16",
-          "time": {
-            "beat": 37
-          },
-          "resourceID": "lumen_1"
-        },
-        {
-          "id": "cut17",
-          "time": {
-            "beat": 38
-          },
-          "resourceID": "pulse_1"
-        },
-        {
-          "id": "cut18",
-          "time": {
-            "beat": 39
-          },
-          "resourceID": "verse_1"
-        },
-        {
-          "id": "cut19",
-          "time": {
-            "beat": 40
-          },
-          "resourceID": "lumen_2"
-        },
-        {
-          "id": "cut20",
-          "time": {
-            "beat": 41
-          },
-          "resourceID": "pulse_2"
-        },
-        {
-          "id": "cut21",
-          "time": {
-            "beat": 42
-          },
-          "resourceID": "verse_2"
-        },
-        {
-          "id": "cut22",
-          "time": {
-            "beat": 43
-          },
-          "resourceID": "lumen_4"
-        },
-        {
-          "id": "cut23",
-          "time": {
-            "beat": 44
-          },
-          "resourceID": "lumen_5"
-        },
-        {
-          "id": "cut24",
-          "time": {
-            "beat": 45
-          },
-          "resourceID": "lumen_1"
-        },
-        {
-          "id": "cut25",
-          "time": {
-            "beat": 46
-          },
-          "resourceID": "pulse_1"
-        },
-        {
-          "id": "cut26",
-          "time": {
-            "beat": 47
-          },
-          "resourceID": "verse_1"
-        },
-        {
-          "id": "cut27",
-          "time": {
-            "beat": 48
-          },
-          "resourceID": "lumen_2"
-        },
-        {
-          "id": "cut28",
-          "time": {
-            "beat": 49
-          },
-          "resourceID": "pulse_2"
-        },
-        {
-          "id": "cut29",
-          "time": {
-            "beat": 50
-          },
-          "resourceID": "verse_2"
-        },
-        {
-          "id": "cut30",
-          "time": {
-            "beat": 51
-          },
-          "resourceID": "lumen_4"
-        },
-        {
-          "id": "cut31",
-          "time": {
-            "beat": 52
-          },
-          "resourceID": "lumen_5"
-        },
-        {
-          "id": "cut32",
-          "time": {
-            "beat": 53
-          },
-          "resourceID": "lumen_1"
-        },
-        {
-          "id": "cut33",
-          "time": {
-            "beat": 54
-          },
-          "resourceID": "pulse_1"
-        },
-        {
-          "id": "cut34",
-          "time": {
-            "beat": 55
-          },
-          "resourceID": "verse_1"
-        },
-        {
-          "id": "cut35",
-          "time": {
-            "beat": 56
-          },
-          "resourceID": "lumen_2"
-        }
-      ],
-      "pulse": [
-        {
-          "every": "downbeat",
-          "property": "placement",
-          "amount": 0.05,
-          "decay": {
-            "beats": 0.5
-          },
-          "range": {
-            "from": {
-              "bar": 3
-            },
-            "to": {
-              "bar": 9
-            }
-          }
-        },
-        {
-          "every": "downbeat",
-          "property": "placement",
-          "amount": 0.09,
-          "decay": {
-            "beats": 0.75
-          },
-          "range": {
-            "from": {
-              "bar": 9
-            },
-            "to": {
-              "bar": 15
-            }
-          }
-        }
-      ],
-      "shake": {
-        "on": "downbeat",
-        "amplitude": 10,
-        "decay": {
-          "beats": 0.25
-        },
-        "range": {
-          "from": {
-            "bar": 9
-          },
-          "to": {
-            "bar": 15
-          }
-        }
-      }
-    },
-    {
-      "id": "outro",
-      "name": "Closing line",
-      "sortIndex": 4,
-      "kind": "caption",
-      "isEnabled": true,
-      "startTime": {
-        "bar": 15
-      },
-      "duration": {
-        "bar": 16
-      },
-      "transitionIn": {
-        "kind": "zoom",
-        "duration": {
-          "beats": 0.25
-        }
-      },
-      "captionText": "Three apps. One beat.",
-      "captionStyle": {
-        "alignment": "center",
-        "fontSize": 116,
-        "fontFamily": "system",
-        "weight": "heavy",
-        "tracking": -1.4,
-        "textColorHex": "FFFFFF",
-        "backgroundOpacity": 0,
-        "placement": {
-          "anchor": "center"
-        },
-        "shadowColorHex": "000000",
-        "shadowOpacity": 0.5,
-        "shadowRadius": 30
-      },
-      "keyframes": []
+     "colorHex": "@ink",
+     "at": 1
     }
-  ]
+   ]
+  },
+  "subtitleColorHex": "@text",
+  "subtitleFontSize": 120,
+  "subtitleBold": true,
+  "beatClock": {
+   "resourceID": "song"
+  },
+  "flash": {
+   "on": "downbeat",
+   "colorHex": "FFFFFF",
+   "opacity": 0.85,
+   "duration": {
+    "beats": 0.5
+   },
+   "range": {
+    "bar": 9,
+    "bars": 1
+   }
+  }
+ },
+ "resources": [
+  {
+   "id": "song",
+   "kind": "audio",
+   "filename": "lift_song.wav",
+   "displayName": "Lift Song",
+   "addedAt": 0,
+   "duration": 28.875011,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "provenance": {
+    "tool": "ffmpeg",
+    "license": "CC0"
+   }
+  },
+  {
+   "id": "ui_lumen_1",
+   "kind": "image",
+   "filename": "ui_lumen_1.png",
+   "displayName": "Lumen 1",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_pulse_1",
+   "kind": "image",
+   "filename": "ui_pulse_1.png",
+   "displayName": "Pulse 1",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_verse_1",
+   "kind": "image",
+   "filename": "ui_verse_1.png",
+   "displayName": "Verse 1",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_lumen_2",
+   "kind": "image",
+   "filename": "ui_lumen_2.png",
+   "displayName": "Lumen 2",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_pulse_2",
+   "kind": "image",
+   "filename": "ui_pulse_2.png",
+   "displayName": "Pulse 2",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_verse_2",
+   "kind": "image",
+   "filename": "ui_verse_2.png",
+   "displayName": "Verse 2",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_lumen_4",
+   "kind": "image",
+   "filename": "ui_lumen_4.png",
+   "displayName": "Lumen 4",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  },
+  {
+   "id": "ui_lumen_5",
+   "kind": "image",
+   "filename": "ui_lumen_5.png",
+   "displayName": "Lumen 5",
+   "addedAt": 0,
+   "imageCuts": [],
+   "disabledAudioTrackIndices": [],
+   "pixelWidth": 1216,
+   "pixelHeight": 760
+  }
+ ],
+ "layers": [
+  {
+   "id": "bg",
+   "name": "Ground",
+   "sortIndex": 0,
+   "kind": "background",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": 28.380136,
+   "keyframes": []
+  },
+  {
+   "id": "music",
+   "name": "Music",
+   "sortIndex": 1,
+   "kind": "audio",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": {
+    "bar": 16
+   },
+   "resourceID": "song",
+   "fadeOut": {
+    "beats": 0.5
+   },
+   "keyframes": []
+  },
+  {
+   "id": "screens",
+   "name": "Screens",
+   "sortIndex": 2,
+   "kind": "image",
+   "isEnabled": true,
+   "startTime": {
+    "bar": 3
+   },
+   "duration": {
+    "bar": 14
+   },
+   "resourceID": "ui_lumen_1",
+   "pulse": [
+    {
+     "every": "downbeat",
+     "property": "viewport",
+     "amount": 0.05,
+     "range": {
+      "bar": 3,
+      "bars": 6
+     }
+    },
+    {
+     "every": "downbeat",
+     "property": "viewport",
+     "amount": 0.09,
+     "decay": {
+      "beats": 0.75
+     },
+     "range": {
+      "bar": 9,
+      "bars": 5
+     }
+    }
+   ],
+   "keyframes": [
+    {
+     "id": "c0",
+     "time": {
+      "beat": 9
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_1",
+     "placement": {
+      "height": 860,
+      "anchor": "center"
+     }
+    },
+    {
+     "id": "c1",
+     "time": {
+      "beat": 11
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_1"
+    },
+    {
+     "id": "c2",
+     "time": {
+      "beat": 13
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_1"
+    },
+    {
+     "id": "c3",
+     "time": {
+      "beat": 15
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_2"
+    },
+    {
+     "id": "c4",
+     "time": {
+      "beat": 17
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_2"
+    },
+    {
+     "id": "c5",
+     "time": {
+      "beat": 19
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_2"
+    },
+    {
+     "id": "c6",
+     "time": {
+      "beat": 21
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_4"
+    },
+    {
+     "id": "c7",
+     "time": {
+      "beat": 23
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_5"
+    },
+    {
+     "id": "c8",
+     "time": {
+      "beat": 25
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_1"
+    },
+    {
+     "id": "c9",
+     "time": {
+      "beat": 27
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_1"
+    },
+    {
+     "id": "c10",
+     "time": {
+      "beat": 29
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_1"
+    },
+    {
+     "id": "c11",
+     "time": {
+      "beat": 31
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_2"
+    },
+    {
+     "id": "c12",
+     "time": {
+      "beat": 33
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_2"
+    },
+    {
+     "id": "c13",
+     "time": {
+      "beat": 34
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_2"
+    },
+    {
+     "id": "c14",
+     "time": {
+      "beat": 35
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_4"
+    },
+    {
+     "id": "c15",
+     "time": {
+      "beat": 36
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_5"
+    },
+    {
+     "id": "c16",
+     "time": {
+      "beat": 37
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_1"
+    },
+    {
+     "id": "c17",
+     "time": {
+      "beat": 38
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_1"
+    },
+    {
+     "id": "c18",
+     "time": {
+      "beat": 39
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_1"
+    },
+    {
+     "id": "c19",
+     "time": {
+      "beat": 40
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_2"
+    },
+    {
+     "id": "c20",
+     "time": {
+      "beat": 41
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_2"
+    },
+    {
+     "id": "c21",
+     "time": {
+      "beat": 42
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_2"
+    },
+    {
+     "id": "c22",
+     "time": {
+      "beat": 43
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_4"
+    },
+    {
+     "id": "c23",
+     "time": {
+      "beat": 44
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_5"
+    },
+    {
+     "id": "c24",
+     "time": {
+      "beat": 45
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_1"
+    },
+    {
+     "id": "c25",
+     "time": {
+      "beat": 46
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_1"
+    },
+    {
+     "id": "c26",
+     "time": {
+      "beat": 47
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_1"
+    },
+    {
+     "id": "c27",
+     "time": {
+      "beat": 48
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_2"
+    },
+    {
+     "id": "c28",
+     "time": {
+      "beat": 49
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_pulse_2"
+    },
+    {
+     "id": "c29",
+     "time": {
+      "beat": 50
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_verse_2"
+    },
+    {
+     "id": "c30",
+     "time": {
+      "beat": 51
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_4"
+    },
+    {
+     "id": "c31",
+     "time": {
+      "beat": 52
+     },
+     "transitionDuration": 0,
+     "resourceID": "ui_lumen_5"
+    }
+   ]
+  },
+  {
+   "id": "title",
+   "name": "Title",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": 0,
+   "duration": {
+    "bar": 3
+   },
+   "captionText": "Lumen · Pulse · Verse",
+   "captionStyle": {
+    "fontSize": 132,
+    "weight": "heavy",
+    "tracking": -1.4,
+    "alignment": "center",
+    "placement": {
+     "anchor": "center"
+    },
+    "backgroundOpacity": 0,
+    "shadowOpacity": 0.45,
+    "shadowRadius": 18
+   },
+   "shake": {
+    "on": "downbeat",
+    "amplitude": 10,
+    "decay": {
+     "beats": 0.25
+    }
+   },
+   "keyframes": [
+    {
+     "id": "t0",
+     "time": 0,
+     "transitionDuration": 0,
+     "opacity": 0,
+     "fontSize": 190
+    },
+    {
+     "id": "t1",
+     "time": {
+      "beat": 1
+     },
+     "transitionDuration": {
+      "beats": 0.4
+     },
+     "easing": "easeIn",
+     "opacity": 1,
+     "fontSize": 132
+    }
+   ]
+  },
+  {
+   "id": "closing",
+   "name": "Closing line",
+   "sortIndex": 3,
+   "kind": "caption",
+   "isEnabled": true,
+   "startTime": {
+    "bar": 14
+   },
+   "duration": {
+    "bar": 16
+   },
+   "captionText": "Three apps. One beat.",
+   "captionStyle": {
+    "fontSize": 120,
+    "weight": "heavy",
+    "tracking": -1.4,
+    "alignment": "center",
+    "placement": {
+     "anchor": "center"
+    },
+    "backgroundOpacity": 0,
+    "shadowOpacity": 0.45,
+    "shadowRadius": 18
+   },
+   "shake": {
+    "on": "downbeat",
+    "amplitude": 10,
+    "decay": {
+     "beats": 0.25
+    }
+   },
+   "keyframes": [
+    {
+     "id": "e0",
+     "time": 0,
+     "transitionDuration": 0,
+     "opacity": 0,
+     "fontSize": 170
+    },
+    {
+     "id": "e1",
+     "time": {
+      "beats": 0.35
+     },
+     "transitionDuration": {
+      "beats": 0.35
+     },
+     "easing": "easeOut",
+     "opacity": 1,
+     "fontSize": 120
+    }
+   ]
+  }
+ ]
 }

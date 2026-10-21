@@ -32,24 +32,25 @@ Score **93%** (14 of 15 rubric checks).
 
 | the agent's work | |
 |---|---|
-| turns | 24 |
-| wall time | 1 min 41 s (API 1 min 32 s) |
-| cost at API list price | $0.90 — on a Claude subscription this is plan usage, not a bill |
-| tokens in | 1.0M (958k cache read, 64k cache write) |
-| tokens out | 10k (3k thinking) |
-| claude-opus-5-5 | 1.0M in, 10k out, $0.90 |
+| turns | 31 |
+| wall time | 2 min 12 s (API 2 min 03 s) |
+| cost at API list price | $1.01 — on a Claude subscription this is plan usage, not a bill |
+| tokens in | 1.4M (1.3M cache read, 67k cache write) |
+| tokens out | 11k (4k thinking) |
+| claude-opus-5-5 | 1.4M in, 11k out, $1.01 |
 
 | MCP tool | calls | time |
 |---|---|---|
 | promo_render_video | 1 | 6 s |
-| promo_beats | 1 | 1 s |
-| promo_render_frames | 1 | 0 s |
+| promo_render_frames | 2 | 0 s |
+| promo_validate | 3 | 0 s |
 | promo_media_probe | 1 | 0 s |
-| promo_validate | 2 | 0 s |
+| promo_beats | 1 | 0 s |
 | promo_inspect | 1 | 0 s |
 | promo_explain | 1 | 0 s |
 | promo_schema_full | 3 | 0 s |
-| **all** | 11 | 7 s |
+| promo_schema | 1 | 0 s |
+| **all** | 14 | 7 s |
 
 <img src="36-beat-cut/result.gif" width="480" alt="the result, looping">
 
@@ -57,7 +58,7 @@ Six moments:
 
 <img src="36-beat-cut/contact-result.png" width="800" alt="six moments of the result">
 
-**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/36-beat-cut.mp4)** (1280 wide, 1.7 MB) · [small copy](36-beat-cut/result.mp4) · [the project it wrote](36-beat-cut/result-metadata.json)
+**[▶ Watch the video](https://github.com/garalex/promoshot/raw/demo-media/36-beat-cut.mp4)** (1280 wide, 1.6 MB) · [small copy](36-beat-cut/result.mp4) · [the project it wrote](36-beat-cut/result-metadata.json)
 
 | check | | detail |
 |---|---|---|
@@ -70,12 +71,12 @@ Six moments:
 | feature:beatClock | ✓ | True |
 | feature:measuredClock | ✓ | True |
 | feature:musicalTime | ✓ | True |
-| feature:beatCuts | ✓ | 36 vs 32 |
+| feature:beatCuts | ✓ | 32 vs 32 |
 | feature:pulse | ✓ | True |
 | feature:flash | ✓ | True |
 | feature:provenance | ✓ | True |
 | phrases | ✓ | 2 of 2 lines recognisable |
-| onBeat | ✓ | 41 of 43 cuts in export.mp4 within a frame of a beat; off: 0.3s (+45 ms), 22.9s (+145 ms) |
+| onBeat | ✓ | 38 of 39 cuts in export.mp4 within a frame of a beat; off: 24.7s (+70 ms) |
 
 ## The hand-built reference, same moments
 
