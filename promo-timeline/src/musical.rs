@@ -27,7 +27,8 @@
 use std::collections::BTreeMap;
 
 use promo_model::musical::{
-    self, After, BeatClock, BeatGrid, MusicalTime, SequenceEntry, TimeSpec, TimeSpecs, TimeValue,
+    self, After, BeatClock, BeatGrid, MusicalTime, SequenceEntry, SnapUnit, TimeSpec, TimeSpecs,
+    TimeValue,
 };
 use promo_model::{
     ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, ProjectResourceKind,
@@ -745,6 +746,121 @@ fn retain_held(specs: &mut Option<TimeSpecs>, numbers: &[(String, Option<f64>)])
     if map.is_empty() {
         *specs = None;
     }
+}
+
+/// A layer edge snapped to the grid its clock counts (docs/BEAT-SYNC.md
+/// §6.3): the musical value an editor writes with `setTime`, the seconds it
+/// resolves to (a start's position, an end's length) and the core's words
+/// for it — so a host rounds nothing itself.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Snapped {
+    pub value: MusicalTime,
+    pub seconds: f64,
+    pub label: String,
+}
+
+/// Which edge of a layer a snap moves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    Start,
+    End,
+}
+
+/// The grid a project-scope layer (or a stage's member) counts on, or why
+/// it has none.
+fn layer_grid<'a>(
+    meta: &'a ProjectMetadata,
+    grids: &BeatGrids,
+    layer_id: &str,
+) -> Result<(&'a ProjectLayer, Grid), String> {
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    let layer =
+        find(layers, layer_id).ok_or_else(|| format!("no layer \"{layer_id}\" in the project"))?;
+    let scope = Scope::new(
+        meta.composition_settings.beat_clock.as_ref(),
+        layers,
+        meta.resources.as_deref().unwrap_or(&[]),
+        grids,
+    );
+    if scope.clockless_for(layer) {
+        return Err(
+            "the project has no beat clock — choose the music that counts the beats".into(),
+        );
+    }
+    Ok((layer, scope.grid_of(layer)))
+}
+
+/// The start of `layer_id` on the nearest beat (`Beat`) or bar start
+/// (`Downbeat`, `Bar`), or its end there — written as the position the
+/// edge sits on (`{"beat": n}` or `{"bar": n}`; an end's length then runs
+/// to it). An end never snaps onto or before the start: it takes the next
+/// grid point after.
+pub fn snap_edge(
+    meta: &ProjectMetadata,
+    grids: &BeatGrids,
+    layer_id: &str,
+    edge: Edge,
+    unit: SnapUnit,
+) -> Result<Snapped, String> {
+    let (layer, grid) = layer_grid(meta, grids, layer_id)?;
+    let step = match unit {
+        SnapUnit::Beat => 1.0,
+        SnapUnit::Downbeat | SnapUnit::Bar => f64::from(grid.meter),
+    };
+    let start = layer.start_time;
+    let near = match edge {
+        Edge::Start => start,
+        Edge::End => {
+            start
+                + layer
+                    .duration
+                    .ok_or("the layer has no set length to snap")?
+        }
+    };
+    let mut index = grid.snap(unit, near);
+    if edge == Edge::End {
+        // A tenth of a millisecond: a length of nothing is not a length.
+        while grid.time_at(index) <= start + 1e-4 {
+            index += step;
+        }
+    }
+    let value = match unit {
+        SnapUnit::Beat => MusicalTime::Beat(index + 1.0),
+        SnapUnit::Downbeat | SnapUnit::Bar => MusicalTime::Bar(index / step + 1.0),
+    };
+    let at = grid.time_at(index);
+    Ok(Snapped {
+        label: value.label(),
+        seconds: match edge {
+            Edge::Start => at,
+            Edge::End => at - start,
+        },
+        value,
+    })
+}
+
+/// Where output time `seconds` falls on a layer's grid, in the core's
+/// words: "bar 3 · beat 2" (a beat between two is written to two decimals).
+/// None when the layer counts on no clock.
+pub fn bars_beats(
+    meta: &ProjectMetadata,
+    grids: &BeatGrids,
+    layer_id: &str,
+    seconds: f64,
+) -> Option<String> {
+    let (_, grid) = layer_grid(meta, grids, layer_id).ok()?;
+    let meter = f64::from(grid.meter);
+    // Rounded to a microbeat, so a value resolved onto a beat reads as it.
+    let index = (grid.index_at(seconds) * 1e6).round() / 1e6;
+    let bar = (index / meter).floor();
+    let beat = index - bar * meter + 1.0;
+    let beat = if (beat - beat.round()).abs() < 1e-3 {
+        format!("{}", beat.round() as i64)
+    } else {
+        let text = format!("{beat:.2}");
+        text.trim_end_matches('0').to_string()
+    };
+    Some(format!("bar {} · beat {beat}", bar as i64 + 1))
 }
 
 fn find<'a>(layers: &'a [ProjectLayer], id: &str) -> Option<&'a ProjectLayer> {

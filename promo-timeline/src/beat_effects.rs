@@ -481,8 +481,11 @@ pub(crate) fn expand_flash(meta: &mut ProjectMetadata, ctx: &Context) -> Vec<Tim
         let colour = color_hex.clone().unwrap_or_else(|| "FFFFFF".into());
         let peak = opacity.unwrap_or(0.6).clamp(0.0, 1.0);
         let id = format!("beat-flash-{n}");
+        // The drawing's id is its own: ids are one namespace in the file,
+        // and a layer and a resource sharing one is a break.
+        let drawing_id = format!("{id}-drawing");
         let mut resource: ProjectResource = serde_json::from_value(json!({
-            "id": id, "kind": "drawing", "filename": "", "displayName": format!("Flash {}", n + 1),
+            "id": drawing_id, "kind": "drawing", "filename": "", "displayName": format!("Flash {}", n + 1),
             "addedAt": 0,
             "drawing": { "shapes": [{ "id": format!("{id}-rect"), "kind": "rect",
                 "points": [[0, 0], [width, height]], "strokeColorHex": colour,
@@ -525,7 +528,7 @@ pub(crate) fn expand_flash(meta: &mut ProjectMetadata, ctx: &Context) -> Vec<Tim
         let mut layer: ProjectLayer = serde_json::from_value(json!({
             "id": id, "name": format!("Flash · on {label}"), "sortIndex": top + 1 + n as i64,
             "kind": "drawing", "isEnabled": true, "startTime": 0, "duration": ctx.end,
-            "resourceID": id, "keyframes": []
+            "resourceID": drawing_id, "keyframes": []
         }))
         .expect("a drawing layer");
         layer.keyframes = keys;
@@ -543,7 +546,7 @@ pub(crate) fn expand_flash(meta: &mut ProjectMetadata, ctx: &Context) -> Vec<Tim
             meta.layers.iter().flatten().any(|l| l.id == id)
                 || meta.resources.iter().flatten().any(|r| r.id == id)
         };
-        if taken(&id) {
+        if taken(&id) || taken(&drawing_id) {
             continue;
         }
         let sign = |value: Value| musical::signature(&value);

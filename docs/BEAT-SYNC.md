@@ -1,6 +1,6 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 8 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 9 built (2026-10-20); the rest is design. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +627,49 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 9 as built** (2026-10-20):
+- **Built:** the audio inspector's "Beats" section (`BeatsSection`: the
+  core's analysis as "120.0 BPM · 4/4 · confidence 1.00" with beat and bar
+  counts, "Set by hand" for a stated `beatGrid`, "Analysing…" while
+  `BeatAnalyzer` runs, Analyse / Analyse Again, and a "Beat clock" toggle);
+  a "Music" section in Settings › Canvas with the beat clock picker (None
+  or the project's songs); under the layer editor's Start and Duration a
+  line with the core's label beside the seconds ("4 beats · 2.000 s"), or
+  for a plain number where it falls ("bar 1 · beat 2.7 · 1.100 s", an end
+  as "ends bar 2 · beat 1.3"), and Snap Start / Snap End menus (to the
+  nearest beat, downbeat or bar). All in `ReVoice/Views/BeatSyncViews.swift`,
+  shared by both apps; the editors place them as they place their other
+  rows (Mac inspector column, iPhone sheet).
+- **Not built (later slices):** "Set BPM…", "Length in beats…", "Use
+  seconds", ruler ticks and drag snapping on the timeline, the app's
+  `promo_beats` MCP twin, and beat rows for a stage member or a
+  composition's layer (their own scope).
+- **Snap is the core's** (`promo_timeline::musical::snap_edge` and
+  `bars_beats`, FFI `promo_project_beat_snap` / `promo_project_bars_beats`
+  instead of the design's `promo_project_time_spec_for`): a start snaps to
+  `{"beat": n}` or `{"bar": n}`, an end to the same position forms — a
+  duration that runs to that point — and never onto or before the start.
+  The app writes the answer with `setTime` as a step of its own
+  (`applyCoreStep`, never coalesced, so ⌘Z takes back exactly one snap).
+- **The apps own `beatClock` and `beatGrid`.** `CompositionSettings.
+  beatClock` and `ProjectResource.beatGrid` are Swift fields now, and
+  `unread::carry_field` no longer carries the project's clock or a
+  resource's grid — a clock the person cleared stays cleared. A
+  composition's own clock is still carried.
+- **The apps hold `generatedBy`** on layers and resources (design change
+  from S6). A beat-clock pick or an analysis re-makes the flash in the
+  model and the document separately; with the tag only in the document, a
+  later replace kept the old tag on the new keys and the save read the
+  flash as a person's edit. Held in the model, both copies carry the tag
+  of what they hold. Folding still strips it at save.
+- **S6 defect fixed:** the flash layer and its drawing shared the id
+  `beat-flash-<n>`, which validate calls a break (ids are one namespace).
+  The drawing is `beat-flash-<n>-drawing` now (`a_flash_validates_clean`).
+- **Seen** on the iPhone 18 Pro simulator (6E233A5C) through the control
+  panel (Beats section, the layer sheet's rows, a Snap End to bar 3) and
+  on the Mac through the DEBUG tour door (Resources › audio, Settings ›
+  Canvas, the Animation inspector on a musical and a plain layer).
 
 **Slice 8 as built** (2026-10-20):
 - **The FFI** is §3.6's seven functions (`promo-ffi/src/beats.rs`), plus

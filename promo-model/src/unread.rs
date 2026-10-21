@@ -117,7 +117,9 @@ fn carry_frame(into: &mut Option<ResourceFrame>, from: &Option<ResourceFrame>, m
 
 /// A field this model types that the apps' model does not read yet (the
 /// beat-sync fields, docs/BEAT-SYNC.md): Fill puts it back where the copy
-/// lacks it, Mirror takes the source's as it is, absence included.
+/// lacks it, Mirror takes the source's as it is, absence included. The
+/// project's `beatClock` and a resource's `beatGrid` are the apps' own since
+/// slice 9 (their editors set and clear them), so neither is carried.
 fn carry_field<T: Clone>(into: &mut Option<T>, from: &Option<T>, mode: Mode) {
     match mode {
         Mode::Fill => {
@@ -155,7 +157,6 @@ fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
 
 fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, APP_RESOURCE_KEYS, mode);
-    carry_field(&mut into.beat_grid, &from.beat_grid, mode);
     carry_field(&mut into.provenance, &from.provenance, mode);
     carry_field(&mut into.generated_by, &from.generated_by, mode);
     if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
@@ -222,7 +223,6 @@ impl ProjectMetadata {
         );
         let settings = &mut self.composition_settings;
         let old = &from.composition_settings;
-        carry_field(&mut settings.beat_clock, &old.beat_clock, mode);
         carry_field(&mut settings.sequence, &old.sequence, mode);
         carry_field(&mut settings.flash, &old.flash, mode);
         let old_layers = layers_by_id(from);

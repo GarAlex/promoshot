@@ -4585,10 +4585,7 @@ mod auto_zoom_tests {
         let mut lossy: serde_json::Value =
             serde_json::from_str(&opened.to_app_json().unwrap()).unwrap();
         lossy.as_object_mut().unwrap().remove("futureTop");
-        lossy["compositionSettings"]
-            .as_object_mut()
-            .unwrap()
-            .remove("beatClock");
+        // The beat clock the apps read and write themselves (slice 9).
         lossy["layers"][0].as_object_mut().unwrap().remove("after");
         let mut doc = Document::open(&lossy.to_string()).unwrap();
         doc.absorb_unread(&file.to_string()).unwrap();

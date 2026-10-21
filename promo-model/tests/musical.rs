@@ -332,23 +332,21 @@ fn ignorable_beat_fields_stamp_48() {
 }
 
 /// What a lossy copy cannot read — the apps' model has no `after`,
-/// `sequence`, generators, clock, grid or provenance yet — comes back from
-/// the document it was made from; its specs are its own.
+/// `sequence`, generators, a composition's clock or provenance — comes back
+/// from the document it was made from; its specs are its own. The project's
+/// beat clock and a resource's beat grid the apps read and edit: a copy
+/// without them has cleared them, and that stands.
 #[test]
 fn a_lossy_copy_gets_the_beat_fields_back() {
     let original = decode(&musical_project());
     let mut copy: Value = serde_json::from_str(&original.to_app_json().unwrap()).unwrap();
     let settings = copy["compositionSettings"].as_object_mut().unwrap();
-    for key in ["beatClock", "sequence", "flash"] {
+    for key in ["sequence", "flash"] {
         settings.remove(key);
     }
     copy["layers"][0].as_object_mut().unwrap().remove("pulse");
     copy["layers"][1].as_object_mut().unwrap().remove("after");
     copy["layers"][1].as_object_mut().unwrap().remove("shake");
-    copy["resources"][0]
-        .as_object_mut()
-        .unwrap()
-        .remove("beatGrid");
     copy["resources"][0]
         .as_object_mut()
         .unwrap()
@@ -361,6 +359,21 @@ fn a_lossy_copy_gets_the_beat_fields_back() {
     assert_ne!(carried, original);
     carried.carry_unread_from(&original);
     assert_eq!(carried, original);
+
+    // Cleared by the apps: the clock and the grid stay cleared.
+    let mut cleared = copy.clone();
+    cleared["compositionSettings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("beatClock");
+    cleared["resources"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("beatGrid");
+    let mut carried = decode(&cleared);
+    carried.carry_unread_from(&original);
+    assert!(carried.composition_settings.beat_clock.is_none());
+    assert!(carried.resources.as_ref().unwrap()[0].beat_grid.is_none());
 }
 
 fn project_files(dir: &Path, out: &mut Vec<PathBuf>) {

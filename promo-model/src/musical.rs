@@ -72,7 +72,7 @@ impl SnapUnit {
         }
     }
 
-    fn parse(text: &str) -> Option<SnapUnit> {
+    pub fn parse(text: &str) -> Option<SnapUnit> {
         Some(match text {
             "beat" => SnapUnit::Beat,
             "downbeat" => SnapUnit::Downbeat,

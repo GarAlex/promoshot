@@ -354,11 +354,29 @@ fn flash_is_one_generated_drawing_layer() {
         .as_ref()
         .unwrap()
         .iter()
-        .find(|r| r.id == "beat-flash-0")
+        .find(|r| r.id == "beat-flash-0-drawing")
         .unwrap();
+    assert_eq!(flash.resource_id.as_deref(), Some("beat-flash-0-drawing"));
     assert!(resource.generated_by.is_some());
     let drawing = resource.drawing.as_ref().unwrap();
     assert_eq!(drawing.shapes[0].fill_color_hex.as_deref(), Some("FFFFFF"));
+}
+
+/// The flash's layer and drawing do not share an id: validate finds no
+/// break in a project whose only content is a flash.
+#[test]
+fn a_flash_validates_clean() {
+    let report = promo_timeline::report::file_report_with(
+        &flash_file().to_string(),
+        None,
+        &BeatGrids::default(),
+    )
+    .unwrap();
+    let said = report.messages();
+    assert!(
+        !said.iter().any(|m| m.contains("used by 2 records")),
+        "{said:?}"
+    );
 }
 
 /// A flash layer someone deleted takes its generator with it, so the
