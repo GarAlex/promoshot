@@ -439,7 +439,7 @@ fn cuts_land_on_the_listed_beats() {
         beats.push(beats[k] + 0.6 - 0.0125 * k as f64);
     }
     let analysis: promo_model::musical::BeatAnalysis = serde_json::from_value(json!({
-        "trackerVersion": 2, "duration": 30.0, "bpm": 120.0, "offset": beats[1],
+        "trackerVersion": 3, "duration": 30.0, "bpm": 120.0, "offset": beats[1],
         "timeSignature": [4, 4], "grid": "tracked", "confidence": 0.8,
         "beats": beats, "downbeats": [beats[1]], "sections": []
     }))

@@ -37,6 +37,11 @@ use promo_model::{
 use crate::attachment::AttachmentProblem;
 use crate::beats::Grid;
 
+/// A measured song whose confidence is under this is called unsure. Set
+/// against the tracker's fixtures and real generated loops (right tempos
+/// score 0.8–1.0; a tempo forced by a wrong hint 0.0–0.53).
+pub const UNSURE_BELOW: f64 = 0.6;
+
 /// Grids from outside the file — analyses of the clocks' audio (slice 4),
 /// by resource id. A resource's own `beatGrid` wins over these.
 #[derive(Debug, Clone, Default)]
@@ -45,7 +50,7 @@ pub struct BeatGrids {
     /// An analysis's sections, by resource id — what a generator's
     /// `{"section": …}` range names.
     pub sections: BTreeMap<String, Vec<musical::BeatSection>>,
-    /// An analysis's confidence, by resource id: under 0.5 is a warning.
+    /// An analysis's confidence, by resource id: under 0.6 is a warning.
     pub confidence: BTreeMap<String, f64>,
     /// An analysis's beats (the song's seconds) and which is beat 1, by
     /// resource id — the list a clock counts on, so the cuts land on the
@@ -663,6 +668,12 @@ fn findings(
                 }
             }
             for (edge, at) in edges {
+                // Only cuts inside the song are judged: a layer opening the
+                // composition (0 s), or anything before the song plays, has
+                // no beat to be off.
+                if at <= half_frame || at < grid.clock - half_frame {
+                    continue;
+                }
                 let index = grid.index_at(at).round();
                 let nearest = grid.time_at(index);
                 let off = at - nearest;
@@ -731,7 +742,7 @@ fn findings(
         }
         if song.beat_grid.is_none() {
             if let Some(&confidence) = grids.confidence.get(&id) {
-                if confidence < 0.5 {
+                if confidence < UNSURE_BELOW {
                     report.problems.push(TimingProblem::UnsureBeats {
                         resource: id.clone(),
                         confidence,

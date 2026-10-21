@@ -522,21 +522,43 @@ fn trailing_blank_warnings(meta: &ProjectMetadata, out: &mut Report) {
     if end <= content + half_frame {
         return;
     }
-    let music = layers
-        .iter()
-        .filter(|l| l.is_enabled && l.kind == ProjectLayerKind::Audio)
-        .filter_map(|l| l.duration.map(|d| l.start_time + d))
-        .fold(f64::NEG_INFINITY, f64::max);
-    let song = if music.is_finite() {
-        format!(" and its sound at {music:.2} s")
-    } else {
-        String::new()
-    };
+    // What holds the end out — each one has to come in for the project to
+    // end with its content: the stored length, a background, the sound.
+    let mut holding: Vec<String> = Vec::new();
+    if meta.video_duration > content + half_frame {
+        holding.push(format!(
+            "videoDuration and trimEnd ({:.3} s) to {content:.3}",
+            meta.video_duration
+        ));
+    }
+    for layer in layers {
+        let Some(d) = layer.duration else { continue };
+        let ends = layer.start_time + d;
+        // A generated layer (a beat flash) lasts as long as the project
+        // does and follows it in; only what a person set holds the end.
+        if !visible(&layer) && layer.generated_by.is_none() && ends > content + half_frame {
+            let what = match layer.kind {
+                ProjectLayerKind::Background => "background",
+                ProjectLayerKind::Audio => "sound",
+                _ => "layer",
+            };
+            holding.push(format!(
+                "the {what} \"{}\" (ends {ends:.3} s) to end at {content:.3} — a duration of \
+                 {:.3}",
+                layer.name,
+                (content - layer.start_time).max(0.0)
+            ));
+        }
+    }
     out.warn(format!(
-        "the project runs to {end:.2} s, but its last picture ends at {content:.2} s{song} — \
-         {:.2} s of nothing at the end; end it with the content (videoDuration and trimEnd \
-         {content:.3}), or let the last slide run to the end",
-        end - content
+        "the project runs to {end:.2} s, but its last picture ends at {content:.2} s — {:.2} s \
+         of nothing at the end; to end with the content set {}",
+        end - content,
+        if holding.is_empty() {
+            "the end to it".to_string()
+        } else {
+            holding.join(", and ")
+        }
     ));
 }
 
@@ -3260,6 +3282,28 @@ mod trailing_blank_tests {
                 .iter()
                 .any(|w| w.contains("of nothing")),
             "within half a frame"
+        );
+        // The suggestion names everything holding the end out — the stored
+        // length AND the background — and doing what it says ends it.
+        let said = warnings(&project(3.57))
+            .into_iter()
+            .find(|w| w.contains("of nothing"))
+            .unwrap();
+        assert!(
+            said.contains("videoDuration and trimEnd (3.570 s) to 3.000"),
+            "{said}"
+        );
+        assert!(
+            said.contains("the background \"Ground\" (ends 3.570 s)"),
+            "{said}"
+        );
+        let mut fixed = project(3.57);
+        fixed.video_duration = 3.0;
+        fixed.trim_end = 3.0;
+        fixed.layers.as_mut().unwrap()[0].duration = Some(3.0);
+        assert!(
+            !warnings(&fixed).iter().any(|w| w.contains("of nothing")),
+            "the suggestion works"
         );
     }
 }

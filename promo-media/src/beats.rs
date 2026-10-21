@@ -22,7 +22,9 @@ use promo_model::musical::{BeatAnalysis, BeatSection};
 /// lives with the cache, which re-measures an older one's answers).
 /// 2: tempo from the autocorrelation's first four multiples, one steady
 /// grid fitted to the whole envelope, a confidence against the off-beat
-/// sixteenths, timbre in the sections.
+/// sixteenths, timbre in the sections. 3: confidence from the beats alone
+/// (alignment against every phase, times steadiness), a jittery free track
+/// yields to a grid that explains half as much.
 pub use promo_model::musical::TRACKER_VERSION;
 
 /// The analysis rate: every input is resampled to it.
@@ -708,6 +710,99 @@ fn attacks(x: &[f64], beats: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// How much a beat list's gaps jump from one beat to the next, as a share
+/// of the median gap: 0 for one steady grid, a hundredth or so for a player
+/// gliding between tempos, a tenth and more for a track chasing hats.
+fn jitter(beats: &[f64]) -> f64 {
+    let gaps: Vec<f64> = beats.windows(2).map(|w| w[1] - w[0]).collect();
+    if gaps.len() < 2 {
+        return 0.0;
+    }
+    let mut sorted = gaps.clone();
+    sorted.sort_by(f64::total_cmp);
+    let median = sorted[sorted.len() / 2];
+    if median <= 0.0 {
+        return 0.0;
+    }
+    let mut sum = 0.0;
+    for w in gaps.windows(2) {
+        sum += (w[1] - w[0]).abs() / median;
+    }
+    sum / (gaps.len() - 1) as f64
+}
+
+/// How sure the beats are, from the beats and the music alone — never the
+/// hint that steered the search. Three parts, multiplied:
+/// - alignment: how much more onset sits on the beats than on the same grid
+///   at every other phase of the beat (an aligned pulse: twice the average
+///   or more; a misplaced one: the average);
+/// - steadiness: a list jumping by a tenth of a beat gap to gap is a track
+///   chasing the hats, not a pulse;
+/// - support: how strongly the music repeats at the beats' tempo (beat,
+///   half bar, bar) against the strongest periodicity it has at any tempo —
+///   a tempo forced by a wrong hint can line its sparse beats up with loud
+///   hits, but the song does not repeat there (right tempos measured
+///   0.83–0.97 of the best on the fixtures and real loops; forced wrong
+///   ones 0.66–0.71).
+fn confidence_of(onsets: &[f64], beats: &[f64]) -> f64 {
+    if beats.len() < 3 {
+        return 0.0;
+    }
+    let gaps: Vec<f64> = {
+        let mut g: Vec<f64> = beats.windows(2).map(|w| w[1] - w[0]).collect();
+        g.sort_by(f64::total_cmp);
+        g
+    };
+    let rate = RATE / HOP as f64;
+    let period = gaps[gaps.len() / 2] * rate;
+    let acf = autocorrelation(onsets, (4.0 * 1.5 * rate).ceil() as usize + 2);
+    let lag_at = |lag: f64| {
+        let i = lag.floor() as usize;
+        if i + 1 >= acf.len() {
+            return 0.0;
+        }
+        let f = lag - i as f64;
+        acf[i] * (1.0 - f) + acf[i + 1] * f
+    };
+    let comb = |p: f64| lag_at(p) + lag_at(2.0 * p) + lag_at(4.0 * p);
+    let mut strongest: f64 = 0.0;
+    let mut p = 0.25 * rate;
+    while p <= 1.5 * rate {
+        strongest = strongest.max(comb(p));
+        p += 0.05;
+    }
+    let mut here: f64 = 0.0;
+    let mut q = period - 1.0;
+    while q <= period + 1.0 {
+        here = here.max(comb(q));
+        q += 0.05;
+    }
+    let support = if strongest > 0.0 {
+        ((here / strongest - 0.7) / 0.15).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let at = |t: f64| {
+        let f = frame_of(t);
+        let (a, b) = (f.saturating_sub(1), (f + 1).min(onsets.len() - 1));
+        onsets[a..=b].iter().copied().fold(0.0, f64::max)
+    };
+    let (mut on, mut every) = (0.0, 0.0);
+    for w in beats.windows(2) {
+        let gap = w[1] - w[0];
+        on += at(w[0]);
+        for k in 0..16 {
+            every += at(w[0] + gap * k as f64 / 16.0) / 16.0;
+        }
+    }
+    if every <= 0.0 {
+        return 0.0;
+    }
+    let alignment = ((on / every - 1.0) / 0.8).clamp(0.0, 1.0);
+    let steadiness = (1.0 - jitter(beats) / 0.12).clamp(0.0, 1.0);
+    alignment * steadiness * support
+}
+
 /// A grid moved onto the music's attacks: each grid beat's attack within
 /// 60 ms (see [`attacks`]), the ones within 30 ms of it kept. When they lie
 /// on one line to within 4 ms RMS — a click, a drum machine — the
@@ -843,9 +938,18 @@ pub fn analyse(x: &[f64], duration: f64, options: BeatOptions) -> BeatAnalysis {
     };
     let tracked_score = mean_near(&tracked);
     let uniform_score = mean_near(&grid);
+    // A free track whose gaps jump about from beat to beat is following
+    // hats and fills, not a tempo that moves (a player speeding up changes
+    // gap by gap by a hair): then a grid that explains even half as much
+    // stands.
+    let ratio = if tracked_score > level {
+        (uniform_score - level) / (tracked_score - level)
+    } else {
+        f64::INFINITY
+    };
     let steady = grid.len() >= 8
         && uniform_score > level
-        && (tracked_score <= level || (uniform_score - level) >= 0.75 * (tracked_score - level));
+        && (ratio >= 0.75 || (jitter(&tracked) > 0.06 && ratio >= 0.5));
     let (beats, grid_kind, beat_period) = if steady {
         let placed = attacks(x, &grid);
         let (start, step) = attack_line(&grid, &placed, step).unwrap_or((grid[0], step));
@@ -942,25 +1046,7 @@ pub fn analyse(x: &[f64], duration: f64, options: BeatOptions) -> BeatAnalysis {
         duration,
     );
 
-    // How much more onset sits on the beats than a quarter of a beat off
-    // them — where nothing of the pulse is. Eighth notes between the beats
-    // are part of the pulse and count against nothing.
-    let at = |t: f64| {
-        let f = frame_of(t);
-        let (a, b) = (f.saturating_sub(1), (f + 1).min(onsets.len() - 1));
-        onsets[a..=b].iter().copied().fold(0.0, f64::max)
-    };
-    let (mut on, mut off) = (0.0, 0.0);
-    for w in beats.windows(2) {
-        let gap = w[1] - w[0];
-        on += at(w[0]);
-        off += 0.5 * (at(w[0] + 0.25 * gap) + at(w[0] + 0.75 * gap));
-    }
-    let confidence = if on > 0.0 {
-        ((on - off) / on).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
+    let confidence = confidence_of(&onsets, &beats);
 
     BeatAnalysis {
         tracker_version: TRACKER_VERSION,

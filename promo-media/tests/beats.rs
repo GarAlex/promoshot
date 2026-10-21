@@ -352,3 +352,65 @@ fn the_real_generated_loop_fits_its_tempo() {
         hinted.bpm
     );
 }
+
+/// The confidence is the beats' own, never the hint's: steered to a wrong
+/// tempo, the real loop scores lower than its right one and under the
+/// "unsure" line; the right tempo — and a click — score well above it.
+#[test]
+fn a_wrong_hint_lowers_the_confidence() {
+    let loop_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/beats/milo-loop.wav"
+    );
+    let click_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/beats/click-120.wav"
+    );
+    let measure = |path: &str, hint: Option<f64>| {
+        beats::analyse_file(
+            std::path::Path::new(path),
+            BeatOptions {
+                meter: 4,
+                bpm_hint: hint,
+            },
+        )
+        .unwrap()
+    };
+    let unsure = promo_timeline_unsure();
+    let right = measure(loop_path, None);
+    assert!(
+        right.confidence >= unsure,
+        "the right tempo: {}",
+        right.confidence
+    );
+    let hinted_right = measure(loop_path, Some(124.0));
+    assert!(
+        hinted_right.confidence >= unsure,
+        "hinted right: {}",
+        hinted_right.confidence
+    );
+    // 100 and 80 BPM: the latter lines its sparse beats up with the loud
+    // hits well enough that alignment alone scored it 0.98.
+    for hint in [100.0, 80.0] {
+        let wrong = measure(loop_path, Some(hint));
+        assert!(
+            (wrong.bpm - right.bpm).abs() > 5.0,
+            "the hint moved it: {}",
+            wrong.bpm
+        );
+        assert!(
+            wrong.confidence < right.confidence && wrong.confidence < unsure,
+            "a wrong tempo {} scores {} against the right one's {}",
+            wrong.bpm,
+            wrong.confidence,
+            right.confidence
+        );
+    }
+    assert!(measure(click_path, None).confidence > 0.95);
+    assert!(measure(click_path, Some(90.0)).confidence < unsure);
+}
+
+/// The line `promo_timeline` calls unsure below (kept beside it).
+fn promo_timeline_unsure() -> f64 {
+    0.6
+}

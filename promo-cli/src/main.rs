@@ -515,6 +515,8 @@ fn beats(args: &[String]) -> Result<String, String> {
     if clear_hint && options.bpm_hint.is_some() {
         return Err("beats: --bpm-hint and --clear-hint say opposite things".into());
     }
+    // A song that states its own grid counts on that grid, not the measure.
+    let mut stated: Option<promo_model::musical::BeatGrid> = None;
     let (analysis, cached) = if path.is_dir() {
         let text = std::fs::read_to_string(path.join("metadata.json"))
             .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
@@ -554,6 +556,7 @@ fn beats(args: &[String]) -> Result<String, String> {
         // given, the kept one steers this measure too.
         let chosen_id = chosen.id.clone();
         let kept = chosen.bpm_hint;
+        stated = chosen.beat_grid.clone();
         let wanted_hint = if clear_hint {
             None
         } else {
@@ -576,12 +579,59 @@ fn beats(args: &[String]) -> Result<String, String> {
     } else {
         (beats::analyse_file(&path, options)?, None)
     };
+    // The hand grid in use against the measure: its beats (in the song's
+    // seconds) to the nearest measured beat, the worst over the song.
+    let drift = stated.as_ref().map(|grid| {
+        let period = 60.0 / grid.bpm.max(1e-6);
+        let mut t = grid.offset.unwrap_or(0.0);
+        while t - period >= 0.0 {
+            t -= period;
+        }
+        let mut worst: f64 = 0.0;
+        // Only where the song has measured beats to compare with.
+        let (first, last) = match (analysis.beats.first(), analysis.beats.last()) {
+            (Some(&a), Some(&b)) => (a - period / 2.0, b + period / 2.0),
+            _ => (0.0, -1.0),
+        };
+        while t <= last {
+            if t < first {
+                t += period;
+                continue;
+            }
+            let near = analysis
+                .beats
+                .iter()
+                .map(|b| (b - t).abs())
+                .fold(f64::INFINITY, f64::min);
+            worst = worst.max(near);
+            t += period;
+        }
+        worst
+    });
     if json {
         let mut value = serde_json::to_value(&analysis).map_err(|e| e.to_string())?;
         if let Some(cached) = cached {
             value["fromCache"] = serde_json::json!(cached);
         }
+        if let (Some(grid), Some(drift)) = (&stated, drift) {
+            value["inUse"] = serde_json::json!("beatGrid");
+            value["beatGrid"] = serde_json::to_value(grid).map_err(|e| e.to_string())?;
+            value["driftMs"] = serde_json::json!((drift * 10_000.0).round() / 10.0);
+        }
         return Ok(value.to_string());
+    }
+    if let (Some(grid), Some(drift)) = (&stated, drift) {
+        return Ok(format!(
+            "{:.3} BPM from the song's hand beatGrid (first downbeat {:.3} s) — the grid in use; \
+             the song itself measures {:.3} BPM ({} grid, confidence {:.2}), and the hand grid's \
+             beats come up to {:.1} ms from the measured ones over the song",
+            grid.bpm,
+            grid.offset.unwrap_or(0.0),
+            analysis.bpm,
+            analysis.grid,
+            analysis.confidence,
+            drift * 1000.0
+        ));
     }
     let sections: Vec<String> = analysis
         .sections

@@ -319,7 +319,7 @@ file re-times the whole edit. The apps share that cache. `promo beats
 <song>` (promo_beats) shows the analysis: its beats — one steady grid, or
 the tracked beats of a tempo that moves; cuts land on exactly those — its
 sections (loudness, bass, brightness, busyness, timbre) and a confidence.
-Under 0.5 is a guess to check by ear. `--bpm-hint` (kept on the song as
+Under 0.6 is a guess to check by ear. `--bpm-hint` (kept on the song as
 `bpmHint`; `--clear-hint`) keeps the tempo near a number, its half or
 double; `--refresh` measures again. A stated `beatGrid` sets tempo and
 offset only — sections stay measured; validate names a hand tempo's drift.

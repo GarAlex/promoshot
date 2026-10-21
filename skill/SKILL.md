@@ -159,8 +159,9 @@ its defaults are the source of the first, the person of the second.
    becomes its words (the listing's headline, a lower third otherwise);
    `narration: true` adds a draft voice per slide for `promo_speak`;
    `music` (a song) cuts a classic show to its beats — `beatsPerSlide` (a
-   number, or a list cycled), `startOn` downbeat or beat — the beat-cut
-   recipe's shape. The
+   number, or a list cycled), `startOn` downbeat or the song's first beat —
+   the beat-cut recipe's shape: hard cuts (a transition, if asked, a quarter
+   beat), the show ending with its last slide. The
    answer carries the glance like every authoring tool — then refine it
    with the tools below. `promo_init` lays the folder, canvas, palette,
    background; `promo_upsert_layer` adds an image/video/caption with a

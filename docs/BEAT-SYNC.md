@@ -629,6 +629,29 @@ the text above, and why:
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
 
+**After the 0.3.14 field test** (2026-10-20, MiloBeat3, SlideBeat):
+- **Confidence (tracker 3):** it measured on-beat against off-beat onset,
+  which a tracked list flatters (it sits on peaks by construction) and a
+  hint could steer: a wrong hinted tempo scored above the right one, and
+  right grids with busy off-beats sat at 0.37–0.42. It is now alignment
+  (onset on the beats against the same grid at every phase) × steadiness
+  (gap-to-gap jitter) × support (how strongly the music repeats at the
+  beats' tempo against its strongest periodicity) — none of it the hint's.
+  Right tempos on the fixtures and real loops: 0.76–1.00; tempos forced by
+  wrong hints: 0.00–0.03. "Unsure" is under 0.6 (`UNSURE_BELOW`). A jittery
+  free track yields to a grid that explains half as much.
+- **`promo beats` with a hand grid** prints the grid in use, the measured
+  tempo beside it and their drift (JSON `inUse`, `beatGrid`, `driftMs`).
+- **Off-grid warnings** judge only cuts inside the song: an edge at the
+  composition start or before the song plays is no cut.
+- **Slideshow music:** no background layer and no stored length — the show
+  ends with its last slide (from a downbeat, the last slide takes the beats
+  to the bar), the sound anchored to that end (`timing.end` previousEnd)
+  and faded over a beat; slides hard-cut unless a transition is asked
+  (then a quarter beat); `startOn: "beat"` starts at 0 s, which snaps to
+  the song's first beat. The blank-tail warning names everything holding
+  the end out (stored length, background, sound) with the value to set.
+
 **After the 0.3.13 field test** (2026-10-20, MiloBeat2 and its hint/grid
 variants):
 - **Tracked cuts off the printed beats (up to 258 ms):** the CLI's open

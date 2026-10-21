@@ -1105,7 +1105,13 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
     let mut authored = promo_editor::author::author(&spec)?;
     let mut cut = String::new();
     if let Some(music) = music {
-        let (text, said) = cut_to_music(&authored, &dir, &music, probe)?;
+        let (text, said) = cut_to_music(
+            &authored,
+            &dir,
+            &music,
+            args.get("transition").is_some(),
+            probe,
+        )?;
         authored = text;
         cut = said;
     }
@@ -1113,11 +1119,17 @@ pub fn slideshow(args: &Value, root: Option<&Path>, probe: Probe) -> Result<Stri
         .map_err(|e| format!("the show the wizard wrote no longer parses: {e}"))?;
     // (the stamp is computed by `write_metadata`)
     write_metadata(&meta, &meta_path)?;
+    // A show cut to music is as long as its beats make it — known once the
+    // song is measured, not here.
+    let length = if cut.is_empty() {
+        format!(", {:.1}s", meta.video_duration)
+    } else {
+        String::new()
+    };
     Ok(format!(
-        "authored a {kind} show at {}: {} slide(s), {:.1}s{cut} — refine with the tools, or open it",
+        "authored a {kind} show at {}: {} slide(s){length}{cut} — refine with the tools, or open it",
         dir.display(),
-        wanted.len(),
-        meta.video_duration
+        wanted.len()
     ))
 }
 
@@ -1178,14 +1190,20 @@ fn beat_music(args: &Value, kind: &str) -> Result<Option<BeatMusic>, String> {
 /// The authored classic show cut to a song, the beat-cut recipe's shape:
 /// the song copied in as an audio resource that an audio layer plays from
 /// 0 s, `compositionSettings.beatClock` on it, the slides in a `sequence`
-/// of `beatsPerSlide` (cycled), the first from the first downbeat (or
-/// beat), each caption riding its picture (`timing` on the layer below it).
-/// The show runs the song's length (the probe's, else the slides' beats at
-/// 120 BPM); the beats themselves are measured when the project opens.
+/// of `beatsPerSlide` (cycled) from the first downbeat (`{"bar": 1}`) or the
+/// song's first beat (a start of 0 s, which snaps to it), each caption
+/// riding its picture (`timing` on the layer below it). The show ENDS with
+/// its last slide — on a downbeat when it starts on one (the last slide
+/// takes the beats to the bar) — the sound anchored to that end and faded
+/// over its last beat; no background layer (the canvas colour shows) and no
+/// stored length to outlast it. Slides hard-cut unless a transition was
+/// asked for, and then it lasts a quarter of a beat — never longer than a
+/// slide.
 fn cut_to_music(
     authored: &str,
     dir: &Path,
     music: &BeatMusic,
+    asked_transition: bool,
     probe: Probe,
 ) -> Result<(String, String), String> {
     let mut doc: Value =
@@ -1194,6 +1212,9 @@ fn cut_to_music(
     let filename = copy_into_resources(dir, &music.file)?;
     let song = mint();
     let mut layers = doc["layers"].as_array().cloned().unwrap_or_default();
+    // The canvas colour stands behind the slides; a background layer would
+    // be one more length to outlast them.
+    layers.retain(|l| l["kind"] != "background");
     layers.sort_by(|a, b| {
         a["sortIndex"]
             .as_f64()
@@ -1206,18 +1227,41 @@ fn cut_to_music(
         .filter(|(_, l)| matches!(l["kind"].as_str(), Some("image" | "video")))
         .map(|(i, _)| i)
         .collect();
+    let mut lengths: Vec<f64> = (0..slides.len())
+        .map(|n| music.beats[n % music.beats.len()])
+        .collect();
+    let mut total_beats: f64 = lengths.iter().sum();
+    // From a downbeat, end on one: the last slide holds to the bar.
+    if music.start_on == "downbeat" {
+        let over = total_beats % 4.0;
+        if over > 1e-9 {
+            if let Some(last) = lengths.last_mut() {
+                *last += 4.0 - over;
+                total_beats += 4.0 - over;
+            }
+        }
+    }
     let mut sequence = Vec::new();
-    let mut total_beats = 0.0;
     for (n, &i) in slides.iter().enumerate() {
-        let beats = music.beats[n % music.beats.len()];
-        total_beats += beats;
-        sequence.push(json!({ "layer": layers[i]["id"], "beats": beats }));
+        sequence.push(json!({ "layer": layers[i]["id"], "beats": lengths[n] }));
         if n == 0 {
             layers[i]["startTime"] = if music.start_on == "beat" {
-                json!({ "beat": 1 })
+                json!(0)
             } else {
                 json!({ "bar": 1 })
             };
+        }
+        let layer = layers[i].as_object_mut().ok_or("a slide is not a layer")?;
+        if asked_transition {
+            if layer.contains_key("fadeIn") {
+                layer.insert("fadeIn".into(), json!({ "beats": 0.25 }));
+            }
+            if let Some(Value::Object(t)) = layer.get_mut("transitionIn") {
+                t.insert("duration".into(), json!({ "beats": 0.25 }));
+            }
+        } else {
+            layer.remove("fadeIn");
+            layer.remove("transitionIn");
         }
     }
     // A caption arrives and leaves with the picture under it.
@@ -1231,15 +1275,6 @@ fn cut_to_music(
             });
         }
     }
-    let total = info
-        .duration
-        .filter(|d| *d > 0.0)
-        .unwrap_or(total_beats * 0.5 + 2.0);
-    for layer in &mut layers {
-        if layer["kind"] == "background" {
-            layer["duration"] = json!(total);
-        }
-    }
     let top = layers
         .iter()
         .filter_map(|l| l["sortIndex"].as_i64())
@@ -1250,9 +1285,14 @@ fn cut_to_music(
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Music".into());
+    // The sound: from 0 s to the last slide's end — the layer just below
+    // it, the last slide or the caption riding it — faded over a beat.
+    let estimate = total_beats * 0.5 + 2.0;
     layers.push(json!({
         "id": mint(), "name": "Music", "sortIndex": top + 1, "kind": "audio",
-        "isEnabled": true, "startTime": 0, "duration": total, "resourceID": song,
+        "isEnabled": true, "startTime": 0, "duration": estimate, "resourceID": song,
+        "timing": { "end": { "from": "previousEnd", "offset": 0 } },
+        "fadeOut": { "beats": 1 },
         "keyframes": []
     }));
     doc["layers"] = Value::Array(layers);
@@ -1269,10 +1309,12 @@ fn cut_to_music(
         .push(resource);
     doc["compositionSettings"]["beatClock"] = json!({ "resourceID": song });
     doc["compositionSettings"]["sequence"] = Value::Array(sequence);
-    doc["trimEnd"] = json!(total);
-    doc["videoDuration"] = json!(total);
+    // No stored length: the show ends where its last slide does.
+    doc["trimEnd"] = json!(0);
+    doc["videoDuration"] = json!(0);
     let said = format!(
-        ", cut to {filename}: {} slide(s) on its beats ({} beats), from its first {}",
+        ", cut to {filename}: {} slide(s) on its beats ({} beats), from its first {}, ending \
+         with the last slide",
         slides.len(),
         total_beats,
         music.start_on

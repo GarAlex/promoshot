@@ -885,7 +885,9 @@ fn a_slideshow_cut_to_music() {
         .iter()
         .map(|e| e["beats"].as_f64().unwrap())
         .collect();
-    assert_eq!(lengths, [2.0, 1.0, 2.0, 1.0], "cycled");
+    // Cycled, the last slide holding to the bar: a show from a downbeat
+    // ends on one.
+    assert_eq!(lengths, [2.0, 1.0, 2.0, 3.0], "cycled, ending on a bar");
     let first = settings["sequence"][0]["layer"].as_str().unwrap();
     let opening = layers.iter().find(|l| l["id"] == first).unwrap();
     assert_eq!(opening["startTime"], json!({"bar": 1}));
@@ -1164,6 +1166,26 @@ fn a_hand_grid_keeps_the_measured_sections() {
         assert!(said.starts_with("ok"), "{bpm}: {said}");
         assert!(!said.contains("no analysis"), "{bpm}: {said}");
         assert_eq!(said.contains("the song measures"), drifts, "{bpm}: {said}");
+        // promo beats shows the grid in use — the hand one — with the
+        // measure beside it and how far apart their beats come.
+        let shown = promo_in(&dir, &["beats", dir.to_str().unwrap()]);
+        assert!(
+            shown.starts_with(&format!("{bpm:.3} BPM from the song's hand beatGrid")),
+            "{shown}"
+        );
+        let measured: f64 = shown
+            .split("the song itself measures ")
+            .nth(1)
+            .and_then(|rest| rest.split(' ').next())
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("{shown}"));
+        assert!((measured - 120.0).abs() < 0.05, "{shown}");
+        let json: Value =
+            serde_json::from_str(&promo_in(&dir, &["beats", dir.to_str().unwrap(), "--json"]))
+                .unwrap();
+        assert_eq!(json["inUse"], "beatGrid");
+        assert_eq!(json["beatGrid"]["bpm"], bpm);
+        assert_eq!(json["driftMs"].as_f64().unwrap() > 5.0, drifts, "{json}");
         // The flash lights the second section only — from bar 9 (16.25 s).
         let explained: Value = serde_json::from_str(
             &promo_author::explain(&json!({"project": dir, "time": 20.0}), None).unwrap(),
@@ -1182,4 +1204,199 @@ fn a_hand_grid_keeps_the_measured_sections() {
         assert!(flash.is_some(), "{bpm}: the flash was made: {explained}");
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// The wizard's music show as authored — untouched — renders the way the
+/// field report asked (0.3.14 left a 12 s blank tail, a caption at its old
+/// time, half-second fades over one-beat slides and a start on the first
+/// downbeat for `startOn: "beat"`): every cut on its beat, one-beat slides
+/// hard-cut, the caption over its slide, the first slide on the song's
+/// first beat, and the show ending with its last slide.
+#[test]
+fn a_music_show_renders_as_authored() {
+    if !has_ffmpeg() {
+        eprintln!("ffmpeg missing: the render check needs it");
+        return;
+    }
+    let base = std::env::temp_dir().join(format!("promo-beats-asis-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let mut slides = Vec::new();
+    for (k, colour) in SLIDES.iter().take(6).enumerate() {
+        let file = base.join(format!("p{k}.png"));
+        image::RgbImage::from_pixel(160, 90, image::Rgb(*colour))
+            .save(&file)
+            .unwrap();
+        let mut slide = json!({"file": file});
+        if k == 1 {
+            slide["caption"] = json!("On two");
+        }
+        slides.push(slide);
+    }
+    // Kicks every half second from 0.25 s, the bar's accent on the second
+    // one: the song's first beat (0.25 s) is a pickup to its first
+    // downbeat (0.75 s).
+    let rate = 44_100.0;
+    let seconds = 9.0;
+    let mut out = vec![0.0f32; (seconds * rate) as usize];
+    for k in 0..17 {
+        let t = 0.25 + k as f64 * 0.5;
+        let gain = if k % 4 == 1 { 0.9 } else { 0.35 };
+        let start = (t * rate) as usize;
+        for i in 0..(0.12 * rate) as usize {
+            if start + i >= out.len() {
+                break;
+            }
+            let s = i as f64 / rate;
+            out[start + i] += (gain
+                * libm::exp(-s / 0.03)
+                * libm::sin(std::f64::consts::TAU * if k % 4 == 1 { 55.0 } else { 180.0 } * s))
+                as f32;
+        }
+    }
+    let song = base.join("song.wav");
+    std::fs::write(&song, click_track::wav(&out, 1, 44_100)).unwrap();
+    let dir = base.join("Show.promo");
+    let args = json!({"music": song, "beatsPerSlide": [3, 1, 2], "startOn": "beat",
+                      "canvas": "160x90", "backgroundColorHex": "000000", "slides": slides});
+    promo_in(
+        &dir,
+        &[
+            "slideshow",
+            dir.to_str().unwrap(),
+            "--args",
+            &args.to_string(),
+        ],
+    );
+
+    let validate = promo_in(&dir, &["validate", dir.to_str().unwrap()]);
+    assert!(!validate.contains("of nothing"), "a blank tail: {validate}");
+    let printed: Value =
+        serde_json::from_str(&promo_in(&dir, &["beats", dir.to_str().unwrap(), "--json"])).unwrap();
+    let beats: Vec<f64> = printed["beats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b.as_f64().unwrap())
+        .collect();
+    let file: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap()).unwrap();
+    let sequence = file["compositionSettings"]["sequence"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let lengths: Vec<usize> = sequence
+        .iter()
+        .map(|e| e["beats"].as_f64().unwrap() as usize)
+        .collect();
+    assert_eq!(lengths, [3, 1, 2, 3, 1, 2]);
+    // The first slide on the song's first beat — the pickup, not the
+    // first downbeat.
+    let (first_start, _) = life(&dir, sequence[0]["layer"].as_str().unwrap());
+    assert!(
+        (first_start - beats[0]).abs() < 1e-6,
+        "starts {first_start}, first beat {}",
+        beats[0]
+    );
+    assert!(
+        beats[0] < printed["offset"].as_f64().unwrap() - 0.1,
+        "{printed}"
+    );
+    // The caption rides its slide.
+    let caption = file["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["kind"] == "caption")
+        .unwrap();
+    assert_eq!(
+        life(&dir, caption["id"].as_str().unwrap()),
+        life(&dir, sequence[1]["layer"].as_str().unwrap()),
+        "the caption over its slide"
+    );
+    // The render: each slide from its beat, hard cuts, and the show's last
+    // frame the last slide.
+    let shown = slides_shown(&dir);
+    let fps = 30.0;
+    let mut at = 0usize;
+    let mut cut_times = Vec::new();
+    for (k, beats_long) in lengths.iter().enumerate() {
+        cut_times.push((k, beats[at]));
+        at += beats_long;
+    }
+    let end = beats[at.min(beats.len() - 1)];
+    for (k, t) in &cut_times {
+        let first = shown
+            .iter()
+            .position(|s| *s == Some(*k))
+            .unwrap_or_else(|| panic!("slide {k} never shows: {shown:?}"));
+        assert!(
+            (first as f64 - t * fps).abs() <= 1.0,
+            "slide {k} first shows at frame {first}, its beat is {t} s"
+        );
+        // Hard cut: from its first frame it is itself, never a blend.
+        let next = cut_times.get(k + 1).map_or(end, |(_, t)| *t);
+        for f in first..((next * fps).floor() as usize).min(shown.len()) {
+            assert_eq!(
+                shown[f],
+                Some(*k),
+                "frame {f} of slide {k}: {:?}",
+                &shown[first..]
+            );
+        }
+    }
+    assert!(
+        (shown.len() as f64 - end * fps).abs() <= 1.5,
+        "{} frames for a show ending at {end} s",
+        shown.len()
+    );
+    assert_eq!(
+        shown.last().copied().flatten(),
+        Some(5),
+        "ends on its last slide"
+    );
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// Asked for a transition, a music show keeps it — a quarter of a beat,
+/// never longer than a slide.
+#[test]
+fn a_music_show_caps_an_asked_transition() {
+    let base = std::env::temp_dir().join(format!("promo-beats-fade-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let picture = base.join("p.png");
+    image::RgbImage::from_pixel(64, 36, image::Rgb([200, 40, 40]))
+        .save(&picture)
+        .unwrap();
+    let song = base.join("song.wav");
+    let (samples, _) = click_track::click_track(120.0, 6.0, 44_100.0, None);
+    std::fs::write(&song, click_track::wav(&samples, 1, 44_100)).unwrap();
+    let dir = base.join("Fade.promo");
+    let args = json!({"music": song, "transition": "crossfade", "beatsPerSlide": 1,
+                      "slides": [{"file": picture}, {"file": picture}, {"file": picture}]});
+    promo_in(
+        &dir,
+        &[
+            "slideshow",
+            dir.to_str().unwrap(),
+            "--args",
+            &args.to_string(),
+        ],
+    );
+    let file: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap()).unwrap();
+    for layer in file["layers"].as_array().unwrap() {
+        if layer["kind"] == "image" {
+            if let Some(fade) = layer.get("fadeIn") {
+                assert_eq!(fade, &json!({"beats": 0.25}), "{layer}");
+            }
+            if let Some(t) = layer.get("transitionIn") {
+                assert_eq!(t["duration"], json!({"beats": 0.25}), "{layer}");
+            }
+        }
+    }
+    let validate = promo_in(&dir, &["validate", dir.to_str().unwrap()]);
+    assert!(!validate.contains("never finishes arriving"), "{validate}");
+    let _ = std::fs::remove_dir_all(&base);
 }

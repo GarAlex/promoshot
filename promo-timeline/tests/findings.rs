@@ -77,7 +77,9 @@ fn off_grid_cut_names_the_nearest_beat() {
         "within half a frame: {said:?}"
     );
     assert!(
-        !said.iter().any(|m| m.contains("Ground")),
+        !said
+            .iter()
+            .any(|m| m.contains("Ground") && m.contains("off the beat grid")),
         "a background is not a cut"
     );
     let clockless = project(json!([caption("a", 1.1, 1.0)]), song(json!({})), json!({}))
@@ -233,8 +235,8 @@ fn pulse_and_internal_key_warnings() {
 }
 
 /// A grid point before beat 1 is named from the music, never as a negative
-/// beat: inside the song, the pickup so many beats before beat 1; before
-/// the song plays at all, where it starts and its first beat.
+/// beat: inside the song, the pickup so many beats before beat 1. An edge
+/// before the song plays — or at the composition's start — is not judged.
 #[test]
 fn points_before_beat_one_are_named_from_the_music() {
     // The song plays from 1.5 s; 120 BPM, beat 1 a second into it (2.5 s).
@@ -245,13 +247,10 @@ fn points_before_beat_one_are_named_from_the_music() {
     );
     let said = warnings(&file, &BeatGrids::default());
     assert!(said.iter().all(|m| !m.contains("beat -")), "{said:?}");
-    let early = said
-        .iter()
-        .find(|m| m.contains("\"early\" at 0.20s"))
-        .expect("the early edge is named");
+    // Before the song plays there is no beat to be off.
     assert!(
-        early.contains("before the song starts (at 1.50 s; its first beat is at 1.50 s)"),
-        "{early}"
+        !said.iter().any(|m| m.contains("\"early\" at 0.20s")),
+        "{said:?}"
     );
     let pickup = said
         .iter()
@@ -260,5 +259,25 @@ fn points_before_beat_one_are_named_from_the_music() {
     assert!(
         pickup.contains("the pickup 1 beat before beat 1, at 2.00 s"),
         "{pickup}"
+    );
+}
+
+/// A layer opening the composition at 0 s is not a cut: an intro there is
+/// never "off the beat", wherever the song's first beat falls.
+#[test]
+fn the_composition_start_is_not_a_cut() {
+    let file = project(
+        json!([caption("intro", 0.0, 2.0), caption("late", 1.1, 1.0)]),
+        song(json!({"beatGrid": {"bpm": 120, "offset": 0.3}})),
+        json!({}),
+    );
+    let said = warnings(&file, &BeatGrids::default());
+    assert!(
+        !said.iter().any(|m| m.contains("\"intro\" at 0.00s")),
+        "{said:?}"
+    );
+    assert!(
+        said.iter().any(|m| m.contains("\"late\" at 1.10s")),
+        "a cut inside the song is still judged: {said:?}"
     );
 }
