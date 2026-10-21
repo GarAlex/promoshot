@@ -18,6 +18,7 @@ demos/
   _media/            files over 1 MB, shared by name
   features.py        what a project IS, structurally — shared by all three below
   score.py           rubric vs a project → percentage and per-check detail
+  beat_cuts.py       cuts found in a video's picture vs the song's measured beats (a rubric's `onBeat`)
   run.sh             one demo, one fresh agent
   run_all.sh         the set, then summary.md
   publish.py         demo.md + docs/demo/ (assets and demo.json)
@@ -87,7 +88,12 @@ length within a quarter, each layer kind present in about the right
 number, every feature the reference uses (a chroma key, a LUT, chapters,
 effects, a mask, viewports, sprites, reveals, blend modes, swaps,
 transitions, timing anchors, speed cuts, narration, motion blur, a
-grade), and whether the words on screen are the words in the prompt. A
+grade, a beat clock and whether its song is measured, musical times, a
+sequence, pulse, flash, shake, provenance), and whether the words on
+screen are the words in the prompt. A rubric with `onBeat` (rubric_from
+adds it when the reference has a beat clock) also judges the agent's own
+video: its cuts, found in the picture, against the beats `promo beats`
+measures in the song — the project's timing is never read. A
 reference scores 100 by construction; a run is judged by its percentage
 and by the two contact sheets side by side — the score says what is
 there, the sheets say whether it reads.

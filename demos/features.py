@@ -4,6 +4,65 @@ derive a rubric from a reference), the scorer (to read a result) and the
 publisher. Keep the three reading the same file the same way."""
 import re
 
+TIME_FIELDS = ('startTime', 'duration', 'fadeIn', 'fadeOut')
+MUSICAL = ('beats', 'bars', 'beat', 'bar', 'snap')
+
+def seconds(v, default=0.0):
+    """A time field as seconds: a number is one; a musical value
+    ({"beats": 2}, {"bar": 5}) is resolved only by promo, so it counts
+    as `default` here."""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else default
+
+def is_musical(v):
+    return isinstance(v, dict) and any(k in v for k in MUSICAL)
+
+def all_layers(meta):
+    """The project's layers, stage members and every composition's own."""
+    out = []
+    def walk(layers):
+        for l in layers or []:
+            out.append(l)
+            walk(l.get('members'))
+    walk(meta.get('layers'))
+    for r in meta.get('resources', []):
+        if r.get('kind') == 'composition':
+            walk((r.get('composition') or {}).get('layers'))
+    return out
+
+def beat_features(meta):
+    """Cutting to music (rung 49): whose beats count, whether the grid is
+    measured or typed in, musical times, back-to-back layouts and the
+    three beat generators, and where a resource came from."""
+    res = meta.get('resources', []); cs = meta.get('compositionSettings', {})
+    layers = all_layers(meta)
+    comps = [cs] + [(r.get('composition') or {}) for r in res if r.get('kind') == 'composition']
+    clocks = [c['beatClock'] for c in comps if isinstance(c.get('beatClock'), dict)] \
+        + [l['beatClock'] for l in layers if isinstance(l.get('beatClock'), dict)]
+    by_id = {r.get('id'): r for r in res}
+    times = [l.get(f) for l in layers for f in TIME_FIELDS] \
+        + [(l.get(t) or {}).get('duration') for l in layers for t in ('transitionIn', 'transitionOut')] \
+        + [k.get(f) for l in layers for k in l.get('keyframes') or [] for f in ('time', 'transitionDuration')]
+    sequences = [c.get('sequence') for c in comps if isinstance(c.get('sequence'), list)]
+    entries = [e for q in sequences for e in q if isinstance(e, dict)]
+    return {
+        "beatClock": bool(clocks),
+        # the song is measured (no grid typed in), so another song re-times the edit
+        "measuredClock": bool(clocks) and all(not (by_id.get(c.get('resourceID')) or {}).get('beatGrid') for c in clocks),
+        "beatGrid": any(r.get('beatGrid') for r in res),
+        "musicalTime": any(is_musical(v) for v in times)
+                       or any('beats' in e or 'bars' in e or is_musical(e.get('duration')) for e in entries),
+        "sequence": bool(entries),
+        # cut points stated on the grid, however built: sequence entries, or
+        # swap keyframes at musical times on one layer
+        "beatCuts": len(entries) + sum(1 for l in layers for k in l.get('keyframes') or []
+                                       if k.get('resourceID') and is_musical(k.get('time'))),
+        "after": any(l.get('after') for l in layers),
+        "pulse": any(l.get('pulse') for l in layers),
+        "shake": any(l.get('shake') for l in layers),
+        "flash": any(c.get('flash') for c in comps),
+        "provenance": any(r.get('provenance') for r in res),
+    }
+
 def kinds(meta):
     c = {}
     for l in meta.get('layers', []):
@@ -80,6 +139,7 @@ def features(meta):
         "motionBlur": any(l.get('motionBlur') for l in layers) or any(k.get('shutter') is not None for k in kf),
         "grade": any(l.get('adjustments') for l in layers) or any(k.get('saturation') is not None for k in kf),
         "placement": any(k.get('placement') for k in kf),
+        **beat_features(meta),
     }
 
 def phrases(meta):
@@ -91,7 +151,7 @@ def phrases(meta):
     for r in meta.get('resources', []):
         if r.get('kind') == 'composition':
             layers += (r.get('composition') or {}).get('layers', [])
-    for l in sorted(layers, key=lambda l: (l.get('startTime', 0), l.get('sortIndex', 0))):
+    for l in sorted(layers, key=lambda l: (seconds(l.get('startTime', 0)), l.get('sortIndex', 0))):
         texts = []
         if l.get('captionText'):
             texts.append(l['captionText'])
@@ -111,15 +171,26 @@ def phrases(meta):
 def words(text):
     return re.sub(r'[^a-z0-9 ]+', ' ', text.lower()).split()
 
+def duration_of(meta):
+    """The piece's length: videoDuration, else the latest layer end in seconds."""
+    return meta.get('videoDuration') or max(
+        (seconds(l.get('startTime', 0)) + seconds(l.get('duration') or 0) for l in meta.get('layers', [])), default=0)
+
 def rubric_from(meta, name, media):
     cs = meta['compositionSettings']
-    return {
+    rubric = {
         "template": name,
         "canvas": [cs.get('canvasWidth'), cs.get('canvasHeight')],
-        "duration": meta.get('videoDuration') or max(
-            (l.get('startTime', 0) + (l.get('duration') or 0) for l in meta.get('layers', [])), default=0),
+        "duration": duration_of(meta),
         "kinds": kinds(meta),
         "features": features(meta),
         "phrases": phrases(meta),
         "media": media,
     }
+    clock = cs.get('beatClock')
+    if isinstance(clock, dict):
+        song = next((r.get('filename') for r in meta.get('resources', []) if r.get('id') == clock.get('resourceID')), None)
+        if song:
+            # the agent's own video, its cuts found in the picture against the song's measured beats
+            rubric["onBeat"] = {"song": song, "minCuts": 8, "share": 0.9}
+    return rubric

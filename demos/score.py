@@ -6,7 +6,7 @@ kinds, the features the prompt implied, and the words on screen.
 """
 import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from features import features, kinds, phrases, words  # noqa: E402
+from features import features, kinds, phrases, words, duration_of  # noqa: E402
 
 # A feature counts only when the PROMPT asked for it, by these words: the
 # rubric comes from the reference, which uses whatever its author liked,
@@ -34,6 +34,17 @@ ASKED = {
     "narration": ("narrat", "voice", "synthesize", "spoken", "speak"),
     "motionBlur": ("motion blur", "whip", "smear", "blurrier"),
     "grade": ("black and white", "sepia", "duotone", "desaturat", "grade", "look", "flat"),
+    # cutting to music (rung 49)
+    "beatClock": ("on the beat", "to the beat", "tempo", "bpm", "beat"),
+    "measuredClock": ("swap the track", "swap the song", "another track", "measure"),
+    "musicalTime": ("on the beat", "beats", "bar"),
+    "sequence": ("back to back", "one after another", "sequence"),
+    "beatCuts": ("on the beat", "every two beats", "every beat"),
+    "after": ("right after", "straight after", "follows the last"),
+    "pulse": ("punch", "pulse", "pump"),
+    "flash": ("flash",),
+    "shake": ("shake", "kick"),
+    "provenance": ("credit", "licen", "provenance", "where it came from"),
 }
 
 def asked_for(key, prompt):
@@ -63,7 +74,7 @@ def score_creative(rubric, meta, project):
     rendered = os.path.isdir(exports) and any(f.endswith('.mp4') for f in os.listdir(exports))
     check("rendered", rendered, "an mp4 beside the project")
     layers = meta.get('layers', [])
-    dur = meta.get('videoDuration') or (max(l.get('startTime', 0) + (l.get('duration') or 0) for l in layers) if layers else 0)
+    dur = length(meta, project)
     lo, hi = rubric.get('duration', [0, 1e9])
     check("length", lo <= dur <= hi, f"{dur:.1f}s, asked {lo}–{hi}s")
     used_files = {r.get('filename') for r in meta.get('resources', [])}
@@ -78,6 +89,53 @@ def score_creative(rubric, meta, project):
     return {"template": rubric['template'], "kind": "creative", "score": round(100 * passed / max(1, len(checks))),
             "passed": passed, "total": len(checks), "checks": checks, "used": used,
             "duration": round(dur, 1), "layers": len(layers), "captions": phrases(meta)}
+
+def length(meta, project):
+    """The piece's length in seconds. A musical value ({"bar": 16}) has no
+    seconds in the file until promo resolves it, so when the file states
+    no videoDuration, promo validate's resolved times stand in."""
+    if meta.get('videoDuration'):
+        return meta['videoDuration']
+    promo = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'target', 'release', 'promo')
+    resolved = {}
+    if os.path.exists(promo):
+        import subprocess
+        try:
+            r = subprocess.run([promo, 'validate', project, '--json'], capture_output=True, text=True)
+            resolved = {e['at']: e['seconds'] for e in json.loads(r.stdout).get('resolvedTimes', [])}
+        except Exception:
+            resolved = {}
+    def sec(l, field):
+        v = resolved.get(f"layers[{l.get('id')}].{field}", l.get(field))
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
+    return max((sec(l, 'startTime') + sec(l, 'duration') for l in meta.get('layers', [])), default=0) or duration_of(meta)
+
+def on_beat(spec, project):
+    """Cuts on the beat, judged from the agent's OWN video (the newest mp4
+    in `<Name> Exports/`): the cuts found in its picture against the beats
+    promo measures in the song — the project's timing is never read."""
+    stem = os.path.basename(project.rstrip('/'))
+    stem = stem[:-6] if stem.endswith('.promo') else stem
+    exports = os.path.join(os.path.dirname(project.rstrip('/')), f"{stem} Exports")
+    videos = sorted((os.path.join(exports, f) for f in os.listdir(exports) if f.endswith('.mp4')),
+                    key=os.path.getmtime) if os.path.isdir(exports) else []
+    if not videos:
+        return False, "no video beside the project"
+    here = os.path.dirname(os.path.abspath(__file__))
+    song = next((p for p in (os.path.join(project, 'Resources', spec['song']),
+                             os.path.join(here, '_media', spec['song'])) if os.path.exists(p)), None)
+    if not song:
+        return False, f"no {spec['song']}"
+    from beat_cuts import measure
+    try:
+        m = measure(videos[-1], song)
+    except Exception as e:
+        return False, f"could not measure: {e}"
+    n, on = len(m['cuts']), m['on_beat']
+    ok = n >= spec.get('minCuts', 8) and on >= spec.get('share', 0.9) * n
+    off = [f"{r['time']}s ({r['error_ms']:+.0f} ms)" for r in m['cuts'] if not r['on']][:4]
+    return ok, f"{on} of {n} cuts in {os.path.basename(videos[-1])} within a frame of a beat" + \
+        (f"; off: {', '.join(off)}" if off else "")
 
 def score(demo, project):
     rubric = json.load(open(os.path.join(demo, 'rubric.json')))
@@ -99,7 +157,7 @@ def score(demo, project):
     if names_size:
         check("canvas", got_canvas == want_canvas or same_aspect, f"{got_canvas} vs {want_canvas}")
     layers = meta.get('layers', [])
-    dur = meta.get('videoDuration') or (max(l.get('startTime', 0) + (l.get('duration') or 0) for l in layers) if layers else 0)
+    dur = length(meta, project)
     want = rubric['duration'] or 0
     check("duration", want and abs(dur - want) <= max(0.25 * want, 1.0), f"{dur:.1f}s vs {want:.1f}s")
     got_kinds, want_kinds = kinds(meta), rubric['kinds']
@@ -133,6 +191,9 @@ def score(demo, project):
             if ws and sum(1 for w in ws if w in got_words) / len(ws) >= 0.4:
                 hit += 1
         check("phrases", hit >= max(1, len(want_phr) // 2), f"{hit} of {len(want_phr)} lines recognisable")
+    if rubric.get('onBeat'):
+        ok, detail = on_beat(rubric['onBeat'], project)
+        check("onBeat", ok, detail)
     passed = sum(1 for c in checks if c['ok'])
     return {"template": rubric['template'], "score": round(100 * passed / max(1, len(checks))),
             "passed": passed, "total": len(checks), "checks": checks}

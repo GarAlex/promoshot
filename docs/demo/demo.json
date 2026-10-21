@@ -5618,6 +5618,228 @@
   "page": "docs/demo/demo35.md"
  },
  {
+  "id": "36",
+  "slug": "36-beat-cut",
+  "title": "Beat Cut",
+  "blurb": "Eight screenshots cut to a song promo measures itself \u2014 two beats each, then one beat after the lift \u2014 with a punch on every downbeat, a flash at the lift and a title that lands on bar 1.",
+  "kind": "conformance",
+  "canvas": [
+   1920,
+   1080
+  ],
+  "duration": 28.38,
+  "prompt": "Make an energetic beat-cut promo of these app screenshots to this track, about 28 seconds \u2014 the whole song. Open on a dark gradient with the title landing on the first downbeat, then cut between the screenshots on the beat, cycling through them: every two beats in the first half, every beat once the music lifts. Give each screenshot a punch on the downbeats, put a white flash where it lifts, and finish on the closing line, ending on a downbeat. I may swap the track later, so let the cuts follow the beats measured from the music rather than fixed times. The track is our own (made with ffmpeg, CC0) \u2014 record that on it so it shows in the credits.\n\nFiles in `resources/`: ui_lumen_1.png, ui_pulse_1.png, ui_verse_1.png, ui_lumen_2.png, ui_pulse_2.png, ui_verse_2.png, ui_lumen_4.png, ui_lumen_5.png, lift_song.wav.\n\nText to use, in order:\n- Lumen \u00b7 Pulse \u00b7 Verse\n- Three apps. One beat.",
+  "resources": [
+   {
+    "file": "ui_lumen_1.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_lumen_1.png"
+   },
+   {
+    "file": "ui_pulse_1.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_pulse_1.png"
+   },
+   {
+    "file": "ui_verse_1.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_verse_1.png"
+   },
+   {
+    "file": "ui_lumen_2.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_lumen_2.png"
+   },
+   {
+    "file": "ui_pulse_2.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_pulse_2.png"
+   },
+   {
+    "file": "ui_verse_2.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_verse_2.png"
+   },
+   {
+    "file": "ui_lumen_4.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_lumen_4.png"
+   },
+   {
+    "file": "ui_lumen_5.png",
+    "kind": "image",
+    "path": "docs/demo/36-beat-cut/resources/ui_lumen_5.png"
+   },
+   {
+    "file": "lift_song.wav",
+    "kind": "file",
+    "path": "demos/_media/lift_song.wav"
+   }
+  ],
+  "result": {
+   "score": 93,
+   "passed": 14,
+   "total": 15,
+   "checks": [
+    {
+     "check": "duration",
+     "ok": true,
+     "detail": "28.4s vs 28.4s"
+    },
+    {
+     "check": "kind:background",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:audio",
+     "ok": true,
+     "detail": "1 vs 1"
+    },
+    {
+     "check": "kind:image",
+     "ok": false,
+     "detail": "1 vs 32"
+    },
+    {
+     "check": "kind:caption",
+     "ok": true,
+     "detail": "2 vs 2"
+    },
+    {
+     "check": "feature:gradient",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:beatClock",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:measuredClock",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:musicalTime",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:beatCuts",
+     "ok": true,
+     "detail": "36 vs 32"
+    },
+    {
+     "check": "feature:pulse",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:flash",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "feature:provenance",
+     "ok": true,
+     "detail": "True"
+    },
+    {
+     "check": "phrases",
+     "ok": true,
+     "detail": "2 of 2 lines recognisable"
+    },
+    {
+     "check": "onBeat",
+     "ok": true,
+     "detail": "41 of 43 cuts in export.mp4 within a frame of a beat; off: 0.3s (+45 ms), 22.9s (+145 ms)"
+    }
+   ],
+   "summary": "turns=24 cost=$0.90 secs=103",
+   "run": {
+    "turns": 24,
+    "wall_s": 101,
+    "api_s": 92,
+    "cost_usd": 0.9,
+    "tokens": {
+     "input": 28,
+     "cache_read": 958369,
+     "cache_write": 64494,
+     "output": 9782,
+     "thinking": 3440
+    },
+    "models": [
+     {
+      "model": "claude-opus-5-5",
+      "input": 1022891,
+      "output": 9782,
+      "cost_usd": 0.9
+     }
+    ],
+    "mcp": {
+     "calls": 11,
+     "ms": 7363,
+     "tools": {
+      "promo_render_video": {
+       "calls": 1,
+       "ms": 6132,
+       "errors": 0
+      },
+      "promo_beats": {
+       "calls": 1,
+       "ms": 578,
+       "errors": 0
+      },
+      "promo_render_frames": {
+       "calls": 1,
+       "ms": 275,
+       "errors": 0
+      },
+      "promo_media_probe": {
+       "calls": 1,
+       "ms": 195,
+       "errors": 0
+      },
+      "promo_validate": {
+       "calls": 2,
+       "ms": 145,
+       "errors": 0
+      },
+      "promo_inspect": {
+       "calls": 1,
+       "ms": 19,
+       "errors": 0
+      },
+      "promo_explain": {
+       "calls": 1,
+       "ms": 14,
+       "errors": 0
+      },
+      "promo_schema_full": {
+       "calls": 3,
+       "ms": 5,
+       "errors": 0
+      }
+     }
+    }
+   },
+   "used": null,
+   "captions": null,
+   "notes": "I've made the promo and rendered it: `out Exports/export.mp4` (1920\u00d71080, 30 fps, 28.38 s with the song mixed in). It passes validation with no errors, and the contact sheet showed the title, the cuts, the flash and the closing line where I put them.\n\n**How it plays.** The analysis found 128 BPM, 4/4, first downbeat at 0.255 s, with the lift at bar 9 (15.26 s). Confidence was 0.96, so I didn't set the tempo by hand.\n\n| Musical position | Time | What happens |\n|---|---|---|\n| Before beat 1 | 0\u20130.26 s | Dark navy radial gradient only |\n| Beat 1 to bar 3 | 0.26\u20134.0 s | \"Lumen \u00b7 Pulse \u00b7 Verse\" zooms in, landing within an eighth of a second |\n| Bars 3\u20139 | 4.0\u201315.3 s | A cut every 2 beats, 12 shots |\n| Bar 9 (the lift) | 15.26 s | White flash, then a cut on every beat |\n| Bars 9\u201315 | 15.3\u201326.5 s | 24 one-beat shots |\n| Bar 15 to bar 16 | 26.5\u201328.38 s | \"Three apps. One beat.\", ending on the bar 16 downbeat |\n\n- **Cycling:** the shots go lumen_1 \u2192 pulse_1 \u2192 verse_1 \u2192 lumen_2 \u2192 pulse_2 \u2192 verse_2 \u2192 lumen_4 \u2192 lumen_5, then repeat. Each screenshot sits centred at its full 1216\u00d7760 size, with rounded corners and a soft violet glow.\n- **Punches:** every downbeat makes the screenshot grow briefly, by 5% in the first half and 9% after the lift. After the lift it also gets a small shake.\n- **Ending:** the music stops at the bar 16 downbeat with a fade of under a tenth of a second, so the final frame matches the last beat. The song's last half-second is cut off.\n\n**Swapping the track.** Every time in the project is written as a beat or bar number, and there is no fixed tempo, so PromoShot measures the song itself. If you drop a different `lift_song.wav` into `out.promo/Resources/`, it gets measured again and every cut, punch and flash moves to the new beats. One thing it won't do: the l",
+   "contact": "docs/demo/36-beat-cut/contact-result.png",
+   "reference_contact": "docs/demo/36-beat-cut/contact-reference.png",
+   "video": "docs/demo/36-beat-cut/result.mp4",
+   "video_hd": "https://github.com/garalex/promoshot/raw/demo-media/36-beat-cut.mp4",
+   "video_hd_bytes": 1737061,
+   "metadata": "docs/demo/36-beat-cut/result-metadata.json",
+   "gif": "docs/demo/36-beat-cut/result.gif",
+   "thumb": "docs/demo/36-beat-cut/thumb.png"
+  },
+  "page": "docs/demo/demo36.md"
+ },
+ {
   "id": "c1",
   "slug": "c1-launch-video",
   "title": "Launch video",
