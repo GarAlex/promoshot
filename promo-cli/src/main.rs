@@ -42,11 +42,14 @@ USAGE:
         on; --refresh analyses again. On a project --bpm-hint is kept on the
         song (its bpmHint) for every later measure; --clear-hint drops it
     promo words   <audio-file | project-dir> [--resource <id>]
-                  [--script <text> | --script-file <f>] [--json]
+                  [--script <text> | --script-file <f>] [--json] [--timeline]
+                  [--refresh] [--no-analyse] [--transcribe openai|elevenlabs [--check]]
+                  [--prune]
         when each word of a take is said, and its sentences: the record in
-        the project's Resources/.words/ (provider timing, alignment), else a
-        syllable estimate over the take's length. On an audio file, the
-        script is given with --script; the answer is an estimate
+        the project's Resources/.words/ (provider or local-voice timing),
+        else the take aligned to its script, offline, and stored. On an
+        audio file, the script is given with --script. --transcribe spends
+        the person's key and is never automatic (--check says the cost)
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -621,15 +624,24 @@ fn beats(args: &[String]) -> Result<String, String> {
     ))
 }
 
-/// `promo words`: a take's word timing — the project's record, else an
-/// estimate over the take's length (docs/SPEECH-SYNC.md §9; slice 1 has
-/// no aligner, so an audio file is estimated).
+/// `promo words`: a take's word timing (docs/SPEECH-SYNC.md §9). On a
+/// project: the take's record by the cache's rules — authoritative provider
+/// timing as it is, the take aligned (and stored) when it has none, an
+/// older aligner's record aligned again; `--refresh` aligns again;
+/// `--no-analyse` reads the cache only, else answers an estimate. On an
+/// audio file: the file aligned to `--script`. `--transcribe` asks a
+/// provider, on the person's key, only when asked (`--check` says the cost
+/// and spends nothing). `--timeline` adds the times on the output timeline
+/// through the first layer that plays the take; `--prune` removes records
+/// no file in Resources/ has.
 fn words(args: &[String]) -> Result<String, String> {
     use promo_model::speech::TakeTiming;
     let mut path: Option<PathBuf> = None;
     let mut resource: Option<String> = None;
     let mut script: Option<String> = None;
-    let mut json = false;
+    let mut transcribe: Option<String> = None;
+    let (mut json, mut refresh, mut no_analyse, mut timeline, mut check, mut prune) =
+        (false, false, false, false, false, false);
     let mut i = 0;
     while i < args.len() {
         let flag = args[i].as_str();
@@ -640,6 +652,11 @@ fn words(args: &[String]) -> Result<String, String> {
         };
         match flag {
             "--json" => json = true,
+            "--refresh" => refresh = true,
+            "--no-analyse" => no_analyse = true,
+            "--timeline" => timeline = true,
+            "--check" => check = true,
+            "--prune" => prune = true,
             "--resource" => {
                 resource = Some(value()?);
                 i += 1;
@@ -653,6 +670,14 @@ fn words(args: &[String]) -> Result<String, String> {
                 script = Some(std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?);
                 i += 1;
             }
+            "--transcribe" => {
+                let provider = value()?;
+                if !promo_speech::transcribe::TRANSCRIBERS.contains(&provider.as_str()) {
+                    return Err(format!("--transcribe: `{provider}` — openai or elevenlabs"));
+                }
+                transcribe = Some(provider);
+                i += 1;
+            }
             other if other.starts_with("--") => {
                 return Err(format!("words: unknown option `{other}`\n\n{USAGE}"))
             }
@@ -663,75 +688,214 @@ fn words(args: &[String]) -> Result<String, String> {
     let path =
         path.ok_or_else(|| format!("words: expected an audio file or a project\n\n{USAGE}"))?;
     let words_err = |e: String| format!("words: {e}");
+    if check && transcribe.is_none() {
+        return Err("words: --check goes with --transcribe (it says what one would cost)".into());
+    }
     let probe = |file: &Path| -> Result<f64, String> {
         promo_media::probe_stream(file)
             .map(|info| info.duration_s)
             .map_err(|e| format!("words: {}: {e}", file.display()))
     };
-    // (record, fromCache, stale, notes)
-    let (timing, cached, stale, notes): (TakeTiming, Option<bool>, bool, Vec<String>) =
-        if path.is_dir() {
-            if script.is_some() {
-                return Err(
-                    "words: a project's take says its own script (speech.text or transcript) \
-                     — --script is for an audio file"
-                        .into(),
-                );
+    // A transcription: the cost first (and only that, with --check), then
+    // the person's key, the request, the record mapped onto the script.
+    let transcribed =
+        |file: &Path, said: &str, seconds: f64| -> Result<Result<TakeTiming, String>, String> {
+            let provider = transcribe.as_deref().expect("asked");
+            let (usd, how) =
+                promo_speech::transcribe::cost(provider, seconds).map_err(words_err)?;
+            let keys = promo_speech::SystemKeys;
+            let key = promo_speech::KeyStore::key(&keys, provider);
+            if check {
+                return Ok(Err(format!(
+                    "transcribing {} ({seconds:.1} s) with {provider} would cost about ${usd:.4} \
+                 ({how}); key: {} — nothing was spent",
+                    file.display(),
+                    if key.is_some() { "found" } else { "none" }
+                )));
             }
-            let text = std::fs::read_to_string(path.join("metadata.json"))
-                .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
-            let meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
-            let take = promo_model::word_cache::choose_take(&meta, resource.as_deref())
-                .map_err(words_err)?;
-            let said = promo_model::speech::take_script(take).unwrap_or_default();
-            let file = promo_model::beat_cache::song_file(&path, take);
-            let fixes = promo_model::speech::word_fixes(take).map_err(words_err)?;
-            let found = file
-                .is_file()
-                .then(|| promo_model::word_cache::lookup(&path, &file, &said))
-                .flatten();
-            let (mut timing, cached, stale) = match found {
-                Some(found) => (found.timing, true, found.stale),
-                None => {
-                    let length = take
-                        .duration
-                        .filter(|d| *d > 0.0)
-                        .map(Ok)
-                        .unwrap_or_else(|| probe(&file))?;
-                    let voice = take
-                        .extra
-                        .get("speech")
-                        .and_then(|s| s.get("voiceID"))
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("");
-                    let language = promo_speech::voice_language(voice);
-                    let mut timing =
-                        promo_speech::estimate_words(&said, length, language.as_deref(), 1.0);
-                    if let Ok(source) = promo_model::media_cache::source_of(&file) {
-                        timing.audio = source;
-                    }
+            let (key, _) = key.ok_or_else(|| promo_speech::keys::missing_key_message(provider))?;
+            let audio = std::fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
+            let name = file
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let spoken =
+                promo_speech::transcribe::transcribe_with_key(provider, &audio, &name, said, &key)?;
+            let mut timing = promo_speech::timing::record(said, &spoken, seconds);
+            timing.extra.insert(
+                "cost".into(),
+                serde_json::json!({"usd": (usd * 1e6).round() / 1e6, "how": how}),
+            );
+            Ok(Ok(timing))
+        };
+    // (record, fromCache, stale, notes, project)
+    let mut notes: Vec<String> = Vec::new();
+    let mut project: Option<(promo_model::ProjectMetadata, String)> = None;
+    let (timing, cached, stale): (TakeTiming, Option<bool>, bool) = if path.is_dir() {
+        if script.is_some() {
+            return Err(
+                "words: a project's take says its own script (speech.text or transcript) \
+                 — --script is for an audio file"
+                    .into(),
+            );
+        }
+        let text = std::fs::read_to_string(path.join("metadata.json"))
+            .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
+        let meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
+        if prune {
+            return Ok(prune_words(&path, &meta));
+        }
+        let chosen =
+            promo_model::word_cache::choose_take(&meta, resource.as_deref()).map_err(words_err)?;
+        let take = promo_model::word_cache::Take {
+            id: chosen.id.clone(),
+            file: promo_model::beat_cache::song_file(&path, chosen),
+            script: promo_model::speech::take_script(chosen).unwrap_or_default(),
+        };
+        let fixes = promo_model::speech::word_fixes(chosen).map_err(words_err)?;
+        let length = || {
+            chosen
+                .duration
+                .filter(|d| *d > 0.0)
+                .map(Ok)
+                .unwrap_or_else(|| probe(&take.file))
+        };
+        let language = promo_cli::project::Project::take_language(&meta, &take.id);
+        let (mut timing, cached, stale) = if transcribe.is_some() {
+            match transcribed(&take.file, &take.script, length()?)? {
+                Err(said) => return Ok(said),
+                Ok(timing) => {
+                    let timing = promo_model::word_cache::store(&path, &take.file, timing)?;
                     (timing, false, false)
                 }
-            };
-            let notes = promo_model::speech::apply_fixes(&mut timing, &fixes);
-            (timing, Some(cached), stale, notes)
+            }
+        } else if no_analyse || !take.file.is_file() {
+            match take
+                .file
+                .is_file()
+                .then(|| promo_model::word_cache::lookup(&path, &take.file, &take.script))
+                .flatten()
+            {
+                Some(found) => (found.timing, true, found.stale),
+                None => {
+                    let mut timing = promo_speech::estimate_words(
+                        &take.script,
+                        length()?,
+                        language.as_deref(),
+                        1.0,
+                    );
+                    if let Ok(source) = promo_model::media_cache::source_of(&take.file) {
+                        timing.audio = source;
+                    }
+                    notes.push(
+                        "no word timing stored for this take yet — an estimate, not stored".into(),
+                    );
+                    (timing, false, false)
+                }
+            }
         } else {
-            let said = script.ok_or_else(|| {
-                "words: an audio file needs its script: --script <text> or --script-file <f>"
-                    .to_string()
-            })?;
+            let options = promo_media::words::AlignOptions { language };
+            let timed = promo_media::words::timing_for(&path, &take, &options, refresh)
+                .map_err(words_err)?;
+            if timed.realigned {
+                notes.push(format!(
+                    "aligned again with aligner {}",
+                    promo_media::words::ALIGNER_VERSION
+                ));
+            }
+            (timed.timing, timed.from_cache, timed.stale)
+        };
+        notes.extend(promo_model::speech::apply_fixes(&mut timing, &fixes));
+        project = Some((meta, take.id.clone()));
+        (timing, Some(cached), stale)
+    } else {
+        let said = script.ok_or_else(|| {
+            "words: an audio file needs its script: --script <text> or --script-file <f>"
+                .to_string()
+        })?;
+        if prune || timeline {
+            return Err("words: --prune and --timeline need a project".into());
+        }
+        let timing = if transcribe.is_some() {
+            match transcribed(&path, &said, probe(&path)?)? {
+                Err(said) => return Ok(said),
+                Ok(timing) => timing,
+            }
+        } else if no_analyse {
             let mut timing = promo_speech::estimate_words(&said, probe(&path)?, None, 1.0);
             timing.audio = promo_model::media_cache::source_of(&path).map_err(words_err)?;
-            (timing, None, false, Vec::new())
+            timing
+        } else {
+            promo_media::words::align_file(&path, &said, &Default::default()).map_err(words_err)?
         };
+        (timing, None, false)
+    };
+    let mapped = match (&project, timeline) {
+        (Some((meta, id)), true) => {
+            Some(promo_timeline::speech::timeline_words(meta, id, &timing).map_err(words_err)?)
+        }
+        _ => None,
+    };
     if json {
         let mut value = promo_model::word_cache::words_answer(&timing, cached, stale)?;
         if !notes.is_empty() {
-            value["fixNotes"] = serde_json::json!(notes);
+            value["notes"] = serde_json::json!(notes);
+        }
+        if let Some((layer, times)) = &mapped {
+            value["timeline"] = promo_timeline::speech::timeline_json(layer, times);
         }
         return Ok(value.to_string());
     }
-    Ok(words_table(&timing, cached, stale, &notes))
+    let mut table = words_table(&timing, cached, stale, &notes);
+    if let Some((layer, times)) = &mapped {
+        table.push_str(&format!("\non the timeline, through layer \"{layer}\":"));
+        for (k, (w, t)) in timing.words.iter().zip(times).enumerate() {
+            table.push_str(&match t {
+                Some((s, e)) => format!("\n{:>4}  {s:>8.3}  {e:>8.3}  {}", k + 1, w.text),
+                None => format!("\n{:>4}  trimmed out  {}", k + 1, w.text),
+            });
+        }
+    }
+    Ok(table)
+}
+
+/// Removes the word records of `.words/` whose audio no file in
+/// Resources/ has (stand-ins voiced since, takes deleted).
+fn prune_words(dir: &Path, meta: &promo_model::ProjectMetadata) -> String {
+    let resources = dir.join("Resources");
+    let mut kept: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&resources) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Ok(source) = promo_model::media_cache::source_of(&path) {
+                    kept.push(source.sha256);
+                }
+            }
+        }
+    }
+    for resource in meta.resources.iter().flatten() {
+        let file = promo_model::beat_cache::song_file(dir, resource);
+        if file.is_file() {
+            if let Ok(source) = promo_model::media_cache::source_of(&file) {
+                kept.push(source.sha256);
+            }
+        }
+    }
+    let mut removed = 0;
+    if let Ok(entries) = std::fs::read_dir(promo_model::word_cache::cache_dir(dir)) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let audio = name.split('-').next().unwrap_or_default().to_string();
+            if name.ends_with(".json")
+                && !kept.contains(&audio)
+                && std::fs::remove_file(entry.path()).is_ok()
+            {
+                removed += 1;
+            }
+        }
+    }
+    format!("removed {removed} word record(s) whose audio no file has")
 }
 
 /// `promo words`' table: a line of what timed the take, the words 1-based
@@ -754,7 +918,8 @@ fn words_table(
     };
     let whence = match cached {
         Some(true) => " (from the project's cache)",
-        Some(false) => " (no word timing stored for this take yet — an estimate, not stored)",
+        Some(false) if timing.estimated => "",
+        Some(false) => " (timed now, stored in the project's cache)",
         None => "",
     };
     let mut out = vec![format!(

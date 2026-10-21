@@ -455,6 +455,27 @@ pub fn tools(host: Host) -> Vec<Value> {
                 "required": [] }
         }),
         json!({
+            "name": "promo_words",
+            "description": "When each word of a take is said, and its sentences: the \
+                record in Resources/.words/ (provider or local-voice timing), else the \
+                take aligned offline and stored. `file` + `script`, or `project` + \
+                `resource` (default: the only take). `refresh` aligns again; \
+                `timeline` adds output times; `transcribe` (openai|elevenlabs) spends \
+                the person's key, only when asked — `check` says the cost.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "file": { "type": "string" },
+                    "script": { "type": "string" },
+                    "project": { "type": "string" },
+                    "resource": { "type": "string" },
+                    "refresh": { "type": "boolean" },
+                    "timeline": { "type": "boolean" },
+                    "transcribe": { "type": "string" },
+                    "check": { "type": "boolean" }
+                },
+                "required": [] }
+        }),
+        json!({
             "name": "promo_media_scenes",
             "description": "Eyes for CUTS: per-frame scene-change scores distilled to \
                 cut times and the shots between them — the footage-first answer when \
@@ -897,6 +918,9 @@ pub fn annotations(host: Host, name: &str) -> Value {
         // Writes the analysis into a project's cache, and only there.
         "promo_beats" => ("The beats of a song", false, false, true, false),
         "promo_transcribe" => ("Words from a recording", true, false, true, false),
+        // Writes the timing into a project's cache; `transcribe` reaches a
+        // provider, on the person's key, only when asked.
+        "promo_words" => ("When each word is said", false, false, true, true),
         "promo_voices" => ("A provider's voices", true, false, true, true),
         "promo_media_filmstrip" => ("A contact sheet of a clip", false, false, true, false),
         "promo_media_turntable" => ("A model from every side", false, false, true, false),

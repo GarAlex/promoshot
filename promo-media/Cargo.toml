@@ -10,6 +10,9 @@ workspace = true
 
 [dependencies]
 promo-model = { path = "../promo-model" }
+# The word aligner (words.rs) reads the script as the estimate does: one
+# tokenizer, the same syllable counts and pauses. Without the keyring.
+promo-speech = { path = "../promo-speech", default-features = false }
 promo-gpu = { path = "../promo-gpu" }
 thiserror.workspace = true
 # Stills as every renderer should see them (still.rs): EXIF orientation
@@ -22,3 +25,7 @@ moxcms = "0.8"
 libm = "0.2"
 sha2 = "0.10"
 serde_json.workspace = true
+
+[dev-dependencies]
+# AC3: local takes against the aligner, where voices are installed.
+promo-speech = { path = "../promo-speech", default-features = false, features = ["local"] }

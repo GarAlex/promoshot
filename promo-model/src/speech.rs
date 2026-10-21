@@ -19,6 +19,12 @@ use crate::media_cache::MediaSource;
 /// is still a record (unknown keys are kept in `extra`).
 pub const TIMING_VERSION: u32 = 1;
 
+/// The offline aligner's version (`promo_media::words`): bumped whenever
+/// the alignment of the same samples could change, so a record from an
+/// older aligner is aligned again (§1.3). Here, beside the record, so a
+/// reader that never aligns (the apps' cache check) knows it too.
+pub const ALIGNER_VERSION: u32 = 1;
+
 /// The version of the syllable estimate (`source: "estimate"`), written as
 /// an estimate record's `alignerVersion`: a record from an older estimate
 /// is estimated again, as an older aligner's is re-aligned.

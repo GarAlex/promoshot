@@ -31,6 +31,10 @@ pub struct Project {
     pub analyses: std::collections::BTreeMap<String, (promo_model::musical::BeatAnalysis, String)>,
     /// The timing pass's answer: clocks, resolved times, problems.
     pub timing: promo_timeline::TimingReport,
+    /// Takes with no word timing after the open: not aligned (cache only,
+    /// or the audio could not be read), each with why
+    /// (docs/SPEECH-SYNC.md §4.5).
+    pub missing_words: Vec<(String, String)>,
 }
 
 /// Whether opening a project may analyse a song it has no grid for.
@@ -205,6 +209,7 @@ impl Project {
             attachment_problems.push(problem);
         }
         let resolved = promo_model::effective_resources(&meta, &Self::listing(dir));
+        let missing_words = Self::measure_words(dir, &meta, analysis);
         Ok(Self {
             dir: dir.to_path_buf(),
             meta,
@@ -215,7 +220,57 @@ impl Project {
             grid_problems,
             analyses,
             timing,
+            missing_words,
         })
+    }
+
+    /// Every take whose file is there gets word timing on the way in, as a
+    /// beat clock's song gets its grid: the cache first, an older aligner's
+    /// record aligned again, a take with none aligned and stored. Cache
+    /// only (`--no-analyse`): the takes with none are named. Answers the
+    /// takes still without timing, with why.
+    fn measure_words(
+        dir: &Path,
+        meta: &ProjectMetadata,
+        analysis: Analysis,
+    ) -> Vec<(String, String)> {
+        let mut missing = Vec::new();
+        for take in promo_model::word_cache::takes(dir, meta) {
+            if !take.file.is_file() {
+                continue;
+            }
+            match analysis {
+                Analysis::CacheOnly => {
+                    if promo_model::word_cache::lookup(dir, &take.file, &take.script).is_none() {
+                        missing.push((take.id.clone(), "not aligned yet (cache only)".into()));
+                    }
+                }
+                Analysis::Allowed => {
+                    let options = promo_media::words::AlignOptions {
+                        language: Self::take_language(meta, &take.id),
+                    };
+                    if let Err(why) = promo_media::words::timing_for(dir, &take, &options, false) {
+                        missing.push((take.id.clone(), why));
+                    }
+                }
+            }
+        }
+        missing
+    }
+
+    /// The language a take's voice speaks, when its name says it.
+    pub fn take_language(meta: &ProjectMetadata, id: &str) -> Option<String> {
+        let voice = meta
+            .resources
+            .iter()
+            .flatten()
+            .find(|r| r.id == id)?
+            .extra
+            .get("speech")?
+            .get("voiceID")?
+            .as_str()?
+            .to_string();
+        promo_speech::voice_language(&voice)
     }
 
     /// The same folder with other metadata — a what-if the renderer can
@@ -232,6 +287,7 @@ impl Project {
             grid_problems: self.grid_problems.clone(),
             analyses: self.analyses.clone(),
             timing: self.timing.clone(),
+            missing_words: self.missing_words.clone(),
         }
     }
 

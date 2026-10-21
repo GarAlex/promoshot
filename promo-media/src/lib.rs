@@ -12,11 +12,13 @@
 pub mod activity;
 pub mod beats;
 pub mod conformance;
+pub mod dsp;
 pub mod ffmpeg;
 pub mod loudness;
 pub mod lut;
 pub mod proxy;
 pub mod still;
+pub mod words;
 
 use promo_gpu::GpuSurface;
 use std::path::Path;

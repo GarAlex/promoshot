@@ -409,6 +409,48 @@ where
             }
             run(config, &argv)
         }
+        "promo_words" => {
+            // A transcription spends the person's key: it runs here, where
+            // the keyring is, never in the CLI it would hand a key to.
+            if args.get("transcribe").is_some() {
+                if args.get("project").is_none() {
+                    return Err("`transcribe` takes a `project`'s take".into());
+                }
+                let project = fenced_project(args, config)?;
+                return speak::transcribe_take(
+                    args,
+                    std::path::Path::new(&project),
+                    &promo_speech::SystemKeys,
+                    &promo_speech::transcribe::transcribe_with_key,
+                );
+            }
+            let target = if args.get("project").is_some() {
+                fenced_project(args, config)?
+            } else {
+                media_fence(args, config)?;
+                args.get("file")
+                    .and_then(Value::as_str)
+                    .ok_or("`file` (an audio file, with `script`) or `project` is required")?
+                    .to_string()
+            };
+            let mut argv = vec!["words".to_string(), target, "--json".into()];
+            if let Some(id) = args.get("resource").and_then(Value::as_str) {
+                argv.extend(["--resource".into(), id.to_string()]);
+            }
+            if let Some(script) = args.get("script").and_then(Value::as_str) {
+                argv.extend(["--script".into(), script.to_string()]);
+            }
+            if args.get("refresh").and_then(Value::as_bool) == Some(true) {
+                argv.push("--refresh".into());
+            }
+            if args.get("timeline").and_then(Value::as_bool) == Some(true) {
+                argv.push("--timeline".into());
+            }
+            if args.get("check").and_then(Value::as_bool) == Some(true) {
+                return Err("`check` goes with `transcribe`".into());
+            }
+            run(config, &argv)
+        }
         "promo_transcribe" => {
             media_fence(args, config)?;
             media::transcribe(args)
@@ -935,6 +977,7 @@ mod tests {
                 "promo_media_filmstrip",
                 "promo_media_silences",
                 "promo_beats",
+                "promo_words",
                 "promo_media_scenes",
                 "promo_transcribe",
                 "promo_init",
@@ -1120,15 +1163,16 @@ mod tests {
             .len();
         assert!(
             // 45,000 until promo_beats (BEAT-SYNC slice 4) joined at 0.7 KB,
-            // its prose already cut to the bone.
-            bytes < 46_000,
+            // its prose already cut to the bone; 47,000 since promo_words
+            // (SPEECH-SYNC slice 5), another 0.9 KB.
+            bytes < 47_000,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
         // And the ceiling is not met by dropping tools or their prose.
         let tools = Value::Array(contract::tools(Host::Headless));
         let tools = tools.as_array().unwrap();
-        assert_eq!(tools.len(), 27);
+        assert_eq!(tools.len(), 28);
         assert!(
             tools
                 .iter()
@@ -1205,6 +1249,90 @@ mod tests {
         assert!(argv.windows(2).any(|w| w == ["--resource", "song"]));
         assert!(argv.windows(2).any(|w| w == ["--meter", "3"]));
         assert!(argv.contains(&"--refresh".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// AC7: both servers list `promo_words`, with every argument its
+    /// handler reads; it can reach the network (a transcription, when
+    /// asked), so it says so.
+    #[test]
+    fn tools_list_includes_promo_words() {
+        let req = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let answer = handle(&req, &config(), &never).unwrap();
+        let tools = answer["result"]["tools"].as_array().unwrap();
+        let words = tools
+            .iter()
+            .find(|t| t["name"] == "promo_words")
+            .expect("promo_words is offered");
+        for key in [
+            "file",
+            "script",
+            "project",
+            "resource",
+            "refresh",
+            "timeline",
+            "transcribe",
+            "check",
+        ] {
+            assert!(
+                words["inputSchema"]["properties"].get(key).is_some(),
+                "promo_words takes `{key}`"
+            );
+        }
+        assert_eq!(words["annotations"]["destructiveHint"], false);
+        assert_eq!(words["annotations"]["openWorldHint"], true);
+        assert!(contract::tools(Host::App)
+            .iter()
+            .any(|t| t["name"] == "promo_words"));
+    }
+
+    /// AC7: `promo_words` asks the CLI — file and script, or a project's
+    /// take — and hands the record back as the answer; a transcription
+    /// never reaches the CLI.
+    #[test]
+    fn promo_words_returns_the_record() {
+        let dir = std::env::temp_dir().join(format!("mcp-words-{}.promo", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let record =
+            r#"{"timingVersion":1,"source":"aligned","words":[{"text":"Meet","start":0.31}]}"#;
+        let call = |arguments: Value| {
+            let seen = std::cell::RefCell::new(Vec::new());
+            let req = serde_json::json!({ "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+                "params": { "name": "promo_words", "arguments": arguments } });
+            let answer = handle(&req, &config(), &|_: &Config, argv: &[String]| {
+                seen.borrow_mut().push(argv.to_vec());
+                Ok(record.to_string())
+            })
+            .unwrap();
+            let argv = seen.borrow().first().cloned();
+            (answer, argv)
+        };
+        let (answer, argv) =
+            call(serde_json::json!({ "file": "/tmp/vo.wav", "script": "Meet Euclid." }));
+        let argv = argv.expect("the CLI was asked");
+        assert_eq!(argv[..3], ["words", "/tmp/vo.wav", "--json"]);
+        assert!(
+            argv.windows(2).any(|w| w == ["--script", "Meet Euclid."]),
+            "{argv:?}"
+        );
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("\"source\":\"aligned\""), "{text}");
+        let (_, argv) = call(serde_json::json!({
+            "project": dir.display().to_string(), "resource": "intro", "refresh": true,
+            "timeline": true }));
+        let argv = argv.unwrap();
+        assert_eq!(argv[0], "words");
+        assert!(argv.windows(2).any(|w| w == ["--resource", "intro"]));
+        assert!(argv.contains(&"--refresh".to_string()));
+        assert!(argv.contains(&"--timeline".to_string()));
+        // A transcription is the server's own, on its keys: no CLI call.
+        let (answer, argv) = call(serde_json::json!({
+            "project": dir.display().to_string(), "transcribe": "openai", "check": true }));
+        assert!(argv.is_none(), "{argv:?}");
+        assert_eq!(
+            answer["result"]["isError"], true,
+            "no metadata.json here: {answer}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

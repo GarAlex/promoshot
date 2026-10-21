@@ -145,6 +145,36 @@ pub fn retire_in(resources: &Path, audio32: &str, keep: &[String]) -> usize {
         .count()
 }
 
+/// Whether a found record is the answer, by the cache's rules (§1.3): a
+/// provider's, a local voice's or a transcription's timing is
+/// authoritative and stands — and `refresh` cannot replace it (an error
+/// says why); an aligned or estimated record stands when this aligner (or
+/// estimate) or a later one made it; a stale record says what the take
+/// says, so it stands. False: align the take (again).
+pub fn usable(found: &Found, refresh: bool, take: &str) -> Result<bool, String> {
+    use crate::speech::{TimingSource, ALIGNER_VERSION, ESTIMATE_VERSION};
+    if found.timing.source.is_authoritative() {
+        if refresh {
+            return Err(format!(
+                "\"{take}\" is timed by {} — provider timing is authoritative; re-voice the take \
+                 to replace it",
+                found.timing.source.as_text()
+            ));
+        }
+        return Ok(true);
+    }
+    if refresh {
+        return Ok(false);
+    }
+    let made_by = found.timing.aligner_version.unwrap_or(0);
+    let current = match found.timing.source {
+        TimingSource::Aligned => made_by >= ALIGNER_VERSION,
+        TimingSource::Estimate => made_by >= ESTIMATE_VERSION,
+        _ => true,
+    };
+    Ok(current || found.stale)
+}
+
 /// A take in a project: a resource whose file says a script.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Take {

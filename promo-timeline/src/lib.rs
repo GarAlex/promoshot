@@ -25,6 +25,7 @@ pub mod plan;
 pub mod report;
 pub mod reveal;
 pub mod route;
+pub mod speech;
 pub mod sprite;
 pub mod transition;
 pub mod transport;

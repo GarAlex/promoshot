@@ -145,6 +145,13 @@ its defaults are the source of the first, the person of the second.
      (`clearHint` drops it); state a `beatGrid` only to override a measure
      you checked by ear — it sets tempo and offset, the sections stay
      measured. promo_schema_full topic `beats`.
+   - `promo_words` — when each word of a narration is said, and its
+     sentences: a take's timing record, cached in `Resources/.words/` —
+     the provider's or the local voice's own timing when the take was
+     bought, else the take aligned to its script offline (no model, no
+     key). `file` + `script` for a bare recording; `timeline` adds the
+     times on the output timeline. `transcribe` (openai|elevenlabs) spends
+     the person's key — only when asked, `check` first.
    - `promo_transcribe` — a transcript with timings, the draft captions
      are cut from (headless it needs whisper-cli + WHISPER_MODEL; the
      app uses Apple's recognizer; without either, captions are typed).

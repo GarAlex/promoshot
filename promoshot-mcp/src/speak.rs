@@ -411,6 +411,61 @@ pub fn key_command(args: &[String], stdin: &mut dyn std::io::Read) -> Result<Str
     }
 }
 
+/// The request a transcription makes: (provider, audio, filename, script,
+/// key) to what the recogniser said.
+pub type Transcriber<'a> =
+    dyn Fn(&str, &[u8], &str, &str, &str) -> Result<promo_speech::Spoken, String> + 'a;
+
+/// A provider's transcription of a project's take (`promo_words` with
+/// `transcribe`, docs/SPEECH-SYNC.md §4.6): only when asked, on the
+/// person's key, its cost said first — and with `check`, only said. The
+/// answer is mapped onto the script and stored as `transcribed:<provider>`.
+/// `transcriber` is the request (`transcribe_with_key` in production).
+pub fn transcribe_take(
+    args: &Value,
+    dir: &Path,
+    keys: &dyn promo_speech::KeyStore,
+    transcriber: &Transcriber<'_>,
+) -> Result<String, String> {
+    let provider = args
+        .get("transcribe")
+        .and_then(Value::as_str)
+        .ok_or("`transcribe` names a provider: openai or elevenlabs")?;
+    let text = std::fs::read_to_string(dir.join("metadata.json"))
+        .map_err(|e| format!("{}: {e}", dir.join("metadata.json").display()))?;
+    let meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
+    let chosen =
+        promo_model::word_cache::choose_take(&meta, args.get("resource").and_then(Value::as_str))?;
+    let script = promo_model::speech::take_script(chosen).unwrap_or_default();
+    let file = promo_model::beat_cache::song_file(dir, chosen);
+    // The take's measured length; else the script's estimate, said as one.
+    let (seconds, measured) = match chosen.duration.filter(|d| *d > 0.0) {
+        Some(d) => (d, true),
+        None => (promo_speech::estimate(&script, None, 1.0).seconds, false),
+    };
+    let (usd, how) = promo_speech::transcribe::cost(provider, seconds)?;
+    let key = keys.key(provider);
+    if args.get("check").and_then(Value::as_bool) == Some(true) {
+        return Ok(format!(
+            "transcribing \"{}\" ({}{seconds:.1} s) with {provider} would cost about ${usd:.4} \
+             ({how}); key: {} — nothing was spent",
+            chosen.id,
+            if measured { "" } else { "about " },
+            if key.is_some() { "found" } else { "none" }
+        ));
+    }
+    let (key, _) = key.ok_or_else(|| promo_speech::keys::missing_key_message(provider))?;
+    let audio = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let spoken = transcriber(provider, &audio, &chosen.filename, &script, &key)?;
+    let mut timing = promo_speech::timing::record(&script, &spoken, seconds);
+    timing.extra.insert(
+        "cost".into(),
+        serde_json::json!({"usd": (usd * 1e6).round() / 1e6, "how": how}),
+    );
+    let timing = promo_model::word_cache::store(dir, &file, timing)?;
+    Ok(promo_model::word_cache::words_answer(&timing, Some(false), false)?.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -667,6 +722,74 @@ mod tests {
             .unwrap()
             .collect();
         assert_eq!(left.len(), 1, "the old take's record went with its bytes");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// `transcribe` is the one door to a recogniser: its cost first (and
+    /// only that, with `check`), then the person's key — and what comes
+    /// back is mapped onto the script and stored as authoritative.
+    #[test]
+    fn transcription_spends_only_when_asked_and_is_stored() {
+        let root = std::env::temp_dir().join(format!("mcp-transcribe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("T.promo");
+        project_with_script(&dir);
+        let path = dir.join("metadata.json");
+        let mut doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        doc["resources"][0]["duration"] = json!(3.7);
+        doc["resources"][0]["speech"]["text"] =
+            json!("Meet Euclid. Geometry, proved step by step.");
+        std::fs::write(&path, doc.to_string()).unwrap();
+        std::fs::write(dir.join("Resources/voice.mp3"), b"ID3take").unwrap();
+        let calls = std::cell::Cell::new(0);
+        let answer: Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../fixtures/speech/openai-transcription.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let fake = |provider: &str, audio: &[u8], _: &str, script: &str, key: &str| {
+            calls.set(calls.get() + 1);
+            assert_eq!((provider, audio, key), ("openai", &b"ID3take"[..], "k"));
+            promo_speech::transcribe::spoken(provider, &answer, script)
+        };
+        let keys = FixedKeys(vec![("openai".into(), "k".into())]);
+        let checked = transcribe_take(
+            &json!({"transcribe": "openai", "check": true}),
+            &dir,
+            &keys,
+            &fake,
+        )
+        .unwrap();
+        assert!(checked.contains("would cost about $0.0004"), "{checked}");
+        assert_eq!(calls.get(), 0, "a check spends nothing");
+        let none = transcribe_take(
+            &json!({"transcribe": "openai"}),
+            &dir,
+            &FixedKeys(vec![]),
+            &fake,
+        )
+        .unwrap_err();
+        assert!(none.contains("no key for openai"), "{none}");
+        assert_eq!(calls.get(), 0);
+        let stored: Value = serde_json::from_str(
+            &transcribe_take(&json!({"transcribe": "openai"}), &dir, &keys, &fake).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(calls.get(), 1);
+        assert_eq!(stored["source"], "transcribed:openai");
+        assert_eq!(stored["words"][2]["start"], 1.4);
+        assert!(stored["cost"]["usd"].as_f64().unwrap() > 0.0);
+        let found = promo_model::word_cache::lookup(
+            &dir,
+            &dir.join("Resources/voice.mp3"),
+            "Meet Euclid. Geometry, proved step by step.",
+        )
+        .unwrap();
+        assert!(found.timing.source.is_authoritative());
         let _ = std::fs::remove_dir_all(&root);
     }
 

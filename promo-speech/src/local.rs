@@ -352,7 +352,10 @@ fn run(
         None
     };
     let (audio, words) = match timed {
-        Some(t) => (t.audio, Some(t.words)),
+        Some(t) => {
+            let words = snap_to_voice(&t.audio.samples, t.audio.sample_rate, t.words);
+            (t.audio, Some(words))
+        }
         None => (
             match engine {
                 Engine::Kokoro(e) => e.synthesize(&request),
@@ -378,6 +381,75 @@ fn run(
         }
     }
     Ok((wav(&audio.samples, audio.sample_rate)?, words))
+}
+
+/// A voice's predicted word edges put on its own audio where they border
+/// silence. The predictor's frames are the model's alignment, not what is
+/// heard: a sentence's last word holds on in silence (Kokoro's final
+/// lengthening ends up to 0.3 s after the voice does) and a word after a
+/// pause is predicted a little after its onset. So an edge with a pause on
+/// its outer side moves to where the voice really starts or stops — the
+/// first (last) 10 ms window within 28 dB of the take's loudest, after
+/// (before) at least 30 ms under it — searching no further than the
+/// neighbouring word. Edges inside connected speech keep the prediction.
+/// Plain arithmetic on the samples, the same on every machine.
+pub(crate) fn snap_to_voice(
+    samples: &[f32],
+    rate: u32,
+    words: Vec<local_tts_core::SpokenWord>,
+) -> Vec<local_tts_core::SpokenWord> {
+    if rate == 0 || samples.is_empty() || words.is_empty() {
+        return words;
+    }
+    let rate = f64::from(rate);
+    let hop = (rate * 0.002) as usize; // 2 ms
+    let half = (rate * 0.005) as usize; // a 10 ms window
+    let levels: Vec<f64> = (0..samples.len() / hop.max(1))
+        .map(|k| {
+            let c = k * hop;
+            let (a, b) = (c.saturating_sub(half), (c + half).min(samples.len()));
+            let mut e = 0.0f64;
+            for v in &samples[a..b] {
+                e += f64::from(*v) * f64::from(*v);
+            }
+            10.0 * (e / (b - a).max(1) as f64 + 1e-12).log10()
+        })
+        .collect();
+    let peak = levels.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let loud = |k: usize| levels.get(k).is_some_and(|l| *l >= peak - 28.0);
+    let at = |t: f64| ((t * rate) as usize / hop.max(1)).min(levels.len().saturating_sub(1));
+    let quiet_run = 15; // 30 ms of 2 ms steps
+    let mut out = words.clone();
+    for i in 0..words.len() {
+        let floor = if i == 0 {
+            0.0
+        } else {
+            words[i - 1].end.max(out[i - 1].end)
+        };
+        let ceiling = words
+            .get(i + 1)
+            .map_or(samples.len() as f64 / rate, |w| w.start);
+        // Start: the first loud window from the previous word's end on,
+        // when quiet comes before it.
+        let (lo, hi) = (at(floor.max(words[i].start - 0.15)), at(words[i].end));
+        if let Some(k) = (lo..=hi).find(|&k| loud(k)) {
+            let quiet_before = k >= quiet_run && (k - quiet_run..k).all(|j| !loud(j));
+            if quiet_before && (k as f64 * hop as f64 / rate) < words[i].end {
+                out[i].start = k as f64 * hop as f64 / rate;
+            }
+        }
+        // End: the last loud window before the next word, when quiet
+        // follows it.
+        let (lo, hi) = (at(out[i].start), at(ceiling.min(words[i].end + 0.05)));
+        if let Some(k) = (lo..=hi).rev().find(|&k| loud(k)) {
+            let quiet_after = (k + 1..k + 1 + quiet_run).all(|j| !loud(j) && j < levels.len());
+            let end = (k + 1) as f64 * hop as f64 / rate;
+            if quiet_after && end > out[i].start {
+                out[i].end = end;
+            }
+        }
+    }
+    out
 }
 
 /// The engine's refusal, with where the fix goes in a project.
@@ -433,6 +505,48 @@ mod tests {
         );
         assert!(split_voice("kitten-nano-en/Nobody").is_err());
         assert!(split_voice("alloy").is_err());
+    }
+
+    /// Edges that border silence move onto the voice; edges inside
+    /// connected speech keep the prediction.
+    #[test]
+    fn predicted_edges_snap_to_the_voice_where_they_border_silence() {
+        let rate = 24_000u32;
+        // Voice from 0.30 to 0.90 s and from 1.30 to 2.00 s, silence else.
+        let samples: Vec<f32> = (0..rate as usize * 3)
+            .map(|i| {
+                let t = i as f64 / f64::from(rate);
+                let on = (0.30..0.90).contains(&t) || (1.30..2.00).contains(&t);
+                if on {
+                    (0.3 * (2.0 * std::f64::consts::PI * 180.0 * t).sin()) as f32
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let word = |text: &str, start: f64, end: f64| local_tts_core::SpokenWord {
+            text: text.into(),
+            start,
+            end,
+        };
+        let snapped = snap_to_voice(
+            &samples,
+            rate,
+            vec![
+                word("meet", 0.375, 0.50),  // starts late after silence
+                word("euclid", 0.55, 1.10), // connected start; ends in silence
+                word("geometry", 1.35, 2.30),
+            ],
+        );
+        assert!((snapped[0].start - 0.30).abs() < 0.008, "{snapped:?}");
+        assert_eq!(
+            snapped[0].end, 0.50,
+            "a connected edge keeps the prediction"
+        );
+        assert_eq!(snapped[1].start, 0.55, "voice runs on before it: kept");
+        assert!((snapped[1].end - 0.90).abs() < 0.008, "{snapped:?}");
+        assert!((snapped[2].start - 1.30).abs() < 0.008, "{snapped:?}");
+        assert!((snapped[2].end - 2.00).abs() < 0.008, "{snapped:?}");
     }
 
     #[test]

@@ -105,5 +105,27 @@ def main():
                         "volumeGainDb": 0, "sampleRateHertz": 24000}}, indent=1) + "\n")
 
 
+def transcriptions():
+    """The opt-in transcription answers (§4.6), in their documented shapes:
+    OpenAI `audio/transcriptions` verbose_json with word timestamps, and
+    ElevenLabs `speech-to-text` (Scribe) with its spacing entries. The
+    recogniser's own spellings: punctuation on the words."""
+    said = ["Meet", "Euclid.", "Geometry,", "proved", "step", "by", "step."]
+    openai = {"task": "transcribe", "language": "english", "duration": DURATION,
+              "text": SCRIPT,
+              "words": [{"word": w, "start": a, "end": b}
+                        for w, (_, a, b) in zip(said, WORDS)]}
+    (HERE / "openai-transcription.json").write_text(json.dumps(openai, indent=1) + "\n")
+    words = []
+    for k, (w, (_, a, b)) in enumerate(zip(said, WORDS)):
+        if k:
+            words.append({"text": " ", "start": WORDS[k - 1][2], "end": a, "type": "spacing"})
+        words.append({"text": w, "start": a, "end": b, "type": "word"})
+    scribe = {"language_code": "en", "language_probability": 0.99, "text": SCRIPT,
+              "words": words}
+    (HERE / "elevenlabs-scribe.json").write_text(json.dumps(scribe, indent=1) + "\n")
+
+
 if __name__ == "__main__":
     main()
+    transcriptions()

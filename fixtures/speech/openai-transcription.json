@@ -1,0 +1,43 @@
+{
+ "task": "transcribe",
+ "language": "english",
+ "duration": 3.7,
+ "text": "Meet Euclid. Geometry, proved step by step.",
+ "words": [
+  {
+   "word": "Meet",
+   "start": 0.12,
+   "end": 0.38
+  },
+  {
+   "word": "Euclid.",
+   "start": 0.42,
+   "end": 0.9
+  },
+  {
+   "word": "Geometry,",
+   "start": 1.4,
+   "end": 1.96
+  },
+  {
+   "word": "proved",
+   "start": 2.16,
+   "end": 2.52
+  },
+  {
+   "word": "step",
+   "start": 2.56,
+   "end": 2.8
+  },
+  {
+   "word": "by",
+   "start": 2.84,
+   "end": 2.98
+  },
+  {
+   "word": "step.",
+   "start": 3.02,
+   "end": 3.4
+  }
+ ]
+}
