@@ -43,7 +43,7 @@ fn carries_generated(meta: &ProjectMetadata) -> bool {
         l.generated_by.is_some()
             || l.keyframes
                 .iter()
-                .any(|k| k.auto.as_deref().is_some_and(|a| a.starts_with(BEAT_TAG)))
+                .any(|k| k.auto.as_deref().is_some_and(musical::is_generator_tag))
     }) || meta
         .resources
         .iter()
@@ -59,6 +59,128 @@ pub(crate) struct Context<'a> {
     pub sections: Option<&'a [BeatSection]>,
     /// Where the composition ends: an open-ended layer's end.
     pub end: f64,
+    /// The scope's takes, for generators firing on words (§7.3).
+    pub speech: Option<&'a crate::speech_time::Speech<'a>>,
+}
+
+/// Who a speech trigger or range is read for: its clock and its name.
+#[derive(Clone, Copy)]
+pub(crate) struct Owner<'a> {
+    pub clock: Option<&'a promo_model::speech::SpeechClock>,
+    pub name: &'a str,
+}
+
+/// Whether a trigger or range names a take's words or sentences.
+pub(crate) fn is_speech(value: Option<&Value>) -> bool {
+    value.and_then(Value::as_object).is_some_and(|o| {
+        o.contains_key("words") || o.contains_key("sentences") || o.contains_key("sentence")
+    })
+}
+
+/// The output times a speech trigger names, inside `[from, to)`:
+/// `{"words": "all" | [12, 14] | ["Euclid"] | "emphasised", "of": …}` (with
+/// `top` or `above` on the words' prominence) or `{"sentences": "start" |
+/// "end", "of": …}`.
+fn speech_times(
+    trigger: &Value,
+    ctx: &Context,
+    owner: Owner,
+    from: f64,
+    to: f64,
+) -> Result<Vec<f64>, String> {
+    let speech = ctx
+        .speech
+        .ok_or("a speech trigger here has no take to count on")?;
+    let of = trigger.get("of").and_then(Value::as_str);
+    let (take, _) = speech
+        .take_for(owner.clock, owner.name, of)
+        .map_err(|f| f.why())?;
+    let words = &take.timing.words;
+    let mut source: Vec<f64> = Vec::new();
+    if let Some(which) = trigger.get("words") {
+        match which {
+            Value::String(all) if all == "all" => source.extend(words.iter().map(|w| w.start)),
+            Value::String(e) if e == "emphasised" || e == "emphasized" => {
+                let scored: Vec<(usize, f64)> = words
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, w)| w.prominence.map(|p| (i, p)))
+                    .collect();
+                if scored.is_empty() {
+                    return Err(format!(
+                        "\"{}\" has no word prominence yet — the open measures it from the audio \
+                         (`promo words`); name the words instead",
+                        take.id
+                    ));
+                }
+                let mut chosen: Vec<usize> =
+                    if let Some(above) = trigger.get("above").and_then(Value::as_f64) {
+                        scored
+                            .iter()
+                            .filter(|(_, p)| *p > above)
+                            .map(|(i, _)| *i)
+                            .collect()
+                    } else {
+                        let top = trigger.get("top").and_then(Value::as_u64).unwrap_or(3) as usize;
+                        let mut ranked = scored.clone();
+                        // Most prominent first; a tie goes to the earlier word.
+                        ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+                        ranked.into_iter().take(top).map(|(i, _)| i).collect()
+                    };
+                chosen.sort_unstable();
+                source.extend(chosen.into_iter().map(|i| words[i].start));
+            }
+            Value::Array(list) => {
+                for item in list {
+                    match item {
+                        Value::Number(n) => {
+                            let i = n
+                                .as_u64()
+                                .and_then(|n| (n as usize).checked_sub(1))
+                                .filter(|i| *i < words.len())
+                                .ok_or_else(|| {
+                                    format!("word {n} is past the end of \"{}\"", take.id)
+                                })?;
+                            source.push(words[i].start);
+                        }
+                        Value::String(text) => {
+                            let wanted = promo_model::speech::fold_word(text);
+                            let hits: Vec<f64> = words
+                                .iter()
+                                .filter(|w| promo_model::speech::fold_word(&w.text) == wanted)
+                                .map(|w| w.start)
+                                .collect();
+                            if hits.is_empty() {
+                                return Err(format!("no word \"{text}\" in \"{}\"", take.id));
+                            }
+                            source.extend(hits);
+                        }
+                        other => return Err(format!("{other} names no word")),
+                    }
+                }
+            }
+            other => {
+                return Err(format!(
+                    "\"words\": {other} — \"all\", \"emphasised\", or a list of indices or texts"
+                ))
+            }
+        }
+    } else if let Some(which) = trigger.get("sentences") {
+        let sentences = &take.timing.sentences;
+        match which.as_str() {
+            Some("start") => source.extend(sentences.iter().map(|s| s.start)),
+            Some("end") => source.extend(sentences.iter().map(|s| s.end)),
+            _ => return Err("\"sentences\" is \"start\" or \"end\"".into()),
+        }
+    }
+    let mut out: Vec<f64> = source
+        .into_iter()
+        .filter_map(|s| take.out(s))
+        .filter(|t| *t >= from - 1e-9 && *t < to)
+        .collect();
+    out.sort_by(f64::total_cmp);
+    out.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    Ok(out)
 }
 
 fn list<T: Clone>(field: &Option<OneOrMany<T>>) -> Vec<T> {
@@ -69,8 +191,20 @@ fn list<T: Clone>(field: &Option<OneOrMany<T>>) -> Vec<T> {
     }
 }
 
-/// Beat indices on the grid a trigger names, inside `[from, to)`.
-fn points(trigger: Option<&Value>, grid: &Grid, from: f64, to: f64) -> Result<Vec<f64>, String> {
+/// Beat indices on the grid a trigger names, inside `[from, to)` — for a
+/// speech trigger, the grid index of each word's (or sentence's) time.
+fn points(
+    trigger: Option<&Value>,
+    ctx: &Context,
+    owner: Owner,
+    from: f64,
+    to: f64,
+) -> Result<Vec<f64>, String> {
+    let grid = &ctx.grid;
+    if is_speech(trigger) {
+        let times = speech_times(trigger.expect("a trigger"), ctx, owner, from, to)?;
+        return Ok(times.into_iter().map(|t| grid.index_at(t)).collect());
+    }
     let step = match trigger {
         None => 1.0,
         Some(Value::String(word)) => match word.as_str() {
@@ -107,17 +241,34 @@ fn points(trigger: Option<&Value>, grid: &Grid, from: f64, to: f64) -> Result<Ve
     Ok(out)
 }
 
-/// The span a `range` names, clipped to `[from, to)`.
+/// The span a `range` names, clipped to `[from, to)` — a speech span is
+/// `{"sentence": 2, "of": …}` or `{"words": [3, 9], "of": …}`.
 fn span(
     range: Option<&Value>,
-    grid: &Grid,
-    sections: Option<&[BeatSection]>,
+    ctx: &Context,
+    owner: Owner,
     from: f64,
     to: f64,
 ) -> Result<(f64, f64), String> {
+    let (grid, sections) = (&ctx.grid, ctx.sections);
     let Some(range) = range else {
         return Ok((from, to));
     };
+    if is_speech(Some(range)) {
+        let speech = ctx
+            .speech
+            .ok_or("a speech range here has no take to count on")?;
+        let during: promo_model::speech::During =
+            serde_json::from_value(range.clone()).map_err(|e| format!("range {range}: {e}"))?;
+        let stand_in: ProjectLayer = serde_json::from_value(json!({
+            "id": "", "name": owner.name, "sortIndex": 0, "kind": "image",
+            "isEnabled": true, "startTime": 0, "keyframes": []}))
+        .expect("a stand-in");
+        let mut stand_in = stand_in;
+        stand_in.speech_clock = owner.clock.cloned();
+        let (a, b, _, _) = speech.during(&stand_in, &during).map_err(|f| f.why())?;
+        return Ok((a.max(from), b.min(to)));
+    }
     let number = |key: &str| range.get(key).and_then(Value::as_f64);
     let value_time = |key: &str| -> Result<Option<f64>, String> {
         let Some(raw) = range.get(key) else {
@@ -191,11 +342,12 @@ fn keyframe(id: String, time: f64, ramp: f64) -> ProjectLayerKeyframe {
         .expect("a keyframe needs only an id, a time and a ramp")
 }
 
-/// Tags a generated keyframe with the signature of its values.
-fn tagged(mut key: ProjectLayerKeyframe) -> ProjectLayerKeyframe {
+/// Tags a generated keyframe with the signature of its values, under the
+/// generator's own tag (`beat:`, `speech:`).
+fn tagged_as(mut key: ProjectLayerKeyframe, tag: &str) -> ProjectLayerKeyframe {
     key.auto = None;
     let value = serde_json::to_value(&key).unwrap_or(Value::Null);
-    key.auto = Some(format!("{BEAT_TAG}{}", musical::signature(&value)));
+    key.auto = Some(format!("{tag}{}", musical::signature(&value)));
     key
 }
 
@@ -319,9 +471,18 @@ pub(crate) fn expand_layer(
             continue;
         }
         let amount = amount.unwrap_or(0.04);
-        let window = span(range.as_ref(), &ctx.grid, ctx.sections, start, end);
-        let found =
-            window.and_then(|(a, b)| points(every.as_ref().or(on.as_ref()), &ctx.grid, a, b));
+        let owner = Owner {
+            clock: person.speech_clock.as_ref(),
+            name: &person.name,
+        };
+        let trigger = every.as_ref().or(on.as_ref());
+        let (prefix, tag) = if is_speech(trigger) {
+            ("speech", musical::SPEECH_TAG)
+        } else {
+            ("beat", BEAT_TAG)
+        };
+        let window = span(range.as_ref(), ctx, owner, start, end);
+        let found = window.and_then(|(a, b)| points(trigger, ctx, owner, a, b));
         let indices = match found {
             Ok(indices) => indices,
             Err(why) => {
@@ -346,7 +507,7 @@ pub(crate) fn expand_layer(
                 continue;
             }
             let decay = length_from(*decay, 0.5, &ctx.grid, t);
-            let id = |role: &str| format!("beat-{}-pulse{n}-{k}-{role}", layer.id);
+            let id = |role: &str| format!("{prefix}-{}-pulse{n}-{k}-{role}", layer.id);
             // Held at its base until the first peak (a track holds its
             // first key's value before it), and before every peak over a
             // person's keys.
@@ -367,13 +528,13 @@ pub(crate) fn expand_layer(
                     &mut pre,
                     0.0,
                 );
-                made.push(tagged(pre));
+                made.push(tagged_as(pre, tag));
             }
             let mut peak = keyframe(id("peak"), local, attack);
             write_base(
                 &person, &property, t, settings, resources, &mut peak, amount,
             );
-            made.push(tagged(peak));
+            made.push(tagged_as(peak, tag));
             let mut rest = keyframe(id("rest"), local + decay, decay);
             rest.easing = Some(promo_model::Easing::EaseOut);
             write_base(
@@ -385,7 +546,7 @@ pub(crate) fn expand_layer(
                 &mut rest,
                 0.0,
             );
-            made.push(tagged(rest));
+            made.push(tagged_as(rest, tag));
         }
     }
     for (n, shake) in shakes.iter().enumerate() {
@@ -398,9 +559,18 @@ pub(crate) fn expand_layer(
             ..
         } = shake;
         let amplitude = amplitude.unwrap_or(8.0);
-        let window = span(range.as_ref(), &ctx.grid, ctx.sections, start, end);
-        let found =
-            window.and_then(|(a, b)| points(on.as_ref().or(every.as_ref()), &ctx.grid, a, b));
+        let owner = Owner {
+            clock: person.speech_clock.as_ref(),
+            name: &person.name,
+        };
+        let trigger = on.as_ref().or(every.as_ref());
+        let (prefix, tag) = if is_speech(trigger) {
+            ("speech", musical::SPEECH_TAG)
+        } else {
+            ("beat", BEAT_TAG)
+        };
+        let window = span(range.as_ref(), ctx, owner, start, end);
+        let found = window.and_then(|(a, b)| points(trigger, ctx, owner, a, b));
         let indices = match found {
             Ok(indices) => indices,
             Err(why) => {
@@ -467,7 +637,11 @@ pub(crate) fn expand_layer(
                 steps.push((role, at, ramp, scale));
             }
             for (role, at, ramp, scale) in steps {
-                let mut key = keyframe(format!("beat-{}-shake{n}-{k}-{role}", layer.id), at, ramp);
+                let mut key = keyframe(
+                    format!("{prefix}-{}-shake{n}-{k}-{role}", layer.id),
+                    at,
+                    ramp,
+                );
                 let (ox, oy) = (amplitude * scale * dx, amplitude * scale * dy);
                 match at_rest(start + at) {
                     Position::Rule(mut rule) => {
@@ -480,7 +654,7 @@ pub(crate) fn expand_layer(
                         key.vertical_shift = Some(y + oy);
                     }
                 }
-                made.push(tagged(key));
+                made.push(tagged_as(key, tag));
             }
         }
     }
@@ -636,8 +810,13 @@ pub(crate) fn expand_flash(meta: &mut ProjectMetadata, ctx: &Context) -> Vec<Tim
             ..
         } = flash;
         let trigger = on.as_ref().or(every.as_ref());
-        let found = span(range.as_ref(), &ctx.grid, ctx.sections, 0.0, ctx.end)
-            .and_then(|(a, b)| points(trigger, &ctx.grid, a, b));
+        let flash_name = format!("flash {n}");
+        let owner = Owner {
+            clock: meta.composition_settings.speech_clock.as_ref(),
+            name: &flash_name,
+        };
+        let found = span(range.as_ref(), ctx, owner, 0.0, ctx.end)
+            .and_then(|(a, b)| points(trigger, ctx, owner, a, b));
         let indices = match found {
             Ok(indices) => indices,
             Err(why) => {
@@ -692,6 +871,10 @@ pub(crate) fn expand_flash(meta: &mut ProjectMetadata, ctx: &Context) -> Vec<Tim
         keys.sort_by(|a, b| a.time.total_cmp(&b.time));
         let label = match trigger {
             Some(Value::String(word)) => word.clone(),
+            Some(other) if is_speech(Some(other)) => match other.get("sentences") {
+                Some(_) => "sentences".into(),
+                None => "words".into(),
+            },
             Some(other) => other.to_string(),
             None => "beat".into(),
         };

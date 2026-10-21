@@ -131,11 +131,31 @@ fn carry_field<T: Clone>(into: &mut Option<T>, from: &Option<T>, mode: Mode) {
     }
 }
 
+/// A reveal's `sync` (the apps' model does not read it), inside a style
+/// both copies hold a reveal in.
+fn carry_sync(into: &mut Option<crate::TextReveal>, from: &Option<crate::TextReveal>, mode: Mode) {
+    if let (Some(reveal), Some(old)) = (into.as_mut(), from.as_ref()) {
+        carry_field(&mut reveal.sync, &old.sync, mode);
+    }
+}
+
+fn carry_style_sync(
+    into: &mut Option<crate::SubtitleStyle>,
+    from: &Option<crate::SubtitleStyle>,
+    mode: Mode,
+) {
+    if let (Some(style), Some(old)) = (into.as_mut(), from.as_ref()) {
+        carry_sync(&mut style.reveal, &old.reveal, mode);
+    }
+}
+
 fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, &[], mode);
     carry_field(&mut into.beat_clock, &from.beat_clock, mode);
     carry_field(&mut into.speech_clock, &from.speech_clock, mode);
     carry_field(&mut into.during, &from.during, mode);
+    carry_field(&mut into.captions, &from.captions, mode);
+    carry_style_sync(&mut into.caption_style, &from.caption_style, mode);
     carry_field(&mut into.after, &from.after, mode);
     carry_field(&mut into.pulse, &from.pulse, mode);
     carry_field(&mut into.shake, &from.shake, mode);
@@ -162,6 +182,7 @@ fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode
     carry_field(&mut into.provenance, &from.provenance, mode);
     carry_field(&mut into.transcript, &from.transcript, mode);
     carry_field(&mut into.generated_by, &from.generated_by, mode);
+    carry_style_sync(&mut into.caption_style, &from.caption_style, mode);
     if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
         carry_field(&mut composition.beat_clock, &old.beat_clock, mode);
         carry_field(&mut composition.speech_clock, &old.speech_clock, mode);
@@ -230,6 +251,7 @@ impl ProjectMetadata {
         carry_field(&mut settings.sequence, &old.sequence, mode);
         carry_field(&mut settings.speech_clock, &old.speech_clock, mode);
         carry_field(&mut settings.flash, &old.flash, mode);
+        carry_sync(&mut settings.subtitle_reveal, &old.subtitle_reveal, mode);
         let old_layers = layers_by_id(from);
         carry_layers(
             self.layers.as_deref_mut().unwrap_or(&mut []),

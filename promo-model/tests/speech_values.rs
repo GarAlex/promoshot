@@ -192,6 +192,37 @@ fn speech_file_stamps_50() {
             "{what}"
         );
     }
+    for (what, extra) in [
+        (
+            "a pulse on words",
+            json!({"pulse": {"on": {"words": ["Euclid"], "of": "vo"}}}),
+        ),
+        (
+            "a shake over a sentence",
+            json!({"shake": {"on": "beat", "range": {"sentence": 2, "of": "vo"}}}),
+        ),
+    ] {
+        assert_eq!(
+            decode(&plain(image("a", extra))).minimum_reader_version(),
+            50,
+            "{what}"
+        );
+    }
+    for sequence in [
+        json!([{"layer": "a", "until": {"sentence": 2, "of": "vo"}}]),
+        json!([{"layers": ["a"], "per": "sentence", "of": "vo"}]),
+    ] {
+        let mut file = plain(image("a", json!({})));
+        file["compositionSettings"]["sequence"] = sequence.clone();
+        assert_eq!(decode(&file).minimum_reader_version(), 50, "{sequence}");
+    }
+    let mut flashed = plain(image("a", json!({})));
+    flashed["compositionSettings"]["flash"] = json!({"on": {"sentences": "start", "of": "vo"}});
+    assert_eq!(
+        decode(&flashed).minimum_reader_version(),
+        50,
+        "a flash on sentences"
+    );
     let mut clocked = plain(image("a", json!({})));
     clocked["compositionSettings"]["speechClock"] = json!({"layer": "vo"});
     assert_eq!(
@@ -214,4 +245,81 @@ fn speech_file_stamps_50() {
     let mut meta = decode(&plain(image("a", json!({"startTime": {"word": 2}}))));
     meta.layers.as_mut().unwrap()[0].start_time = 1.5;
     assert!(meta.minimum_reader_version() < 48);
+}
+
+/// A synced reveal and `captions` need the speech reader; what speech sync
+/// derives — `unitTimes`, `unitEnds`, a generator's `made` — never reaches
+/// the file, and `sync` and `captions` come back as written.
+#[test]
+fn synced_reveal_and_captions_stamp_50_and_save_no_derived_numbers() {
+    let file = json!({
+        "id": "P", "name": "P", "createdAt": 0, "state": "recorded",
+        "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+        "compositionSettings": {},
+        "layers": [
+            {"id": "vo", "name": "VO", "sortIndex": 0, "kind": "audio", "isEnabled": true,
+             "startTime": 0, "resourceID": "intro", "keyframes": [],
+             "captions": {"maxWords": 6, "skip": [1]}},
+            {"id": "c", "name": "C", "sortIndex": 1, "kind": "caption", "isEnabled": true,
+             "startTime": 0, "duration": 2, "captionText": "Hello there",
+             "captionStyle": {"reveal": {"by": "word", "mode": "highlight",
+                                         "sync": {"of": "intro", "words": [1, 2]}}},
+             "keyframes": []}
+        ]
+    });
+    let plain = |f: &Value| decode(f).minimum_reader_version();
+    assert_eq!(plain(&file), 50);
+    let mut no_captions = file.clone();
+    no_captions["layers"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("captions");
+    assert_eq!(plain(&no_captions), 50, "a synced reveal alone");
+    let mut no_sync = no_captions.clone();
+    no_sync["layers"][1]["captionStyle"]["reveal"]
+        .as_object_mut()
+        .unwrap()
+        .remove("sync");
+    assert!(plain(&no_sync) < 50);
+
+    let mut meta = decode(&file);
+    let reveal = meta.layers.as_mut().unwrap()[1]
+        .caption_style
+        .as_mut()
+        .unwrap()
+        .reveal
+        .as_mut()
+        .unwrap();
+    reveal.unit_times = Some(vec![0.1, 0.5]);
+    reveal.unit_ends = Some(vec![0.4, 0.9]);
+    meta.layers.as_mut().unwrap()[0]
+        .captions
+        .as_mut()
+        .unwrap()
+        .made = Some(3);
+    let app = meta.to_app_json().unwrap();
+    assert!(
+        app.contains("unitTimes") && app.contains("\"made\":3"),
+        "{app}"
+    );
+    let written: Value = serde_json::from_str(&meta.to_json().unwrap()).unwrap();
+    let text = written.to_string();
+    assert!(
+        !text.contains("unitTimes") && !text.contains("unitEnds"),
+        "{text}"
+    );
+    assert!(
+        written["layers"][0]["captions"].get("made").is_none(),
+        "{text}"
+    );
+    assert!(promo_model::json_semantically_equal(
+        &written["layers"][1]["captionStyle"]["reveal"]["sync"],
+        &file["layers"][1]["captionStyle"]["reveal"]["sync"]
+    ));
+    // Pieces 0 and 2 of the 3 made are gone: a person deleted them.
+    assert_eq!(
+        written["layers"][0]["captions"]["skip"],
+        json!([0, 1, 2]),
+        "{text}"
+    );
 }

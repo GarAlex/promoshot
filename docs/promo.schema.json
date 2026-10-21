@@ -2710,6 +2710,16 @@
             }
           ]
         },
+        "captions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeechCaptions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "chromaKey": {
           "anyOf": [
             {
@@ -3957,6 +3967,39 @@
       ],
       "type": "string"
     },
+    "RevealSync": {
+      "additionalProperties": true,
+      "properties": {
+        "of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sentence": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "words": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "RevealUnit": {
       "enum": [
         "character",
@@ -4052,8 +4095,49 @@
             }
           ]
         },
+        "hold": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "layer": {
           "type": "string"
+        },
+        "layers": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "lead": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "per": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quantize": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "seconds": {
           "format": "double",
@@ -4061,11 +4145,9 @@
             "number",
             "null"
           ]
-        }
+        },
+        "until": {}
       },
-      "required": [
-        "layer"
-      ],
       "type": "object"
     },
     "Shake": {
@@ -4108,6 +4190,86 @@
         }
       ],
       "type": "array"
+    },
+    "SpeechCaptions": {
+      "additionalProperties": true,
+      "properties": {
+        "by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hold": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lead": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "made": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxSeconds": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "maxWords": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reveal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextReveal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skip": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
     },
     "SpeechClock": {
       "additionalProperties": true,
@@ -4717,10 +4879,40 @@
             "null"
           ]
         },
+        "sync": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RevealSync"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unitEnds": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "unitSeconds": {
           "format": "double",
           "type": [
             "number",
+            "null"
+          ]
+        },
+        "unitTimes": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
             "null"
           ]
         }

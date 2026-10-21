@@ -1587,7 +1587,7 @@ fn layer_doc(
         "generated": layer.keyframes.iter().filter(|k| k
             .auto
             .as_deref()
-            .is_some_and(|a| a.starts_with(promo_model::musical::BEAT_TAG))).count(),
+            .is_some_and(promo_model::musical::is_generator_tag)).count(),
     });
     let on_canvas = |r: &Value| -> Option<[f64; 4]> {
         let (x, y) = (r["x"].as_f64()?, r["y"].as_f64()?);

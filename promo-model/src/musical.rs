@@ -559,8 +559,7 @@ pub fn layer_keeps_musical(layer: &ProjectLayer) -> bool {
 /// Whether any entity of the project carries a side map at all — the
 /// encoder's cue that the file form differs from the app form.
 pub fn carries_specs(meta: &ProjectMetadata) -> bool {
-    let generated =
-        |k: &ProjectLayerKeyframe| k.auto.as_deref().is_some_and(|a| a.starts_with(BEAT_TAG));
+    let generated = |k: &ProjectLayerKeyframe| k.auto.as_deref().is_some_and(is_generator_tag);
     crate::nesting::all_layers(meta).iter().any(|l| {
         // Stage members are in the walk, after their stage.
         l.time_specs.is_some()
@@ -573,6 +572,51 @@ pub fn carries_specs(meta: &ProjectMetadata) -> bool {
         .iter()
         .flatten()
         .any(|r| r.generated_by.is_some())
+        || carries_derived(meta)
+}
+
+/// Whether the app form holds what speech sync derives and a save drops: a
+/// reveal's `unitTimes`, a captions generator's `made`.
+fn carries_derived(meta: &ProjectMetadata) -> bool {
+    let timed = |style: &Option<crate::SubtitleStyle>| {
+        style
+            .as_ref()
+            .and_then(|s| s.reveal.as_ref())
+            .is_some_and(|r| r.unit_times.is_some() || r.unit_ends.is_some())
+    };
+    crate::nesting::all_layers(meta)
+        .iter()
+        .any(|l| timed(&l.caption_style) || l.captions.as_ref().is_some_and(|c| c.made.is_some()))
+        || meta
+            .resources
+            .iter()
+            .flatten()
+            .any(|r| timed(&r.caption_style))
+}
+
+/// Drops what speech sync derives from the file form: every `unitTimes`
+/// and `unitEnds`, and a captions generator's `made`.
+fn strip_derived(value: &mut Value) -> bool {
+    let mut changed = false;
+    match value {
+        Value::Object(map) => {
+            changed |= map.remove("unitTimes").is_some();
+            changed |= map.remove("unitEnds").is_some();
+            if let Some(Value::Object(captions)) = map.get_mut("captions") {
+                changed |= captions.remove("made").is_some();
+            }
+            for v in map.values_mut() {
+                changed |= strip_derived(v);
+            }
+        }
+        Value::Array(items) => {
+            for v in items {
+                changed |= strip_derived(v);
+            }
+        }
+        _ => {}
+    }
+    changed
 }
 
 // ---------------------------------------------------------------- lift and fold
@@ -802,11 +846,21 @@ pub fn fold(root: &mut Value) -> bool {
     });
     apply_detaches(root, detached);
     let stripped = strip_generated(root);
-    changed || stripped
+    let derived = strip_derived(root);
+    changed || stripped || derived
 }
 
 /// The tag on a keyframe a beat generator wrote: `auto` = `beat:<signature>`.
 pub const BEAT_TAG: &str = "beat:";
+
+/// The tag on a keyframe a generator firing on a take's words wrote
+/// (docs/SPEECH-SYNC.md §7.3): `auto` = `speech:<signature>`.
+pub const SPEECH_TAG: &str = "speech:";
+
+/// Whether an `auto` tag is a beat or speech generator's.
+pub fn is_generator_tag(auto: &str) -> bool {
+    auto.starts_with(BEAT_TAG) || auto.starts_with(SPEECH_TAG)
+}
 
 /// A generated entity's signature: 16 hex digits of a 64-bit FNV-1a over
 /// its JSON as written — numbers quantized to 1e-5, so a value that went
@@ -823,6 +877,11 @@ pub fn signature(value: &Value) -> String {
                         && ["id", "auto", "timeSpecs", "generatedBy", "sortIndex"]
                             .contains(&key.as_str())
                     {
+                        continue;
+                    }
+                    // Derived on every resolve and dropped by a save: never
+                    // a person's edit.
+                    if key == "unitTimes" || key == "unitEnds" {
                         continue;
                     }
                     out.push_str(key);
@@ -859,7 +918,10 @@ pub fn signature(value: &Value) -> String {
 
 /// Whether a keyframe (as JSON) is a beat generator's, as it wrote it.
 pub fn is_unedited_beat_keyframe(keyframe: &Value) -> Option<bool> {
-    let tag = keyframe.get("auto")?.as_str()?.strip_prefix(BEAT_TAG)?;
+    let auto = keyframe.get("auto")?.as_str()?;
+    let tag = auto
+        .strip_prefix(BEAT_TAG)
+        .or_else(|| auto.strip_prefix(SPEECH_TAG))?;
     Some(tag == signature(keyframe))
 }
 
@@ -921,6 +983,7 @@ pub fn strip_generated(root: &mut Value) -> bool {
         }
     }
     if let Some(Value::Array(layers)) = top.get_mut("layers") {
+        retire_deleted_captions(layers);
         scope_lists.push((None, layers));
     }
     for (scope, layers) in scope_lists {
@@ -993,6 +1056,46 @@ pub fn strip_generated(root: &mut Value) -> bool {
         }
     }
     true
+}
+
+/// A captions generator's pieces a person deleted (docs/SPEECH-SYNC.md
+/// §7.2): of the `made` pieces, each whose layer is no longer in the scope
+/// goes into `skip`, so the delete sticks.
+fn retire_deleted_captions(layers: &mut [Value]) {
+    let ids: std::collections::HashSet<String> = layers
+        .iter()
+        .filter_map(|l| l.get("id").and_then(Value::as_str).map(str::to_string))
+        .collect();
+    for layer in layers.iter_mut() {
+        let Some(id) = layer.get("id").and_then(Value::as_str).map(str::to_string) else {
+            continue;
+        };
+        let Some(captions) = layer.get_mut("captions").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        let Some(made) = captions.get("made").and_then(Value::as_u64) else {
+            continue;
+        };
+        let mut skip: Vec<u64> = captions
+            .get("skip")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_u64).collect())
+            .unwrap_or_default();
+        for k in 0..made {
+            if !skip.contains(&k) && !ids.contains(&caption_id(&id, k as usize)) {
+                skip.push(k);
+            }
+        }
+        skip.sort_unstable();
+        if !skip.is_empty() {
+            captions.insert("skip".into(), serde_json::json!(skip));
+        }
+    }
+}
+
+/// The id of piece `k` a captions generator on layer `layer` makes.
+pub fn caption_id(layer: &str, k: usize) -> String {
+    format!("speech-captions-{layer}-{k}")
 }
 
 /// Replaces `into`'s beat-generated content with `from`'s (the same
@@ -1095,12 +1198,106 @@ fn apply_detaches(root: &mut Value, detached: Vec<(Option<String>, Detach)>) {
             continue;
         };
         let named = |e: &Value, id: &str| e.get("layer").and_then(Value::as_str) == Some(id);
+        // A `per` entry's member moved or resized by hand leaves it.
+        let member = match &detach {
+            Detach::Leave(id) | Detach::Seconds(id, _) => id.clone(),
+        };
+        for entry in entries.iter_mut() {
+            if let Some(Value::Array(layers)) = entry.get_mut("layers") {
+                layers.retain(|l| l.as_str() != Some(member.as_str()));
+            }
+        }
         match detach {
             Detach::Leave(id) => entries.retain(|e| !named(e, &id)),
             Detach::Seconds(id, seconds) => {
                 for entry in entries.iter_mut().filter(|e| named(e, &id)) {
                     *entry = serde_json::json!({ "layer": id, "seconds": seconds });
                 }
+            }
+        }
+    }
+}
+
+/// Copies what speech sync derives (docs/SPEECH-SYNC.md §7) from `from` —
+/// the same document, resolved — into `into`: each caption reveal's
+/// `unitTimes` and `unitEnds` (layers by id path, caption resources by
+/// id), and a captions generator's `made`. What a host that keeps the
+/// file's own text beside the resolved numbers needs so its renderer walks
+/// the words.
+pub fn copy_derived(from: &Value, into: &mut Value) {
+    fn take(object: &Map<String, Value>) -> Map<String, Value> {
+        let mut out = Map::new();
+        if let Some(reveal) = object
+            .get("captionStyle")
+            .and_then(|s| s.get("reveal"))
+            .and_then(Value::as_object)
+        {
+            for key in ["unitTimes", "unitEnds"] {
+                if let Some(v) = reveal.get(key) {
+                    out.insert(key.to_string(), v.clone());
+                }
+            }
+        }
+        if let Some(made) = object.get("captions").and_then(|c| c.get("made")) {
+            out.insert("made".into(), made.clone());
+        }
+        out
+    }
+    fn put(object: &mut Map<String, Value>, found: &Map<String, Value>) {
+        for (key, value) in found {
+            if key == "made" {
+                if let Some(Value::Object(c)) = object.get_mut("captions") {
+                    c.insert(key.clone(), value.clone());
+                }
+            } else if let Some(Value::Object(reveal)) = object
+                .get_mut("captionStyle")
+                .and_then(|s| s.get_mut("reveal"))
+            {
+                reveal.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    let mut found: std::collections::HashMap<String, Map<String, Value>> = Default::default();
+    let mut source = from.clone();
+    let _ = each_entity(&mut source, &mut |entity, object, at| {
+        if entity == Entity::Layer {
+            let derived = take(object);
+            if !derived.is_empty() {
+                found.insert(at.to_string(), derived);
+            }
+        }
+        Ok(())
+    });
+    let _ = each_entity(into, &mut |entity, object, at| {
+        if entity == Entity::Layer {
+            if let Some(derived) = found.get(at) {
+                put(object, derived);
+            }
+        }
+        Ok(())
+    });
+    let resources: std::collections::HashMap<String, Map<String, Value>> = from
+        .get("resources")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            let object = r.as_object()?;
+            let derived = take(object);
+            let id = object.get("id")?.as_str()?.to_string();
+            (!derived.is_empty()).then_some((id, derived))
+        })
+        .collect();
+    if let Some(Value::Array(list)) = into.get_mut("resources") {
+        for r in list.iter_mut() {
+            let Some(object) = r.as_object_mut() else {
+                continue;
+            };
+            let Some(id) = object.get("id").and_then(Value::as_str).map(str::to_string) else {
+                continue;
+            };
+            if let Some(derived) = resources.get(&id) {
+                put(object, derived);
             }
         }
     }
@@ -1269,11 +1466,35 @@ pub struct Provenance {
 }
 
 /// One member of a `sequence`: the layer, and its length — `beats`, `bars`,
-/// `seconds` or a time value; none keeps the layer's own duration.
+/// `seconds` or a time value; none keeps the layer's own duration. Or a
+/// `per` entry (docs/SPEECH-SYNC.md §7.3): `layers`, one per sentence of
+/// the take `of`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SequenceEntry {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub layer: String,
+    /// The layers of a `per` entry, in order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layers: Option<Vec<String>>,
+    /// The entry ends at a position — musical (`{"bar": 9}`) or speech
+    /// (`{"sentence": 3, "of": "intro"}`) — and the next starts there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<Value>,
+    /// `sentence`: one of `layers` per sentence of the take `of`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub per: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<String>,
+    /// Seconds each cut comes before its sentence (default 0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<f64>,
+    /// Seconds the last slide holds past the last sentence (default 0.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hold: Option<f64>,
+    /// `beat`, `downbeat` or `bar`: each cut onto the nearest one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quantize: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beats: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

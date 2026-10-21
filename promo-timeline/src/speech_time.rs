@@ -92,6 +92,15 @@ pub(crate) enum Fault {
     Trimmed(String),
 }
 
+impl Fault {
+    /// The sentence that says what is wrong.
+    pub fn why(self) -> String {
+        match self {
+            Fault::Word(why) | Fault::Take(why) | Fault::Trimmed(why) => why,
+        }
+    }
+}
+
 /// A resolved value: the output seconds, the word it landed on, and what
 /// to say about it.
 pub(crate) struct Resolved {
@@ -585,6 +594,129 @@ impl<'a> Speech<'a> {
     }
 }
 
+impl Fault {
+    /// The problem a fault at `field` of layer `layer` is.
+    pub(crate) fn problem(self, layer: &str, field: &str, spec: String) -> TimingProblem {
+        let (layer, field) = (layer.to_string(), field.to_string());
+        match self {
+            Fault::Word(why) => TimingProblem::SpeechNoWord {
+                layer,
+                field,
+                spec,
+                why,
+            },
+            Fault::Take(why) => TimingProblem::SpeechTake {
+                layer,
+                field,
+                spec,
+                why,
+            },
+            Fault::Trimmed(why) => TimingProblem::SpeechTrimmedOut {
+                layer,
+                field,
+                spec,
+                why,
+            },
+        }
+    }
+}
+
+/// Whether a sequence counts on a take: a `per` entry, or an `until` that
+/// names words.
+pub(crate) fn sequence_uses_speech(
+    sequence: Option<&[promo_model::musical::SequenceEntry]>,
+) -> bool {
+    sequence.unwrap_or(&[]).iter().any(|e| {
+        e.per.is_some()
+            || e.until
+                .as_ref()
+                .and_then(serde_json::Value::as_object)
+                .is_some_and(promo_model::speech::is_speech_object)
+    })
+}
+
+/// A sequence with its `per` entries made into one entry per layer
+/// (docs/SPEECH-SYNC.md §7.3): slide k lasts until sentence k+1's start −
+/// `lead`, the last until the last sentence's end + `hold` — each an
+/// `until` the pass resolves like any speech value, `quantize` with it.
+pub(crate) fn expand_per(
+    sequence: &[promo_model::musical::SequenceEntry],
+    speech: &Speech,
+) -> (Vec<promo_model::musical::SequenceEntry>, Vec<TimingProblem>) {
+    use serde_json::json;
+    let mut out = Vec::new();
+    let mut problems = Vec::new();
+    for entry in sequence {
+        let Some(per) = entry.per.as_deref() else {
+            out.push(entry.clone());
+            continue;
+        };
+        let layers = entry.layers.clone().unwrap_or_default();
+        let here = format!("sequence per {per}");
+        if per != "sentence" {
+            problems.push(TimingProblem::Generator {
+                layer: here,
+                why: format!("\"per\": \"{per}\" — only \"sentence\" is known"),
+            });
+            continue;
+        }
+        let take = match speech.take_for(None, &here, entry.of.as_deref()) {
+            Ok((take, _)) => take,
+            Err(f) => {
+                problems.push(TimingProblem::Generator {
+                    layer: here,
+                    why: f.why(),
+                });
+                continue;
+            }
+        };
+        let sentences = take.timing.sentences.len();
+        if layers.is_empty() || sentences == 0 {
+            continue;
+        }
+        if layers.len() != sentences {
+            problems.push(TimingProblem::PerSlots {
+                take: take.id.clone(),
+                layers: layers.len(),
+                sentences,
+            });
+        }
+        let lead = entry.lead.unwrap_or(0.0);
+        let hold = entry.hold.unwrap_or(0.5);
+        let used = layers.len().min(sentences);
+        for (k, layer) in layers.iter().take(used).enumerate() {
+            let mut until = if k + 1 < used {
+                json!({"sentence": k + 2, "of": take.id})
+            } else {
+                json!({"sentence": sentences, "of": take.id, "edge": "end"})
+            };
+            let offset = if k + 1 < used { -lead } else { hold };
+            if offset != 0.0 {
+                until["offset"] = json!(offset);
+            }
+            if let Some(q) = &entry.quantize {
+                until["quantize"] = json!(q);
+            }
+            out.push(promo_model::musical::SequenceEntry {
+                layer: layer.clone(),
+                layers: None,
+                until: Some(until),
+                per: None,
+                of: None,
+                lead: None,
+                hold: None,
+                quantize: None,
+                beats: None,
+                bars: None,
+                seconds: None,
+                duration: None,
+                extra: Default::default(),
+            });
+        }
+    }
+    (out, problems)
+}
+
 /// Edit distance, for "closest: …".
 fn distance(a: &str, b: &str) -> usize {
     let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
@@ -872,13 +1004,19 @@ fn label(value: &SpeechTime, resolved: &Resolved, ends: bool) -> String {
 /// Whether anything in the project — its layers or a composition's — is
 /// timed on speech: what makes an open align its takes.
 pub fn project_uses_speech(meta: &promo_model::ProjectMetadata) -> bool {
-    uses_speech(meta.layers.as_deref().unwrap_or(&[]))
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    crate::speech_effects::any_sync(layers, resources)
+        || promo_model::nesting::all_layers(meta)
+            .iter()
+            .any(|l| l.captions.is_some())
+        || uses_speech(layers)
         || meta
             .resources
             .iter()
             .flatten()
             .filter_map(|r| r.composition.as_ref())
-            .any(|c| uses_speech(&c.layers))
+            .any(|c| uses_speech(&c.layers) || crate::speech_effects::any_sync(&c.layers, &[]))
 }
 
 /// Whether any layer of a scope uses speech timing.

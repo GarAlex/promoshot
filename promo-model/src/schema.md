@@ -405,6 +405,52 @@ a render waits for it. Rewrite a line and re-voice it, and every cut on
 its words moves with them. validate lists "Speech times": each value, the
 word it landed on, and the timing's source.
 
+## Speech cuts — sync, captions, karaoke, emphasised, per, until, slides per sentence, generators on words
+
+A caption reveal arrives on the words: `"reveal": {"by": "word", "mode":
+"highlight", "highlightColorHex": "@accent", "sync": {"of": "intro"}}` in
+a caption's `captionStyle` (the layer's, or its caption resource's). The
+caption's words are matched to the take's — the caption may be one
+sentence of a longer narration — and each arrives when it is said; a
+highlight lights the word while it sounds and goes out between words.
+`"sync": {"of": "intro", "words": [5, 12]}` (or `"sentence": 2`) pins the
+span. A word the take does not say arrives between its neighbours, and
+validate says how many matched. With `by: "character"` or `"line"`, each
+unit takes the time of the word it falls in.
+
+Captions from a narration: `"captions": {"by": "sentence", "maxWords": 8,
+"maxSeconds": 3.5, "lead": 0.1, "hold": 0.25, "reveal": {…}, "style":
+{…captionStyle…}}` on the audio or video layer that plays the take makes
+one caption layer per sentence (`"by": "phrase"`: per comma, too), split at
+the comma or gap nearest the middle while longer than `maxWords` (default
+10) or `maxSeconds` (default 4). Each shows from its first word − lead to
+its last + hold (never past the next), revealed on its words. They are
+made again on every open and are not saved, so a new take re-times them;
+edit one and it is yours from then on; delete one and its piece goes into
+`"skip": [n]` so it stays deleted.
+
+Generators fire on words too: `"pulse": {"on": {"words": ["Euclid",
+"free"], "of": "intro"}, "amount": 0.05, "decay": 0.25}`, `"flash": {"on":
+{"sentences": "start", "of": "intro"}, …}`, `"shake": {"on": {"words":
+"emphasised", "of": "intro", "top": 3}}`. `words` takes `"all"`, a list of
+indices, a list of texts (every time each is said), or `"emphasised"` — the
+most prominent words, `top` of them (3) or those `above` a prominence of
+0–1, which promo reads from the audio (loudness, pitch movement, length)
+and keeps in the take's record. `sentences` takes `"start"` or `"end"`.
+A `range` may be `{"sentence": 2, "of": "intro"}` or `{"words": [3, 9],
+"of": "intro"}`. Decay and duration stay seconds or beats.
+
+Sequences cut on words: an entry's `"until": {"sentence": 3, "of":
+"intro"}` (or any position — `{"bar": 9}`) ends it there, and the next
+starts there. One slide per sentence: `{"layers": ["s1", "s2", "s3"],
+"per": "sentence", "of": "intro", "lead": 0.1, "hold": 0.5}` — slide k
+lasts until sentence k+1 starts, less `lead`; the last until the last
+sentence ends, plus `hold`. Fewer slides than sentences and the last holds
+through the rest; more, and the extras get no slot (validate says which).
+`"quantize": "beat"` puts every sentence cut on the nearest beat. The first
+slide's own `startTime` opens it (`{"sentence": 1, "of": "intro",
+"offset": -0.1}`).
+
 ## Beat effects — pulse, shake, flash, punch, generator, onbeat
 
 Three generators make keyframes on the beat grid of a layer's clock

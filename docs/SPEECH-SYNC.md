@@ -1235,6 +1235,81 @@ criteria.
   - `generated_captions_retime_with_a_new_take`
   - Swift: `testUnitTimesSurviveTheAppForm`, and synced-caption cases in `DemoPreviewExportParityTests` (both suites) and `CrossPathRenderTests` (Mac)
 
+**Slice 7 as built** (2026-10-21):
+- **The model.** `TextReveal` gains `sync` (`RevealSync {of, words,
+  sentence}`), `unitTimes` and `unitEnds`; a layer gains `captions`
+  (`SpeechCaptions {by, maxWords, maxSeconds, lead, hold, reveal, style,
+  skip, made}`). A reveal `sync` or `captions` stamps 50. The fold drops
+  every `unitTimes`/`unitEnds` and a generator's `made` (`strip_derived`).
+  The signature skips them at any depth, so derived times are never an
+  edit. Swift's `TextReveal` decodes the two time lists; `sync` and
+  `captions` are carried for it (`unread::carry_style_sync`, `carry_field`).
+  The FFI's open, which hands back the file's own text with the resolved
+  numbers copied in, copies these too (`musical::copy_derived`): without
+  it the app's model never saw a word time.
+- **Matching** (`promo-timeline/src/speech_effects.rs`). Units are the
+  caption's whitespace words, the rasterizer's word units. Each is
+  tokenized (a hyphenated unit may be several words) and matched to the
+  take by a local alignment: equal words +2, a skip or mismatch −1. It is
+  a separate small DP, not §2.5's mapper, which lives in promo-speech
+  above the timeline. A unit with no letters takes the next word's start;
+  a word the take does not say sits between its neighbours, by index.
+  Times are layer-local, rounded to 1 µs. `by: "character"` and
+  `"line"` take the time of the word their unit falls in, by position
+  (`unit_at`) — an approximation where the counts differ, since the
+  timeline does not know the wrap.
+- **Where it applies:** a caption layer's own `captionStyle.reveal`, or
+  its caption resource's (computed for the first layer that shows it; a
+  resource shown by several layers counts on the first). Not
+  `compositionSettings.subtitleReveal`: per-caption times cannot live
+  there. Inside compositions, only a layer's own style is synced.
+- **The engine** (`reveal::progress`): with `unitTimes`, a unit has
+  arrived once its time has passed. `shown` stays at least one (the
+  never-empty rule); `active` is the last arrived unit until its
+  `unitEnds`, else none. The staggered modes start each unit on its own
+  time and take `unitSeconds` (0.25 s when absent). `Progress` gained
+  `local`. Without `unitTimes` the old path is untouched: all 81
+  repository projects with a reveal render pixel-identical frames (six
+  samples each, `promo frames`) with the S6 release binary and this one.
+- **Captions** (`expand_captions`, project scope only, like the flash):
+  - Pieces are sentences, or phrases (every comma or semicolon); a
+    piece over `maxWords` (default 10) or `maxSeconds` (default 4) splits
+    at the comma nearest its middle, else at the gap nearest it.
+  - Each piece is a caption layer `speech-captions-<layer>-<k>` with the
+    script's slice, its style, and its reveal (default word highlight)
+    synced to its words. It runs from the first word − `lead` to the last
+    + `hold`, never past the next piece's start.
+  - It is tagged `generatedBy: captions:<layer>:<sig>`: stripped when
+    unedited, kept as the person's when edited (its piece is then left
+    alone).
+  - The expansion writes `made` (app form only). A save that finds fewer
+    of the made pieces adds the missing ones to `skip`
+    (`retire_deleted_captions`), so a delete sticks.
+- **Findings:** `RevealUnmatched` (a warning: how many matched, the span,
+  and a note under half) and `RevealSync` (no match at all: the reveal
+  walks at its own pace). explain's `reveal` units/matched block is not
+  built.
+- **AC1** (`promo-cli/tests/speech_captions.rs`): the ElevenLabs fixture
+  take, its record made by the settle's own mapper, rendered with
+  `promo frames` at 30 fps. Each word's first lit frame is read from the
+  red ink's centre, and all seven land on the frame of the provider's
+  start (within ±1 allowed). The pause after "Euclid." is dark.
+- **Tests:** promo-timeline `synced_reveal_maps_caption_units_to_take_words`,
+  `highlight_goes_out_between_words`, `reveal_without_unit_times_is_unchanged`
+  (the progress for unsynced rules equals the old formula),
+  `generated_captions_split_long_sentences`,
+  `edited_generated_caption_becomes_the_persons`,
+  `deleted_generated_caption_stays_deleted`,
+  `generated_captions_retime_with_a_new_take`, and
+  `a_synced_stagger_starts_each_unit_on_its_word`; promo-model
+  `synced_reveal_and_captions_stamp_50_and_save_no_derived_numbers`;
+  promo-cli `captions_reveal_each_word_within_one_frame` (AC1). The
+  Swift tests are `testUnitTimesSurviveTheAppForm` and
+  `testSyncedCaptionPreviewsAsItExports` in both suites, in a class of
+  their own: preview against still export, word by word. No case was
+  added to `DemoPreviewExportParityTests`, which walks the demos'
+  references, or to `CrossPathRenderTests`.
+
 **S8 — Generators on words, sequences per sentence, prominence.**
 - Build: speech `on` and `range` for pulse, shake and flash; sequence `until` and `per`; per-word `prominence` (a z-score over the take's words of RMS dB, voiced F0 range and duration ratio against the estimate, squashed to 0–1), computed by the aligner pass for every take, including provider and local ones, since it reads the audio.
 - Tests:
@@ -1244,6 +1319,67 @@ criteria.
   - **AC8** `one_slide_per_sentence`: 4 stills `per` sentence on the fixture take; each cut lands at sentence start − lead within ±1 frame (a rendered pixel oracle)
   - `per_with_fewer_layers_holds_the_last`
   - `quantized_sentence_cuts_land_on_beats`
+
+**Slice 8 as built** (2026-10-21):
+- **Generators** (`beat_effects.rs`). `on`/`every` and `range` stay free
+  JSON on `pulse`, `shake` and `flash`. A trigger with `words` or
+  `sentences` — or a range with `sentence` or `words` — is speech:
+  - `speech_times` reads the take through the scope's `Speech` (built
+    on the final numbers and handed in through `Context`). Each time is
+    mapped through the layer that plays the take and made a grid index,
+    so the beat code places it unchanged: decay and duration stay
+    seconds or beats.
+  - `words: [texts]` takes every occurrence; an index or text the take
+    lacks is a break.
+  - `emphasised` takes `top` (3) by prominence, a tie going to the
+    earlier word, or those `above` a value; with no prominence it is a
+    break that says how to get it.
+  - Ids are `speech-<layer>-pulse<n>-<k>-<role>` (and `…-shake…`), with
+    the tag `auto: "speech:<sig>"`. `is_generator_tag` replaces the
+    `beat:` checks in the strip, `carries_specs`, settle and explain. The
+    app's `isBeatGenerated` reads both tags.
+  - A flash keeps its `beat-flash-<n>` layer.
+- **Sequences.** `SequenceEntry` gains `layers`, `until`, `per`, `of`,
+  `lead`, `hold` and `quantize`; `layer` may be empty for a `per` entry.
+  - `until` takes seconds, a musical position or a speech position.
+    `Plan::place` now takes the round's `Speech`.
+  - A `per` entry expands before the plan (`expand_per`) into one entry
+    per layer. Slide k gets `until` sentence k+2 with `offset: -lead`;
+    the last gets the last sentence's end plus `hold` (default 0.5).
+    `quantize` is copied into each value. Either way, a slide count that
+    differs from the sentence count is `PerSlots` (a warning), and extra
+    layers keep their own numbers.
+  - A first member whose start is a speech value is not snapped to the
+    beat.
+  - A per member moved or resized by hand leaves the entry, both in the
+    fold and in `settle_edits`.
+- **Prominence** (`promo_media::words::prominence`): the z-scores over
+  the take's words of their loudness, their pitch range (semitones;
+  `frames` now records each voiced frame's autocorrelation pitch) and
+  their length against the estimate. These are averaged, squashed by a
+  logistic at 1.5 and rounded to 0.001.
+  - It is computed in `timing_for` (the CLI open and `promo words`) for
+    every record whose words lack it, provider and local ones included,
+    and the record is stored again. `align_file` and the golden are
+    unchanged.
+  - **Not built for the apps:** the app's FFI aligner writes no
+    prominence. In the app, `emphasised` works only on a record the CLI
+    has measured, and otherwise says why.
+- **Rung:** a speech trigger or range on any generator, and any `until`
+  or `per`, stamps 50 (`needs_speech_reader`). The open aligns when
+  `needs_speech_reader` holds.
+- **AC8** (`promo-cli/tests/speech_slides.rs`): four solid stills `per`
+  sentence of the synthetic take (eight sentences), rendered with `promo
+  frames` at 30 fps. The first frame of each colour is within ±1 frame
+  of its sentence's start less the lead; the last slide holds, and
+  validate says "4 slides for the 8 sentences". The open stored each
+  word's prominence.
+- **Tests:** promo-timeline `pulse_on_named_words`,
+  `flash_on_sentence_starts`, `emphasised_top_n_is_deterministic`,
+  `sequence_until_ends_on_a_word`, `per_with_fewer_layers_holds_the_last`
+  and `quantized_sentence_cuts_land_on_beats`; promo-media
+  `prominence_marks_the_stressed_word`; promo-cli `one_slide_per_sentence`
+  (AC8); the rung cases in promo-model `speech_file_stamps_50`.
 
 **S9 — The apps.**
 - Build: the FFI aligner and stores, `WordAligner.swift`, `missingWords` in the open and the export guard, then the §8.2 UI and the app's `promo_words` twin.

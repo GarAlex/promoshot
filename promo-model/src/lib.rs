@@ -307,6 +307,15 @@ mod schema_doc_tests {
             rise: Some(0.5),
             highlight_color_hex: Some("5B8CFF".into()),
             easing: Some(Easing::EaseInOut),
+            sync: Some(speech::RevealSync {
+                of: Some("R".into()),
+                words: Some([1, 4]),
+                sentence: None,
+                extra: serde_json::Map::new(),
+            }),
+            // Derived from `sync` on every resolve, the app form only.
+            unit_times: None,
+            unit_ends: None,
         }
     }
 
@@ -596,6 +605,19 @@ mod schema_doc_tests {
                 hold: Some(0.25),
                 extra: serde_json::Map::new(),
             }),
+            captions: Some(speech::SpeechCaptions {
+                by: Some("phrase".into()),
+                max_words: Some(8),
+                max_seconds: Some(3.5),
+                lead: Some(0.1),
+                hold: Some(0.25),
+                reveal: Some(full_reveal()),
+                style: None,
+                skip: Some(vec![2]),
+                // App form only: what the last expansion made.
+                made: None,
+                extra: serde_json::Map::new(),
+            }),
             after: Some(musical::After::Spec(musical::AfterSpec {
                 layer: "L0".into(),
                 offset: Some(musical::TimeValue::Musical(musical::MusicalTime::Beats(
@@ -843,14 +865,38 @@ mod schema_doc_tests {
                 start_time: Some(0.0),
                 extra: serde_json::Map::new(),
             }),
-            sequence: Some(vec![musical::SequenceEntry {
-                layer: "L".into(),
-                beats: Some(4.0),
-                bars: None,
-                seconds: None,
-                duration: None,
-                extra: serde_json::Map::new(),
-            }]),
+            sequence: Some(vec![
+                musical::SequenceEntry {
+                    layer: "L".into(),
+                    layers: None,
+                    until: Some(serde_json::json!({"sentence": 2, "of": "R"})),
+                    per: None,
+                    of: None,
+                    lead: None,
+                    hold: None,
+                    quantize: None,
+                    beats: Some(4.0),
+                    bars: None,
+                    seconds: None,
+                    duration: None,
+                    extra: serde_json::Map::new(),
+                },
+                musical::SequenceEntry {
+                    layer: String::new(),
+                    layers: Some(vec!["L1".into(), "L2".into()]),
+                    until: None,
+                    per: Some("sentence".into()),
+                    of: Some("R".into()),
+                    lead: Some(0.1),
+                    hold: Some(0.5),
+                    quantize: Some("beat".into()),
+                    beats: None,
+                    bars: None,
+                    seconds: None,
+                    duration: None,
+                    extra: serde_json::Map::new(),
+                },
+            ]),
             flash: Some(musical::OneOrMany::One(musical::Flash {
                 every: None,
                 on: Some(serde_json::json!("downbeat")),

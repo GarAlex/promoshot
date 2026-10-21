@@ -21,6 +21,9 @@ pub struct Progress {
     /// How long the whole walk lasts, in seconds — what an arrival time has
     /// to be measured against to become a fraction of it.
     pub total: f64,
+    /// The layer-local time it was read at — what a synced reveal's
+    /// `unitTimes` count against.
+    pub local: f64,
 }
 
 /// How far the reveal has got at `time`, for a caption of `units` units.
@@ -38,7 +41,11 @@ pub fn progress(reveal: &TextReveal, layer: &ProjectLayer, time: f64, units: usi
             active: None,
             fraction: 1.0,
             total: 0.0,
+            local: 0.0,
         };
+    }
+    if let Some(times) = reveal.unit_times.as_deref().filter(|t| !t.is_empty()) {
+        return synced(reveal, times, crate::layer_local_time(layer, time), units);
     }
     let (tenure_start, tenure_end) = crate::transition::tenure(layer, time);
     let tenure_len = tenure_end.map(|end| (end - tenure_start).max(0.0));
@@ -63,6 +70,54 @@ pub fn progress(reveal: &TextReveal, layer: &ProjectLayer, time: f64, units: usi
         active,
         fraction,
         total,
+        local: crate::layer_local_time(layer, time),
+    }
+}
+
+/// The time of unit `i` of `units` in a list of `times` made for another
+/// count (a character or line reveal walks finer or coarser units than the
+/// words the times are of): the word the unit falls in, by position.
+fn unit_at(times: &[f64], i: usize, units: usize) -> f64 {
+    if times.len() == units {
+        return times[i];
+    }
+    let k = (i * times.len()) / units.max(1);
+    times[k.min(times.len() - 1)]
+}
+
+/// A reveal on a take's words (docs/SPEECH-SYNC.md §7.1): a unit has
+/// arrived once its word is said; the active unit is the last arrived,
+/// while its word is still sounding — so a highlight goes out between
+/// words and at the end. At least one unit shows once the caption is on.
+fn synced(reveal: &TextReveal, times: &[f64], local: f64, units: usize) -> Progress {
+    let arrived = (0..units)
+        .filter(|&i| unit_at(times, i, units) <= local + 1e-9)
+        .count();
+    let ends = reveal
+        .unit_ends
+        .as_deref()
+        .filter(|e| e.len() == times.len());
+    let active = arrived.checked_sub(1).filter(|&last| {
+        let end = match ends {
+            Some(ends) => unit_at(ends, last, units),
+            None => {
+                if last + 1 < units {
+                    unit_at(times, last + 1, units)
+                } else {
+                    f64::INFINITY
+                }
+            }
+        };
+        local < end
+    });
+    let first = times[0];
+    let last = times[times.len() - 1];
+    Progress {
+        shown: arrived.clamp(1, units),
+        active,
+        fraction: arrived as f64 / units as f64,
+        total: (last - first).max(0.0),
+        local,
     }
 }
 
@@ -230,10 +285,22 @@ fn stagger_bands(
         0.0
     };
 
+    let times = reveal.unit_times.as_deref().filter(|t| !t.is_empty());
+    // On a take's words each unit starts arriving when its word is said,
+    // and takes `unitSeconds` (0.25 s when absent).
+    let own = reveal.unit_seconds.filter(|s| *s > 0.0).unwrap_or(0.25);
     let mut out = Vec::new();
     for (index, unit) in layout.units.iter().enumerate() {
-        let started = index as f64 * step;
-        let arrival = ((progress.fraction - started) / unit_span).clamp(0.0, 1.0);
+        let arrival = match times {
+            Some(times) => {
+                let at = unit_at(times, index, layout.units.len());
+                ((progress.local - at) / own).clamp(0.0, 1.0)
+            }
+            None => {
+                let started = index as f64 * step;
+                ((progress.fraction - started) / unit_span).clamp(0.0, 1.0)
+            }
+        };
         if arrival <= 0.0 {
             continue;
         }
@@ -453,6 +520,28 @@ mod tests {
         }
     }
 
+    /// On a take's words a staggered unit starts arriving when its word is
+    /// said and lands `unitSeconds` later — not on the walk's own spread.
+    #[test]
+    fn a_synced_stagger_starts_each_unit_on_its_word() {
+        let rule: TextReveal = serde_json::from_str(
+            r#"{"by":"word","mode":"fade","unitSeconds":0.4,"unitTimes":[0.5,2.0],"unitEnds":[1.0,2.5]}"#,
+        )
+        .expect("rule");
+        let l = layout(&[(0, 0.0, 50.0), (0, 60.0, 110.0)], 1);
+        let layer = caption(Some(4.0));
+        let at = |local: f64| bands(&l, progress(&rule, &layer, 2.0 + local, 2), &rule);
+        assert!(at(0.4).is_empty(), "nothing before the first word");
+        let mid = at(0.7);
+        assert_eq!(mid.len(), 1, "only the first word is arriving");
+        assert!((mid[0].effect.opacity - 0.5).abs() < 1e-9, "half way in");
+        assert_eq!(at(1.9).len(), 1, "the second waits for its word");
+        let both = at(2.3);
+        assert_eq!(both.len(), 2);
+        assert_eq!(both[0].effect.opacity, 1.0);
+        assert!((both[1].effect.opacity - 0.75).abs() < 1e-9);
+    }
+
     /// A wipe crops from the raster's left edge to the last arrived unit, so
     /// the plate travels with the text instead of the words appearing in mid
     /// air.
@@ -466,6 +555,7 @@ mod tests {
                 active: Some(0),
                 fraction: 0.5,
                 total: 1.0,
+                local: 0.0,
             },
             &wipe(),
         );
@@ -479,6 +569,7 @@ mod tests {
                 active: None,
                 fraction: 1.0,
                 total: 1.0,
+                local: 0.0,
             },
             &wipe(),
         );
@@ -491,6 +582,7 @@ mod tests {
                 active: None,
                 fraction: 0.0,
                 total: 1.0,
+                local: 0.0,
             },
             &wipe(),
         );
@@ -508,6 +600,7 @@ mod tests {
                 active: Some(1),
                 fraction: 0.6,
                 total: 1.0,
+                local: 0.0,
             },
             &wipe(),
         );
@@ -521,6 +614,7 @@ mod tests {
                 active: None,
                 fraction: 1.0,
                 total: 1.0,
+                local: 0.0,
             },
             &wipe(),
         );
@@ -540,6 +634,7 @@ mod tests {
                 active: Some(1),
                 fraction: 0.5,
                 total: 1.0,
+                local: 0.0,
             },
             &highlight(),
         );
@@ -566,6 +661,7 @@ mod tests {
                 active: Some(0),
                 fraction: 0.1,
                 total: 1.0,
+                local: 0.0,
             },
             &rule,
         );
@@ -589,6 +685,7 @@ mod tests {
                 active: Some(1),
                 fraction: 0.5,
                 total: 1.0,
+                local: 0.0,
             },
             &rule,
         );
@@ -610,6 +707,7 @@ mod tests {
                 active: None,
                 fraction: 1.0,
                 total: 1.0,
+                local: 0.0,
             },
             &rule,
         );
@@ -646,6 +744,7 @@ mod tests {
                 active: Some(0),
                 fraction: 0.4,
                 total: 1.0,
+                local: 0.0,
             },
             &wipe(),
         );
@@ -665,12 +764,14 @@ mod tests {
             active: Some(0),
             fraction: 0.4,
             total: 10.0,
+            local: 0.0,
         };
         let short = Progress {
             shown: 1,
             active: Some(0),
             fraction: 0.4,
             total: 2.0,
+            local: 0.0,
         };
 
         // One second is a TENTH of the ten-second walk and a HALF of the

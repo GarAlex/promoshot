@@ -145,10 +145,22 @@ pub fn timing_for(
 ) -> Result<Timed, String> {
     use promo_model::word_cache;
     let found = word_cache::lookup(project, &take.file, &take.script);
+    // Every record carries its words' prominence (§7.3), read from the
+    // audio once — whoever timed the take — and kept with the record.
+    let with_prominence = |mut timing: TakeTiming| -> TakeTiming {
+        if timing.words.iter().any(|w| w.prominence.is_none())
+            && add_prominence(&take.file, &mut timing).is_ok()
+        {
+            if let Ok(stored) = word_cache::store(project, &take.file, timing.clone()) {
+                return stored;
+            }
+        }
+        timing
+    };
     if let Some(found) = &found {
         if word_cache::usable(found, refresh, &take.id)? {
             return Ok(Timed {
-                timing: found.timing.clone(),
+                timing: with_prominence(found.timing.clone()),
                 from_cache: true,
                 stale: found.stale,
                 realigned: false,
@@ -158,12 +170,97 @@ pub fn timing_for(
     let fresh = align_file(&take.file, &take.script, options)?;
     let realigned = found.is_some();
     let timing = word_cache::store(project, &take.file, fresh.clone()).unwrap_or(fresh);
+    let timing = with_prominence(timing);
     Ok(Timed {
         timing,
         from_cache: false,
         stale: false,
         realigned,
     })
+}
+
+/// Each word's prominence (docs/SPEECH-SYNC.md §7.3), 0–1: a z-score over
+/// the take's words of three things read from the audio — the word's
+/// loudness (its frames' mean dB), its pitch range (semitones between its
+/// voiced frames' lowest and highest pitch) and how long it is against the
+/// estimate's length for it — averaged and squashed. A cue for
+/// generators, never a timing. `x` is mono at the aligner's rate.
+pub fn prominence(x: &[f64], timing: &TakeTiming) -> Vec<f64> {
+    let words = &timing.words;
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let f = frames(x);
+    let count = f.db.len();
+    let frame_of =
+        |t: f64| ((t * RATE / HOP as f64).max(0.0) as usize).min(count.saturating_sub(1));
+    let expected =
+        promo_model::estimate::estimate_words(&timing.script, timing.duration, None, 1.0);
+    let mut loud = Vec::new();
+    let mut range = Vec::new();
+    let mut length = Vec::new();
+    for (i, w) in words.iter().enumerate() {
+        let (a, b) = (
+            frame_of(w.start),
+            frame_of(w.end).max(frame_of(w.start) + 1).min(count),
+        );
+        let span = &f.db[a..b.max(a + 1).min(count)];
+        loud.push(span.iter().sum::<f64>() / span.len().max(1) as f64);
+        let pitches: Vec<f64> = f.pitch[a..b.max(a + 1).min(count)]
+            .iter()
+            .copied()
+            .filter(|p| *p > 0.0)
+            .collect();
+        range.push(
+            match (
+                pitches.iter().copied().fold(f64::INFINITY, f64::min),
+                pitches.iter().copied().fold(0.0f64, f64::max),
+            ) {
+                (lo, hi) if hi > 0.0 && lo.is_finite() => 12.0 * libm::log2(hi / lo),
+                _ => 0.0,
+            },
+        );
+        let said = (w.end - w.start).max(0.01);
+        let guess = expected
+            .words
+            .get(i)
+            .map(|e| (e.end - e.start).max(0.01))
+            .unwrap_or(said);
+        length.push(libm::log(said / guess));
+    }
+    let z = |v: &[f64]| -> Vec<f64> {
+        let n = v.len() as f64;
+        let mean = v.iter().sum::<f64>() / n;
+        let sd = (v.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>() / n).sqrt();
+        v.iter()
+            .map(|x| if sd > 1e-9 { (x - mean) / sd } else { 0.0 })
+            .collect()
+    };
+    let (zl, zr, zd) = (z(&loud), z(&range), z(&length));
+    (0..words.len())
+        .map(|i| {
+            let score = (zl[i] + zr[i] + zd[i]) / 3.0;
+            let p = 1.0 / (1.0 + libm::exp(-1.5 * score));
+            (p * 1000.0).round() / 1000.0
+        })
+        .collect()
+}
+
+/// [`prominence`] over a take's file, written onto its record's words.
+pub fn add_prominence(path: &std::path::Path, timing: &mut TakeTiming) -> Result<(), String> {
+    let pcm = crate::dsp::read_pcm(path)?;
+    let channels = pcm.channels.max(1);
+    let mono: Vec<f32> = pcm
+        .samples
+        .chunks_exact(channels)
+        .map(crate::dsp::mix)
+        .collect();
+    let x = crate::dsp::resample(&mono, pcm.rate, RATE);
+    let scores = prominence(&x, timing);
+    for (w, p) in timing.words.iter_mut().zip(scores) {
+        w.prominence = Some(p);
+    }
+    Ok(())
 }
 
 /// [`timing_for`]'s answer.
@@ -184,6 +281,8 @@ struct Frames {
     /// The envelope: dB smoothed over 30 ms.
     env: Vec<f64>,
     voiced: Vec<bool>,
+    /// The pitch of a voiced frame, Hz; 0 when unvoiced.
+    pitch: Vec<f64>,
     speech: Vec<bool>,
     /// The 10th percentile of `db`.
     floor: f64,
@@ -208,6 +307,7 @@ fn frames(x: &[f64]) -> Frames {
     let fft = crate::dsp::Fft::new(FFT);
     let mut db = Vec::with_capacity(count);
     let mut voiced = Vec::with_capacity(count);
+    let mut pitch = Vec::with_capacity(count);
     let (min_lag, max_lag) = ((RATE / 400.0) as usize, (RATE / 70.0) as usize);
     for t in 0..count {
         let start = t * HOP;
@@ -231,16 +331,23 @@ fn frames(x: &[f64]) -> Frames {
         fft.run(&mut re, &mut im);
         let zero = re[0];
         let mut peak = 0.0f64;
+        let mut best = 0usize;
         if zero > 1e-9 {
             for (lag, power) in re.iter().enumerate().take(max_lag + 1).skip(min_lag) {
                 // Unbias by the overlap the window leaves at this lag.
                 let r = power / zero * WIN as f64 / (WIN - lag) as f64;
                 if r > peak {
                     peak = r;
+                    best = lag;
                 }
             }
         }
         voiced.push(peak > 0.5);
+        pitch.push(if peak > 0.5 && best > 0 {
+            RATE / best as f64
+        } else {
+            0.0
+        });
     }
     let env: Vec<f64> = (0..count)
         .map(|t| {
@@ -302,6 +409,7 @@ fn frames(x: &[f64]) -> Frames {
         db,
         env,
         voiced,
+        pitch,
         speech,
         floor,
         nuclei,

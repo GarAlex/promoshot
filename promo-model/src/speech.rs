@@ -1109,8 +1109,64 @@ pub struct SpeechClock {
     pub extra: Map<String, Value>,
 }
 
+/// A caption reveal on a take's words: `{"of": "intro"}`, optionally pinned
+/// to `words` (1-based, inclusive) or a `sentence`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RevealSync {
+    /// The take: a resource id, or a layer that plays one. None: the
+    /// scope's speech clock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<[u32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentence: Option<u32>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// Captions made from a narration (docs/SPEECH-SYNC.md §7.2), on the
+/// layer that plays the take: one caption layer per sentence (or phrase),
+/// split when longer than `maxWords` or `maxSeconds`, each revealed on its
+/// words.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeechCaptions {
+    /// `sentence` (default) or `phrase` (split at every comma first).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_words: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_seconds: Option<f64>,
+    /// Seconds a caption appears before its first word (default 0.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<f64>,
+    /// Seconds it stays after its last word (default 0.25), never past the
+    /// next caption's start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hold: Option<f64>,
+    /// The reveal each caption carries; its `sync` is filled in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reveal: Option<crate::TextReveal>,
+    /// The caption style each carries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<crate::SubtitleStyle>,
+    /// Pieces a person deleted: not made again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip: Option<Vec<u32>>,
+    /// How many pieces the last expansion made — the app form only, so a
+    /// save can tell a deleted caption from one never made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub made: Option<u32>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
 /// Whether the project needs the speech reader (rung 50): a speech value a
-/// save keeps, or a `during`.
+/// save keeps, a `during`, a reveal `sync` or `captions` — an older reader
+/// would render a different film.
 pub fn needs_speech_reader(meta: &crate::ProjectMetadata) -> bool {
     let holds_speech = |specs: &Option<crate::musical::TimeSpecs>,
                         number: &dyn Fn(&str) -> Option<f64>| {
@@ -1119,17 +1175,81 @@ pub fn needs_speech_reader(meta: &crate::ProjectMetadata) -> bool {
             .flatten()
             .any(|(key, entry)| entry.speech().is_some() && entry.holds(number(key)))
     };
-    crate::nesting::all_layers(meta).iter().any(|layer| {
-        layer.during.is_some()
-            || holds_speech(&layer.time_specs, &|k| {
-                crate::musical::layer_number(layer, k)
-            })
-            || layer.keyframes.iter().any(|k| {
-                holds_speech(&k.time_specs, &|key| {
-                    crate::musical::keyframe_number(k, key)
+    let synced = |style: &Option<crate::SubtitleStyle>| {
+        style
+            .as_ref()
+            .and_then(|s| s.reveal.as_ref())
+            .is_some_and(|r| r.sync.is_some())
+    };
+    // A generator firing on words, a range of them, a sequence entry until
+    // one or per sentence.
+    let speech_value = |v: &Option<Value>| {
+        v.as_ref().and_then(Value::as_object).is_some_and(|o| {
+            o.contains_key("words") || o.contains_key("sentences") || o.contains_key("sentence")
+        })
+    };
+    let fires = |on: &Option<Value>, every: &Option<Value>, range: &Option<Value>| {
+        speech_value(on) || speech_value(every) || speech_value(range)
+    };
+    let list = |field: &Option<crate::musical::OneOrMany<crate::musical::Pulse>>| match field {
+        None => Vec::new(),
+        Some(crate::musical::OneOrMany::One(one)) => vec![one.clone()],
+        Some(crate::musical::OneOrMany::Many(many)) => many.clone(),
+    };
+    let shakes = |field: &Option<crate::musical::OneOrMany<crate::musical::Shake>>| match field {
+        None => Vec::new(),
+        Some(crate::musical::OneOrMany::One(one)) => vec![one.clone()],
+        Some(crate::musical::OneOrMany::Many(many)) => many.clone(),
+    };
+    let sequenced = |seq: &Option<Vec<crate::musical::SequenceEntry>>| {
+        seq.iter()
+            .flatten()
+            .any(|e| e.until.is_some() || e.per.is_some())
+    };
+    let flashes = match &meta.composition_settings.flash {
+        None => Vec::new(),
+        Some(crate::musical::OneOrMany::One(one)) => vec![one.clone()],
+        Some(crate::musical::OneOrMany::Many(many)) => many.clone(),
+    };
+    flashes.iter().any(|f| fires(&f.on, &f.every, &f.range))
+        || sequenced(&meta.composition_settings.sequence)
+        || meta
+            .resources
+            .iter()
+            .flatten()
+            .filter_map(|r| r.composition.as_ref())
+            .any(|c| sequenced(&c.sequence))
+        || crate::nesting::all_layers(meta).iter().any(|layer| {
+            list(&layer.pulse)
+                .iter()
+                .any(|p| fires(&p.on, &p.every, &p.range))
+                || shakes(&layer.shake)
+                    .iter()
+                    .any(|p| fires(&p.on, &p.every, &p.range))
+        })
+        || meta
+            .composition_settings
+            .subtitle_reveal
+            .as_ref()
+            .is_some_and(|r| r.sync.is_some())
+        || meta
+            .resources
+            .iter()
+            .flatten()
+            .any(|r| synced(&r.caption_style))
+        || crate::nesting::all_layers(meta).iter().any(|layer| {
+            layer.during.is_some()
+                || layer.captions.is_some()
+                || synced(&layer.caption_style)
+                || holds_speech(&layer.time_specs, &|k| {
+                    crate::musical::layer_number(layer, k)
                 })
-            })
-    })
+                || layer.keyframes.iter().any(|k| {
+                    holds_speech(&k.time_specs, &|key| {
+                        crate::musical::keyframe_number(k, key)
+                    })
+                })
+        })
 }
 
 #[cfg(test)]

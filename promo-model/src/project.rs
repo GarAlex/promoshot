@@ -1623,6 +1623,19 @@ pub struct TextReveal {
     /// Shapes the walk across units, not each unit's own arrival.
     #[serde(default, skip_serializing_if = "is_none")]
     pub easing: Option<Easing>,
+    /// Arrive on a take's words (docs/SPEECH-SYNC.md §7.1): the caption's
+    /// units are matched to the take's words, and each arrives when its
+    /// word is said.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub sync: Option<crate::speech::RevealSync>,
+    /// Derived from `sync`, the app form only (a save drops it): each
+    /// caption word's arrival, in layer-local seconds.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub unit_times: Option<Vec<f64>>,
+    /// With `unit_times`: when each word's sound ends — what a highlight
+    /// goes out at.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub unit_ends: Option<Vec<f64>>,
 }
 
 fn reveal_unit_default() -> RevealUnit {
@@ -3585,6 +3598,10 @@ pub struct ProjectLayer {
     /// together (docs/SPEECH-SYNC.md §6.2).
     #[serde(default, skip_serializing_if = "is_none")]
     pub during: Option<crate::speech::During>,
+    /// On a layer that plays a take: captions made from what it says, one
+    /// per sentence or phrase, revealed on its words (§7.2).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub captions: Option<crate::speech::SpeechCaptions>,
     /// Start when another layer ends (by id), optionally offset.
     #[serde(default, skip_serializing_if = "is_none")]
     pub after: Option<crate::musical::After>,

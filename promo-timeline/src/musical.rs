@@ -33,6 +33,7 @@ use promo_model::musical::{
 use promo_model::{
     ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, ProjectResourceKind,
 };
+use serde_json::Value;
 
 use crate::attachment::AttachmentProblem;
 use crate::beats::Grid;
@@ -342,6 +343,27 @@ pub enum TimingProblem {
         first: u32,
         last: u32,
     },
+    /// A synced caption reveal whose words the take does not all say: the
+    /// rest arrive between their neighbours.
+    RevealUnmatched {
+        layer: String,
+        matched: usize,
+        units: usize,
+        span: Option<(u32, u32)>,
+    },
+    /// A synced caption reveal that cannot be matched at all: it walks at
+    /// its own pace.
+    RevealSync {
+        layer: String,
+        why: String,
+    },
+    /// A `per` sentence entry whose layers and the take's sentences differ
+    /// in number: the last slide holds the rest, or the extras get no slot.
+    PerSlots {
+        take: String,
+        layers: usize,
+        sentences: usize,
+    },
     /// A visual edge inside a word of a take playing then.
     CutMidWord {
         layer: String,
@@ -590,6 +612,48 @@ impl std::fmt::Display for TimingProblem {
                 "\"{take}\" is longer than its layer \"{layer}\" — words {first}–{last} are \
                  never heard"
             ),
+            Self::RevealUnmatched {
+                layer,
+                matched,
+                units,
+                span,
+            } => {
+                write!(
+                    f,
+                    "caption \"{layer}\": the take says {matched} of its {units} words"
+                )?;
+                if let Some((a, b)) = span {
+                    write!(f, " (matched to words {a}–{b})")?;
+                }
+                if *matched * 2 < *units {
+                    write!(f, " — under half: check its text and the reveal's sync")?;
+                }
+                write!(f, "; the others arrive between their neighbours")
+            }
+            Self::PerSlots {
+                take,
+                layers,
+                sentences,
+            } => {
+                if layers < sentences {
+                    write!(
+                        f,
+                        "the sequence has {layers} slides for the {sentences} sentences of \
+                         \"{take}\" — the last slide holds through the rest"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "the sequence has {layers} slides for the {sentences} sentences of \
+                         \"{take}\" — the last {} get no slot",
+                        layers - sentences
+                    )
+                }
+            }
+            Self::RevealSync { layer, why } => write!(
+                f,
+                "caption \"{layer}\": its reveal cannot sync — {why}; it walks at its own pace"
+            ),
             Self::CutMidWord {
                 layer,
                 at,
@@ -662,14 +726,33 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
     // bounds it.
     let clock = meta.composition_settings.beat_clock.clone();
     let rounds = meta.layers.as_ref().map_or(0, Vec::len) + 1;
-    let plan = Plan::new(
-        meta.layers.as_deref().unwrap_or(&[]),
-        meta.composition_settings.sequence.as_deref(),
-    );
+    let speech_clock = meta.composition_settings.speech_clock.clone();
+    let spoken = crate::speech_time::uses_speech(meta.layers.as_deref().unwrap_or(&[]))
+        || crate::speech_time::sequence_uses_speech(meta.composition_settings.sequence.as_deref());
+    let plan = {
+        let sequence = meta.composition_settings.sequence.as_deref();
+        let (expanded, per_problems) = match sequence {
+            Some(entries) if entries.iter().any(|e| e.per.is_some()) => {
+                let speech = crate::speech_time::Speech::new(
+                    speech_clock.as_ref(),
+                    meta.layers.as_deref().unwrap_or(&[]),
+                    &resources,
+                    grids,
+                );
+                let (list, problems) = crate::speech_time::expand_per(entries, &speech);
+                (Some(list), problems)
+            }
+            _ => (None, Vec::new()),
+        };
+        let mut plan = Plan::new(
+            meta.layers.as_deref().unwrap_or(&[]),
+            expanded.as_deref().or(sequence),
+        );
+        plan.problems.extend(per_problems);
+        plan
+    };
     let mut attachment_problems = Vec::new();
     let mut late = Vec::new();
-    let speech_clock = meta.composition_settings.speech_clock.clone();
-    let spoken = crate::speech_time::uses_speech(meta.layers.as_deref().unwrap_or(&[]));
     let original = spoken.then(|| meta.layers.clone().unwrap_or_default());
     let mut settled = !spoken;
     let mut previous = Vec::new();
@@ -687,13 +770,14 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         );
         let layers = meta.layers.as_deref_mut().unwrap_or(&mut []);
         positions_and_lengths(layers, &scope);
-        if spoken {
+        let speech = spoken.then(|| {
+            crate::speech_time::Speech::new(speech_clock.as_ref(), layers, &resources, grids)
+        });
+        if let Some(speech) = speech.as_ref() {
             said = Said::default();
-            let speech =
-                crate::speech_time::Speech::new(speech_clock.as_ref(), layers, &resources, grids);
             said.problems = crate::speech_time::speech_pass(
                 layers,
-                &speech,
+                speech,
                 &scope,
                 &plan.during,
                 "layers",
@@ -701,7 +785,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
                 &mut said.used,
             );
         }
-        late = plan.place(layers, &scope);
+        late = plan.place(layers, &scope, speech.as_ref());
         // A layer the sequence or `after` places is no attachment's: its
         // start anchor sits out the attachment pass, and comes back.
         let held = plan.hold_start_anchors(meta.layers.as_deref_mut().unwrap_or(&mut []));
@@ -752,6 +836,13 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             .as_ref()
             .and_then(|id| grids.sections.get(id))
             .map(Vec::as_slice);
+        // The takes, on the final numbers, for generators firing on words.
+        let speech = crate::speech_time::Speech::new(
+            speech_clock.as_ref(),
+            meta.layers.as_deref().unwrap_or(&[]),
+            &resources,
+            grids,
+        );
         expand_scope(
             meta.layers.as_deref_mut().unwrap_or(&mut []),
             &scope,
@@ -760,6 +851,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             end,
             &settings,
             &resources,
+            Some(&speech),
             &mut report,
         );
         let flash = crate::beat_effects::Context {
@@ -767,10 +859,33 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             fps,
             sections,
             end,
+            speech: Some(&speech),
         };
         report
             .problems
             .extend(crate::beat_effects::expand_flash(meta, &flash));
+        // Captions made from a narration, on the final numbers.
+        report
+            .problems
+            .extend(crate::speech_effects::expand_captions(meta, grids));
+        // Every synced caption reveal, on its take's words.
+        if crate::speech_effects::any_sync(
+            meta.layers.as_deref().unwrap_or(&[]),
+            meta.resources.as_deref().unwrap_or(&[]),
+        ) {
+            let takes = meta.resources.clone().unwrap_or_default();
+            let mut resources = meta.resources.take();
+            crate::speech_effects::sync_reveals(
+                meta.layers.as_deref_mut().unwrap_or(&mut []),
+                resources.as_deref_mut().unwrap_or(&mut []),
+                &takes,
+                meta.composition_settings.speech_clock.as_ref(),
+                grids,
+                &mut report.problems,
+                &mut report.missing_words,
+            );
+            meta.resources = resources;
+        }
         let timeline = crate::composition_duration(meta);
         findings(
             meta.layers.as_deref().unwrap_or(&[]),
@@ -803,10 +918,29 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             continue;
         };
         let clock = composition.beat_clock.clone();
-        let plan = Plan::new(&composition.layers, composition.sequence.as_deref());
-        let mut late = Vec::new();
         let speech_clock = composition.speech_clock.clone();
-        let spoken = crate::speech_time::uses_speech(&composition.layers);
+        let spoken = crate::speech_time::uses_speech(&composition.layers)
+            || crate::speech_time::sequence_uses_speech(composition.sequence.as_deref());
+        let plan = {
+            let sequence = composition.sequence.as_deref();
+            let (expanded, per_problems) = match sequence {
+                Some(entries) if entries.iter().any(|e| e.per.is_some()) => {
+                    let speech = crate::speech_time::Speech::new(
+                        speech_clock.as_ref(),
+                        &composition.layers,
+                        &resources,
+                        grids,
+                    );
+                    let (list, problems) = crate::speech_time::expand_per(entries, &speech);
+                    (Some(list), problems)
+                }
+                _ => (None, Vec::new()),
+            };
+            let mut plan = Plan::new(&composition.layers, expanded.as_deref().or(sequence));
+            plan.problems.extend(per_problems);
+            plan
+        };
+        let mut late = Vec::new();
         let original = spoken.then(|| composition.layers.clone());
         let mut settled = !spoken;
         let mut previous = Vec::new();
@@ -818,17 +952,19 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             }
             let scope = Scope::new(clock.as_ref(), &composition.layers, &resources, grids);
             positions_and_lengths(&mut composition.layers, &scope);
-            if spoken {
-                said = Said::default();
-                let speech = crate::speech_time::Speech::new(
+            let speech = spoken.then(|| {
+                crate::speech_time::Speech::new(
                     speech_clock.as_ref(),
                     &composition.layers,
                     &resources,
                     grids,
-                );
+                )
+            });
+            if let Some(speech) = speech.as_ref() {
+                said = Said::default();
                 said.problems = crate::speech_time::speech_pass(
                     &mut composition.layers,
-                    &speech,
+                    speech,
                     &scope,
                     &plan.during,
                     &format!("resources[{id}].composition.layers"),
@@ -836,7 +972,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
                     &mut said.used,
                 );
             }
-            late = plan.place(&mut composition.layers, &scope);
+            late = plan.place(&mut composition.layers, &scope, speech.as_ref());
             if numbers(&composition.layers) == before {
                 settled = true;
                 break;
@@ -866,6 +1002,12 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             .iter()
             .filter_map(|l| l.duration.map(|d| l.start_time + d))
             .fold(0.0, f64::max);
+        let speech = crate::speech_time::Speech::new(
+            composition.speech_clock.as_ref(),
+            &composition.layers,
+            &resources,
+            grids,
+        );
         expand_scope(
             &mut composition.layers,
             &scope,
@@ -874,6 +1016,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             end,
             &settings,
             &resources,
+            Some(&speech),
             &mut report,
         );
         findings(
@@ -885,6 +1028,15 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             end,
             &format!("resources[{id}]"),
             &mut report,
+        );
+        crate::speech_effects::sync_reveals(
+            &mut composition.layers,
+            &mut [],
+            &resources,
+            composition.speech_clock.as_ref(),
+            grids,
+            &mut report.problems,
+            &mut report.missing_words,
         );
         if spoken {
             said.report(
@@ -1182,6 +1334,7 @@ fn expand_scope(
     end: f64,
     settings: &promo_model::CompositionSettings,
     resources: &[ProjectResource],
+    speech: Option<&crate::speech_time::Speech>,
     report: &mut TimingReport,
 ) {
     for layer in layers {
@@ -1190,13 +1343,14 @@ fn expand_scope(
             fps,
             sections,
             end,
+            speech,
         };
         report.problems.extend(crate::beat_effects::expand_layer(
             layer, &ctx, settings, resources,
         ));
         if let Some(members) = layer.members.as_mut() {
             expand_scope(
-                members, scope, fps, sections, end, settings, resources, report,
+                members, scope, fps, sections, end, settings, resources, speech, report,
             );
         }
     }
@@ -1278,6 +1432,14 @@ fn settle_edits(layers: &mut [ProjectLayer], sequence: &mut Option<Vec<SequenceE
     let Some(entries) = sequence.as_mut() else {
         return;
     };
+    // A `per` entry's member moved or resized by hand leaves it.
+    for (id, _) in &detaches {
+        for entry in entries.iter_mut() {
+            if let Some(layers) = entry.layers.as_mut() {
+                layers.retain(|l| l != id);
+            }
+        }
+    }
     for (id, seconds) in detaches {
         match seconds {
             None => entries.retain(|e| e.layer != id),
@@ -1285,6 +1447,13 @@ fn settle_edits(layers: &mut [ProjectLayer], sequence: &mut Option<Vec<SequenceE
                 for entry in entries.iter_mut().filter(|e| e.layer == id) {
                     *entry = SequenceEntry {
                         layer: id.clone(),
+                        layers: None,
+                        until: None,
+                        per: None,
+                        of: None,
+                        lead: None,
+                        hold: None,
+                        quantize: None,
                         beats: None,
                         bars: None,
                         seconds: Some(seconds),
@@ -1831,7 +2000,12 @@ impl Plan {
 
     /// Places every sequenced and `after` layer on the numbers as they
     /// stand; what cannot be placed this round is returned.
-    fn place(&self, layers: &mut [ProjectLayer], scope: &Scope) -> Vec<TimingProblem> {
+    fn place(
+        &self,
+        layers: &mut [ProjectLayer],
+        scope: &Scope,
+        speech: Option<&crate::speech_time::Speech>,
+    ) -> Vec<TimingProblem> {
         let mut late = Vec::new();
         // The sequence: back to back, each for its length.
         let mut previous: Option<(f64, f64, String)> = None;
@@ -1846,7 +2020,12 @@ impl Plan {
                 // The first member's own start opens the sequence: a beat
                 // as written, or a number snapped to the nearest beat when
                 // a clock counts.
-                if spec_of(&layer.time_specs, "startTime").is_some() || !clocked {
+                let spoken_start = layer
+                    .time_specs
+                    .as_ref()
+                    .and_then(|m| m.get("startTime"))
+                    .is_some_and(|e| e.speech().is_some());
+                if spec_of(&layer.time_specs, "startTime").is_some() || spoken_start || !clocked {
                     (layer.start_time, start_index(layer, &grid, scope))
                 } else {
                     let mut first = grid.snap(musical::SnapUnit::Beat, layer.start_time);
@@ -1879,7 +2058,56 @@ impl Plan {
                 }
                 Some((end, grid.index_at(end)))
             };
-            let length = if let Some(n) = entry.beats {
+            let length = if let Some(until) = &entry.until {
+                // Ends at a position: seconds, a beat, or a word.
+                let end = match until {
+                    Value::Number(n) => n.as_f64().ok_or_else(|| "not a number".to_string()),
+                    Value::Object(object) if promo_model::speech::is_speech_object(object) => {
+                        match (promo_model::speech::SpeechTime::from_object(object), speech) {
+                            (Ok(value), Some(speech)) => speech
+                                .resolve(
+                                    &*layer,
+                                    &value,
+                                    promo_model::speech::SpeechEdge::Start,
+                                    &grid,
+                                )
+                                .map(|r| r.seconds)
+                                .map_err(|f| {
+                                    late.push(f.problem(
+                                        &name,
+                                        "sequence.until",
+                                        until.to_string(),
+                                    ));
+                                    String::new()
+                                }),
+                            (Err(why), _) => Err(why),
+                            (_, None) => Err("no take to count on here".into()),
+                        }
+                    }
+                    Value::Object(object) => {
+                        MusicalTime::from_object(object).map(|m| grid.time_at(grid.position(&m)))
+                    }
+                    other => Err(format!("{other} is no position")),
+                };
+                match end {
+                    Ok(end) if end > start => Some((end, grid.index_at(end))),
+                    Ok(_) => {
+                        late.push(TimingProblem::EndsBeforeItStarts {
+                            layer: name.clone(),
+                            spec: until.to_string(),
+                        });
+                        None
+                    }
+                    Err(why) if why.is_empty() => None,
+                    Err(why) => {
+                        late.push(TimingProblem::Generator {
+                            layer: name.clone(),
+                            why: format!("sequence until {until}: {why}"),
+                        });
+                        None
+                    }
+                }
+            } else if let Some(n) = entry.beats {
                 stated(n)
             } else if let Some(n) = entry.bars {
                 stated(grid.bars(n))

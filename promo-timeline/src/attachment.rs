@@ -926,6 +926,7 @@ mod tests {
             beat_clock: None,
             speech_clock: None,
             during: None,
+            captions: None,
             after: None,
             pulse: None,
             shake: None,

@@ -26,6 +26,7 @@ pub mod report;
 pub mod reveal;
 pub mod route;
 pub mod speech;
+pub(crate) mod speech_effects;
 pub mod speech_time;
 pub mod sprite;
 pub mod transition;

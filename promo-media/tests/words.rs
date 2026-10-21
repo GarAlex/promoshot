@@ -221,3 +221,65 @@ fn aligner_finds_the_provider_fixtures_words() {
         assert!(*e <= 0.020, "{} off by {e}", w.text);
     }
 }
+
+/// A word said louder, longer and with a wider pitch move than its
+/// neighbours is the take's most prominent; the scores are 0–1 and the same
+/// every time (S8's `emphasised`).
+#[test]
+fn prominence_marks_the_stressed_word() {
+    let rate = promo_media::words::RATE;
+    let script = "one two three four five six.";
+    let mut x: Vec<f64> = Vec::new();
+    let mut words = Vec::new();
+    let mut t = 0.2;
+    x.resize((0.2 * rate) as usize, 0.0);
+    for i in 0..6 {
+        let stressed = i == 3;
+        let length = if stressed { 0.45 } else { 0.25 };
+        let amplitude = if stressed { 0.6 } else { 0.2 };
+        let n = (length * rate) as usize;
+        let mut phase = 0.0f64;
+        for k in 0..n {
+            let f = if stressed {
+                180.0 + 120.0 * k as f64 / n as f64
+            } else {
+                200.0
+            };
+            phase += 2.0 * std::f64::consts::PI * f / rate;
+            // A voice-like buzz: a few harmonics, an attack and release.
+            let env = (k as f64 / (0.02 * rate))
+                .min(1.0)
+                .min((n - k) as f64 / (0.02 * rate));
+            x.push(
+                amplitude
+                    * env
+                    * (phase.sin() + 0.5 * (2.0 * phase).sin() + 0.25 * (3.0 * phase).sin()),
+            );
+        }
+        words.push((t, t + length));
+        t += length + 0.12;
+        x.resize(x.len() + (0.12 * rate) as usize, 0.0);
+    }
+    let tokens = promo_model::speech::tokenize(script);
+    let mut timing = promo_model::estimate::estimate_words(script, t + 0.2, None, 1.0);
+    for (w, (a, b)) in timing.words.iter_mut().zip(&words) {
+        w.start = *a;
+        w.end = *b;
+    }
+    assert_eq!(tokens.words.len(), 6);
+    let scores = promo_media::words::prominence(&x, &timing);
+    assert_eq!(scores.len(), 6);
+    assert!(scores.iter().all(|p| (0.0..=1.0).contains(p)), "{scores:?}");
+    let top = scores
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.total_cmp(b.1))
+        .map(|(i, _)| i);
+    assert_eq!(top, Some(3), "{scores:?}");
+    assert!(scores[3] > 0.8, "{scores:?}");
+    assert_eq!(
+        scores,
+        promo_media::words::prominence(&x, &timing),
+        "deterministic"
+    );
+}
