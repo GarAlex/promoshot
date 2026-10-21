@@ -158,6 +158,7 @@ fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
 fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, APP_RESOURCE_KEYS, mode);
     carry_field(&mut into.provenance, &from.provenance, mode);
+    carry_field(&mut into.transcript, &from.transcript, mode);
     carry_field(&mut into.generated_by, &from.generated_by, mode);
     if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
         carry_field(&mut composition.beat_clock, &old.beat_clock, mode);

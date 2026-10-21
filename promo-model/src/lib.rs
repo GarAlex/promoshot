@@ -6,11 +6,14 @@
 pub mod beat_cache;
 pub mod geometry;
 pub mod inventory;
+pub mod media_cache;
 pub mod musical;
 pub mod nesting;
 pub mod project;
+pub mod speech;
 pub mod unread;
 pub mod wire;
+pub mod word_cache;
 
 pub use geometry::{Point, Rect, Size};
 pub use inventory::{
@@ -747,6 +750,8 @@ mod schema_doc_tests {
                 extra: serde_json::Map::new(),
             }),
             bpm_hint: Some(128.0),
+            // Speech-sync fields join the sink with their docs (S10).
+            transcript: None,
             generated_by: None,
             extra: serde_json::Map::new(),
         }

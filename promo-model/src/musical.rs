@@ -1099,13 +1099,7 @@ pub struct BeatAnalysis {
 
 /// The file an analysis is of: its name, the first 32 hex digits of the
 /// SHA-256 of its bytes (the cache key), its size.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct BeatSource {
-    pub filename: String,
-    pub sha256: String,
-    pub bytes: u64,
-}
+pub type BeatSource = crate::media_cache::MediaSource;
 
 /// A stretch of bars with one character.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]

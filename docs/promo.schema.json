@@ -3548,6 +3548,12 @@
             }
           ]
         },
+        "transcript": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "trimEnd": {
           "format": "double",
           "type": [

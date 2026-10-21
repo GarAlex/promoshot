@@ -21,3 +21,5 @@ ttf-parser = "0.21"
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
+# The speech tokenizer's units are held to the reveal's over the repo's captions.
+serde_json.workspace = true

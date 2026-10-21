@@ -4122,6 +4122,12 @@ pub struct ProjectResource {
     /// Where the resource came from (tool, licence, prompt, cost).
     #[serde(skip_serializing_if = "is_none")]
     pub provenance: Option<crate::musical::Provenance>,
+    /// What a recording says — an imported voice-over, or a video with a
+    /// voice track — the script its words are timed against
+    /// (docs/SPEECH-SYNC.md §1.3). A narration's `speech.text` wins over
+    /// it: that is what the take was bought from.
+    #[serde(skip_serializing_if = "is_none")]
+    pub transcript: Option<String>,
     /// Set on a resource a beat generator made — see
     /// `ProjectLayer::generated_by`.
     #[serde(skip_serializing_if = "is_none")]
@@ -4215,6 +4221,8 @@ struct ProjectResourceWire {
     #[serde(default)]
     provenance: Option<crate::musical::Provenance>,
     #[serde(default)]
+    transcript: Option<String>,
+    #[serde(default)]
     generated_by: Option<String>,
     /// Unknown keys captured on decode; the conversion below carries them
     /// into the model so encode preserves them.
@@ -4292,6 +4300,7 @@ impl<'de> Deserialize<'de> for ProjectResource {
             beat_grid: w.beat_grid,
             bpm_hint: w.bpm_hint,
             provenance: w.provenance,
+            transcript: w.transcript,
             generated_by: w.generated_by,
             extra: w.extra,
         })
@@ -4444,6 +4453,7 @@ impl ProjectResource {
             beat_grid: None,
             bpm_hint: None,
             provenance: None,
+            transcript: None,
             generated_by: None,
             extra: Default::default(),
         }
@@ -4781,6 +4791,7 @@ impl ProjectMetadata {
             .any(|l| l.auto_zoom.is_some() || l.keyframes.iter().any(|k| k.needs_rung_48()))
             || resources.iter().any(|r| r.activity.is_some())
             || crate::musical::carries_ignorable_beat_fields(self)
+            || crate::speech::carries_ignorable_speech_fields(self)
         {
             return crate::LOSSLESS_READER;
         }

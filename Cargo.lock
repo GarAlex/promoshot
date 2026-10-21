@@ -2549,6 +2549,7 @@ dependencies = [
  "promo-gpu",
  "promo-media",
  "promo-model",
+ "promo-speech",
  "promo-timeline",
  "serde_json",
 ]
@@ -2625,6 +2626,7 @@ version = "0.3.15"
 dependencies = [
  "keyring",
  "local-tts-core",
+ "promo-model",
  "serde_json",
  "sha2 0.10.9",
  "ureq 2.12.1",
@@ -2637,6 +2639,7 @@ dependencies = [
  "cosmic-text",
  "image",
  "promo-model",
+ "serde_json",
  "ttf-parser 0.21.1",
 ]
 

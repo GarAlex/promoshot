@@ -300,14 +300,26 @@ fn pause_for(c: char) -> f64 {
     }
 }
 
-/// Syllables and pauses in `text`, read as `language` (or by its script).
-fn count(text: &str, language: Option<&str>) -> (f64, f64) {
+/// Whether `text` in `language` counts as English, and the script it is
+/// mostly in — decided once for a whole script.
+fn reading(text: &str, language: Option<&str>) -> (bool, Script) {
     let script = dominant_script(text);
-    let lang = base_language(language);
-    let english = match lang.as_deref() {
+    let english = match base_language(language).as_deref() {
         Some(code) => code == "en",
         None => script == Script::Latin,
     };
+    (english, script)
+}
+
+/// Syllables and pauses in `text`, read as `language` (or by its script).
+fn count(text: &str, language: Option<&str>) -> (f64, f64) {
+    let (english, script) = reading(text, language);
+    count_as(text, english, script)
+}
+
+/// [`count`] with the reading decided — so a word counts the way the
+/// whole script around it does.
+fn count_as(text: &str, english: bool, script: Script) -> (f64, f64) {
     let mut syllables = 0.0;
     let mut word = String::new();
     let mut digits = String::new();
@@ -440,6 +452,135 @@ pub fn estimate(text: &str, language: Option<&str>, calibration: f64) -> Estimat
         syllables,
         pauses,
         calibration,
+    }
+}
+
+/// How long one word of a script takes, in the estimate's own terms.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WordWeight {
+    /// Syllables (moras) the word takes to say — numbers spelled out.
+    pub syllables: f64,
+    /// Pauses inside the word ("e.g", "3.5" have none; a word with an
+    /// inner dash may), seconds.
+    pub pause_within: f64,
+    /// The pause punctuation asks for after the word, before the next one,
+    /// seconds; 0 after the last word.
+    pub pause_after: f64,
+}
+
+/// The estimate per word: the same syllable counts and punctuation pauses
+/// the length estimate uses ([`estimate`]), made per word of the one
+/// tokenizer (`promo_model::speech::tokenize`). Their sum is the whole
+/// script's count.
+pub fn word_weights(
+    script: &promo_model::speech::Script,
+    text: &str,
+    language: Option<&str>,
+) -> Vec<WordWeight> {
+    let (english, dominant) = reading(text, language);
+    let chars: Vec<char> = text.chars().collect();
+    script
+        .words
+        .iter()
+        .enumerate()
+        .map(|(i, word)| {
+            let (syllables, pause_within) = count_as(&word.text, english, dominant);
+            let pause_after = match script.words.get(i + 1) {
+                None => 0.0,
+                Some(next) => {
+                    let mut in_tag = false;
+                    let mut pause = 0.0;
+                    for &c in &chars[word.chars[1] as usize..next.chars[0] as usize] {
+                        match c {
+                            '<' if script.ssml => in_tag = true,
+                            '>' if in_tag => in_tag = false,
+                            _ if in_tag => {}
+                            _ if script_of(c).is_none() && !c.is_ascii_digit() => {
+                                pause += pause_for(c)
+                            }
+                            _ => {}
+                        }
+                    }
+                    pause
+                }
+            };
+            WordWeight {
+                syllables,
+                pause_within,
+                pause_after,
+            }
+        })
+        .collect()
+}
+
+/// Word times for a take nothing has timed (docs/SPEECH-SYNC.md §5): a
+/// placeholder, or a take before its timing exists. `PADDING / 2` of
+/// lead-in and as much at the end; the rest shared between the words in
+/// proportion to their syllables, the punctuation pauses kept and scaled
+/// by the same factor — so the times fill `duration` exactly. A duration
+/// that is not a positive number is the estimate's own length (scaled by
+/// `calibration`). Source `estimate`, flagged `estimated`, confidence 0.3;
+/// the `audio` source is filled in when the record is stored.
+pub fn estimate_words(
+    text: &str,
+    duration: f64,
+    language: Option<&str>,
+    calibration: f64,
+) -> promo_model::speech::TakeTiming {
+    use promo_model::speech::{round_us, Word};
+    let script = promo_model::speech::tokenize(text);
+    let weights = word_weights(&script, text, language);
+    let rate = default_rate(language, dominant_script(text));
+    let duration = if duration.is_finite() && duration > 0.0 {
+        duration
+    } else {
+        estimate(text, language, calibration).seconds
+    };
+    let lead = (PADDING / 2.0).min(duration / 4.0);
+    let spans: Vec<f64> = weights
+        .iter()
+        .map(|w| w.syllables.max(0.5) / rate + w.pause_within)
+        .collect();
+    let raw: f64 = spans.iter().sum::<f64>() + weights.iter().map(|w| w.pause_after).sum::<f64>();
+    let scale = if raw > 0.0 {
+        (duration - 2.0 * lead).max(0.0) / raw
+    } else {
+        0.0
+    };
+    let mut t = lead;
+    let words: Vec<Word> = script
+        .words
+        .iter()
+        .zip(spans.iter().zip(&weights))
+        .map(|(word, (span, weight))| {
+            let start = t;
+            t += span * scale;
+            let end = t;
+            t += weight.pause_after * scale;
+            Word {
+                text: word.text.clone(),
+                start: round_us(start),
+                end: round_us(end),
+                chars: word.chars,
+                confidence: None,
+                interpolated: false,
+                prominence: None,
+            }
+        })
+        .collect();
+    promo_model::speech::TakeTiming {
+        timing_version: promo_model::speech::TIMING_VERSION,
+        audio: Default::default(),
+        script: text.to_string(),
+        script_hash: promo_model::speech::script_hash(text),
+        duration: round_us(duration),
+        source: promo_model::speech::TimingSource::Estimate,
+        estimated: true,
+        confidence: 0.3,
+        sentences: promo_model::speech::sentences_of(&script, &words),
+        words,
+        aligner_version: Some(promo_model::speech::ESTIMATE_VERSION),
+        extra: Default::default(),
     }
 }
 
@@ -624,6 +765,70 @@ mod tests {
         assert_eq!(voice_language("en-US-Neural2-F").as_deref(), Some("en-US"));
         assert_eq!(voice_language("ja-JP-Wavenet-B").as_deref(), Some("ja-JP"));
         assert_eq!(voice_language("alloy"), None);
+    }
+
+    /// The words' weights add up to the whole script's count, so an
+    /// estimate's word times and its length never disagree.
+    #[test]
+    fn estimate_words_sum_matches_estimate() {
+        for text in [
+            "Meet Euclid. Geometry, proved step by step.",
+            "Built for 1,250 worksheets — e.g. 3.5 times faster, 50% cheaper!",
+            "The camera never moved — the viewport did.\n\nThen: a new line.",
+            "Приложение стои'т три доллара.",
+        ] {
+            let script = promo_model::speech::tokenize(text);
+            let weights = word_weights(&script, text, None);
+            let (syllables, pauses) = count(text, None);
+            let sum: f64 = weights.iter().map(|w| w.syllables).sum();
+            let paused: f64 = weights.iter().map(|w| w.pause_after + w.pause_within).sum();
+            assert!(
+                (sum - syllables).abs() < 1e-9,
+                "{text}: {sum} vs {syllables}"
+            );
+            assert!(
+                (paused - pauses).abs() < 1e-9,
+                "{text}: {paused} vs {pauses}"
+            );
+            // With no duration, the record runs the estimate's own length.
+            let timing = estimate_words(text, f64::NAN, None, 1.0);
+            let length = estimate(text, None, 1.0).seconds;
+            assert!((timing.duration - length).abs() < 1e-6);
+        }
+    }
+
+    /// A placeholder's words fill its file exactly: 0.2 s in, 0.2 s out,
+    /// in order, every word a positive span, the pauses where the
+    /// punctuation is.
+    #[test]
+    fn estimate_words_fill_the_placeholder_exactly() {
+        let text = "Meet Euclid. Geometry, proved step by step.";
+        let duration = silent_mp3_seconds(estimate(text, None, 1.0).seconds);
+        let timing = estimate_words(text, duration, None, 1.0);
+        assert!(timing.estimated);
+        assert_eq!(timing.source, promo_model::speech::TimingSource::Estimate);
+        assert_eq!(timing.confidence, 0.3);
+        assert_eq!(timing.words.len(), 7);
+        assert_eq!(timing.words[0].start, 0.2);
+        let last = timing.words.last().unwrap();
+        assert!(
+            (last.end - (duration - 0.2)).abs() < 2e-6,
+            "{} vs {duration}",
+            last.end
+        );
+        for pair in timing.words.windows(2) {
+            assert!(pair[0].start < pair[0].end && pair[0].end <= pair[1].start);
+        }
+        // The sentence break is longer than the comma, which is longer
+        // than a plain word gap (none).
+        let gap = |i: usize| timing.words[i + 1].start - timing.words[i].end;
+        assert!(gap(1) > gap(2) && gap(2) > gap(3) && gap(3).abs() < 1e-6);
+        assert_eq!(timing.sentences.len(), 2);
+        assert_eq!(timing.sentences[1].start, timing.words[2].start);
+        // A take too short for its padding still lays out in order.
+        let tiny = estimate_words(text, 0.3, None, 1.0);
+        assert!(tiny.words.last().unwrap().end <= 0.3 + 1e-9);
+        assert!(estimate_words("", 1.0, None, 1.0).words.is_empty());
     }
 
     /// The silent take is whole 36 ms frames of 144 bytes, MPEG-1 Layer III.

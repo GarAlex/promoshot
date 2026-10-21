@@ -41,6 +41,12 @@ USAGE:
         analysis is cached in Resources/.beats/ and is the answer from then
         on; --refresh analyses again. On a project --bpm-hint is kept on the
         song (its bpmHint) for every later measure; --clear-hint drops it
+    promo words   <audio-file | project-dir> [--resource <id>]
+                  [--script <text> | --script-file <f>] [--json]
+        when each word of a take is said, and its sentences: the record in
+        the project's Resources/.words/ (provider timing, alignment), else a
+        syllable estimate over the take's length. On an audio file, the
+        script is given with --script; the answer is an estimate
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -143,6 +149,11 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     // Beats take a song or a project, with options of their own.
     if command == "beats" {
         println!("{}", beats(rest)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    // Word timing takes a take or a project, with options of its own.
+    if command == "words" {
+        println!("{}", words(rest)?);
         return Ok(ExitCode::SUCCESS);
     }
     // Media senses take a FILE and a verb, not a project.
@@ -608,6 +619,196 @@ fn beats(args: &[String]) -> Result<String, String> {
             None => "",
         }
     ))
+}
+
+/// `promo words`: a take's word timing — the project's record, else an
+/// estimate over the take's length (docs/SPEECH-SYNC.md §9; slice 1 has
+/// no aligner, so an audio file is estimated).
+fn words(args: &[String]) -> Result<String, String> {
+    use promo_model::speech::TakeTiming;
+    let mut path: Option<PathBuf> = None;
+    let mut resource: Option<String> = None;
+    let mut script: Option<String> = None;
+    let mut json = false;
+    let mut i = 0;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let value = || {
+            args.get(i + 1)
+                .cloned()
+                .ok_or_else(|| format!("{flag}: expected a value"))
+        };
+        match flag {
+            "--json" => json = true,
+            "--resource" => {
+                resource = Some(value()?);
+                i += 1;
+            }
+            "--script" => {
+                script = Some(value()?);
+                i += 1;
+            }
+            "--script-file" => {
+                let file = value()?;
+                script = Some(std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?);
+                i += 1;
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("words: unknown option `{other}`\n\n{USAGE}"))
+            }
+            other => path = Some(PathBuf::from(other)),
+        }
+        i += 1;
+    }
+    let path =
+        path.ok_or_else(|| format!("words: expected an audio file or a project\n\n{USAGE}"))?;
+    let words_err = |e: String| format!("words: {e}");
+    let probe = |file: &Path| -> Result<f64, String> {
+        promo_media::probe_stream(file)
+            .map(|info| info.duration_s)
+            .map_err(|e| format!("words: {}: {e}", file.display()))
+    };
+    // (record, fromCache, stale, notes)
+    let (timing, cached, stale, notes): (TakeTiming, Option<bool>, bool, Vec<String>) =
+        if path.is_dir() {
+            if script.is_some() {
+                return Err(
+                    "words: a project's take says its own script (speech.text or transcript) \
+                     — --script is for an audio file"
+                        .into(),
+                );
+            }
+            let text = std::fs::read_to_string(path.join("metadata.json"))
+                .map_err(|e| format!("{}: {e}", path.join("metadata.json").display()))?;
+            let meta = promo_model::ProjectMetadata::from_json(&text).map_err(|e| e.to_string())?;
+            let take = promo_model::word_cache::choose_take(&meta, resource.as_deref())
+                .map_err(words_err)?;
+            let said = promo_model::speech::take_script(take).unwrap_or_default();
+            let file = promo_model::beat_cache::song_file(&path, take);
+            let fixes = promo_model::speech::word_fixes(take).map_err(words_err)?;
+            let found = file
+                .is_file()
+                .then(|| promo_model::word_cache::lookup(&path, &file, &said))
+                .flatten();
+            let (mut timing, cached, stale) = match found {
+                Some(found) => (found.timing, true, found.stale),
+                None => {
+                    let length = take
+                        .duration
+                        .filter(|d| *d > 0.0)
+                        .map(Ok)
+                        .unwrap_or_else(|| probe(&file))?;
+                    let voice = take
+                        .extra
+                        .get("speech")
+                        .and_then(|s| s.get("voiceID"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("");
+                    let language = promo_speech::voice_language(voice);
+                    let mut timing =
+                        promo_speech::estimate_words(&said, length, language.as_deref(), 1.0);
+                    if let Ok(source) = promo_model::media_cache::source_of(&file) {
+                        timing.audio = source;
+                    }
+                    (timing, false, false)
+                }
+            };
+            let notes = promo_model::speech::apply_fixes(&mut timing, &fixes);
+            (timing, Some(cached), stale, notes)
+        } else {
+            let said = script.ok_or_else(|| {
+                "words: an audio file needs its script: --script <text> or --script-file <f>"
+                    .to_string()
+            })?;
+            let mut timing = promo_speech::estimate_words(&said, probe(&path)?, None, 1.0);
+            timing.audio = promo_model::media_cache::source_of(&path).map_err(words_err)?;
+            (timing, None, false, Vec::new())
+        };
+    if json {
+        let mut value = promo_model::word_cache::words_answer(&timing, cached, stale)?;
+        if !notes.is_empty() {
+            value["fixNotes"] = serde_json::json!(notes);
+        }
+        return Ok(value.to_string());
+    }
+    Ok(words_table(&timing, cached, stale, &notes))
+}
+
+/// `promo words`' table: a line of what timed the take, the words 1-based
+/// (`#  start  end  conf  word`), then the sentences.
+fn words_table(
+    timing: &promo_model::speech::TakeTiming,
+    cached: Option<bool>,
+    stale: bool,
+    notes: &[String],
+) -> String {
+    let how = match &timing.source {
+        promo_model::speech::TimingSource::Estimate => {
+            "estimated from the script's syllables".to_string()
+        }
+        promo_model::speech::TimingSource::Provider(p) => format!("timed by {p}"),
+        promo_model::speech::TimingSource::Local(v) => format!("timed by the local voice {v}"),
+        promo_model::speech::TimingSource::Aligned => "aligned to the audio".to_string(),
+        promo_model::speech::TimingSource::Transcribed(p) => format!("transcribed by {p}"),
+        promo_model::speech::TimingSource::Other(s) => s.clone(),
+    };
+    let whence = match cached {
+        Some(true) => " (from the project's cache)",
+        Some(false) => " (no word timing stored for this take yet — an estimate, not stored)",
+        None => "",
+    };
+    let mut out = vec![format!(
+        "{how}, confidence {:.2} — {} words, {} sentences over {:.3} s{whence}",
+        timing.confidence,
+        timing.words.len(),
+        timing.sentences.len(),
+        timing.duration
+    )];
+    if stale {
+        out.push(
+            "the take's text changed since it was voiced — these times follow the old take"
+                .to_string(),
+        );
+    }
+    out.extend(notes.iter().cloned());
+    out.push(format!(
+        "{:>4}  {:>8}  {:>8}  {:>4}  word",
+        "#", "start", "end", "conf"
+    ));
+    for (i, w) in timing.words.iter().enumerate() {
+        let conf = w.confidence.map(|c| format!("{c:.2}")).unwrap_or_default();
+        out.push(format!(
+            "{:>4}  {:>8.3}  {:>8.3}  {:>4}  {}{}",
+            i + 1,
+            w.start,
+            w.end,
+            conf,
+            w.text,
+            if w.interpolated {
+                "  (interpolated)"
+            } else {
+                ""
+            }
+        ));
+    }
+    out.push("sentences".to_string());
+    let chars: Vec<char> = timing.script.chars().collect();
+    for (i, s) in timing.sentences.iter().enumerate() {
+        let text: String = chars
+            .get(s.chars[0] as usize..(s.chars[1] as usize).min(chars.len()))
+            .map(|c| c.iter().collect())
+            .unwrap_or_default();
+        out.push(format!(
+            "{:>4}  {:.3}–{:.3}  words {}–{}  {}",
+            i + 1,
+            s.start,
+            s.end,
+            s.words[0] + 1,
+            s.words[1] + 1,
+            text.split_whitespace().collect::<Vec<_>>().join(" ")
+        ));
+    }
+    out.join("\n")
 }
 
 #[derive(Default)]

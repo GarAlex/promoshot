@@ -1,0 +1,947 @@
+# Speech timing and speech sync: implementation design
+
+Status: slice 1 built (2026-10-21); where building changed the design,
+the "Slice N as built" notes under §10 say what and why. Modelled on
+`docs/BEAT-SYNC.md`, including its "as built" notes, and reusing its
+machinery wherever it fits. Owner requirements: one word-timing format for
+every take whatever produced it; time fields that point into a take, the way
+musical values point into a beat grid; existing files unchanged.
+
+The rule stays the beat-sync rule, which `promo-timeline/src/attachment.rs`
+first stated: **resolve once, write numbers, and leave nothing for a renderer
+to interpret.** A value like "word 12 of the intro" is a spec a person edits.
+`startTime`, `duration` and the other fields stay plain `f64` answers. The
+engine never learns that a word exists. It learns only that a caption has
+per-unit arrival times (§7.1), which are plain numbers too.
+
+---
+
+## 0. What exists today (the starting point)
+
+- **`promo-speech`** buys takes:
+  - `settle_except` walks the resources whose `speech.text` says something. The receipt is `renderedHash` = sha256(provider|voice|text), plus a lexicon hash for local voices.
+  - `placehold` writes a silent MP3 of `estimate::estimate` length, sets `speech.placeholder: true`, and leaves no receipt.
+  - `synthesize_with_key` posts to OpenAI `/v1/audio/speech`, ElevenLabs `/v1/text-to-speech/{voice}` and Google `v1/text:synthesize`. None of them asks for timing.
+  - `local::synthesize` runs local-tts and returns WAV bytes only.
+- **The apps:**
+  - They synthesize through the same client over the FFI (`promo_speech_*` job API, core-private `promo-ffi/src/speech.rs`) and write placeholders through `promo_speech_placeholder_write`.
+  - The FFI links `promo-speech` with `default-features = false`, so **the apps have no local voices**. A local take is always made headless, and the app only opens it.
+  - The Swift `SpeechSynthesizer.generate` measures the duration with AVFoundation, and that is all it learns about a take.
+- **Caption reveal** (`promo-timeline/src/reveal.rs`) is a uniform walk. `TextReveal::total_seconds` spreads N units over `seconds`, `secondsPer`·N or the layer's tenure.
+  - A word unit is a whitespace-separated run of the caption's text (`promo-text` `reveal_layout`, `RevealBy::Word`), so a punctuation-only token such as "—" is a unit of its own.
+  - Nothing knows when a word is actually said.
+- **The local engines** (`/Users/alex/src/tts`, remote `https://github.com/GarAlex/local-tts.git`). PromoShot pins tag `v0.6.0` (23ccd8e) in `promo-speech/Cargo.toml`; the cargo checkouts are under `~/.cargo/git/checkouts/local-tts-b719b0f9f09eb0be/`. Both PromoShot models have duration predictors. I read the ONNX graphs of the installed packages in `~/src/tts/voices`, with a protobuf walk and no onnx module:
+
+  | package | graph outputs | per-token durations |
+  |---|---|---|
+  | `kitten-nano-en` (`kitten_tts_nano_v0_8.onnx`) | `waveform`, `duration` | **already an output**; `compact_english.rs` reads only `out[0]` |
+  | `kokoro-en-q8` (and `kokoro-en`, `kokoro-en-q4`) | `waveform` only | computed inside the graph as `/encoder/Clip_output_0` (Round, then Clip ≥ 1, then the `CumSum` that expands frames); not exposed |
+  | `inflect-nano-en` (`duration.onnx`) | `m_p_exp`, `logs_p_exp`, `y_mask` (already expanded) | not exposed (out of scope, §3.4) |
+
+---
+
+## 1. The word-timing format (one format for every take)
+
+### 1.1 The record
+
+`promo-model/src/speech.rs` (new) holds the wire types, so the timeline and
+`promo-author` can read them without `promo-media`. The record is the same in
+the cache file, in CLI `--json` and in MCP:
+
+```json
+{ "timingVersion": 1,
+  "audio":  {"filename": "narration-intro.mp3", "sha256": "…32 hex…", "bytes": 48213},
+  "script": "Meet Euclid. Geometry, proved step by step.",
+  "scriptHash": "9c1e04aa",
+  "duration": 3.912,
+  "source": "provider:elevenlabs",
+  "estimated": false,
+  "confidence": 0.98,
+  "words": [
+    {"text": "Meet",   "start": 0.104, "end": 0.341, "chars": [0, 4]},
+    {"text": "Euclid", "start": 0.362, "end": 0.903, "chars": [5, 11]},
+    {"text": "Geometry", "start": 1.390, "end": 1.948, "chars": [13, 21], "confidence": 0.9}
+  ],
+  "sentences": [ {"start": 0.104, "end": 0.903, "words": [0, 1], "chars": [0, 12]},
+                 {"start": 1.390, "end": 3.701, "words": [2, 6], "chars": [13, 43]} ] }
+```
+
+**Fields**
+- `source` is one of:
+  - `provider:elevenlabs` or `provider:google`: the provider's own timing
+  - `local:<package>/<speaker>`: the model's duration predictor
+  - `aligned`: offline forced alignment (§4)
+  - `transcribed:openai` or `transcribed:elevenlabs`: opt-in provider transcription (§4.6)
+  - `estimate`: syllable estimate (§5)
+- `estimated: true` only for `estimate`. It is a separate flag so that a reader never parses `source` to learn whether it may trust the times.
+- `confidence` is 0–1 for the take as a whole. A word's own `confidence` is written only where it differs from the take's (aligned takes, and words that were interpolated).
+- `words[i].text` is the script's token with its outer punctuation removed (§1.2). `chars` is `[start, end)` in **Unicode scalar indices into `script`**: the unit ElevenLabs' `characters` array uses and Swift's `unicodeScalars` view counts. Times are in the take's **own source seconds**, rounded to 1 µs, as in beats.
+- `words[i].interpolated: true` marks a script word the source never voiced on its own. A provider may say "$49" as four words, and a word may get no match (§2.5). Its times are shared out within its neighbours' gap.
+- `sentences[i].words` is `[first, last]` inclusive, as word indices.
+- `prominence` (optional, 0–1 per word) is computed from the audio for every source (S8, §8.2). It is a cue for generators and never a timing.
+
+**Units and numbering.** On the wire, a word index is **1-based**, matching `{"beat": 1}`. In the record, `words` is a plain array (0-based in code); the CLI's tables and the labels print 1-based.
+
+### 1.2 Words and sentences from a script, one tokenizer
+
+`promo_model::speech::tokenize(script) -> Script { words, sentences }` is the
+only tokenizer. Providers, the aligner, the estimator, the resolver and the
+reveal mapping all go through it.
+
+- **Words** are maximal runs of non-whitespace, the same units `promo-text` reveals by word. Leading and trailing punctuation (`"“”‘’«»()[]{}.,;:!?…—–-`) is stripped into the token's margins. Inner apostrophes and hyphens stay ("don't", "step-by-step").
+- **A token with no letter or digit left** ("—", "&") is no word. A caption unit made of one takes its neighbour's time (§7.1).
+- **SSML scripts** (Google, text starting with `<speak`): words are tokenized from text nodes only. Tags are skipped, and `chars` index into the raw SSML string.
+- **Sentences** end at `.`, `!`, `?` or `…` followed by whitespace or the end, or at a blank line. This is the boundary rule `local-tts` `paragraph::chunks` uses, plus an abbreviation list ("Dr.", "Mr.", "e.g.", "i.e.", "vs.", "etc."). A decimal never ends a sentence, because the rule requires whitespace after the point.
+- **Scripts with no spaces** (CJK, Thai): v1 makes each Han, kana or Thai cluster a word. Their reveal is by character, so a caption still maps. Validate notes the coarser sync (§9).
+
+### 1.3 Where it is stored: an authoritative cache keyed by audio, not the resource
+
+**Decision:** the record lives in `<project>/Resources/.words/<audio32>-<script8>.json`.
+- `audio32` is the first 32 hex digits of SHA-256 of the audio file's bytes. This is `beat_cache::source_of` with its (path, size, mtime) memo, generalised into `promo_model::media_cache`.
+- `script8` is 8 hex digits of SHA-256 of the script text exactly as written.
+- `promo_model::word_cache::{cache_path, lookup, store, takes_needing_timing}` is the only code that knows the naming, as `beat_cache` is for beats.
+
+Why not inline in `speech`:
+- **Size.** It is derived data, about 60 bytes a word: 25 KB for a three-minute voice-over, in a `metadata.json` that every save rewrites and Swift decodes.
+- **Irreproducibility.** Provider timing cannot be recomputed, so it must be stored the moment the take is bought, next to the bytes it describes, even before the document is written (§3.1).
+- **Keying.** Keyed by content, the record follows the take through renames, library moves and duplicate projects. A re-synthesised take is new bytes, so it gets a new key, and every dependent time re-times on the next resolve. That is the mechanism of "editing the script re-times everything".
+- **The script half of the key.** Two silent placeholders of the same length are byte-identical. A recording re-aligned to a corrected script is the same audio with different words. So the script is part of the key.
+
+**Lookup** for a resource, given its audio and its current script text:
+1. `<audio32>-<script8>`, an exact match: used.
+2. Otherwise, exactly one record for that audio under another script: the take is **stale**. The text was edited and no take was bought (no key, or not yet). The old record is used, because it describes what the take actually says, and validate warns that the take is stale (§9). Several stale records: the newest by `timingVersion`, then by file mtime.
+3. Nothing: the take is in `missingWords`. On open, the CLI aligns it (§4.5). The app runs `WordAligner` (§8.1). Meanwhile resolution uses an estimate (§6.4).
+
+**Authority.**
+- Once a `provider:*`, `local:*` or `transcribed:*` record exists, it is never replaced except by an explicit `promo words --refresh` (which can only re-align) or by a new take.
+- `aligned` and `estimate` records carry `alignerVersion`. A record from an older aligner is re-aligned on open, the precedent BEAT-SYNC's tracker-version notes set ("an older tracker's cached answer is measured again"), because alignment is offline, deterministic and free. validate notes "re-aligned with aligner 2" once.
+
+**Hand corrections.**
+- `speech.wordFixes` on the resource: `[{"word": 12, "start": 4.38}, {"word": 13, "end": 5.02}]`, 1-based, in source seconds. Applied over the record at resolve time.
+- It is ignorable (rung 48), and it is the only timing data in `metadata.json`.
+- Fixes name the script they were made for (`"scriptHash"`). A fix for another script is ignored, and validate says so.
+
+**Recordings with no `speech`.** An imported voice-over (an audio resource, or a video resource with a voice track) states what it says in a new resource field, `transcript: "…"`. That is the script the aligner uses. It is ignorable (rung 48).
+- It is not `speech.text`: `promo-speech::script()` defaults a missing provider to OpenAI, and settle would try to buy a take over the recording.
+- A resource with both: `speech.text` wins, because it is what the take was bought from.
+
+### 1.4 Rust shape
+
+```rust
+pub struct TakeTiming { pub timing_version: u32, pub audio: MediaSource, pub script: String,
+    pub script_hash: String, pub duration: f64, pub source: TimingSource, pub estimated: bool,
+    pub confidence: f64, pub words: Vec<Word>, pub sentences: Vec<Sentence>,
+    pub aligner_version: Option<u32>, #[serde(flatten)] pub extra: Map<String, Value> }
+pub struct Word { pub text: String, pub start: f64, pub end: f64, pub chars: [u32; 2],
+    pub confidence: Option<f64>, pub interpolated: bool, pub prominence: Option<f64> }
+pub struct SpokenWord { pub text: String, pub start: f64, pub end: f64,
+    pub chars: Option<[u32; 2]> }   // what a source hands back, before §2.5
+```
+
+---
+
+## 2. Where timing comes from, per provider
+
+`promo-speech` gains a module, `timing.rs`. Its `Synth` trait gains a method
+with a default, so every existing fake keeps compiling:
+
+```rust
+pub struct Take { pub audio: Vec<u8>, pub spoken: Option<Spoken> }
+pub struct Spoken { pub words: Vec<SpokenWord>, pub source: TimingSource, pub against: SentText }
+pub trait Synth {
+    fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String>;
+    fn synthesize_timed(&self, provider: &str, voice: &str, text: &str) -> Result<Take, String> {
+        self.synthesize(provider, voice, text).map(|audio| Take { audio, spoken: None })
+    }
+}
+```
+
+`synthesize_with_key_timed(provider, voice, text, key) -> Take` is the client.
+`synthesize_with_key` becomes `…_timed(..).audio`, so the bytes the apps get
+are unchanged.
+
+### 2.1 Stress spellings and offsets
+
+Every provider is sent `marking_stress(text)`. That conversion maps an
+apostrophe to U+0301 one for one, and a capital vowel to lowercase plus
+U+0301, one char to two. `stress::marking_stress_mapped(text) -> (String,
+Vec<u32>)` returns, for each sent char, the script char it came from. The
+existing function becomes `.0` of it, and a test holds the two equal over the
+stress vectors. Provider char offsets are mapped back through this table
+before §2.5 runs.
+
+### 2.2 ElevenLabs: `with-timestamps`
+
+**Request:**
+- `POST https://api.elevenlabs.io/v1/text-to-speech/{voice}/with-timestamps?output_format=mp3_44100_128`
+- The same headers and body as today (`{"text", "model_id": "eleven_multilingual_v2"}`).
+
+**Response:** JSON, not bytes:
+```json
+{ "audio_base64": "…", "alignment": { "characters": [...],
+  "character_start_times_seconds": [...], "character_end_times_seconds": [...] },
+  "normalized_alignment": { … } }
+```
+- The audio comes from the existing `base64_decode`.
+- **`alignment`, not `normalized_alignment`.** `alignment` is over the characters we sent, so it maps straight back to script offsets. `normalized_alignment` is over ElevenLabs' own text normalization.
+- The answer is about 1.35× the MP3's size. That is acceptable at narration lengths.
+
+**Characters to words:**
+1. Concatenate `characters` and check it equals the sent text.
+   - If it does not (ElevenLabs has dropped or merged characters), run a char-level DP (Levenshtein with backpointers) to map each returned char to a sent char.
+2. Map through §2.1 to script chars.
+3. For each script word, the start is that of the first char inside `chars`, and the end is that of the last non-space char.
+
+The result is `source: "provider:elevenlabs"`, with confidence 1.0, or 0.9 when the DP was needed.
+
+The ElevenLabs path is still "UNVERIFIED against a live key", as
+`SpeechSynthesis.swift` says. S3 proves it through the Xcode-run app's MCP
+(`speech-tests-through-the-xcode-run-app`).
+
+### 2.3 Google: `v1beta1` with `<mark>` before each word
+
+**Request:**
+- `POST https://texttospeech.googleapis.com/v1beta1/text:synthesize`
+- The same voice and `audioConfig` as today, plus `"enableTimePointing": ["SSML_MARK"]`.
+- The input is always SSML. `google_input` stays the untimed form, and `google_ssml_marked` is new:
+  - Plain text: `<speak>` + for each token, its leading margin + `<mark name="w{k}"/>` + XML-escaped word + margin … + `</speak>`, where `k` is the script word index. Whitespace and newlines are kept as written.
+  - A script that is already SSML: marks go into text nodes only. A word inside `<say-as>`, `<sub>` or `<phoneme>` gets one mark before the element (a mark inside them is invalid). Words in one such element share it, and their times are interpolated.
+- **Response:** `{"audioContent", "timepoints": [{"markName": "w3", "timeSeconds": 0.812}], …}`.
+- **Times:**
+  - A word's start is its mark's time.
+  - Its end is the next mark's time, pulled back to the end of voiced energy before it. A pause, a comma or a sentence break sits between marks. The pull-back uses the aligner's VAD (§4.2) on the decoded take, limited to the gap.
+  - The last word ends at the end of voiced energy.
+- The result is `source: "provider:google"`, confidence 0.95.
+
+**Which voices** (decided by name, in `google_supports_marks(voice)`):
+
+| class (the third name segment) | SSML and marks | what we do |
+|---|---|---|
+| `Standard`, `Wavenet`, `Neural2`, `News`, `Polyglot`, `Studio` | yes | the v1beta1 marked request |
+| `Chirp3-HD`, `Chirp-HD`, `Journey`, anything unknown | no SSML, or marks unsupported | today's v1 plain request, then align (§4) |
+| bare names (Gemini, Vertex-only) | no | unchanged; already refused with a key |
+
+The memory note recommends `en-US-Chirp3-HD-<Name>`, so the popular voice gets
+offline alignment. That is acceptable: the aligner does best on clean TTS
+(§4.7).
+
+**Runtime guards:**
+- Fewer timepoints than marks: use the audio, discard the marks, align, and say so in the report line.
+- A 400 that names SSML or timepoints: retry once with the plain v1 request. A refused request is not billed.
+- To verify in S3: whether `<mark>` tags count toward billed characters. If they do, a mark costs about 14 characters a word, and the `promo_speak check` cost line says so.
+
+### 2.4 OpenAI: no timing, so alignment
+
+`/v1/audio/speech` (`gpt-4o-mini-tts`) returns audio only. Its takes get
+`aligned` timing (§4) right after the bytes are written, in the same settle
+step. The opt-in transcription in §4.6 is the paid upgrade.
+
+### 2.5 Spoken words to script words (one mapper for every source)
+
+`timing::attach(script: &Script, spoken: &[SpokenWord]) -> Vec<Word>` takes
+what a source said and returns the script's words. It is used by local takes
+(the engine reports normalized words: "$49.99" becomes "forty nine dollars
+ninety nine cents"), by transcriptions, and by any provider answer whose chars
+did not map.
+
+- **The alignment:** a monotonic DP of script tokens against spoken tokens.
+  - Moves: match or substitute (1:1); one script token to k spoken tokens (1:k, k ≤ 8: numbers, money, dates, acronyms spelled out); deletion (a script token nothing said); insertion (a spoken word not in the script).
+  - Costs: 0 for an exact match after lowercasing and NFKD with accents stripped; 0.2 for a 1:k merge whose script token holds a digit, a currency sign, `%` or capitals; 0.5 for edit distance ≤ 1/3 of the length; otherwise 1 for a substitution, a deletion or an insertion.
+  - Ties go to the lowest index.
+- **Times:** a 1:k word spans its first to its last spoken word. A deleted word gets `interpolated: true` within its neighbours' gap, with confidence 0.3.
+- **When it is a failure:** if over 25% of words are deleted or inserted, the result is a mismatch (the audio does not say this script). It is stored with confidence ≤ 0.3, and validate warns (§9).
+
+---
+
+## 3. The local-tts change (repo `/Users/alex/src/tts`, release v0.7.0)
+
+### 3.1 The API
+
+The change is additive. `SynthesisRequest` and `Synthesizer` are unchanged:
+adding a field to the request struct would break every struct literal that
+builds one, including `promo-speech/src/local.rs`. New, in
+`crates/tts-core/src/lib.rs`:
+
+```rust
+/// One spoken word of the text as the engine read it — normalized words
+/// ("forty", "nine", "dollars"), not the caller's spelling.
+pub struct SpokenWord { pub text: String, pub start: f64, pub end: f64 }
+pub struct TimedAudio { pub audio: Audio, pub words: Vec<SpokenWord>,
+                        /// Seconds per duration unit the model predicted in.
+                        pub frame_seconds: f64 }
+pub trait TimedSynthesizer: Synthesizer {
+    fn synthesize_timed(&mut self, request: &SynthesisRequest<'_>) -> Result<TimedAudio, Self::Error>;
+}
+```
+
+`Kokoro` and `CompactEnglish` with `Kitten` implement it. `CompactEnglish`
+with `Inflect` returns `Err("timing not supported for Inflect")`; PromoShot
+then aligns (§3.4).
+
+**Promise:** the waveform from `synthesize_timed` is the same bytes as from
+`synthesize` for the same request. Tests pin this (§3.5).
+
+### 3.2 What changes inside
+
+1. **`english.rs`: phoneme spans.**
+   - `phonemize_impl` already pushes each word's phones inside `flush`, starting at `let start = out.len()`. It records `PhonemeWord { spoken: word.clone(), range: start..out.len() }` there.
+   - A new `phonemize_american_spans` / `phonemize_ipa_current_spans` returns `(String, Vec<PhonemeWord>)`. The existing functions call it and drop the spans.
+   - The `connected_us` rewrite happens inside the same `start` window, so a span still covers its word. For `ipa()`'s vowel expansion (A becomes eɪ…), the map is applied span by span.
+2. **`paragraph.rs`:** `chunks_with_offsets(text, limit) -> Vec<(String, usize)>` returns each chunk with its char offset in the input, after the trim. `chunks` delegates to it.
+3. **`kokoro.rs`: expose the durations without a new download.**
+   - `Kokoro::load` still checks the pinned file's SHA-256, as today.
+   - It then builds the session from the bytes in memory, patched by a new `onnx_output::expose(bytes, "/encoder/Clip_output_0", "durations", Float)`. That function appends one `ValueInfoProto` to `GraphProto.output` (field 12) and re-encodes the two enclosing length prefixes. It is about 80 lines of protobuf with no `onnx` crate, and the result goes to `commit_from_memory`.
+   - The file on disk and its pin are unchanged, so an installed package needs no reinstall.
+   - `synthesize_phonemes_timed` reads `outputs["durations"]`: one count per token, including the leading and trailing pad 0s.
+   - One unit is 600 samples at 24 kHz (25 ms): hexgrad's `KPipeline` doubles the predicted durations and divides by 80. This is **pinned by a test, not assumed**: `sum(d)·600 = samples.len()` within one unit.
+   - If an export ever disagrees, the unit is `samples.len() / sum(d)`, which is exact arithmetic and still deterministic.
+4. **`compact_english.rs` (Kitten): read `out[1]`, the existing `duration` output.**
+   - Tokens are `[0] + ids(kitten_spacing(chunk)) + [10, 0]`. `kitten_spacing_mapped` returns the same string plus each output char's source index, so a phoneme span maps to token indices. A test holds it equal to `kitten_spacing`.
+   - The 5000-sample tail that `samples.truncate` removes is subtracted. A word past it is clamped and flagged.
+   - The unit is pinned the same way as Kokoro's.
+5. **Words.** For each `PhonemeWord`, start = the cumulative frames before its first token, and end = the cumulative frames after its last token, times `frame_seconds`. Spaces and punctuation tokens fall in the gaps.
+   - Chunks join as `paragraph::append` joins them: each later chunk is offset by the earlier audio plus 120 ms.
+   - All of this is integer frames times one f64 constant: no transcendentals, and identical on every machine.
+
+### 3.3 PromoShot's side
+
+- `promo-speech/Cargo.toml` pins `tag = "v0.7.0"`.
+- `local::synthesize_timed(voice, text, lexicon) -> (Vec<u8>, Vec<SpokenWord>)`. `LiveSynth`, `ProjectSynth` (in `promoshot-mcp/src/speak.rs`) and the settle walk call it.
+- §2.5 maps the result to script words, with `source: "local:kokoro-en-q8/af_heart"` and confidence 0.97. It is not 1.0 because the predictor's durations are frame-quantized at 25 ms and coarticulation blurs edges.
+- The lexicon is part of the receipt already (§0), so a pronunciation edit re-voices the take and re-times it.
+
+### 3.4 Inflect, math voices
+
+- **Inflect** (`duration.onnx`) emits only frame-expanded tensors. v0.7 does not expose its durations; its takes are aligned. A later local-tts release can expose the tensor before its `y_mask`/`CumSum` expansion the same way.
+- **`math_speech.rs`** voices are concatenations of word clips, so their timing is known by construction. They are not PromoShot voices, and nothing is planned for them.
+
+### 3.5 local-tts tests (in `crates/tts-core`, run where packages are installed)
+
+- `timed_audio_equals_untimed_audio`: Kokoro q8/f32/q4 and Kitten, byte-identical samples over the short corpus
+- `durations_sum_to_samples`: pins `frame_seconds` per model
+- `phoneme_strings_unchanged_by_spans`: over `math_speech::corpus` and the narration fixtures
+- `word_spans_cover_every_spoken_word`: no gaps or overlaps in token ranges
+- `chunk_offsets_join_like_append`
+- `onnx_expose_is_idempotent_and_keeps_the_pinned_digest`
+- `timed_is_deterministic`: two runs give the same JSON
+
+---
+
+## 4. Offline forced alignment (recordings, OpenAI takes, old takes)
+
+### 4.1 Where and how it is fed
+
+- `promo-media/src/words.rs` holds a pure, chunk-fed meter shaped like `BeatMeter`:
+  ```rust
+  pub const ALIGNER_VERSION: u32 = 1;
+  pub struct WordAligner { .. }
+  impl WordAligner {
+      pub fn new(channels: usize, sample_rate: f64, script: &str, options: AlignOptions) -> Option<Self>;
+      pub fn push(&mut self, interleaved: &[f32]);
+      pub fn finish(self) -> TakeTiming;   // source "aligned"
+  }
+  ```
+  `AlignOptions` carries `language` (from `estimate::voice_language` or the resource) and `calibration` (estimate.rs).
+- **No model and no download.** The tools are the beats DSP, which moves into `promo-media/src/dsp.rs` and is shared: the 64-tap windowed-sinc resampler (to 16 kHz), the radix-2 FFT and `libm` transcendentals.
+- **Determinism:** the BEAT-SYNC §3.4 rules apply unchanged. Sequential f64 reductions, ties to the lowest index, times rounded to 1 µs, and the core resamples, so the CLI (ffmpeg) and the app (AVFoundation) give identical JSON from identical PCM.
+
+### 4.2 Features (10 ms hop, 25 ms Hann window, 16 kHz mono)
+
+- log energy, and an energy envelope smoothed over 30 ms
+- voicing: the normalised autocorrelation peak for 70–400 Hz lags
+- spectral flux over 24 log bands from 100 Hz to 7.6 kHz
+- zero-crossing rate, so sibilants count as speech
+- **VAD** with hysteresis:
+  - the noise floor is the 10th percentile of energy
+  - speech is above floor + 12 dB, or above floor + 6 dB and voiced
+  - a hangover of 50 ms, and a pause is at least 80 ms
+- **Syllable nuclei** as in de Jong & Wempe (2009): intensity peaks at least 2 dB above the surrounding dip, voiced, and at least 60 ms apart.
+
+### 4.3 The expectation from the script
+
+`estimate.rs` exposes `word_weights(script, language) -> Vec<WordWeight
+{syllables, pause_after}>`. These are the same syllable counts and
+punctuation pauses the length estimate uses (`word_syllables`,
+`number_syllables`, `pause_for`, made per word).
+
+The expected length of word i is `syllables_i / rate`. The rate is fitted so
+that the total expected speech time equals the VAD's total speech time,
+which keeps the per-word priors relative.
+
+### 4.4 The alignment: a DP over candidate boundaries
+
+1. **Candidate boundaries:** every VAD edge, plus every local minimum of the smoothed envelope at least 3 dB below both neighbouring peaks, plus a 30 ms lattice inside speech runs longer than 400 ms with no minimum. That is typically 3–6 candidates per word.
+2. **The state** is (the word, the candidate where it starts). A transition places word i over [b_j, b_k), optionally followed by a pause segment [b_k, b_l) that must be non-speech under the VAD.
+3. **The cost of word i on [b_j, b_k):**
+   - duration: `(ln(len / expected_i))² / (2·0.35²)` (log-normal, σ = 0.35)
+   - nuclei: `0.5·|nuclei in span − syllables_i|`
+   - edges: `−0.3` per edge on a VAD edge or a deep dip, `+0.6` per edge in the middle of a voiced, high-energy region (a cut through a vowel)
+   - silence inside: `+2·(the fraction of the span that is non-speech)`
+4. **The cost of a pause after word i:** `−0.4` when `pause_after_i > 0` (the script puts punctuation there), `+0.4` otherwise, plus the duration prior of `pause_after_i`.
+5. **Search:** Viterbi with backpointers. A word is limited to at most 4× its expected length, so the cost is O(words × candidates × window). A five-minute voice-over is under 100 ms of compute.
+6. **Confidence:** for each word, from the margin between the best and second-best boundary on each edge, mapped through `1 − e^(−margin)`. The take's confidence is the mean, times a fit factor (the nuclei count over all words against the expected total).
+
+### 4.5 When it runs
+
+- **CLI open** (`Project::open_with`, beside `measure_grids`): every take that a speech value, a reveal `sync` or a speech generator in the project needs, and that has no record, is decoded and aligned, and the record is stored. As for beats, `--no-analyse` reads the cache only.
+- **`promo speak`** (settle), after writing an OpenAI or Chirp take: aligns at once, so the record exists before the receipt is persisted.
+- **`promo words … --refresh`**: re-aligns an `aligned` or `estimate` record. A `provider:*` or `local:*` record is never replaced; refresh then says "provider timing is authoritative; re-voice to replace".
+- **The app:** `WordAligner.swift` (§8.1).
+
+### 4.6 Provider transcription: allowed, opt-in, never automatic
+
+**Decision:** `promo words <project|audio> --transcribe openai|elevenlabs` (and MCP `promo_words {"transcribe": "openai"}`).
+- It spends the person's key: whisper-1 at about $0.006 a minute, Scribe at about $0.40 an hour. It is not deterministic, and it is never needed for sync to work. So it is a choice a person makes, never something an open does.
+- Its result is stored as `transcribed:<provider>`, mapped through §2.5. It is authoritative like provider timing.
+- **OpenAI:** `POST /v1/audio/transcriptions`, multipart: `model=whisper-1`, `response_format=verbose_json`, `timestamp_granularities[]=word`, and `prompt=<script>` to bias spelling. The response's `words[]` are `{word, start, end}`. `whisper-1` is the model that returns word timestamps. A small multipart builder is needed, since `ureq` 2 has none.
+- **ElevenLabs:** `POST /v1/speech-to-text`, multipart `model_id=scribe_v1`. The response's `words[]` are `{text, start, end, type}`, and `type == "spacing"` entries are skipped.
+- Keys come from `KeyStore`, exactly as for synthesis. `check: true` reports the cost estimate first.
+
+### 4.7 Accuracy to expect, and when to warn
+
+| material | word start, median / p95 | sentence boundaries |
+|---|---|---|
+| synthetic fixture (§10, S5) | ≤ 10 ms / ≤ 20 ms | ≤ 10 ms |
+| clean TTS takes (OpenAI, Chirp, Kokoro as a check) | 40–70 ms / ~150 ms | ≤ 40 ms |
+| a human read in a quiet room | 60–120 ms / ~250 ms | ≤ 60 ms |
+| voice over a music bed, noisy rooms, ad-libs | unreliable | usually fine |
+
+Sentence and comma boundaries are reliable because pauses are clear. Word
+boundaries inside connected speech are the weak point: two words with no dip
+between them are split by the syllable prior. That is good enough to cut or to
+pulse on a word, and visibly loose for a karaoke highlight on fast speech. The
+editors therefore show aligned timing as "aligned" (§8.2) and offer
+`--transcribe`.
+
+**Warn** (§9) when the take's confidence is under 0.6, or under 0.45 for any
+word a value names. Warn too when the VAD's speech time against the script's
+estimate is outside [0.6, 1.7] ("the recording may not say this script"), or
+when §2.5 called the result a mismatch.
+
+---
+
+## 5. Estimates and placeholders (same format, flagged)
+
+`estimate::estimate_words(script, duration, language, calibration) ->
+TakeTiming` produces `source: "estimate"`, `estimated: true` and confidence
+0.3:
+- `PADDING/2` (0.2 s) of lead-in, and the same at the end
+- the remainder split between words in proportion to `word_weights.syllables`
+- `pause_after` honoured, scaled by the same factor
+
+**Who writes it**
+- `placehold` writes it beside the silent MP3, for the MP3's own length (`silent_mp3_seconds`), so the times fit the file the timeline plays.
+- The app's placeholder door gets a twin: `promo_speech_placeholder_write_timed(project_dir, filename, provider, voice, text, project_json)` writes both files and returns the length. The old function stays for the old app.
+- A placeholder's record is **replaced** when the real take lands: new bytes, a new key. The old record is removed with the old file, under the existing rule "a silent stand-in this walk wrote under another name is the walk's own file".
+- `narration-placeholders` stays true: placeholder ⇒ no receipt. The record is not a receipt.
+
+---
+
+## 6. Speech values in time fields
+
+### 6.1 The value
+
+`promo-model/src/musical.rs` `TimeValue` gains a third arm, and `MusicalTime`
+stays as it is:
+
+```rust
+pub enum TimeValue { Seconds(f64), Musical(MusicalTime), Speech(SpeechTime) }
+pub struct SpeechTime { pub at: SpeechPoint, pub of: Option<String>, pub edge: Option<Edge>,
+    pub offset: Option<TimeOffset>, pub quantize: Option<SnapUnit>, pub guard: Option<String> }
+pub enum SpeechPoint { Word(u32), WordText { text: String, nth: u32 }, Sentence(u32),
+                       Snap { to: SpeechSnap, near: f64 } }
+pub enum SpeechSnap { Word, WordEnd, Gap, Sentence }
+pub enum Edge { Start, End }
+```
+
+**On the wire**, each a strict object:
+
+| form | means |
+|---|---|
+| `{"word": 12, "of": "intro"}` | word 12 (1-based) of that take |
+| `{"word": "Euclid", "of": "intro"}` / `…, "nth": 2` | the first (or nth) word whose stripped, case-folded text is "euclid" |
+| `{"sentence": 2, "of": "intro"}` | sentence 2 |
+| `{"snap": "word", "near": 4.2, "of": "intro"}` | the word start nearest 4.2 s; `wordEnd`, `gap` (the middle of the nearest inter-word gap, the safe place to cut) and `sentence` likewise |
+| `"edge": "start"` or `"end"` | which edge of the word or sentence (defaults in §6.2) |
+| `"offset": -0.1` or `{"beats": -0.5}` | added after the edge; seconds or a musical length |
+| `"quantize": "beat"` (also `downbeat`, `bar`) | then snapped to the beat grid: "the beat nearest word 12" |
+| `"text": "Euclid"` with an index | a guard: if word 12 is no longer "Euclid", resolution follows the guard to the nearest occurrence and warns (§9) |
+
+**Rules:**
+- `of` names a resource (a take) or an audio/video layer that plays one (§6.3). It may be left out when the scope has a `speechClock`.
+- Decoding is strict, as for musical values: exactly one of `word`, `sentence` or `snap` (with `near`); `nth` only with a text `word`; `text` only with an index; any other key is refused with its path.
+- **One object names one clock.** A speech value counts on its take. A `quantize` or a musical `offset` counts on the scope's beat clock, which is the only way the two meet inside one value.
+- Encoding is canonical, with integers written as integers.
+- Lift, fold, `timeSpecs`, `SetTime` and the editor commands that clear specs are the beat-sync machinery, unchanged. `lift` recognises the new keys and `label()` gains the speech wording.
+
+### 6.2 Which fields accept it
+
+The same fields as musical values (`LAYER_TIME_FIELDS`,
+`KEYFRAME_TIME_FIELDS`, the sequence entries and `after.offset`). A speech
+value is always a **position**:
+
+| field | a speech position means | default edge |
+|---|---|---|
+| layer `startTime` | the layer starts there | start |
+| layer `duration` | the layer ENDS there ("until sentence 2 ends") | end |
+| keyframe `time` | that output instant, made layer-local ("zoom on Euclid") | start |
+| `fadeIn`, `fadeOut`, `transition*.duration`, keyframe `transitionDuration` | refused: a length is required (a break; the seconds stand) | — |
+| `after.offset` | refused | — |
+
+**New layer field `during`:** `{"sentence": 2, "of": "intro", "lead": 0.15,
+"hold": 0.25}` (or `{"word": …}`, or `{"words": [3, 9], "of": …}`) sets
+`startTime` and `duration` together. The layer starts at the span's start −
+lead and ends at its end + hold. Both entries are recorded as derived
+`timeSpecs` (`rule: "during"`). The detach rules are those of `after`: a hand
+move drops `during`, and a resize alone becomes a plain duration.
+
+### 6.3 The speech clock
+
+- **`speechClock`**, on `compositionSettings`, on a `Composition` (for its own scope) and on a layer (an override), is `{"layer": "<audio layer id>"}` or `{"resourceID": "<take>", "startTime": 0}`. A value without `of` counts on it.
+- **Resolving `of`:**
+  - A layer id means that layer.
+  - A resource id means the first enabled audio (or video) layer in the scope that plays the resource, by start time. If several play it, validate warns and suggests the layer id.
+  - With no layer playing it, `startTime` must be given (as in `beatClock`), or else it is a break.
+- **The mapping.** A take's source second s maps to the output timeline through the **inverse of `mapping::source_time_for_layer`**, so trims, `speed` (layer and resource), media cuts, trim keyframes and `beyondEnd: loop` are honoured.
+  - The inverse is built as a monotone piecewise map: the forward mapping is sampled at the project frame rate over the layer's window, and split wherever it jumps.
+  - A word that falls in no played window (it was trimmed out) is a break: `word 12 "Euclid" is trimmed out of layer "VO"`.
+  - On a loop, the first play is meant, with a warning.
+- **No default.** Without `of` and without a clock: exactly one take in the scope means that take, with a warning; otherwise it is a break that asks which.
+- **Nested compositions** count only on their own clock, as for beats.
+
+### 6.4 Resolution: order, and the beats beside it
+
+`resolve_timing(meta, inputs: &TimingInputs)`, where `TimingInputs { beats:
+BeatGrids, words: TakeWords }`. `TakeWords` maps a resource id to its
+`TakeTiming`, plus the list of missing takes. As in S2, every caller of
+`resolve_timing` is moved, and the compiler finds them.
+
+Changes to BEAT-SYNC §2.2, per scope:
+
+1. **Clocks.** Beat grids as today. **Speech clocks** are built per (scope, clock layer), lazily, because their mapping needs the clock layer's start and trim, which may themselves be derived.
+2. **Absolute starts.** Beat positions as today. A speech position resolves here when its clock layer's start is a stated number.
+3. **The fixpoint loop** gains:
+   - **d.** Speech positions whose clock layer's start became known this round, and `during`.
+   - **e.** Clock rebuilds: a beat clock that follows an audio layer, or a speech clock, whose layer start moved this round is rebuilt, and dependents re-resolve.
+   - The bound stays the layer count + 1. Whatever is still unknown is `Circular` and keeps its number. Example: the music enters at `{"word": 3, "of": "vo"}` while the voice-over starts at `{"beat": 5}`.
+4. Lengths measured from an edge, unchanged.
+5. **Generators expand** (beats and speech, §7), then captions (§7.2).
+6. **Side entries**, with `resolved` rows carrying `clock: "speech"`, the word index and text, and the timing's `source`.
+
+**Missing timing.** The take is in `missingWords`. Resolution lays out on `estimate_words` over the take's measured duration, with a warning per value.
+- An export waits while `missingWords` is non-empty, exactly like `missingGrids` (`PromoTiming.exportWaitsForGrids` becomes `…ForClocks`).
+- A placeholder's `estimate` record is timing, not missing, so a placeholder project renders, with validate's existing "exports silent" warning plus "estimated".
+
+**Idempotent**, as before: resolving twice changes nothing, and fold-then-lift changes nothing. Both are pinned by tests.
+
+### 6.5 Rung
+
+A rung-49 reader decodes `{"word": 12}` through `MusicalTime::from_object`,
+which refuses the unknown key, so the file cannot be opened. That is the
+strict-kind case of `adding-a-wire-field-is-not-always-additive`. **Rung 50
+is new**, `SPEECH_READER = 50`.
+
+| a file carrying… | rung |
+|---|---|
+| a speech value in any time field; `during`; a sequence `until`/`per` entry (§7.3) | 50 |
+| reveal `sync`, a speech `on`/`range` in `pulse`/`shake`/`flash`, `captions` (an older reader renders a different film) | 50 |
+| `speechClock` alone (ignorable: with no speech value, nothing renders differently) | 48 |
+| `transcript`, `speech.wordFixes` (ignorable) | 48 (`LOSSLESS_READER`) |
+| none of these | unchanged |
+
+- `READER_VERSION` = 50 in `promo-model/src/lib.rs`. `ProjectStore.currentFormatVersion` and `supportedFormatVersion` = 50. The pin `the_apps_reader_version_is_the_cores` moves them together.
+- schema.md keeps its single version statement (`one-version-no-compat-docs`).
+- The `.words/` cache is not part of `metadata.json` and carries no rung.
+
+---
+
+## 7. Captions, generators and sequences on speech
+
+### 7.1 A caption reveal on the take's real word times
+
+`captionStyle.reveal` (and `compositionSettings.subtitleReveal`) gains
+`"sync": {"of": "intro"}`, with optional `"words": [5, 12]` or `"sentence": 2`
+to pin the span.
+
+**Mapping the caption's units to the take's words** (step 5, after the
+layer's times are final):
+- Tokenize the caption text (§1.2) and run a **local** version of the §2.5 DP. It finds the best-matching run of the take's words: a caption usually shows one sentence of a longer narration, so the match is a substring.
+- A stated `words` or `sentence` range skips the search.
+- With `by: "word"`, each caption unit gets its matched word's start. A punctuation-only unit gets the next word's start (the previous word's end, at the end of the line).
+- With `by: "character"`, a word's characters share out its span by grapheme count.
+- With `by: "line"`, a line takes its first word's start.
+- An unmatched unit is interpolated, and validate warns (§9).
+
+**The resolved answer is a new, derived field:** `reveal.unitTimes: [f64]`,
+the arrival of each unit in **layer-local seconds**, plus `reveal.unitEnds`
+(the spoken end of each unit, for highlight).
+- Like `timeSpecs`, both are carried in the app form and stripped by `fold`, so they never reach a file.
+- They are typed fields in Rust `TextReveal` and Swift `TextReveal`, a synthesized Codable struct, so adding them is two optional properties.
+- `sync` itself is unread by Swift until S9, and `keep_unread` restores it.
+
+**The engine change** (`reveal.rs::progress`), the only engine change in this design:
+- With `unitTimes` present:
+  - `shown` is the count of units whose time is ≤ the local time. At least one unit shows once the first time has passed, so the "never empty" rule holds from the first word.
+  - `active` is the last arrived unit while the time is before its `unitEnds`. A karaoke highlight goes out between words and at the end, instead of sticking to the last word.
+  - `fraction` is shown ÷ units.
+  - The staggered modes start each unit's arrival at its own time and keep `unitSeconds`.
+- Without `unitTimes`: the existing code path, byte for byte (AC4).
+- `unitTimes` reaches all three hosts (the preview, the video export, the image export) as part of the layer model the app already encodes. That is the reason it is a model field and not a host input (`engine-inputs-three-paths`). The parity tests gain a synced-caption case (S7).
+
+### 7.2 Captions generated from a narration
+
+**New, on an audio or video layer that plays a take:**
+
+```json
+"captions": { "by": "sentence", "maxWords": 8, "maxSeconds": 3.5, "lead": 0.1, "hold": 0.25,
+              "reveal": {"by": "word", "mode": "highlight", "highlightColorHex": "@accent"},
+              "style": { …captionStyle… } }
+```
+
+- **Expansion** (step 5, `promo-timeline/src/speech_effects.rs`):
+  - Sentences longer than `maxWords` or `maxSeconds` are split at the comma or word gap nearest the middle, recursively. `by: "phrase"` splits at every comma or semicolon first.
+  - Each piece becomes a generated caption layer `speech-captions-<layer>-<k>`. Its `captionText` is the script slice (from `chars`). It starts at the first word's start − lead and ends at min(the last word's end + hold, the next piece's start). It carries the style and a reveal with `sync`, so `unitTimes` fill in.
+- **Ownership** is the flash generator's (BEAT-SYNC §4 and the S6/S9 notes):
+  - `generatedBy: "captions:<layer>:<sig>"`.
+  - An unedited caption is stripped at save and regenerated, so a new take re-times all of them.
+  - An edited caption becomes the person's, and the generator skips its span.
+  - A deleted generated caption adds its index to `captions.skip` at fold, so the delete sticks.
+- The ids are one namespace with every other id (the S9 lesson: the drawing id collision).
+
+### 7.3 Generators firing on words; one slide per sentence
+
+**Generators.** `pulse`, `shake` and `flash` take speech events in `on`/`every` and speech spans in `range`:
+
+```json
+"pulse": {"on": {"words": ["Euclid", "free"], "of": "intro"}, "property": "viewport", "amount": 0.05,
+          "decay": 0.25}
+"flash": {"on": {"sentences": "start", "of": "intro"}, "opacity": 0.4, "duration": 0.12}
+"shake": {"on": {"words": "emphasised", "of": "intro", "top": 3}, "amplitude": 6}
+```
+
+- `words` takes `"all"`, a list of indices, a list of texts (every occurrence) or `"emphasised"` with `top`/`above` on `prominence` (§8.2). `sentences` takes `"start"` or `"end"`.
+- `range` takes `{"sentence": 2, "of": …}` or `{"words": [3, 9], "of": …}`.
+- Expansion is the beats code with a different point list: grid points are replaced by word times mapped to output time.
+- Ids are `speech-<layer>-pulse<n>-<k>-<role>`. The tag is `auto: "speech:<sig>"`. `musical::strip_generated` and `is_unedited_beat_keyframe` generalise to the `beat:` and `speech:` tags.
+- Decay and duration may be seconds or beats (they still count on the beat clock).
+
+**Sequences.**
+- A sequence entry gains a length form `"until": <speech or musical position>`. The entry ends there, and the next entry starts there.
+- A sequence entry may also be a **per** entry:
+  ```json
+  {"layers": ["s1", "s2", "s3", "s4"], "per": "sentence", "of": "intro", "lead": 0.1}
+  ```
+  It expands to one entry per layer. Slide k lasts until sentence k+1's start − lead, and the last slide until the last sentence's end + `hold` (default 0.5 s). This is "one slide per sentence".
+  - Fewer layers than sentences: the last slide holds through the rest, with a warning. More layers: the extras get no slot, with a warning.
+- The first entry's start is its own (as in BEAT-SYNC's S3 notes). A start of `{"sentence": 1, "of": …, "offset": -0.1}` lands the first cut just before the voice.
+- `quantize: "beat"` on `per` puts each sentence cut on the nearest beat, for music and voice together.
+
+---
+
+## 8. The apps
+
+### 8.1 Storing and computing timing (core-private FFI, shared Swift)
+
+**At synthesis:**
+- The FFI job API gains `promo_speech_job_timing(job) -> char*`: the `Spoken` JSON, or NULL.
+- `SpeechSynthesizer.generate` writes the take, then calls `promo_words_store_take(project_dir, filename, script, job)`. The core hashes the file, maps the timing to the script (§2.5) and writes the record.
+- An OpenAI take, a Chirp take, or a store that failed lands in `missingWords` and is aligned by the next item.
+
+**`WordAligner.swift`** (ReVoice/Services, both targets) has the `BeatAnalyzer` shape:
+- AVAudioFile, decoded in chunks and pushed interleaved to `promo_word_aligner_new(channels, rate, script_json)`, `_push`, `_finish` and `promo_words_store`.
+- It runs off the main thread, on the `missingWords` from `promo_project_opened` (whose envelope gains `missingWords` and `timingProblems` with speech cases), and after any re-take.
+- It then reconciles, in the order the S8 notes fixed: the model first, then the document.
+
+**Other FFI:**
+- `promo_words_lookup(project_dir, filename, script)` returns the record or NULL.
+- `promo_doc_set_project_dir` already exists; `Document::set_takes` stores `TakeWords` for every later `apply`, like `set_beat_grids`.
+- Exports run `WordAligner.align(in:)` before their guard, so only a take that cannot be aligned holds an export.
+
+**The app never computes a word time** (`swift-twin-is-not-the-renderer`,
+`parity-comment-without-test`). Swift draws what the core answers.
+
+### 8.2 UI (shared views, by size class)
+
+- **The narration resource inspector** gets a "Words" section:
+  - The status reads: "Timed by ElevenLabs · 42 words · 7 sentences", "Kokoro (local) timing", "Aligned · confidence 0.71" (in amber under 0.6, with "Transcribe with OpenAI…" when a key exists, showing its cost), "Estimated (placeholder)" or "Aligning…".
+  - Actions: Align again, and Transcribe…
+  - The section shows the script with each word tappable. A tap selects the word and offers "Start selected layer here", "End selected layer here" and "Copy reference".
+- **The timeline:** the narration lane draws word boxes over the waveform and sentence brackets, all in output time, from `promo_project_speech_ticks(json, dir)`, a twin of `beat_ticks`.
+  - Dragging a layer edge near a narration snaps to word starts and ends, and gaps are preferred when ⌥ is held. With a beat clock as well, beat snapping wins unless the edge is within 2 frames of a word gap.
+  - Every snap goes through the core: `promo_project_speech_snap(json, dir, layer, edge, seconds, of)` returns `{"word": n, "text": "…", "of": id}`, which `applyCoreStep` writes with `setTime`, as one undo step.
+- **The layer editor's Start and Duration rows** show the core's label: "word 12 ‘Euclid’ · 4.380 s", "ends with sentence 2 · 9.120 s". Menus: "Start at word…" (a searchable list), and "Snap Start/End to word / gap / sentence".
+- **The caption inspector's Reveal section** gets "Follow narration" (a picker of takes), with a matched-span readout: "words 5–12 of Intro · 2 unmatched".
+- **App MCP:** `promo_words` is a twin of the headless tool. It reads the cache, else runs `WordAligner`, and returns the core's JSON. `ServerContractTests` lists it on both servers.
+
+---
+
+## 9. validate, explain, inspect
+
+**Findings,** with the existing prefixes, as `warn` or `break`:
+
+| finding | severity |
+|---|---|
+| `layer "s3": startTime {"word":"Eucld","of":"intro"} — no word "Eucld" in "intro" (closest: word 2 "Euclid")` | break |
+| a word index past the end, a `nth` past the last occurrence, a sentence past the end | break |
+| `of` names an unknown resource, a non-audio resource, or a take nothing plays and no `startTime` places | break |
+| the word is trimmed out of its clock layer | break |
+| a speech position where a length is required (`fadeIn {"word":3}`) | break |
+| `during` together with `sequence`, `after` or `timing.start` (who wins: sequence, then during, then after, as in S3) | break |
+| a guard moved: `word 12 is now "the"; followed "Euclid" to word 14 — update the reference` | warn |
+| `"intro" has no word timing yet — laid out on an estimate` (app or `--no-analyse` only) | warn |
+| `"intro" timing is estimated (placeholder)`, once per take | warn |
+| `"intro" was aligned with confidence 0.42 — word starts may be ±0.2 s; transcribe or fix by hand` | warn |
+| `"intro"'s text changed since its take was voiced — times follow the old take` | warn |
+| `the recording "vo.m4a" may not say its transcript (speech 14.2 s, the script reads about 31 s)` | warn |
+| `layer "s4" at 6.31s: cuts mid-word "proved" (6.18–6.52 s of "intro") — the nearest gap is 6.55 s`. Checked for every visual edge in a scope that uses speech sync anywhere, against takes playing at that instant, ±1 frame | warn |
+| a caption reveal `sync` with unmatched units, or one matching under 50% of its words | warn |
+| a resource played by several layers named by resource id | warn |
+| `the take is longer than its layer — words 31–40 are never heard` | warn |
+| CJK or Thai scripts: `word sync for "intro" is by character` | note |
+
+**`promo validate`.** Text mode adds:
+
+```
+Speech times
+  layers[s3].startTime  {"word":12,"of":"intro"}    → word 12 "Euclid" at 4.380 s  (elevenlabs)
+  layers[s4].duration   {"sentence":2,"of":"intro"} → ends with sentence 2 at 9.120 s  (aligned 0.72)
+  layers[s5].startTime  per sentence 3 of "intro"   → 9.020 s
+```
+
+`--json` adds `resolvedTimes` rows with `"clock": "speech"`, `"word":
+{"index", "text"}` and `"source"`, and a `speechClocks` key (scope, take,
+layer, source, confidence, words, sentences, estimated, stale).
+
+**`promo explain`.** `times` lists speech values in both forms. `generated`
+counts speech keys and generated captions. A synced caption shows
+`"reveal": {"sync": …, "units": 9, "matched": "words 5–12"}`.
+
+**`promo inspect`.**
+- A `words` section per take: file, source, confidence, the counts of words and sentences, coverage (the share of the take's speech covered by words), the first and last word, stale or not, and any fixes.
+- Each layer's speech fields in both forms.
+- The `credits` block gains transcription spend with `provenance` (`{"tool": "openai-whisper", "cost": …}` on the resource).
+
+**CLI `promo words <audio | project> [--resource id] [--script text | --script-file f] [--json] [--timeline] [--refresh] [--transcribe openai|elevenlabs] [--no-analyse]`:**
+- On an audio file, it aligns with the given script. On a project, it uses the named take, else the speech clock's, else the only one.
+- It prints a 1-based table (`#  start  end  conf  word`) and the sentences.
+- `--timeline` maps the times to the output timeline through the clock layer.
+- `--json` is the record, plus `fromCache` in project mode.
+
+**MCP `promo_words`** is headless and in the app (§8.2), with the same
+arguments. The tool-surface ceiling (`the_tool_surface_stays_small`) rises
+for it, as it did for `promo_beats`.
+
+---
+
+## 10. Build order
+
+Each slice compiles, passes `check-all.sh` (and both Xcode suites when Swift
+is touched), and is committed on its own. **AC** marks the owner's acceptance
+criteria.
+
+**S1 — Format, tokenizer and cache (core).**
+- Build: `promo_model::speech` (the types and `tokenize`), `promo_model::media_cache` (split from `beat_cache`), `word_cache`, the `transcript` and `speech.wordFixes` fields (rung 48), and the schema JSON.
+- `promo words <audio> --script` prints the estimate only.
+- Tests:
+  - `tokenizer_words_are_reveal_units`: against promo-text's word units over the caption fixtures
+  - `chars_are_scalar_offsets`: emoji, combining marks, Cyrillic stress
+  - `sentences_skip_abbreviations_and_decimals`
+  - `ssml_words_come_from_text_nodes`
+  - `cache_key_is_audio_and_script`
+  - `stale_take_finds_its_old_record`
+  - `transcript_and_word_fixes_stamp_48`
+  - `unread_sweep` stays green
+
+**Slice 1 as built** (2026-10-21):
+- **Modules.** `promo_model::speech` (the record, `tokenize`, `script_hash`,
+  `WordFix`, `apply_fixes`, `take_script`), `promo_model::word_cache`
+  (`cache_path`, `lookup`, `store`, `records_for`, `takes`,
+  `takes_needing_timing`, `choose_take`, `words_answer`) and
+  `promo_model::media_cache` (`MediaSource`, `source_of` with its memo,
+  `content_key`). `musical::BeatSource` is now an alias of `MediaSource` —
+  the same JSON, so the beat cache and its goldens are unchanged;
+  `beat_cache::source_of` delegates.
+- **`estimate_words` moved into S1** (with `word_weights`), because
+  `promo words` prints it. `WordWeight` has a third field, `pause_within`
+  (a pause inside a word, e.g. an inner dash), so the per-word weights sum
+  to the whole-script count exactly (`estimate_words_sum_matches_estimate`).
+  The words are read as the whole script reads (one English/script
+  decision), not word by word. An estimate record carries
+  `alignerVersion: 1` (`ESTIMATE_VERSION`).
+- **The tokenizer** exposes the reveal units (`Script::units`: every
+  whitespace run, tags counting as whitespace in SSML) beside the words;
+  each word carries its unit, its stripped `chars`, its `token` span with
+  margins (what a sentence spans) and, in SSML, the `<` of the outermost
+  `<say-as>`/`<sub>`/`<phoneme>` it sits in (`atomic`, for S3's marks).
+  An SSML entity (`&amp;`) is one character of a word. Additions to §1.2:
+  `。`, `！` and `？` end a sentence wherever they stand; closing quotes and
+  brackets may stand between a terminator and its whitespace; a
+  terminator the next word leans on (`costs .5`) ends nothing (found by a
+  break-test); the abbreviation list adds "Mrs." and "Ms.". A Thai word is a
+  base character with its marks.
+- **`transcript`** is a typed `ProjectResource` field (in the machine
+  schema); the apps' model does not read it, so `unread::carry_field`
+  keeps it through their save. **`speech.wordFixes`** stays inside the
+  `speech` bag, and each fix may carry its own `scriptHash`. Both stamp 48
+  (`speech::carries_ignorable_speech_fields`). `speech` is a key the apps'
+  model reads and writes, so the Swift `SpeechSpec` gains `wordFixes` with
+  S2's app change; until then an app save drops it.
+- **`takes_needing_timing`** is every take (audio or video with
+  `speech.text` or a `transcript`) whose file is there with no record at
+  all; S6 narrows it to the takes a value needs.
+- **`promo words`** (S1 form): on a project, the named take or the only
+  one; its record (`fromCache: true`, `stale: true` when it follows an
+  older script), else an estimate over the take's measured `duration` (or
+  ffprobe's), not stored (`fromCache: false`). The take's `wordFixes` are
+  applied, and what was ignored is `fixNotes`. On a file, `--script` or
+  `--script-file` is required and the answer is an estimate. `--timeline`,
+  `--refresh`, `--transcribe` and `--no-analyse` come with the aligner (S5).
+  `promo-cli` now links `promo-speech` without its keyring.
+- **Docs.** No schema.md entries yet: nothing renders from the new fields
+  until S6/S7 (the same choice as BEAT-SYNC's slice 1); the kitchen sink
+  leaves `transcript` unset.
+- **Tests:** `tokenizer_words_are_reveal_units` lives in
+  `promo-text/tests/speech_units.rs` (promo-text depends on promo-model, so
+  the comparison is the real reveal layout over every caption in
+  `examples/`, `demos/` and `fixtures/`); the rest are in `speech.rs`,
+  `word_cache.rs`, `promo-model/tests/speech.rs`, `estimate.rs` and
+  `promo-cli/tests/words.rs`.
+
+**S2 — Estimates and placeholders.**
+- Build: `estimate::word_weights` and `estimate_words`; `placehold` writes records; the FFI `promo_speech_placeholder_write_timed`; the Swift placeholder path calls it.
+- Tests:
+  - `estimate_words_fill_the_placeholder_exactly`: the last word ends at duration − 0.2
+  - `estimate_words_sum_matches_estimate`
+  - `placeholder_record_is_flagged_estimated`
+  - `real_take_replaces_placeholder_record`
+  - Swift: `testPlaceholderWritesWordTiming`
+  - **AC6** (estimates are in the same format, flagged)
+
+**S3 — Provider timing (ElevenLabs, Google) and the script mapper.**
+- Build: `marking_stress_mapped`, the `Synth::synthesize_timed` default, `synthesize_with_key_timed`, `timing::attach`, settle storing records before persisting receipts, `google_supports_marks`, and the FFI `promo_speech_job_timing` and `promo_words_store_take`.
+- Fixtures: committed provider answers (`fixtures/speech/elevenlabs-with-timestamps.json`, `google-timepoints.json`) and their MP3s. No live calls in tests.
+- Tests:
+  - `stress_map_matches_marking_stress`
+  - `elevenlabs_alignment_maps_to_script_chars`, including stress-marked Russian
+  - `elevenlabs_char_mismatch_falls_back_to_dp`
+  - `google_ssml_has_one_mark_per_word_and_escapes`
+  - `google_ssml_script_marks_text_nodes_only`
+  - `google_missing_timepoints_falls_back_to_alignment`
+  - `chirp_voices_take_the_plain_request`
+  - `attach_merges_spelled_numbers` ("$49.99" to 6 spoken words)
+  - `timing_is_stored_before_the_receipt`
+  - Then one manual live check per provider through the Xcode-run app's MCP (`speech-tests-through-the-xcode-run-app`), recording the measured offset of word 1 against the energy onset (the MP3 priming risk, §11.1).
+
+**S4 — local-tts v0.7.0 and local timing** (repo `/Users/alex/src/tts`; tag, then bump the pin).
+- Build: §3.2 items 1–5 in local-tts; the §3.5 tests there; then `local::synthesize_timed` in promo-speech.
+- Tests:
+  - `local_take_writes_local_timing`
+  - `lexicon_edit_retimes_local_take`
+  - **AC3**: `local_timing_agrees_with_alignment`. Over 20 corpus lines with Kokoro q8 and Kitten, word starts within 60 ms median and 120 ms p95 of the S5 aligner, and every sentence boundary within 40 ms. It runs where the packages are installed and skips with a note otherwise. It lands in S5 when the aligner exists; S4 lands `durations_sum_to_samples` and `timed_audio_equals_untimed_audio`.
+
+**S5 — The aligner, the CLI and MCP.**
+- Build: `promo-media/src/dsp.rs` (shared with beats; the beats goldens stay byte-identical), `words.rs`, `Project::open_with` aligning missing takes, the full `promo words`, MCP `promo_words`, `--transcribe` (multipart, opt-in, with `check`).
+- Fixture: `fixtures/speech/synthetic-60w.wav`, made by `tests/support/speech_synth.rs`. Each syllable is a voiced burst (a 140 Hz harmonic stack under two formant bumps, with an attack and release envelope), with 5–40 ms gaps between some words, 300 ms at commas and 600 ms at sentence ends. The truth is known.
+- Tests:
+  - **AC5** `aligner_finds_synthetic_words`: every start within 20 ms of the truth
+  - `aligner_matches_its_golden` (macOS and the Linux Docker image, debug and release)
+  - `chunked_push_equals_one_push`
+  - `aligner_warns_when_audio_does_not_say_script`
+  - `cache_is_authoritative_for_provider_records`
+  - `older_aligner_records_are_realigned`
+  - `promo_words_json_shape`
+  - **AC7** `tools_list_includes_promo_words`, `promo_words_returns_the_record`
+  - `transcribe_is_never_automatic`
+  - AC3 (see S4)
+
+**S6 — Speech values, the clock and resolution (rung 50).**
+- Build: `TimeValue::Speech` with lift, fold and labels; `speechClock`; `during`; `TimingInputs` with every caller moved; the clock rebuild in the loop; `missingWords` with the export guard (CLI, app); validate, explain and inspect output; schema.md and schema-quick.md entries.
+- Tests:
+  - `speech_values_round_trip_byte_for_byte`
+  - `malformed_speech_value_names_its_path`
+  - `speech_file_stamps_50`
+  - **AC4** `seconds_only_and_beat_projects_are_unchanged`: every repo fixture, demo, example and the BeatCut recipe, byte-identical, with the rung unchanged and `resolve_timing` equal to its pre-slice answer
+  - `word_by_index_text_nth_and_sentence`
+  - `edges_and_offsets_including_beats`
+  - `quantize_lands_on_the_beat_grid`
+  - `clock_follows_trim_speed_and_cuts`
+  - `trimmed_out_word_is_a_break`
+  - `clock_layer_that_is_itself_sequenced_resolves_in_the_loop`
+  - `speech_beat_cycle_is_circular`
+  - `guard_follows_a_moved_word_and_warns`
+  - `missing_timing_lays_out_on_estimate_and_holds_render`
+  - **AC2** `editing_a_line_retimes_dependent_cuts`: a FakeSynth makes deterministic synthetic speech plus timing; one narration's text changes and settle re-voices it. Only layers that name that take move, each to its word's new time, and the JSON is otherwise byte-identical.
+  - `validate_lists_speech_times`
+  - `cut_mid_word_warns_with_the_gap`
+  - `every_loader_gives_the_same_numbers` (speech case)
+
+**S7 — Caption reveal sync and generated captions.**
+- Build: reveal `sync`, `unitTimes` and `unitEnds` (Rust and Swift), the `progress` change, the `captions` generator, and their fold stripping.
+- Tests:
+  - `synced_reveal_maps_caption_units_to_take_words`, including punctuation units, a caption that is a substring of the script, and a pinned range
+  - `highlight_goes_out_between_words`
+  - `reveal_without_unit_times_is_unchanged` (a pixel diff over every reveal fixture)
+  - **AC1** `captions_reveal_each_word_within_one_frame`: the ElevenLabs fixture take, a highlight reveal, rendered through the CLI. The arrival of each word is found from pixel colour per unit box (an independent oracle). Each is within ±1 frame at 30 fps of the provider's word start.
+  - `generated_captions_split_long_sentences`
+  - `edited_generated_caption_becomes_the_persons`
+  - `deleted_generated_caption_stays_deleted`
+  - `generated_captions_retime_with_a_new_take`
+  - Swift: `testUnitTimesSurviveTheAppForm`, and synced-caption cases in `DemoPreviewExportParityTests` (both suites) and `CrossPathRenderTests` (Mac)
+
+**S8 — Generators on words, sequences per sentence, prominence.**
+- Build: speech `on` and `range` for pulse, shake and flash; sequence `until` and `per`; per-word `prominence` (a z-score over the take's words of RMS dB, voiced F0 range and duration ratio against the estimate, squashed to 0–1), computed by the aligner pass for every take, including provider and local ones, since it reads the audio.
+- Tests:
+  - `pulse_on_named_words`
+  - `flash_on_sentence_starts`
+  - `emphasised_top_n_is_deterministic`
+  - **AC8** `one_slide_per_sentence`: 4 stills `per` sentence on the fixture take; each cut lands at sentence start − lead within ±1 frame (a rendered pixel oracle)
+  - `per_with_fewer_layers_holds_the_last`
+  - `quantized_sentence_cuts_land_on_beats`
+
+**S9 — The apps.**
+- Build: the FFI aligner and stores, `WordAligner.swift`, `missingWords` in the open and the export guard, then the §8.2 UI and the app's `promo_words` twin.
+- Tests:
+  - Rust `ffi_aligner_matches_cli_alignment` (the same PCM gives identical JSON)
+  - `bindings` up to date
+  - Swift: `testSynthesisStoresProviderTiming` (a fake provider with a fixture answer), `testAlignerMatchesCoreGolden` (the synthetic WAV through AVAudioFile), `testOpeningMarksNothingDirty`, `testSnapToWordUsesTheCoresSpec`, `testTimingRowShowsTheCoresLabel`, `testExportWaitsForWords`
+  - Checked in the simulator at phone width and on iPad, and on the Mac through the DEBUG tour door (`mac-ui-tour-captures`)
+
+**S10 — Recipe and docs.**
+- Build: a schema.md section "Speech sync — word, sentence, of, speechClock, during, sync, captions, transcript, words" with cross-references from Timing, Reveal and Beats; schema-quick.md's sixth recipe, "narrated slideshow: one slide per sentence, karaoke captions" (`examples/Narrated.promo`, a placeholder take, so it renders with no key and is honestly estimated); SKILL.md entries for `promo_words` and the recipe (and the app's bundled copy).
+- Tests:
+  - **AC9** `narrated_recipe_validates_and_renders`, `the_examples_are_the_recipes`
+  - `schema_md_mentions_every_authorable_wire_field` (the kitchen sink carries every speech field)
+
+**Acceptance criteria:**
+1. **AC1.** Captions reveal each word within ±1 frame of the provider's word start (S7).
+2. **AC2.** Changing a line's text re-times the dependent cuts and nothing else (S6).
+3. **AC3.** Local takes' word starts are within 60 ms median and 120 ms p95 of the forced alignment, and the durations account for every sample (S4/S5).
+4. **AC4.** Seconds-only and beat-only projects are unchanged, and the rung moves only for the new forms (S6, S7).
+5. **AC5.** The aligner is deterministic across machines, and within 20 ms on the synthetic truth (S5).
+6. **AC6.** Placeholders carry estimated word times in the same format, flagged (S2).
+7. **AC7.** `promo_words` and `promo words` exist, with the JSON shape pinned (S5).
+8. **AC8.** One slide per sentence cuts within ±1 frame (S8).
+9. **AC9.** The recipe validates and renders, and the docs cover every key (S10).
+
+---
+
+## 11. Risks
+
+1. **MP3 priming.** ElevenLabs and Google times are relative to their decoded PCM. AVFoundation and ffmpeg trim LAME priming only when the gapless header is present, so the whole take may shift by about 25 ms. That is close to AC1's one frame.
+   - Measure it in S3 against the energy onset of word 1.
+   - If it is systematic, apply a per-provider constant (stored with the record as `audioOffset`).
+   - The S5 cross-check (aligner against provider) catches drift.
+2. **Aligner accuracy on real recordings** (§4.7). Word-level karaoke on fast human speech will sometimes be visibly loose. Mitigations: confidence warnings, `--transcribe`, `wordFixes`, and cutting on gaps rather than word starts. The tests prove determinism and synthetic truth, not real-world taste. Hand-check three real recordings before S6 ships.
+3. **The Kokoro graph patch.** Exposing `/encoder/Clip_output_0` can change ORT's fusion choices, so the waveform could differ in the last bits.
+   - `timed_audio_equals_untimed_audio` guards it.
+   - If it fails: run the unpatched session for audio and the patched session only for durations (twice the encoder cost, still deterministic), or pin a timestamped export as a new variant (a new download and a new pin).
+   - The tensor name is an export detail. Re-check it whenever a Kokoro variant pin changes; the test fails loudly.
+4. **Google.** The voice families supporting marks, and whether marks are billed, are taken from documentation and must be verified live (S3). Chirp3-HD, the recommended voice, gets alignment only.
+5. **Index fragility.** `{"word": 12}` silently means another word after an edit. The `text` guard, the editors writing it, and the guard warning contain this, and the docs recommend `{"word": "Euclid"}` for hand-written files.
+6. **Swift drops the derived fields.** A copy, paste or rebuild path that constructs a fresh `TextReveal` loses `unitTimes`, and the preview then types uniformly while exports agree with the core. The three-path parity tests are the tripwire, plus model tests per path (BEAT-SYNC risk 4, again).
+7. **Placeholder records and re-takes.** The record must go with the stand-in file. A leftover record is harmless, because it is keyed by bytes no file has, but `.words/` grows. `promo words --prune` removes records with no file (S5).
+8. **Normalization drift.** local-tts and the providers normalize numbers, dates and URLs differently, so §2.5's merges must be generous. A wrong 1:k merge mis-times one word and never shifts the rest, because the DP is monotonic.
+9. **CJK and Thai.** Whitespace words do not exist there, so v1 syncs by character (and sentences). It is noted, not hidden.
+10. **The dot-folder in `Resources/`.** The scanners already skip `.beats` (the BEAT-SYNC risk 8 audit). Add `.words` to the same test.
+11. **Rung 50 locks out shipped apps** (3.2 and older) for files that use speech sync. This was accepted for 49, and the same rule applies. Seconds-only and beat files are unaffected (AC4).
+12. **Cost.** Timing adds no provider calls: ElevenLabs and Google return it in the same request. Only `--transcribe` spends extra, and only when asked.

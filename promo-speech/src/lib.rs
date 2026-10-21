@@ -26,7 +26,8 @@ pub mod stress;
 pub mod voices;
 
 pub use estimate::{
-    calibration, estimate, silent_mp3, silent_mp3_seconds, voice_language, Estimate,
+    calibration, estimate, estimate_words, silent_mp3, silent_mp3_seconds, voice_language,
+    word_weights, Estimate, WordWeight,
 };
 pub use keys::{
     secrets_path, FixedKeys, KeySource, KeyStatus, KeyStore, SystemKeys, PROVIDERS, SECRETS,
