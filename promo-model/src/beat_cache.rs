@@ -8,7 +8,32 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::ProjectMetadata;
+use crate::{ProjectMetadata, ProjectResource};
+
+/// The apps' shared resource library's folder of files, when the host has
+/// one: a resource that is a library reference (`libraryID`) keeps its file
+/// there, not in the project's `Resources/`. Process-wide — one library a
+/// device — and unset for the CLI, which reads only the project.
+static LIBRARY_FILES: std::sync::RwLock<Option<PathBuf>> = std::sync::RwLock::new(None);
+
+/// Tells the cache where the shared library keeps its files (None: no
+/// library). The apps call it once their library is known.
+pub fn set_library_files(dir: Option<PathBuf>) {
+    if let Ok(mut slot) = LIBRARY_FILES.write() {
+        *slot = dir;
+    }
+}
+
+/// Where a song's bytes are: the shared library's folder for a library
+/// reference (when the host named one), the project's `Resources/` else.
+pub fn song_file(dir: &Path, resource: &ProjectResource) -> PathBuf {
+    if resource.extra.contains_key("libraryID") {
+        if let Some(library) = LIBRARY_FILES.read().ok().and_then(|slot| slot.clone()) {
+            return library.join(&resource.filename);
+        }
+    }
+    dir.join("Resources").join(&resource.filename)
+}
 
 /// The file's name, the first 32 hex digits of the SHA-256 of its bytes,
 /// and its size.
@@ -104,7 +129,8 @@ pub fn store(
 
 /// The project's songs a beat clock counts and that state no `beatGrid` —
 /// the settings', a composition's, a layer's clock — by resource id, with
-/// their files in `Resources/`.
+/// their files (`song_file`: `Resources/`, or the shared library's folder
+/// for a library reference). The cache itself stays the project's.
 pub fn clock_songs(dir: &Path, meta: &ProjectMetadata) -> Vec<(String, PathBuf)> {
     let mut ids: Vec<String> = Vec::new();
     let mut note = |clock: &Option<crate::musical::BeatClock>| {
@@ -134,7 +160,7 @@ pub fn clock_songs(dir: &Path, meta: &ProjectMetadata) -> Vec<(String, PathBuf)>
             (resource.beat_grid.is_none()
                 && resource.kind == crate::ProjectResourceKind::Audio
                 && plain)
-                .then(|| (id, dir.join("Resources").join(&resource.filename)))
+                .then(|| (id, song_file(dir, resource)))
         })
         .collect()
 }

@@ -3022,7 +3022,7 @@ mod palette_tests {
     fn every_quick_schema_recipe_validates_clean() {
         let doc = promo_model::SCHEMA_QUICK;
         let recipes = promo_model::quick_schema_recipes();
-        assert_eq!(recipes.len(), 4, "four recipes, as promised");
+        assert_eq!(recipes.len(), 5, "five recipes, as promised");
         for (index, recipe) in recipes.iter().enumerate() {
             let meta = promo_model::ProjectMetadata::from_json(recipe)
                 .unwrap_or_else(|e| panic!("recipe {index} does not decode: {e}"));
@@ -3033,12 +3033,10 @@ mod palette_tests {
                 meta.name
             );
             // Each recipe carries the stamp an agent copies with it: 34,
-            // even where its fields need less — never less than they need.
-            assert_eq!(meta.min_reader_version, Some(34), "recipe {index} stamp");
-            assert!(
-                meta.minimum_reader_version() <= 34,
-                "recipe {index} uses fields beyond the stamp"
-            );
+            // even where its fields need less — never less than they need
+            // (the beat-cut recipe's musical times need the musical reader).
+            let stamp = meta.minimum_reader_version().max(34);
+            assert_eq!(meta.min_reader_version, Some(stamp), "recipe {index} stamp");
         }
         let prose_lines = doc[..doc.find("```json").unwrap()].lines().count();
         assert!(

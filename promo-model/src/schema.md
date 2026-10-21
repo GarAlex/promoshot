@@ -315,7 +315,9 @@ bar first. Beat k (0 is beat 1) sits at
 seconds on every machine. No `beatGrid`, and promo measures the song when
 it opens the project: tempo, beats and downbeats, cached by content in
 `Resources/.beats/` and the answer from then on — so swapping the song's
-file re-times the whole edit. `promo beats <song>` (promo_beats) shows that
+file re-times the whole edit. The apps measure into the same cache when
+they open the project, and find it for a song referenced from their shared
+library too, so the CLI and the apps count the same beats. `promo beats <song>` (promo_beats) shows that
 analysis (with sections and a confidence; `--refresh` measures again); a
 confidence under 0.5 is a guess worth checking by ear, and stating
 `beatGrid` overrides it.
@@ -326,7 +328,8 @@ Back to back, without computing a start: `compositionSettings.sequence`
 {"layer": "s3", "seconds": 2}, {"layer": "s4", "duration": {"beats": 2}},
 {"layer": "s5"}]` — each layer starting where the one before ends and
 lasting its entry's length (none keeps its own `duration`). The first
-layer's own `startTime` opens the sequence. With a beat clock, every cut
+layer's own `startTime` opens the sequence (`{"beat": 1}` for the first
+downbeat; a number snaps to the nearest beat, never before 0 s). With a beat clock, every cut
 lands on the grid: a start in seconds snaps to the nearest beat, and so
 does a `seconds` length's end. A layer's `after`: `"s1"` starts it where
 layer s1 ends, `{"layer": "s1", "offset": 0.5}` (or `{"beats": 1}`) a
@@ -341,9 +344,13 @@ many seconds; move an `after` layer and its `after` goes.
 Without a clock, musical values resolve against 120 BPM with beat 1 at
 0 s, and promo_validate names every one. A clock whose song cannot be
 measured (no file, or a compressed one and no ffmpeg) lays out the same
-way, validate names it as a break, and a render waits for a grid. Every tool writes the resolved seconds where the
-renderers read them and keeps the musical value in the file; set a field
-to seconds and that one value is plain seconds from then on.
+way, validate names it as a break, and a render waits for a grid. Every
+tool writes the resolved seconds where the renderers read them and keeps
+the musical value in the file; set a field to seconds and that one value
+is plain seconds from then on. The apps' editors show each musical value's
+words beside its seconds and snap a layer's start or end to the nearest
+beat, downbeat or bar — writing `{"beat": n}` or `{"bar": n}` (an end as
+the position its duration runs to), the same values a file states by hand.
 
 ## Beat effects — pulse, shake, flash, punch, generator, onbeat
 

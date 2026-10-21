@@ -112,9 +112,9 @@ its defaults are the source of the first, the person of the second.
 ## The loop
 
 1. **Learn the format** — `promo_schema` once: the authoring subset plus
-   four complete, validated recipes (a device-framed product card, two
+   five complete, validated recipes (a device-framed product card, two
    clips under a wipe, a Ken Burns push with a lower caption, a 9:16
-   re-stamp). `promo_schema_full` is the whole format when a field is not
+   re-stamp, a beat-cut stills slideshow). `promo_schema_full` is the whole format when a field is not
    in the subset; `promo_schema_types` is a generated, types-only JSON
    Schema to fill structured output against.
 2. **Look at the footage first** — the senses, before composing:
@@ -138,9 +138,11 @@ its defaults are the source of the first, the person of the second.
      them; the cut list when the footage has no silence gaps.
    - `promo_beats` (headless) — a song's tempo, beats, downbeats and
      sections; on a project it is cached in `Resources/.beats/` and stays
-     the answer. Put its `bpm` and `offset` in the song's `beatGrid`, point
-     `compositionSettings.beatClock` at it, and times can say
-     `{"beats": 2}` (promo_schema_full topic `beats`).
+     the answer (the app measures into the same cache when it opens the
+     project). Point `compositionSettings.beatClock` at the song and times
+     can say `{"beats": 2}` — cut a slideshow to it with the beat-cut
+     recipe. State a `beatGrid` only to override a measure you checked by
+     ear (confidence under 0.5); promo_schema_full topic `beats`.
    - `promo_transcribe` — a transcript with timings, the draft captions
      are cut from (headless it needs whisper-cli + WHISPER_MODEL; the
      app uses Apple's recognizer; without either, captions are typed).

@@ -107,6 +107,20 @@ fn sequence_seconds_cuts_snap_to_the_grid() {
     assert!((window(&meta, "b").1 - 0.6).abs() < 1e-12);
 }
 
+/// A sequence opening at 0 s with the song's first downbeat a quarter
+/// second in starts on that downbeat, never on the pickup before the
+/// timeline.
+#[test]
+fn a_snapped_sequence_start_stays_on_the_timeline() {
+    let mut file = project(
+        json!({"beatClock": clock(), "sequence": [{"layer": "a", "beats": 2}]}),
+        json!([image("a", 0, json!({}))]),
+    );
+    file["resources"][0]["beatGrid"] = json!({"bpm": 120, "offset": 0.25});
+    let (meta, _) = resolved(&file);
+    assert_eq!(window(&meta, "a"), (0.25, 1.0));
+}
+
 /// `after` names a layer by id, wherever it sits in the stack, plus an
 /// offset in seconds or beats; a chain of them follows through.
 #[test]

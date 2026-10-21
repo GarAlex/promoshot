@@ -22,8 +22,8 @@ This is the authoring subset; `promo_schema_full` is the whole format.
   A layer: `id`, `name`, `sortIndex`, `kind`, `isEnabled: true`,
   `startTime`, `duration` (seconds on the output timeline), usually a
   `resourceID`, and `keyframes`.
-- Cutting to music: `{"beats": 2}`-style times, a `sequence` of slides,
-  `after` — on a song's `beatGrid`; `promo_schema_full {"topics": ["beats"]}`.
+- Cutting to music: a `beatClock` song (promo measures its beats), `{"beats":
+  2}` times, `sequence`, `pulse`, `flash` — the beat-cut recipe; topic `beats`.
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
   `Resources/`), `displayName`, `addedAt: 0`, `imageCuts: []`,
   `disabledAudioTrackIndices: []`; videos also carry `duration`,
@@ -82,7 +82,7 @@ its keyframes' `camera` turns it. The old `frame` on a picture resource
 is legacy 2.5D and `promo_validate` says so. `"kind": "border"` with
 `borderWidth`/`cornerRadius` is still the flat card.
 
-Four recipes. Each is a complete `metadata.json` — copy one beside your
+Five recipes. Each is a complete `metadata.json` — copy one beside your
 media, rename ids/filenames, validate.
 
 **16:9 product card** — a phone body with the screenshot on its screen
@@ -234,6 +234,59 @@ redesign:
    "keyframes":[
     {"id":"t0","time":0,"opacity":0,"transitionDuration":0},
     {"id":"t1","time":0.3,"opacity":1,"transitionDuration":0.3}]}]}
+```
+
+**Beat-cut stills slideshow** — four stills cut every two beats of the
+song, from its first downbeat; each punches in on its downbeats and a
+white flash marks bar 2. No `beatGrid`: promo measures the song on open
+(`promo beats` shows what it found), so another song re-times the cuts:
+
+```json
+{"id":"beatcut","name":"Beat Cut","createdAt":0,"state":"recorded",
+ "minReaderVersion":49,"trimStart":0,"trimEnd":5,"videoDuration":5,
+ "subtitles":[],
+ "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,
+   "backgroundColorHex":"000000",
+   "beatClock":{"resourceID":"song"},
+   "sequence":[{"layer":"s1","beats":2},{"layer":"s2","beats":2},
+               {"layer":"s3","beats":2},{"layer":"s4","beats":2}],
+   "flash":{"on":"downbeat","colorHex":"FFFFFF","opacity":0.5,
+            "duration":{"beats":0.25},"range":{"bar":2,"bars":1}}},
+ "resources":[{"id":"song","kind":"audio","filename":"song.wav",
+   "displayName":"Song","addedAt":0,"imageCuts":[],
+   "disabledAudioTrackIndices":[]},
+  {"id":"p1","kind":"image","filename":"s1.png","displayName":"Still 1",
+   "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+   "pixelWidth":320,"pixelHeight":180},
+  {"id":"p2","kind":"image","filename":"s2.png","displayName":"Still 2",
+   "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+   "pixelWidth":320,"pixelHeight":180},
+  {"id":"p3","kind":"image","filename":"s3.png","displayName":"Still 3",
+   "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+   "pixelWidth":320,"pixelHeight":180},
+  {"id":"p4","kind":"image","filename":"s4.png","displayName":"Still 4",
+   "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+   "pixelWidth":320,"pixelHeight":180}],
+ "layers":[
+  {"id":"music","name":"Music","sortIndex":0,"kind":"audio",
+   "isEnabled":true,"startTime":0,"duration":5,"resourceID":"song",
+   "keyframes":[]},
+  {"id":"s1","name":"Still 1","sortIndex":1,"kind":"image",
+   "isEnabled":true,"startTime":{"beat":1},"duration":1,"resourceID":"p1",
+   "pulse":{"every":"downbeat","property":"viewport","amount":0.04},
+   "keyframes":[]},
+  {"id":"s2","name":"Still 2","sortIndex":2,"kind":"image",
+   "isEnabled":true,"startTime":0,"duration":1,"resourceID":"p2",
+   "pulse":{"every":"downbeat","property":"viewport","amount":0.04},
+   "keyframes":[]},
+  {"id":"s3","name":"Still 3","sortIndex":3,"kind":"image",
+   "isEnabled":true,"startTime":0,"duration":1,"resourceID":"p3",
+   "pulse":{"every":"downbeat","property":"viewport","amount":0.04},
+   "keyframes":[]},
+  {"id":"s4","name":"Still 4","sortIndex":4,"kind":"image",
+   "isEnabled":true,"startTime":0,"duration":1,"resourceID":"p4",
+   "pulse":{"every":"downbeat","property":"viewport","amount":0.04},
+   "keyframes":[]}]}
 ```
 
 Everything else — sprites, masks, motion paths, drawings, narration,

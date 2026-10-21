@@ -1045,7 +1045,12 @@ impl Plan {
                 if spec_of(&layer.time_specs, "startTime").is_some() || !clocked {
                     (layer.start_time, start_index(layer, &grid, scope))
                 } else {
-                    let first = grid.snap(musical::SnapUnit::Beat, layer.start_time);
+                    let mut first = grid.snap(musical::SnapUnit::Beat, layer.start_time);
+                    // Never before the timeline: a start of 0 with the
+                    // first downbeat a moment later ties toward the pickup.
+                    while grid.time_at(first) < 0.0 {
+                        first += 1.0;
+                    }
                     let start = grid.time_at(first);
                     layer.start_time = start;
                     (start, first)
@@ -1639,6 +1644,11 @@ mod tests {
             let Ok(meta) = ProjectMetadata::from_json(text) else {
                 continue;
             };
+            // The beat-cut recipe (and its example) is the one project
+            // written in musical time on purpose.
+            if meta.id == "beatcut" {
+                continue;
+            }
             assert!(!musical::carries_specs(&meta), "{name} is not seconds-only");
             checked += 1;
             let mut old = meta.clone();

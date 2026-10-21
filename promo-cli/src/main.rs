@@ -80,7 +80,7 @@ OPTIONS:
     then what the renderer adjusts (warnings). It exits 1 when the project
     cannot be decoded; with --strict, also when anything is reported.
 
-    `schema` prints the authoring subset plus four complete recipes — the
+    `schema` prints the authoring subset plus five complete recipes — the
     same text the app's `promo_schema` tool serves. `schema --full` is the
     whole format (`promo_schema_full`); one file in the core backs each, so
     no reader can disagree.

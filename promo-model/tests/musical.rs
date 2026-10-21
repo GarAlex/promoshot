@@ -418,6 +418,10 @@ fn seconds_only_projects_are_unchanged() {
         let Ok(meta) = ProjectMetadata::from_json(text) else {
             continue;
         };
+        // The beat-cut recipe and its example are musical on purpose.
+        if meta.id == "beatcut" {
+            continue;
+        }
         checked += 1;
         // Nothing to lift: the file holds no musical value...
         let mut value: Value = serde_json::from_str(text).unwrap();

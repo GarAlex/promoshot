@@ -1,6 +1,7 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 9 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 10 built (2026-10-20); the design is complete. What
+is left out is listed under "Slice 9 as built" (not built). Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +628,57 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 10 as built** (2026-10-20):
+- **Recipe.** schema-quick.md's fifth recipe, "beat-cut stills slideshow",
+  is `examples/BeatCut.promo` byte for byte (`the_examples_are_the_recipes`;
+  synthetic stills and the 120 BPM click as its song): a `beatClock` on a
+  song with no `beatGrid` (measured on open), four stills in a `sequence`
+  of `{"beats": 2}` from `{"beat": 1}`, a downbeat zoom `pulse` on each, a
+  `flash` on bar 2. It stamps 49; the other four keep 34 (the stamp test
+  is now "the recipe's own need, at least 34"). AC7 is
+  `beat_cut_recipe_validates_and_renders` (promo-cli/tests/beats.rs). The
+  seconds-only sweeps (AC4) skip it by id — it is musical on purpose.
+- **`promo_slideshow` did not gain `music`/`beatsPerSlide`**: the recipe
+  is the shape an agent copies; the tool stays as it was.
+- **Docs.** schema.md's Beats section names the apps' shared cache, the
+  library case, the sequence's first start and the editors' snap; no rung
+  callouts (the header's one version statement covers it). schema-quick's
+  music bullet points at the recipe; SKILL.md (and the app's bundled copy)
+  drops "put bpm in beatGrid" — promo measures — and lists five recipes.
+- **Fix:** a sequence whose first start is a number snapped onto the
+  pickup when the first downbeat came a moment after 0 s (0 ties earlier):
+  a snapped start now never lands before 0
+  (`a_snapped_sequence_start_stays_on_the_timeline`).
+- **Gaps closed.** A library-referenced song: `beat_cache::song_file`
+  reads it from the shared library's folder, which the apps name once
+  (`promo_beats_set_library_dir`, from `ResourceLibrary.shared` whenever
+  its root is set); store and lookup take its absolute path, the cache
+  stays the project's (`a_library_song_finds_its_cache`,
+  `testALibrarySongFindsItsCache`). The app's warnings list resolves on the
+  folder's grids (`promo_project_warnings(json, project_dir)`;
+  `testWarningsCountTheMeasuredBeats`).
+
+**Acceptance criteria — final checklist:**
+1. 30 s slideshow, 16 stills, every cut within ±1 frame of the detected
+   beats — `beat_cut_slideshow_cuts_land_on_beats` (promo-cli/tests/beats.rs).
+2. Swapping the song re-times the edit with no other change —
+   `swapping_the_track_retimes_the_edit` (promo-cli/tests/beats.rs).
+3. A stated `beatGrid` is bit-identical across runs and machines —
+   `override_grid_is_bit_identical` (promo-timeline/tests/beat_grid.rs, also
+   run in the Linux image).
+4. Seconds-only projects unchanged, the rung only for new fields —
+   `seconds_only_projects_are_unchanged` (promo-model/tests/musical.rs),
+   `resolve_timing_equals_resolve_attachments_on_seconds_only_projects`,
+   `musical_file_stamps_49`, `ignorable_beat_fields_stamp_48`.
+5. `promo_beats` — `tools_list_includes_promo_beats`,
+   `promo_beats_returns_the_analysis` (promoshot-mcp), `promo_beats_json_shape`
+   (CLI); the apps list it as headless-only (ServerContractTests).
+6. Schema docs cover every new key — `schema_md_mentions_every_authorable_wire_field`
+   (the kitchen sink carries every beat field),
+   `every_quick_schema_recipe_validates_clean`.
+7. The beat-cut recipe validates and renders —
+   `beat_cut_recipe_validates_and_renders`, `the_examples_are_the_recipes`.
 
 **Slice 9 as built** (2026-10-20):
 - **Built:** the audio inspector's "Beats" section (`BeatsSection`: the

@@ -660,3 +660,93 @@ fn render_credits_list_only_used_resources() {
     assert!(text.contains("Blue") && !text.contains("Red"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Acceptance criterion 7 (docs/BEAT-SYNC.md, slice 10): the beat-cut
+/// recipe — `examples/BeatCut.promo`, byte for byte the fifth recipe in
+/// schema-quick.md (`the_examples_are_the_recipes`) — validates with no
+/// break and renders its four stills on the song's measured beats: the
+/// first downbeat at 0.25 s, a cut every two beats, the flash on bar 2.
+#[test]
+fn beat_cut_recipe_validates_and_renders() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/BeatCut.promo");
+    let dir = std::env::temp_dir().join(format!("promo-beats-recipe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("Resources")).unwrap();
+    std::fs::copy(source.join("metadata.json"), dir.join("metadata.json")).unwrap();
+    for entry in std::fs::read_dir(source.join("Resources"))
+        .unwrap()
+        .flatten()
+    {
+        if entry.path().is_file() {
+            std::fs::copy(entry.path(), dir.join("Resources").join(entry.file_name())).unwrap();
+        }
+    }
+    let said = promo_in(&dir, &["validate", dir.to_str().unwrap()]);
+    assert!(said.starts_with("ok"), "{said}");
+    assert!(
+        said.contains("layers[s4].startTime   sequence    → 3.250 s"),
+        "{said}"
+    );
+    assert!(
+        dir.join("Resources/.beats").is_dir(),
+        "the song was measured and cached"
+    );
+
+    let pixel = |time: f64, x: u32, y: u32| {
+        let out = dir.join(format!("still-{time}.png"));
+        let run = Command::new(env!("CARGO_BIN_EXE_promo"))
+            .args(["still"])
+            .arg(&dir)
+            .args(["--out"])
+            .arg(&out)
+            .args(["--time", &time.to_string()])
+            .output()
+            .expect("run promo");
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        let picture = image::open(&out).expect("a still").to_rgb8();
+        let (w, h) = picture.dimensions();
+        let p = picture.get_pixel(x * w / 1920, y * h / 1080);
+        [p[0], p[1], p[2]]
+    };
+    let dominant = |c: [u8; 3]| {
+        if c[0] > 150 && c[1] > 150 && c[2] < 120 {
+            "yellow"
+        } else if c[0] > c[1] && c[0] > c[2] {
+            "red"
+        } else if c[2] > c[0] && c[2] > c[1] {
+            "blue"
+        } else {
+            "green"
+        }
+    };
+    // Each still from its downbeat-aligned cut: sampled clear of the
+    // centre square, half a beat after each cut and just before the next.
+    for (time, colour) in [
+        (0.4, "red"),
+        (1.2, "red"),
+        (1.4, "blue"),
+        (2.2, "blue"),
+        (2.9, "green"),
+        (3.4, "yellow"),
+        (4.2, "yellow"),
+    ] {
+        assert_eq!(dominant(pixel(time, 200, 200)), colour, "at {time} s");
+    }
+    assert_eq!(
+        pixel(0.1, 200, 200),
+        [0, 0, 0],
+        "nothing before the first downbeat"
+    );
+    // The flash on bar 2 (2.25 s) lights the green still over its plain look.
+    let lit = pixel(2.26, 200, 200);
+    let plain = pixel(2.9, 200, 200);
+    assert!(
+        u32::from(lit[0]) > u32::from(plain[0]) + 60,
+        "the flash on bar 2: {lit:?} against {plain:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
