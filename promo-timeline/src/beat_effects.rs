@@ -318,6 +318,12 @@ pub(crate) fn expand_layer(
             }
         };
         let keyed = person.keyframes.iter().any(|k| keys_track(k, &property));
+        if keyed {
+            problems.push(TimingProblem::PulseOverKeys {
+                layer: layer.name.clone(),
+                property: property.clone(),
+            });
+        }
         for (k, index) in indices.iter().enumerate() {
             let t = ctx.grid.time_at(*index);
             let local = t - start;

@@ -438,3 +438,27 @@ fn seconds_only_projects_are_unchanged() {
     }
     assert!(checked > 20, "decoded only {checked}");
 }
+
+/// Provenance on a resource — every field, and one this build does not
+/// name — comes back as written, and asks only the lossless reader.
+#[test]
+fn provenance_round_trips_and_stamps_48() {
+    let provenance = json!({"tool": "ace-step", "model": "v1.5", "license": "Apache-2.0",
+                            "prompt": "a bright synth loop", "cost": 0.25, "currency": "EUR",
+                            "createdAt": "2026-10-20T10:00:00Z", "url": "https://example.com/x",
+                            "seed": 7});
+    let file = json!({
+        "id": "P", "name": "P", "createdAt": 0, "state": "recorded",
+        "trimStart": 0, "trimEnd": 1, "videoDuration": 1, "subtitles": [],
+        "compositionSettings": {},
+        "resources": [{"id": "song", "kind": "audio", "filename": "s.wav", "displayName": "S",
+                       "addedAt": 0, "provenance": provenance.clone()}]
+    });
+    let meta = decode(&file);
+    let written: Value = serde_json::from_str(&meta.to_json().unwrap()).unwrap();
+    assert!(promo_model::json_semantically_equal(
+        &written["resources"][0]["provenance"],
+        &provenance
+    ));
+    assert_eq!(meta.minimum_reader_version(), 48);
+}

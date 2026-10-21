@@ -67,7 +67,15 @@ fn sequence_lays_layers_back_to_back() {
         ]),
     );
     let (meta, report) = resolved(&file);
-    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    // Edges set in seconds off the beat are said, and nothing else.
+    assert!(
+        report.problems.iter().all(|p| matches!(
+            p,
+            TimingProblem::OffGrid { .. } | TimingProblem::ShorterThanABeat { .. }
+        )),
+        "{:?}",
+        report.problems
+    );
     assert_eq!(window(&meta, "c"), (0.5, 2.0));
     assert_eq!(window(&meta, "a"), (2.5, 2.0));
     assert_eq!(window(&meta, "b"), (4.5, 0.5));
@@ -121,7 +129,15 @@ fn after_names_a_layer_by_id_across_the_stack() {
         ]),
     );
     let (meta, report) = resolved(&file);
-    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    // Edges set in seconds off the beat are said, and nothing else.
+    assert!(
+        report.problems.iter().all(|p| matches!(
+            p,
+            TimingProblem::OffGrid { .. } | TimingProblem::ShorterThanABeat { .. }
+        )),
+        "{:?}",
+        report.problems
+    );
     assert_eq!(window(&meta, "mid").0, 3.5);
     assert_eq!(window(&meta, "top").0, 4.5);
     assert_eq!(window(&meta, "off").0, 2.75);

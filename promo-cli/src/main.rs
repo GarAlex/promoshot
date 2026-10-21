@@ -210,10 +210,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     let answer = match command {
         "inspect" => inspect(&project, &opts),
         "proxy" => build_proxies(&project, &opts),
-        "still" => still(&project, &opts),
-        "frames" => frames(&project, &opts),
-        "video" => video(&project, &opts),
-        "gif" => gif(&project, &opts),
+        "still" => still(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
+        "frames" => frames(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
+        "video" => video(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
+        "gif" => gif(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
         other => Err(format!("unknown command `{other}`\n\n{USAGE}")),
     }?;
     println!("{answer}");
@@ -432,6 +432,36 @@ fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
+}
+
+/// A render's answer with the credits of what it reached (resource
+/// `provenance`, docs/BEAT-SYNC.md §8): a `credits` block in the text, a
+/// `credits` key in the JSON — only when a resource it drew states one.
+fn with_credits(answer: String, command: &str, project: &Project, opts: &Options) -> String {
+    let span = if command == "still" {
+        let t = opts.time.unwrap_or(0.0);
+        (t, t)
+    } else if !opts.times.is_empty() {
+        let lo = opts.times.iter().copied().fold(f64::INFINITY, f64::min);
+        let hi = opts.times.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        (lo, hi)
+    } else {
+        (
+            opts.from.unwrap_or(0.0),
+            opts.to.unwrap_or_else(|| project.duration()),
+        )
+    };
+    let credits = promo_cli::credits::credits(&project.meta, Some(span));
+    if credits.is_empty() {
+        return answer;
+    }
+    if opts.json {
+        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&answer) {
+            value["credits"] = promo_cli::credits::json(&credits);
+            return value.to_string();
+        }
+    }
+    format!("{answer}\ncredits:\n{}", promo_cli::credits::text(&credits))
 }
 
 /// `promo beats`: the tracker on one audio file, or on a project's audio

@@ -1,6 +1,6 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 6 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 7 built (2026-10-20); the rest is design. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +627,41 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 7 as built** (2026-10-20):
+- **Findings** come from the timing pass (`TimingProblem`): off-grid edges
+  (start and end of every enabled visual layer a clock governs, skipping
+  audio, backgrounds, generated layers and the clock's own audio layer;
+  tolerance half a frame; the nearest beat numbered from 1), a layer
+  shorter than one beat, the clock's song ending before the timeline
+  (`clock + duration / speed`), an unsure analysis (`BeatGrids.confidence`
+  under 0.5, only when no `beatGrid` overrides it) and a pulse over a keyed
+  track — all warnings. `timeSpecs` or `generatedBy` found in a file is a
+  warning from `file_report_with`, which sees the raw text.
+- **`Report`** gained `resolved_times` and `beat_clocks` (`BeatClockInfo`:
+  scope, resource, source `beatGrid`/`analysis`/`nominal`, bpm, meter,
+  offset, clock); `text()` adds the "Musical times" block (a derived start
+  or length shows its rule's name, `sequence` or `after`), `json()` the
+  `resolvedTimes` and `beatClocks` keys.
+- **explain** adds `times` (only fields stated musically, keyframes as
+  `keyframes[<id>].<field>`) and `generated` (the layer's beat keys), and
+  resolves on the song's cached analysis — it reads, never analyses.
+- **The cache's naming moved to `promo_model::beat_cache`** (`source_of`
+  with its memo, `cache_path`, `load_cached`, `store`, `clock_songs`,
+  `cached_analyses`), re-exported from `promo_media::beats`: explain lives
+  in `promo-author`, which the headless server links without
+  `promo-media`'s GPU stack, and must find the same files. The core still
+  owns the naming in one place; promo-model now does that file I/O.
+- **inspect** adds `beats` (each clock: song, source — `override`,
+  `cache`, `detected now`, or the 120 BPM stand-in — bpm, meter, offset,
+  confidence, beat and bar counts, sections), each layer's `musical` times
+  in both forms, `provenance` per resource and `credits`.
+- **Credits** (`promo-cli/src/credits.rs`): resources a span reaches — the
+  enabled layers overlapping it, the settings, then what those resources
+  point at in turn — with provenance, grouped by tool and licence, costs
+  summed per currency. `still`, `frames`, `video` and `gif` add a `credits`
+  block (text) or key (JSON) when there is any; the whole project's are
+  inspect's. The headless server's render tools pass the CLI's answer on.
 
 **Slice 6 as built** (2026-10-20):
 - **Expansion** is `promo-timeline/src/beat_effects.rs`, the last step of

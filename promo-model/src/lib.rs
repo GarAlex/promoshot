@@ -3,6 +3,7 @@
 //! with the Swift app's `metadata.json` (fixtures harvested from real projects
 //! are the parity gate — see `fixtures/projects/`).
 
+pub mod beat_cache;
 pub mod geometry;
 pub mod inventory;
 pub mod musical;
@@ -728,13 +729,23 @@ mod schema_doc_tests {
             }),
             palette: None,
             looped: Some(true),
+            provenance: Some(musical::Provenance {
+                tool: Some("ace-step".into()),
+                model: Some("v1.5".into()),
+                license: Some("Apache-2.0".into()),
+                prompt: Some("a bright synth loop".into()),
+                cost: Some(0.0),
+                currency: Some("USD".into()),
+                created_at: Some("2026-10-20T10:00:00Z".into()),
+                url: Some("https://example.com".into()),
+                extra: serde_json::Map::new(),
+            }),
             beat_grid: Some(musical::BeatGrid {
                 bpm: 128.0,
                 offset: Some(0.469),
                 time_signature: Some([4, 4]),
                 extra: serde_json::Map::new(),
             }),
-            provenance: None,
             generated_by: None,
             extra: serde_json::Map::new(),
         }

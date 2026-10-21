@@ -44,6 +44,40 @@ pub struct BeatGrids {
     /// An analysis's sections, by resource id — what a generator's
     /// `{"section": …}` range names.
     pub sections: BTreeMap<String, Vec<musical::BeatSection>>,
+    /// An analysis's confidence, by resource id: under 0.5 is a warning.
+    pub confidence: BTreeMap<String, f64>,
+}
+
+impl BeatGrids {
+    /// The grids, sections and confidences of songs' analyses, by resource
+    /// id (`promo_model::beat_cache::cached_analyses`).
+    pub fn from_analyses(analyses: &BTreeMap<String, musical::BeatAnalysis>) -> BeatGrids {
+        let mut grids = BeatGrids::default();
+        for (id, analysis) in analyses.iter().filter(|(_, a)| a.bpm > 0.0) {
+            grids.by_resource.insert(id.clone(), analysis.grid());
+            grids.sections.insert(id.clone(), analysis.sections.clone());
+            grids.confidence.insert(id.clone(), analysis.confidence);
+        }
+        grids
+    }
+}
+
+/// One beat clock as resolution read it: what `validate` and `inspect`
+/// list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BeatClockInfo {
+    /// `composition` for the project's own, else `resources[<id>]`.
+    pub scope: String,
+    pub resource: String,
+    /// `beatGrid` (stated on the resource), `analysis`, or `nominal` (the
+    /// 120 BPM stand-in).
+    pub source: String,
+    pub bpm: f64,
+    pub meter: u32,
+    /// The first downbeat, in the song's seconds.
+    pub offset: f64,
+    /// Where the song's second 0 sits on the output timeline.
+    pub clock: f64,
 }
 
 /// A musical value and the seconds it resolved to.
@@ -129,6 +163,39 @@ pub enum TimingProblem {
         layer: String,
         why: String,
     },
+    /// A layer edge off the beat grid by more than half a frame.
+    OffGrid {
+        layer: String,
+        edge: &'static str,
+        at: f64,
+        off: f64,
+        beat: i64,
+        nearest: f64,
+    },
+    /// A layer shorter than one beat of its clock.
+    ShorterThanABeat {
+        layer: String,
+        length: f64,
+        beat: f64,
+        bpm: f64,
+    },
+    /// The clock's song ends before the timeline does.
+    SongEndsEarly {
+        resource: String,
+        ends: f64,
+        timeline: f64,
+    },
+    /// The tracker was unsure of the song's beats.
+    UnsureBeats {
+        resource: String,
+        confidence: f64,
+    },
+    /// A pulse over a track already keyed: its base is sampled at beat
+    /// resolution.
+    PulseOverKeys {
+        layer: String,
+        property: String,
+    },
 }
 
 impl TimingProblem {
@@ -209,6 +276,51 @@ impl std::fmt::Display for TimingProblem {
                  it — none of them can be placed, and each keeps its stored start"
             ),
             Self::Generator { layer, why } => write!(f, "layer \"{layer}\": {why}"),
+            Self::OffGrid {
+                layer,
+                edge,
+                at,
+                off,
+                beat,
+                nearest,
+            } => write!(
+                f,
+                "layer \"{layer}\" at {at:.2}s: {edge} {:.2} s off the beat grid — nearest is \
+                 beat {beat} at {nearest:.2} s",
+                off.abs()
+            ),
+            Self::ShorterThanABeat {
+                layer,
+                length,
+                beat,
+                bpm,
+            } => write!(
+                f,
+                "layer \"{layer}\": lasts {length:.2} s, shorter than one beat ({beat:.2} s at \
+                 {bpm} BPM)"
+            ),
+            Self::SongEndsEarly {
+                resource,
+                ends,
+                timeline,
+            } => write!(
+                f,
+                "the beat clock's audio \"{resource}\" ends at {ends:.1} s but the timeline runs \
+                 to {timeline:.1} s — the grid after {ends:.1} s is extrapolated"
+            ),
+            Self::UnsureBeats {
+                resource,
+                confidence,
+            } => write!(
+                f,
+                "beat detection for \"{resource}\" is unsure (confidence {confidence:.2}) — set \
+                 beatGrid by hand"
+            ),
+            Self::PulseOverKeys { layer, property } => write!(
+                f,
+                "pulse on layer \"{layer}\" reshapes keyed {property} keyframes at beat \
+                 resolution"
+            ),
             Self::FollowsAnOpenEnd { layer, target } => write!(
                 f,
                 "layer \"{layer}\" follows \"{target}\", which never ends — give \
@@ -225,6 +337,8 @@ pub struct TimingReport {
     pub resolved: Vec<ResolvedTime>,
     /// Clock resources with no grid: the nominal grid stood in.
     pub missing_grids: Vec<String>,
+    /// Every scope's beat clock.
+    pub clocks: Vec<BeatClockInfo>,
 }
 
 /// Every musical value and attachment in `meta`, resolved to seconds in
@@ -331,6 +445,17 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         report
             .problems
             .extend(crate::beat_effects::expand_flash(meta, &flash));
+        let timeline = crate::composition_duration(meta);
+        findings(
+            meta.layers.as_deref().unwrap_or(&[]),
+            &scope,
+            &resources,
+            grids,
+            fps,
+            timeline,
+            "composition",
+            &mut report,
+        );
     }
 
     // Each composition: its own clock, never its parent's — it may be
@@ -380,10 +505,120 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             &settings,
             &mut report,
         );
+        findings(
+            &composition.layers,
+            &scope,
+            &resources,
+            grids,
+            fps,
+            end,
+            &format!("resources[{id}]"),
+            &mut report,
+        );
     }
     report.missing_grids.sort();
     report.missing_grids.dedup();
     report
+}
+
+/// What a reader of a beat-cut edit wants to hear: a visual layer's edge off
+/// the grid (by more than half a frame), one shorter than a beat, a song
+/// that ends before the timeline, a detection the tracker was unsure of —
+/// and the scope's clock, for the listing.
+#[allow(clippy::too_many_arguments)]
+fn findings(
+    layers: &[ProjectLayer],
+    scope: &Scope,
+    resources: &[ProjectResource],
+    grids: &BeatGrids,
+    fps: f64,
+    timeline: f64,
+    name: &str,
+    report: &mut TimingReport,
+) {
+    let Some(id) = scope.clock_resource.clone() else {
+        return;
+    };
+    let grid = scope.grid;
+    report.clocks.push(BeatClockInfo {
+        scope: name.into(),
+        resource: id.clone(),
+        source: scope.source.into(),
+        bpm: grid.bpm,
+        meter: grid.meter,
+        offset: grid.offset,
+        clock: grid.clock,
+    });
+    let half_frame = 0.5 / fps.max(1.0);
+    fn walk(layers: &[ProjectLayer], scope: &Scope, half_frame: f64, report: &mut TimingReport) {
+        for layer in layers {
+            if let Some(members) = layer.members.as_deref() {
+                walk(members, scope, half_frame, report);
+            }
+            if matches!(
+                layer.kind,
+                ProjectLayerKind::Audio | ProjectLayerKind::Background
+            ) || layer.generated_by.is_some()
+                || scope.places_clock(layer)
+                || scope.clockless_for(layer)
+                || !layer.is_enabled
+            {
+                continue;
+            }
+            let grid = scope.grid_of(layer);
+            let mut edges = vec![("starts", layer.start_time)];
+            if let Some(d) = layer.duration {
+                edges.push(("ends", layer.start_time + d));
+                let beat = grid.time_at(1.0) - grid.time_at(0.0);
+                if d + 1e-9 < beat {
+                    report.problems.push(TimingProblem::ShorterThanABeat {
+                        layer: layer.name.clone(),
+                        length: d,
+                        beat,
+                        bpm: grid.bpm,
+                    });
+                }
+            }
+            for (edge, at) in edges {
+                let index = grid.index_at(at).round();
+                let nearest = grid.time_at(index);
+                let off = at - nearest;
+                if off.abs() > half_frame {
+                    report.problems.push(TimingProblem::OffGrid {
+                        layer: layer.name.clone(),
+                        edge,
+                        at,
+                        off,
+                        beat: index as i64 + 1,
+                        nearest,
+                    });
+                }
+            }
+        }
+    }
+    walk(layers, scope, half_frame, report);
+    if let Some(song) = resources.iter().find(|r| r.id == id) {
+        if let Some(length) = song.duration.filter(|d| *d > 0.0) {
+            let ends = grid.clock + length / grid.speed;
+            if ends + half_frame < timeline {
+                report.problems.push(TimingProblem::SongEndsEarly {
+                    resource: id.clone(),
+                    ends,
+                    timeline,
+                });
+            }
+        }
+        if song.beat_grid.is_none() {
+            if let Some(&confidence) = grids.confidence.get(&id) {
+                if confidence < 0.5 {
+                    report.problems.push(TimingProblem::UnsureBeats {
+                        resource: id.clone(),
+                        confidence,
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Each layer's `pulse` and `shake`, stage members included, on its grid.
@@ -863,6 +1098,8 @@ struct Scope {
     overrides: BTreeMap<String, Grid>,
     /// The resource the scope's clock counts.
     clock_resource: Option<String>,
+    /// Where the scope's grid came from: `beatGrid`, `analysis`, `nominal`.
+    source: &'static str,
 }
 
 impl Scope {
@@ -880,11 +1117,18 @@ impl Scope {
             clock_layer: None,
             overrides: BTreeMap::new(),
             clock_resource: clock.and_then(|c| c.resource_id.clone()),
+            source: "nominal",
         };
         if let Some(clock) = clock {
             let (grid, layer) = scope.grid_for(clock, layers, resources, grids);
             scope.grid = grid;
             scope.clock_layer = layer;
+            let id = clock.resource_id.as_deref().unwrap_or_default();
+            scope.source = match resources.iter().find(|r| r.id == id) {
+                Some(r) if r.beat_grid.is_some() => "beatGrid",
+                Some(_) if grids.by_resource.contains_key(id) => "analysis",
+                _ => "nominal",
+            };
         }
         fn walk(
             scope: &mut Scope,
@@ -1007,6 +1251,7 @@ impl Scope {
             clock_layer: self.clock_layer.clone(),
             overrides: self.overrides.clone(),
             clock_resource: self.clock_resource.clone(),
+            source: self.source,
         }
     }
 }

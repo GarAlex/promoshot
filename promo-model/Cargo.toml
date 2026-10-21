@@ -12,6 +12,8 @@ workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_ignored.workspace = true
+# The beat cache is keyed by the SHA-256 of a song (beat_cache.rs).
+sha2 = "0.10"
 # The machine half of the format: a JSON Schema GENERATED from these same
 # structs, so it cannot drift from what the parser accepts.
 schemars = "1"

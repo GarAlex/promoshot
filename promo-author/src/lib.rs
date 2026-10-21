@@ -1148,11 +1148,15 @@ fn open_existing(
 /// gain, and the keyframes bracketing the moment; per project: the timing
 /// resolver's problems and validate's warnings. JSON, machine-first.
 pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
-    let (_, text) = open_existing(args, "project", root)?;
+    let (dir, text) = open_existing(args, "project", root)?;
     let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
     // The project the renderer draws: musical values and attachments
-    // resolved to the seconds it uses.
-    let timing = promo_timeline::resolve_timing(&mut meta, &Default::default());
+    // resolved to the seconds it uses — on the beats a song's cached
+    // analysis counts (explain reads; it never analyses).
+    let grids = promo_timeline::BeatGrids::from_analyses(
+        &promo_model::beat_cache::cached_analyses(&dir, &meta),
+    );
+    let timing = promo_timeline::resolve_timing(&mut meta, &grids);
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
     let settings = &meta.composition_settings;
@@ -1191,6 +1195,38 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
         "warnings": promo_timeline::validate::warnings(&meta),
     });
     serde_json::to_string_pretty(&out).map_err(|e| e.to_string())
+}
+
+/// A layer's musical times: field → `{"value", "seconds"}`, the value the
+/// file's spec (or a derived start's rule name), the seconds resolution
+/// wrote. Keyframes' under `keyframes[<id>].<field>`.
+fn musical_times(layer: &promo_model::ProjectLayer) -> Value {
+    let shown = |entry: &promo_model::TimeSpec| -> Value {
+        match (&entry.spec, &entry.rule) {
+            (Some(spec), _) => serde_json::from_str(spec).unwrap_or(Value::Null),
+            (None, Some(rule)) => Value::String(rule.clone()),
+            _ => Value::Null,
+        }
+    };
+    let mut out = serde_json::Map::new();
+    for (key, entry) in layer.time_specs.iter().flatten() {
+        let seconds = promo_model::musical::layer_number(layer, key).unwrap_or(entry.seconds);
+        out.insert(
+            key.clone(),
+            json!({ "value": shown(entry), "seconds": seconds }),
+        );
+    }
+    for keyframe in &layer.keyframes {
+        for (key, entry) in keyframe.time_specs.iter().flatten() {
+            let seconds =
+                promo_model::musical::keyframe_number(keyframe, key).unwrap_or(entry.seconds);
+            out.insert(
+                format!("keyframes[{}].{key}", keyframe.id),
+                json!({ "value": shown(entry), "seconds": seconds }),
+            );
+        }
+    }
+    Value::Object(out)
 }
 
 /// One layer at `time`, as the renderer resolves it — see [`explain`]. A
@@ -1330,6 +1366,14 @@ fn layer_doc(
         "transitionIn": layer.transition_in.as_ref().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
         "transitionOut": layer.transition_out.as_ref().map(|t| serde_json::to_value(t).unwrap_or(Value::Null)),
         "fadeIn": layer.fade_in, "fadeOut": layer.fade_out,
+        // Each time the file states musically, in both forms (only those):
+        // `{"value": {"beats": 4}, "seconds": 1.832}` — and how many keys a
+        // beat generator made.
+        "times": musical_times(layer),
+        "generated": layer.keyframes.iter().filter(|k| k
+            .auto
+            .as_deref()
+            .is_some_and(|a| a.starts_with(promo_model::musical::BEAT_TAG))).count(),
     });
     let on_canvas = |r: &Value| -> Option<[f64; 4]> {
         let (x, y) = (r["x"].as_f64()?, r["y"].as_f64()?);

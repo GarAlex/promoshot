@@ -65,6 +65,11 @@ pub struct Finding {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Report {
     pub findings: Vec<Finding>,
+    /// Every musical value (and derived start or length) with the seconds
+    /// it resolved to — `validate`'s "Musical times" block.
+    pub resolved_times: Vec<crate::ResolvedTime>,
+    /// Every beat clock, as resolution read it.
+    pub beat_clocks: Vec<crate::BeatClockInfo>,
 }
 
 impl Report {
@@ -128,6 +133,32 @@ impl Report {
     /// The report as an author reads it. The first word is the verdict:
     /// `ok` only when everything written will show.
     pub fn text(&self) -> String {
+        let mut out = self.verdict();
+        if !self.resolved_times.is_empty() {
+            out.push_str("\n\nMusical times");
+            let width = self
+                .resolved_times
+                .iter()
+                .map(|r| r.at.len())
+                .max()
+                .unwrap_or(0);
+            let spec = self
+                .resolved_times
+                .iter()
+                .map(|r| r.spec.len())
+                .max()
+                .unwrap_or(0);
+            for row in &self.resolved_times {
+                out.push_str(&format!(
+                    "\n  {:width$}   {:spec$}  → {:.3} s",
+                    row.at, row.spec, row.seconds
+                ));
+            }
+        }
+        out
+    }
+
+    fn verdict(&self) -> String {
         let breaks = self.of(Severity::Breaks);
         let warnings = self.of(Severity::Warning);
         if breaks.is_empty() && warnings.is_empty() {
@@ -172,6 +203,18 @@ impl Report {
                 }
                 entry
             }).collect::<Vec<_>>(),
+            "resolvedTimes": self.resolved_times.iter().map(|r| json!({
+                "at": r.at,
+                // A musical value as the file spells it; a derived one by
+                // its rule's name.
+                "value": serde_json::from_str::<Value>(&r.spec)
+                    .unwrap_or_else(|_| Value::String(r.spec.clone())),
+                "seconds": r.seconds,
+            })).collect::<Vec<_>>(),
+            "beatClocks": self.beat_clocks.iter().map(|c| json!({
+                "scope": c.scope, "resource": c.resource, "source": c.source,
+                "bpm": c.bpm, "meter": c.meter, "offset": c.offset, "clock": c.clock,
+            })).collect::<Vec<_>>(),
             "text": self.text(),
         })
     }
@@ -228,8 +271,22 @@ pub fn file_report_with(
 ) -> Result<Report, String> {
     let mut meta = ProjectMetadata::from_json(json).map_err(|e| e.to_string())?;
     let mut out = Report::default();
+    // The tools keep these in memory only; one in a file was written by
+    // something else, and every tool ignores what it says.
+    if let Ok(raw) = serde_json::from_str::<Value>(json) {
+        for key in ["timeSpecs", "generatedBy"] {
+            if holds_key(&raw, key) {
+                out.warn(format!(
+                    "the file holds `{key}`, which the tools keep in memory only — it is \
+                     recomputed on every open and what the file says is ignored"
+                ));
+            }
+        }
+    }
     // One pass for musical values and attachments alike.
     let timing = crate::resolve_timing(&mut meta, grids);
+    out.resolved_times = timing.resolved.clone();
+    out.beat_clocks = timing.clocks.clone();
     for problem in &timing.problems {
         if problem.is_break() {
             out.breaks(problem.to_string());
@@ -275,6 +332,14 @@ enum Holder {
     Layer,
     Resource,
     Other,
+}
+
+fn holds_key(value: &Value, key: &str) -> bool {
+    match value {
+        Value::Object(map) => map.contains_key(key) || map.values().any(|v| holds_key(v, key)),
+        Value::Array(items) => items.iter().any(|v| holds_key(v, key)),
+        _ => false,
+    }
 }
 
 fn holder(path: &[PathStep]) -> Holder {

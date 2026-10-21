@@ -107,8 +107,72 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             })
         })
         .collect();
+    // Beat clocks and their grids, each musical value in both forms, and
+    // the credits of what the project uses (docs/BEAT-SYNC.md §7–8).
+    let beats: Vec<serde_json::Value> = project
+        .timing
+        .clocks
+        .iter()
+        .map(|c| {
+            let analysis = project.analyses.get(&c.resource);
+            let source = match c.source.as_str() {
+                "beatGrid" => "override".to_string(),
+                "analysis" => analysis
+                    .map(|(_, how)| how.clone())
+                    .unwrap_or_else(|| "analysis".into()),
+                _ => "none — 120 BPM stand-in".into(),
+            };
+            serde_json::json!({
+                "scope": c.scope, "resource": c.resource, "source": source,
+                "bpm": c.bpm, "meter": c.meter, "offset": c.offset, "clock": c.clock,
+                "confidence": analysis.map(|(a, _)| a.confidence),
+                "beats": analysis.map(|(a, _)| a.beats.len()),
+                "bars": analysis.map(|(a, _)| a.downbeats.len()),
+                "sections": analysis.map(|(a, _)| a.sections.iter().map(|s| serde_json::json!({
+                    "index": s.index, "label": s.label, "startBar": s.start_bar,
+                    "bars": s.bars, "energy": s.energy,
+                })).collect::<Vec<_>>()),
+            })
+        })
+        .collect();
+    let musical_of = |layer: &promo_model::ProjectLayer| -> Vec<(String, String, f64)> {
+        let mut out: Vec<(String, String, f64)> = layer
+            .time_specs
+            .iter()
+            .flatten()
+            .map(|(key, entry)| {
+                let shown = entry
+                    .spec
+                    .clone()
+                    .or_else(|| entry.rule.clone())
+                    .unwrap_or_default();
+                let seconds =
+                    promo_model::musical::layer_number(layer, key).unwrap_or(entry.seconds);
+                (key.clone(), shown, seconds)
+            })
+            .collect();
+        for keyframe in &layer.keyframes {
+            for (key, entry) in keyframe.time_specs.iter().flatten() {
+                if let Some(spec) = &entry.spec {
+                    let seconds = promo_model::musical::keyframe_number(keyframe, key)
+                        .unwrap_or(entry.seconds);
+                    out.push((
+                        format!("keyframes[{}].{key}", keyframe.id),
+                        spec.clone(),
+                        seconds,
+                    ));
+                }
+            }
+        }
+        out
+    };
+    let credits = crate::credits::credits(&project.meta, None);
     if json {
         return serde_json::json!({
+            "beats": beats,
+            "credits": crate::credits::json(&credits),
+            "provenance": resources.iter().filter_map(|r| r.provenance.as_ref().map(|p|
+                serde_json::json!({ "resource": r.id, "provenance": p }))).collect::<Vec<_>>(),
             "name": project.meta.name,
             "folder": project.dir.display().to_string(),
             "canvas": { "width": w, "height": h },
@@ -121,6 +185,12 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                     "id": l.id, "name": l.name, "kind": l.kind,
                     "startTime": l.start_time, "duration": l.duration,
                     "handle": handle(&l.id),
+                    "musical": musical_of(l).into_iter().map(|(at, value, seconds)| {
+                        serde_json::json!({ "at": at,
+                            "value": serde_json::from_str::<serde_json::Value>(&value)
+                                .unwrap_or(serde_json::Value::String(value)),
+                            "seconds": seconds })
+                    }).collect::<Vec<_>>(),
                 }))
                 .collect::<Vec<_>>(),
             "resources": resources.len(),
@@ -190,6 +260,38 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             "  {}  {kind}  {:.2}–{end}s  \"{}\"{spelling}\n",
             layer.id, layer.start_time, layer.name
         ));
+        for (at, value, seconds) in musical_of(layer) {
+            out.push_str(&format!("      {at}  {value} → {seconds:.3} s\n"));
+        }
+    }
+    for clock in &beats {
+        out.push_str(&format!(
+            "beats:     \"{}\" ({}) — {} BPM, {}/4, first downbeat {:.3} s, from the {}{}\n",
+            clock["resource"].as_str().unwrap_or(""),
+            clock["scope"].as_str().unwrap_or(""),
+            clock["bpm"],
+            clock["meter"],
+            clock["offset"].as_f64().unwrap_or(0.0),
+            clock["source"].as_str().unwrap_or(""),
+            match (
+                clock["confidence"].as_f64(),
+                clock["beats"].as_u64(),
+                clock["bars"].as_u64()
+            ) {
+                (Some(c), Some(b), Some(n)) => format!(", confidence {c:.2}, {b} beats, {n} bars"),
+                _ => String::new(),
+            }
+        ));
+        for section in clock["sections"].as_array().into_iter().flatten() {
+            out.push_str(&format!(
+                "      {} — bars {}–{}, energy {:.2}\n",
+                section["label"].as_str().unwrap_or(""),
+                section["startBar"],
+                section["startBar"].as_u64().unwrap_or(1) + section["bars"].as_u64().unwrap_or(1)
+                    - 1,
+                section["energy"].as_f64().unwrap_or(0.0)
+            ));
+        }
     }
     if let Some(kept) = handles.filter(|h| !h.is_empty()) {
         out.push_str(&format!(
@@ -298,6 +400,34 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             out.push_str(&format!("\n  - {} \"{}\": {}", u.kind, u.name, u.why));
         }
     }
+    let made: Vec<String> = resources
+        .iter()
+        .filter_map(|r| {
+            let p = r.provenance.as_ref()?;
+            Some(format!(
+                "\n  - \"{}\": {}{}{}",
+                r.display_name,
+                p.tool.as_deref().unwrap_or("an unnamed tool"),
+                p.model
+                    .as_ref()
+                    .map(|m| format!(" {m}"))
+                    .unwrap_or_default(),
+                p.license
+                    .as_ref()
+                    .map(|l| format!(", {l}"))
+                    .unwrap_or_default(),
+            ))
+        })
+        .collect();
+    if !made.is_empty() {
+        out.push_str("\n\nprovenance:");
+        for line in made {
+            out.push_str(&line);
+        }
+    }
+    if !credits.is_empty() {
+        out.push_str(&format!("\n\ncredits:\n{}", crate::credits::text(&credits)));
+    }
     if palette.named > 0 || !palette.undefined.is_empty() {
         out.push_str(&format!(
             "\n\npalette: {} named, {} references",
@@ -358,7 +488,7 @@ pub struct Unused {
 /// walking the whole file, so a use in a stage member, a nested layer, a
 /// camera's route or the environment is a use (the Swift walk counted
 /// neither the environment's panorama nor the theme plate).
-fn pointed_at(node: &Value, parent: Option<&str>, out: &mut HashSet<String>) {
+pub(crate) fn pointed_at(node: &Value, parent: Option<&str>, out: &mut HashSet<String>) {
     match node {
         Value::Object(map) => {
             for (key, value) in map {

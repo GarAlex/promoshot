@@ -122,7 +122,15 @@ fn beats_and_bars_measure_along_the_grid() {
         json!([song(json!({"bpm": 90, "timeSignature": [3, 4]}))]),
     );
     let (meta, report) = resolved(&file);
-    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    // A layer placed on seconds off the beat is said, and nothing else.
+    assert!(
+        report
+            .problems
+            .iter()
+            .all(|p| matches!(p, TimingProblem::OffGrid { .. })),
+        "{:?}",
+        report.problems
+    );
     let beat = 60.0 / 90.0;
     let a = layer(&meta, "a");
     assert!((a.start_time - 2.0 * beat).abs() < 1e-12);
@@ -383,7 +391,15 @@ fn musical_lengths_and_attachments_compose() {
         json!([song(json!({"bpm": 120}))]),
     );
     let (meta, report) = resolved(&file);
-    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    // A layer placed on seconds off the beat is said, and nothing else.
+    assert!(
+        report
+            .problems
+            .iter()
+            .all(|p| matches!(p, TimingProblem::OffGrid { .. })),
+        "{:?}",
+        report.problems
+    );
     assert_eq!(layer(&meta, "a").start_time, 0.5);
     assert_eq!(layer(&meta, "a").duration, Some(2.0));
     // b starts where a ends and lasts until bar 3 (4 s): its musical END

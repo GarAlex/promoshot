@@ -14,9 +14,9 @@
 //! the host never resamples (this file does, with one fixed kernel), and
 //! the output is rounded to 1 µs (times) and 0.001 (bpm).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use promo_model::musical::{BeatAnalysis, BeatSection, BeatSource};
+use promo_model::musical::{BeatAnalysis, BeatSection};
 
 /// Bumped whenever the analysis of the same samples could change.
 pub const TRACKER_VERSION: u32 = 1;
@@ -1088,97 +1088,9 @@ pub fn analyse_file(path: &Path, options: BeatOptions) -> Result<BeatAnalysis, B
     Ok(analysis)
 }
 
-/// The file's name, the first 32 hex digits of the SHA-256 of its bytes,
-/// and its size.
-///
-/// Hashing a song is the slow part of finding its cache, so the process
-/// remembers each answer by (path, size, modification time): a file that
-/// changed in either is hashed again.
-pub fn source_of(path: &Path) -> Result<BeatSource, BeatError> {
-    use sha2::Digest;
-    use std::sync::atomic::Ordering;
-    let filename = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let stamp = std::fs::metadata(path)
-        .ok()
-        .and_then(|m| Some((m.len(), m.modified().ok()?)));
-    let memo_key = stamp.map(|(size, modified)| (path.to_path_buf(), size, modified));
-    if let Some(key) = &memo_key {
-        if let Some((sha256, bytes)) = memo().lock().ok().and_then(|m| m.get(key).cloned()) {
-            return Ok(BeatSource {
-                filename,
-                sha256,
-                bytes,
-            });
-        }
-    }
-    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    HASHED.fetch_add(1, Ordering::Relaxed);
-    let digest = sha2::Sha256::digest(&bytes);
-    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
-    let source = BeatSource {
-        filename,
-        sha256: hex[..32].to_string(),
-        bytes: bytes.len() as u64,
-    };
-    if let (Some(key), Ok(mut memo)) = (memo_key, memo().lock()) {
-        memo.insert(key, (source.sha256.clone(), source.bytes));
-    }
-    Ok(source)
-}
-
-type MemoKey = (PathBuf, u64, std::time::SystemTime);
-
-fn memo() -> &'static std::sync::Mutex<std::collections::HashMap<MemoKey, (String, u64)>> {
-    static MEMO: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::HashMap<MemoKey, (String, u64)>>,
-    > = std::sync::OnceLock::new();
-    MEMO.get_or_init(Default::default)
-}
-
-static HASHED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-/// How many times this process has hashed a file's bytes — what the memo
-/// saves, for the tests that hold it to that.
-pub fn files_hashed() -> usize {
-    HASHED.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-/// Where an analysis of content `key` lives in a project:
-/// `Resources/.beats/<key>.json`.
-pub fn cache_path(project: &Path, key: &str) -> PathBuf {
-    project
-        .join("Resources")
-        .join(".beats")
-        .join(format!("{key}.json"))
-}
-
-/// The project's cached analysis of `audio`, by content, when there is one.
-pub fn load_cached(project: &Path, audio: &Path) -> Option<BeatAnalysis> {
-    let key = source_of(audio).ok()?.sha256;
-    let text = std::fs::read_to_string(cache_path(project, &key)).ok()?;
-    serde_json::from_str(&text).ok()
-}
-
-/// Writes `analysis` (of `audio`) into the project's cache, `source` filled
-/// in, and returns what was written.
-pub fn store(
-    project: &Path,
-    audio: &Path,
-    mut analysis: BeatAnalysis,
-) -> Result<BeatAnalysis, BeatError> {
-    let source = source_of(audio)?;
-    let path = cache_path(project, &source.sha256);
-    analysis.source = Some(source);
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    let text = serde_json::to_string_pretty(&analysis).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text + "\n").map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(analysis)
-}
+// The cache's naming lives in `promo_model::beat_cache`, so a reader that
+// does not analyse (explain, the apps) finds the same files.
+pub use promo_model::beat_cache::{cache_path, files_hashed, load_cached, source_of, store};
 
 /// The project's analysis of `audio`: the cache when it holds one — it is
 /// authoritative, so an upgraded tracker never re-times an edit — else a

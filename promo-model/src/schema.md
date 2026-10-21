@@ -968,7 +968,15 @@ flies a title in from the left.
   project using a rect or a corner radius carries
   `minReaderVersion: 42`.
 
-## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration
+## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits
+
+- `provenance` on any resource says where it came from, for credits and
+  AI labels: `{"tool": "ace-step", "model": "v1.5", "license":
+  "Apache-2.0", "prompt": "…", "cost": 0, "currency": "USD", "createdAt":
+  "2026-10-20T10:00:00Z", "url": "…"}`, every field optional. promo_inspect
+  lists it per resource and a `credits` block of what the project uses
+  (grouped by tool and licence, costs summed per currency); a render's
+  answer carries `credits` for what that render reached.
 
 - speed on a resource or a cut is the playback rate; 1.5 plays half
   again as fast, so the material occupies two thirds of the timeline.

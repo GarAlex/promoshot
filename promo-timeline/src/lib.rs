@@ -61,7 +61,9 @@ pub use mapping::{
     VideoSegment,
 };
 pub use motion::{path_document_polyline, path_polyline, point_along, point_along_range, Polyline};
-pub use musical::{resolve_timing, BeatGrids, ResolvedTime, TimingProblem, TimingReport};
+pub use musical::{
+    resolve_timing, BeatClockInfo, BeatGrids, ResolvedTime, TimingProblem, TimingReport,
+};
 pub use plan::{
     composition_duration, export_fps, export_plan, export_size, frame_count, look_times,
     ExportPlan, DEFAULT_FPS, MAX_FPS,

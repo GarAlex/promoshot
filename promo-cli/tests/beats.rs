@@ -101,8 +101,9 @@ fn every_loader_gives_the_same_numbers() {
     // validate sees a clean file: the grid is stated.
     let report = promo_timeline::report::file_report(&file.to_string(), None).unwrap();
     assert!(
-        !format!("{report:?}").contains("beat"),
-        "a stated grid draws no beat finding: {report:?}"
+        !report.messages().iter().any(|m| m.contains("beat")),
+        "a stated grid draws no beat finding: {:?}",
+        report.messages()
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -480,5 +481,182 @@ fn flash_brightens_each_downbeat_frame() {
     for off in [1.0, 1.5, 3.0] {
         assert!(brightness(off) < 10, "the off-beat at {off} s is lit");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Two stills, each made by a tool that says so, one after the other —
+/// and a song the 128 BPM click track, measured on open.
+fn credited_project(name: &str) -> PathBuf {
+    let dir = folder(name, &json!({}));
+    for (file, rgb) in [("a.png", [255u8, 0, 0]), ("b.png", [0, 0, 255])] {
+        image::RgbImage::from_pixel(16, 9, image::Rgb(rgb))
+            .save(dir.join("Resources").join(file))
+            .unwrap();
+    }
+    let (samples, _) = click_track::click_track(128.0, 12.0, 44_100.0, None);
+    std::fs::write(
+        dir.join("Resources/song.wav"),
+        click_track::wav(&samples, 1, 44_100),
+    )
+    .unwrap();
+    let metadata = json!({
+        "id": "P", "name": "Credits", "createdAt": 0, "state": "recorded",
+        "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+        "compositionSettings": {"canvasWidth": 160, "canvasHeight": 90, "fps": 30,
+                                "beatClock": {"resourceID": "song"}},
+        "resources": [
+            {"id": "song", "kind": "audio", "filename": "song.wav", "displayName": "Song",
+             "addedAt": 0, "duration": 12,
+             "provenance": {"tool": "ace-step", "model": "v1.5", "license": "Apache-2.0",
+                            "cost": 0, "currency": "USD"}},
+            {"id": "ra", "kind": "image", "filename": "a.png", "displayName": "Red",
+             "addedAt": 0, "pixelWidth": 16, "pixelHeight": 9,
+             "provenance": {"tool": "flux", "license": "CC-BY-4.0", "cost": 0.04,
+                            "currency": "USD"}},
+            {"id": "rb", "kind": "image", "filename": "b.png", "displayName": "Blue",
+             "addedAt": 0, "pixelWidth": 16, "pixelHeight": 9,
+             "provenance": {"tool": "flux", "license": "CC-BY-4.0", "cost": 0.06,
+                            "currency": "USD"}}
+        ],
+        "layers": [
+            {"id": "music", "name": "Music", "sortIndex": 0, "kind": "audio", "isEnabled": true,
+             "startTime": 0, "resourceID": "song", "keyframes": []},
+            {"id": "a", "name": "A", "sortIndex": 1, "kind": "image", "isEnabled": true,
+             "startTime": {"beat": 1}, "duration": {"bars": 1}, "resourceID": "ra",
+             "keyframes": []},
+            {"id": "b", "name": "B", "sortIndex": 2, "kind": "image", "isEnabled": true,
+             "startTime": 0, "after": "a", "duration": {"bars": 1}, "resourceID": "rb",
+             "keyframes": []}
+        ]
+    });
+    std::fs::write(dir.join("metadata.json"), metadata.to_string()).unwrap();
+    dir
+}
+
+fn promo_in(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_promo"))
+        .args(args)
+        .output()
+        .expect("run promo");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = dir;
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// explain shows each musical time in both forms, `{"bars":1}` beside the
+/// seconds a render uses — on the song's cached grid, as the render counts.
+#[test]
+fn explain_shows_both_forms() {
+    let dir = credited_project("explain-forms");
+    // The CLI's open measures the song and caches it; explain reads that.
+    promo_in(&dir, &["validate", dir.to_str().unwrap()]);
+    let out = promo_author::explain(&json!({"project": dir, "time": 0.5, "layer": "a"}), None)
+        .expect("explains");
+    let out: Value = serde_json::from_str(&out).unwrap();
+    let times = &out["layers"][0]["times"];
+    assert_eq!(times["duration"]["value"], json!({"bars": 1}), "{times}");
+    assert!((times["duration"]["seconds"].as_f64().unwrap() - 4.0 * 60.0 / 128.0).abs() < 0.01);
+    assert_eq!(times["startTime"]["value"], json!({"beat": 1}));
+    let out =
+        promo_author::explain(&json!({"project": dir, "time": 2.5, "layer": "b"}), None).unwrap();
+    let out: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(out["layers"][0]["times"]["startTime"]["value"], "after");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// inspect lists the clock — its song, where its grid came from, the
+/// tempo, the confidence, the beats and bars — each layer's musical times in
+/// both forms, and the credits.
+#[test]
+fn inspect_lists_clocks_grids_and_credits() {
+    let dir = credited_project("inspect-beats");
+    let path = dir.to_str().unwrap();
+    let json: Value = serde_json::from_str(&promo_in(&dir, &["inspect", path, "--json"])).unwrap();
+    let clock = &json["beats"][0];
+    assert_eq!(clock["resource"], "song");
+    assert_eq!(clock["source"], "detected now");
+    assert!((clock["bpm"].as_f64().unwrap() - 128.0).abs() < 0.05);
+    assert!(clock["confidence"].as_f64().unwrap() > 0.5);
+    assert!(clock["beats"].as_u64().unwrap() > 20);
+    let again: Value = serde_json::from_str(&promo_in(&dir, &["inspect", path, "--json"])).unwrap();
+    assert_eq!(
+        again["beats"][0]["source"], "cache",
+        "the second open reads the cache"
+    );
+    let a = json["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["id"] == "a")
+        .unwrap();
+    assert!(a["musical"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["at"] == "duration" && m["value"] == json!({"bars": 1})));
+    let credits = json["credits"].as_array().unwrap();
+    assert_eq!(credits.len(), 2, "{credits:?}");
+    let flux = credits.iter().find(|c| c["tool"] == "flux").unwrap();
+    assert_eq!(flux["resources"], json!(["Red", "Blue"]));
+    assert!((flux["cost"]["USD"].as_f64().unwrap() - 0.10).abs() < 1e-9);
+    let text = promo_in(&dir, &["inspect", path]);
+    assert!(text.contains("beats:     \"song\""), "{text}");
+    assert!(text.contains("duration  {\"bars\":1} →"), "{text}");
+    assert!(
+        text.contains("provenance:\n  - \"Song\": ace-step v1.5, Apache-2.0"),
+        "{text}"
+    );
+    assert!(text.contains("credits:\n"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A render's credits list what that render reached: a still of the first
+/// bar credits the song and the red still, not the blue one after it.
+#[test]
+fn render_credits_list_only_used_resources() {
+    let dir = credited_project("render-credits");
+    let path = dir.to_str().unwrap();
+    let out = dir.join("first.png");
+    let answer: Value = serde_json::from_str(&promo_in(
+        &dir,
+        &[
+            "still",
+            path,
+            "--out",
+            out.to_str().unwrap(),
+            "--time",
+            "1.0",
+            "--json",
+        ],
+    ))
+    .unwrap();
+    let credits = answer["credits"].as_array().expect("credits");
+    let names: Vec<&Value> = credits
+        .iter()
+        .flat_map(|c| c["resources"].as_array().unwrap())
+        .collect();
+    assert!(names.contains(&&json!("Song")), "{credits:?}");
+    assert!(names.contains(&&json!("Red")), "{credits:?}");
+    assert!(
+        !names.contains(&&json!("Blue")),
+        "the blue still is not in this frame: {credits:?}"
+    );
+    let text = promo_in(
+        &dir,
+        &[
+            "still",
+            path,
+            "--out",
+            out.to_str().unwrap(),
+            "--time",
+            "3.0",
+        ],
+    );
+    assert!(text.contains("credits:\n"), "{text}");
+    assert!(text.contains("Blue") && !text.contains("Red"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }

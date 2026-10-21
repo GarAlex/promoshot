@@ -26,6 +26,11 @@ pub struct Project {
     /// Why a clock's song could not be measured — a missing file, no
     /// ffmpeg for a compressed format. `validate` reports each as a break.
     pub grid_problems: Vec<String>,
+    /// Each measured song's analysis and where it came from (`cache`,
+    /// `detected now`), by resource id — what `inspect` lists.
+    pub analyses: std::collections::BTreeMap<String, (promo_model::musical::BeatAnalysis, String)>,
+    /// The timing pass's answer: clocks, resolved times, problems.
+    pub timing: promo_timeline::TimingReport,
 }
 
 /// Whether opening a project may analyse a song it has no grid for.
@@ -92,7 +97,11 @@ impl Project {
         dir: &Path,
         meta: &ProjectMetadata,
         analysis: Analysis,
-    ) -> (promo_timeline::BeatGrids, Vec<String>) {
+    ) -> (
+        promo_timeline::BeatGrids,
+        Vec<String>,
+        std::collections::BTreeMap<String, (promo_model::musical::BeatAnalysis, String)>,
+    ) {
         use promo_media::beats::{self, BeatOptions};
         let mut ids: Vec<String> = Vec::new();
         let mut note = |clock: &Option<promo_model::musical::BeatClock>| {
@@ -113,6 +122,7 @@ impl Project {
         }
         let mut grids = promo_timeline::BeatGrids::default();
         let mut problems = Vec::new();
+        let mut analyses = std::collections::BTreeMap::new();
         for id in ids {
             let Some(resource) = meta.resources.iter().flatten().find(|r| r.id == id) else {
                 continue;
@@ -137,24 +147,25 @@ impl Project {
                 bpm_hint: None,
             };
             let measured = match analysis {
-                Analysis::CacheOnly => beats::load_cached(dir, &file).ok_or_else(String::new),
+                Analysis::CacheOnly => beats::load_cached(dir, &file)
+                    .map(|found| (found, "cache"))
+                    .ok_or_else(String::new),
                 Analysis::Allowed => match beats::analysis_for(dir, &file, options, false) {
-                    Ok((found, _)) => Ok(found),
+                    Ok((found, true)) => Ok((found, "cache")),
+                    Ok((found, false)) => Ok((found, "detected now")),
                     // A folder the analysis cannot be stored in still
                     // gets its beats, measured for this open only.
-                    Err(stored) => beats::analyse_file(&file, options).map_err(|e| {
-                        if e.is_empty() {
-                            stored
-                        } else {
-                            e
-                        }
-                    }),
+                    Err(stored) => beats::analyse_file(&file, options)
+                        .map(|found| (found, "detected now, not cached"))
+                        .map_err(|e| if e.is_empty() { stored } else { e }),
                 },
             };
             match measured {
-                Ok(found) if found.bpm > 0.0 => {
+                Ok((found, source)) if found.bpm > 0.0 => {
                     grids.sections.insert(id.clone(), found.sections.clone());
-                    grids.by_resource.insert(id, found.grid());
+                    grids.confidence.insert(id.clone(), found.confidence);
+                    grids.by_resource.insert(id.clone(), found.grid());
+                    analyses.insert(id, (found, source.to_string()));
                 }
                 Ok(_) => problems.push(format!(
                     "the beat clock's song \"{id}\" has no beat the tracker can find — set \
@@ -167,7 +178,7 @@ impl Project {
                 )),
             }
         }
-        (grids, problems)
+        (grids, problems, analyses)
     }
 
     /// The project in `dir` as `text` says — the metadata a caller already
@@ -182,7 +193,7 @@ impl Project {
         let mut meta = ProjectMetadata::from_json(text)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
         // A beat clock's song with no stated grid is measured first.
-        let (grids, grid_problems) = Self::measure_grids(dir, &meta, analysis);
+        let (grids, grid_problems, analyses) = Self::measure_grids(dir, &meta, analysis);
         // Attached layers and musical values become plain numbers before
         // anything reads them, so the renderer never has to know the
         // difference.
@@ -192,7 +203,7 @@ impl Project {
             .iter()
             .map(|problem| problem.to_string())
             .collect();
-        let missing_grids = timing.missing_grids;
+        let missing_grids = timing.missing_grids.clone();
         // Nested compositions: a composition that contains itself, or nests
         // deeper than the cap, cannot be rendered by recursion — refuse the
         // file, as a decode failure would. Lesser problems (a nested layer
@@ -213,6 +224,8 @@ impl Project {
             missing_grids,
             grids,
             grid_problems,
+            analyses,
+            timing,
         })
     }
 
@@ -228,6 +241,8 @@ impl Project {
             missing_grids: self.missing_grids.clone(),
             grids: self.grids.clone(),
             grid_problems: self.grid_problems.clone(),
+            analyses: self.analyses.clone(),
+            timing: self.timing.clone(),
         }
     }
 
