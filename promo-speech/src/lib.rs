@@ -23,6 +23,7 @@ pub mod keys;
 #[cfg(feature = "local")]
 pub mod local;
 pub mod stress;
+pub mod timing;
 pub mod voices;
 
 pub use estimate::{
@@ -33,7 +34,8 @@ pub use keys::{
     secrets_path, FixedKeys, KeySource, KeyStatus, KeyStore, SystemKeys, PROVIDERS, SECRETS,
     SERVICE,
 };
-pub use stress::{google_input, marking_stress};
+pub use stress::{google_input, marking_stress, marking_stress_mapped};
+pub use timing::{google_ssml_marked, google_supports_marks, Spoken, Take};
 pub use voices::{roster_needs_key, voices_with_key, Voice};
 
 /// sha256("provider|voiceID|text"), lowercase hex — the Swift
@@ -124,6 +126,16 @@ pub fn take_local_guesses() -> Vec<LocalGuess> {
 /// Something that turns words into audio bytes for a provider and voice.
 pub trait Synth {
     fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String>;
+
+    /// The take with the words it said, when the provider says when
+    /// (docs/SPEECH-SYNC.md §2). A synth that cannot tell answers the
+    /// audio alone, and its take is aligned later.
+    fn synthesize_timed(&self, provider: &str, voice: &str, text: &str) -> Result<Take, String> {
+        self.synthesize(provider, voice, text).map(|audio| Take {
+            audio,
+            ..Take::default()
+        })
+    }
 }
 
 /// The live providers, spending the key a [`KeyStore`] answers with.
@@ -142,37 +154,74 @@ impl<K: KeyStore> Synth for LiveSynth<K> {
             .ok_or_else(|| keys::missing_key_message(provider))?;
         synthesize_with_key(provider, voice, text, &key)
     }
+
+    fn synthesize_timed(&self, provider: &str, voice: &str, text: &str) -> Result<Take, String> {
+        if is_keyless(provider) {
+            return self.synthesize(provider, voice, text).map(|audio| Take {
+                audio,
+                ..Take::default()
+            });
+        }
+        let (key, _) = self
+            .keys
+            .key(provider)
+            .ok_or_else(|| keys::missing_key_message(provider))?;
+        synthesize_with_key_timed(provider, voice, text, &key)
+    }
 }
 
 /// One synthesis with an explicit key — the client itself, for a host
 /// that keeps its own key store (the apps, over the FFI). Stress
 /// spellings are converted here, at the wire, so the script stays what
-/// the author typed and the receipt with it.
+/// the author typed and the receipt with it. The bytes are
+/// [`synthesize_with_key_timed`]'s: the same request.
 pub fn synthesize_with_key(
     provider: &str,
     voice: &str,
     text: &str,
     key: &str,
 ) -> Result<Vec<u8>, String> {
-    let text = marking_stress(text);
+    synthesize_with_key_timed(provider, voice, text, key).map(|take| take.audio)
+}
+
+/// One synthesis with an explicit key, and the words it said when the
+/// provider reports them in the same answer (docs/SPEECH-SYNC.md §2):
+/// ElevenLabs through `/with-timestamps` (per character); Google through
+/// `v1beta1` with a `<mark>` before each word, for the voice families that
+/// take marks ([`google_supports_marks`]) — Chirp, Journey and Gemini
+/// voices are asked as before and their takes aligned later, as OpenAI's
+/// are. Timing adds no request and no charge beyond the marks' characters.
+pub fn synthesize_with_key_timed(
+    provider: &str,
+    voice: &str,
+    text: &str,
+    key: &str,
+) -> Result<Take, String> {
+    let sent = marking_stress(text);
     match provider {
         "openai" => post_bytes(
             "https://api.openai.com/v1/audio/speech",
             &[("Authorization", &format!("Bearer {key}"))],
             &json!({
-                "model": "gpt-4o-mini-tts", "input": text,
+                "model": "gpt-4o-mini-tts", "input": sent,
                 "voice": voice, "response_format": "mp3",
             }),
-        ),
+        )
+        .map(|audio| Take {
+            audio,
+            ..Take::default()
+        }),
         "elevenlabs" => {
             let url = format!(
-                "https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128"
+                "https://api.elevenlabs.io/v1/text-to-speech/{voice}/with-timestamps?output_format=mp3_44100_128"
             );
-            post_bytes(
+            let answer = post_bytes(
                 &url,
                 &[("xi-api-key", key)],
-                &json!({ "text": text, "model_id": "eleven_multilingual_v2" }),
-            )
+                &json!({ "text": sent, "model_id": "eleven_multilingual_v2" }),
+            )?;
+            let parsed: Value = serde_json::from_slice(&answer).map_err(|e| e.to_string())?;
+            timing::elevenlabs_take(text, &parsed)
         }
         "google" => {
             let mut spoken = json!({
@@ -182,25 +231,64 @@ pub fn synthesize_with_key(
             if let Some(model) = google_model(voice) {
                 spoken["modelName"] = json!(model);
             }
-            let body = json!({
-                "input": google_input(&text),
-                "voice": spoken,
-                "audioConfig": { "audioEncoding": "MP3" },
-            });
-            let answer = post_bytes(
-                "https://texttospeech.googleapis.com/v1/text:synthesize",
-                &[("X-Goog-Api-Key", key)],
-                &body,
-            )?;
-            let parsed: Value = serde_json::from_slice(&answer).map_err(|e| e.to_string())?;
-            let base64 = parsed
-                .get("audioContent")
-                .and_then(Value::as_str)
-                .ok_or("Google returned no audio content")?;
-            base64_decode(base64)
+            if google_supports_marks(voice) {
+                let (ssml, marks) = google_ssml_marked(text);
+                let body = json!({
+                    "input": { "ssml": ssml },
+                    "voice": spoken,
+                    "audioConfig": { "audioEncoding": "MP3" },
+                    "enableTimePointing": ["SSML_MARK"],
+                });
+                match post_bytes(
+                    "https://texttospeech.googleapis.com/v1beta1/text:synthesize",
+                    &[("X-Goog-Api-Key", key)],
+                    &body,
+                ) {
+                    Ok(answer) => {
+                        let parsed: Value =
+                            serde_json::from_slice(&answer).map_err(|e| e.to_string())?;
+                        return timing::google_take(text, &parsed, &marks);
+                    }
+                    // A refusal that names the marks or the SSML: once more
+                    // as the plain request (a refused request is not billed).
+                    Err(e) if timing::google_refused_marks(&e) => {
+                        let mut take = google_plain(text, &spoken, key)?;
+                        take.note = Some(format!(
+                            "Google refused the marked request ({}) — the take will be aligned",
+                            e.chars().take(160).collect::<String>()
+                        ));
+                        return Ok(take);
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            google_plain(text, &spoken, key)
         }
         other => Err(format!("provider `{other}` — openai, elevenlabs or google")),
     }
+}
+
+/// Google's untimed request: `v1`, the text (or the script's own SSML).
+fn google_plain(text: &str, voice: &Value, key: &str) -> Result<Take, String> {
+    let body = json!({
+        "input": google_input(text),
+        "voice": voice,
+        "audioConfig": { "audioEncoding": "MP3" },
+    });
+    let answer = post_bytes(
+        "https://texttospeech.googleapis.com/v1/text:synthesize",
+        &[("X-Goog-Api-Key", key)],
+        &body,
+    )?;
+    let parsed: Value = serde_json::from_slice(&answer).map_err(|e| e.to_string())?;
+    let base64 = parsed
+        .get("audioContent")
+        .and_then(Value::as_str)
+        .ok_or("Google returned no audio content")?;
+    Ok(Take {
+        audio: base64_decode(base64)?,
+        ..Take::default()
+    })
 }
 
 /// The `languageCode` a Google voice is asked for in.
@@ -605,7 +693,8 @@ pub fn settle_except(
         }
         let destination = resources_dir.join(&script.filename);
         let print = receipt(&script, resources_dir);
-        let audio = synth.synthesize(&script.provider, &script.voice, &script.words)?;
+        let take = synth.synthesize_timed(&script.provider, &script.voice, &script.words)?;
+        let audio = take.audio;
         // The bytes this take replaces — under its own name, or a stand-in
         // under another — and so the records that described them.
         let mut replaced: Vec<String> = bytes_key(&destination).into_iter().collect();
@@ -636,6 +725,23 @@ pub fn settle_except(
         }
         let seconds = measure(&destination)?;
         spent += 1;
+        // The provider's word times exist only in this answer: stored now,
+        // beside the bytes they describe, before the receipt is.
+        let timed = match &take.spoken {
+            Some(spoken) => {
+                let record = timing::record(&script.words, spoken, seconds);
+                let words = record.words.len();
+                match promo_model::word_cache::store_in(resources_dir, &destination, record) {
+                    Ok(_) => format!(", timed by {} ({words} words)", spoken.source.as_text()),
+                    Err(e) => format!(", its word timing could not be stored: {e}"),
+                }
+            }
+            None => take
+                .note
+                .as_ref()
+                .map(|note| format!(" — {note}"))
+                .unwrap_or_default(),
+        };
         {
             let resource = &mut doc["resources"][index];
             resource["filename"] = json!(script.filename);
@@ -655,7 +761,7 @@ pub fn settle_except(
             }
         }
         persist(doc)?;
-        report.push(format!("{id}: generated ({seconds:.2}s)"));
+        report.push(format!("{id}: generated ({seconds:.2}s){timed}"));
     }
     if !report.is_empty() {
         report.push(format!(
@@ -1172,6 +1278,61 @@ mod tests {
         let left = promo_model::word_cache::records_for_in(&dir, &silent.sha256);
         assert_eq!(left.len(), 1, "only the voiced one's record went");
         assert_eq!(left[0].1.script, "Hello where");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A provider's word times are irreproducible: the walk stores them
+    /// beside the take BEFORE the receipt that says the take is paid for.
+    #[test]
+    fn timing_is_stored_before_the_receipt() {
+        struct Timed;
+        impl Synth for Timed {
+            fn synthesize(&self, _: &str, _: &str, _: &str) -> Result<Vec<u8>, String> {
+                Ok(b"ID3timed".to_vec())
+            }
+            fn synthesize_timed(&self, _: &str, _: &str, text: &str) -> Result<Take, String> {
+                let words = promo_model::speech::tokenize(text)
+                    .words
+                    .iter()
+                    .enumerate()
+                    .map(|(i, w)| promo_model::speech::SpokenWord {
+                        text: w.text.clone(),
+                        start: 0.1 + i as f64 * 0.5,
+                        end: Some(0.5 + i as f64 * 0.5),
+                        chars: Some(w.chars),
+                    })
+                    .collect();
+                Ok(Take {
+                    audio: b"ID3timed".to_vec(),
+                    spoken: Some(Spoken {
+                        words,
+                        source: promo_model::speech::TimingSource::Provider("fake".into()),
+                        confidence: 1.0,
+                        against: text.to_string(),
+                    }),
+                    note: None,
+                })
+            }
+        }
+        let dir = std::env::temp_dir().join(format!("speech-timed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut doc = script();
+        let mut persisted = 0;
+        let report = settle(&mut doc, &dir, &Timed, &|_| Ok(1.2), &mut |d| {
+            let file = dir.join("voice.mp3");
+            let found = promo_model::word_cache::lookup_in(&dir, &file, "Hello there")
+                .expect("the record exists when the receipt is persisted");
+            assert_eq!(found.timing.words[1].start, 0.6);
+            assert!(d["resources"][0]["speech"]["renderedHash"].is_string());
+            persisted += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(persisted, 1);
+        assert!(
+            report[0].contains("timed by provider:fake (2 words)"),
+            "{report:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

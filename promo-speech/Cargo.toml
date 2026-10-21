@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 # The word-timing record and the one tokenizer (docs/SPEECH-SYNC.md §1).
 promo-model = { path = "../promo-model" }
+serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
 ureq = "2"

@@ -1,6 +1,6 @@
 # Speech timing and speech sync: implementation design
 
-Status: slices 1 and 2 built (2026-10-21); where building changed the design,
+Status: slices 1 to 3 built (2026-10-21); where building changed the design,
 the "Slice N as built" notes under §10 say what and why. Modelled on
 `docs/BEAT-SYNC.md`, including its "as built" notes, and reusing its
 machinery wherever it fits. Owner requirements: one word-timing format for
@@ -866,6 +866,87 @@ criteria.
   - `attach_merges_spelled_numbers` ("$49.99" to 6 spoken words)
   - `timing_is_stored_before_the_receipt`
   - Then one manual live check per provider through the Xcode-run app's MCP (`speech-tests-through-the-xcode-run-app`), recording the measured offset of word 1 against the energy onset (the MP3 priming risk, §11.1).
+
+**Slice 3 as built** (2026-10-21):
+- **Types.** `promo_speech::timing::{Take, Spoken}`. `Take` has a `note`:
+  why a take that could have been timed was not (a report line, never an
+  error). `Spoken` carries its `confidence`, and `against` is the text the
+  synthesizer was GIVEN, which its words' `chars` index (the design's
+  `SentText`). The `Synth` default, `synthesize_with_key_timed`, and
+  `synthesize_with_key` = `…_timed(..).audio` are as §2 says.
+  `ProjectSynth` (promoshot-mcp) forwards `synthesize_timed`; the trait
+  default would have dropped the timing.
+- **ElevenLabs.** The answer's `characters` are flattened to scalars,
+  because a vowel and its acute may come back as one string. They are
+  compared with the sent text: equal means one for one (confidence 1.0);
+  otherwise a Levenshtein alignment with backpointers runs (accent-folded
+  equality, ties to the diagonal, confidence 0.9). Then they go through
+  `marking_stress_mapped` to script characters. A word spans its first
+  character's start to its last non-space character's end. No usable
+  alignment: the audio is kept, and the note says the take will be aligned.
+- **Google.** `google_supports_marks` needs a locale-prefixed name with a
+  fourth segment and a class in the list (Standard, Wavenet, Neural2,
+  News, Polyglot, Studio). `google_ssml_marked` builds the SSML from the
+  stress-converted text, XML-escaped, with a mark before each word's first
+  stripped character (`<now>` is a word, so its mark comes before
+  `&lt;`). In an SSML script, marks go before words in text nodes, and
+  once before a `say-as`/`sub`/`phoneme` element whose other words share
+  it (and are interpolated). A word ends at the next mark's time and the
+  last word at the take's end. **The pull-back to the end of voiced energy
+  waits for the aligner's VAD (S5)**, so until then a word's end includes
+  the pause after it. A 400 that names SSML, marks or time pointing is
+  retried once as the plain v1 request, with a note. Fewer timepoints than
+  marks: the audio is kept, there is no record, and the note says so.
+  Whether marks are billed is still unverified.
+- **The mapper** (`timing::record`). The chars path runs when `against`
+  is the script, or the script with its stress converted (the apps send
+  that). Otherwise the §2.5 word alignment runs, with one addition: a 1:k
+  merge costs 0 when the spoken words concatenate to the script word (a
+  compound said apart). Open ends are filled with the next start, else
+  the take's end. Times are clamped monotonic. Unvoiced runs share their
+  gap by letter count. A word's confidence 0.3 is written only where it
+  differs from the take's.
+- **Settle** stores the record before `persist` writes the receipt
+  (`timing_is_stored_before_the_receipt`). A store that fails is a report
+  line, and the receipt still stands. The report says "timed by
+  provider:elevenlabs (42 words)", or gives the note.
+- **The apps.** The FFI is `promo_speech_job_timing(job)` (Spoken JSON or
+  NULL) and `promo_words_store_take(resources_dir, filename, script,
+  spoken_json, duration)`. It takes the timing JSON rather than the job
+  (the job is freed inside the synthesis wrapper), the resources folder
+  (as in S2), and the measured length. Swift: `SpeechProvider.
+  synthesizeTimed` (the default answers no timing; the three core-backed
+  providers answer the core's), `PromoCore.synthesizeTimed`,
+  `wordsStoreTake`. `SpeechSynthesizer.generate` stores the record before
+  it returns, so before any caller keeps the receipt. The app's
+  `promo_speak` goes through `generate`, so it times too.
+- **Fixtures** (`fixtures/speech/`): `elevenlabs-with-timestamps.json`,
+  `elevenlabs-stress-ru.json` and `google-timepoints.json`, with their
+  MP3s. They are **built in the providers' documented answer shapes, not
+  recorded**: no key is readable headlessly here (`promoshot-mcp key
+  status`: none for all three), and the keyed path is the Xcode-run app,
+  which runs this code only after its owner rebuilds it.
+  `make_fixtures.py` regenerates them (each MP3 has a tone exactly where
+  its words are).
+- **Not done: the live checks.** That means one line per provider through
+  the Xcode-run app's MCP, the word-1 offset against the energy onset
+  (§11.1, MP3 priming), and whether marks are billed. They wait for a
+  keyed run.
+- **Tests:** `stress_map_matches_marking_stress`,
+  `elevenlabs_alignment_maps_to_script_chars` (Russian included, and the
+  apps' pre-converted text), `elevenlabs_char_mismatch_falls_back_to_dp`,
+  `character_alignment_survives_drops_and_inserts`,
+  `google_ssml_has_one_mark_per_word_and_escapes`,
+  `google_ssml_script_marks_text_nodes_only`,
+  `google_missing_timepoints_falls_back_to_alignment`,
+  `chirp_voices_take_the_plain_request`, `attach_merges_spelled_numbers`,
+  `unvoiced_words_interpolate_and_a_different_text_is_a_mismatch`,
+  `a_near_spelling_wins_over_a_filler`,
+  `stress_marked_chars_map_onto_the_script`,
+  `timing_is_stored_before_the_receipt`,
+  `the_tool_keeps_a_providers_word_timing` (promoshot-mcp),
+  `a_takes_timing_is_stored_through_the_doors` (FFI); Swift
+  `testSynthesisStoresProviderTiming`.
 
 **S4 — local-tts v0.7.0 and local timing** (repo `/Users/alex/src/tts`; tag, then bump the pin).
 - Build: §3.2 items 1–5 in local-tts; the §3.5 tests there; then `local::synthesize_timed` in promo-speech.

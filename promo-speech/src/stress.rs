@@ -23,20 +23,34 @@ const STRESS_VOWELS: &str = "аеёиоуыэюяіїє";
 /// as the app's: don't, l'été, О'Брайен, Москва, США and ВКонтакте all
 /// keep themselves.
 pub fn marking_stress(text: &str) -> String {
+    marking_stress_mapped(text).0
+}
+
+/// [`marking_stress`], and for each character of what it answers (a
+/// Unicode scalar), the scalar index in `text` it came from: an
+/// apostrophe becomes the acute one for one, a capital vowel becomes two
+/// (the vowel and the acute), both from the capital. A provider's
+/// character offsets go back to the script through it.
+pub fn marking_stress_mapped(text: &str) -> (String, Vec<u32>) {
     if text.trim().to_lowercase().starts_with("<speak") {
-        return text.to_string();
+        return (text.to_string(), (0..text.chars().count() as u32).collect());
     }
-    capital_stress(&apostrophe_stress(text))
+    let (apostrophes, first) = apostrophe_stress(text);
+    let (out, second) = capital_stress(&apostrophes);
+    let map = second.into_iter().map(|i| first[i as usize]).collect();
+    (out, map)
 }
 
 fn is_stress_vowel(c: char) -> bool {
     STRESS_VOWELS.chars().any(|v| v == c)
 }
 
-fn apostrophe_stress(text: &str) -> String {
+fn apostrophe_stress(text: &str) -> (String, Vec<u32>) {
     let mut out = String::new();
+    let mut map = Vec::new();
     let mut previous: Option<char> = None;
-    for character in text.chars() {
+    for (index, character) in text.chars().enumerate() {
+        map.push(index as u32);
         if (character == '\'' || character == '’') && previous.map(is_stress_vowel).unwrap_or(false)
         {
             out.push('\u{0301}');
@@ -46,58 +60,60 @@ fn apostrophe_stress(text: &str) -> String {
         out.push(character);
         previous = Some(character);
     }
-    out
+    (out, map)
 }
 
 fn is_cyrillic(c: char) -> bool {
     ('\u{0400}'..='\u{04FF}').contains(&c)
 }
 
-fn capital_stress(text: &str) -> String {
+fn capital_stress(text: &str) -> (String, Vec<u32>) {
     let mut out = String::new();
-    let mut word: Vec<char> = Vec::new();
-    let flush = |word: &mut Vec<char>, out: &mut String| {
+    let mut map: Vec<u32> = Vec::new();
+    // The word's letters, each with its index in `text`.
+    let mut word: Vec<(char, u32)> = Vec::new();
+    let flush = |word: &mut Vec<(char, u32)>, out: &mut String, map: &mut Vec<u32>| {
         let uppers: Vec<usize> = word
             .iter()
             .enumerate()
-            .filter(|(_, c)| c.is_uppercase())
+            .filter(|(_, (c, _))| c.is_uppercase())
             .map(|(i, _)| i)
             .collect();
         let convertible = uppers.len() == 1
             && uppers[0] > 0
-            && word.iter().all(|c| is_cyrillic(*c))
+            && word.iter().all(|(c, _)| is_cyrillic(*c))
             && word[uppers[0]]
+                .0
                 .to_lowercase()
                 .next()
                 .map(is_stress_vowel)
                 .unwrap_or(false);
-        if convertible {
-            let at = uppers[0];
-            for c in &word[..at] {
-                out.push(*c);
-            }
-            out.extend(word[at].to_lowercase());
-            out.push('\u{0301}');
-            for c in &word[at + 1..] {
-                out.push(*c);
-            }
-        } else {
-            for c in word.iter() {
-                out.push(*c);
+        for (i, &(c, from)) in word.iter().enumerate() {
+            if convertible && i == uppers[0] {
+                for lower in c.to_lowercase() {
+                    out.push(lower);
+                    map.push(from);
+                }
+                out.push('\u{0301}');
+                map.push(from);
+            } else {
+                out.push(c);
+                map.push(from);
             }
         }
         word.clear();
     };
-    for character in text.chars() {
+    for (index, character) in text.chars().enumerate() {
         if character.is_alphabetic() {
-            word.push(character);
+            word.push((character, index as u32));
         } else {
-            flush(&mut word, &mut out);
+            flush(&mut word, &mut out, &mut map);
             out.push(character);
+            map.push(index as u32);
         }
     }
-    flush(&mut word, &mut out);
-    out
+    flush(&mut word, &mut out, &mut map);
+    (out, map)
 }
 
 #[cfg(test)]
@@ -129,5 +145,37 @@ mod tests {
         }
         let ssml = "<speak>ай'ти <sub alias='сто'>100</sub></speak>";
         assert_eq!(google_input(ssml), json!({ "ssml": ssml }));
+    }
+
+    /// The map's text is `marking_stress` exactly, over the same vectors,
+    /// and each of its characters points at the script character it came
+    /// from — the apostrophe at itself, both halves of a capital at it.
+    #[test]
+    fn stress_map_matches_marking_stress() {
+        for text in [
+            "Приложение стои'т три",
+            "сто’ит",
+            "don't touch l'été",
+            "О'Брайен согласен",
+            "Это стоИт денег",
+            "зАмок и замОк",
+            "Москва слезам не верит",
+            "ВКонтакте",
+            "iPhone стоит",
+            "<speak>ай'ти</speak>",
+            "",
+        ] {
+            let (mapped, map) = marking_stress_mapped(text);
+            assert_eq!(mapped, marking_stress(text), "{text}");
+            assert_eq!(map.len(), mapped.chars().count(), "{text}");
+            // Monotonic, onto every script character.
+            assert!(map.windows(2).all(|w| w[0] <= w[1]), "{text}");
+            let n = text.chars().count() as u32;
+            assert!((0..n).all(|i| map.contains(&i)), "{text}");
+        }
+        let (mapped, map) = marking_stress_mapped("стоИт и сто'ит");
+        assert_eq!(mapped, "стои\u{0301}т и сто\u{0301}ит");
+        assert_eq!(&map[..6], &[0, 1, 2, 3, 3, 4]);
+        assert_eq!(&map[9..], &[8, 9, 10, 11, 12, 13]);
     }
 }

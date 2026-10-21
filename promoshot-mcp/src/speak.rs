@@ -35,6 +35,25 @@ impl Synth for ProjectSynth<'_> {
             self.inner.synthesize(provider, voice, text)
         }
     }
+
+    /// The provider's word timing passes through: without this the trait's
+    /// default would drop it, and a bought take's timing is irreproducible.
+    fn synthesize_timed(
+        &self,
+        provider: &str,
+        voice: &str,
+        text: &str,
+    ) -> Result<promo_speech::Take, String> {
+        if promo_speech::is_keyless(provider) {
+            self.synthesize(provider, voice, text)
+                .map(|audio| promo_speech::Take {
+                    audio,
+                    ..Default::default()
+                })
+        } else {
+            self.inner.synthesize_timed(provider, voice, text)
+        }
+    }
 }
 
 /// The whole tool: read the document raw (every unknown key preserved),
@@ -464,6 +483,64 @@ mod tests {
         assert!(err.contains("outside the served root"), "{err}");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    /// A provider's word timing survives the tool's own synth wrapper and
+    /// is in the project's cache when the tool answers: the committed
+    /// ElevenLabs answer, through the walk the tool runs.
+    #[test]
+    fn the_tool_keeps_a_providers_word_timing() {
+        struct Eleven;
+        impl Synth for Eleven {
+            fn synthesize(&self, _: &str, _: &str, _: &str) -> Result<Vec<u8>, String> {
+                Err("the timed door must be used".into())
+            }
+            fn synthesize_timed(
+                &self,
+                _: &str,
+                _: &str,
+                text: &str,
+            ) -> Result<promo_speech::Take, String> {
+                let answer = std::fs::read_to_string(
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../fixtures/speech/elevenlabs-with-timestamps.json"),
+                )
+                .unwrap();
+                promo_speech::timing::elevenlabs_take(text, &serde_json::from_str(&answer).unwrap())
+            }
+        }
+        let root = std::env::temp_dir().join(format!("mcp-speak-timed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Timed.promo");
+        project_with_script(&dir);
+        let path = dir.join("metadata.json");
+        let mut doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        doc["resources"][0]["speech"] = json!({ "text": "Meet Euclid. Geometry, proved step by step.",
+            "provider": "elevenlabs", "voiceID": "v" });
+        std::fs::write(&path, doc.to_string()).unwrap();
+        let answer = speak(
+            &json!({ "project": dir.to_string_lossy() }),
+            Some(&root),
+            &Eleven,
+            &FixedKeys(vec![("elevenlabs".into(), "k".into())]),
+            &|_| Ok(3.7),
+        )
+        .unwrap();
+        assert!(
+            answer.contains("timed by provider:elevenlabs (7 words)"),
+            "{answer}"
+        );
+        let records: Vec<_> = std::fs::read_dir(dir.join("Resources/.words"))
+            .unwrap()
+            .flatten()
+            .collect();
+        assert_eq!(records.len(), 1);
+        let record: Value =
+            serde_json::from_str(&std::fs::read_to_string(records[0].path()).unwrap()).unwrap();
+        assert_eq!(record["source"], "provider:elevenlabs");
+        assert_eq!(record["words"][2]["start"], 1.4);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// `check: true` tells an agent whether narration is possible before
