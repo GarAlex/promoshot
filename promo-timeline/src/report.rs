@@ -70,6 +70,11 @@ pub struct Report {
     pub resolved_times: Vec<crate::ResolvedTime>,
     /// Every beat clock, as resolution read it.
     pub beat_clocks: Vec<crate::BeatClockInfo>,
+    /// Every speech value with its seconds, word and timing source —
+    /// validate's "Speech times" block (docs/SPEECH-SYNC.md §9).
+    pub speech_times: Vec<crate::speech_time::SpeechRow>,
+    /// Every take a speech value counted on.
+    pub speech_clocks: Vec<crate::speech_time::SpeechClockInfo>,
 }
 
 impl Report {
@@ -155,6 +160,27 @@ impl Report {
                 ));
             }
         }
+        if !self.speech_times.is_empty() {
+            out.push_str("\n\nSpeech times");
+            let width = self
+                .speech_times
+                .iter()
+                .map(|r| r.at.len())
+                .max()
+                .unwrap_or(0);
+            let spec = self
+                .speech_times
+                .iter()
+                .map(|r| r.spec.len())
+                .max()
+                .unwrap_or(0);
+            for row in &self.speech_times {
+                out.push_str(&format!(
+                    "\n  {:width$}   {:spec$}  → {} at {:.3} s  ({})",
+                    row.at, row.spec, row.label, row.instant, row.source
+                ));
+            }
+        }
         out
     }
 
@@ -210,6 +236,27 @@ impl Report {
                 "value": serde_json::from_str::<Value>(&r.spec)
                     .unwrap_or_else(|_| Value::String(r.spec.clone())),
                 "seconds": r.seconds,
+            })).chain(self.speech_times.iter().map(|r| {
+                let mut row = json!({
+                    "at": r.at,
+                    "value": serde_json::from_str::<Value>(&r.spec)
+                        .unwrap_or_else(|_| Value::String(r.spec.clone())),
+                    "seconds": r.seconds,
+                    "clock": "speech",
+                    "time": r.instant,
+                    "label": r.label,
+                    "take": r.take,
+                    "source": r.source,
+                });
+                if let Some((index, text)) = &r.word {
+                    row["word"] = json!({"index": index, "text": text});
+                }
+                row
+            })).collect::<Vec<_>>(),
+            "speechClocks": self.speech_clocks.iter().map(|c| json!({
+                "scope": c.scope, "take": c.take, "layer": c.layer, "source": c.source,
+                "confidence": c.confidence, "words": c.words, "sentences": c.sentences,
+                "estimated": c.estimated, "stale": c.stale,
             })).collect::<Vec<_>>(),
             "beatClocks": self.beat_clocks.iter().map(|c| json!({
                 "scope": c.scope, "resource": c.resource, "source": c.source,
@@ -287,6 +334,8 @@ pub fn file_report_with(
     let timing = crate::resolve_timing(&mut meta, grids);
     out.resolved_times = timing.resolved.clone();
     out.beat_clocks = timing.clocks.clone();
+    out.speech_times = timing.speech.clone();
+    out.speech_clocks = timing.speech_clocks.clone();
     for problem in &timing.problems {
         if problem.is_break() {
             out.breaks(problem.to_string());

@@ -924,6 +924,8 @@ mod tests {
             keyframes: Vec::new(),
             time_specs: None,
             beat_clock: None,
+            speech_clock: None,
+            during: None,
             after: None,
             pulse: None,
             shake: None,

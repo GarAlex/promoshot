@@ -661,12 +661,474 @@ pub fn apply_fixes(timing: &mut TakeTiming, fixes: &[WordFix]) -> Vec<String> {
 /// simply ignore: a recording's `transcript`, a take's `speech.wordFixes`
 /// (rung 48).
 pub fn carries_ignorable_speech_fields(meta: &crate::ProjectMetadata) -> bool {
-    meta.resources.iter().flatten().any(|r| {
-        r.transcript.is_some()
-            || r.extra
-                .get("speech")
-                .and_then(|s| s.get("wordFixes"))
-                .is_some()
+    meta.composition_settings.speech_clock.is_some()
+        || crate::nesting::all_layers(meta)
+            .iter()
+            .any(|l| l.speech_clock.is_some())
+        || meta.resources.iter().flatten().any(|r| {
+            r.composition
+                .as_ref()
+                .is_some_and(|c| c.speech_clock.is_some())
+                || r.transcript.is_some()
+                || r.extra
+                    .get("speech")
+                    .and_then(|s| s.get("wordFixes"))
+                    .is_some()
+        })
+}
+
+// ---------------------------------------------------------------------------
+// Speech values in time fields (§6).
+
+/// The reader that understands speech values, `during` and the speech
+/// generators: an older reader decodes `{"word": 12}` as a musical value,
+/// refuses the unknown key, and cannot open the file.
+pub const SPEECH_READER: i64 = 50;
+
+/// What a speech value points at in its take.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SpeechPoint {
+    /// Word n, 1-based.
+    Word(u32),
+    /// The nth (1-based) word whose stripped, case-folded text is `text`.
+    WordText { text: String, nth: u32 },
+    /// Sentence n, 1-based.
+    Sentence(u32),
+    /// The word start (end, gap middle, sentence start) nearest `near`
+    /// output seconds.
+    Snap { to: SpeechSnap, near: f64 },
+}
+
+/// What a speech `snap` lands on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeechSnap {
+    Word,
+    WordEnd,
+    /// The middle of the nearest gap between two words: the safe cut.
+    Gap,
+    Sentence,
+}
+
+impl SpeechSnap {
+    pub fn name(self) -> &'static str {
+        match self {
+            SpeechSnap::Word => "word",
+            SpeechSnap::WordEnd => "wordEnd",
+            SpeechSnap::Gap => "gap",
+            SpeechSnap::Sentence => "sentence",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<SpeechSnap> {
+        Some(match text {
+            "word" => SpeechSnap::Word,
+            "wordEnd" => SpeechSnap::WordEnd,
+            "gap" => SpeechSnap::Gap,
+            "sentence" => SpeechSnap::Sentence,
+            _ => return None,
+        })
+    }
+}
+
+/// Which edge of a word or sentence a value means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeechEdge {
+    Start,
+    End,
+}
+
+/// What is added after the edge: seconds, or beats or bars on the scope's
+/// beat clock — signed, so `{"beats": -0.5}` counts back.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SpeechOffset {
+    Seconds(f64),
+    Beats(f64),
+    Bars(f64),
+}
+
+/// A time that points into a take: "word 12 of the intro".
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeechTime {
+    pub at: SpeechPoint,
+    /// The take: a resource id, or the id of a layer that plays one. None:
+    /// the scope's speech clock.
+    pub of: Option<String>,
+    pub edge: Option<SpeechEdge>,
+    pub offset: Option<SpeechOffset>,
+    /// Then onto the scope's beat grid.
+    pub quantize: Option<crate::musical::SnapUnit>,
+    /// The word an index is meant to be: followed (with a warning) when the
+    /// index has moved.
+    pub guard: Option<String>,
+}
+
+const SPEECH_KEYS: &[&str] = &[
+    "word", "sentence", "snap", "near", "of", "nth", "edge", "offset", "quantize", "text",
+];
+
+/// Whether a time-field object is a speech value rather than a musical one.
+pub fn is_speech_object(object: &Map<String, Value>) -> bool {
+    object.contains_key("word")
+        || object.contains_key("sentence")
+        || object.contains_key("of")
+        || object
+            .get("snap")
+            .and_then(Value::as_str)
+            .is_some_and(|s| SpeechSnap::parse(s).is_some())
+}
+
+fn whole(value: &Value, key: &str) -> Result<u32, String> {
+    match value.as_f64() {
+        Some(n) if n.is_finite() && n >= 1.0 && n.fract() == 0.0 && n <= u32::MAX as f64 => {
+            Ok(n as u32)
+        }
+        _ => Err(format!("\"{key}\" must be a whole number from 1")),
+    }
+}
+
+impl SpeechTime {
+    /// The strict decode: exactly one of `word` (a 1-based index or a word's
+    /// text), `sentence`, or `snap` with `near`; `nth` only with a text
+    /// `word`; `text` (the guard) only with an index; any other key refused
+    /// by name.
+    pub fn from_object(object: &Map<String, Value>) -> Result<SpeechTime, String> {
+        if let Some(key) = object.keys().find(|k| !SPEECH_KEYS.contains(&k.as_str())) {
+            return Err(format!("unknown key \"{key}\""));
+        }
+        let shape = "needs exactly one of \"word\", \"sentence\", or \"snap\" with \"near\"";
+        let points = ["word", "sentence", "snap"]
+            .iter()
+            .filter(|k| object.contains_key(**k))
+            .count();
+        if points != 1 {
+            return Err(shape.into());
+        }
+        let at = if let Some(word) = object.get("word") {
+            if object.contains_key("near") {
+                return Err(shape.into());
+            }
+            match word {
+                Value::String(text) => {
+                    if object.contains_key("text") {
+                        return Err(
+                            "\"text\" guards an index; a word given by its text needs none".into(),
+                        );
+                    }
+                    let folded = fold_word(text);
+                    if folded.is_empty() {
+                        return Err("\"word\" names no word".into());
+                    }
+                    let nth = match object.get("nth") {
+                        None => 1,
+                        Some(n) => whole(n, "nth")?,
+                    };
+                    SpeechPoint::WordText {
+                        text: text.clone(),
+                        nth,
+                    }
+                }
+                other => {
+                    if object.contains_key("nth") {
+                        return Err("\"nth\" goes with a word given by its text".into());
+                    }
+                    SpeechPoint::Word(whole(other, "word")?)
+                }
+            }
+        } else if let Some(sentence) = object.get("sentence") {
+            if object.contains_key("near")
+                || object.contains_key("nth")
+                || object.contains_key("text")
+            {
+                return Err(shape.into());
+            }
+            SpeechPoint::Sentence(whole(sentence, "sentence")?)
+        } else {
+            let to = object
+                .get("snap")
+                .and_then(Value::as_str)
+                .and_then(SpeechSnap::parse)
+                .ok_or("\"snap\" must be \"word\", \"wordEnd\", \"gap\" or \"sentence\"")?;
+            let near = object
+                .get("near")
+                .and_then(Value::as_f64)
+                .filter(|n| n.is_finite())
+                .ok_or(shape)?;
+            if object.contains_key("nth") || object.contains_key("text") {
+                return Err(shape.into());
+            }
+            SpeechPoint::Snap { to, near }
+        };
+        let of = match object.get("of") {
+            None => None,
+            Some(Value::String(id)) if !id.is_empty() => Some(id.clone()),
+            Some(_) => return Err("\"of\" names a take: a resource or layer id".into()),
+        };
+        let edge = match object.get("edge").map(|e| e.as_str()) {
+            None => None,
+            Some(Some("start")) => Some(SpeechEdge::Start),
+            Some(Some("end")) => Some(SpeechEdge::End),
+            Some(_) => return Err("\"edge\" must be \"start\" or \"end\"".into()),
+        };
+        let offset = match object.get("offset") {
+            None => None,
+            Some(Value::Number(n)) => match n.as_f64() {
+                Some(n) if n.is_finite() => Some(SpeechOffset::Seconds(n)),
+                _ => return Err("\"offset\" must be a finite number".into()),
+            },
+            Some(Value::Object(o)) => {
+                let finite = |v: &Value| v.as_f64().filter(|n| n.is_finite());
+                match (o.len(), o.get("beats"), o.get("bars")) {
+                    (1, Some(n), None) => Some(SpeechOffset::Beats(
+                        finite(n).ok_or("offset: \"beats\" must be a finite number")?,
+                    )),
+                    (1, None, Some(n)) => Some(SpeechOffset::Bars(
+                        finite(n).ok_or("offset: \"bars\" must be a finite number")?,
+                    )),
+                    _ => return Err("offset: {\"beats\": n} or {\"bars\": n}".into()),
+                }
+            }
+            Some(_) => return Err("\"offset\" is seconds or {\"beats\": n}".into()),
+        };
+        let quantize = match object.get("quantize").map(|q| q.as_str()) {
+            None => None,
+            Some(Some(unit)) => Some(
+                crate::musical::SnapUnit::parse(unit)
+                    .ok_or("\"quantize\" must be \"beat\", \"downbeat\" or \"bar\"")?,
+            ),
+            Some(None) => {
+                return Err("\"quantize\" must be \"beat\", \"downbeat\" or \"bar\"".into())
+            }
+        };
+        let guard = match object.get("text") {
+            None => None,
+            Some(Value::String(t)) if matches!(at, SpeechPoint::Word(_)) => Some(t.clone()),
+            Some(_) => {
+                return Err(
+                    "\"text\" guards a word index: {\"word\": 12, \"text\": \"Euclid\"}".into(),
+                )
+            }
+        };
+        Ok(SpeechTime {
+            at,
+            of,
+            edge,
+            offset,
+            quantize,
+            guard,
+        })
+    }
+
+    /// The canonical object (keys sorted, integers as integers).
+    pub fn to_value(&self) -> Value {
+        let mut map = Map::new();
+        let number = |n: f64| -> Value {
+            if n.fract() == 0.0 && n.abs() < 9.0e15 {
+                Value::from(n as i64)
+            } else {
+                Value::from(n)
+            }
+        };
+        match &self.at {
+            SpeechPoint::Word(n) => {
+                map.insert("word".into(), Value::from(*n));
+            }
+            SpeechPoint::WordText { text, nth } => {
+                map.insert("word".into(), Value::from(text.clone()));
+                if *nth != 1 {
+                    map.insert("nth".into(), Value::from(*nth));
+                }
+            }
+            SpeechPoint::Sentence(n) => {
+                map.insert("sentence".into(), Value::from(*n));
+            }
+            SpeechPoint::Snap { to, near } => {
+                map.insert("snap".into(), Value::from(to.name()));
+                map.insert("near".into(), number(*near));
+            }
+        }
+        if let Some(of) = &self.of {
+            map.insert("of".into(), Value::from(of.clone()));
+        }
+        if let Some(edge) = self.edge {
+            map.insert(
+                "edge".into(),
+                Value::from(match edge {
+                    SpeechEdge::Start => "start",
+                    SpeechEdge::End => "end",
+                }),
+            );
+        }
+        match self.offset {
+            Some(SpeechOffset::Seconds(n)) => {
+                map.insert("offset".into(), number(n));
+            }
+            Some(SpeechOffset::Beats(n)) => {
+                map.insert("offset".into(), serde_json::json!({ "beats": number(n) }));
+            }
+            Some(SpeechOffset::Bars(n)) => {
+                map.insert("offset".into(), serde_json::json!({ "bars": number(n) }));
+            }
+            None => {}
+        }
+        if let Some(q) = self.quantize {
+            map.insert("quantize".into(), Value::from(q.name()));
+        }
+        if let Some(t) = &self.guard {
+            map.insert("text".into(), Value::from(t.clone()));
+        }
+        Value::Object(map)
+    }
+
+    pub fn canonical_text(&self) -> String {
+        self.to_value().to_string()
+    }
+
+    /// The core's own wording, before the take's words are known: "word 12
+    /// of intro", "the end of sentence 2", "word “Euclid” (2nd)".
+    pub fn label(&self) -> String {
+        let point = match &self.at {
+            SpeechPoint::Word(n) => format!("word {n}"),
+            SpeechPoint::WordText { text, nth } if *nth == 1 => {
+                format!("word \u{201C}{text}\u{201D}")
+            }
+            SpeechPoint::WordText { text, nth } => format!("word \u{201C}{text}\u{201D} ({nth}th)"),
+            SpeechPoint::Sentence(n) => format!("sentence {n}"),
+            SpeechPoint::Snap { to, near } => format!(
+                "the {} nearest {near} s",
+                match to {
+                    SpeechSnap::Word => "word start",
+                    SpeechSnap::WordEnd => "word end",
+                    SpeechSnap::Gap => "gap",
+                    SpeechSnap::Sentence => "sentence start",
+                }
+            ),
+        };
+        let mut out = match self.edge {
+            Some(SpeechEdge::End) => format!("the end of {point}"),
+            _ => point,
+        };
+        if let Some(of) = &self.of {
+            out.push_str(&format!(" of {of}"));
+        }
+        match self.offset {
+            Some(SpeechOffset::Seconds(n)) if n != 0.0 => out.push_str(&format!(" {n:+} s")),
+            Some(SpeechOffset::Beats(n)) => out.push_str(&format!(" {n:+} beats")),
+            Some(SpeechOffset::Bars(n)) => out.push_str(&format!(" {n:+} bars")),
+            _ => {}
+        }
+        if let Some(q) = self.quantize {
+            out.push_str(&format!(", on the nearest {}", q.name()));
+        }
+        out
+    }
+}
+
+impl schemars::JsonSchema for SpeechTime {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "SpeechTime".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "word": { "type": ["integer", "string"] },
+                "nth": { "type": "integer", "minimum": 1 },
+                "sentence": { "type": "integer", "minimum": 1 },
+                "snap": { "type": "string", "enum": ["word", "wordEnd", "gap", "sentence"] },
+                "near": { "type": "number" },
+                "of": { "type": "string" },
+                "edge": { "type": "string", "enum": ["start", "end"] },
+                "offset": { "type": ["number", "object"] },
+                "quantize": { "type": "string", "enum": ["beat", "downbeat", "bar"] },
+                "text": { "type": "string" }
+            },
+            "additionalProperties": false
+        })
+    }
+}
+
+/// A word as speech values compare it: case-folded, outer punctuation off.
+pub fn fold_word(text: &str) -> String {
+    tokenize(text)
+        .words
+        .first()
+        .map(|w| w.text.to_lowercase())
+        .unwrap_or_default()
+}
+
+/// A word a `during` names: by index or by text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum WordRef {
+    Index(u32),
+    Text(String),
+}
+
+/// A layer that lasts while a span of a take is said: the span's start −
+/// `lead` to its end + `hold` — `startTime` and `duration` together.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct During {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word: Option<WordRef>,
+    /// `[first, last]`, 1-based, inclusive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<[u32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentence: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<String>,
+    /// Seconds before the span (default 0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<f64>,
+    /// Seconds after it (default 0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hold: Option<f64>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// The take a scope's speech values count on when they name none: a layer
+/// that plays it, or a resource placed at `startTime`. On
+/// `compositionSettings`, a composition, or a layer (an override).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeechClock {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "resourceID"
+    )]
+    pub resource_id: Option<String>,
+    /// Where the take's source second 0 sits (with `resourceID`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<f64>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// Whether the project needs the speech reader (rung 50): a speech value a
+/// save keeps, or a `during`.
+pub fn needs_speech_reader(meta: &crate::ProjectMetadata) -> bool {
+    let holds_speech = |specs: &Option<crate::musical::TimeSpecs>,
+                        number: &dyn Fn(&str) -> Option<f64>| {
+        specs
+            .iter()
+            .flatten()
+            .any(|(key, entry)| entry.speech().is_some() && entry.holds(number(key)))
+    };
+    crate::nesting::all_layers(meta).iter().any(|layer| {
+        layer.during.is_some()
+            || holds_speech(&layer.time_specs, &|k| {
+                crate::musical::layer_number(layer, k)
+            })
+            || layer.keyframes.iter().any(|k| {
+                holds_speech(&k.time_specs, &|key| {
+                    crate::musical::keyframe_number(k, key)
+                })
+            })
     })
 }
 

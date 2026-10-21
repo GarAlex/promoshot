@@ -352,6 +352,59 @@ the musical value in the file; set a field to seconds and that one value
 is plain seconds from then on. The apps' editors snap a layer's start or
 end to a beat or bar, writing `{"beat": n}` or `{"bar": n}`.
 
+## Speech — word, words, sentence, speechClock, during, voiceover, narration timing, cut on words
+
+Times can name a word of a take — a narration, or a recording with a
+`transcript`. The fields that take a musical position take one:
+a layer's `startTime` and `duration`, and a keyframe's `time`.
+
+- `{"word": 12, "of": "intro"}` — word 12 (1-based) of take `intro`;
+  `{"word": "Euclid", "of": "intro"}` the first word that says it (case and
+  outer punctuation ignored), `"nth": 2` the second.
+- `{"sentence": 2, "of": "intro"}` — sentence 2.
+- `{"snap": "gap", "near": 4.2, "of": "intro"}` — the gap between words
+  nearest 4.2 s (the safe place to cut); also `"word"`, `"wordEnd"`,
+  `"sentence"`.
+- `"edge": "start"` or `"end"` picks the word's (or sentence's) edge;
+  `"offset": -0.1` (seconds) or `{"beats": -0.5}` moves it; `"quantize":
+  "beat"` (`"downbeat"`, `"bar"`) then lands it on the beat clock's grid.
+- `{"word": 12, "text": "Euclid"}` guards the index: when the line is
+  rewritten and word 12 is no longer "Euclid", the time follows "Euclid"
+  and validate says so.
+
+A speech value is a position: in `startTime` the layer starts there, in
+`duration` it ENDS there (`{"sentence": 2, "of": "intro"}` = "until
+sentence 2 ends"; the default edge there is the end), in a keyframe's
+`time` it is that moment, made layer-local. `fadeIn`, `fadeOut`,
+`transition*.duration`, `transitionDuration` and `after.offset` need a
+length — a speech value there breaks, and the stored seconds stand.
+
+`of` is a resource id (the first enabled audio or video layer that plays
+it counts), or the id of a layer that plays it. Leave it out under a
+speech clock: `"speechClock": {"layer": "vo"}`, or `{"resourceID":
+"intro", "startTime": 0}` for a take no layer plays — on
+`compositionSettings`, on a composition (its own scope) or on a layer.
+With neither and exactly one take playing, that one counts (with a
+warning). The words follow the layer: its start, trim, speed and media
+cut; a word the layer never plays breaks.
+
+`during` places a layer on a span: `{"sentence": 2, "of": "intro",
+"lead": 0.15, "hold": 0.25}` (or `"word": 5`, or `"words": [3, 9]`) sets
+`startTime` and `duration` together — from the span's start − lead to its
+end + hold. A layer in the sequence that also says `during` breaks (the
+sequence places it); `during` beside `after` or `timing.start` breaks too
+(`during` places it). Move or resize a `during` layer by hand and
+`during` goes; the numbers stand.
+
+Where the word times come from: the provider's own timing when the take
+was voiced (ElevenLabs, Google, the local voices), else promo aligns the
+take to its text on open and keeps the answer in `Resources/.words/`,
+keyed by the audio and the text — `promo words` (promo_words) shows it.
+A take with no timing yet lays out on an estimate, validate says so, and
+a render waits for it. Rewrite a line and re-voice it, and every cut on
+its words moves with them. validate lists "Speech times": each value, the
+word it landed on, and the timing's source.
+
 ## Beat effects — pulse, shake, flash, punch, generator, onbeat
 
 Three generators make keyframes on the beat grid of a layer's clock

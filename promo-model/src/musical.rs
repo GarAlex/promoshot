@@ -291,6 +291,71 @@ impl schemars::JsonSchema for TimeValue {
     }
 }
 
+/// What an editor writes at a time field (`SetTime`): seconds, a musical
+/// value, or a speech value (docs/SPEECH-SYNC.md §6) — where the other
+/// time values (`after.offset`, sequence lengths) take no speech.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldTime {
+    Seconds(f64),
+    Musical(MusicalTime),
+    Speech(crate::speech::SpeechTime),
+}
+
+impl FieldTime {
+    /// The `timeSpecs` entry for a value (none for seconds), resolving for
+    /// now to `seconds`.
+    pub fn spec(&self, seconds: f64) -> Option<TimeSpec> {
+        match self {
+            FieldTime::Seconds(_) => None,
+            FieldTime::Musical(m) => Some(TimeSpec::musical(m, seconds)),
+            FieldTime::Speech(v) => Some(TimeSpec::speech_value(v, seconds)),
+        }
+    }
+}
+
+impl schemars::JsonSchema for FieldTime {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "FieldTime".into()
+    }
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let musical = generator.subschema_for::<MusicalTime>();
+        let speech = generator.subschema_for::<crate::speech::SpeechTime>();
+        schemars::json_schema!({ "oneOf": [{ "type": "number" }, musical, speech] })
+    }
+}
+
+impl Serialize for FieldTime {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            FieldTime::Seconds(n) => n.serialize(s),
+            FieldTime::Musical(m) => m.serialize(s),
+            FieldTime::Speech(v) => v.to_value().serialize(s),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for FieldTime {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        match Value::deserialize(d)? {
+            Value::Number(n) => match n.as_f64() {
+                Some(n) if n.is_finite() => Ok(FieldTime::Seconds(n)),
+                _ => Err(serde::de::Error::custom("seconds must be finite")),
+            },
+            Value::Object(object) if crate::speech::is_speech_object(&object) => {
+                crate::speech::SpeechTime::from_object(&object)
+                    .map(FieldTime::Speech)
+                    .map_err(serde::de::Error::custom)
+            }
+            Value::Object(object) => MusicalTime::from_object(&object)
+                .map(FieldTime::Musical)
+                .map_err(serde::de::Error::custom),
+            _ => Err(serde::de::Error::custom(
+                "a time is seconds, a musical object or a speech object",
+            )),
+        }
+    }
+}
+
 /// The schema of a model time field: what the FILE may hold there (seconds
 /// or a musical object) while the struct holds the resolved number. Used
 /// through `#[schemars(with = …)]` only.
@@ -298,10 +363,11 @@ pub struct SecondsOrMusical;
 
 impl schemars::JsonSchema for SecondsOrMusical {
     fn schema_name() -> std::borrow::Cow<'static, str> {
-        "TimeValue".into()
+        "FieldTime".into()
     }
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        TimeValue::json_schema(generator)
+        // Seconds, a musical value, or a speech value (docs/SPEECH-SYNC.md §6).
+        FieldTime::json_schema(generator)
     }
 }
 
@@ -359,7 +425,37 @@ impl TimeSpec {
         }
     }
 
-    /// The spec, decoded — `None` for a rule entry or unreadable text.
+    /// The entry for a speech value (docs/SPEECH-SYNC.md §6) that resolved
+    /// to `seconds`.
+    pub fn speech_value(value: &crate::speech::SpeechTime, seconds: f64) -> TimeSpec {
+        TimeSpec {
+            spec: Some(value.canonical_text()),
+            rule: None,
+            seconds,
+            label: value.label(),
+        }
+    }
+
+    /// The spec as a speech value — `None` for a musical one, a rule entry
+    /// or unreadable text.
+    pub fn speech(&self) -> Option<crate::speech::SpeechTime> {
+        let text = self.spec.as_deref()?;
+        match serde_json::from_str::<Value>(text).ok()? {
+            Value::Object(object) if crate::speech::is_speech_object(&object) => {
+                crate::speech::SpeechTime::from_object(&object).ok()
+            }
+            _ => None,
+        }
+    }
+
+    /// The spec text as the object a file holds — musical or speech alike.
+    pub fn spec_object(&self) -> Option<Value> {
+        let value = serde_json::from_str::<Value>(self.spec.as_deref()?).ok()?;
+        value.is_object().then_some(value)
+    }
+
+    /// The spec, decoded as a musical value — `None` for a rule entry, a
+    /// speech value or unreadable text.
     pub fn value(&self) -> Option<MusicalTime> {
         let text = self.spec.as_deref()?;
         match serde_json::from_str::<Value>(text).ok()? {
@@ -573,16 +669,23 @@ fn fields_of(entity: Entity) -> &'static [&'static str] {
 pub fn lift(root: &mut Value) -> Result<bool, String> {
     let mut lifted = false;
     each_entity(root, &mut |entity, object, at| {
-        let mut found: Vec<(&str, MusicalTime)> = Vec::new();
+        let mut found: Vec<(&str, TimeSpec)> = Vec::new();
         for key in fields_of(entity) {
             let Some((holder, leaf)) = slot(object, key) else {
                 continue;
             };
             if let Some(Value::Object(spec)) = holder.get(leaf) {
-                let value =
-                    MusicalTime::from_object(spec).map_err(|e| format!("{at}.{key}: {e}"))?;
+                let entry = if crate::speech::is_speech_object(spec) {
+                    let value = crate::speech::SpeechTime::from_object(spec)
+                        .map_err(|e| format!("{at}.{key}: {e}"))?;
+                    TimeSpec::speech_value(&value, 0.0)
+                } else {
+                    let value =
+                        MusicalTime::from_object(spec).map_err(|e| format!("{at}.{key}: {e}"))?;
+                    TimeSpec::musical(&value, 0.0)
+                };
                 holder.insert(leaf.to_string(), Value::from(0));
-                found.push((key, value));
+                found.push((key, entry));
             }
         }
         if found.is_empty() {
@@ -596,8 +699,8 @@ pub fn lift(root: &mut Value) -> Result<bool, String> {
             *specs = Value::Object(Map::new());
         }
         let specs = specs.as_object_mut().expect("an object");
-        for (key, value) in found {
-            let entry = serde_json::to_value(TimeSpec::musical(&value, 0.0)).expect("encodes");
+        for (key, entry) in found {
+            let entry = serde_json::to_value(entry).expect("encodes");
             specs.insert(key.to_string(), entry);
         }
         Ok(())
@@ -657,7 +760,18 @@ pub fn fold(root: &mut Value) -> bool {
                     object.remove("after");
                 } else if rule == "sequence" {
                     detached.push((scope.clone(), Detach::Leave(id.clone())));
+                } else if rule == "during" {
+                    object.remove("during");
                 }
+            }
+            // `during` sets both edges: a hand move of either leaves it,
+            // and the numbers stand (docs/SPEECH-SYNC.md §6.2).
+            if specs
+                .get("duration")
+                .filter(|e| e.rule.as_deref() == Some("during"))
+                .is_some_and(|e| !e.stands(number(object, "duration")))
+            {
+                object.remove("during");
             }
             let start_stood = !matches!(start_moved, Some((_, true)));
             if let Some(entry) = specs
@@ -673,7 +787,7 @@ pub fn fold(root: &mut Value) -> bool {
             }
         }
         for (key, entry) in &specs {
-            let Some(value) = entry.value() else {
+            let Some(value) = entry.spec_object() else {
                 continue;
             };
             let Some((holder, leaf)) = slot(object, key) else {
@@ -681,7 +795,7 @@ pub fn fold(root: &mut Value) -> bool {
             };
             let number = holder.get(leaf).and_then(Value::as_f64);
             if entry.holds(number) {
-                holder.insert(leaf.to_string(), value.to_value());
+                holder.insert(leaf.to_string(), value);
             }
         }
         Ok(())

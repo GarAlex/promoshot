@@ -243,7 +243,9 @@ fn edited_value_flattens_only_itself() {
 /// other content needs.
 #[test]
 fn musical_file_stamps_49() {
-    assert_eq!(promo_model::READER_VERSION, 49);
+    // 50 since speech time (docs/SPEECH-SYNC.md); musical files stay 49.
+    assert_eq!(promo_model::READER_VERSION, 50);
+    assert_eq!(promo_model::musical::MUSICAL_READER, 49);
     assert_eq!(promo_model::LOSSLESS_READER, 48);
     let plain = |layer: Value| {
         json!({

@@ -61,7 +61,7 @@ pub enum Command {
         #[serde(default, rename = "keyframeID")]
         keyframe_id: Option<String>,
         field: String,
-        value: promo_model::TimeValue,
+        value: promo_model::musical::FieldTime,
     },
     #[serde(rename_all = "camelCase")]
     SetLayerAudioFocus {
@@ -882,10 +882,10 @@ fn set_time(
     layer: &mut promo_model::ProjectLayer,
     keyframe_id: Option<&str>,
     field: &str,
-    value: &promo_model::TimeValue,
+    value: &promo_model::musical::FieldTime,
 ) -> Result<(), String> {
     use promo_model::musical;
-    use promo_model::TimeValue;
+    use promo_model::musical::FieldTime as TimeValue;
     let fields = if keyframe_id.is_some() {
         musical::KEYFRAME_TIME_FIELDS
     } else {
@@ -916,7 +916,16 @@ fn set_time(
                     m.canonical_text()
                 ));
             }
-            (None, Some(*m))
+            (None, Some(value.clone()))
+        }
+        TimeValue::Speech(v) => {
+            if !takes_position {
+                return Err(format!(
+                    "{field} is a length — a speech value is a position ({})",
+                    v.canonical_text()
+                ));
+            }
+            (None, Some(value.clone()))
         }
     };
     match keyframe_id {
@@ -936,10 +945,7 @@ fn set_time(
                     keyframe
                         .time_specs
                         .get_or_insert_with(Default::default)
-                        .insert(
-                            field.to_string(),
-                            promo_model::TimeSpec::musical(&m, current),
-                        );
+                        .insert(field.to_string(), m.spec(current).expect("a value"));
                 }
                 (None, None) => unreachable!(),
             }
@@ -966,10 +972,7 @@ fn set_time(
                 layer
                     .time_specs
                     .get_or_insert_with(Default::default)
-                    .insert(
-                        field.to_string(),
-                        promo_model::TimeSpec::musical(&m, current),
-                    );
+                    .insert(field.to_string(), m.spec(current).expect("a value"));
             }
             (None, None) => unreachable!(),
         },

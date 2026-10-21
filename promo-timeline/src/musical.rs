@@ -56,9 +56,23 @@ pub struct BeatGrids {
     /// resource id — the list a clock counts on, so the cuts land on the
     /// beats `promo beats` prints.
     pub beats: BTreeMap<String, (Vec<f64>, usize)>,
+    /// The takes' word timing (docs/SPEECH-SYNC.md §6.4) — what speech
+    /// values count on; a take with none is laid out on an estimate.
+    pub words: promo_model::word_cache::TakeWords,
 }
 
+/// What the timing pass reads from outside the file: beat grids and word
+/// timing. The design's `TimingInputs` — one struct, so every loader that
+/// already hands the pass its grids hands it the words beside them.
+pub type TimingInputs = BeatGrids;
+
 impl BeatGrids {
+    /// These grids with the word timing of the project at `dir`'s takes.
+    pub fn with_words(mut self, dir: &std::path::Path, meta: &ProjectMetadata) -> BeatGrids {
+        self.words = promo_model::word_cache::take_words(dir, meta);
+        self
+    }
+
     /// The grids, sections and confidences of songs' analyses, by resource
     /// id (`promo_model::beat_cache::cached_analyses`).
     pub fn from_analyses(analyses: &BTreeMap<String, musical::BeatAnalysis>) -> BeatGrids {
@@ -234,6 +248,110 @@ pub enum TimingProblem {
         layer: String,
         property: String,
     },
+    /// Numbers that wait on each other through a beat clock and a speech
+    /// clock (the music enters on a word while the voice starts on a beat):
+    /// none settles, and each keeps its stored number.
+    Circular {
+        layer: String,
+    },
+    /// A speech value names no word the take has: an index, an `nth` or a
+    /// sentence past the end, or a word the take never says.
+    SpeechNoWord {
+        layer: String,
+        field: String,
+        spec: String,
+        why: String,
+    },
+    /// A speech value's take cannot be found, says nothing, or nothing
+    /// places it.
+    SpeechTake {
+        layer: String,
+        field: String,
+        spec: String,
+        why: String,
+    },
+    /// The word is in the take, but the layer that plays it never does.
+    SpeechTrimmedOut {
+        layer: String,
+        field: String,
+        spec: String,
+        why: String,
+    },
+    /// A speech value (always a position) where a length is required.
+    SpeechForLength {
+        layer: String,
+        field: String,
+        spec: String,
+    },
+    /// A layer with `during` that also says `after` or `timing.start`:
+    /// `during` places it.
+    DuringWins {
+        layer: String,
+        over: String,
+    },
+    /// An index whose guard word moved: followed to where it is now.
+    GuardMoved {
+        layer: String,
+        word: u32,
+        now: String,
+        guard: String,
+        to: u32,
+    },
+    /// A value names no take, and the scope plays exactly one.
+    ImplicitTake {
+        layer: String,
+        take: String,
+    },
+    /// A take named by resource id that several layers play: the first
+    /// counts.
+    SeveralPlayers {
+        take: String,
+        layers: Vec<String>,
+    },
+    /// A take with no word timing yet: laid out on an estimate, and an
+    /// export waits for timing.
+    SpeechEstimated {
+        take: String,
+    },
+    /// A placeholder take's timing is the estimate it was made from.
+    SpeechPlaceholder {
+        take: String,
+    },
+    /// Timing the aligner was unsure of.
+    SpeechUnsure {
+        take: String,
+        confidence: f64,
+    },
+    /// The take's text changed since it was voiced.
+    SpeechStale {
+        take: String,
+    },
+    /// The aligner's doubt that the audio says its script.
+    SpeechMayNotSay {
+        take: String,
+        note: String,
+    },
+    /// A script with no spaces between words: synced by character.
+    SpeechByCharacter {
+        take: String,
+    },
+    /// Words the layer that plays the take never reaches.
+    TakeLongerThanLayer {
+        take: String,
+        layer: String,
+        first: u32,
+        last: u32,
+    },
+    /// A visual edge inside a word of a take playing then.
+    CutMidWord {
+        layer: String,
+        at: f64,
+        word: String,
+        take: String,
+        from: f64,
+        to: f64,
+        gap: Option<f64>,
+    },
 }
 
 impl TimingProblem {
@@ -252,6 +370,12 @@ impl TimingProblem {
                 | TimingProblem::AfterCircular { .. }
                 | TimingProblem::FollowsAnOpenEnd { .. }
                 | TimingProblem::Generator { .. }
+                | TimingProblem::Circular { .. }
+                | TimingProblem::SpeechNoWord { .. }
+                | TimingProblem::SpeechTake { .. }
+                | TimingProblem::SpeechTrimmedOut { .. }
+                | TimingProblem::SpeechForLength { .. }
+                | TimingProblem::DuringWins { .. }
         )
     }
 }
@@ -376,6 +500,115 @@ impl std::fmt::Display for TimingProblem {
                 "layer \"{layer}\" follows \"{target}\", which never ends — give \
                  \"{target}\" a duration"
             ),
+            Self::Circular { layer } => write!(
+                f,
+                "layer \"{layer}\" waits on a clock that waits on it (a beat clock and a \
+                 speech clock placing each other) — it keeps its stored numbers; give one \
+                 of them a start in seconds"
+            ),
+            Self::SpeechNoWord {
+                layer,
+                field,
+                spec,
+                why,
+            }
+            | Self::SpeechTake {
+                layer,
+                field,
+                spec,
+                why,
+            }
+            | Self::SpeechTrimmedOut {
+                layer,
+                field,
+                spec,
+                why,
+            } => write!(
+                f,
+                "layer \"{layer}\": {field} {spec} — {why}; the stored seconds stand"
+            ),
+            Self::SpeechForLength { layer, field, spec } => write!(
+                f,
+                "layer \"{layer}\": {field} {spec} is a speech position where a length is \
+                 required — use seconds or beats; the stored seconds stand"
+            ),
+            Self::DuringWins { layer, over } => write!(
+                f,
+                "layer \"{layer}\" has during and also {over} — during places it; remove one"
+            ),
+            Self::GuardMoved {
+                layer,
+                word,
+                now,
+                guard,
+                to,
+            } => write!(
+                f,
+                "layer \"{layer}\": word {word} is now \"{now}\"; followed \"{guard}\" to \
+                 word {to} — update the reference"
+            ),
+            Self::ImplicitTake { layer, take } => write!(
+                f,
+                "layer \"{layer}\": a speech value names no take — counted on \"{take}\", \
+                 the only one here; add \"of\": \"{take}\""
+            ),
+            Self::SeveralPlayers { take, layers } => write!(
+                f,
+                "\"{take}\" is played by several layers ({}) — speech values count on the \
+                 first, \"{}\"; name the layer in \"of\" to choose",
+                layers.join(", "),
+                layers.first().map(String::as_str).unwrap_or_default()
+            ),
+            Self::SpeechEstimated { take } => write!(
+                f,
+                "\"{take}\" has no word timing yet — laid out on an estimate, and an export \
+                 waits for timing (`promo words`)"
+            ),
+            Self::SpeechPlaceholder { take } => {
+                write!(f, "\"{take}\" timing is estimated (placeholder)")
+            }
+            Self::SpeechUnsure { take, confidence } => write!(
+                f,
+                "\"{take}\" was aligned with confidence {confidence:.2} — word starts may be \
+                 ±0.2 s; transcribe or fix by hand"
+            ),
+            Self::SpeechStale { take } => write!(
+                f,
+                "\"{take}\"'s text changed since its take was voiced — times follow the old take"
+            ),
+            Self::SpeechMayNotSay { take, note } => write!(f, "\"{take}\": {note}"),
+            Self::SpeechByCharacter { take } => {
+                write!(f, "word sync for \"{take}\" is by character")
+            }
+            Self::TakeLongerThanLayer {
+                take,
+                layer,
+                first,
+                last,
+            } => write!(
+                f,
+                "\"{take}\" is longer than its layer \"{layer}\" — words {first}–{last} are \
+                 never heard"
+            ),
+            Self::CutMidWord {
+                layer,
+                at,
+                word,
+                take,
+                from,
+                to,
+                gap,
+            } => {
+                write!(
+                    f,
+                    "layer \"{layer}\" at {at:.2}s: cuts mid-word \"{word}\" ({from:.2}–{to:.2} s \
+                     of \"{take}\")"
+                )?;
+                match gap {
+                    Some(gap) => write!(f, " — the nearest gap is {gap:.2} s"),
+                    None => Ok(()),
+                }
+            }
         }
     }
 }
@@ -392,6 +625,14 @@ pub struct TimingReport {
     pub unmeasured: Vec<String>,
     /// Every scope's beat clock.
     pub clocks: Vec<BeatClockInfo>,
+    /// Every speech value with the seconds it resolved to, the word it
+    /// landed on and the timing's source — validate's "Speech times".
+    pub speech: Vec<crate::speech_time::SpeechRow>,
+    /// Every take a scope's speech values counted on.
+    pub speech_clocks: Vec<crate::speech_time::SpeechClockInfo>,
+    /// Takes a value counted on that have no word timing: laid out on an
+    /// estimate, and an export waits (as for `missing_grids`).
+    pub missing_words: Vec<String>,
 }
 
 /// Every musical value and attachment in `meta`, resolved to seconds in
@@ -427,8 +668,17 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
     );
     let mut attachment_problems = Vec::new();
     let mut late = Vec::new();
+    let speech_clock = meta.composition_settings.speech_clock.clone();
+    let spoken = crate::speech_time::uses_speech(meta.layers.as_deref().unwrap_or(&[]));
+    let original = spoken.then(|| meta.layers.clone().unwrap_or_default());
+    let mut settled = !spoken;
+    let mut previous = Vec::new();
+    let mut said = Said::default();
     for _ in 0..rounds {
         let before = numbers(meta.layers.as_deref().unwrap_or(&[]));
+        if spoken {
+            previous = meta.layers.clone().unwrap_or_default();
+        }
         let scope = Scope::new(
             clock.as_ref(),
             meta.layers.as_deref().unwrap_or(&[]),
@@ -437,6 +687,20 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         );
         let layers = meta.layers.as_deref_mut().unwrap_or(&mut []);
         positions_and_lengths(layers, &scope);
+        if spoken {
+            said = Said::default();
+            let speech =
+                crate::speech_time::Speech::new(speech_clock.as_ref(), layers, &resources, grids);
+            said.problems = crate::speech_time::speech_pass(
+                layers,
+                &speech,
+                &scope,
+                &plan.during,
+                "layers",
+                &mut said.rows,
+                &mut said.used,
+            );
+        }
         late = plan.place(layers, &scope);
         // A layer the sequence or `after` places is no attachment's: its
         // start anchor sits out the attachment pass, and comes back.
@@ -444,8 +708,16 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         attachment_problems = crate::attachment::resolve_attachments(meta);
         Plan::restore_start_anchors(meta.layers.as_deref_mut().unwrap_or(&mut []), held);
         if numbers(meta.layers.as_deref().unwrap_or(&[])) == before {
+            settled = true;
             break;
         }
+    }
+    if let (false, Some(original)) = (settled, original.as_deref()) {
+        report.problems.extend(keep_circular(
+            meta.layers.as_deref_mut().unwrap_or(&mut []),
+            original,
+            &previous,
+        ));
     }
     let scope = Scope::new(
         clock.as_ref(),
@@ -510,6 +782,17 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             "composition",
             &mut report,
         );
+        if spoken {
+            said.report(
+                meta.layers.as_deref().unwrap_or(&[]),
+                speech_clock.as_ref(),
+                &resources,
+                grids,
+                fps,
+                "composition",
+                &mut report,
+            );
+        }
     }
 
     // Each composition: its own clock, never its parent's — it may be
@@ -522,14 +805,47 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
         let clock = composition.beat_clock.clone();
         let plan = Plan::new(&composition.layers, composition.sequence.as_deref());
         let mut late = Vec::new();
+        let speech_clock = composition.speech_clock.clone();
+        let spoken = crate::speech_time::uses_speech(&composition.layers);
+        let original = spoken.then(|| composition.layers.clone());
+        let mut settled = !spoken;
+        let mut previous = Vec::new();
+        let mut said = Said::default();
         for _ in 0..composition.layers.len() + 1 {
             let before = numbers(&composition.layers);
+            if spoken {
+                previous = composition.layers.clone();
+            }
             let scope = Scope::new(clock.as_ref(), &composition.layers, &resources, grids);
             positions_and_lengths(&mut composition.layers, &scope);
+            if spoken {
+                said = Said::default();
+                let speech = crate::speech_time::Speech::new(
+                    speech_clock.as_ref(),
+                    &composition.layers,
+                    &resources,
+                    grids,
+                );
+                said.problems = crate::speech_time::speech_pass(
+                    &mut composition.layers,
+                    &speech,
+                    &scope,
+                    &plan.during,
+                    &format!("resources[{id}].composition.layers"),
+                    &mut said.rows,
+                    &mut said.used,
+                );
+            }
             late = plan.place(&mut composition.layers, &scope);
             if numbers(&composition.layers) == before {
+                settled = true;
                 break;
             }
+        }
+        if let (false, Some(original)) = (settled, original.as_deref()) {
+            report
+                .problems
+                .extend(keep_circular(&mut composition.layers, original, &previous));
         }
         let scope = Scope::new(clock.as_ref(), &composition.layers, &resources, grids);
         finish(
@@ -570,12 +886,113 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             &format!("resources[{id}]"),
             &mut report,
         );
+        if spoken {
+            said.report(
+                &composition.layers,
+                speech_clock.as_ref(),
+                &resources,
+                grids,
+                fps,
+                &format!("resources[{id}]"),
+                &mut report,
+            );
+        }
     }
     report.missing_grids.sort();
     report.missing_grids.dedup();
     report.unmeasured.sort();
     report.unmeasured.dedup();
+    report.missing_words.sort();
+    report.missing_words.dedup();
     report
+}
+
+/// What one scope's speech values said in the round that settled.
+#[derive(Default)]
+struct Said {
+    problems: Vec<TimingProblem>,
+    rows: Vec<crate::speech_time::SpeechRow>,
+    used: std::collections::BTreeSet<String>,
+}
+
+impl Said {
+    /// Into the report, with what the takes themselves call for — read on
+    /// the final numbers.
+    #[allow(clippy::too_many_arguments)]
+    fn report(
+        self,
+        layers: &[ProjectLayer],
+        clock: Option<&promo_model::speech::SpeechClock>,
+        resources: &[ProjectResource],
+        grids: &BeatGrids,
+        fps: f64,
+        scope: &str,
+        report: &mut TimingReport,
+    ) {
+        report.problems.extend(self.problems);
+        report.speech.extend(self.rows);
+        let speech = crate::speech_time::Speech::new(clock, layers, resources, grids);
+        crate::speech_time::findings(
+            layers,
+            &speech,
+            &self.used,
+            fps,
+            scope,
+            &mut report.problems,
+            &mut report.speech_clocks,
+            &mut report.missing_words,
+        );
+    }
+}
+
+/// A scope whose loop ran out of rounds still moving: the layers the last
+/// round moved wait on each other through a clock. Each keeps its stored
+/// numbers (its entries say so, so a save keeps what it says) and is named.
+fn keep_circular(
+    layers: &mut [ProjectLayer],
+    original: &[ProjectLayer],
+    previous: &[ProjectLayer],
+) -> Vec<TimingProblem> {
+    fn ids(layers: &[ProjectLayer], out: &mut Vec<String>) {
+        for layer in layers {
+            out.push(layer.id.clone());
+            if let Some(members) = layer.members.as_deref() {
+                ids(members, out);
+            }
+        }
+    }
+    let mut all = Vec::new();
+    ids(layers, &mut all);
+    let mut problems = Vec::new();
+    for id in all {
+        let (Some(was), Some(stored)) = (find(previous, &id), find(original, &id)) else {
+            continue;
+        };
+        let (was_start, was_length) = (was.start_time, was.duration);
+        let (start, length) = (stored.start_time, stored.duration);
+        let Some(layer) = find_mut(layers, &id) else {
+            continue;
+        };
+        if layer.start_time.to_bits() == was_start.to_bits()
+            && layer.duration.map(f64::to_bits) == was_length.map(f64::to_bits)
+        {
+            continue;
+        }
+        layer.start_time = start;
+        layer.duration = length;
+        for (key, number) in [("startTime", Some(start)), ("duration", length)] {
+            if let (Some(entry), Some(number)) = (
+                layer.time_specs.as_mut().and_then(|m| m.get_mut(key)),
+                number,
+            ) {
+                entry.seconds = number;
+            }
+        }
+        problems.push(TimingProblem::Circular {
+            layer: layer.name.clone(),
+        });
+    }
+    problems
 }
 
 /// A grid point in the words a person reads: "beat 3 at 1.25 s" from beat 1
@@ -810,6 +1227,18 @@ fn settle_edits(layers: &mut [ProjectLayer], sequence: &mut Option<Vec<SequenceE
                         !e.stands(Some(layer.start_time)),
                     )
                 });
+            // `during` sets both edges: a hand move of either leaves it,
+            // and the numbers stand (as the save's fold).
+            let span_moved = matches!(&start_moved, Some((rule, true)) if rule == "during")
+                || layer
+                    .time_specs
+                    .as_ref()
+                    .and_then(|m| m.get("duration"))
+                    .filter(|e| e.rule.as_deref() == Some("during"))
+                    .is_some_and(|e| !e.stands(layer.duration));
+            if span_moved {
+                layer.during = None;
+            }
             match &start_moved {
                 Some((rule, true)) if rule == "after" => layer.after = None,
                 Some((rule, true)) if rule == "sequence" => {
@@ -1218,11 +1647,29 @@ fn name_of(layers: &[ProjectLayer], id: &str) -> String {
 
 /// Writes a start a rule derived, with its entry.
 fn place_start(layer: &mut ProjectLayer, rule: &str, seconds: f64) {
-    layer.start_time = seconds;
-    layer
-        .time_specs
-        .get_or_insert_with(Default::default)
-        .insert("startTime".into(), TimeSpec::derived(rule, seconds));
+    place_derived(layer, "startTime", rule, seconds);
+}
+
+/// Writes a start or length a rule derived (`sequence`, `after`,
+/// `during`), with its entry.
+pub(crate) fn place_derived(layer: &mut ProjectLayer, key: &str, rule: &str, seconds: f64) {
+    if musical::set_layer_number(layer, key, seconds) {
+        layer
+            .time_specs
+            .get_or_insert_with(Default::default)
+            .insert(key.into(), TimeSpec::derived(rule, seconds));
+    }
+}
+
+/// Writes the seconds a value resolved to at its field, and the core's
+/// words for it on the entry.
+pub(crate) fn write_spec(layer: &mut ProjectLayer, key: &str, seconds: f64, label: &str) {
+    if musical::set_layer_number(layer, key, seconds) {
+        if let Some(entry) = layer.time_specs.as_mut().and_then(|m| m.get_mut(key)) {
+            entry.seconds = seconds;
+            entry.label = label.to_string();
+        }
+    }
 }
 
 type Link = (String, String, Option<TimeValue>);
@@ -1232,6 +1679,8 @@ type Link = (String, String, Option<TimeValue>);
 /// cannot be honoured (docs/BEAT-SYNC.md §5).
 struct Plan {
     sequence: Vec<SequenceEntry>,
+    /// Layers `during` places (the sequence wins over it, it over `after`).
+    during: std::collections::BTreeSet<String>,
     afters: Vec<Link>,
     placed: std::collections::BTreeSet<String>,
     problems: Vec<TimingProblem>,
@@ -1241,6 +1690,7 @@ impl Plan {
     fn new(layers: &[ProjectLayer], sequence: Option<&[SequenceEntry]>) -> Plan {
         let mut plan = Plan {
             sequence: Vec::new(),
+            during: Default::default(),
             afters: Vec::new(),
             placed: Default::default(),
             problems: Vec::new(),
@@ -1261,6 +1711,25 @@ impl Plan {
                 plan.sequence.push(entry.clone());
             }
         }
+        fn spans(layers: &[ProjectLayer], plan: &mut Plan) {
+            for layer in layers {
+                if layer.during.is_some() {
+                    if plan.sequence.iter().any(|e| e.layer == layer.id) {
+                        plan.problems.push(TimingProblem::SequenceWins {
+                            layer: layer.name.clone(),
+                            over: "during".into(),
+                        });
+                    } else {
+                        plan.during.insert(layer.id.clone());
+                        plan.placed.insert(layer.id.clone());
+                    }
+                }
+                if let Some(members) = layer.members.as_deref() {
+                    spans(members, plan);
+                }
+            }
+        }
+        spans(layers, &mut plan);
         fn walk(layers: &[ProjectLayer], out: &mut Vec<Link>) {
             for layer in layers {
                 match &layer.after {
@@ -1279,7 +1748,12 @@ impl Plan {
         walk(layers, &mut links);
         for (id, target, offset) in links {
             let name = name_of(layers, &id);
-            if plan.placed.contains(&id) {
+            if plan.during.contains(&id) {
+                plan.problems.push(TimingProblem::DuringWins {
+                    layer: name,
+                    over: "after".into(),
+                });
+            } else if plan.placed.contains(&id) {
                 plan.problems.push(TimingProblem::SequenceWins {
                     layer: name,
                     over: "after".into(),
@@ -1332,6 +1806,11 @@ impl Plan {
                 if layer.timing.as_ref().is_some_and(|t| t.start.is_some()) {
                     if plan.sequence.iter().any(|e| e.layer == layer.id) {
                         plan.problems.push(TimingProblem::SequenceWins {
+                            layer: layer.name.clone(),
+                            over: "timing.start".into(),
+                        });
+                    } else if plan.during.contains(&layer.id) {
+                        plan.problems.push(TimingProblem::DuringWins {
                             layer: layer.name.clone(),
                             over: "timing.start".into(),
                         });
@@ -1532,7 +2011,7 @@ fn numbers(layers: &[ProjectLayer]) -> Vec<u64> {
 
 /// The clock of one scope: the grid its layers resolve against, and why —
 /// worked out from the layers as they stand, owning what it found.
-struct Scope {
+pub(crate) struct Scope {
     grid: Grid,
     /// No clock at all: every musical value gets a warning.
     clockless: bool,
@@ -1693,7 +2172,7 @@ impl Scope {
     }
 
     /// The grid one layer resolves against: its own clock, or the scope's.
-    fn grid_of(&self, layer: &ProjectLayer) -> Grid {
+    pub(crate) fn grid_of(&self, layer: &ProjectLayer) -> Grid {
         self.overrides
             .get(&layer.id)
             .cloned()
@@ -1701,7 +2180,7 @@ impl Scope {
     }
 
     /// Whether this layer resolves against no clock at all.
-    fn clockless_for(&self, layer: &ProjectLayer) -> bool {
+    pub(crate) fn clockless_for(&self, layer: &ProjectLayer) -> bool {
         self.clockless && !self.overrides.contains_key(&layer.id)
     }
 
@@ -1893,6 +2372,10 @@ fn finish(layers: &mut [ProjectLayer], scope: &Scope, at: &str, report: &mut Tim
         }
         // The report: every value as written and as resolved.
         for (key, entry) in layer.time_specs.iter().flatten() {
+            if entry.speech().is_some() || entry.rule.as_deref() == Some("during") {
+                // Listed with its word, in "Speech times".
+                continue;
+            }
             let Some(spec) = entry.spec.clone() else {
                 // A derived start or length: listed by its rule.
                 if let Some(rule) = entry.rule.clone() {
@@ -1919,7 +2402,7 @@ fn finish(layers: &mut [ProjectLayer], scope: &Scope, at: &str, report: &mut Tim
         }
         for keyframe in &layer.keyframes {
             for (key, entry) in keyframe.time_specs.iter().flatten() {
-                let Some(spec) = entry.spec.clone() else {
+                let Some(spec) = entry.spec.clone().filter(|_| entry.speech().is_none()) else {
                     continue;
                 };
                 if clockless {

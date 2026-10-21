@@ -187,6 +187,14 @@ impl Project {
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
         // A beat clock's song with no stated grid is measured first.
         let (grids, grid_problems, analyses) = Self::measure_grids(dir, &meta, analysis);
+        // A project that times anything on speech gets its takes' word
+        // timing first, as a clock's song gets its grid.
+        let missing_words = if promo_timeline::speech_time::project_uses_speech(&meta) {
+            Self::measure_words(dir, &meta, analysis)
+        } else {
+            Vec::new()
+        };
+        let grids = grids.with_words(dir, &meta);
         // Attached layers and musical values become plain numbers before
         // anything reads them, so the renderer never has to know the
         // difference.
@@ -209,7 +217,6 @@ impl Project {
             attachment_problems.push(problem);
         }
         let resolved = promo_model::effective_resources(&meta, &Self::listing(dir));
-        let missing_words = Self::measure_words(dir, &meta, analysis);
         Ok(Self {
             dir: dir.to_path_buf(),
             meta,

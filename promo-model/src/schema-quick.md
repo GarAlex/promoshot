@@ -22,8 +22,8 @@ This is the authoring subset; `promo_schema_full` is the whole format.
   A layer: `id`, `name`, `sortIndex`, `kind`, `isEnabled: true`,
   `startTime`, `duration` (seconds on the output timeline), usually a
   `resourceID`, and `keyframes`.
-- Cutting to music: a `beatClock` song (promo measures its beats), `{"beats":
-  2}` times, `sequence`, `pulse`, `flash` — the beat-cut recipe; topic `beats`.
+- Cutting to music: a `beatClock` song, `{"beats": 2}`, `sequence`, `pulse`,
+  `flash` (topic `beats`); on words: `{"word": 12, "of": "intro"}` (`speech`).
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
   `Resources/`), `displayName`, `addedAt: 0`, `imageCuts: []`,
   `disabledAudioTrackIndices: []`; videos also carry `duration`,

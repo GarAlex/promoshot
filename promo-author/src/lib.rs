@@ -1363,7 +1363,8 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
     // analysis counts (explain reads; it never analyses).
     let grids = promo_timeline::BeatGrids::from_analyses(
         &promo_model::beat_cache::cached_analyses(&dir, &meta),
-    );
+    )
+    .with_words(&dir, &meta);
     let timing = promo_timeline::resolve_timing(&mut meta, &grids);
     let resolved = resolving_handles(&text, args);
     let args = &resolved;
@@ -1419,19 +1420,24 @@ fn musical_times(layer: &promo_model::ProjectLayer) -> Value {
     let mut out = serde_json::Map::new();
     for (key, entry) in layer.time_specs.iter().flatten() {
         let seconds = promo_model::musical::layer_number(layer, key).unwrap_or(entry.seconds);
-        out.insert(
-            key.clone(),
-            json!({ "value": shown(entry), "seconds": seconds }),
-        );
+        let mut row = json!({ "value": shown(entry), "seconds": seconds });
+        // A speech value says the word it landed on.
+        if entry.speech().is_some() || entry.rule.as_deref() == Some("during") {
+            row["clock"] = json!("speech");
+            row["label"] = json!(entry.label);
+        }
+        out.insert(key.clone(), row);
     }
     for keyframe in &layer.keyframes {
         for (key, entry) in keyframe.time_specs.iter().flatten() {
             let seconds =
                 promo_model::musical::keyframe_number(keyframe, key).unwrap_or(entry.seconds);
-            out.insert(
-                format!("keyframes[{}].{key}", keyframe.id),
-                json!({ "value": shown(entry), "seconds": seconds }),
-            );
+            let mut row = json!({ "value": shown(entry), "seconds": seconds });
+            if entry.speech().is_some() {
+                row["clock"] = json!("speech");
+                row["label"] = json!(entry.label);
+            }
+            out.insert(format!("keyframes[{}].{key}", keyframe.id), row);
         }
     }
     Value::Object(out)

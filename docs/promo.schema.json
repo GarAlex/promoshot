@@ -762,6 +762,16 @@
             "array",
             "null"
           ]
+        },
+        "speechClock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeechClock"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -908,6 +918,17 @@
             "array",
             "null"
           ]
+        },
+        "speechClock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeechClock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "subtitleAlignment": {
           "anyOf": [
@@ -1338,6 +1359,63 @@
         }
       ]
     },
+    "During": {
+      "additionalProperties": true,
+      "properties": {
+        "hold": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lead": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sentence": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "word": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "words": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Easing": {
       "enum": [
         "linear",
@@ -1372,6 +1450,19 @@
         "depth"
       ],
       "type": "object"
+    },
+    "FieldTime": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/MusicalTime"
+        },
+        {
+          "$ref": "#/$defs/SpeechTime"
+        }
+      ]
     },
     "Flash": {
       "additionalProperties": true,
@@ -1707,7 +1798,7 @@
     "LayerTransition": {
       "properties": {
         "duration": {
-          "$ref": "#/$defs/TimeValue"
+          "$ref": "#/$defs/FieldTime"
         },
         "easing": {
           "anyOf": [
@@ -2632,7 +2723,7 @@
         "duration": {
           "anyOf": [
             {
-              "$ref": "#/$defs/TimeValue"
+              "$ref": "#/$defs/FieldTime"
             },
             {
               "type": "null"
@@ -2643,6 +2734,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/DurationRule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "during": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/During"
             },
             {
               "type": "null"
@@ -2662,7 +2763,7 @@
         "fadeIn": {
           "anyOf": [
             {
-              "$ref": "#/$defs/TimeValue"
+              "$ref": "#/$defs/FieldTime"
             },
             {
               "type": "null"
@@ -2672,7 +2773,7 @@
         "fadeOut": {
           "anyOf": [
             {
-              "$ref": "#/$defs/TimeValue"
+              "$ref": "#/$defs/FieldTime"
             },
             {
               "type": "null"
@@ -2828,6 +2929,16 @@
           "format": "int64",
           "type": "integer"
         },
+        "speechClock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeechClock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "stage": {
           "type": [
             "string",
@@ -2835,7 +2946,7 @@
           ]
         },
         "startTime": {
-          "$ref": "#/$defs/TimeValue"
+          "$ref": "#/$defs/FieldTime"
         },
         "timeSpecs": {
           "additionalProperties": {
@@ -3151,7 +3262,7 @@
           ]
         },
         "time": {
-          "$ref": "#/$defs/TimeValue"
+          "$ref": "#/$defs/FieldTime"
         },
         "timeSpecs": {
           "additionalProperties": {
@@ -3180,7 +3291,7 @@
           ]
         },
         "transitionDuration": {
-          "$ref": "#/$defs/TimeValue",
+          "$ref": "#/$defs/FieldTime",
           "default": 0.5
         },
         "transitionPercent": {
@@ -3998,6 +4109,90 @@
       ],
       "type": "array"
     },
+    "SpeechClock": {
+      "additionalProperties": true,
+      "properties": {
+        "layer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resourceID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startTime": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SpeechTime": {
+      "additionalProperties": false,
+      "properties": {
+        "edge": {
+          "enum": [
+            "start",
+            "end"
+          ],
+          "type": "string"
+        },
+        "near": {
+          "type": "number"
+        },
+        "nth": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "of": {
+          "type": "string"
+        },
+        "offset": {
+          "type": [
+            "number",
+            "object"
+          ]
+        },
+        "quantize": {
+          "enum": [
+            "beat",
+            "downbeat",
+            "bar"
+          ],
+          "type": "string"
+        },
+        "sentence": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snap": {
+          "enum": [
+            "word",
+            "wordEnd",
+            "gap",
+            "sentence"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "word": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "SphereShape": {
       "properties": {
         "radius": {
@@ -4717,6 +4912,18 @@
         "isIncluded"
       ],
       "type": "object"
+    },
+    "WordRef": {
+      "anyOf": [
+        {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",

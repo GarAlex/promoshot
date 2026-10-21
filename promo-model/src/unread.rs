@@ -134,6 +134,8 @@ fn carry_field<T: Clone>(into: &mut Option<T>, from: &Option<T>, mode: Mode) {
 fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, &[], mode);
     carry_field(&mut into.beat_clock, &from.beat_clock, mode);
+    carry_field(&mut into.speech_clock, &from.speech_clock, mode);
+    carry_field(&mut into.during, &from.during, mode);
     carry_field(&mut into.after, &from.after, mode);
     carry_field(&mut into.pulse, &from.pulse, mode);
     carry_field(&mut into.shake, &from.shake, mode);
@@ -162,6 +164,7 @@ fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode
     carry_field(&mut into.generated_by, &from.generated_by, mode);
     if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
         carry_field(&mut composition.beat_clock, &old.beat_clock, mode);
+        carry_field(&mut composition.speech_clock, &old.speech_clock, mode);
         carry_field(&mut composition.sequence, &old.sequence, mode);
         carry_field(&mut composition.flash, &old.flash, mode);
     }
@@ -225,6 +228,7 @@ impl ProjectMetadata {
         let settings = &mut self.composition_settings;
         let old = &from.composition_settings;
         carry_field(&mut settings.sequence, &old.sequence, mode);
+        carry_field(&mut settings.speech_clock, &old.speech_clock, mode);
         carry_field(&mut settings.flash, &old.flash, mode);
         let old_layers = layers_by_id(from);
         carry_layers(

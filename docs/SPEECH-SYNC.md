@@ -1147,6 +1147,81 @@ criteria.
   - `cut_mid_word_warns_with_the_gap`
   - `every_loader_gives_the_same_numbers` (speech case)
 
+**Slice 6 as built** (2026-10-21):
+- **The value.** `TimeValue` keeps its two arms; speech values travel as
+  `timeSpecs` entries like musical ones (`TimeSpec::speech()`,
+  `speech_value`, `spec_object`), and `TimeSpec::value()` stays
+  musical-only, so no beat code sees a speech spec. `SetTime` takes
+  `FieldTime {Seconds, Musical, Speech}`, and speech only for `startTime`,
+  `duration` and a keyframe's `time`. `after.offset` and sequence lengths
+  stay `TimeValue` and so refuse speech by decoding.
+- **`TimingInputs` is `BeatGrids`** (a type alias) with a new `words:
+  TakeWords` field (`word_cache::take_words`: records by resource id plus
+  the stale set), filled by `BeatGrids::with_words(dir, meta)`. Every
+  caller keeps its signature; the loaders that have a folder add
+  `.with_words`: the CLI open, `explain`, the FFI's `cached_grids` (open,
+  resolve, warnings, the document's project directory). The headless
+  editor document resolves without words (as it does without beat
+  analyses).
+- **Resolution** (`promo-timeline/src/speech_time.rs`) runs inside each
+  scope's fixpoint loop, after the beat positions and before `sequence`/
+  `after`/attachments, and only in a scope that uses speech. Players are
+  read from the round's numbers, so a sequenced voice-over settles first
+  and its words follow on the next round. The map is the closed-form
+  inverse `mapping::timeline_output_time_for_source` through
+  `resource_for_cut`, cut off at the layer's end — not the sampled
+  piecewise inverse of §6.3. It honours trims, trim keyframes, pauses,
+  resource speed and cuts; a loop maps to its first play, with no
+  warning yet.
+- **Circular.** A scope whose loop runs out of rounds while still moving
+  (a beat clock and a speech clock placing each other) gives every layer
+  the last round moved its stored numbers back, and a `Circular` break.
+- **`during`:** sequence wins (`SequenceWins` over "during"), then
+  `during` (`DuringWins` over `after` or `timing.start`, a break). A hand
+  move of either edge drops `during` and both numbers stand, in the fold
+  and in `settle_edits` alike — simpler than "a resize alone becomes a
+  plain duration".
+- **Missing timing.** A take with no record lays out on
+  `estimate_words` over its duration, with `wordFixes` applied; it is
+  named once per take (`SpeechEstimated`, not one warning per value) and
+  listed in `TimingReport::missing_words`. `promo still|frames|video|gif`
+  refuse while it is non-empty. The FFI answers `missingWords` (open and
+  resolve). The app's export guard (`exportWaitsForGrids`, name kept)
+  also waits on it, and `BeatAnalyzer.gridsBeforeExport` first runs
+  `WordAligner.timeMissing`, which aligns those takes and reconciles.
+- **The open aligns only when speech is used:** the CLI aligns takes
+  only when some layer or composition uses a speech value or `during`
+  (`speech_time::project_uses_speech`), and does it before resolving.
+- **Findings** as §9, except: per-word low confidence is not reported (the
+  take's confidence is); the take-longer-than-layer, by-character and
+  may-not-say findings read the record (`extra.warnings`).
+- **Output.** validate's text has a "Speech times" block (`at  spec  →
+  label at instant s  (source)`). Its JSON adds speech rows to
+  `resolvedTimes` (`clock: "speech"`, `time`, `label`, `take`, `source`,
+  `word {index, text}`) and a `speechClocks` key. explain's `times` rows
+  carry `clock` and `label`, and inspect has a `words` section. Labels
+  use curly quotes: `word 4 “Primes”`, `ends with sentence 2`.
+- **Rung 50:** `READER_VERSION` 50, `ProjectStore` 50, and the pin
+  moved. `speechClock` alone stays 48. schema.md has a Speech topic and
+  schema-quick.md a line; the kitchen sink sets `speechClock` (settings,
+  composition, layer) and `during`.
+- **AC4:** the resolved app form, the problems and the file form of all
+  141 repository projects were snapshotted before the slice and diffed
+  after it: identical. The committed test checks that words beside every
+  take change nothing, the rung stays under 50, and no speech output
+  appears; the existing seconds-only tests stand.
+- **Tests:** promo-model `speech_values_round_trip_byte_for_byte`,
+  `malformed_speech_value_names_its_path`, `speech_file_stamps_50`;
+  promo-timeline (tests/speech_time.rs) the §10 list plus
+  `during_places_a_span_and_yields_to_the_sequence`,
+  `speech_in_a_length_field_is_a_break`; promo-cli
+  `editing_a_line_retimes_dependent_cuts` (AC2, a deterministic
+  FakeSynth through `promo_speech::settle`),
+  `every_loader_gives_the_same_numbers`,
+  `a_render_waits_for_missing_words`; FFI
+  `opened_and_resolved_count_on_the_cached_words`; Swift
+  `testSpeechTimedProjectWaitsThenAligns`.
+
 **S7 — Caption reveal sync and generated captions.**
 - Build: reveal `sync`, `unitTimes` and `unitEnds` (Rust and Swift), the `progress` change, the `captions` generator, and their fold stripping.
 - Tests:

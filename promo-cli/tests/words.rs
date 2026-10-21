@@ -205,11 +205,21 @@ fn older_aligner_records_are_realigned() {
 }
 
 /// The CLI's open aligns every take with no timing and stores it, as it
-/// measures a beat clock's song; `--no-analyse` reads the cache only.
+/// measures a beat clock's song — once something is timed on speech;
+/// `--no-analyse` reads the cache only.
 #[test]
 fn the_open_aligns_takes_with_no_timing() {
     let (_, script) = synthetic();
     let dir = folder("open", &script);
+    // Nothing timed on its words: the open aligns nothing (slice 6).
+    promo(&["validate", dir.to_str().unwrap()]);
+    assert_eq!(records(&dir), 0, "no speech value, no alignment");
+    let mut meta: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap()).unwrap();
+    meta["layers"].as_array_mut().unwrap().push(json!({
+        "id": "s1", "name": "S1", "sortIndex": 1, "kind": "image", "isEnabled": true,
+        "startTime": {"word": 3, "of": "intro"}, "duration": 1, "keyframes": []}));
+    std::fs::write(dir.join("metadata.json"), meta.to_string()).unwrap();
     promo(&["validate", dir.to_str().unwrap(), "--no-analyse"]);
     assert_eq!(records(&dir), 0, "cache only");
     let estimate = words(&dir, &["--no-analyse"]);

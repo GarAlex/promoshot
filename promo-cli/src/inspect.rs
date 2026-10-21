@@ -173,10 +173,53 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
         }
         out
     };
+    // Each take's word timing (docs/SPEECH-SYNC.md §9): what speech values
+    // count on.
+    let words: Vec<serde_json::Value> = promo_model::word_cache::takes(&project.dir, &project.meta)
+        .into_iter()
+        .map(|take| {
+            let record = project.grids.words.by_resource.get(&take.id);
+            let fixes = project
+                .meta
+                .resources
+                .iter()
+                .flatten()
+                .find(|r| r.id == take.id)
+                .and_then(|r| promo_model::speech::word_fixes(r).ok())
+                .map_or(0, |f| f.len());
+            let file = take
+                .file
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            match record {
+                Some(t) => {
+                    let spoken: f64 = t.words.iter().map(|w| (w.end - w.start).max(0.0)).sum();
+                    serde_json::json!({
+                        "take": take.id, "file": file, "source": t.source.as_text(),
+                        "confidence": t.confidence, "estimated": t.estimated,
+                        "words": t.words.len(), "sentences": t.sentences.len(),
+                        "coverage": if t.duration > 0.0 { spoken / t.duration } else { 0.0 },
+                        "first": t.words.first().map(|w| w.text.clone()),
+                        "last": t.words.last().map(|w| w.text.clone()),
+                        "stale": project.grids.words.stale.contains(&take.id),
+                        "fixes": fixes,
+                    })
+                }
+                None => serde_json::json!({
+                    "take": take.id, "file": file, "source": null, "fixes": fixes,
+                    "missing": project.missing_words.iter().find(|(id, _)| *id == take.id)
+                        .map(|(_, why)| why.clone())
+                        .unwrap_or_else(|| "no word timing yet".into()),
+                }),
+            }
+        })
+        .collect();
     let credits = crate::credits::credits(&project.meta, None);
     if json {
         return serde_json::json!({
             "beats": beats,
+            "words": words,
             "credits": crate::credits::json(&credits),
             "provenance": resources.iter().filter_map(|r| r.provenance.as_ref().map(|p|
                 serde_json::json!({ "resource": r.id, "provenance": p }))).collect::<Vec<_>>(),
@@ -308,6 +351,35 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                     - 1,
                 section["energy"].as_f64().unwrap_or(0.0)
             ));
+        }
+    }
+    for take in &words {
+        let name = take["take"].as_str().unwrap_or("");
+        let file = take["file"].as_str().unwrap_or("");
+        match take["source"].as_str() {
+            Some(source) => out.push_str(&format!(
+                "words:     \"{name}\" ({file}) — {} words, {} sentences, from {source}, \
+                 confidence {:.2}, covers {:.0}% — \"{}\" … \"{}\"{}{}\n",
+                take["words"],
+                take["sentences"],
+                take["confidence"].as_f64().unwrap_or(0.0),
+                take["coverage"].as_f64().unwrap_or(0.0) * 100.0,
+                take["first"].as_str().unwrap_or(""),
+                take["last"].as_str().unwrap_or(""),
+                if take["stale"].as_bool() == Some(true) {
+                    ", stale (the text changed)"
+                } else {
+                    ""
+                },
+                match take["fixes"].as_u64() {
+                    Some(0) | None => String::new(),
+                    Some(n) => format!(", {n} hand fix(es)"),
+                }
+            )),
+            None => out.push_str(&format!(
+                "words:     \"{name}\" ({file}) — {}\n",
+                take["missing"].as_str().unwrap_or("no word timing yet")
+            )),
         }
     }
     if let Some(kept) = handles.filter(|h| !h.is_empty()) {

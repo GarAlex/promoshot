@@ -2384,6 +2384,9 @@ pub struct CompositionSettings {
     /// Which audio's beat grid drives musical time values
     /// (`crate::musical`), and where its source second 0 sits.
     pub beat_clock: Option<crate::musical::BeatClock>,
+    /// The take speech values count on when they name none
+    /// (docs/SPEECH-SYNC.md §6.3).
+    pub speech_clock: Option<crate::speech::SpeechClock>,
     /// Layers laid back to back, each for a length — parsed and kept;
     /// resolved from slice 3.
     pub sequence: Option<Vec<crate::musical::SequenceEntry>>,
@@ -2458,6 +2461,7 @@ impl Default for CompositionSettings {
             video_export_width: None,
             video_export_height: None,
             beat_clock: None,
+            speech_clock: None,
             sequence: None,
             flash: None,
             extra: serde_json::Map::new(),
@@ -2513,6 +2517,7 @@ struct CompositionSettingsWire {
     video_export_width: Option<f64>,
     video_export_height: Option<f64>,
     beat_clock: Option<crate::musical::BeatClock>,
+    speech_clock: Option<crate::speech::SpeechClock>,
     sequence: Option<Vec<crate::musical::SequenceEntry>>,
     flash: Option<crate::musical::OneOrMany<crate::musical::Flash>>,
     #[serde(flatten)]
@@ -2611,6 +2616,7 @@ impl<'de> Deserialize<'de> for CompositionSettings {
             video_export_width: w.video_export_width,
             video_export_height: w.video_export_height,
             beat_clock: w.beat_clock,
+            speech_clock: w.speech_clock,
             sequence: w.sequence,
             flash: w.flash,
             extra: w.extra,
@@ -2679,6 +2685,8 @@ impl Serialize for CompositionSettings {
             #[serde(skip_serializing_if = "is_none")]
             beat_clock: &'a Option<crate::musical::BeatClock>,
             #[serde(skip_serializing_if = "is_none")]
+            speech_clock: &'a Option<crate::speech::SpeechClock>,
+            #[serde(skip_serializing_if = "is_none")]
             sequence: &'a Option<Vec<crate::musical::SequenceEntry>>,
             #[serde(skip_serializing_if = "is_none")]
             flash: &'a Option<crate::musical::OneOrMany<crate::musical::Flash>>,
@@ -2729,6 +2737,7 @@ impl Serialize for CompositionSettings {
             video_export_width: &self.video_export_width,
             video_export_height: &self.video_export_height,
             beat_clock: &self.beat_clock,
+            speech_clock: &self.speech_clock,
             sequence: &self.sequence,
             flash: &self.flash,
             extra: &self.extra,
@@ -3569,6 +3578,13 @@ pub struct ProjectLayer {
     /// This layer's own beat clock, over the composition's.
     #[serde(default, skip_serializing_if = "is_none")]
     pub beat_clock: Option<crate::musical::BeatClock>,
+    /// This layer's own speech clock, over the composition's.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub speech_clock: Option<crate::speech::SpeechClock>,
+    /// Last while a span of a take is said: `startTime` and `duration`
+    /// together (docs/SPEECH-SYNC.md §6.2).
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub during: Option<crate::speech::During>,
     /// Start when another layer ends (by id), optionally offset.
     #[serde(default, skip_serializing_if = "is_none")]
     pub after: Option<crate::musical::After>,
@@ -3977,6 +3993,9 @@ pub struct Composition {
     /// inherits its parent's, since it may be placed at several times.
     #[serde(default, skip_serializing_if = "is_none")]
     pub beat_clock: Option<crate::musical::BeatClock>,
+    /// The composition's own speech clock, likewise.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub speech_clock: Option<crate::speech::SpeechClock>,
     /// Layers laid back to back (see `CompositionSettings::sequence`).
     #[serde(default, skip_serializing_if = "is_none")]
     pub sequence: Option<Vec<crate::musical::SequenceEntry>>,
@@ -4770,6 +4789,12 @@ impl ProjectMetadata {
         // numbers an older writer would edit around and contradict. Only a
         // musical value a save KEEPS counts: one a person edited to seconds
         // folds flat.
+        // 50 is speech time (`crate::speech`): `{"word": 12}` in a time field
+        // is refused by a 49 reader's musical decode, and `during` derives
+        // numbers an older writer would edit around.
+        if crate::speech::needs_speech_reader(self) {
+            return crate::speech::SPEECH_READER;
+        }
         if crate::musical::needs_musical_reader(self) {
             return crate::musical::MUSICAL_READER;
         }

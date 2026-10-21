@@ -4,6 +4,7 @@
 //! are the parity gate — see `fixtures/projects/`).
 
 pub mod beat_cache;
+pub mod estimate;
 pub mod geometry;
 pub mod inventory;
 pub mod media_cache;
@@ -37,8 +38,9 @@ pub use project::*;
 /// editing around it.
 ///
 /// 49 is musical time (`musical`): a time field may hold `{"beats": 4}`,
-/// which a reader before it cannot decode.
-pub const READER_VERSION: i64 = 49;
+/// which a reader before it cannot decode. 50 is speech time (`speech`):
+/// `{"word": 12}`, which a 49 reader's musical decode refuses.
+pub const READER_VERSION: i64 = 50;
 
 /// The first reader that keeps what it does not read (see
 /// [`READER_VERSION`]). A file carrying content its writer did not read,
@@ -579,6 +581,21 @@ mod schema_doc_tests {
                 start_time: None,
                 extra: serde_json::Map::new(),
             }),
+            speech_clock: Some(speech::SpeechClock {
+                layer: Some("L0".into()),
+                resource_id: None,
+                start_time: None,
+                extra: serde_json::Map::new(),
+            }),
+            during: Some(speech::During {
+                word: None,
+                words: Some([1, 3]),
+                sentence: None,
+                of: Some("R".into()),
+                lead: Some(0.15),
+                hold: Some(0.25),
+                extra: serde_json::Map::new(),
+            }),
             after: Some(musical::After::Spec(musical::AfterSpec {
                 layer: "L0".into(),
                 offset: Some(musical::TimeValue::Musical(musical::MusicalTime::Beats(
@@ -727,6 +744,12 @@ mod schema_doc_tests {
                 background_color_hex: Some("0E1726".into()),
                 layers: vec![],
                 beat_clock: None,
+                speech_clock: Some(speech::SpeechClock {
+                    layer: Some("N0".into()),
+                    resource_id: None,
+                    start_time: None,
+                    extra: serde_json::Map::new(),
+                }),
                 sequence: None,
                 flash: None,
             }),
@@ -810,6 +833,12 @@ mod schema_doc_tests {
             video_export_width: None,
             video_export_height: None,
             beat_clock: Some(musical::BeatClock {
+                resource_id: Some("R".into()),
+                start_time: Some(0.0),
+                extra: serde_json::Map::new(),
+            }),
+            speech_clock: Some(speech::SpeechClock {
+                layer: None,
                 resource_id: Some("R".into()),
                 start_time: Some(0.0),
                 extra: serde_json::Map::new(),

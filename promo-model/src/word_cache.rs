@@ -214,6 +214,33 @@ pub fn takes(dir: &Path, meta: &ProjectMetadata) -> Vec<Take> {
         .collect()
 }
 
+/// The word timing of a project's takes, as the timing pass reads it:
+/// each take's record by resource id (an exact one, or a stale one — it
+/// says what the take says), and which are stale. A take with no record is
+/// absent; the pass lays it out on an estimate and says so.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TakeWords {
+    pub by_resource: std::collections::BTreeMap<String, TakeTiming>,
+    pub stale: std::collections::BTreeSet<String>,
+}
+
+/// Every take's record in the project at `dir` (`lookup`, never aligning).
+pub fn take_words(dir: &Path, meta: &ProjectMetadata) -> TakeWords {
+    let mut out = TakeWords::default();
+    for take in takes(dir, meta) {
+        if !take.file.is_file() {
+            continue;
+        }
+        if let Some(found) = lookup(dir, &take.file, &take.script) {
+            if found.stale {
+                out.stale.insert(take.id.clone());
+            }
+            out.by_resource.insert(take.id, found.timing);
+        }
+    }
+    out
+}
+
 /// The takes whose file is there and has no record at all — what an open
 /// aligns (S5) and the apps' aligner works through.
 pub fn takes_needing_timing(dir: &Path, meta: &ProjectMetadata) -> Vec<Take> {

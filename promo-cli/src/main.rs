@@ -222,6 +222,28 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 .join(", ")
         ));
     }
+    // Speech values laid out on an estimate would cut on guessed words —
+    // so a render waits for the takes' timing, as for a grid.
+    if matches!(command, "still" | "frames" | "video" | "gif")
+        && !project.timing.missing_words.is_empty()
+    {
+        let takes = project
+            .timing
+            .missing_words
+            .iter()
+            .map(
+                |id| match project.missing_words.iter().find(|(take, _)| take == id) {
+                    Some((_, why)) => format!("\"{id}\" ({why})"),
+                    None => format!("\"{id}\""),
+                },
+            )
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "not rendering: speech values count on {takes}, which has no word timing yet — \
+             run `promo words {dir} --resource <id>` (promo validate says the same)"
+        ));
+    }
     let answer = match command {
         "inspect" => inspect(&project, &opts),
         "proxy" => build_proxies(&project, &opts),
@@ -1196,6 +1218,14 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
     // tempo: nothing renders as written.
     for problem in &project.grid_problems {
         report.breaks(problem.clone());
+    }
+    // A take a speech value counts on that could not be timed: why.
+    for (take, why) in &project.missing_words {
+        if project.timing.missing_words.contains(take) {
+            report.warn(format!(
+                "the word timing of \"{take}\" could not be made: {why}"
+            ));
+        }
     }
     // A layer whose media is gone. `inspect` has always reported these and
     // `validate` did not, so a project with a hole in it came back "ok" and
