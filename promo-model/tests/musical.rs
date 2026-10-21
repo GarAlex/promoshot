@@ -418,8 +418,9 @@ fn seconds_only_projects_are_unchanged() {
         let Ok(meta) = ProjectMetadata::from_json(text) else {
             continue;
         };
-        // The beat-cut recipe and its example are musical on purpose.
-        if meta.id == "beatcut" {
+        // A project that declares the musical reader is musical on purpose —
+        // the beat-cut recipe, its example, the beat demos.
+        if meta.min_reader_version.unwrap_or(0) >= 49 {
             continue;
         }
         checked += 1;

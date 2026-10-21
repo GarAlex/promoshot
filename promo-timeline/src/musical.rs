@@ -435,6 +435,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             sections,
             end,
             &settings,
+            &resources,
             &mut report,
         );
         let flash = crate::beat_effects::Context {
@@ -504,6 +505,7 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             sections,
             end,
             &settings,
+            &resources,
             &mut report,
         );
         findings(
@@ -623,6 +625,9 @@ fn findings(
 }
 
 /// Each layer's `pulse` and `shake`, stage members included, on its grid.
+/// (The settings and resources are what a layer's base position resolves
+/// against; the rest is its scope.)
+#[allow(clippy::too_many_arguments)]
 fn expand_scope(
     layers: &mut [ProjectLayer],
     scope: &Scope,
@@ -630,6 +635,7 @@ fn expand_scope(
     sections: Option<&[musical::BeatSection]>,
     end: f64,
     settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
     report: &mut TimingReport,
 ) {
     for layer in layers {
@@ -639,11 +645,13 @@ fn expand_scope(
             sections,
             end,
         };
-        report
-            .problems
-            .extend(crate::beat_effects::expand_layer(layer, &ctx, settings));
+        report.problems.extend(crate::beat_effects::expand_layer(
+            layer, &ctx, settings, resources,
+        ));
         if let Some(members) = layer.members.as_mut() {
-            expand_scope(members, scope, fps, sections, end, settings, report);
+            expand_scope(
+                members, scope, fps, sections, end, settings, resources, report,
+            );
         }
     }
 }
@@ -1644,9 +1652,9 @@ mod tests {
             let Ok(meta) = ProjectMetadata::from_json(text) else {
                 continue;
             };
-            // The beat-cut recipe (and its example) is the one project
-            // written in musical time on purpose.
-            if meta.id == "beatcut" {
+            // A project that declares the musical reader is musical on purpose —
+            // the beat-cut recipe, its example, the beat demos.
+            if meta.min_reader_version.unwrap_or(0) >= 49 {
                 continue;
             }
             assert!(!musical::carries_specs(&meta), "{name} is not seconds-only");

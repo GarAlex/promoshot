@@ -365,8 +365,10 @@ Three generators make keyframes on the beat grid of a layer's clock
   amount, within 0..1). On each grid point the value peaks one frame after
   the beat and eases back over `decay` (half a beat by default).
 - `shake` on a layer: `{"on": "beat", "amplitude": 8, "decay": {"beats":
-  0.25}}` — the layer kicks `amplitude` px out, half back, a quarter, then
-  home, in a direction fixed by the layer and the beat.
+  0.25}}` — the layer kicks `amplitude` canvas px out, half back, a
+  quarter, then home, in a direction fixed by the layer and the beat. Any
+  kind: a picture or drawing moves its box, a caption its placement (its
+  own, or where its margins put it).
 - `flash` in `compositionSettings`: `{"on": "downbeat", "colorHex": "FFFFFF",
   "opacity": 0.6, "duration": {"beats": 0.25}, "blendMode": "screen"}` — a
   full-canvas colour over everything, up to `opacity` on each grid point,

@@ -193,6 +193,8 @@ fn shake_is_seeded_and_deterministic() {
     let two = resolved(&file);
     assert_eq!(one, two);
     let a = layer(&one, "a");
+    // Four a beat; the first hit falls on the layer's start, so no
+    // "base" key holds the layer before it.
     assert_eq!(a.keyframes.len(), 8 * 4);
     let mut directions = std::collections::BTreeSet::new();
     for beat in 0..8 {
@@ -210,6 +212,114 @@ fn shake_is_seeded_and_deterministic() {
         );
     }
     assert!(directions.len() > 1, "every beat shook the same way");
+}
+
+/// The shake's keys move each kind of layer by its amplitude in canvas
+/// pixels, in the terms that kind is placed by: a picture's top-left as its
+/// own track resolves it (the resource's real aspect, not a square), a
+/// caption's placement rule (its style's, or the one its margins amount
+/// to) — never a caption's shifts, which are its margins.
+#[test]
+fn shake_keys_move_each_kind_by_the_amplitude() {
+    let delta =
+        |meta: &ProjectMetadata, id: &str, f: &dyn Fn(&ProjectLayerKeyframe) -> (f64, f64)| {
+            let hit = f(key(meta, &format!("beat-{id}-shake0-1-hit")));
+            let base = f(key(meta, &format!("beat-{id}-shake0-0-rest")));
+            let rest = f(key(meta, &format!("beat-{id}-shake0-1-rest")));
+            assert_eq!(base, rest, "{id}: home before and after the hit");
+            ((hit.0 - base.0).powi(2) + (hit.1 - base.1).powi(2)).sqrt()
+        };
+    let shifts =
+        |k: &ProjectLayerKeyframe| (k.horizontal_shift.unwrap(), k.vertical_shift.unwrap());
+    let offset = |k: &ProjectLayerKeyframe| {
+        assert!(
+            k.horizontal_shift.is_none() && k.vertical_shift.is_none(),
+            "a caption's shifts are its margins"
+        );
+        let rule = k
+            .placement
+            .as_ref()
+            .expect("a caption moves by its placement");
+        assert!(!rule.sizes(), "only where it hangs");
+        let [x, y] = rule.offset.unwrap();
+        (x, y)
+    };
+    let shake = json!({"on": "downbeat", "amplitude": 12});
+
+    // A placed 16:9 picture: an 80×45 box centred on 160×90 — its top-left
+    // is (40, 22.5), not where a square stand-in would put it.
+    let placed = resolved(&project(
+        json!({"shake": shake, "keyframes": [{"id": "p", "time": 0,
+                                               "placement": {"height": 45, "anchor": "center"}}]}),
+        json!({}),
+    ));
+    let home = key(&placed, "beat-a-shake0-1-rest");
+    assert!(
+        (home.horizontal_shift.unwrap() - 40.0).abs() < 1e-9,
+        "{home:?}"
+    );
+    assert!(
+        (home.vertical_shift.unwrap() - 22.5).abs() < 1e-9,
+        "{home:?}"
+    );
+    assert!((delta(&placed, "a", &shifts) - 12.0).abs() < 1e-9);
+
+    // A caption by its margins: anchored top, centred between them.
+    let caption = |extra: Value| {
+        let mut layer = json!({"kind": "caption", "resourceID": null, "captionText": "Hi",
+                               "shake": shake});
+        for (k, v) in extra.as_object().unwrap() {
+            layer[k] = v.clone();
+        }
+        resolved(&project(
+            layer,
+            json!({"subtitleLeftMargin": 30, "subtitleRightMargin": 10,
+                   "subtitleVerticalMargin": 50}),
+        ))
+    };
+    let margins = caption(json!({}));
+    let home = key(&margins, "beat-a-shake0-1-rest")
+        .placement
+        .clone()
+        .unwrap();
+    assert_eq!(home.anchor, Some(promo_model::Anchor::Top));
+    assert_eq!(
+        home.offset,
+        Some([10.0, 50.0]),
+        "(30 − 10) / 2 across, the margin down"
+    );
+    assert!((delta(&margins, "a", &offset) - 12.0).abs() < 1e-9);
+
+    // A placed caption: its style's rule, nudged.
+    let styled = caption(json!({"captionStyle": {"placement": {"anchor": "bottom",
+                                                                "offset": [0, -20]}}}));
+    let home = key(&styled, "beat-a-shake0-1-rest")
+        .placement
+        .clone()
+        .unwrap();
+    assert_eq!(home.anchor, Some(promo_model::Anchor::Bottom));
+    assert_eq!(home.offset, Some([0.0, -20.0]));
+    assert!((delta(&styled, "a", &offset) - 12.0).abs() < 1e-9);
+    let blamed: Vec<String> = promo_timeline::validate::warnings(&styled)
+        .into_iter()
+        .filter(|w| !w.contains("minReaderVersion"))
+        .collect();
+    assert!(blamed.is_empty(), "nothing to blame: {blamed:?}");
+}
+
+/// A pulse on a caption's size punches its fontSize — its zoom is the
+/// legacy spelling of the size in points, and 1.04 of it is 1-point text.
+#[test]
+fn a_caption_pulse_punches_its_font_size() {
+    let meta = resolved(&project(
+        json!({"kind": "caption", "resourceID": null, "captionText": "Hi",
+               "pulse": {"every": "downbeat", "property": "placement", "amount": 0.25}}),
+        json!({"subtitleFontSize": 40}),
+    ));
+    let peak = key(&meta, "beat-a-pulse0-1-peak");
+    assert_eq!(peak.font_size, Some(50.0));
+    assert_eq!(peak.zoom, None);
+    assert_eq!(key(&meta, "beat-a-pulse0-1-rest").font_size, Some(40.0));
 }
 
 /// A range limits the grid points: bars, beats, a named section of the

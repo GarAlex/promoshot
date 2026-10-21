@@ -201,6 +201,7 @@ fn keys_track(key: &ProjectLayerKeyframe, property: &str) -> bool {
         "viewport" => key.viewport.is_some(),
         "opacity" => key.opacity.is_some(),
         "position" => key.horizontal_shift.is_some() || key.vertical_shift.is_some(),
+        "captionPosition" => key.placement.is_some(),
         _ => key.zoom.is_some() || key.placement.is_some(),
     }
 }
@@ -225,6 +226,7 @@ fn write_base(
     property: &str,
     t: f64,
     settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
     key: &mut ProjectLayerKeyframe,
     punch: f64,
 ) {
@@ -242,6 +244,13 @@ fn write_base(
                     .unwrap_or(1.0);
             key.opacity = Some((base + punch).clamp(0.0, 1.0));
         }
+        _ if person.kind == promo_model::ProjectLayerKind::Caption => {
+            // A caption's size is its fontSize in points — its zoom field
+            // is the legacy spelling of the same number, so a zoom of
+            // 1.04 would draw 1-point text.
+            let style = caption_text_style(person, t, settings, resources);
+            key.font_size = Some(style.font_size * (1.0 + punch));
+        }
         _ => {
             // A layer placed by a rule pulses its box; one placed by raw
             // zoom pulses the zoom.
@@ -253,7 +262,8 @@ fn write_base(
                     key.placement = Some(placement);
                 }
                 None => {
-                    let zoom = crate::layer_transform(person, t, settings).zoom;
+                    let zoom =
+                        crate::layer_transform_along_paths(person, t, settings, resources).zoom;
                     key.zoom = Some(zoom * (1.0 + punch));
                 }
             }
@@ -266,6 +276,7 @@ pub(crate) fn expand_layer(
     layer: &mut ProjectLayer,
     ctx: &Context,
     settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
 ) -> Vec<TimingProblem> {
     let pulses = list(&layer.pulse);
     let shakes = list(&layer.shake);
@@ -332,7 +343,10 @@ pub(crate) fn expand_layer(
             }
             let decay = length_from(*decay, 0.5, &ctx.grid, t);
             let id = |role: &str| format!("beat-{}-pulse{n}-{k}-{role}", layer.id);
-            if keyed && local - attack > 0.0 {
+            // Held at its base until the first peak (a track holds its
+            // first key's value before it), and before every peak over a
+            // person's keys.
+            if (keyed || k == 0) && local - attack > 1e-9 {
                 let previous =
                     previous_on(&person, &property, local - attack).map_or(0.0, |p| p.time);
                 let mut pre = keyframe(
@@ -340,15 +354,33 @@ pub(crate) fn expand_layer(
                     local - attack,
                     (local - attack - previous).max(0.0),
                 );
-                write_base(&person, &property, t - attack, settings, &mut pre, 0.0);
+                write_base(
+                    &person,
+                    &property,
+                    t - attack,
+                    settings,
+                    resources,
+                    &mut pre,
+                    0.0,
+                );
                 made.push(tagged(pre));
             }
             let mut peak = keyframe(id("peak"), local, attack);
-            write_base(&person, &property, t, settings, &mut peak, amount);
+            write_base(
+                &person, &property, t, settings, resources, &mut peak, amount,
+            );
             made.push(tagged(peak));
             let mut rest = keyframe(id("rest"), local + decay, decay);
             rest.easing = Some(promo_model::Easing::EaseOut);
-            write_base(&person, &property, t + decay, settings, &mut rest, 0.0);
+            write_base(
+                &person,
+                &property,
+                t + decay,
+                settings,
+                resources,
+                &mut rest,
+                0.0,
+            );
             made.push(tagged(rest));
         }
     }
@@ -375,15 +407,44 @@ pub(crate) fn expand_layer(
                 continue;
             }
         };
+        let caption = person.kind == promo_model::ProjectLayerKind::Caption;
+        let track = if caption {
+            "captionPosition"
+        } else {
+            "position"
+        };
+        let keyed = person.keyframes.iter().any(|key| keys_track(key, track));
         for (k, index) in indices.iter().enumerate() {
             let t = ctx.grid.time_at(*index);
             let local = t - start;
-            if near_person("position", local) {
+            if near_person(track, local) {
                 continue;
             }
             let decay = length_from(*decay, 0.25, &ctx.grid, t);
-            let base = crate::layer_transform(&person, t, settings);
             let [dx, dy] = direction(&layer.id, *index);
+            // Where the layer sits, in canvas px, at each step's instant:
+            // a caption by the placement rule that hangs its box (its
+            // keyed one, its style's, or the one its margins amount to);
+            // anything else by the top-left its own track resolves to,
+            // the resource's real aspect included — a placement rule
+            // resolved against a square stand-in put the picture ~200 px
+            // off on every hit.
+            let at_rest = |at: f64| -> Position {
+                if caption {
+                    Position::Rule(caption_rule(&person, at, settings, resources))
+                } else {
+                    let base = crate::layer_transform_along_paths(&person, at, settings, resources);
+                    Position::TopLeft(base.horizontal_shift, base.vertical_shift)
+                }
+            };
+            let mut steps: Vec<(&str, f64, f64, f64)> = Vec::new();
+            // Held where it was until the first hit — without this its
+            // offset stood from the layer's start to its beat (a track
+            // holds its first key's value before it) — and before every
+            // hit over a person's own moves.
+            if (keyed || k == 0) && local - attack > 1e-9 {
+                steps.push(("base", local - attack, 0.0, 0.0));
+            }
             for (step, (role, scale)) in [
                 ("hit", 1.0),
                 ("back", -0.5),
@@ -394,10 +455,27 @@ pub(crate) fn expand_layer(
             .enumerate()
             {
                 let at = local + decay * step as f64 / 3.0;
-                let ramp = if step == 0 { attack } else { decay / 3.0 };
+                let ramp = if step == 0 {
+                    attack.min(local)
+                } else {
+                    decay / 3.0
+                };
+                steps.push((role, at, ramp, scale));
+            }
+            for (role, at, ramp, scale) in steps {
                 let mut key = keyframe(format!("beat-{}-shake{n}-{k}-{role}", layer.id), at, ramp);
-                key.horizontal_shift = Some(base.horizontal_shift + amplitude * scale * dx);
-                key.vertical_shift = Some(base.vertical_shift + amplitude * scale * dy);
+                let (ox, oy) = (amplitude * scale * dx, amplitude * scale * dy);
+                match at_rest(start + at) {
+                    Position::Rule(mut rule) => {
+                        let [x, y] = rule.offset.unwrap_or([0.0, 0.0]);
+                        rule.offset = Some([x + ox, y + oy]);
+                        key.placement = Some(rule);
+                    }
+                    Position::TopLeft(x, y) => {
+                        key.horizontal_shift = Some(x + ox);
+                        key.vertical_shift = Some(y + oy);
+                    }
+                }
                 made.push(tagged(key));
             }
         }
@@ -405,6 +483,94 @@ pub(crate) fn expand_layer(
     layer.keyframes.extend(made);
     layer.keyframes.sort_by(|a, b| a.time.total_cmp(&b.time));
     problems
+}
+
+/// Where a layer stands, as its shake moves it.
+enum Position {
+    /// A caption: the rule hanging its box (anchor and offset only).
+    Rule(promo_model::Placement),
+    /// Anything else: its drawn top-left, in canvas px.
+    TopLeft(f64, f64),
+}
+
+/// A caption's text style at absolute `t`: its showing resource's (or its
+/// own) captionStyle over the composition's, with its keyed size and
+/// margins — what the renderer lays it out with.
+fn caption_text_style(
+    person: &ProjectLayer,
+    t: f64,
+    settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
+) -> promo_text::TextStyle {
+    let showing = crate::layer_resource_id(person, t, resources);
+    let style = resources
+        .iter()
+        .find(|r| Some(r.id.as_str()) == showing)
+        .and_then(|r| r.caption_style.clone())
+        .or_else(|| person.caption_style.clone());
+    let mut text = crate::caption::caption_style(style.as_ref(), settings);
+    if let Some(values) = crate::layer_caption_values(
+        person,
+        t,
+        crate::CaptionValues {
+            font_size: text.font_size,
+            vertical_margin: text.vertical_margin,
+            left_margin: text.left_margin,
+        },
+    ) {
+        text.font_size = values.font_size;
+        text.vertical_margin = values.vertical_margin;
+        text.left_margin = values.left_margin;
+    }
+    text
+}
+
+/// The placement rule that hangs a caption's box where it stands at
+/// absolute `t`: its keyed rule, else its style's, else the one its
+/// margins amount to (the box's top at the vertical margin; across, by its
+/// alignment between the side margins) — so an offset added to it moves
+/// the words by exactly that many canvas px, whichever placed them.
+fn caption_rule(
+    person: &ProjectLayer,
+    t: f64,
+    settings: &promo_model::CompositionSettings,
+    resources: &[ProjectResource],
+) -> promo_model::Placement {
+    let local = crate::layer_local_time(person, t);
+    let keyed = previous_on(person, "captionPosition", local)
+        .or_else(|| {
+            person
+                .keyframes
+                .iter()
+                .filter(|k| k.placement.is_some())
+                .min_by(|a, b| a.time.total_cmp(&b.time))
+        })
+        .and_then(|k| k.placement.clone());
+    let text = caption_text_style(person, t, settings, resources);
+    let rule = keyed.or(text.placement.clone()).unwrap_or_else(|| {
+        let (anchor, x) = match text.align {
+            promo_text::Align::Leading => (promo_model::Anchor::TopLeft, text.left_margin),
+            promo_text::Align::Center => (
+                promo_model::Anchor::Top,
+                (text.left_margin - text.right_margin) / 2.0,
+            ),
+            promo_text::Align::Trailing => (promo_model::Anchor::TopRight, -text.right_margin),
+        };
+        promo_model::Placement {
+            height: None,
+            width: None,
+            mode: None,
+            anchor: Some(anchor),
+            offset: Some([x, text.vertical_margin]),
+        }
+    });
+    // Only where it hangs: a caption's size is its text.
+    promo_model::Placement {
+        height: None,
+        width: None,
+        mode: None,
+        ..rule
+    }
 }
 
 /// A deterministic direction for a layer's shake at a beat: one of eight,
