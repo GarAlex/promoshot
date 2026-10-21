@@ -606,6 +606,14 @@ pub fn settle_except(
         let destination = resources_dir.join(&script.filename);
         let print = receipt(&script, resources_dir);
         let audio = synth.synthesize(&script.provider, &script.voice, &script.words)?;
+        // The bytes this take replaces — under its own name, or a stand-in
+        // under another — and so the records that described them.
+        let mut replaced: Vec<String> = bytes_key(&destination).into_iter().collect();
+        if let Some(previous) = doc["resources"][index]["filename"].as_str() {
+            if previous != script.filename && plain_name(previous) {
+                replaced.extend(bytes_key(&resources_dir.join(previous)));
+            }
+        }
         std::fs::write(&destination, &audio).map_err(|e| format!("{id}: write: {e}"))?;
         // A silent stand-in this walk wrote under another name (an .mp3
         // before a local .wav take) is the walk's own file: it goes.
@@ -622,6 +630,9 @@ pub fn settle_except(
                     }
                 }
             }
+        }
+        for old in &replaced {
+            retire_records(resources_dir, old, doc, &script.filename);
         }
         let seconds = measure(&destination)?;
         spent += 1;
@@ -699,13 +710,16 @@ pub fn placehold(
         // The stand-in is a silent MP3 whatever the provider will send, so
         // it is named as one; the real take renames it.
         let filename = with_audio_extension(&script.filename, "mp3");
-        let destination = resources_dir.join(&filename);
         let calibration = estimate::calibration(doc, &script.provider, &script.voice);
-        let language = estimate::voice_language(&script.voice);
-        let guess = estimate::estimate(&script.words, language.as_deref(), calibration);
-        std::fs::write(&destination, estimate::silent_mp3(guess.seconds))
-            .map_err(|e| format!("{}: write: {e}", script.id))?;
-        let seconds = estimate::silent_mp3_seconds(guess.seconds);
+        let (seconds, unstored) = placeholder_take(
+            resources_dir,
+            &filename,
+            &script.provider,
+            &script.voice,
+            &script.words,
+            Some(doc),
+        )
+        .map_err(|e| format!("{}: {e}", script.id))?;
         {
             let resource = &mut doc["resources"][index];
             resource["filename"] = json!(filename);
@@ -738,14 +752,105 @@ pub fn placehold(
             )
         };
         report.push(format!(
-            "{}: silent placeholder ({seconds:.2}s, {how}) — {owed}",
-            script.id
+            "{}: silent placeholder ({seconds:.2}s, {how}) — {owed}{}",
+            script.id,
+            unstored
+                .map(|e| format!("; its estimated word times were not stored: {e}"))
+                .unwrap_or_default()
         ));
     }
     if !report.is_empty() {
         persist(doc)?;
     }
     Ok(report)
+}
+
+/// A silent stand-in for a narration with no take yet, and its word
+/// times (docs/SPEECH-SYNC.md §5): a silent MP3 of the estimated length of
+/// `text` in `provider`/`voice` at `resources_dir/filename`, and beside it,
+/// in the `.words` cache, the estimate's word times for exactly that file's
+/// length — the same format as a real take's, flagged `estimated`. `doc`
+/// (the project, when known) calibrates the estimate by its own takes in
+/// that voice, and keeps the records of another file with the replaced
+/// bytes. Answers the length, and why the word times could not be stored
+/// (the stand-in is written either way). The headless walk and the apps'
+/// placeholder door are this one function.
+pub fn placeholder_take(
+    resources_dir: &Path,
+    filename: &str,
+    provider: &str,
+    voice: &str,
+    text: &str,
+    doc: Option<&Value>,
+) -> Result<(f64, Option<String>), String> {
+    let destination = resources_dir.join(filename);
+    let calibration = doc
+        .map(|d| estimate::calibration(d, provider, voice))
+        .unwrap_or(1.0);
+    let language = estimate::voice_language(voice);
+    let guess = estimate::estimate(text, language.as_deref(), calibration);
+    std::fs::create_dir_all(resources_dir).map_err(|e| format!("write: {e}"))?;
+    let replaced = bytes_key(&destination);
+    std::fs::write(&destination, estimate::silent_mp3(guess.seconds))
+        .map_err(|e| format!("write: {e}"))?;
+    let seconds = estimate::silent_mp3_seconds(guess.seconds);
+    // Without the project, a replaced file's records stay (harmless: keyed
+    // by bytes no file has) rather than risk a byte-identical sibling's.
+    if let (Some(old), Some(doc)) = (replaced, doc) {
+        retire_records(resources_dir, &old, doc, filename);
+    }
+    let timing = estimate::estimate_words(text, seconds, language.as_deref(), calibration);
+    let unstored = promo_model::word_cache::store_in(resources_dir, &destination, timing).err();
+    Ok((seconds, unstored))
+}
+
+/// The cache key of the bytes at `path`, when a file is there.
+fn bytes_key(path: &Path) -> Option<String> {
+    path.is_file()
+        .then(|| promo_model::media_cache::source_of(path).ok())
+        .flatten()
+        .map(|s| s.sha256)
+}
+
+fn plain_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains('/') && !name.contains('\\') && !name.starts_with('.')
+}
+
+/// The script a resource of `doc` says: `speech.text`, else `transcript`.
+fn said(resource: &Value) -> Option<&str> {
+    resource
+        .pointer("/speech/text")
+        .and_then(Value::as_str)
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            resource
+                .get("transcript")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+        })
+}
+
+/// Retires the word records of bytes `old` that a write to `written` just
+/// replaced — keeping those another resource's file (same bytes) still
+/// says.
+fn retire_records(resources_dir: &Path, old: &str, doc: &Value, written: &str) {
+    let keep: Vec<String> = doc
+        .get("resources")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|r| {
+            let name = r.get("filename")?.as_str()?;
+            if name == written || !plain_name(name) {
+                return None;
+            }
+            let script = said(r)?;
+            (bytes_key(&resources_dir.join(name)).as_deref() == Some(old))
+                .then(|| promo_model::speech::script_hash(script))
+        })
+        .collect();
+    promo_model::word_cache::retire_in(resources_dir, old, &keep);
 }
 
 /// English names for the language codes providers hand back, so a
@@ -1010,6 +1115,63 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["B", "C"]
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A placeholder carries estimated word times in the take format,
+    /// flagged — for exactly the file it wrote — and no receipt.
+    #[test]
+    fn placeholder_record_is_flagged_estimated() {
+        let dir = std::env::temp_dir().join(format!("speech-ph-record-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut doc = script();
+        placehold(&mut doc, &dir, &["openai".to_string()], &mut |_| Ok(())).unwrap();
+        let file = dir.join("voice.mp3");
+        let found = promo_model::word_cache::lookup_in(&dir, &file, "Hello there").unwrap();
+        assert!(!found.stale);
+        let timing = found.timing;
+        assert!(timing.estimated);
+        assert_eq!(timing.source, promo_model::speech::TimingSource::Estimate);
+        assert_eq!(timing.words.len(), 2);
+        assert_eq!(
+            timing.duration,
+            doc["resources"][0]["duration"].as_f64().unwrap()
+        );
+        assert!((timing.words[1].end - (timing.duration - 0.2)).abs() < 2e-6);
+        assert_eq!(timing.audio.filename, "voice.mp3");
+        assert!(doc["resources"][0]["speech"].get("renderedHash").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The real take is new bytes: the stand-in's record goes with the
+    /// stand-in — but not a byte-identical sibling's.
+    #[test]
+    fn real_take_replaces_placeholder_record() {
+        let dir = std::env::temp_dir().join(format!("speech-ph-replace-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut doc = script();
+        // A second narration of the same length: byte-identical silence.
+        doc["resources"][1] = json!({ "id": "W", "kind": "audio", "filename": "twin.mp3",
+            "displayName": "W", "addedAt": 0,
+            "speech": { "text": "Hello where", "provider": "elevenlabs", "voiceID": "v" } });
+        let both = ["openai".to_string(), "elevenlabs".to_string()];
+        placehold(&mut doc, &dir, &both, &mut |_| Ok(())).unwrap();
+        let silent = promo_model::media_cache::source_of(&dir.join("voice.mp3")).unwrap();
+        let twin = promo_model::media_cache::source_of(&dir.join("twin.mp3")).unwrap();
+        assert_eq!(
+            silent.sha256, twin.sha256,
+            "the fixture needs identical silence"
+        );
+        assert_eq!(
+            promo_model::word_cache::records_for_in(&dir, &silent.sha256).len(),
+            2
+        );
+        // Only the openai narration is voiced; the twin stays a stand-in.
+        let skip = ["elevenlabs".to_string()];
+        settle_except(&mut doc, &dir, &Fake, &|_| Ok(1.0), &mut |_| Ok(()), &skip).unwrap();
+        let left = promo_model::word_cache::records_for_in(&dir, &silent.sha256);
+        assert_eq!(left.len(), 1, "only the voiced one's record went");
+        assert_eq!(left[0].1.script, "Hello where");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

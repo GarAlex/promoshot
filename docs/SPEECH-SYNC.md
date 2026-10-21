@@ -1,6 +1,6 @@
 # Speech timing and speech sync: implementation design
 
-Status: slice 1 built (2026-10-21); where building changed the design,
+Status: slices 1 and 2 built (2026-10-21); where building changed the design,
 the "Slice N as built" notes under §10 say what and why. Modelled on
 `docs/BEAT-SYNC.md`, including its "as built" notes, and reusing its
 machinery wherever it fits. Owner requirements: one word-timing format for
@@ -816,6 +816,41 @@ criteria.
   - `real_take_replaces_placeholder_record`
   - Swift: `testPlaceholderWritesWordTiming`
   - **AC6** (estimates are in the same format, flagged)
+
+**Slice 2 as built** (2026-10-21):
+- **One placeholder door.** `promo_speech::placeholder_take(resources_dir,
+  filename, provider, voice, text, doc)` writes the silent MP3 and, in the
+  `.words` cache beside it, `estimate_words` for exactly that file's length
+  (`silent_mp3_seconds`). `placehold` (headless) and the FFI's
+  `promo_speech_placeholder_write_timed` both call it. A record that cannot
+  be stored is a report line (stderr on the FFI), never a failed stand-in.
+- **The FFI takes the resources folder**, not the project folder:
+  `promo_speech_placeholder_write_timed(resources_dir, filename, provider,
+  voice, text, project_json)`. `SpeechSynthesizer.generate` knows only the
+  folder it writes takes into (in the tests, a scratch folder with no
+  project around it), so `word_cache` gained `*_in(resources)` variants of
+  `cache_dir`, `cache_path`, `records_for`, `lookup` and `store`; the
+  project forms call them with `<project>/Resources`. A name that is not
+  one plain component is refused (-1).
+- **Retiring records.** Whenever a write replaces a file's bytes — a
+  stand-in re-estimated, a real take over a stand-in under its own name or
+  under another, a re-voiced take — the records of the old bytes go
+  (`word_cache::retire_in`), except those under a script another resource's
+  file with the same bytes still says: two stand-ins of one length are
+  byte-identical, so one audio key. Without the project (the FFI given no
+  `project_json`) nothing is retired; a leftover record is keyed by bytes
+  no file has.
+- **The apps.** `SpeechSpec.wordFixes` (`[SpeechWordFix]`, carried, no
+  editor yet) closes slice 1's gap: `speech` is the app's key, so the
+  field must be in its model to survive a save. The placeholder path calls
+  the timed door; the untimed `promo_speech_placeholder_write` stays for
+  older builds.
+- **Tests:** `placeholder_record_is_flagged_estimated`,
+  `real_take_replaces_placeholder_record` (the byte-identical sibling kept),
+  `the_timed_placeholder_door_writes_the_estimate_beside_the_take` (FFI);
+  Swift `testPlaceholderWritesWordTiming`,
+  `testWordFixesSurviveAResourceRoundTrip`. `estimate_words_*` landed in
+  S1.
 
 **S3 — Provider timing (ElevenLabs, Google) and the script mapper.**
 - Build: `marking_stress_mapped`, the `Synth::synthesize_timed` default, `synthesize_with_key_timed`, `timing::attach`, settle storing records before persisting receipts, `google_supports_marks`, and the FFI `promo_speech_job_timing` and `promo_words_store_take`.

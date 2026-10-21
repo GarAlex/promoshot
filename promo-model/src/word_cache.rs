@@ -13,12 +13,23 @@ use crate::{ProjectMetadata, ProjectResourceKind};
 
 /// The folder of a project's records.
 pub fn cache_dir(project: &Path) -> PathBuf {
-    project.join("Resources").join(".words")
+    cache_dir_in(&project.join("Resources"))
+}
+
+/// The folder of the records beside a resources folder — what a host that
+/// knows only where it writes takes (the apps' synthesizer) names.
+pub fn cache_dir_in(resources: &Path) -> PathBuf {
+    resources.join(".words")
 }
 
 /// Where the record of audio `audio32` saying `script8` lives.
 pub fn cache_path(project: &Path, audio32: &str, script8: &str) -> PathBuf {
-    cache_dir(project).join(format!("{audio32}-{script8}.json"))
+    cache_path_in(&project.join("Resources"), audio32, script8)
+}
+
+/// [`cache_path`] beside a resources folder.
+pub fn cache_path_in(resources: &Path, audio32: &str, script8: &str) -> PathBuf {
+    cache_dir_in(resources).join(format!("{audio32}-{script8}.json"))
 }
 
 /// A record found for a take.
@@ -38,8 +49,13 @@ fn read(path: &Path) -> Option<TakeTiming> {
 
 /// Every record of audio `audio32`, with its path.
 pub fn records_for(project: &Path, audio32: &str) -> Vec<(PathBuf, TakeTiming)> {
+    records_for_in(&project.join("Resources"), audio32)
+}
+
+/// [`records_for`] beside a resources folder.
+pub fn records_for_in(resources: &Path, audio32: &str) -> Vec<(PathBuf, TakeTiming)> {
     let prefix = format!("{audio32}-");
-    let Ok(entries) = std::fs::read_dir(cache_dir(project)) else {
+    let Ok(entries) = std::fs::read_dir(cache_dir_in(resources)) else {
         return Vec::new();
     };
     let mut out: Vec<(PathBuf, TakeTiming)> = entries
@@ -63,8 +79,13 @@ pub fn records_for(project: &Path, audio32: &str) -> Vec<(PathBuf, TakeTiming)> 
 ///    modification time;
 /// 3. else none: the take needs timing.
 pub fn lookup(project: &Path, audio: &Path, script: &str) -> Option<Found> {
+    lookup_in(&project.join("Resources"), audio, script)
+}
+
+/// [`lookup`] beside a resources folder.
+pub fn lookup_in(resources: &Path, audio: &Path, script: &str) -> Option<Found> {
     let source = crate::media_cache::source_of(audio).ok()?;
-    let exact = cache_path(project, &source.sha256, &script_hash(script));
+    let exact = cache_path_in(resources, &source.sha256, &script_hash(script));
     if let Some(timing) = read(&exact) {
         return Some(Found {
             timing,
@@ -73,7 +94,7 @@ pub fn lookup(project: &Path, audio: &Path, script: &str) -> Option<Found> {
         });
     }
     let mtime = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-    records_for(project, &source.sha256)
+    records_for_in(resources, &source.sha256)
         .into_iter()
         .max_by(|a, b| {
             a.1.timing_version
@@ -90,10 +111,19 @@ pub fn lookup(project: &Path, audio: &Path, script: &str) -> Option<Found> {
 /// Writes the record of the take in `audio`: its `audio` source and
 /// `scriptHash` filled in from the file and the record's own script.
 /// Answers what was written.
-pub fn store(project: &Path, audio: &Path, mut timing: TakeTiming) -> Result<TakeTiming, String> {
+pub fn store(project: &Path, audio: &Path, timing: TakeTiming) -> Result<TakeTiming, String> {
+    store_in(&project.join("Resources"), audio, timing)
+}
+
+/// [`store`] beside a resources folder.
+pub fn store_in(
+    resources: &Path,
+    audio: &Path,
+    mut timing: TakeTiming,
+) -> Result<TakeTiming, String> {
     let source = crate::media_cache::source_of(audio)?;
     timing.script_hash = script_hash(&timing.script);
-    let path = cache_path(project, &source.sha256, &timing.script_hash);
+    let path = cache_path_in(resources, &source.sha256, &timing.script_hash);
     timing.audio = source;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -101,6 +131,18 @@ pub fn store(project: &Path, audio: &Path, mut timing: TakeTiming) -> Result<Tak
     let text = serde_json::to_string_pretty(&timing).map_err(|e| e.to_string())?;
     std::fs::write(&path, text + "\n").map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(timing)
+}
+
+/// Removes the records of audio `audio32` — bytes a re-made take has just
+/// replaced — except those under a script in `keep` (another file with the
+/// same bytes still says it: two silent placeholders of one length are one
+/// audio). Answers how many went.
+pub fn retire_in(resources: &Path, audio32: &str, keep: &[String]) -> usize {
+    records_for_in(resources, audio32)
+        .into_iter()
+        .filter(|(_, timing)| !keep.contains(&script_hash(&timing.script)))
+        .filter(|(path, _)| std::fs::remove_file(path).is_ok())
+        .count()
 }
 
 /// A take in a project: a resource whose file says a script.
