@@ -620,6 +620,11 @@ pub struct Document {
     /// That file as written, for what no struct keeps: a key at any depth
     /// the format does not read (`promo_model::unread::keep_unread`).
     unread_source_json: Option<serde_json::Value>,
+    /// The beat grids measured for this project's songs (their cached
+    /// analyses), which every edit resolves musical values on — without
+    /// them a song that states no `beatGrid` would count on the stand-in
+    /// 120 BPM after each edit (docs/BEAT-SYNC.md, slice 8).
+    grids: promo_timeline::BeatGrids,
 }
 
 /// What an `autoZoom` asks for.
@@ -1013,7 +1018,19 @@ impl Document {
             layer_revisions: std::collections::HashMap::new(),
             unread_source: None,
             unread_source_json: None,
+            grids: Default::default(),
         })
+    }
+
+    /// The grids this and every later edit resolves on: the host's measure
+    /// of the project's songs (the analysis cache under its folder). The
+    /// document re-resolves on them at once — resolution is not an edit, so
+    /// no step and no version: an analysis landing after the open moves the
+    /// beats the way the open would have, and the apps' model, resolving
+    /// the same, finds nothing to hand back.
+    pub fn set_beat_grids(&mut self, grids: promo_timeline::BeatGrids) {
+        self.grids = grids;
+        promo_timeline::resolve_timing(&mut self.meta, &self.grids);
     }
 
     /// Everything that changed after `version` — the union of every bump
@@ -1174,7 +1191,7 @@ impl Document {
         // Anchored layers and musical values follow what moved — the Mac
         // reconciles after every edit through the same resolver; a
         // document the core owns must not wait for the app to do it.
-        promo_timeline::resolve_timing(&mut edited, &Default::default());
+        promo_timeline::resolve_timing(&mut edited, &self.grids);
         let before = std::mem::replace(&mut self.meta, edited);
         self.push_step(snapshot);
         self.version += 1;
@@ -1216,7 +1233,7 @@ impl Document {
         for command in commands {
             Self::run(&mut edited, command)?;
         }
-        promo_timeline::resolve_timing(&mut edited, &Default::default());
+        promo_timeline::resolve_timing(&mut edited, &self.grids);
         let before = std::mem::replace(&mut self.meta, edited);
         if !merge_with_last || self.undo.is_empty() {
             self.push_step(snapshot);
@@ -4448,6 +4465,49 @@ mod auto_zoom_tests {
             })))
             .unwrap_err();
         assert!(err.contains("unknown key \"bras\""), "{err}");
+    }
+
+    /// An edit resolves on the grids the host measured: a song with no
+    /// `beatGrid` but an analysis counts at its tempo, not the stand-in.
+    #[test]
+    fn edits_resolve_on_the_measured_grids() {
+        let mut file = musical_file();
+        file["resources"] = serde_json::json!([{"id": "song", "kind": "audio",
+            "filename": "song.m4a", "displayName": "Song", "addedAt": 0, "duration": 30}]);
+        let mut doc = Document::open(&file.to_string()).unwrap();
+        let set = serde_json::json!({
+            "kind": "setTime", "layerID": "M", "field": "duration", "value": {"beats": 4}
+        });
+        doc.apply(&command(set.clone())).unwrap();
+        assert_eq!(doc.meta().layers.as_ref().unwrap()[1].duration, Some(2.0));
+        let mut grids = promo_timeline::BeatGrids::default();
+        grids.by_resource.insert(
+            "song".into(),
+            serde_json::from_value(serde_json::json!({"bpm": 100})).unwrap(),
+        );
+        let version = doc.version();
+        doc.set_beat_grids(grids);
+        let duration = doc.meta().layers.as_ref().unwrap()[1].duration.unwrap();
+        assert!(
+            (duration - 2.4).abs() < 1e-9,
+            "re-resolved at once: {duration}"
+        );
+        assert_eq!(doc.version(), version, "and that is no edit");
+        assert!(doc.undo(), "the one step there was");
+        assert!(!doc.can_undo(), "no step of its own");
+        assert!(doc.redo());
+        doc.apply(&command(serde_json::json!({
+            "kind": "setTime", "layerID": "M", "field": "duration", "value": {"beats": 8}
+        })))
+        .unwrap();
+        let duration = doc.meta().layers.as_ref().unwrap()[1].duration.unwrap();
+        assert!(
+            (duration - 4.8).abs() < 1e-9,
+            "8 beats at 100 BPM: {duration}"
+        );
+        doc.apply_group(&[command(set)]).unwrap();
+        let duration = doc.meta().layers.as_ref().unwrap()[1].duration.unwrap();
+        assert!((duration - 2.4).abs() < 1e-9, "a group too: {duration}");
     }
 
     /// `setTime` is the door for a musical value: it writes the spec, a

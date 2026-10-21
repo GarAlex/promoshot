@@ -94,3 +94,27 @@ pub fn wav(samples: &[f32], channels: u16, rate: u32) -> Vec<u8> {
     }
     out
 }
+
+/// A 16-bit PCM WAV of interleaved `samples`, each rounded to the nearest
+/// step and held inside the range — the shape most songs are delivered in.
+pub fn wav16(samples: &[f32], channels: u16, rate: u32) -> Vec<u8> {
+    let data = (samples.len() * 2) as u32;
+    let mut out = Vec::with_capacity(44 + data as usize);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + data).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&rate.to_le_bytes());
+    out.extend_from_slice(&(rate * u32::from(channels) * 2).to_le_bytes());
+    out.extend_from_slice(&(channels * 2).to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data.to_le_bytes());
+    for s in samples {
+        let v = libm::round(f64::from(*s) * 32768.0).clamp(-32768.0, 32767.0) as i16;
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out
+}

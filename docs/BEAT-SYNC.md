@@ -1,6 +1,6 @@
 # Beat sync: implementation design
 
-Status: slices 1 to 7 built (2026-10-20); the rest is design. Where
+Status: slices 1 to 8 built (2026-10-20); the rest is design. Where
 building changed the design, the "Slice N as built" notes under §9 say
 what and why. Covers the request in
 `8a7e43a8-beat-sync.md`: all of Part A plus resource provenance.
@@ -627,6 +627,51 @@ the text above, and why:
   parser can land one ulp off the shortest representation another encoder
   printed, so a number that crossed Swift's encoder is equal only within
   fold's 1e-4. Bit identity is a property of the core's own arithmetic.
+
+**Slice 8 as built** (2026-10-20):
+- **The FFI** is §3.6's seven functions (`promo-ffi/src/beats.rs`), plus
+  `promo_doc_set_project_dir(doc, dir)`. `promo_project_opened` and
+  `promo_project_resolve_timing` (which gained a `project_dir` argument)
+  resolve on `BeatGrids::from_analyses(beat_cache::cached_analyses(dir))` —
+  the CLI's cache reader — so an analysed song lays out on its own beats and
+  its sections, and only a song never analysed reaches `missingGrids`.
+- **No `promo_doc_resolved_json`.** The re-resolve stays
+  `promo_project_resolve_timing(json, source, dir)` (S2's door, carrying
+  the document's unread content); what the design wanted from a document
+  door is the document's own grids, which it now has:
+  `Document::set_beat_grids` stores them for every later `apply` and
+  `apply_group` (they resolved on the stand-in before) and re-resolves at
+  once — no step, no version, since resolving is not an edit.
+- **Swift.** `RecordingProject.directoryURL` (in-memory, set by
+  `ProjectStore.build` before the apply and by `projectDirectory(for:)`)
+  is the folder every `PromoTiming` resolve and the core document read the
+  cache under. `PromoCore.BeatMeter` wraps the meter, store and lookup;
+  `BeatAnalyzer` decodes with `AVAudioFile` and pushes every channel
+  interleaved — the core downmixes, as for the CLI's ffmpeg decode — off
+  the main thread. `BeatAnalyzer.analyse(in:)` measures the clock songs in
+  `missingGrids` (the editor runs it once when a project opens, and every
+  export runs it before its guard: `gridsBeforeExport`, so only a song that
+  cannot be measured holds an export), then reconciles the model and then
+  points the document at the folder.
+- **That order matters.** A flash the model holds still carries the
+  document's tag; re-resolved the other way round, the document's tag is
+  for the new beats and the model's flash reads as a person's edit, which
+  retires the generator. For the same reason `PromoTiming.reconcile` now
+  takes the layers and the flash from one resolve (S6 asked twice, the
+  second time after the first had already moved the flash's keys home).
+- **Fixture.** `core/fixtures/beats/click-120.wav` (16-bit 22.05 kHz mono,
+  120 BPM, first downbeat 0.25 s, 353 KB) and `click-120.json`, the
+  tracker's answer for that file: `promo-media`'s
+  `committed_fixture_is_the_synthesizer_and_its_golden` holds both to the
+  synthesizer, and the app's `testFixtureMatchesCoreGolden` reads the same
+  file through AVFoundation and compares value for value.
+- **Parity cases** live beside S6's in `BeatAnalyzerTests.swift`, not in
+  `DemoPreviewExportParityTests`/`CrossPathRenderTests`: the preview and the
+  image export agree on the analysed downbeats (both suites), and the
+  app's video export matches the core's export of the same folder (Mac).
+- **Left for later:** a library-referenced song is looked for under the
+  project's `Resources/`, so it is never found in the cache;
+  `promo_project_warnings` still resolves on the stand-in.
 
 **Slice 7 as built** (2026-10-20):
 - **Findings** come from the timing pass (`TimingProblem`): off-grid edges

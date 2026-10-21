@@ -5,7 +5,7 @@ mod support;
 
 use promo_media::beats::{self, BeatMeter, BeatOptions};
 use promo_model::musical::BeatAnalysis;
-use support::click_track::{click_track, wav, OFFSET};
+use support::click_track::{click_track, wav, wav16, OFFSET};
 
 fn analyse(samples: &[f32], channels: usize, rate: f64) -> BeatAnalysis {
     let mut meter = BeatMeter::new(channels, rate, BeatOptions::default()).unwrap();
@@ -125,6 +125,42 @@ fn tracker_matches_its_golden() {
     }
     let golden = std::fs::read_to_string(path).expect("the golden is committed");
     assert_eq!(text, golden, "the tracker's answer moved");
+}
+
+/// The fixture the apps analyse through AVFoundation
+/// (`core/fixtures/beats/`): a 16-bit 22.05 kHz mono WAV of the 120 BPM
+/// click track, committed so another host can read the same bytes, and the
+/// analysis this tracker gives of that FILE — what the app's
+/// AVAudioFile → beat meter path must answer too. Regenerate both with
+/// PROMO_UPDATE_BEATS_GOLDEN=1.
+#[test]
+fn committed_fixture_is_the_synthesizer_and_its_golden() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/beats");
+    let wav_path = std::path::Path::new(dir).join("click-120.wav");
+    let json_path = std::path::Path::new(dir).join("click-120.json");
+    let (samples, _) = click_track(120.0, 8.0, 22_050.0, Some(2));
+    let bytes = wav16(&samples, 1, 22_050);
+    if std::env::var_os("PROMO_UPDATE_BEATS_GOLDEN").is_some() {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(&wav_path, &bytes).unwrap();
+    }
+    assert_eq!(
+        std::fs::read(&wav_path).expect("the fixture is committed"),
+        bytes,
+        "the committed fixture is the synthesizer's"
+    );
+    let mut analysis = promo_media::beats::analyse_file(&wav_path, BeatOptions::default()).unwrap();
+    analysis.source = None;
+    let text = serde_json::to_string_pretty(&analysis).unwrap() + "\n";
+    if std::env::var_os("PROMO_UPDATE_BEATS_GOLDEN").is_some() {
+        std::fs::write(&json_path, &text).unwrap();
+    }
+    assert_eq!(
+        text,
+        std::fs::read_to_string(&json_path).expect("the golden is committed"),
+        "the tracker's answer for the committed fixture moved"
+    );
+    assert!((analysis.bpm - 120.0).abs() < 0.05, "{}", analysis.bpm);
 }
 
 fn project(name: &str) -> std::path::PathBuf {
