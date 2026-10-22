@@ -35,30 +35,54 @@ pub fn layout_warnings_for(meta: &ProjectMetadata, only: Option<&str>) -> Vec<St
     let resources = meta.resources.clone().unwrap_or_default();
     let layers = meta.layers.as_deref().unwrap_or(&[]);
     let mut out = Vec::new();
-    for layer in layers {
-        if only.is_some_and(|id| id != layer.id) {
-            continue;
+    let mut scope = |layers: &[ProjectLayer], canvas: Size, within: Option<&str>| {
+        for layer in layers {
+            if only.is_some_and(|id| id != layer.id) {
+                continue;
+            }
+            // A layer switched off draws nothing, so it has no layout to
+            // warn about and covers nothing either.
+            if !layer.is_enabled {
+                continue;
+            }
+            if layer.kind == ProjectLayerKind::Caption {
+                caption_checks(meta, layer, layers, &resources, canvas, within, &mut out);
+            }
         }
-        // A layer switched off draws nothing, so it has no layout to warn
-        // about and covers nothing either.
-        if !layer.is_enabled {
-            continue;
-        }
-        if layer.kind == ProjectLayerKind::Caption {
-            caption_checks(meta, layer, layers, &resources, canvas, &mut out);
+    };
+    scope(layers, canvas, None);
+    // A composition's captions lay out on the composition's own canvas,
+    // with the project's caption defaults — as the renderer draws them.
+    for resource in meta.resources.iter().flatten() {
+        if let Some(c) = resource.composition.as_ref() {
+            if c.canvas_width > 0.0 && c.canvas_height > 0.0 {
+                scope(
+                    &c.layers,
+                    Size::new(c.canvas_width, c.canvas_height),
+                    Some(&resource.display_name),
+                );
+            }
         }
     }
     out
 }
 
 /// A few instants of a layer's life: just after it starts (a reveal
-/// done, a fade in done), its middle, just before it ends.
+/// done, a fade in done), its middle, just before it ends — and every
+/// keyframe inside it, where a keyed move or size comes to rest, so a
+/// caption that is pushed off an edge on its way is caught there.
 fn instants(layer: &ProjectLayer) -> Vec<f64> {
     let start = layer.start_time;
     let end = layer.duration.map(|d| start + d).unwrap_or(start + 4.0);
     let span = (end - start).max(0.0);
     let lead = (span / 2.0).min(1.0);
     let mut ts = vec![start + lead, start + span / 2.0, end - lead];
+    for key in &layer.keyframes {
+        let t = start + key.time;
+        if t > start && t < end {
+            ts.push(t);
+        }
+    }
     ts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     ts.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
     ts
@@ -70,15 +94,24 @@ fn caption_checks(
     layers: &[ProjectLayer],
     resources: &[promo_model::ProjectResource],
     canvas: Size,
+    within: Option<&str>,
     out: &mut Vec<String>,
 ) {
     let settings = &meta.composition_settings;
     let (w, h) = (canvas.width(), canvas.height());
+    // The caption as the messages name it.
+    let named = match within {
+        Some(comp) => format!("caption \"{}\" (in composition \"{comp}\")", layer.name),
+        None => format!("caption \"{}\"", layer.name),
+    };
     let safe = SAFE_SHARE * w.min(h);
     // The worst finding of each kind across the instants, so a caption
     // says one thing about its edges and one about what covers it.
-    let mut overflow: Option<(f64, String, f64)> = None; // (amount, side, t)
+    let mut overflow: Option<(f64, String, f64, &'static str)> = None; // (amount, side, t, why)
     let mut tight: Option<(f64, String, f64)> = None; // (distance, side, t)
+                                                      // What the fix would move: its placement offset, or its margins.
+    let mut placed = false;
+    let mut margins = (0.0, 0.0);
     let mut covered: Option<(f64, String, f64)> = None; // (share, name, t)
     for t in instants(layer) {
         let showing = crate::layer_resource_id(layer, t, resources).map(str::to_string);
@@ -111,7 +144,15 @@ fn caption_checks(
         // track the renderer draws.
         let (bx, by) =
             ip::caption_box_origin(layer, t, (b.width, b.height), (w, h)).unwrap_or((b.x, b.y));
+        placed = style.placement.is_some() || layer.keyframes.iter().any(|k| k.placement.is_some());
+        margins = (style.left_margin, style.right_margin);
         let (x0, y0, x1, y1) = (bx, by, bx + b.width, by + b.height);
+        // What shows is the ink, not the box: with no plate behind the
+        // words (and no stroke round them), the box's padding is empty and
+        // a caption whose words clear the edge does not clip.
+        let plateless = style.background_rgba[3] == 0 && style.stroke_width <= 0.0;
+        let inset = if plateless { style.padding } else { 0.0 };
+        let (x0, y0, x1, y1) = (x0 + inset, y0 + inset, x1 - inset, y1 - inset);
         // Past the canvas.
         let sides = [
             (-x0, "left"),
@@ -121,7 +162,27 @@ fn caption_checks(
         ];
         for (amount, side) in sides {
             if amount > 0.5 && overflow.as_ref().is_none_or(|o| amount > o.0) {
-                overflow = Some((amount, side.into(), t));
+                overflow = Some((amount, side.into(), t, ""));
+            }
+        }
+        // A reveal that moves its words in: a slide brings each from the
+        // right, a rise or a tumble from below. Half way in a word is half
+        // there and plainly visible, so that is where it is measured.
+        let reveal = style_source
+            .as_ref()
+            .and_then(|s| s.reveal.clone())
+            .or_else(|| settings.subtitle_reveal.clone());
+        if let Some(reveal) = reveal {
+            let line = style.font_size * style.line_height;
+            let (side, extra) = match reveal.mode {
+                promo_model::RevealMode::Slide => ("right", x1 + 0.5 * line - w),
+                promo_model::RevealMode::Rise | promo_model::RevealMode::Tumble => {
+                    ("bottom", y1 + 0.5 * reveal.rise.unwrap_or(0.5) * line - h)
+                }
+                _ => ("", 0.0),
+            };
+            if extra > 0.5 && overflow.as_ref().is_none_or(|o| extra > o.0) {
+                overflow = Some((extra, side.into(), t, " while its words move in"));
             }
         }
         // Inside the canvas but within the safe band. LEFT and RIGHT only:
@@ -151,6 +212,15 @@ fn caption_checks(
             let showing = crate::layer_resource_id(other, t, resources);
             let other_resource = resources.iter().find(|r| Some(r.id.as_str()) == showing);
             if other_resource.is_some_and(|r| r.particles.is_some()) {
+                continue;
+            }
+            // A beat flash is a full-canvas wash that is dark between its
+            // beats: it lights the caption, it does not hide it.
+            if other
+                .generated_by
+                .as_deref()
+                .is_some_and(|g| g.starts_with("flash:"))
+            {
                 continue;
             }
             let opaque_rect = matches!(
@@ -184,25 +254,43 @@ fn caption_checks(
             }
         }
     }
-    if let Some((amount, side, t)) = overflow {
+    // The fix, in numbers: how far in the edge must come to sit `safe` px
+    // from it, as the field that moves it.
+    let fix = |side: &str, by: f64| -> String {
+        let by = by.ceil();
+        match side {
+            "left" if placed => format!("move its placement offset {by:.0} px right"),
+            "left" => format!("set leftMargin ≥ {:.0}", margins.0 + by),
+            "right" if placed => format!("move its placement offset {by:.0} px left"),
+            "right" => format!(
+                "set rightMargin ≥ {:.0} or shorten the line",
+                margins.1 + by
+            ),
+            "top" => format!("move it {by:.0} px down"),
+            _ => format!("move it {by:.0} px up"),
+        }
+    };
+    if let Some((amount, side, t, why)) = overflow {
         out.push(format!(
-            "caption \"{}\" runs {:.0} px past the canvas's {side} edge at {t:.1}s; widen its margins, \
-             shorten the line or move its placement",
-            layer.name, amount
+            "{named} runs {:.0} px past the canvas's {side} edge at {t:.1}s{why}; {} (or a smaller \
+             fontSize) to keep it {:.0} px clear",
+            amount,
+            fix(&side, amount + safe),
+            safe
         ));
     } else if let Some((gap, side, t)) = tight {
         out.push(format!(
-            "caption \"{}\" sits {:.0} px from the canvas's {side} edge at {t:.1}s (safe ≥ {:.0} px); a \
-             leading or trailing alignment still needs margins, a placement offset or a smaller size \
-             to clear the edge",
-            layer.name, gap, safe
+            "{named} sits {:.0} px from the canvas's {side} edge at {t:.1}s (safe ≥ {:.0} px); {} — \
+             a leading or trailing alignment keeps its side, it just needs room",
+            gap,
+            safe,
+            fix(&side, safe - gap)
         ));
     }
     if let Some((share, name, t)) = covered {
         out.push(format!(
-            "caption \"{}\" is {:.0}% overlapped by \"{name}\" at {t:.1}s, which draws above it; move the \
+            "{named} is {:.0}% overlapped by \"{name}\" at {t:.1}s, which draws above it; move the \
              caption, raise its sortIndex above \"{name}\", or trim the other layer's placement",
-            layer.name,
             share * 100.0
         ));
     }
@@ -451,6 +539,153 @@ mod tests {
                 .any(|w| w.contains("overlapped by \"Slab\"")),
             "{:?}",
             layout_warnings(&over)
+        );
+    }
+
+    /// Issue #9: a caption whose keyframes push it off the left edge is
+    /// caught at the keyframe where it comes to rest — between the three
+    /// sampled instants — and the fix names its placement offset with the
+    /// pixels it must move.
+    #[test]
+    fn a_keyed_move_off_the_edge_is_caught_at_its_keyframe() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let meta = project(
+            r#"{"id":"C","name":"Slide","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":0,"duration":4,
+                "captionText":"A long line that travels left",
+                "keyframes":[{"id":"A","time":0,"transitionDuration":0,"placement":{"anchor":"center"}},
+                             {"id":"B","time":2.2,"transitionDuration":0.4,"placement":{"anchor":"left","offset":[-260,0]}},
+                             {"id":"D","time":2.6,"transitionDuration":0.4,"placement":{"anchor":"center"}}]}"#,
+            "",
+        );
+        let found = layout_warnings(&meta);
+        assert!(
+            found.iter().any(|w| w.contains("caption \"Slide\" runs")
+                && w.contains("past the canvas's left edge at 2.2s")
+                && w.contains("move its placement offset")
+                && w.contains("px right")),
+            "{found:?}"
+        );
+    }
+
+    /// The fix in numbers: a margin-placed caption is told the margin that
+    /// clears the edge.
+    #[test]
+    fn the_fix_names_the_margin_that_clears_the_edge() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let flush = project(
+            r#"{"id":"C","name":"Hook","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":0,"duration":4,
+                "captionText":"Ship the film tonight",
+                "captionStyle":{"alignment":"leading","leftMargin":12},"keyframes":[]}"#,
+            "",
+        );
+        let found = layout_warnings(&flush);
+        let line = found
+            .iter()
+            .find(|w| w.contains("left edge"))
+            .expect("named");
+        // Its ink is 12 + 16 (the empty padding) = 28 px in; 54 is safe.
+        assert!(line.contains("sits 28 px"), "{line}");
+        assert!(line.contains("set leftMargin ≥ 38"), "{line}");
+    }
+
+    /// A slide reveal brings each word in from the right: a trailing line
+    /// close to the edge runs past it while its words move in.
+    #[test]
+    fn a_sliding_reveal_is_measured_as_it_moves() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let caption = |mode: &str| {
+            project(
+                &format!(
+                    r#"{{"id":"C","name":"Tag","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":0,
+                    "duration":4,"captionText":"Now live",
+                    "captionStyle":{{"alignment":"trailing","fontSize":120,"rightMargin":30,
+                      "reveal":{{"by":"word","mode":"{mode}"}}}},"keyframes":[]}}"#
+                ),
+                "",
+            )
+        };
+        let slide = layout_warnings(&caption("slide"));
+        assert!(
+            slide
+                .iter()
+                .any(|w| w.contains("past the canvas's right edge")
+                    && w.contains("while its words move in")),
+            "{slide:?}"
+        );
+        let wipe = layout_warnings(&caption("wipe"));
+        assert!(
+            wipe.iter().all(|w| !w.contains("move in")),
+            "a wipe moves nothing: {wipe:?}"
+        );
+    }
+
+    /// A composition's captions are measured on the composition's canvas,
+    /// and named as its.
+    #[test]
+    fn a_composition_caption_is_measured_on_its_canvas() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let meta = project(
+            "",
+            r#"{"id":"K","kind":"composition","filename":"","displayName":"Card","addedAt":0,
+                "composition":{"canvasWidth":600,"canvasHeight":400,"layers":[
+                  {"id":"N","name":"Inner","sortIndex":0,"kind":"caption","isEnabled":true,"startTime":0,
+                   "duration":3,"captionText":"A headline far too long for a small card",
+                   "captionStyle":{"alignment":"leading","leftMargin":10},"keyframes":[]}]}}"#,
+        );
+        let found = layout_warnings(&meta);
+        assert!(
+            found
+                .iter()
+                .any(|w| w.contains("caption \"Inner\" (in composition \"Card\")")),
+            "{found:?}"
+        );
+    }
+
+    /// A beat flash — a full-canvas wash, dark between its beats — lights a
+    /// caption; it does not cover it. It fired on this repo's beat-cut demo.
+    #[test]
+    fn a_beat_flash_covers_nothing() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let mut meta = ProjectMetadata::from_json(
+            r#"{"id":"P","name":"Flash","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":4,
+                "videoDuration":4,"subtitles":[],
+                "compositionSettings":{"canvasWidth":1920,"canvasHeight":1080,"subtitleFontSize":64,
+                  "beatClock":{"resourceID":"song","startTime":0},
+                  "flash":{"on":"beat","opacity":0.9,"duration":{"beats":0.5}}},
+                "resources":[{"id":"song","kind":"audio","filename":"s.wav","displayName":"Song",
+                  "addedAt":0,"duration":10,"beatGrid":{"bpm":120}}],
+                "layers":[{"id":"C","name":"End card","sortIndex":0,"kind":"caption","isEnabled":true,
+                  "startTime":0,"duration":4,"captionText":"See you","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        crate::resolve_timing(&mut meta, &Default::default());
+        assert!(
+            meta.layers
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|l| l.generated_by.is_some()),
+            "the flash was made"
+        );
+        assert!(
+            layout_warnings(&meta).is_empty(),
+            "{:?}",
+            layout_warnings(&meta)
         );
     }
 }

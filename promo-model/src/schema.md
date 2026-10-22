@@ -666,6 +666,13 @@ flash layer, or delete it, and the flash generator goes with it.
 
 ## Captions — caption, text, font, fontSize, subtitle, margins, captionStyle
 
+Left or right is a layout, not a mistake — but a `leading` caption still
+needs a `leftMargin` (or placement offset) its fontSize clears, and a
+`trailing` one a `rightMargin`. validate lays every caption out at its
+resolved times (keyframed moves, sizes and a moving reveal included) and
+says which edge it runs past or sits within 5% of, when, and the margin
+or offset that fixes it.
+
 A CAPTION is typography, said in its own words: `fontSize` on a keyframe
 is the size in points (its own field; the legacy spelling on a caption
 layer was `zoom` carrying points, which is read forever — `fontSize` wins
