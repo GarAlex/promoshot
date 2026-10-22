@@ -418,7 +418,9 @@ has.
 
 A caption reveal arrives on the words: `"reveal": {"by": "word", "mode":
 "highlight", "highlightColorHex": "@accent", "sync": {"of": "intro"}}` in
-a caption's `captionStyle` (the layer's, or its caption resource's). The
+a caption's `captionStyle` (the layer's, or its caption resource's), or
+in `compositionSettings.subtitleReveal` for every caption that has none of
+its own — in a composition too, where the take is one its layers play. The
 caption's words are matched to the take's — the caption may be one
 sentence of a longer narration — and each arrives when it is said; a
 highlight lights the word while it sounds and goes out between words.

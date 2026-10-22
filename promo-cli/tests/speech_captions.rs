@@ -21,8 +21,8 @@ fn fixtures() -> PathBuf {
 
 /// The project: a voice-over of the fixture take at 0.5 s, and its line as
 /// a white caption whose active word turns pure red.
-fn folder() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("promo-ac1-{}", std::process::id()));
+fn folder(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("promo-ac1-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("Resources")).unwrap();
     let audio = dir.join("Resources/intro.mp3");
@@ -75,7 +75,7 @@ fn red(p: &image::Rgba<u8>) -> bool {
 /// its provider start falls on.
 #[test]
 fn captions_reveal_each_word_within_one_frame() {
-    let dir = folder();
+    let dir = folder("own");
     let out = dir.join("frames");
     let run = Command::new(env!("CARGO_BIN_EXE_promo"))
         .arg("frames")
@@ -161,5 +161,47 @@ fn captions_reveal_each_word_within_one_frame() {
     assert_eq!(reveal["matched"], 7, "{reveal}");
     assert_eq!(reveal["words"], "words 1\u{2013}7", "{reveal}");
     assert_eq!(reveal["sync"], json!({"of": "intro"}));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The same karaoke line with its reveal on the project-wide caption style
+/// (`compositionSettings.subtitleReveal`): rendered, the word being said
+/// is lit and the pause after "Euclid." is dark — read from the pixels.
+#[test]
+fn a_shared_synced_reveal_lights_the_word_being_said() {
+    let dir = folder("shared");
+    let file = dir.join("metadata.json");
+    let mut meta: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let reveal = meta["layers"][2]["captionStyle"]
+        .as_object_mut()
+        .unwrap()
+        .remove("reveal")
+        .unwrap();
+    meta["compositionSettings"]["subtitleReveal"] = reveal;
+    std::fs::write(&file, meta.to_string()).unwrap();
+    let lit = |time: f64| -> usize {
+        let out = dir.join(format!("shared-{time}.png"));
+        let run = Command::new(env!("CARGO_BIN_EXE_promo"))
+            .arg("still")
+            .arg(&dir)
+            .arg("--out")
+            .arg(&out)
+            .args(["--time", &time.to_string()])
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        image::open(&out)
+            .unwrap()
+            .to_rgba8()
+            .pixels()
+            .filter(|p| red(p))
+            .count()
+    };
+    assert!(lit(AT + 0.6) > 20, "\"Euclid\" is lit while it is said");
+    assert_eq!(lit(AT + 1.15), 0, "the pause after it is dark");
     let _ = std::fs::remove_dir_all(&dir);
 }

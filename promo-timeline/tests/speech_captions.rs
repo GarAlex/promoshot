@@ -431,3 +431,106 @@ fn generated_captions_retime_with_a_new_take() {
         "the file is the same"
     );
 }
+
+/// A synced reveal on the project-wide caption style
+/// (`compositionSettings.subtitleReveal`) times each caption on its own
+/// words: the times live on each layer (`revealTimes`), the renderer reads
+/// them as the reveal's, and a save writes none of them.
+#[test]
+fn a_shared_synced_reveal_times_each_caption() {
+    let t = timing(SCRIPT, 6.0);
+    let mut file = project(json!([
+        {"id": "a", "name": "a", "sortIndex": 1, "kind": "caption", "isEnabled": true,
+         "startTime": 2.5, "duration": 2, "captionText": "Euclid proved it.", "keyframes": []},
+        {"id": "b", "name": "b", "sortIndex": 2, "kind": "caption", "isEnabled": true,
+         "startTime": 4.0, "duration": 3, "captionText": "Primes never end", "keyframes": []},
+    ]));
+    file["compositionSettings"]["subtitleReveal"] =
+        json!({"by": "word", "mode": "highlight", "sync": {"of": "intro"}});
+    let (meta, report) = resolved_with(&file, &inputs());
+    assert!(
+        !report.problems.iter().any(TimingProblem::is_break),
+        "{:?}",
+        report.problems
+    );
+    let times = |id: &str| {
+        layer(&meta, id)
+            .reveal_times
+            .clone()
+            .expect("its own times")
+    };
+    let a = times("a");
+    assert_eq!(a.times.len(), 3);
+    assert!(close(a.times[0], 2.0 + t.words[0].start - 2.5));
+    let b = times("b");
+    assert_eq!(b.times.len(), 3);
+    assert!(close(b.times[0], 2.0 + t.words[3].start - 4.0), "{b:?}");
+    // The renderer's view: the shared rule with this caption's times.
+    let shared = meta.composition_settings.subtitle_reveal.clone().unwrap();
+    let walked = promo_timeline::reveal::effective(shared, layer(&meta, "b"));
+    assert_eq!(walked.unit_times.as_deref(), Some(b.times.as_slice()));
+    let written = meta.to_json().unwrap();
+    assert!(!written.contains("revealTimes"), "{written}");
+    assert_eq!(meta.minimum_reader_version(), 50);
+
+    // A caption resource's synced style shown by two layers: each its own.
+    let mut file = project(json!([
+        {"id": "c", "name": "c", "sortIndex": 1, "kind": "caption", "isEnabled": true,
+         "startTime": 2.5, "duration": 2, "resourceID": "line", "keyframes": []},
+        {"id": "d", "name": "d", "sortIndex": 2, "kind": "caption", "isEnabled": true,
+         "startTime": 3.0, "duration": 2, "resourceID": "line", "keyframes": []},
+    ]));
+    file["resources"].as_array_mut().unwrap().push(json!({
+        "id": "line", "kind": "caption", "filename": "", "displayName": "Line", "addedAt": 0,
+        "captionText": "Euclid proved it.",
+        "captionStyle": {"reveal": {"by": "word", "sync": {"of": "intro"}}}}));
+    let (meta, _) = resolved_with(&file, &inputs());
+    let c = layer(&meta, "c").reveal_times.clone().unwrap();
+    let d = layer(&meta, "d").reveal_times.clone().unwrap();
+    assert!(
+        close(c.times[0] - d.times[0], 0.5),
+        "layer-local, each its own: {c:?} {d:?}"
+    );
+}
+
+/// Inside a composition, a caption shows the project's shared reveal on a
+/// take the composition plays.
+#[test]
+fn a_composition_caption_syncs_on_its_own_take() {
+    let t = timing(SCRIPT, 6.0);
+    let mut file = project(json!([]));
+    file["compositionSettings"]["subtitleReveal"] =
+        json!({"by": "word", "mode": "highlight", "sync": {"of": "intro"}});
+    file["resources"].as_array_mut().unwrap().push(json!({
+        "id": "card", "kind": "composition", "filename": "", "displayName": "Card", "addedAt": 0,
+        "composition": {"canvasWidth": 800, "canvasHeight": 400, "layers": [
+            {"id": "cv", "name": "cv", "sortIndex": 0, "kind": "audio", "isEnabled": true,
+             "startTime": 1, "duration": 6, "resourceID": "intro", "keyframes": []},
+            {"id": "cc", "name": "cc", "sortIndex": 1, "kind": "caption", "isEnabled": true,
+             "startTime": 1, "duration": 3, "captionText": "Euclid proved it.", "keyframes": []}]}}));
+    let (meta, report) = resolved_with(&file, &inputs());
+    assert!(
+        !report.problems.iter().any(TimingProblem::is_break),
+        "{:?}",
+        report.problems
+    );
+    let comp = meta
+        .resources
+        .as_ref()
+        .unwrap()
+        .iter()
+        .find(|r| r.id == "card")
+        .unwrap()
+        .composition
+        .clone()
+        .unwrap();
+    let cc = comp.layers.iter().find(|l| l.id == "cc").unwrap();
+    let times = cc
+        .reveal_times
+        .clone()
+        .expect("synced inside the composition");
+    assert!(
+        close(times.times[1], 1.0 + t.words[1].start - 1.0),
+        "{times:?}"
+    );
+}

@@ -889,22 +889,44 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             .problems
             .extend(crate::speech_effects::expand_captions(meta, grids));
         // Every synced caption reveal, on its take's words.
-        if crate::speech_effects::any_sync(
-            meta.layers.as_deref().unwrap_or(&[]),
-            meta.resources.as_deref().unwrap_or(&[]),
-        ) {
-            let takes = meta.resources.clone().unwrap_or_default();
-            let mut resources = meta.resources.take();
+        let syncing = meta
+            .composition_settings
+            .subtitle_reveal
+            .as_ref()
+            .is_some_and(|r| r.sync.is_some())
+            || crate::speech_effects::any_sync(
+                meta.layers.as_deref().unwrap_or(&[]),
+                meta.resources.as_deref().unwrap_or(&[]),
+            );
+        if !syncing {
+            crate::speech_effects::clear_reveal_times(
+                meta.layers.as_deref_mut().unwrap_or(&mut []),
+            );
+        } else {
+            // What each caption shows, its words and the reveal it falls back
+            // to (its resource's, else the project's), from the document as
+            // it stands.
+            let doc = meta.clone();
+            let shown = |layer: &ProjectLayer| {
+                let style = doc.caption_resource_style(layer);
+                crate::speech_effects::Shown {
+                    resource_styled: style.is_some(),
+                    reveal: style
+                        .and_then(|s| s.reveal)
+                        .or_else(|| doc.composition_settings.subtitle_reveal.clone()),
+                    text: doc.caption_text_for(layer),
+                }
+            };
             crate::speech_effects::sync_reveals(
                 meta.layers.as_deref_mut().unwrap_or(&mut []),
-                resources.as_deref_mut().unwrap_or(&mut []),
-                &takes,
+                &resources,
+                &doc.composition_settings,
+                &shown,
                 meta.composition_settings.speech_clock.as_ref(),
                 grids,
                 &mut report.problems,
                 &mut report.missing_words,
             );
-            meta.resources = resources;
         }
         let timeline = crate::composition_duration(meta);
         findings(
@@ -1049,10 +1071,26 @@ pub fn resolve_timing(meta: &mut ProjectMetadata, grids: &BeatGrids) -> TimingRe
             &format!("resources[{id}]"),
             &mut report,
         );
+        let shown = |layer: &ProjectLayer| {
+            let showing = resources
+                .iter()
+                .find(|r| Some(&r.id) == layer.resource_id.as_ref());
+            let style = showing.and_then(|r| r.caption_style.clone());
+            crate::speech_effects::Shown {
+                resource_styled: style.is_some(),
+                reveal: style
+                    .and_then(|s| s.reveal)
+                    .or_else(|| settings.subtitle_reveal.clone()),
+                text: showing
+                    .and_then(|r| r.caption_text.clone())
+                    .or_else(|| layer.caption_text.clone()),
+            }
+        };
         crate::speech_effects::sync_reveals(
             &mut composition.layers,
-            &mut [],
             &resources,
+            &settings,
+            &shown,
             composition.speech_clock.as_ref(),
             grids,
             &mut report.problems,

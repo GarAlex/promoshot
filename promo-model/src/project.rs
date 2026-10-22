@@ -3615,6 +3615,12 @@ pub struct ProjectLayer {
     /// regenerated on every load, never saved unless a person edited it.
     #[serde(default, skip_serializing_if = "is_none")]
     pub generated_by: Option<String>,
+    /// Derived, the app form only (a save drops it): this caption's word
+    /// arrivals when the reveal it shows is not its own — a caption
+    /// resource's, or `compositionSettings.subtitleReveal` — synced to a
+    /// take. The renderer reads it as that reveal's `unitTimes`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub reveal_times: Option<crate::speech::RevealTimes>,
     #[serde(default)]
     pub keyframes: Vec<ProjectLayerKeyframe>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
@@ -5485,6 +5491,13 @@ impl ProjectMetadata {
     /// is showing — a keyframe swap resolves that per time — can ask for it
     /// by name. Reading the layer's own id is only ever right before the
     /// first swap.
+    /// The style of the caption resource a layer shows, when it has one —
+    /// which wins over the layer's own (`caption_style_showing`).
+    pub fn caption_resource_style(&self, layer: &ProjectLayer) -> Option<SubtitleStyle> {
+        self.caption_resource_named(layer.resource_id.as_deref())
+            .and_then(|r| r.caption_style.clone())
+    }
+
     fn caption_resource_named(&self, id: Option<&str>) -> Option<&ProjectResource> {
         let id = id?;
         self.resources

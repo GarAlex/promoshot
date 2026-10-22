@@ -1298,6 +1298,13 @@ is `fixtures/speech/kitten-comma.wav` with the voice's own timing in
   resource shown by several layers counts on the first). Not
   `compositionSettings.subtitleReveal`: per-caption times cannot live
   there. Inside compositions, only a layer's own style is synced.
+  *Closed since:* a shared reveal (the caption resource's, or
+  `subtitleReveal`) now syncs every caption that shows it, and inside
+  compositions too. Its times are per caption, so they sit on the layer
+  as a derived `revealTimes: {times, ends}` (stripped by the fold, copied
+  by `copy_derived`, carried by Swift `ProjectLayer.revealTimes`); the
+  engine reads them through `reveal::effective` when the rule carries no
+  `unitTimes` of its own.
 - **The engine** (`reveal::progress`): with `unitTimes`, a unit has
   arrived once its time has passed. `shown` stays at least one (the
   never-empty rule); `active` is the last arrived unit until its

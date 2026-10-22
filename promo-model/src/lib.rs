@@ -646,6 +646,8 @@ mod schema_doc_tests {
             }])),
             // Bookkeeping a generator writes, never authored.
             generated_by: None,
+            // Derived from a shared synced reveal, the app form only.
+            reveal_times: None,
             extra: serde_json::Map::new(),
         }
     }

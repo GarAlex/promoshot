@@ -74,6 +74,21 @@ pub fn progress(reveal: &TextReveal, layer: &ProjectLayer, time: f64, units: usi
     }
 }
 
+/// The reveal a caption walks: `rule` as it reads, with the caption's own
+/// word arrivals (`revealTimes`) when the synced reveal it shows is shared
+/// — its caption resource's, or the project's `subtitleReveal` — and so
+/// cannot hold one caption's times itself.
+pub fn effective(rule: TextReveal, layer: &ProjectLayer) -> TextReveal {
+    match (&rule.unit_times, &layer.reveal_times) {
+        (None, Some(times)) => TextReveal {
+            unit_times: Some(times.times.clone()),
+            unit_ends: Some(times.ends.clone()),
+            ..rule
+        },
+        _ => rule,
+    }
+}
+
 /// The time of unit `i` of `units` in a list of `times` made for another
 /// count (a character or line reveal walks finer or coarser units than the
 /// words the times are of): the word the unit falls in, by position.

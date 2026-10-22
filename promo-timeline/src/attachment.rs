@@ -931,6 +931,7 @@ mod tests {
             pulse: None,
             shake: None,
             generated_by: None,
+            reveal_times: None,
             extra: Default::default(),
         }
     }

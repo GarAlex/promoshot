@@ -2410,7 +2410,8 @@ impl PreviewEngine {
                         .meta
                         .caption_style_showing(layer, showing.as_deref())
                         .and_then(|style| style.reveal)
-                        .or_else(|| settings.subtitle_reveal.clone());
+                        .or_else(|| settings.subtitle_reveal.clone())
+                        .map(|rule| tl::reveal::effective(rule, layer));
                     let bands = rule.as_ref().and_then(|rule| {
                         let by = tl::reveal::unit_of(rule);
                         let layout = self.caption_reveal(

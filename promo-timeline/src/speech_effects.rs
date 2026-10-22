@@ -213,74 +213,84 @@ pub(crate) fn any_sync(layers: &[ProjectLayer], resources: &[ProjectResource]) -
     walk(layers, &synced) || resources.iter().any(|r| synced(&r.caption_style))
 }
 
-/// Fills `unitTimes`/`unitEnds` on every synced reveal of a scope's
-/// caption layers — the layer's own style, or the caption resource it
-/// shows (for the first layer that shows it) — and says what did not match.
+/// No caption in these layers shows a synced reveal: none carries word
+/// arrivals of its own (an app form made before the sync went keeps none).
+pub(crate) fn clear_reveal_times(layers: &mut [ProjectLayer]) {
+    for layer in layers {
+        layer.reveal_times = None;
+        if let Some(members) = layer.members.as_mut() {
+            clear_reveal_times(members);
+        }
+    }
+}
+
+/// What a caption shows, as the renderer picks it: its words, the reveal
+/// it falls back to (its caption resource's style, else the project's
+/// `subtitleReveal`), and whether a resource's style is the one it shows
+/// (which then wins over the layer's own).
+pub(crate) struct Shown {
+    pub text: Option<String>,
+    pub reveal: Option<TextReveal>,
+    pub resource_styled: bool,
+}
+
+/// Fills the word arrivals of every caption that shows a synced reveal:
+/// on its own style's reveal (`unitTimes`/`unitEnds`), or — when the
+/// reveal it shows is shared, its caption resource's or the project's
+/// `subtitleReveal` — on the layer itself (`revealTimes`), each layer its
+/// own times. Says what did not match.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_reveals(
     layers: &mut [ProjectLayer],
-    resources: &mut [ProjectResource],
     takes: &[ProjectResource],
+    settings: &promo_model::CompositionSettings,
+    meta_text: &dyn Fn(&ProjectLayer) -> Shown,
     speech_clock: Option<&promo_model::speech::SpeechClock>,
     inputs: &BeatGrids,
     problems: &mut Vec<TimingProblem>,
     missing: &mut Vec<String>,
 ) {
-    if !any_sync(layers, resources) {
+    let shared = settings
+        .subtitle_reveal
+        .as_ref()
+        .is_some_and(|r| r.sync.is_some());
+    if !shared && !any_sync(layers, takes) {
+        clear_reveal_times(layers);
         return;
     }
     let all: Vec<ProjectLayer> = layers.to_vec();
     let speech = Speech::new(speech_clock, &all, takes, inputs);
-    let mut done_resources: BTreeSet<String> = BTreeSet::new();
     fn walk(
         layers: &mut [ProjectLayer],
-        resources: &mut [ProjectResource],
         speech: &Speech,
-        done: &mut BTreeSet<String>,
+        meta_text: &dyn Fn(&ProjectLayer) -> Shown,
         problems: &mut Vec<TimingProblem>,
         missing: &mut Vec<String>,
     ) {
         for layer in layers.iter_mut() {
             if let Some(members) = layer.members.as_mut() {
-                walk(members, resources, speech, done, problems, missing);
+                walk(members, speech, meta_text, problems, missing);
             }
+            layer.reveal_times = None;
             if layer.kind != ProjectLayerKind::Caption {
                 continue;
             }
+            // Its own reveal, else the one it shows (its resource's, the
+            // project's) — the renderer's precedence.
             let own = layer
                 .caption_style
                 .as_ref()
                 .and_then(|s| s.reveal.as_ref())
                 .and_then(|r| r.sync.clone());
-            let showing = layer.resource_id.as_ref().and_then(|id| {
-                resources
-                    .iter()
-                    .position(|r| r.id == *id && r.caption_style.is_some())
-            });
-            let (sync, on_resource) = match (own, showing) {
-                (Some(sync), _) => (sync, None),
-                (None, Some(index)) => {
-                    let resource = &resources[index];
-                    let Some(sync) = resource
-                        .caption_style
-                        .as_ref()
-                        .and_then(|s| s.reveal.as_ref())
-                        .and_then(|r| r.sync.clone())
-                    else {
-                        continue;
-                    };
-                    if !done.insert(resource.id.clone()) {
-                        continue;
-                    }
-                    (sync, Some(index))
-                }
+            let shown = meta_text(layer);
+            let own = own.filter(|_| !shown.resource_styled);
+            let (sync, on_layer) = match (own, shown.reveal.and_then(|r| r.sync)) {
+                (Some(sync), _) => (sync, false),
+                (None, Some(sync)) => (sync, true),
                 _ => continue,
             };
-            let text = match on_resource {
-                Some(index) => resources[index].caption_text.clone(),
-                None => layer.caption_text.clone(),
-            }
-            .unwrap_or_default();
+            let text = shown.text;
+            let text = text.unwrap_or_default();
             let found = speech
                 .take_for(layer.speech_clock.as_ref(), &layer.name, sync.of.as_deref())
                 .map_err(|f| f.why());
@@ -298,22 +308,8 @@ pub(crate) fn sync_reveals(
                 }
                 unit_times(&text, &sync, &take, layer.start_time)
             });
-            let reveal: &mut TextReveal = match on_resource {
-                Some(index) => resources[index]
-                    .caption_style
-                    .as_mut()
-                    .and_then(|s| s.reveal.as_mut())
-                    .expect("a synced reveal"),
-                None => layer
-                    .caption_style
-                    .as_mut()
-                    .and_then(|s| s.reveal.as_mut())
-                    .expect("a synced reveal"),
-            };
-            match answer {
+            let (times, ends) = match answer {
                 Ok(found) => {
-                    reveal.unit_times = Some(found.times.iter().copied().map(us).collect());
-                    reveal.unit_ends = Some(found.ends.iter().copied().map(us).collect());
                     if found.matched < found.units {
                         problems.push(TimingProblem::RevealUnmatched {
                             layer: layer.name.clone(),
@@ -322,26 +318,35 @@ pub(crate) fn sync_reveals(
                             span: found.span,
                         });
                     }
+                    (
+                        Some(found.times.iter().copied().map(us).collect::<Vec<_>>()),
+                        Some(found.ends.iter().copied().map(us).collect::<Vec<_>>()),
+                    )
                 }
                 Err(why) => {
-                    reveal.unit_times = None;
-                    reveal.unit_ends = None;
                     problems.push(TimingProblem::RevealSync {
                         layer: layer.name.clone(),
                         why,
                     });
+                    (None, None)
                 }
+            };
+            if on_layer {
+                layer.reveal_times = match (times, ends) {
+                    (Some(times), Some(ends)) => {
+                        Some(promo_model::speech::RevealTimes { times, ends })
+                    }
+                    _ => None,
+                };
+            } else if let Some(reveal) =
+                layer.caption_style.as_mut().and_then(|s| s.reveal.as_mut())
+            {
+                reveal.unit_times = times;
+                reveal.unit_ends = ends;
             }
         }
     }
-    walk(
-        layers,
-        resources,
-        &speech,
-        &mut done_resources,
-        problems,
-        missing,
-    );
+    walk(layers, &speech, meta_text, problems, missing);
 }
 
 /// Where a piece of a sentence may be split: after word `i` (0-based),

@@ -2925,6 +2925,16 @@
             "null"
           ]
         },
+        "revealTimes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RevealTimes"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "shake": {
           "anyOf": [
             {
@@ -3998,6 +4008,29 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "RevealTimes": {
+      "properties": {
+        "ends": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "times": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "times",
+        "ends"
+      ],
       "type": "object"
     },
     "RevealUnit": {

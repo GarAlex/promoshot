@@ -584,14 +584,15 @@ fn carries_derived(meta: &ProjectMetadata) -> bool {
             .and_then(|s| s.reveal.as_ref())
             .is_some_and(|r| r.unit_times.is_some() || r.unit_ends.is_some())
     };
-    crate::nesting::all_layers(meta)
+    crate::nesting::all_layers(meta).iter().any(|l| {
+        timed(&l.caption_style)
+            || l.reveal_times.is_some()
+            || l.captions.as_ref().is_some_and(|c| c.made.is_some())
+    }) || meta
+        .resources
         .iter()
-        .any(|l| timed(&l.caption_style) || l.captions.as_ref().is_some_and(|c| c.made.is_some()))
-        || meta
-            .resources
-            .iter()
-            .flatten()
-            .any(|r| timed(&r.caption_style))
+        .flatten()
+        .any(|r| timed(&r.caption_style))
 }
 
 /// Drops what speech sync derives from the file form: every `unitTimes`
@@ -602,6 +603,7 @@ fn strip_derived(value: &mut Value) -> bool {
         Value::Object(map) => {
             changed |= map.remove("unitTimes").is_some();
             changed |= map.remove("unitEnds").is_some();
+            changed |= map.remove("revealTimes").is_some();
             if let Some(Value::Object(captions)) = map.get_mut("captions") {
                 changed |= captions.remove("made").is_some();
             }
@@ -881,7 +883,7 @@ pub fn signature(value: &Value) -> String {
                     }
                     // Derived on every resolve and dropped by a save: never
                     // a person's edit.
-                    if key == "unitTimes" || key == "unitEnds" {
+                    if key == "unitTimes" || key == "unitEnds" || key == "revealTimes" {
                         continue;
                     }
                     out.push_str(key);
@@ -1221,7 +1223,8 @@ fn apply_detaches(root: &mut Value, detached: Vec<(Option<String>, Detach)>) {
 /// Copies what speech sync derives (docs/SPEECH-SYNC.md §7) from `from` —
 /// the same document, resolved — into `into`: each caption reveal's
 /// `unitTimes` and `unitEnds` (layers by id path, caption resources by
-/// id), and a captions generator's `made`. What a host that keeps the
+/// id), a layer's `revealTimes` when its synced reveal is shared, and a
+/// captions generator's `made`. What a host that keeps the
 /// file's own text beside the resolved numbers needs so its renderer walks
 /// the words.
 pub fn copy_derived(from: &Value, into: &mut Value) {
@@ -1241,6 +1244,10 @@ pub fn copy_derived(from: &Value, into: &mut Value) {
         if let Some(made) = object.get("captions").and_then(|c| c.get("made")) {
             out.insert("made".into(), made.clone());
         }
+        // A shared synced reveal's word times sit on the layer itself.
+        if let Some(times) = object.get("revealTimes") {
+            out.insert("revealTimes".into(), times.clone());
+        }
         out
     }
     fn put(object: &mut Map<String, Value>, found: &Map<String, Value>) {
@@ -1249,6 +1256,8 @@ pub fn copy_derived(from: &Value, into: &mut Value) {
                 if let Some(Value::Object(c)) = object.get_mut("captions") {
                     c.insert(key.clone(), value.clone());
                 }
+            } else if key == "revealTimes" {
+                object.insert(key.clone(), value.clone());
             } else if let Some(Value::Object(reveal)) = object
                 .get_mut("captionStyle")
                 .and_then(|s| s.get_mut("reveal"))
@@ -1635,6 +1644,31 @@ mod tests {
 
     fn parse(value: Value) -> Result<MusicalTime, String> {
         MusicalTime::from_object(value.as_object().unwrap())
+    }
+
+    /// The app keeps the file's own text and takes only what sync derives:
+    /// a shared reveal's times on the layer come across, in a composition
+    /// too, and the file form never had them.
+    #[test]
+    fn a_shared_reveals_times_reach_the_file_form() {
+        let times = json!({"times": [0.5, 1.0], "ends": [0.9, 1.4]});
+        let resolved = json!({
+            "layers": [{"id": "cap", "revealTimes": times}],
+            "resources": [{"id": "comp", "composition": {"layers": [
+                {"id": "inner", "revealTimes": times}
+            ]}}]
+        });
+        let mut file = json!({
+            "layers": [{"id": "cap", "x": 1}],
+            "resources": [{"id": "comp", "composition": {"layers": [{"id": "inner"}]}}]
+        });
+        copy_derived(&resolved, &mut file);
+        assert_eq!(file["layers"][0]["revealTimes"], times);
+        assert_eq!(file["layers"][0]["x"], 1);
+        assert_eq!(
+            file["resources"][0]["composition"]["layers"][0]["revealTimes"],
+            times
+        );
     }
 
     #[test]

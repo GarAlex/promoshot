@@ -1127,6 +1127,15 @@ pub struct RevealSync {
     pub extra: Map<String, Value>,
 }
 
+/// A caption's word arrivals and ends in layer-local seconds, held on the
+/// layer when the synced reveal it shows is shared (§7.1).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RevealTimes {
+    pub times: Vec<f64>,
+    pub ends: Vec<f64>,
+}
+
 /// Captions made from a narration (docs/SPEECH-SYNC.md §7.2), on the
 /// layer that plays the take: one caption layer per sentence (or phrase),
 /// split when longer than `maxWords` or `maxSeconds`, each revealed on its
