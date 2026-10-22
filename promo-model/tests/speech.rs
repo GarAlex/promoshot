@@ -55,10 +55,11 @@ fn transcript_and_word_fixes_stamp_48() {
     }
 }
 
-/// The apps' model has no `transcript`: their copy gets it back from the
-/// file it was made from.
+/// The apps' model reads `transcript` now (it times a recording's
+/// words), so a copy that cleared it keeps it cleared: the unread carry
+/// never puts back what the app took out.
 #[test]
-fn a_lossy_copy_gets_the_transcript_back() {
+fn a_cleared_transcript_stays_cleared() {
     let mut file = base();
     file["resources"][0]["transcript"] = json!("What the recording says.");
     let original = decode(&file);
@@ -67,10 +68,11 @@ fn a_lossy_copy_gets_the_transcript_back() {
         .as_object_mut()
         .unwrap()
         .remove("transcript");
-    let mut carried = decode(&copy);
-    assert_ne!(carried, original);
+    let cleared = decode(&copy);
+    let mut carried = cleared.clone();
     carried.carry_unread_from(&original);
-    assert_eq!(carried, original);
+    assert_eq!(carried, cleared);
+    assert_ne!(carried, original);
 }
 
 /// Fixes parse from the resource, name their script, and a malformed list
