@@ -1303,6 +1303,13 @@ is `fixtures/speech/kitten-comma.wav` with the voice's own timing in
   `"line"` take the time of the word their unit falls in, by position
   (`unit_at`) — an approximation where the counts differ, since the
   timeline does not know the wrap.
+  *Closed since:* the engine knows the wrap, so it re-times them
+  (`reveal::per_unit`, called by the preview on the laid-out units): each
+  `UnitSpan` carries its byte offset in the laid-out text; a character
+  arrives at its share of its word's span (start → end) and is lit for
+  its own share; a space arrives with the next word and is never lit; a
+  line arrives with its first word and is lit until its last word ends.
+  Times that do not match the text's words keep the `unit_at` fallback.
 - **Where it applies:** a caption layer's own `captionStyle.reveal`, or
   its caption resource's (computed for the first layer that shows it; a
   resource shown by several layers counts on the first). Not

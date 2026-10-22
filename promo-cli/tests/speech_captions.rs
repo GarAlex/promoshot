@@ -205,3 +205,54 @@ fn a_shared_synced_reveal_lights_the_word_being_said() {
     assert_eq!(lit(AT + 1.15), 0, "the pause after it is dark");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// By character, a synced highlight types across the word as it is said:
+/// the lit letter of "Geometry," moves right through the word's span
+/// rather than every letter arriving with the word — read from the pixels.
+#[test]
+fn a_character_reveal_walks_inside_the_word() {
+    let dir = folder("chars");
+    let file = dir.join("metadata.json");
+    let mut meta: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    meta["layers"][2]["captionStyle"]["reveal"]["by"] = json!("character");
+    std::fs::write(&file, meta.to_string()).unwrap();
+    // Word 3's own span, from the record the folder stored.
+    let answer: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixtures().join("elevenlabs-with-timestamps.json")).unwrap(),
+    )
+    .unwrap();
+    let take = promo_speech::timing::elevenlabs_take(SCRIPT, &answer).unwrap();
+    let record = promo_speech::timing::record(SCRIPT, &take.spoken.unwrap(), 3.7);
+    let word = &record.words[2];
+    assert!(word.text.starts_with("Geometry"), "{}", word.text);
+    let centre = |time: f64| -> Option<f64> {
+        let out = dir.join(format!("chars-{time}.png"));
+        let run = Command::new(env!("CARGO_BIN_EXE_promo"))
+            .arg("still")
+            .arg(&dir)
+            .arg("--out")
+            .arg(&out)
+            .args(["--time", &time.to_string()])
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        let img = image::open(&out).unwrap().to_rgba8();
+        let xs: Vec<f64> = img
+            .enumerate_pixels()
+            .filter(|(_, _, p)| red(p))
+            .map(|(x, _, _)| x as f64)
+            .collect();
+        (xs.len() > 5).then(|| xs.iter().sum::<f64>() / xs.len() as f64)
+    };
+    let span = word.end - word.start;
+    let early = centre(AT + word.start + 0.1 * span).expect("a letter is lit early in the word");
+    let late = centre(AT + word.start + 0.8 * span).expect("a letter is lit late in the word");
+    // "Geometry," at 40 px is some 180 px wide: seven letters apart is far
+    // more than a letter's width.
+    assert!(late - early > 60.0, "early {early}, late {late}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -431,8 +431,9 @@ sentence of a longer narration — and each arrives when it is said; a
 highlight lights the word while it sounds and goes out between words.
 `"sync": {"of": "intro", "words": [5, 12]}` (or `"sentence": 2`) pins the
 span. A word the take does not say arrives between its neighbours, and
-validate says how many matched. With `by: "character"` or `"line"`, each
-unit takes the time of the word it falls in.
+validate says how many matched. With `by: "character"`, the letters of a
+word type across the time it is said; with `"line"`, a line arrives with
+its first word and stays lit until its last word ends.
 
 Captions from a narration: `"captions": {"by": "sentence", "maxWords": 8,
 "maxSeconds": 3.5, "lead": 0.1, "hold": 0.25, "reveal": {…}, "style":

@@ -2422,8 +2422,11 @@ impl PreviewEngine {
                             time,
                             by,
                         )?;
-                        let progress = tl::reveal::progress(rule, layer, time, layout.units.len());
-                        Some((tl::reveal::bands(&layout, progress, rule), rule.clone()))
+                        // A character or line walk times its units inside
+                        // the words the core timed.
+                        let rule = tl::reveal::per_unit(rule.clone(), &layout);
+                        let progress = tl::reveal::progress(&rule, layer, time, layout.units.len());
+                        Some((tl::reveal::bands(&layout, progress, &rule), rule))
                     });
 
                     match bands {

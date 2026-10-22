@@ -89,6 +89,98 @@ pub fn effective(rule: TextReveal, layer: &ProjectLayer) -> TextReveal {
     }
 }
 
+/// A synced reveal by character or by line with its times made per unit
+/// of `layout` (docs/SPEECH-SYNC.md §7.1). The core's times are per word
+/// (whitespace-separated, as the timeline matched them); the layout knows
+/// where each character or line sits in the text, so a character arrives
+/// at its share of its word's span — the letters of a word type across the
+/// time it is said — and a line with its first word, lit until its last
+/// word ends. A space arrives with the next word and is never the active
+/// unit. A word reveal, or times that do not match the text's words, are
+/// returned as they are (the position approximation in `progress`).
+pub fn per_unit(rule: TextReveal, layout: &promo_text::RevealLayout) -> TextReveal {
+    if !matches!(rule.by, RevealUnit::Character | RevealUnit::Line) {
+        return rule;
+    }
+    let Some(times) = rule.unit_times.as_deref() else {
+        return rule;
+    };
+    let text = layout.text.as_str();
+    let mut words: Vec<(usize, usize)> = Vec::new();
+    let mut open: Option<usize> = None;
+    for (i, c) in text.char_indices() {
+        match (c.is_whitespace(), open) {
+            (false, None) => open = Some(i),
+            (true, Some(start)) => {
+                words.push((start, i));
+                open = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(start) = open {
+        words.push((start, text.len()));
+    }
+    let units = &layout.units;
+    if words.is_empty() || words.len() != times.len() || units.is_empty() {
+        return rule;
+    }
+    let ends: Vec<f64> = match rule.unit_ends.as_deref() {
+        Some(ends) if ends.len() == times.len() => ends.to_vec(),
+        _ => (0..times.len())
+            .map(|k| times.get(k + 1).copied().unwrap_or(times[k]))
+            .collect(),
+    };
+    let next_word = |b: usize| words.iter().position(|w| w.0 >= b);
+    let chars = |a: usize, b: usize| text.get(a..b).map_or(0, |t| t.chars().count());
+    let mut unit_times = Vec::with_capacity(units.len());
+    let mut unit_ends = Vec::with_capacity(units.len());
+    for (i, unit) in units.iter().enumerate() {
+        let b = unit.byte.min(text.len());
+        let after = units
+            .get(i + 1)
+            .map_or(text.len(), |u| u.byte.clamp(b, text.len()));
+        let (at, end) = match rule.by {
+            RevealUnit::Line => {
+                let on_line: Vec<usize> = (0..words.len())
+                    .filter(|&k| words[k].0 >= b && (words[k].0 < after || i + 1 == units.len()))
+                    .collect();
+                match (on_line.first(), on_line.last()) {
+                    (Some(&f), Some(&l)) => (times[f], ends[l]),
+                    _ => match next_word(b) {
+                        Some(k) => (times[k], times[k]),
+                        None => (ends[ends.len() - 1], ends[ends.len() - 1]),
+                    },
+                }
+            }
+            _ => match words.iter().position(|w| w.0 <= b && b < w.1) {
+                Some(k) => {
+                    let (w0, w1) = words[k];
+                    let n = chars(w0, w1).max(1) as f64;
+                    let before = chars(w0, b) as f64;
+                    let own = chars(b, after.min(w1)).max(1) as f64;
+                    let span = (ends[k] - times[k]).max(0.0);
+                    (
+                        times[k] + span * before / n,
+                        times[k] + span * ((before + own) / n).min(1.0),
+                    )
+                }
+                None => match next_word(b) {
+                    Some(k) => (times[k], times[k]),
+                    None => (ends[ends.len() - 1], ends[ends.len() - 1]),
+                },
+            },
+        };
+        unit_times.push(at);
+        unit_ends.push(end);
+    }
+    TextReveal {
+        unit_times: Some(unit_times),
+        unit_ends: Some(unit_ends),
+        ..rule
+    }
+}
+
 /// The time of unit `i` of `units` in a list of `times` made for another
 /// count (a character or line reveal walks finer or coarser units than the
 /// words the times are of): the word the unit falls in, by position.
@@ -450,6 +542,75 @@ mod tests {
         serde_json::from_str(json).expect("reveal")
     }
 
+    fn spans(text: &str, bytes: &[usize], lines: &[u32]) -> promo_text::RevealLayout {
+        promo_text::RevealLayout {
+            text: text.into(),
+            units: bytes
+                .iter()
+                .zip(lines)
+                .enumerate()
+                .map(|(i, (b, l))| promo_text::UnitSpan {
+                    line: *l,
+                    start_x: i as f64 * 10.0,
+                    end_x: i as f64 * 10.0 + 8.0,
+                    byte: *b,
+                })
+                .collect(),
+            line_tops: vec![0.0, 50.0],
+            line_height: 50.0,
+            width: 200.0,
+            height: 100.0,
+        }
+    }
+
+    /// By character, a letter arrives at its share of its word's span and
+    /// is lit for its own share; a space waits for the next word and is
+    /// never the lit unit.
+    #[test]
+    fn a_synced_character_walks_inside_its_word() {
+        let r = rule(
+            r#"{"by":"character","mode":"highlight","unitTimes":[1.0,2.0],"unitEnds":[1.4,3.0]}"#,
+        );
+        // "abcd ef": four letters over 1.0–1.4, the space, two over 2.0–3.0.
+        let layout = spans("abcd ef", &[0, 1, 2, 3, 4, 5, 6], &[0; 7]);
+        let walked = per_unit(r, &layout);
+        let times = walked.unit_times.clone().unwrap();
+        let ends = walked.unit_ends.clone().unwrap();
+        let want = [1.0, 1.1, 1.2, 1.3, 2.0, 2.0, 2.5];
+        for (t, w) in times.iter().zip(want) {
+            assert!((t - w).abs() < 1e-9, "{times:?}");
+        }
+        assert!((ends[1] - 1.2).abs() < 1e-9 && (ends[6] - 3.0).abs() < 1e-9);
+        assert_eq!(ends[4], 2.0, "a space has no time of its own");
+        let layer = caption(Some(4.0));
+        let p = progress(&walked, &layer, 2.0 + 1.25, 7);
+        assert_eq!((p.shown, p.active), (3, Some(2)), "the third letter is lit");
+        let p = progress(&walked, &layer, 2.0 + 1.7, 7);
+        assert_eq!((p.shown, p.active), (4, None), "dark between the words");
+        let p = progress(&walked, &layer, 2.0 + 2.6, 7);
+        assert_eq!((p.shown, p.active), (7, Some(6)));
+    }
+
+    /// By line, a line arrives with its first word and is lit until its
+    /// last word ends; a word walk, or times for other words, are as given.
+    #[test]
+    fn a_synced_line_arrives_with_its_first_word() {
+        let r = rule(
+            r#"{"by":"line","mode":"highlight","unitTimes":[1.0,2.0,3.0],"unitEnds":[1.5,2.5,3.5]}"#,
+        );
+        let layout = spans("one two three", &[0, 8], &[0, 1]);
+        let walked = per_unit(r.clone(), &layout);
+        assert_eq!(walked.unit_times.as_deref(), Some(&[1.0, 3.0][..]));
+        assert_eq!(walked.unit_ends.as_deref(), Some(&[2.5, 3.5][..]));
+        let short = spans("one two", &[0, 4], &[0, 1]);
+        assert_eq!(per_unit(r.clone(), &short), r, "three times, two words");
+        let words = TextReveal {
+            by: RevealUnit::Word,
+            ..r.clone()
+        };
+        assert_eq!(per_unit(words.clone(), &layout), words);
+    }
+
     /// The pace comes from the caption's own life unless it is stated, so a
     /// reveal lands with the caption rather than at some unrelated moment —
     /// which matters because no word timings exist to sync to.
@@ -526,8 +687,10 @@ mod tests {
                     line: *line,
                     start_x: *a,
                     end_x: *b,
+                    byte: 0,
                 })
                 .collect(),
+            text: String::new(),
             line_tops: (0..lines).map(|i| i as f64 * 50.0).collect(),
             line_height: 50.0,
             width: 200.0,

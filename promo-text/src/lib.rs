@@ -429,6 +429,9 @@ pub struct UnitSpan {
     /// Raster-space x of the unit's left and right edges, padding included.
     pub start_x: f64,
     pub end_x: f64,
+    /// Byte offset in [`RevealLayout::text`] where the unit starts: what
+    /// times a character or a line inside the word it belongs to.
+    pub byte: usize,
 }
 
 /// The geometry a reveal needs: where every unit is, in a raster laid out for
@@ -440,6 +443,8 @@ pub struct UnitSpan {
 /// raster cache. The reveal is a crop of one stable picture.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RevealLayout {
+    /// The text laid out (trimmed): what each unit's `byte` counts in.
+    pub text: String,
     pub units: Vec<UnitSpan>,
     /// Raster-space y of each line's top, padding included.
     pub line_tops: Vec<f64>,
@@ -506,7 +511,13 @@ pub fn reveal_layout(
 
     let tracking = style.tracking;
     let inner_width = box_.width - padding * 2.0;
+    // Where each paragraph starts in `text`: a glyph's byte range counts in
+    // its paragraph (cosmic-text's buffer line), split at line feeds.
+    let paragraph_starts: Vec<usize> = std::iter::once(0)
+        .chain(text.match_indices('\n').map(|(i, _)| i + 1))
+        .collect();
     for (line, run) in buffer.layout_runs().enumerate() {
+        let base = paragraph_starts.get(run.line_i).copied().unwrap_or(0);
         // The same step the rasterizer applies, and the same nudge, so a
         // reveal wipes exactly the letters it is drawing rather than a box
         // beside them.
@@ -524,6 +535,7 @@ pub fn reveal_layout(
                 line: line as u32,
                 start_x: padding + aligned,
                 end_x: padding + aligned + run_width,
+                byte: base + run.glyphs.iter().map(|g| g.start).min().unwrap_or(0),
             }),
             RevealBy::Character => {
                 // By CLUSTER, not byte: a glyph carries the byte range of the
@@ -541,6 +553,7 @@ pub fn reveal_layout(
                             line: line as u32,
                             start_x: left,
                             end_x: right,
+                            byte: base + glyph.start,
                         });
                     } else if let Some(last) = units.last_mut() {
                         last.end_x = last.end_x.max(right);
@@ -575,6 +588,7 @@ pub fn reveal_layout(
                                 line: line as u32,
                                 start_x: left,
                                 end_x: right,
+                                byte: base + glyph.start,
                             })
                         }
                     }
@@ -587,6 +601,7 @@ pub fn reveal_layout(
     }
 
     Some(RevealLayout {
+        text: text.to_string(),
         units,
         line_tops,
         line_height: metrics.line_height as f64,
@@ -2539,6 +2554,26 @@ mod reveal_layout_tests {
         }
         let last = layout.units.last().unwrap();
         assert!(last.end_x <= layout.width, "inside the raster");
+    }
+
+    /// Every unit says where it starts in the text, across paragraphs: what
+    /// a synced reveal times a letter or a line inside its word by.
+    #[test]
+    fn units_carry_their_byte_offsets() {
+        let text = "ab cd\nef";
+        let chars =
+            reveal_layout(text, 1920.0, 1080.0, &style(), RevealBy::Character).expect("layout");
+        assert_eq!(chars.text, text);
+        let bytes: Vec<usize> = chars.units.iter().map(|u| u.byte).collect();
+        assert!(bytes.starts_with(&[0, 1]), "{bytes:?}");
+        assert!(bytes.contains(&3) && bytes.contains(&4), "{bytes:?}");
+        assert!(bytes.ends_with(&[6, 7]), "the second paragraph: {bytes:?}");
+        let lines = reveal_layout(text, 1920.0, 1080.0, &style(), RevealBy::Line).expect("layout");
+        let starts: Vec<usize> = lines.units.iter().map(|u| u.byte).collect();
+        assert_eq!(starts, vec![0, 6]);
+        let words = reveal_layout(text, 1920.0, 1080.0, &style(), RevealBy::Word).expect("layout");
+        let starts: Vec<usize> = words.units.iter().map(|u| u.byte).collect();
+        assert_eq!(starts, vec![0, 3, 6]);
     }
 
     /// A typewriter ticks per CLUSTER: an emoji or a combining accent is one
