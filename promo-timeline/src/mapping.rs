@@ -608,6 +608,73 @@ pub fn source_time_for_layer(
     }
 }
 
+/// Where a VIDEO layer reads its material at composition `time` — the one
+/// answer the engine draws from and the apps' export seeks by: the
+/// layer's clock through its transport (seeks, pauses), mapped through the
+/// resource it SHOWS then (a takeover's composition, not the one it
+/// started on — issue #11), its cut, and its beyond-end policy. `None` is
+/// `Hide` past the material: draw nothing. A layer whose resource is not in
+/// `resources` answers its material time.
+pub fn layer_source_time(
+    layer: &promo_model::ProjectLayer,
+    time: f64,
+    resources: &[ProjectResource],
+) -> Option<f64> {
+    let local = crate::transport::material_time(layer, crate::layer_local_time(layer, time));
+    let shown = crate::layer_resource_id(layer, time, resources)
+        .and_then(|id| resources.iter().find(|r| r.id == id));
+    match shown {
+        Some(res) => {
+            let view = resource_for_cut(res, layer.media_cut_id.as_deref());
+            source_time_for_layer(&view, local, layer.beyond_end)
+        }
+        None => Some(local),
+    }
+}
+
+#[cfg(test)]
+mod layer_source_time_tests {
+    use super::*;
+
+    /// Issue #11's shape: A (3.5 s) starts the layer, B (12 s) takes over
+    /// fresh at 3 s; a pause holds B from 9 to 10. B's clock is B's.
+    #[test]
+    fn a_takeover_maps_through_the_arriving_resource() {
+        let comp = |id: &str, d: f64| {
+            serde_json::json!({"id": id, "kind": "composition", "filename": "", "displayName": id,
+                "addedAt": 0, "duration": d, "imageCuts": [], "disabledAudioTrackIndices": [],
+                "composition": {"canvasWidth": 64, "canvasHeight": 64, "layers": []}})
+        };
+        let resources: Vec<ProjectResource> =
+            serde_json::from_value(serde_json::json!([comp("A", 3.5), comp("B", 12.0)])).unwrap();
+        let layer = |beyond: Option<&str>| -> promo_model::ProjectLayer {
+            let mut l = serde_json::json!({"id": "show", "name": "show", "sortIndex": 0, "kind": "video",
+                "isEnabled": true, "startTime": 0, "duration": 12, "resourceID": "A",
+                "keyframes": [{"id": "k1", "time": 3, "resourceID": "B", "sourceTime": 0},
+                              {"id": "k2", "time": 9, "playback": "pause"},
+                              {"id": "k3", "time": 10, "playback": "play"}]});
+            if let Some(b) = beyond {
+                l["beyondEnd"] = b.into();
+            }
+            serde_json::from_value(l).unwrap()
+        };
+        for beyond in [None, Some("loop")] {
+            let l = layer(beyond);
+            let at = |t: f64| layer_source_time(&l, t, &resources).unwrap();
+            assert!(
+                (at(2.0) - 2.0).abs() < 1e-9,
+                "{beyond:?}: A before the swap"
+            );
+            assert!(
+                (at(8.0) - 5.0).abs() < 1e-9,
+                "{beyond:?}: B-local 5, past A's 3.5"
+            );
+            assert!((at(9.5) - 6.0).abs() < 1e-9, "{beyond:?}: paused at 6");
+            assert!((at(11.5) - 7.5).abs() < 1e-9, "{beyond:?}: resumed");
+        }
+    }
+}
+
 #[cfg(test)]
 mod beyond_end_tests {
     use super::*;

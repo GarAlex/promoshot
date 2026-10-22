@@ -806,16 +806,6 @@ impl PreviewEngine {
         self.meta.resources.as_ref()?.iter().find(|r| &r.id == rid)
     }
 
-    /// The resource a layer's clock maps through at `time`: what it SHOWS
-    /// then — the composition a takeover swapped in, not the one it started
-    /// on. Mapping the arriving composition through the first one's trims
-    /// and length froze it at that length (issue #11), or looped it there.
-    fn clock_resource(&self, layer: &ProjectLayer, time: f64) -> Option<&ProjectResource> {
-        let resources = self.meta.resources.as_deref()?;
-        let showing = tl::layer_resource_id(layer, time, resources)?;
-        resources.iter().find(|r| r.id == showing)
-    }
-
     /// True when an image layer's device frame animates its tilt — the baked
     /// bitmap then changes over time, so the layer can't be cached as static
     /// content. Mirrors Swift `effectiveFrame(forCutID:)`: the layer's image
@@ -1022,13 +1012,11 @@ impl PreviewEngine {
             if layer.kind != ProjectLayerKind::Video || !tl::layer_is_visible(layer, time) {
                 continue;
             }
-            let local = tl::transport::material_time(layer, tl::layer_local_time(layer, time));
-            let source_time = match self.clock_resource(layer, time) {
-                Some(res) => {
-                    let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
-                    tl::source_time_for_layer(&view, local, layer.beyond_end).unwrap_or(local)
-                }
-                None => local,
+            // `Hide` past its material: nothing to fetch.
+            let Some(source_time) =
+                tl::layer_source_time(layer, time, self.meta.resources.as_deref().unwrap_or(&[]))
+            else {
+                continue;
             };
             let before = self.misses;
             let resource_id =
@@ -2617,21 +2605,18 @@ impl PreviewEngine {
             let source_time = if layer.kind == ProjectLayerKind::Video {
                 // The consumer's transport (rung 47): where the layer has
                 // its material — paused, sought, or running since its start.
-                let local =
-                    tl::transport::material_time(layer, tl::layer_local_time(layer, centre));
-                match self.clock_resource(layer, centre) {
-                    Some(res) => {
-                        // A layer naming a cut plays that sub-range; the
-                        // mapping is the same code either way.
-                        let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
-                        match tl::source_time_for_layer(&view, local, layer.beyond_end) {
-                            Some(time) => time,
-                            // `Hide`: the layer has outlived its material and
-                            // draws nothing rather than freezing on a still.
-                            None => continue,
-                        }
-                    }
-                    None => local,
+                // Through the resource it shows now (a takeover's
+                // composition), its cut and its beyond-end policy — the one
+                // mapping the apps' export seeks by too.
+                match tl::layer_source_time(
+                    layer,
+                    centre,
+                    self.meta.resources.as_deref().unwrap_or(&[]),
+                ) {
+                    Some(time) => time,
+                    // `Hide`: the layer has outlived its material and draws
+                    // nothing rather than freezing on a still.
+                    None => continue,
                 }
             } else if self.image_has_animated_tilt(layer) {
                 // Animated-tilt device frame: the baked bitmap varies with

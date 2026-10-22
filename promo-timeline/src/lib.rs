@@ -57,11 +57,11 @@ pub use layout::{
 };
 pub use mapping::{
     effective_speed, effective_trimmed_media_duration, effective_video_playback_duration,
-    extended_video_pauses, loop_folded, loop_period, output_time_for_source, playback_interval,
-    playback_video_trim_ranges, resource_for_cut, source_time_for_layer, source_time_for_local,
-    timeline_loop_period, timeline_output_time_for_source, timeline_source_time,
-    timeline_video_segment, video_segment, video_trim_ranges, ExtendedPause, PlaybackInterval,
-    VideoSegment,
+    extended_video_pauses, layer_source_time, loop_folded, loop_period, output_time_for_source,
+    playback_interval, playback_video_trim_ranges, resource_for_cut, source_time_for_layer,
+    source_time_for_local, timeline_loop_period, timeline_output_time_for_source,
+    timeline_source_time, timeline_video_segment, video_segment, video_trim_ranges, ExtendedPause,
+    PlaybackInterval, VideoSegment,
 };
 pub use motion::{path_document_polyline, path_polyline, point_along, point_along_range, Polyline};
 pub use musical::{
