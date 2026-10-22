@@ -19,7 +19,8 @@
       "chars": [
         0,
         9
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "cuts",
@@ -28,7 +29,8 @@
       "chars": [
         10,
         14
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "on",
@@ -37,7 +39,8 @@
       "chars": [
         15,
         17
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "the",
@@ -46,7 +49,8 @@
       "chars": [
         18,
         21
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "words",
@@ -55,7 +59,8 @@
       "chars": [
         22,
         27
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "Every",
@@ -64,7 +69,8 @@
       "chars": [
         29,
         34
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "slide",
@@ -73,7 +79,8 @@
       "chars": [
         35,
         40
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "changes",
@@ -82,7 +89,8 @@
       "chars": [
         41,
         48
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "with",
@@ -91,7 +99,8 @@
       "chars": [
         49,
         53
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "a",
@@ -100,7 +109,8 @@
       "chars": [
         54,
         55
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "sentence",
@@ -109,7 +119,8 @@
       "chars": [
         56,
         64
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "And",
@@ -118,7 +129,8 @@
       "chars": [
         66,
         69
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "the",
@@ -127,7 +139,8 @@
       "chars": [
         70,
         73
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "captions",
@@ -136,7 +149,8 @@
       "chars": [
         74,
         82
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "light",
@@ -145,7 +159,8 @@
       "chars": [
         83,
         88
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "up",
@@ -154,7 +169,8 @@
       "chars": [
         89,
         91
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "as",
@@ -163,7 +179,8 @@
       "chars": [
         92,
         94
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "each",
@@ -172,7 +189,8 @@
       "chars": [
         95,
         99
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "word",
@@ -181,7 +199,8 @@
       "chars": [
         100,
         104
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "is",
@@ -190,7 +209,8 @@
       "chars": [
         105,
         107
-      ]
+      ],
+      "prominence": 0.5
     },
     {
       "text": "said",
@@ -199,7 +219,8 @@
       "chars": [
         108,
         112
-      ]
+      ],
+      "prominence": 0.5
     }
   ],
   "sentences": [
