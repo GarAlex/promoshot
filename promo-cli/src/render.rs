@@ -31,6 +31,10 @@ struct HostState {
     cuts: HashMap<String, (String, Vec<u8>, u32, u32, i32)>,
     /// layer id → its clip, decoder opened only while it is on screen.
     videos: HashMap<String, VideoLayer>,
+    /// Opens a nested clip's decoder when the engine first asks for it.
+    registry: Registry,
+    /// The parent timeline's time of the frame being rendered.
+    now: f64,
 }
 
 struct VideoLayer {
@@ -53,6 +57,16 @@ struct VideoLayer {
     /// the SOURCE says BT.709 (a proxy keeps the source's pixels, not
     /// always its tags).
     flags: i32,
+    /// A layer inside a composition (or a slot on a nested model): its
+    /// window is on the COMPOSITION's clock, which a parent may run at any
+    /// offset, loop or swap in late. So it is not windowed by the parent's
+    /// time: its decoder opens when the engine asks for a frame and closes
+    /// once the engine has stopped asking (issue #12: a clip in a
+    /// composition shown from t=30 was never opened, its 0–10 window having
+    /// "passed" on the parent's clock).
+    nested: bool,
+    /// Parent time of the last frame the engine asked this clip for.
+    last_used: f64,
 }
 
 impl HostState {
@@ -61,7 +75,17 @@ impl HostState {
     /// Called before each rendered frame, so decoders track the playhead
     /// rather than the whole composition.
     fn retain_only_active(&mut self, time: f64, registry: &Registry) {
+        self.now = time;
         for layer in self.videos.values_mut() {
+            if layer.nested {
+                // Opened on demand by the provider; closed once unasked for
+                // a moment (either way along the playhead).
+                if layer.decoder.is_some() && (time - layer.last_used).abs() > 0.25 {
+                    layer.decoder = None;
+                    layer.last = None;
+                }
+                continue;
+            }
             // A small margin keeps a decoder alive across the dissolve into
             // the next clip rather than reopening it a frame later.
             let active = time >= layer.start - 0.25 && time <= layer.end + 0.25;
@@ -143,9 +167,21 @@ extern "C" fn provider(
 
     // A video layer: the engine has already mapped composition time through
     // the resource's trim, so `source_time` is where to read the clip.
-    let Some(video) = state.videos.get_mut(&id) else {
+    let HostState {
+        videos,
+        registry,
+        now,
+        ..
+    } = &mut *state;
+    let Some(video) = videos.get_mut(&id) else {
         return 1; // Not ours to draw — the engine skips the layer.
     };
+    if video.nested {
+        video.last_used = *now;
+        if video.decoder.is_none() {
+            video.decoder = registry.open_decoder(&video.path).ok();
+        }
+    }
     let Some(decoder) = video.decoder.as_mut() else {
         // Outside its window, or the file would not open.
         return 1;
@@ -253,6 +289,8 @@ impl Renderer {
             frames,
             cuts,
             videos,
+            registry: Registry::with_defaults(),
+            now: 0.0,
         }));
         let user = &*state as *const Mutex<HostState> as *mut c_void;
         let mut engine = PreviewEngine::new(project.meta.clone(), provider, user, 512 << 20)
@@ -361,6 +399,16 @@ impl Renderer {
         let mut frames = HashMap::new();
         let mut cuts = HashMap::new();
         let mut videos = HashMap::new();
+        // The project's own layers (stage members included): every other
+        // layer `all_layers` walks lives inside a composition.
+        let top: std::collections::HashSet<&str> = project
+            .meta
+            .layers
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .map(|l| l.id.as_str())
+            .collect();
         // Colour look-up tables: every `.cube` resource becomes a strip the
         // engine asks for by resource id (under a synthetic layer) — the
         // same still path an image takes.
@@ -448,6 +496,8 @@ impl Renderer {
                             last: None,
                             proxied,
                             flags: Self::colour_flags(&source),
+                            nested: !top.contains(layer.id.as_str()),
+                            last_used: f64::NEG_INFINITY,
                         },
                     );
                 }
@@ -483,6 +533,8 @@ impl Renderer {
                         last: None,
                         proxied,
                         flags: Self::colour_flags(&source),
+                        nested: !top.contains(layer.id.as_str()),
+                        last_used: f64::NEG_INFINITY,
                     },
                 );
                 continue;
@@ -3550,6 +3602,81 @@ mod tests {
                 );
             }
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Issue #12: a clip inside a composition is windowed on the
+    /// COMPOSITION's clock. C holds a 4 s clip at C-local 0–4; the outer
+    /// layer starts on C0 and swaps to C at t=12. The host windowed the
+    /// clip's decoder by the PARENT time, so from t=12 it was "past" and the
+    /// clip never drew — only C's caption did.
+    #[test]
+    fn a_nested_clip_plays_in_a_late_swapped_composition() {
+        let dir = std::env::temp_dir().join(format!("promo-nested-clip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let ok = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg("testsrc2=size=320x180:rate=30:duration=4")
+            .args(["-pix_fmt", "yuv420p"])
+            .arg(dir.join("Resources/clip.mp4"))
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok || promo_gpu::gpu_for_test().is_none() {
+            return;
+        }
+        let json = r#"{"id":"R2","name":"R2","createdAt":0,"state":"recorded","minReaderVersion":50,"trimStart":0,"trimEnd":20,"videoDuration":20,"subtitles":[],
+          "compositionSettings":{"canvasWidth":640,"canvasHeight":360,"backgroundColorHex":"222222","fps":30},
+          "resources":[
+            {"id":"clip","kind":"video","filename":"clip.mp4","displayName":"clip","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],"videoNaturalWidth":320,"videoNaturalHeight":180,"duration":4},
+            {"id":"C0","kind":"composition","filename":"","displayName":"C0","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],"pixelWidth":640,"pixelHeight":360,"duration":30,
+             "composition":{"canvasWidth":640,"canvasHeight":360,"layers":[
+               {"id":"c0","name":"c0","sortIndex":0,"kind":"caption","isEnabled":true,"startTime":0,"duration":30,"captionText":"C0","captionStyle":{"fontSize":40,"placement":{"anchor":"topLeft","offset":[40,40]},"backgroundOpacity":0},"keyframes":[]}]}},
+            {"id":"C","kind":"composition","filename":"","displayName":"C","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],"pixelWidth":640,"pixelHeight":360,"duration":8,
+             "composition":{"canvasWidth":640,"canvasHeight":360,"layers":[
+               {"id":"nclip","name":"clip","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":4,"resourceID":"clip",
+                "keyframes":[{"id":"kc","time":0,"placement":{"height":300,"anchor":"topLeft","offset":[20,30]}}]},
+               {"id":"lbl","name":"lbl","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":0,"duration":8,"captionText":"C local","captionStyle":{"fontSize":40,"placement":{"anchor":"topLeft","offset":[40,300]},"backgroundOpacity":0},"keyframes":[]}]}}],
+          "layers":[{"id":"show","name":"show","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":16,"resourceID":"C0",
+            "keyframes":[{"id":"k0","time":0,"placement":{"height":360,"anchor":"topLeft","offset":[0,0]}},
+                         {"id":"k1","time":12,"resourceID":"C","sourceTime":0}]}]}"#;
+        std::fs::write(dir.join("metadata.json"), json).unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mut renderer = Renderer::new(&project, 640, 360).expect("renderer");
+        // testsrc2 is saturated colour; everything else here is grey/white.
+        let colourful = |frame: &[u8]| {
+            frame
+                .chunks_exact(4)
+                .filter(|p| {
+                    let (lo, hi) = (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2]));
+                    hi as i32 - lo as i32 > 80
+                })
+                .count()
+        };
+        let before = renderer.frame_bgra(2.0).expect("frame");
+        assert_eq!(colourful(&before), 0, "C0 shows no clip");
+        let mut shown = Vec::new();
+        for t in [13.0, 14.0, 15.5] {
+            let frame = renderer.frame_bgra(t).expect("frame");
+            let n = colourful(&frame);
+            assert!(
+                n > 20_000,
+                "t={t}: C-local {} — the nested clip draws ({n} colourful px)",
+                t - 12.0
+            );
+            shown.push(frame);
+        }
+        assert_ne!(
+            shown[0], shown[2],
+            "the clip plays: C-local 1 and 3.5 differ"
+        );
+        renderer.frame_bgra(18.0).expect("frame");
+        assert_eq!(
+            renderer.open_decoders(),
+            0,
+            "once nothing asks for it, the nested clip's decoder closes"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
