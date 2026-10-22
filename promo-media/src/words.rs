@@ -46,6 +46,15 @@ const STRAY_PAUSE: usize = 12;
 /// costs this much.
 const HELD_PAUSE: usize = 8;
 const SWALLOWED_FRAME_COST: f64 = 0.12;
+/// How much quiet a word may hold, free, at each inner joint — a hyphen
+/// between letters or digits ("small-team", "GPT-Rosalind"): a voice may
+/// pause there (edge-tts does) where it never pauses inside a plain word
+/// (issue #16).
+const JOINT_PAUSE: usize = 40;
+/// What each of those frames costs: less than a swallowed pause, more
+/// than nothing, so a joint holds a pause the voice made, not one it
+/// borrowed from the words around it.
+const JOINT_FRAME_COST: f64 = 0.08;
 const MISPLACED_REACH: usize = 3;
 const DOUBTFUL: f64 = 0.3;
 
@@ -515,6 +524,12 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
         })
         .collect();
     let total_units: f64 = units.iter().sum();
+    // Quiet each word may hold at its inner joints, in frames.
+    let joint_allowance: Vec<usize> = tokens
+        .words
+        .iter()
+        .map(|w| joints(&w.text) * JOINT_PAUSE)
+        .collect();
     let expected: Vec<f64> = units
         .iter()
         .map(|u| (u * speech_frames as f64 / total_units).max(3.0))
@@ -599,8 +614,11 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
         let ratio = libm::log(len / expected[i]);
         let mut cost = ratio * ratio / (2.0 * SIGMA * SIGMA);
         cost += 0.5 * ((nuc[b] - nuc[s]) as f64 - syllables[i]).abs();
-        cost += 2.0 * (quiet[b] - quiet[s]) as f64 / len;
-        cost += SWALLOWED_FRAME_COST * (held[b] - held[s]) as f64;
+        let allowed = joint_allowance[i];
+        let held_in = held[b] - held[s];
+        let free = held_in.min(allowed);
+        cost += 2.0 * (quiet[b] - quiet[s] - free) as f64 / len;
+        cost += SWALLOWED_FRAME_COST * (held_in - free) as f64 + JOINT_FRAME_COST * free as f64;
         let span = b - s;
         cost += 0.15 * (quiet_ahead[s].min(span) + quiet_behind[b].min(span)) as f64;
         cost += edge[s] + edge[b];
@@ -871,6 +889,19 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
         aligner_version: Some(ALIGNER_VERSION),
         extra,
     }
+}
+
+/// Inner joints a voice may pause at: hyphens (or slashes) with a letter
+/// or digit on each side — "small-team" has one, "-" alone none.
+fn joints(word: &str) -> usize {
+    let chars: Vec<char> = word.chars().collect();
+    (1..chars.len().saturating_sub(1))
+        .filter(|&i| {
+            matches!(chars[i], '-' | '\u{2010}' | '\u{2011}' | '/')
+                && chars[i - 1].is_alphanumeric()
+                && chars[i + 1].is_alphanumeric()
+        })
+        .count()
 }
 
 /// A take too short for its words: even shares, confidence 0.1.

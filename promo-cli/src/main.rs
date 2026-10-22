@@ -44,12 +44,15 @@ USAGE:
     promo words   <audio-file | project-dir> [--resource <id>]
                   [--script <text> | --script-file <f>] [--json] [--timeline]
                   [--refresh] [--no-analyse] [--transcribe openai|elevenlabs [--check]]
-                  [--prune]
+                  [--import <timings.json> [--provider <name>]] [--prune]
         when each word of a take is said, and its sentences: the record in
         the project's Resources/.words/ (provider or local-voice timing),
         else the take aligned to its script, offline, and stored. On an
         audio file, the script is given with --script. --transcribe spends
-        the person's key and is never automatic (--check says the cost)
+        the person's key and is never automatic (--check says the cost).
+        --import stores word timings the voice handed over (edge-tts
+        WordBoundary events, or [{\"text\",\"start\",\"end\"}] in seconds) as the
+        take's provider timing (--provider names it; edge-tts is guessed)
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -662,6 +665,8 @@ fn words(args: &[String]) -> Result<String, String> {
     let mut resource: Option<String> = None;
     let mut script: Option<String> = None;
     let mut transcribe: Option<String> = None;
+    let mut import: Option<PathBuf> = None;
+    let mut provider: Option<String> = None;
     let (mut json, mut refresh, mut no_analyse, mut timeline, mut check, mut prune) =
         (false, false, false, false, false, false);
     let mut i = 0;
@@ -692,6 +697,14 @@ fn words(args: &[String]) -> Result<String, String> {
                 script = Some(std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?);
                 i += 1;
             }
+            "--import" => {
+                import = Some(PathBuf::from(value()?));
+                i += 1;
+            }
+            "--provider" => {
+                provider = Some(value()?);
+                i += 1;
+            }
             "--transcribe" => {
                 let provider = value()?;
                 if !promo_speech::transcribe::TRANSCRIBERS.contains(&provider.as_str()) {
@@ -713,6 +726,25 @@ fn words(args: &[String]) -> Result<String, String> {
     if check && transcribe.is_none() {
         return Err("words: --check goes with --transcribe (it says what one would cost)".into());
     }
+    if provider.is_some() && import.is_none() {
+        return Err("words: --provider names who timed an --import".into());
+    }
+    if import.is_some() && (transcribe.is_some() || refresh || no_analyse) {
+        return Err(
+            "words: --import is the take's timing — not with --transcribe, --refresh or \
+             --no-analyse"
+                .into(),
+        );
+    }
+    // Word timings a voice handed over (issue #16): read and matched onto
+    // the script, as the provider's.
+    let imported = |said: &str, seconds: f64| -> Result<TakeTiming, String> {
+        let file = import.as_ref().expect("asked");
+        let text =
+            std::fs::read_to_string(file).map_err(|e| format!("words: {}: {e}", file.display()))?;
+        promo_speech::timing::imported_record(said, &text, provider.as_deref(), seconds)
+            .map_err(|e| format!("words: {}: {e}", file.display()))
+    };
     let probe = |file: &Path| -> Result<f64, String> {
         promo_media::probe_stream(file)
             .map(|info| info.duration_s)
@@ -783,7 +815,18 @@ fn words(args: &[String]) -> Result<String, String> {
                 .unwrap_or_else(|| probe(&take.file))
         };
         let language = promo_cli::project::Project::take_language(&meta, &take.id);
-        let (mut timing, cached, stale) = if transcribe.is_some() {
+        let (mut timing, cached, stale) = if import.is_some() {
+            let mut timing = imported(&take.script, length()?)?;
+            if let Ok(source) = promo_model::media_cache::source_of(&take.file) {
+                timing.audio = source;
+            }
+            let timing = promo_model::word_cache::store(&path, &take.file, timing)?;
+            notes.push(format!(
+                "imported as {} timing — it stands until the take changes",
+                timing.source.as_text()
+            ));
+            (timing, false, false)
+        } else if transcribe.is_some() {
             match transcribed(&take.file, &take.script, length()?)? {
                 Err(said) => return Ok(said),
                 Ok(timing) => {
@@ -838,7 +881,11 @@ fn words(args: &[String]) -> Result<String, String> {
         if prune || timeline {
             return Err("words: --prune and --timeline need a project".into());
         }
-        let timing = if transcribe.is_some() {
+        let timing = if import.is_some() {
+            let mut timing = imported(&said, probe(&path)?)?;
+            timing.audio = promo_model::media_cache::source_of(&path).map_err(words_err)?;
+            timing
+        } else if transcribe.is_some() {
             match transcribed(&path, &said, probe(&path)?)? {
                 Err(said) => return Ok(said),
                 Ok(timing) => timing,

@@ -152,7 +152,10 @@ its defaults are the source of the first, the person of the second.
      bought, else the take aligned to its script offline (no model, no
      key). `file` + `script` for a bare recording; `timeline` adds the
      times on the output timeline. `transcribe` (openai|elevenlabs) spends
-     the person's key — only when asked, `check` first. Times can then
+     the person's key — only when asked, `check` first. A recording voiced
+     elsewhere with word timings (edge-tts WordBoundary events, or
+     [{text,start,end}]) hands them over with `import` (a file) — exact
+     karaoke, no alignment. Times can then
      say `{"word": 12, "of": "intro"}` or `{"sentence": 2, "of": "intro"}`,
      a layer `during` a sentence, a caption reveal `sync` on the take,
      `captions` on the voice-over layer, a sequence `per` sentence — the

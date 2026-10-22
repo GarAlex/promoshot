@@ -461,7 +461,8 @@ pub fn tools(host: Host) -> Vec<Value> {
                 take aligned offline and stored. `file` + `script`, or `project` + \
                 `resource` (default: the only take). `refresh` aligns again; \
                 `timeline` adds output times; `transcribe` (openai|elevenlabs) spends \
-                the person's key, only when asked — `check` says the cost.",
+                the person's key, only when asked — `check` says the cost. `import`: a voice's \
+                own timings file (edge-tts WordBoundary, [{text,start,end}]).",
             "inputSchema": { "type": "object",
                 "properties": {
                     "file": { "type": "string" },
@@ -471,7 +472,9 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "refresh": { "type": "boolean" },
                     "timeline": { "type": "boolean" },
                     "transcribe": { "type": "string" },
-                    "check": { "type": "boolean" }
+                    "check": { "type": "boolean" },
+                    "import": { "type": "string" },
+                    "provider": { "type": "string" }
                 },
                 "required": [] }
         }),

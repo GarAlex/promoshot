@@ -668,6 +668,134 @@ fn interpolate(script: &Script, words: &mut [Option<(f64, f64)>], duration: f64)
     filled
 }
 
+// ---------------------------------------------------------------------------
+// Imported: word timings a voice handed over for a recording (issue #16).
+
+/// One tick of an edge-tts `WordBoundary` event: 100 ns.
+const TICK: f64 = 1e-7;
+
+/// The words in a timing file a voice wrote beside its audio, and the
+/// provider its shape names (`edge-tts` for `WordBoundary` events). Read:
+/// a JSON array, `{"words": [...]}`, or JSON Lines, of either
+/// `{"text", "start", "end"?}` in seconds (`"word"` for `"text"` too) or
+/// edge-tts `{"type": "WordBoundary", "offset", "duration", "text"}` in
+/// 100-ns ticks; other edge-tts events (`SentenceBoundary`, audio) are
+/// skipped.
+pub fn imported_words(text: &str) -> Result<(Vec<SpokenWord>, Option<&'static str>), String> {
+    let items: Vec<Value> = match serde_json::from_str::<Value>(text.trim()) {
+        Ok(Value::Array(items)) => items,
+        Ok(Value::Object(o)) => match o.get("words") {
+            Some(Value::Array(items)) => items.clone(),
+            _ => vec![Value::Object(o)],
+        },
+        Ok(_) => return Err("expected a list of words".into()),
+        Err(_) => text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .enumerate()
+            .map(|(n, l)| serde_json::from_str(l).map_err(|e| format!("line {}: {e}", n + 1)))
+            .collect::<Result<_, _>>()?,
+    };
+    let mut words = Vec::new();
+    let mut edge = false;
+    for (n, item) in items.iter().enumerate() {
+        let at = |why: &str| format!("word {}: {why}", n + 1);
+        let Some(o) = item.as_object() else {
+            return Err(at("not an object"));
+        };
+        if let Some(kind) = o.get("type").and_then(Value::as_str) {
+            if kind != "WordBoundary" {
+                continue;
+            }
+        }
+        let said = o
+            .get("text")
+            .or_else(|| o.get("word"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| at("no \"text\""))?;
+        let number = |key: &str| o.get(key).and_then(Value::as_f64).filter(|v| v.is_finite());
+        let (start, end) = if let Some(offset) = number("offset") {
+            edge = true;
+            let start = offset * TICK;
+            (start, number("duration").map(|d| start + d.max(0.0) * TICK))
+        } else {
+            let start = number("start")
+                .ok_or_else(|| at("needs \"start\" (seconds) or \"offset\" (100-ns ticks)"))?;
+            (start, number("end"))
+        };
+        if start < 0.0 || end.is_some_and(|e| e < start) {
+            return Err(at("its times run backwards"));
+        }
+        words.push(SpokenWord {
+            text: said.to_string(),
+            start,
+            end,
+            chars: None,
+        });
+    }
+    if words.is_empty() {
+        return Err("no words in it".into());
+    }
+    Ok((words, edge.then_some("edge-tts")))
+}
+
+/// The record of a recording saying `script_text`, from word timings its
+/// voice handed over (`imported_words`): matched onto the script's words
+/// by spelling, as a transcription is, and stored as `provider:<name>` —
+/// authoritative, so it stands until the take changes. A file that does
+/// not say this script is refused rather than stored.
+pub fn imported_record(
+    script_text: &str,
+    file_text: &str,
+    provider: Option<&str>,
+    duration: f64,
+) -> Result<TakeTiming, String> {
+    let (words, guessed) = imported_words(file_text)?;
+    let name = provider.or(guessed).unwrap_or("import");
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err(format!(
+            "provider `{name}`: letters, digits, '-', '_' or '.'"
+        ));
+    }
+    let count = words.len();
+    // Does the file say this script? Its words, spelled as the script's
+    // (or as pieces of them, "small" of "small-team") — three in four at
+    // least, or it is some other take's.
+    let fold = |t: &str| -> Vec<String> {
+        t.split(|c: char| !c.is_alphanumeric())
+            .filter(|p| !p.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let known: std::collections::BTreeSet<String> = fold(script_text).into_iter().collect();
+    let said: Vec<String> = words.iter().flat_map(|w| fold(&w.text)).collect();
+    let found = said.iter().filter(|w| known.contains(*w)).count();
+    if said.is_empty() || found * 4 < said.len() * 3 {
+        return Err(format!(
+            "these {count} words do not say the take's script ({found} of {} spelled as it \
+             is) — is it the right file, or the right take?",
+            said.len()
+        ));
+    }
+    let spoken = Spoken {
+        words,
+        source: TimingSource::Provider(name.to_string()),
+        confidence: 1.0,
+        against: String::new(),
+    };
+    let mut timing = record(script_text, &spoken, duration);
+    let guessed_words = timing.words.iter().filter(|w| w.interpolated).count();
+    timing.extra.insert(
+        "imported".into(),
+        serde_json::json!({ "words": count, "interpolated": guessed_words }),
+    );
+    Ok(timing)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1024,5 +1152,84 @@ mod tests {
         assert_eq!(map[5], Some(6), "the space after the dropped comma");
         assert_eq!(map[10], Some(11));
         assert_eq!(map[11], None, "an added character maps nowhere");
+    }
+
+    /// Issue #16: edge-tts's WordBoundary events (100-ns ticks) become the
+    /// take's record, matched onto the script — a hyphenated word the voice
+    /// reported in two pieces is one word from the first's start to the
+    /// last's end — and stored as the provider's, authoritative.
+    #[test]
+    fn edge_tts_boundaries_become_the_record() {
+        let script = "We are a small-team lab.";
+        let events = r#"[
+            {"type": "WordBoundary", "offset": 1000000, "duration": 2000000, "text": "We"},
+            {"type": "WordBoundary", "offset": 3500000, "duration": 1500000, "text": "are"},
+            {"type": "WordBoundary", "offset": 5000000, "duration": 500000, "text": "a"},
+            {"type": "WordBoundary", "offset": 6000000, "duration": 3000000, "text": "small"},
+            {"type": "WordBoundary", "offset": 11000000, "duration": 3000000, "text": "team"},
+            {"type": "SentenceBoundary", "offset": 0, "duration": 0, "text": "We are"},
+            {"type": "WordBoundary", "offset": 15000000, "duration": 4000000, "text": "lab"}
+        ]"#;
+        let timing = imported_record(script, events, None, 2.5).unwrap();
+        assert_eq!(timing.source, TimingSource::Provider("edge-tts".into()));
+        assert!(timing.source.is_authoritative());
+        let got: Vec<(&str, f64, f64)> = timing
+            .words
+            .iter()
+            .map(|w| (w.text.as_str(), w.start, w.end))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("We", 0.1, 0.3),
+                ("are", 0.35, 0.5),
+                ("a", 0.5, 0.55),
+                ("small-team", 0.6, 1.4),
+                ("lab", 1.5, 1.9),
+            ]
+        );
+        assert_eq!(timing.extra["imported"]["words"], 6);
+        assert_eq!(timing.confidence, 1.0);
+    }
+
+    /// Seconds as a list, a `words` object or JSON Lines, under a provider
+    /// the person names; a file for another script, or a bad shape, is
+    /// refused with the reason.
+    #[test]
+    fn imported_seconds_and_refusals() {
+        let script = "Primes never end.";
+        let lines = "{\"text\": \"Primes\", \"start\": 0.2, \"end\": 0.6}\n\
+                     {\"word\": \"never\", \"start\": 0.7}\n\
+                     {\"text\": \"end.\", \"start\": 1.1, \"end\": 1.4}\n";
+        let timing = imported_record(script, lines, Some("kokoro"), 2.0).unwrap();
+        assert_eq!(timing.source.as_text(), "provider:kokoro");
+        assert_eq!(
+            timing.words[1].end, 1.1,
+            "an open end runs to the next start"
+        );
+        let wrapped = r#"{"words": [{"text": "Primes", "start": 0.2}, {"text": "never", "start": 0.7},
+                         {"text": "end", "start": 1.1}]}"#;
+        assert_eq!(
+            imported_record(script, wrapped, None, 2.0)
+                .unwrap()
+                .source
+                .as_text(),
+            "provider:import"
+        );
+        let other = r#"[{"text": "Something", "start": 0.1}, {"text": "else", "start": 0.4},
+                        {"text": "entirely", "start": 0.8}]"#;
+        assert!(imported_record(script, other, None, 2.0)
+            .unwrap_err()
+            .contains("do not say"));
+        assert!(imported_words("[]").unwrap_err().contains("no words"));
+        assert!(imported_words(r#"[{"text": "a"}]"#)
+            .unwrap_err()
+            .contains("start"));
+        assert!(imported_words(r#"[{"text": "a", "start": 2, "end": 1}]"#)
+            .unwrap_err()
+            .contains("backwards"));
+        assert!(imported_record(script, wrapped, Some("bad name"), 2.0)
+            .unwrap_err()
+            .contains("provider"));
     }
 }

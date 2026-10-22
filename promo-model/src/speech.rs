@@ -24,11 +24,15 @@ pub const TIMING_VERSION: u32 = 1;
 /// older aligner is aligned again (§1.3). Here, beside the record, so a
 /// reader that never aligns (the apps' cache check) knows it too.
 /// 2: pauses belong at the script's punctuation (issue #10).
-pub const ALIGNER_VERSION: u32 = 2;
+/// 3: a voice may pause at a word's inner hyphen, and capitals with no
+/// vowel are spelled out (issue #16).
+pub const ALIGNER_VERSION: u32 = 3;
 
 /// The version of the syllable estimate (`source: "estimate"`), written as
 /// an estimate record's `alignerVersion`: a record from an older estimate
 /// is estimated again, as an older aligner's is re-aligned.
+/// (Issue #16's spelled-out capitals changed the estimate only for words
+/// like "GPT"; a record from before stands — an estimate is a guess.)
 pub const ESTIMATE_VERSION: u32 = 1;
 
 /// Where a take's word times came from.

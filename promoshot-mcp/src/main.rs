@@ -449,6 +449,15 @@ where
             if args.get("check").and_then(Value::as_bool) == Some(true) {
                 return Err("`check` goes with `transcribe`".into());
             }
+            // Word timings the voice handed over (issue #16): a file under
+            // the served root, like any file this server reads.
+            if let Some(file) = args.get("import").and_then(Value::as_str) {
+                media_fence(args, config)?;
+                argv.extend(["--import".into(), file.to_string()]);
+            }
+            if let Some(name) = args.get("provider").and_then(Value::as_str) {
+                argv.extend(["--provider".into(), name.to_string()]);
+            }
             run(config, &argv)
         }
         "promo_transcribe" => {
@@ -722,8 +731,10 @@ fn media_fence(args: &Value, config: &Config) -> Result<(), String> {
     };
     let root = std::fs::canonicalize(root).map_err(|e| format!("--root: {e}"))?;
     let mut named: Vec<&str> = Vec::new();
-    if let Some(file) = args.get("file").and_then(Value::as_str) {
-        named.push(file);
+    for key in ["file", "import"] {
+        if let Some(file) = args.get(key).and_then(Value::as_str) {
+            named.push(file);
+        }
     }
     if let Some(list) = args.get("files").and_then(Value::as_array) {
         named.extend(list.iter().filter_map(Value::as_str));

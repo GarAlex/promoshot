@@ -144,6 +144,15 @@ fn word_syllables(word: &str, english: bool) -> f64 {
     if lower.is_empty() {
         return 0.0;
     }
+    // "GPT", "LLM", "HTML": capitals with no vowel are spelled out, a
+    // syllable a letter ("W" three) — issue #16.
+    if english
+        && (2..=5).contains(&word.chars().count())
+        && word.chars().all(|c| c.is_ascii_uppercase())
+        && !word.chars().any(|c| "AEIOUY".contains(c))
+    {
+        return word.chars().map(|c| if c == 'W' { 3.0 } else { 1.0 }).sum();
+    }
     let mut groups = 0usize;
     let mut previous = false;
     for &c in &lower {
@@ -628,6 +637,19 @@ mod tests {
         assert_eq!(syl("wanted"), 2.0);
         assert_eq!(syl("narration"), 3.0);
         assert_eq!(syl("Some footage tells the story on its own."), 10.0);
+    }
+
+    /// Capitals with no vowel are spelled out, a syllable a letter (issue
+    /// #16): "GPT-Rosalind" is gee-pee-tee ro-sa-lind; NASA and plain
+    /// words are read as words.
+    #[test]
+    fn vowelless_capitals_are_spelled() {
+        assert_eq!(syl("GPT"), 3.0);
+        assert_eq!(syl("GPT-Rosalind"), 6.0);
+        assert_eq!(syl("WWW"), 9.0);
+        assert_eq!(syl("NASA"), 2.0);
+        assert_eq!(syl("Hmm"), 1.0);
+        assert_eq!(count("GPT", Some("de")).0, 1.0, "English only");
     }
 
     /// Numbers are said, not read as digits: 2026 is a year, 1,250 one

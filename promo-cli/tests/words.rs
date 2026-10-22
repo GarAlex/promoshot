@@ -327,3 +327,69 @@ fn a_project_with_no_take_says_how_to_time_one() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Issue #16: word timings the voice handed over — edge-tts WordBoundary
+/// events, offsets and durations in 100-ns ticks — become the take's
+/// record as the provider's: exact times, authoritative (a later open or
+/// `--refresh` keeps them), and a file for some other script is refused
+/// with nothing stored.
+#[test]
+fn imported_boundaries_are_the_takes_timing() {
+    let (_, script) = synthetic();
+    let dir = folder("import", &script);
+    let golden: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixtures().join("synthetic-60w.json")).unwrap(),
+    )
+    .unwrap();
+    let truth = golden["words"].as_array().unwrap();
+    let events: Vec<Value> = truth
+        .iter()
+        .map(|w| {
+            let (s, e) = (w["start"].as_f64().unwrap(), w["end"].as_f64().unwrap());
+            json!({"type": "WordBoundary", "offset": (s * 1e7).round() as i64,
+                   "duration": ((e - s) * 1e7).round() as i64,
+                   "text": w["text"].as_str().unwrap().trim_matches(|c: char| !c.is_alphanumeric())})
+        })
+        .collect();
+    let file = dir.join("boundaries.json");
+    std::fs::write(&file, Value::Array(events).to_string()).unwrap();
+
+    let wrong = dir.join("other.json");
+    std::fs::write(
+        &wrong,
+        r#"[{"text": "Nothing", "start": 0.1}, {"text": "here", "start": 0.5}, {"text": "matches", "start": 0.9}]"#,
+    )
+    .unwrap();
+    let err = fail(&[
+        "words",
+        dir.to_str().unwrap(),
+        "--import",
+        wrong.to_str().unwrap(),
+    ]);
+    assert!(err.contains("do not say"), "{err}");
+    assert_eq!(records(&dir), 0, "nothing stored");
+
+    let got = words(&dir, &["--import", file.to_str().unwrap()]);
+    assert_eq!(got["source"], "provider:edge-tts");
+    let words_got = got["words"].as_array().unwrap();
+    assert_eq!(words_got.len(), truth.len());
+    for (w, t) in words_got.iter().zip(truth) {
+        assert!(
+            (w["start"].as_f64().unwrap() - t["start"].as_f64().unwrap()).abs() < 1e-6,
+            "{w} vs {t}"
+        );
+    }
+    assert_eq!(records(&dir), 1);
+    // It stands: the next ask reads it from the cache, and --refresh will
+    // not align over it.
+    let again = words(&dir, &[]);
+    assert_eq!(
+        (again["source"].clone(), again["fromCache"].clone()),
+        (json!("provider:edge-tts"), json!(true))
+    );
+    let err = fail(&["words", dir.to_str().unwrap(), "--refresh"]);
+    assert!(err.contains("authoritative"), "{err}");
+    let err = fail(&["words", dir.to_str().unwrap(), "--provider", "x"]);
+    assert!(err.contains("--import"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

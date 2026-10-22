@@ -4,7 +4,7 @@
 mod support;
 
 use promo_media::words::{AlignOptions, WordAligner};
-use support::speech_synth::{synthetic_speech, SCRIPT};
+use support::speech_synth::{synthetic_speech, synthetic_speech_pausing, SCRIPT};
 
 fn syllables(script: &str) -> Vec<usize> {
     let tokens = promo_model::speech::tokenize(script);
@@ -372,4 +372,37 @@ fn a_pause_away_from_its_comma_reads_doubtful() {
         "{:?}",
         agreed.words
     );
+}
+
+/// Issue #16: a voice that pauses at a hyphen ("small-team", "one-shot" —
+/// edge-tts does) keeps the hyphenated word whole around its pause, and
+/// the words after it on time: every start within 40 ms of the truth.
+#[test]
+fn a_pause_at_a_hyphen_stays_inside_its_word() {
+    let script = "We are a small-team lab, and our one-shot test was self-made by the crew. \
+                  Then it ran all night, and nobody slept.";
+    let counts = syllables(script);
+    let tokens = promo_model::speech::tokenize(script);
+    // Half a second after each hyphenated word's first part (the old
+    // aligner pushed "a" 90 ms early to keep the pause out of the word).
+    let inner: Vec<(usize, usize, f64)> = tokens
+        .words
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| w.text.contains('-'))
+        .map(|(i, _)| (i, 1, 0.5))
+        .collect();
+    assert_eq!(inner.len(), 3);
+    let (samples, truth) = synthetic_speech_pausing(script, &counts, 24_000.0, &inner);
+    let mut aligner = WordAligner::new(1, 24_000.0, script, AlignOptions::default()).unwrap();
+    aligner.push(&samples);
+    let timing = aligner.finish();
+    for (w, (start, _)) in timing.words.iter().zip(&truth) {
+        assert!(
+            (w.start - start).abs() <= 0.04,
+            "{} starts {:.3}, truly {start:.3}",
+            w.text,
+            w.start
+        );
+    }
 }

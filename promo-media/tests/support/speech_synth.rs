@@ -56,6 +56,17 @@ pub fn synthetic_speech(
     syllables: &[usize],
     rate: f64,
 ) -> (Vec<f32>, Vec<(f64, f64)>) {
+    synthetic_speech_pausing(script, syllables, rate, &[])
+}
+
+/// The same, with a pause INSIDE some words: `(word, after_syllable,
+/// seconds)` — a voice that stops at "small-team"'s hyphen.
+pub fn synthetic_speech_pausing(
+    script: &str,
+    syllables: &[usize],
+    rate: f64,
+    inner: &[(usize, usize, f64)],
+) -> (Vec<f32>, Vec<(f64, f64)>) {
     let words = syllables.len();
     let lead = 0.35;
     // Plan the bursts first: (start, length, f1, f2, amplitude).
@@ -65,7 +76,13 @@ pub fn synthetic_speech(
     let mut k = 0u64;
     for (w, &count) in syllables.iter().enumerate() {
         let start = t;
-        for _ in 0..count.max(1) {
+        for syllable in 0..count.max(1) {
+            if let Some(&(_, _, pause)) = inner
+                .iter()
+                .find(|(word, after, _)| *word == w && *after == syllable)
+            {
+                t += pause;
+            }
             let length = 0.14 + 0.08 * unit(1, k);
             let f1 = 500.0 + 300.0 * unit(2, k);
             let f2 = 1100.0 + 800.0 * unit(3, k);

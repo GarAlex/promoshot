@@ -417,7 +417,13 @@ word it landed on, and the timing's source. A recording's script is its
 `transcript` (a narration's is `speech.text`); a word the timing got
 wrong is fixed by hand with `speech.wordFixes`: `[{"word": 7, "start":
 3.42, "end": 3.80}]` in the take's own seconds, over whatever record it
-has.
+has. A recording voiced elsewhere that came with its word timings —
+edge-tts's `WordBoundary` events (`offset`/`duration` in 100-ns ticks +
+`text`), or `[{"text", "start", "end"}]` in seconds — hands them over with
+`promo words <project> --resource vo --import timings.json` (promo_words
+`import`; `--provider` names the voice, edge-tts is recognised): matched
+onto the transcript and kept as the provider's timing, which no realign
+replaces until the take changes.
 
 ## Speech cuts — sync, captions, karaoke, emphasised, per, until, slides per sentence, generators on words
 
