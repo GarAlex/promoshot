@@ -579,3 +579,59 @@ pub(crate) fn expand_captions(
     }
     problems
 }
+
+/// How a synced caption reveal matched its take — what `explain` shows
+/// beside the reveal: its `sync`, how many caption words there are, how
+/// many the take says, and the span of the take's words they matched.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RevealMatch {
+    pub sync: RevealSync,
+    pub units: usize,
+    pub matched: usize,
+    /// 1-based, inclusive.
+    pub span: Option<(u32, u32)>,
+    /// Why it cannot match at all.
+    pub error: Option<String>,
+}
+
+/// [`RevealMatch`] for caption layer `layer_id` of the project's scope
+/// (its own style, or the caption resource it shows); None when it does
+/// not reveal on a take's words.
+pub fn reveal_match(
+    meta: &ProjectMetadata,
+    inputs: &BeatGrids,
+    layer_id: &str,
+) -> Option<RevealMatch> {
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let layer = layers.iter().find(|l| l.id == layer_id)?;
+    let style = meta.caption_style_for(layer)?;
+    let sync = style.reveal.as_ref()?.sync.clone()?;
+    let text = meta.caption_text_for(layer).unwrap_or_default();
+    let speech = Speech::new(
+        meta.composition_settings.speech_clock.as_ref(),
+        layers,
+        resources,
+        inputs,
+    );
+    let found = speech
+        .take_for(layer.speech_clock.as_ref(), &layer.name, sync.of.as_deref())
+        .map_err(|f| f.why())
+        .and_then(|(take, _)| unit_times(&text, &sync, &take, layer.start_time));
+    Some(match found {
+        Ok(t) => RevealMatch {
+            sync,
+            units: t.units,
+            matched: t.matched,
+            span: t.span,
+            error: None,
+        },
+        Err(why) => RevealMatch {
+            sync,
+            units: text.split_whitespace().count(),
+            matched: 0,
+            span: None,
+            error: Some(why),
+        },
+    })
+}

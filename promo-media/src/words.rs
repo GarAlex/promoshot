@@ -99,11 +99,29 @@ impl WordAligner {
         self.carry.extend_from_slice(frames.remainder());
     }
 
-    /// The record, `source: "aligned"`; its `audio` is filled when stored.
+    /// The record, `source: "aligned"`, each word's prominence read from
+    /// the same audio (§7.3); its `audio` is filled when stored.
     pub fn finish(self) -> TakeTiming {
         let duration = self.mono.len() as f64 / self.rate;
         let x = crate::dsp::resample(&self.mono, self.rate, RATE);
-        align(&x, duration, &self.script, &self.options)
+        let mut timing = align(&x, duration, &self.script, &self.options);
+        let scores = prominence(&x, &timing);
+        for (w, p) in timing.words.iter_mut().zip(scores) {
+            w.prominence = Some(p);
+        }
+        timing
+    }
+
+    /// `timing` — a record of this audio another source timed (a provider,
+    /// a local voice) — with each word's prominence read from the samples
+    /// pushed, its times untouched.
+    pub fn score(self, mut timing: TakeTiming) -> TakeTiming {
+        let x = crate::dsp::resample(&self.mono, self.rate, RATE);
+        let scores = prominence(&x, &timing);
+        for (w, p) in timing.words.iter_mut().zip(scores) {
+            w.prominence = Some(p);
+        }
+        timing
     }
 }
 

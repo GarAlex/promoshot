@@ -43,6 +43,10 @@ enum Placement {
     Stated(f64),
 }
 
+/// A word whose own confidence is under this is said beside a value that
+/// lands on it: its edge may be a tenth of a second off.
+pub const WORD_UNSURE_BELOW: f64 = 0.5;
+
 /// A take a value counts on, with its words.
 #[derive(Debug, Clone)]
 pub(crate) struct Take {
@@ -339,7 +343,8 @@ impl<'a> Speech<'a> {
                         .collect(),
                     SpeechSnap::Gap => words
                         .windows(2)
-                        .map(|p| ((p[0].end + p[1].start) / 2.0, None))
+                        .enumerate()
+                        .map(|(i, p)| ((p[0].end + p[1].start) / 2.0, Some(i)))
                         .collect(),
                     SpeechSnap::Sentence => take
                         .timing
@@ -388,6 +393,21 @@ impl<'a> Speech<'a> {
                 (out, word)
             }
         };
+        // A word the timing itself doubts: said beside the value.
+        if let Some((n, text)) = &word {
+            if let Some(c) = words[*n as usize - 1]
+                .confidence
+                .filter(|c| *c < WORD_UNSURE_BELOW)
+            {
+                warnings.push(TimingProblem::SpeechWordUnsure {
+                    layer: owner.name.clone(),
+                    take: take.id.clone(),
+                    word: *n,
+                    text: text.clone(),
+                    confidence: c,
+                });
+            }
+        }
         match value.offset {
             Some(SpeechOffset::Seconds(n)) => seconds += n,
             Some(SpeechOffset::Beats(n)) => seconds = grid.time_at(grid.index_at(seconds) + n),
@@ -985,6 +1005,19 @@ fn label(value: &SpeechTime, resolved: &Resolved, ends: bool) -> String {
         .map(|(n, text)| format!("word {n} \u{201C}{text}\u{201D}"));
     let base = match (&value.at, word) {
         (SpeechPoint::Sentence(n), _) => format!("sentence {n}"),
+        (
+            SpeechPoint::Snap {
+                to: SpeechSnap::Gap,
+                ..
+            },
+            Some(w),
+        ) => {
+            return if ends {
+                format!("ends at the gap after {w}")
+            } else {
+                format!("the gap after {w}")
+            };
+        }
         (_, Some(w)) => w,
         (_, None) => value.label(),
     };
@@ -1199,4 +1232,283 @@ pub(crate) fn findings(
             });
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// The editors' questions (docs/SPEECH-SYNC.md §8.2): a layer edge snapped to
+// a word, a gap or a sentence, and the words to draw under a voice-over.
+
+/// What a speech snap lands on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeechUnit {
+    Word,
+    Gap,
+    Sentence,
+}
+
+impl SpeechUnit {
+    pub fn parse(text: &str) -> Option<SpeechUnit> {
+        match text {
+            "word" => Some(SpeechUnit::Word),
+            "gap" => Some(SpeechUnit::Gap),
+            "sentence" => Some(SpeechUnit::Sentence),
+            _ => None,
+        }
+    }
+}
+
+/// A layer edge snapped to speech: the value an editor writes with
+/// `setTime`, the seconds it resolves to (a start's position, an end's
+/// length) and the core's words for it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeechSnapped {
+    pub value: serde_json::Value,
+    pub seconds: f64,
+    pub label: String,
+}
+
+/// One word of a take on the output timeline.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WordTick {
+    /// 1-based.
+    pub index: u32,
+    pub text: String,
+    pub start: f64,
+    pub end: f64,
+    /// The word opens a sentence.
+    pub sentence_start: bool,
+    pub confidence: Option<f64>,
+    pub prominence: Option<f64>,
+}
+
+/// A layer, its scope's layers and the scope's speech clock — the project's
+/// (stage members included) or a composition's.
+fn scope_of<'a>(
+    meta: &'a promo_model::ProjectMetadata,
+    layer_id: &str,
+) -> Option<(
+    &'a ProjectLayer,
+    &'a [ProjectLayer],
+    Option<&'a SpeechClock>,
+)> {
+    fn find<'a>(layers: &'a [ProjectLayer], id: &str) -> Option<&'a ProjectLayer> {
+        layers.iter().find_map(|l| {
+            if l.id == id {
+                Some(l)
+            } else {
+                l.members.as_deref().and_then(|m| find(m, id))
+            }
+        })
+    }
+    let layers = meta.layers.as_deref().unwrap_or(&[]);
+    if let Some(layer) = find(layers, layer_id) {
+        return Some((
+            layer,
+            layers,
+            meta.composition_settings.speech_clock.as_ref(),
+        ));
+    }
+    meta.resources.iter().flatten().find_map(|r| {
+        let c = r.composition.as_ref()?;
+        Some((
+            find(&c.layers, layer_id)?,
+            c.layers.as_slice(),
+            c.speech_clock.as_ref(),
+        ))
+    })
+}
+
+impl<'a> Speech<'a> {
+    /// The take a layer's edge at `t` counts on: its own or the scope's
+    /// speech clock, else the take playing at `t`, else the scope's only.
+    fn take_at(&self, owner: &ProjectLayer, t: f64) -> Result<Take, String> {
+        if owner.speech_clock.is_some() || self.clock.is_some() {
+            return self
+                .take_for(owner.speech_clock.as_ref(), &owner.name, None)
+                .map(|(take, _)| take)
+                .map_err(Fault::why);
+        }
+        let playing = self.players.iter().find(|p| {
+            p.start <= t + 1e-9
+                && p.end.is_none_or(|e| t <= e + 1e-9)
+                && self
+                    .resource(&p.resource)
+                    .is_some_and(|r| promo_model::speech::take_script(r).is_some())
+        });
+        let of = playing.map(|p| p.id.clone());
+        self.take_for(None, &owner.name, of.as_deref())
+            .map(|(take, _)| take)
+            .map_err(Fault::why)
+    }
+}
+
+/// The candidates a unit offers on a take, in output seconds: (time, word
+/// index 0-based, sentence index 0-based).
+fn candidates(take: &Take, unit: SpeechUnit, end: bool) -> Vec<(f64, usize, usize)> {
+    let t = &take.timing;
+    let sentence_of = |i: usize| {
+        t.sentences
+            .iter()
+            .position(|s| (s.words[0] as usize..=s.words[1] as usize).contains(&i))
+            .unwrap_or(0)
+    };
+    match unit {
+        SpeechUnit::Word => t
+            .words
+            .iter()
+            .enumerate()
+            .filter_map(|(i, w)| {
+                Some((
+                    take.out(if end { w.end } else { w.start })?,
+                    i,
+                    sentence_of(i),
+                ))
+            })
+            .collect(),
+        SpeechUnit::Gap => t
+            .words
+            .windows(2)
+            .enumerate()
+            .filter_map(|(i, p)| {
+                Some((take.out((p[0].end + p[1].start) / 2.0)?, i, sentence_of(i)))
+            })
+            .collect(),
+        SpeechUnit::Sentence => t
+            .sentences
+            .iter()
+            .enumerate()
+            .filter_map(|(k, s)| {
+                let at = if end { s.end } else { s.start };
+                Some((take.out(at)?, s.words[0] as usize, k))
+            })
+            .collect(),
+    }
+}
+
+/// `edge` of layer `layer_id` on the nearest word, gap between words, or
+/// sentence of the take it counts on (docs/SPEECH-SYNC.md §8.2): a start on
+/// a word's start, an end on a word's end. The value is written with the
+/// word's text as its guard, so a rewritten line follows the word.
+pub fn snap_speech(
+    meta: &promo_model::ProjectMetadata,
+    inputs: &BeatGrids,
+    layer_id: &str,
+    edge: crate::musical::Edge,
+    unit: SpeechUnit,
+) -> Result<SpeechSnapped, String> {
+    use serde_json::json;
+    let (layer, layers, clock) = scope_of(meta, layer_id)
+        .ok_or_else(|| format!("no layer \"{layer_id}\" in the project"))?;
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let speech = Speech::new(clock, layers, resources, inputs);
+    let start = layer.start_time;
+    let end_edge = edge == crate::musical::Edge::End;
+    let near = if end_edge {
+        start
+            + layer
+                .duration
+                .ok_or("the layer has no set length to snap")?
+    } else {
+        start
+    };
+    let take = speech.take_at(layer, near)?;
+    let (at, word, sentence) = candidates(&take, unit, end_edge)
+        .into_iter()
+        .filter(|(t, _, _)| !end_edge || *t > start + 1e-4)
+        .min_by(|a, b| (a.0 - near).abs().total_cmp(&(b.0 - near).abs()))
+        .ok_or_else(|| {
+            format!(
+                "\"{}\" has nothing to snap to that the layer plays",
+                take.id
+            )
+        })?;
+    let words = &take.timing.words;
+    let quoted = |i: usize| format!("word {} \u{201C}{}\u{201D}", i + 1, words[i].text);
+    let (mut value, base) = match unit {
+        SpeechUnit::Word => (
+            json!({"word": word + 1, "of": take.id, "text": words[word].text}),
+            quoted(word),
+        ),
+        SpeechUnit::Sentence => (
+            json!({"sentence": sentence + 1, "of": take.id}),
+            format!("sentence {}", sentence + 1),
+        ),
+        SpeechUnit::Gap => (
+            json!({"snap": "gap", "near": (at * 1e6).round() / 1e6, "of": take.id}),
+            format!("the gap after {}", quoted(word)),
+        ),
+    };
+    // A gap is a point either edge may sit on; a word or sentence ends
+    // where its sound does.
+    if end_edge && unit != SpeechUnit::Gap {
+        value["edge"] = json!("end");
+    }
+    let label = if end_edge {
+        match unit {
+            SpeechUnit::Gap => format!("ends at {base}"),
+            _ => format!("ends with {base}"),
+        }
+    } else {
+        base
+    };
+    Ok(SpeechSnapped {
+        value,
+        seconds: if end_edge { at - start } else { at },
+        label,
+    })
+}
+
+/// The nearest word start, gap or sentence start to output time `seconds`
+/// on the take layer `layer_id` counts on there — what a timeline drag
+/// snapping to speech lands on. None when there is none.
+pub fn snap_speech_time(
+    meta: &promo_model::ProjectMetadata,
+    inputs: &BeatGrids,
+    layer_id: &str,
+    seconds: f64,
+    unit: SpeechUnit,
+) -> Option<f64> {
+    let (layer, layers, clock) = scope_of(meta, layer_id)?;
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let speech = Speech::new(clock, layers, resources, inputs);
+    let take = speech.take_at(layer, seconds).ok()?;
+    candidates(&take, unit, false)
+        .into_iter()
+        .map(|(t, _, _)| t)
+        .min_by(|a, b| (a - seconds).abs().total_cmp(&(b - seconds).abs()))
+}
+
+/// The words of the take layer `layer_id` plays, on the output timeline —
+/// what a word lane under a voice-over draws. Empty for a layer that plays
+/// no take; words the layer never reaches are left out.
+pub fn word_ticks(
+    meta: &promo_model::ProjectMetadata,
+    inputs: &BeatGrids,
+    layer_id: &str,
+) -> Result<Vec<WordTick>, String> {
+    let (layer, layers, clock) = scope_of(meta, layer_id)
+        .ok_or_else(|| format!("no layer \"{layer_id}\" in the project"))?;
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let speech = Speech::new(clock, layers, resources, inputs);
+    let (take, _) = speech
+        .take_for(None, &layer.name, Some(layer_id))
+        .map_err(Fault::why)?;
+    let starts: BTreeSet<u32> = take.timing.sentences.iter().map(|s| s.words[0]).collect();
+    Ok(take
+        .timing
+        .words
+        .iter()
+        .enumerate()
+        .filter_map(|(i, w)| {
+            Some(WordTick {
+                index: i as u32 + 1,
+                text: w.text.clone(),
+                start: take.out(w.start)?,
+                end: take.out(w.end)?,
+                sentence_start: starts.contains(&(i as u32)),
+                confidence: w.confidence.or(Some(take.timing.confidence)),
+                prominence: w.prominence,
+            })
+        })
+        .collect())
 }

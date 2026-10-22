@@ -20,7 +20,8 @@
         0,
         4
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.451
     },
     {
       "text": "Euclid",
@@ -30,7 +31,8 @@
         5,
         11
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.496
     },
     {
       "text": "the",
@@ -40,7 +42,8 @@
         13,
         16
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.438
     },
     {
       "text": "patient",
@@ -50,7 +53,8 @@
         17,
         24
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.608
     },
     {
       "text": "geometry",
@@ -60,7 +64,8 @@
         25,
         33
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.274
     },
     {
       "text": "tutor",
@@ -70,7 +75,8 @@
         34,
         39
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.923
     },
     {
       "text": "It",
@@ -80,7 +86,8 @@
         41,
         43
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.585
     },
     {
       "text": "proves",
@@ -90,7 +97,8 @@
         44,
         50
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.405
     },
     {
       "text": "every",
@@ -100,7 +108,8 @@
         51,
         56
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.473
     },
     {
       "text": "step",
@@ -110,7 +119,8 @@
         57,
         61
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.669
     },
     {
       "text": "explains",
@@ -120,7 +130,8 @@
         63,
         71
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.592
     },
     {
       "text": "each",
@@ -130,7 +141,8 @@
         72,
         76
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.145
     },
     {
       "text": "idea",
@@ -140,7 +152,8 @@
         77,
         81
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.358
     },
     {
       "text": "and",
@@ -150,7 +163,8 @@
         83,
         86
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.252
     },
     {
       "text": "never",
@@ -160,7 +174,8 @@
         87,
         92
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.399
     },
     {
       "text": "rushes",
@@ -170,7 +185,8 @@
         93,
         99
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.709
     },
     {
       "text": "you",
@@ -180,7 +196,8 @@
         100,
         103
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.748
     },
     {
       "text": "Draw",
@@ -190,7 +207,8 @@
         105,
         109
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.382
     },
     {
       "text": "a",
@@ -200,7 +218,8 @@
         110,
         111
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.277
     },
     {
       "text": "triangle",
@@ -210,7 +229,8 @@
         112,
         120
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.668
     },
     {
       "text": "on",
@@ -220,7 +240,8 @@
         121,
         123
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.321
     },
     {
       "text": "the",
@@ -230,7 +251,8 @@
         124,
         127
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.695
     },
     {
       "text": "board",
@@ -240,7 +262,8 @@
         128,
         133
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.576
     },
     {
       "text": "Euclid",
@@ -250,7 +273,8 @@
         135,
         141
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.534
     },
     {
       "text": "measures",
@@ -260,7 +284,8 @@
         142,
         150
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.252
     },
     {
       "text": "the",
@@ -270,7 +295,8 @@
         151,
         154
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.351
     },
     {
       "text": "angles",
@@ -280,7 +306,8 @@
         155,
         161
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.829
     },
     {
       "text": "checks",
@@ -290,7 +317,8 @@
         163,
         169
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.642
     },
     {
       "text": "the",
@@ -300,7 +328,8 @@
         170,
         173
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.275
     },
     {
       "text": "sides",
@@ -310,7 +339,8 @@
         174,
         179
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.47
     },
     {
       "text": "and",
@@ -320,7 +350,8 @@
         181,
         184
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.781
     },
     {
       "text": "shows",
@@ -330,7 +361,8 @@
         185,
         190
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.451
     },
     {
       "text": "why",
@@ -340,7 +372,8 @@
         191,
         194
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.327
     },
     {
       "text": "the",
@@ -350,7 +383,8 @@
         195,
         198
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.752
     },
     {
       "text": "sum",
@@ -360,7 +394,8 @@
         199,
         202
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.426
     },
     {
       "text": "is",
@@ -370,7 +405,8 @@
         203,
         205
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.29
     },
     {
       "text": "always",
@@ -380,7 +416,8 @@
         206,
         212
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.394
     },
     {
       "text": "the",
@@ -390,7 +427,8 @@
         213,
         216
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.362
     },
     {
       "text": "same",
@@ -400,7 +438,8 @@
         217,
         221
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.473
     },
     {
       "text": "Ask",
@@ -410,7 +449,8 @@
         223,
         226
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.653
     },
     {
       "text": "a",
@@ -420,7 +460,8 @@
         227,
         228
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.126
     },
     {
       "text": "question",
@@ -430,7 +471,8 @@
         229,
         237
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.504
     },
     {
       "text": "at",
@@ -440,7 +482,8 @@
         238,
         240
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.389
     },
     {
       "text": "any",
@@ -450,7 +493,8 @@
         241,
         244
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.878
     },
     {
       "text": "time",
@@ -460,7 +504,8 @@
         245,
         249
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.822
     },
     {
       "text": "The",
@@ -470,7 +515,8 @@
         251,
         254
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.289
     },
     {
       "text": "answer",
@@ -480,7 +526,8 @@
         255,
         261
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.445
     },
     {
       "text": "arrives",
@@ -490,7 +537,8 @@
         262,
         269
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.768
     },
     {
       "text": "in",
@@ -500,7 +548,8 @@
         270,
         272
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.312
     },
     {
       "text": "plain",
@@ -510,7 +559,8 @@
         273,
         278
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.506
     },
     {
       "text": "words",
@@ -520,7 +570,8 @@
         279,
         284
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.381
     },
     {
       "text": "with",
@@ -530,7 +581,8 @@
         286,
         290
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.768
     },
     {
       "text": "a",
@@ -540,7 +592,8 @@
         291,
         292
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.593
     },
     {
       "text": "picture",
@@ -550,7 +603,8 @@
         293,
         300
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.394
     },
     {
       "text": "beside",
@@ -560,7 +614,8 @@
         301,
         307
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.732
     },
     {
       "text": "it",
@@ -570,7 +625,8 @@
         308,
         310
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.76
     },
     {
       "text": "Try",
@@ -580,7 +636,8 @@
         312,
         315
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.256
     },
     {
       "text": "it",
@@ -590,7 +647,8 @@
         316,
         318
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.361
     },
     {
       "text": "today",
@@ -600,7 +658,8 @@
         319,
         324
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.589
     },
     {
       "text": "Now",
@@ -610,7 +669,8 @@
         326,
         329
       ],
-      "confidence": 0.95
+      "confidence": 0.95,
+      "prominence": 0.19
     }
   ],
   "sentences": [

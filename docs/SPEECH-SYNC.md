@@ -1389,6 +1389,79 @@ criteria.
   - Swift: `testSynthesisStoresProviderTiming` (a fake provider with a fixture answer), `testAlignerMatchesCoreGolden` (the synthetic WAV through AVAudioFile), `testOpeningMarksNothingDirty`, `testSnapToWordUsesTheCoresSpec`, `testTimingRowShowsTheCoresLabel`, `testExportWaitsForWords`
   - Checked in the simulator at phone width and on iPad, and on the Mac through the DEBUG tour door (`mac-ui-tour-captures`)
 
+**Slice 9 as built** (2026-10-21):
+- **Most of this slice's build list was already there.** The FFI aligner
+  and stores, `WordAligner.swift` and the app's `promo_words` came in S5,
+  and `missingWords` with the export guard in S6. S9 adds:
+  - **Prominence everywhere.** `WordAligner::finish` writes each word's
+    prominence (the golden `synthetic-60w.json` is regenerated, the WAV
+    unchanged). `score(record)` reads it for a record another source
+    timed, exposed to the app as `promo_word_aligner_score`. The app
+    measures takes with none (`WordAligner.measureProminence`) on open
+    and before an export, but only when the project names `emphasised`
+    words. Its `promo_words` adds prominence to a cached record that lacks
+    it, as the CLI's `timing_for` does.
+  - **The app adopts generated keyframes the core makes later.**
+    `PromoTiming.reconcile` brings a layer home when the RESOLVED layer
+    carries generated keyframes, not only the stored one. Without this, a
+    pulse whose words got their prominence after the open never reached
+    the model.
+- **Core questions for the editors** (`speech_time.rs`):
+  - `snap_speech(meta, inputs, layer, edge, word|gap|sentence)` gives the
+    value to write, its seconds (an end's as a length) and the core's
+    label. A word is written with its text as the guard and an end edge
+    as `edge: "end"`; a gap as `{"snap": "gap", "near": t}`. The take is
+    the layer's or the scope's speech clock, else the one playing at
+    the edge, else the only one.
+  - `snap_speech_time` is the timeline drag's version, and `word_ticks`
+    the lane's words.
+  - FFI: `promo_project_speech_snap`, `_speech_snap_time` and
+    `_word_ticks`.
+  - A resolved gap's label is now "the gap after word n “…”".
+- **App UI** (shared by Mac and iOS):
+  - **Words section:** audio resources with a `speech` spec get it in
+    the inspector (`SpeechSyncViews.swift`): where the times came from,
+    the confidence, counts, a stale or unsure note, hand fixes (read from
+    the source document), every word (# start end conf word; prominent
+    words bold, unsure ones orange), and "Time the Words" when a take has
+    none. Recordings that only carry a `transcript` get no section: the
+    Swift model has no `transcript`.
+  - **Word ticks:** on the voice-over's bar in the list timeline, and a
+    Words lane under its audio lane in the lanes timeline. Sentence starts
+    are taller; unsure words are dimmed.
+  - **Snapping:** the start/duration menus gain "Snap to Speech" (word,
+    gap, sentence) whenever the project has a spoken take. Without a beat
+    clock the menu reads "Start on Words" / "End on Words". The row shows
+    the core's label. The timeline's snap menu gains "Snap to Words" and
+    "Snap to Sentences" for drags (`TimelineSnapper`); the voice-over
+    itself never snaps to its own words.
+  - **DEBUG tour steps:** `resource.audio`, `words.list`/`words.close`,
+    `timeline.lanes`/`timeline.list`.
+- **Leftovers from S8:** explain shows a synced caption's `reveal`
+  (`{"sync", "units", "matched", "words": "words a–b"}`, or `error`), via
+  `speech_effects::reveal_match`. A value landing on a word whose own
+  confidence is under 0.5 warns (`SpeechWordUnsure`).
+- **Checked on screen:**
+  - Mac, through the DEBUG tour door (snapshot step; the screen was
+    locked to `screencapture`): the Words section with its list, the
+    timeline with word ticks under the voice-over, and the Title layer's
+    rows reading "word 3 “Geometry”" and "ends with sentence 2", with
+    "Start on Words".
+  - iPhone 18 Pro simulator: the ticks on the voice-over's bar; the
+    editor's "Start on Words" menu; "To Nearest Word" writing "word 1
+    “Meet”" at 0.616 s.
+- **Tests:**
+  - promo-timeline `snap_to_word_gap_and_sentence`,
+    `word_ticks_follow_the_layer`, `a_value_on_an_unsure_word_warns`.
+  - promo-cli: explain's `reveal` block, inside the AC1 test.
+  - promo-media golden regenerated.
+  - FFI `prominence_snap_and_ticks_doors`.
+  - Swift `SpeechEditingTests`: `testOpeningMarksNothingDirty`,
+    `testSnapToWordUsesTheCoresSpec`, `testTimingRowShowsTheCoresLabel`,
+    `testWordLaneAndDragSnapAreTheCores` and
+    `testEmphasisedWordsGetProminenceInTheApp`.
+  - Every new test was break-tested.
+
 **S10 — Recipe and docs.**
 - Build: a schema.md section "Speech sync — word, sentence, of, speechClock, during, sync, captions, transcript, words" with cross-references from Timing, Reveal and Beats; schema-quick.md's sixth recipe, "narrated slideshow: one slide per sentence, karaoke captions" (`examples/Narrated.promo`, a placeholder take, so it renders with no key and is honestly estimated); SKILL.md entries for `promo_words` and the recipe (and the app's bundled copy).
 - Tests:

@@ -323,6 +323,14 @@ pub enum TimingProblem {
         take: String,
         confidence: f64,
     },
+    /// A value lands on a word whose own timing is doubtful.
+    SpeechWordUnsure {
+        layer: String,
+        take: String,
+        word: u32,
+        text: String,
+        confidence: f64,
+    },
     /// The take's text changed since it was voiced.
     SpeechStale {
         take: String,
@@ -593,6 +601,18 @@ impl std::fmt::Display for TimingProblem {
                 f,
                 "\"{take}\" was aligned with confidence {confidence:.2} — word starts may be \
                  ±0.2 s; transcribe or fix by hand"
+            ),
+            Self::SpeechWordUnsure {
+                layer,
+                take,
+                word,
+                text,
+                confidence,
+            } => write!(
+                f,
+                "layer \"{layer}\" lands on word {word} \"{text}\" of \"{take}\", whose timing \
+                 is unsure (confidence {confidence:.2}) — check it by ear, or fix it with \
+                 speech.wordFixes"
             ),
             Self::SpeechStale { take } => write!(
                 f,

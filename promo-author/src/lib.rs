@@ -1392,7 +1392,22 @@ pub fn explain(args: &Value, root: Option<&Path>) -> Result<String, String> {
 
     let mut docs = Vec::new();
     for layer in layers.iter().filter(|l| only.is_none_or(|id| l.id == id)) {
-        docs.push(layer_doc(layer, time, settings, resources, None, 0));
+        let mut doc = layer_doc(layer, time, settings, resources, None, 0);
+        // A caption revealed on a take's words: how its words matched.
+        if let Some(found) = promo_timeline::speech_effects::reveal_match(&meta, &grids, &layer.id)
+        {
+            let mut reveal = json!({
+                "sync": found.sync, "units": found.units, "matched": found.matched,
+            });
+            if let Some((a, b)) = found.span {
+                reveal["words"] = json!(format!("words {a}\u{2013}{b}"));
+            }
+            if let Some(why) = found.error {
+                reveal["error"] = json!(why);
+            }
+            doc["reveal"] = reveal;
+        }
+        docs.push(doc);
     }
     let timing_problems: Vec<String> = timing.problems.iter().map(|p| p.to_string()).collect();
     let out = json!({

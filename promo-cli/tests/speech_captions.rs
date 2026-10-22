@@ -152,5 +152,14 @@ fn captions_reveal_each_word_within_one_frame() {
     // Between "Euclid." and "Geometry," the voice pauses: nothing is lit.
     let pause = ((AT + 1.1) * FPS) as usize;
     assert_eq!(lit[pause], None, "a highlight goes out between words");
+    // explain shows how the caption's words matched the take.
+    let out = promo_author::explain(&json!({"project": dir, "time": 1.0, "layer": "cap"}), None)
+        .expect("explains");
+    let out: Value = serde_json::from_str(&out).unwrap();
+    let reveal = &out["layers"][0]["reveal"];
+    assert_eq!(reveal["units"], 7, "{reveal}");
+    assert_eq!(reveal["matched"], 7, "{reveal}");
+    assert_eq!(reveal["words"], "words 1\u{2013}7", "{reveal}");
+    assert_eq!(reveal["sync"], json!({"of": "intro"}));
     let _ = std::fs::remove_dir_all(&dir);
 }
