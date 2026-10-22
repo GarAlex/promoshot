@@ -75,6 +75,10 @@ pub struct Report {
     pub speech_times: Vec<crate::speech_time::SpeechRow>,
     /// Every take a speech value counted on.
     pub speech_clocks: Vec<crate::speech_time::SpeechClockInfo>,
+    /// Things worth knowing that are usually meant — a pulse reshaping a
+    /// keyed track. Kept out of the verdict and the findings; `validate
+    /// --strict` lists them ([`Report::with_notes`]).
+    pub notes: Vec<String>,
 }
 
 impl Report {
@@ -214,6 +218,25 @@ impl Report {
         out
     }
 
+    /// [`Report::text`] with the notes after it — what `validate --strict`
+    /// prints.
+    pub fn text_with_notes(&self) -> String {
+        let mut out = self.text();
+        if !self.notes.is_empty() {
+            out.push_str(&format!("\n\nNotes ({}):", self.notes.len()));
+            for note in &self.notes {
+                out.push_str(&format!("\n  - {note}"));
+            }
+        }
+        out
+    }
+
+    /// Whether anything at all was said, notes included — `--strict`'s
+    /// exit code.
+    pub fn is_clean_with_notes(&self) -> bool {
+        self.is_clean() && self.notes.is_empty()
+    }
+
     /// `ok` is "nothing to report", `renders` is "no breaks"; `text` is the
     /// same words [`Report::text`] prints, for a caller that shows them.
     pub fn json(&self) -> Value {
@@ -337,7 +360,9 @@ pub fn file_report_with(
     out.speech_times = timing.speech.clone();
     out.speech_clocks = timing.speech_clocks.clone();
     for problem in &timing.problems {
-        if problem.is_break() {
+        if problem.is_note() {
+            out.notes.push(problem.to_string());
+        } else if problem.is_break() {
             out.breaks(problem.to_string());
         } else {
             out.warn(problem.to_string());

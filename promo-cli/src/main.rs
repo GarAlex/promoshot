@@ -91,7 +91,9 @@ OPTIONS:
     render or has no effect — a field nothing reads, a value that does
     nothing where it is, missing media; the answer then starts NOT OK — and
     then what the renderer adjusts (warnings). It exits 1 when the project
-    cannot be decoded; with --strict, also when anything is reported.
+    cannot be decoded; with --strict, also when anything is reported, and
+    the notes (things usually meant, like a pulse over keyed keyframes) are
+    listed too.
 
     `schema` prints the authoring subset plus six complete recipes — the
     same text the app's `promo_schema` tool serves. `schema --full` is the
@@ -203,7 +205,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     if command == "validate" {
         let report = validation(&project);
         println!("{}", report_answer(&report, &opts));
-        return Ok(if opts.strict && !report.is_clean() {
+        return Ok(if opts.strict && !report.is_clean_with_notes() {
             ExitCode::FAILURE
         } else {
             ExitCode::SUCCESS
@@ -1292,10 +1294,15 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
 }
 
 fn report_answer(report: &promo_timeline::report::Report, opts: &Options) -> String {
-    if opts.json {
-        report.json().to_string()
-    } else {
-        report.text()
+    match (opts.json, opts.strict) {
+        (true, false) => report.json().to_string(),
+        (true, true) => {
+            let mut json = report.json();
+            json["notes"] = serde_json::json!(report.notes);
+            json.to_string()
+        }
+        (false, false) => report.text(),
+        (false, true) => report.text_with_notes(),
     }
 }
 

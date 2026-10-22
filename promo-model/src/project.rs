@@ -5375,11 +5375,37 @@ impl ProjectMetadata {
         if plain.is_ok() {
             return plain;
         }
-        match lifted_value(json) {
+        let result = match lifted_value(json) {
             Some(Ok(value)) => serde_json::from_value(value),
-            Some(Err(message)) => Err(serde::de::Error::custom(message)),
+            Some(Err(message)) => return Err(serde::de::Error::custom(message)),
             None => plain,
+        };
+        result.map_err(|e| Self::located(json, e))
+    }
+
+    /// A decode error with the record it is in — `layers[0].keyframes[2]:
+    /// missing field `id`` — found by decoding again with the path kept
+    /// (issue #15: a minified file's "line 1 column 790" said nowhere).
+    fn located(json: &str, error: serde_json::Error) -> serde_json::Error {
+        if !error.is_data() {
+            return error;
         }
+        let value = match lifted_value(json) {
+            Some(Ok(value)) => value,
+            _ => match serde_json::from_str::<serde_json::Value>(json) {
+                Ok(value) => value,
+                Err(_) => return error,
+            },
+        };
+        let found = serde_path_to_error::deserialize::<_, ProjectMetadata>(&value);
+        let Err(at) = found else {
+            return error;
+        };
+        let path = at.path().to_string();
+        if path.is_empty() || path == "." {
+            return error;
+        }
+        serde::de::Error::custom(format!("{path}: {error}"))
     }
 
     /// Every key in `json` that the model does not read (review 2026-09-27,

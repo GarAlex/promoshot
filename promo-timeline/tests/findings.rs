@@ -143,6 +143,79 @@ fn audio_shorter_than_timeline_warning() {
     );
 }
 
+/// The song keeps sounding past its own length when a layer loops it, or
+/// a later layer plays it again to the end: nothing is said then; a
+/// looping layer that stops early still leaves the grid extrapolated
+/// (issue #15).
+#[test]
+fn a_bed_that_keeps_playing_is_not_said_to_end() {
+    let bed = |extra: Value| {
+        let mut layer = json!({"id": "m", "name": "M", "sortIndex": 0, "kind": "audio",
+                               "isEnabled": true, "startTime": 0, "resourceID": "song",
+                               "keyframes": []});
+        for (k, v) in extra.as_object().unwrap() {
+            layer[k] = v.clone();
+        }
+        layer
+    };
+    let ends = |layers: Value| {
+        let file = project(layers, song(json!({"duration": 3.0})), json!({}));
+        warnings(&file, &BeatGrids::default())
+            .iter()
+            .any(|m| m.contains("is extrapolated"))
+    };
+    assert!(ends(json!([
+        caption("a", 0.0, 4.0),
+        bed(json!({"duration": 3.0}))
+    ])));
+    assert!(!ends(json!([
+        caption("a", 0.0, 4.0),
+        bed(json!({"duration": 4.0, "beyondEnd": "loop"}))
+    ])));
+    assert!(!ends(json!([
+        caption("a", 0.0, 4.0),
+        bed(json!({"duration": 3.0})),
+        bed(json!({"id": "m2", "startTime": 3.0, "duration": 1.0}))
+    ])));
+    assert!(ends(json!([
+        caption("a", 0.0, 4.0),
+        bed(json!({"duration": 2.0, "beyondEnd": "loop"}))
+    ])));
+}
+
+/// A stated beatClock.startTime the playing layer disagrees with — the
+/// song trimmed by 0.43 s and played from 0 s puts its second 0 at
+/// −0.43 s — is said with the number that would agree; following the
+/// layer, or agreeing with it, says nothing (issue #15).
+#[test]
+fn a_clock_start_off_the_playing_layer_is_said() {
+    let said = |settings: Value| {
+        let file = project(
+            json!([caption("a", 0.0, 4.0),
+                   {"id": "m", "name": "Music", "sortIndex": 0, "kind": "audio",
+                    "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "song",
+                    "keyframes": []}]),
+            song(json!({"trimStart": 0.43})),
+            settings,
+        );
+        warnings(&file, &BeatGrids::default())
+            .into_iter()
+            .filter(|m| m.starts_with("beatClock.startTime"))
+            .collect::<Vec<_>>()
+    };
+    let off = said(json!({}));
+    assert_eq!(off.len(), 1, "{off:?}");
+    assert!(
+        off[0].contains("layer \"Music\"")
+            && off[0].contains("-0.430 s")
+            && off[0].contains("+0.430 s off"),
+        "{}",
+        off[0]
+    );
+    assert!(said(json!({"beatClock": {"resourceID": "song"}})).is_empty());
+    assert!(said(json!({"beatClock": {"resourceID": "song", "startTime": -0.43}})).is_empty());
+}
+
 /// A detection the tracker was unsure of is said — unless the grid is
 /// stated, which overrides it.
 #[test]
@@ -223,10 +296,17 @@ fn pulse_and_internal_key_warnings() {
         song(json!({})),
         json!({}),
     );
+    // Usually meant (a Ken Burns move on the beat): a note, said with
+    // --strict, never a warning (issue #15).
+    let report = file_report_with(&file, None, &BeatGrids::default()).unwrap();
+    let pulse = "pulse on layer \"A\" reshapes keyed opacity keyframes at beat resolution";
+    assert_eq!(report.notes, vec![pulse.to_string()]);
+    assert!(!report.messages().iter().any(|m| m == pulse));
+    assert!(report
+        .text_with_notes()
+        .ends_with(&format!("Notes (1):\n  - {pulse}")));
+    assert!(!report.text().contains(pulse));
     let said = warnings(&file, &BeatGrids::default());
-    assert!(said.contains(
-        &"pulse on layer \"A\" reshapes keyed opacity keyframes at beat resolution".to_string()
-    ));
     assert!(
         said.iter()
             .any(|m| m.starts_with("the file holds `timeSpecs`")),

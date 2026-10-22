@@ -245,6 +245,14 @@ pub enum TimingProblem {
     },
     /// A pulse over a track already keyed: its base is sampled at beat
     /// resolution.
+    /// A beat clock's stated `startTime` against the layer that plays its
+    /// audio: the grid sits off what is heard.
+    ClockStartDisagrees {
+        resource: String,
+        stated: f64,
+        layer: String,
+        heard: f64,
+    },
     PulseOverKeys {
         layer: String,
         property: String,
@@ -395,6 +403,13 @@ pub enum TimingProblem {
 }
 
 impl TimingProblem {
+    /// Usually meant, so said only when asked (`validate --strict`): a
+    /// pulse over keyed keyframes is how a Ken Burns move gets a beat
+    /// (issue #15).
+    pub fn is_note(&self) -> bool {
+        matches!(self, TimingProblem::PulseOverKeys { .. })
+    }
+
     /// Whether the file renders something other than it says.
     pub fn is_break(&self) -> bool {
         matches!(
@@ -529,6 +544,19 @@ impl std::fmt::Display for TimingProblem {
                 f,
                 "beat detection for \"{resource}\" is unsure (confidence {confidence:.2}) — set \
                  beatGrid by hand"
+            ),
+            Self::ClockStartDisagrees {
+                resource,
+                stated,
+                layer,
+                heard,
+            } => write!(
+                f,
+                "beatClock.startTime {stated} s puts \"{resource}\"'s second 0 there, but layer \
+                 \"{layer}\" plays it with its second 0 at {heard:.3} s — the beats sit {:+.3} s \
+                 off what is heard; leave startTime out to follow the layer, or set it to \
+                 {heard:.3}",
+                stated - heard
             ),
             Self::PulseOverKeys { layer, property } => write!(
                 f,
@@ -1256,6 +1284,52 @@ pub(crate) fn grid_point_words(grid: &Grid, index: f64, half_frame: f64) -> Stri
     format!("beat {} at {at:.2} s", index as i64 + 1)
 }
 
+/// Until when some layer plays `song` on the output timeline: the latest
+/// end of a layer that plays it, a looping one to its own end — None when
+/// one loops it with no end, so it never stops; `Some(-inf)` when nothing
+/// plays it.
+fn played_until(layers: &[ProjectLayer], song: &ProjectResource, id: &str) -> Option<f64> {
+    fn walk(layers: &[ProjectLayer], song: &ProjectResource, id: &str, until: &mut Option<f64>) {
+        for layer in layers {
+            if let Some(members) = layer.members.as_deref() {
+                walk(members, song, id, until);
+            }
+            if !layer.is_enabled
+                || layer.resource_id.as_deref() != Some(id)
+                || !matches!(
+                    layer.kind,
+                    ProjectLayerKind::Audio | ProjectLayerKind::Video
+                )
+            {
+                continue;
+            }
+            let material = crate::mapping::resource_for_cut(song, layer.media_cut_id.as_deref());
+            let loops = match layer.beyond_end {
+                Some(promo_model::BeyondEnd::Loop) => true,
+                Some(_) => false,
+                None => material.is_looped(),
+            };
+            let period = crate::mapping::timeline_loop_period(&material);
+            let end = match (loops, layer.duration) {
+                (true, None) => {
+                    *until = None;
+                    return;
+                }
+                (true, Some(d)) => layer.start_time + d,
+                (false, Some(d)) if period > 0.0 => layer.start_time + d.min(period),
+                (false, Some(d)) => layer.start_time + d,
+                (false, None) => layer.start_time + period.max(0.0),
+            };
+            if let Some(u) = until.as_mut() {
+                *u = u.max(end);
+            }
+        }
+    }
+    let mut until = Some(f64::NEG_INFINITY);
+    walk(layers, song, id, &mut until);
+    until
+}
+
 /// What a reader of a beat-cut edit wants to hear: a visual layer's edge off
 /// the grid (by more than half a frame), one shorter than a beat, a song
 /// that ends before the timeline, a detection the tracker was unsure of —
@@ -1343,7 +1417,13 @@ fn findings(
     if let Some(song) = resources.iter().find(|r| r.id == id) {
         if let Some(length) = song.duration.filter(|d| *d > 0.0) {
             let ends = grid.clock + length / grid.speed;
-            if ends + half_frame < timeline {
+            // The song keeps sounding while any layer plays it: a later
+            // layer of the same resource, or one that loops it (issue #15)
+            // — to its own end, or for good when it has none.
+            let heard_until = played_until(layers, song, id.as_str());
+            if ends + half_frame < timeline
+                && heard_until.is_none_or(|until| until + half_frame < timeline)
+            {
                 report.problems.push(TimingProblem::SongEndsEarly {
                     resource: id.clone(),
                     ends,
@@ -2426,32 +2506,49 @@ impl Scope {
         // inverse of `mapping::source_time_for_layer`).
         let speed = crate::mapping::effective_speed(resource);
         let mut placed_by = None;
+        // The layer that plays it, and where it puts the audio's second 0.
+        let follows = {
+            let mut players: Vec<&ProjectLayer> = layers
+                .iter()
+                .filter(|l| {
+                    l.kind == ProjectLayerKind::Audio
+                        && l.is_enabled
+                        && l.resource_id.as_deref() == Some(id)
+                })
+                .collect();
+            players.sort_by_key(|l| l.sort_index);
+            players.first().copied().map(|layer| {
+                let material =
+                    crate::mapping::resource_for_cut(resource, layer.media_cut_id.as_deref());
+                let first =
+                    crate::mapping::source_time_for_layer(&material, 0.0, None).unwrap_or(0.0);
+                (layer, layer.start_time - first / speed)
+            })
+        };
         let origin = match clock.start_time {
-            Some(start) if start.is_finite() => start,
-            _ => {
-                let mut players: Vec<&ProjectLayer> = layers
-                    .iter()
-                    .filter(|l| {
-                        l.kind == ProjectLayerKind::Audio
-                            && l.is_enabled
-                            && l.resource_id.as_deref() == Some(id)
-                    })
-                    .collect();
-                players.sort_by_key(|l| l.sort_index);
-                match players.first() {
-                    Some(layer) => {
-                        placed_by = Some(layer.id.clone());
-                        let material = crate::mapping::resource_for_cut(
-                            resource,
-                            layer.media_cut_id.as_deref(),
-                        );
-                        let first = crate::mapping::source_time_for_layer(&material, 0.0, None)
-                            .unwrap_or(0.0);
-                        layer.start_time - first / speed
+            Some(start) if start.is_finite() => {
+                // A stated start the playing layer disagrees with: the grid
+                // sits off what is heard (issue #15) — a trimmed song's
+                // second 0 is before the layer starts.
+                if let Some((layer, heard)) = follows {
+                    if (start - heard).abs() > 0.01 {
+                        self.problems.push(TimingProblem::ClockStartDisagrees {
+                            resource: id.into(),
+                            stated: start,
+                            layer: layer.name.clone(),
+                            heard,
+                        });
                     }
-                    None => 0.0,
                 }
+                start
             }
+            _ => match follows {
+                Some((layer, heard)) => {
+                    placed_by = Some(layer.id.clone());
+                    heard
+                }
+                None => 0.0,
+            },
         };
         if resource.beat_grid.is_none() {
             if let (Some((beats, first)), Some(measured)) =

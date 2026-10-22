@@ -113,6 +113,8 @@ fn caption_checks(
     let mut placed = false;
     let mut margins = (0.0, 0.0);
     let mut covered: Option<(f64, String, f64)> = None; // (share, name, t)
+                                                        // Lines centred in a box hung from a side (issue #15): (lines, anchor).
+    let mut centred: Option<(u32, &'static str)> = None;
     for t in instants(layer) {
         let showing = crate::layer_resource_id(layer, t, resources).map(str::to_string);
         let Some(text) = meta.caption_text_showing(layer, showing.as_deref()) else {
@@ -145,6 +147,33 @@ fn caption_checks(
         let (bx, by) =
             ip::caption_box_origin(layer, t, (b.width, b.height), (w, h)).unwrap_or((b.x, b.y));
         placed = style.placement.is_some() || layer.keyframes.iter().any(|k| k.placement.is_some());
+        // Hung from a side with its lines left to the default centre: what
+        // a left-anchored headline almost never means.
+        let anchor = layer
+            .keyframes
+            .iter()
+            .rev()
+            .find(|k| k.time <= t + 1e-9 && k.placement.is_some())
+            .and_then(|k| k.placement.as_ref())
+            .or(style.placement.as_ref())
+            .and_then(|p| p.anchor);
+        let unsaid = style_source.as_ref().is_none_or(|s| s.alignment.is_none())
+            && settings.subtitle_alignment == promo_model::SubtitleTextAlignment::Center;
+        if let Some(anchor) = anchor.filter(|_| unsaid && b.lines > 1) {
+            use promo_model::Anchor;
+            if matches!(
+                anchor,
+                Anchor::TopLeft
+                    | Anchor::Left
+                    | Anchor::BottomLeft
+                    | Anchor::TopRight
+                    | Anchor::Right
+                    | Anchor::BottomRight
+            ) && centred.is_none_or(|c| b.lines > c.0)
+            {
+                centred = Some((b.lines, anchor.as_str()));
+            }
+        }
         margins = (style.left_margin, style.right_margin);
         let (x0, y0, x1, y1) = (bx, by, bx + b.width, by + b.height);
         // What shows is the ink, not the box: with no plate behind the
@@ -285,6 +314,18 @@ fn caption_checks(
             gap,
             safe,
             fix(&side, safe - gap)
+        ));
+    }
+    if let Some((lines, anchor)) = centred {
+        let side = if anchor.ends_with("Left") || anchor == "left" {
+            "leading"
+        } else {
+            "trailing"
+        };
+        out.push(format!(
+            "{named} hangs from {anchor} but centres its {lines} lines (alignment defaults to \
+             center); set \"alignment\": \"{side}\" in its captionStyle to line them up on \
+             that side"
         ));
     }
     if let Some((share, name, t)) = covered {
@@ -592,6 +633,56 @@ mod tests {
         // Its ink is 12 + 16 (the empty padding) = 28 px in; 54 is safe.
         assert!(line.contains("sits 28 px"), "{line}");
         assert!(line.contains("set leftMargin ≥ 38"), "{line}");
+    }
+
+    /// A two-line caption hung from the left with its lines left to the
+    /// default centre is told to align them (issue #15); one line, an
+    /// alignment it states, or a centre anchor says nothing.
+    #[test]
+    fn a_side_anchored_caption_with_centred_lines_is_told() {
+        if !fonts_available() {
+            eprintln!("no fonts; skipping");
+            return;
+        }
+        let caption = |text: &str, style: &str| {
+            let flush = project(
+                &format!(
+                    r#"{{"id":"C","name":"Hook","sortIndex":1,"kind":"caption","isEnabled":true,"startTime":0,"duration":4,
+                    "captionText":"{text}","captionStyle":{{{style}}},"keyframes":[]}}"#
+                ),
+                "",
+            );
+            layout_warnings(&flush)
+                .into_iter()
+                .filter(|w| w.contains("centres its"))
+                .collect::<Vec<_>>()
+        };
+        let left = r#""placement":{"anchor":"bottomLeft","offset":[80,-80]}"#;
+        let told = caption("Ship the film\\ntonight", left);
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert!(
+            told[0].contains("hangs from bottomLeft")
+                && told[0].contains("its 2 lines")
+                && told[0].contains("\"alignment\": \"leading\""),
+            "{}",
+            told[0]
+        );
+        let right = r#""placement":{"anchor":"topRight","offset":[-80,80]}"#;
+        assert!(caption("Ship the film\\ntonight", right)[0].contains("\"trailing\""));
+        assert!(
+            caption("Ship the film tonight", left).is_empty(),
+            "one line"
+        );
+        assert!(caption(
+            "Ship the film\\ntonight",
+            &format!(r#"{left},"alignment":"center""#)
+        )
+        .is_empty());
+        assert!(caption(
+            "Ship the film\\ntonight",
+            r#""placement":{"anchor":"bottom","offset":[0,-80]}"#
+        )
+        .is_empty());
     }
 
     /// A slide reveal brings each word in from the right: a trailing line

@@ -308,7 +308,12 @@ Whose beats: `compositionSettings.beatClock` —
 `{ "resourceID": "<audio>", "startTime": 0 }`, the audio resource whose
 grid counts and the output time of its second 0. Without `startTime`, the
 clock follows the first enabled audio layer that plays the resource,
-through its trim and speed. A composition resource's own
+through its trim and speed — usually what you want: a stated `startTime`
+is the output time of the audio's second 0, so on a song trimmed by
+0.43 s and played from 0 s it is −0.43, and validate says so when a stated
+one disagrees with the playing layer. A pulse over a keyed track (a Ken
+Burns viewport on the beat) is usually meant, so it is a note `validate
+--strict` lists, not a warning. A composition resource's own
 `composition.beatClock` is its clock — a nested composition never counts
 its parent's — and a layer's own `beatClock` overrides for that layer.
 
@@ -686,6 +691,18 @@ needs a `leftMargin` (or placement offset) its fontSize clears, and a
 resolved times (keyframed moves, sizes and a moving reveal included) and
 says which edge it runs past or sits within 5% of, when, and the margin
 or offset that fixes it.
+
+Hung from a side (`placement.anchor` `bottomLeft`, `left`, `topRight`…),
+a caption's LINES still centre inside its box unless `alignment` says
+otherwise — a two-line headline in the corner wants `"alignment":
+"leading"` (or `"trailing"` on the right), and validate says so when it
+is left out. Every caption has a dark plate by default; plain words over
+a designed background want `"backgroundOpacity": 0` (set it once as
+`subtitleBackgroundOpacity` in compositionSettings for the whole film).
+Font families are the system faces listed below: a headless render on
+Linux uses the nearest installed face for the Apple names, and a font
+file of the project's own is not read yet — a brand face renders the
+same everywhere only through the apps on macOS/iOS.
 
 A CAPTION is typography, said in its own words: `fontSize` on a keyframe
 is the size in points (its own field; the legacy spelling on a caption
@@ -1108,6 +1125,15 @@ A reveal can arrive on a narration's words instead of at its own pace —
   screenshot sits in, and as a MASK it is the rounded rect itself. A
   project using a rect or a corner radius carries
   `minReaderVersion: 42`.
+- A drawing's points are in its OWN space, not the canvas's: the layer
+  scales the bounds of all its shapes to fit the canvas (centred, like
+  a picture of that aspect), then applies zoom, shifts or `placement`.
+  One `rect` from [100,100] to [200,150] on a 640x360 canvas therefore
+  fills the canvas height as a 2:1 box — it does not draw a 100x50 bar
+  at (100,100). To lay a drawing out in canvas pixels, give it the
+  canvas as its bounds: add a `rect` from [0,0] to [canvasWidth,
+  canvasHeight] with `strokeOpacity: 0` and `fillOpacity: 0` — then
+  every point is a canvas pixel, with no placement needed.
 
 ## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits, audioFocus, duck, ducking
 
