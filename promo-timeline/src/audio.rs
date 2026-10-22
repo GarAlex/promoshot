@@ -762,7 +762,12 @@ fn nested_inputs(
             continue;
         };
         let res = crate::mapping::resource_for_cut(stored, layer.media_cut_id.as_deref());
-        let ranges = crate::mapping::playback_video_trim_ranges(&res);
+        let ranges = looped_ranges(
+            layer,
+            &res,
+            crate::mapping::playback_video_trim_ranges(&res),
+            layer.duration,
+        );
         let own_rate = crate::mapping::effective_speed(&res);
         let own_rate = if own_rate.abs() > 0.0001 {
             own_rate.abs()
@@ -839,6 +844,70 @@ fn nested_inputs(
     (inputs, focus)
 }
 
+/// The ranges a layer plays, repeated for every pass when it LOOPS —
+/// `beyondEnd: "loop"` on the layer, or (naming no policy) `looped` on the
+/// resource — so its sound starts over the way its picture does
+/// (`mapping::source_time_for_layer`). Laid end to end by the placer, the
+/// passes are one input to every executor: the CLI's mixer and the apps'
+/// AVFoundation graph alike. Until this a looping layer's sound played its
+/// material once and then nothing (issue #13).
+///
+/// `horizon` is how many timeline seconds of material the layer can reach
+/// (its duration, plus any seek). A layer that does not loop, names no
+/// duration, or whose material is empty or of unknown length keeps its
+/// ranges as they were.
+fn looped_ranges(
+    layer: &ProjectLayer,
+    res: &promo_model::ProjectResource,
+    ranges: Option<Vec<VideoTrimRange>>,
+    horizon: Option<f64>,
+) -> Option<Vec<VideoTrimRange>> {
+    let loops = match layer.beyond_end {
+        Some(policy) => policy == promo_model::BeyondEnd::Loop,
+        None => res.is_looped(),
+    };
+    let Some(horizon) = horizon.filter(|h| loops && h.is_finite() && *h > 0.0) else {
+        return ranges;
+    };
+    let pass = match ranges.as_ref() {
+        Some(rs) => rs.clone(),
+        None => match res.duration.filter(|d| *d > 0.0) {
+            Some(d) => vec![VideoTrimRange { start: 0.0, end: d }],
+            None => return ranges,
+        },
+    };
+    let content: f64 = pass.iter().map(|r| (r.end - r.start).max(0.0)).sum();
+    let rate = crate::mapping::effective_speed(res).abs();
+    let rate = if rate > 0.0001 { rate } else { 1.0 };
+    if content <= 0.000_1 {
+        return ranges;
+    }
+    // Passes to cover the horizon, in source seconds; bounded so a
+    // pathological loop (a frame-long take under an hour) stays finite.
+    let passes = ((horizon * rate) / content).ceil().clamp(1.0, 100_000.0) as usize;
+    if passes <= 1 {
+        return ranges;
+    }
+    Some(
+        std::iter::repeat_n(pass, passes)
+            .flatten()
+            .filter(|r| r.end > r.start)
+            .collect(),
+    )
+}
+
+/// How far a layer's material clock can run, in timeline seconds: its
+/// duration, plus the furthest a seek puts it.
+fn material_horizon(layer: &ProjectLayer) -> Option<f64> {
+    let duration = layer.duration?;
+    let seek = layer
+        .keyframes
+        .iter()
+        .filter_map(|k| k.source_time)
+        .fold(0.0f64, f64::max);
+    Some(duration.max(0.0) + seek)
+}
+
 /// Drops `seconds` of source from the front of `ranges`.
 fn shift_ranges(ranges: Vec<VideoTrimRange>, seconds: f64) -> Vec<VideoTrimRange> {
     let mut left = seconds.max(0.0);
@@ -905,7 +974,12 @@ pub fn audio_inputs(
                 };
                 // The layer's cut decides which part plays and at what speed.
                 let res = crate::mapping::resource_for_cut(stored, layer.media_cut_id.as_deref());
-                let ranges = crate::mapping::playback_video_trim_ranges(&res);
+                let ranges = looped_ranges(
+                    layer,
+                    &res,
+                    crate::mapping::playback_video_trim_ranges(&res),
+                    material_horizon(layer),
+                );
                 let rate = crate::mapping::effective_speed(&res);
                 let rate = if rate.abs() > 0.0001 { rate.abs() } else { 1.0 };
                 played_length = ranges

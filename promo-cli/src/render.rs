@@ -1256,6 +1256,114 @@ mod tests {
         (slice.iter().map(|s| s * s).sum::<f32>() / slice.len().max(1) as f32).sqrt()
     }
 
+    /// Issue #13: a looping layer's SOUND starts over like its picture —
+    /// `looped` on the resource, `beyondEnd: "loop"` on the layer, trimmed or
+    /// not, and inside a composition. A 3 s tone trimmed to 0.5–2.5 (or
+    /// whole) under a 9 s layer used to play once and then render silence
+    /// (-91 dB in the issue's volumedetect windows). Every 0.6 s window to
+    /// the layer's end must sound at the first pass's level.
+    #[test]
+    fn a_looping_sound_repeats_for_the_whole_layer() {
+        let dir = std::env::temp_dir().join(format!("promo-audio-loop-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        if !tone(&dir.join("Resources/bed.wav"), 220, 3.0) {
+            eprintln!("no ffmpeg; skipping");
+            return;
+        }
+        let write = |resource_extra: &str, layer_extra: &str, nested: bool| {
+            let bed = format!(
+                r#"{{"id":"bed","kind":"audio","filename":"bed.wav","displayName":"bed","addedAt":0,
+                    "duration":3,"imageCuts":[],"disabledAudioTrackIndices":[]{resource_extra}}}"#
+            );
+            let layer = format!(
+                r#"{{"id":"bedL","name":"bed","sortIndex":0,"kind":"audio","isEnabled":true,
+                    "startTime":0,"duration":9,"resourceID":"bed","keyframes":[]{layer_extra}}}"#
+            );
+            let (resources, layers) = if nested {
+                (
+                    format!(
+                        r#"{bed},{{"id":"C","kind":"composition","filename":"","displayName":"C","addedAt":0,"duration":9,
+                            "pixelWidth":64,"pixelHeight":64,"imageCuts":[],"disabledAudioTrackIndices":[],
+                            "composition":{{"canvasWidth":64,"canvasHeight":64,"layers":[{layer}]}}}}"#
+                    ),
+                    r#"{"id":"show","name":"show","sortIndex":0,"kind":"video","isEnabled":true,
+                        "startTime":0,"duration":9,"resourceID":"C","keyframes":[]}"#
+                        .to_string(),
+                )
+            } else {
+                (bed, layer)
+            };
+            std::fs::write(
+                dir.join("metadata.json"),
+                format!(
+                    r#"{{"id":"P","name":"loop","createdAt":0,"state":"recorded","minReaderVersion":50,
+                    "trimStart":0,"trimEnd":9,"videoDuration":9,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"}},
+                    "resources":[{resources}],"layers":[{layers}]}}"#
+                ),
+            )
+            .unwrap();
+        };
+        let trim = r#","trimStart":0.5,"trimEnd":2.5"#;
+        let cases = [
+            (
+                "resource looped, trimmed",
+                format!(r#"{trim},"looped":true"#),
+                "",
+                false,
+            ),
+            (
+                "layer beyondEnd loop, trimmed",
+                trim.to_string(),
+                r#","beyondEnd":"loop""#,
+                false,
+            ),
+            (
+                "resource looped, untrimmed",
+                r#","looped":true"#.to_string(),
+                "",
+                false,
+            ),
+            (
+                "inside a composition",
+                trim.to_string(),
+                r#","beyondEnd":"loop""#,
+                true,
+            ),
+        ];
+        let db = |audio: &promo_media::AudioBuffer, a: f64, b: f64| {
+            20.0 * rms(audio, a, b).max(1e-6).log10()
+        };
+        for (name, resource_extra, layer_extra, nested) in cases {
+            write(&resource_extra, layer_extra, nested);
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mix = build_soundtrack(&project, 9.0)
+                .expect("mixes")
+                .expect("has sound");
+            let first = db(&mix, 0.2, 0.8);
+            assert!(
+                first > -30.0,
+                "{name}: the first pass sounds ({first:.1} dB)"
+            );
+            for from in [2.2, 3.2, 4.6, 6.2, 8.2] {
+                let level = db(&mix, from, from + 0.6);
+                assert!(
+                    (level - first).abs() < 1.0,
+                    "{name}: {from}-{} s is at the first pass's level: {level:.1} dB vs {first:.1} dB",
+                    from + 0.6
+                );
+            }
+        }
+        // Hold (the default without `looped`) still plays once.
+        write(trim, "", false);
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mix = build_soundtrack(&project, 9.0)
+            .expect("mixes")
+            .expect("has sound");
+        assert!(db(&mix, 4.0, 5.0) < -80.0, "a held sound does not repeat");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// An export's sound is the window it writes (review 2026-09-27,
     /// P2-31): a voice starting at 1 s is heard from the first sample of
     /// an export that starts at 1 s. `promo video --from 1` used to mix
