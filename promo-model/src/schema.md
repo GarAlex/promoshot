@@ -308,12 +308,7 @@ Whose beats: `compositionSettings.beatClock` —
 `{ "resourceID": "<audio>", "startTime": 0 }`, the audio resource whose
 grid counts and the output time of its second 0. Without `startTime`, the
 clock follows the first enabled audio layer that plays the resource,
-through its trim and speed — usually what you want: a stated `startTime`
-is the output time of the audio's second 0, so on a song trimmed by
-0.43 s and played from 0 s it is −0.43, and validate says so when a stated
-one disagrees with the playing layer. A pulse over a keyed track (a Ken
-Burns viewport on the beat) is usually meant, so it is a note `validate
---strict` lists, not a warning. A composition resource's own
+through its trim and speed. A composition resource's own
 `composition.beatClock` is its clock — a nested composition never counts
 its parent's — and a layer's own `beatClock` overrides for that layer.
 
