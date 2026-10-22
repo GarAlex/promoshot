@@ -180,7 +180,8 @@ fn carry_layer(into: &mut ProjectLayer, from: &ProjectLayer, mode: Mode) {
 fn carry_resource(into: &mut ProjectResource, from: &ProjectResource, mode: Mode) {
     carry_map(&mut into.extra, &from.extra, APP_RESOURCE_KEYS, mode);
     carry_field(&mut into.provenance, &from.provenance, mode);
-    carry_field(&mut into.transcript, &from.transcript, mode);
+    // `transcript` is the app's own now (it times a recording's words), so
+    // its edits — a cleared one included — stand.
     carry_field(&mut into.generated_by, &from.generated_by, mode);
     carry_style_sync(&mut into.caption_style, &from.caption_style, mode);
     if let (Some(composition), Some(old)) = (into.composition.as_mut(), from.composition.as_ref()) {
