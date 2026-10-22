@@ -806,6 +806,16 @@ impl PreviewEngine {
         self.meta.resources.as_ref()?.iter().find(|r| &r.id == rid)
     }
 
+    /// The resource a layer's clock maps through at `time`: what it SHOWS
+    /// then — the composition a takeover swapped in, not the one it started
+    /// on. Mapping the arriving composition through the first one's trims
+    /// and length froze it at that length (issue #11), or looped it there.
+    fn clock_resource(&self, layer: &ProjectLayer, time: f64) -> Option<&ProjectResource> {
+        let resources = self.meta.resources.as_deref()?;
+        let showing = tl::layer_resource_id(layer, time, resources)?;
+        resources.iter().find(|r| r.id == showing)
+    }
+
     /// True when an image layer's device frame animates its tilt — the baked
     /// bitmap then changes over time, so the layer can't be cached as static
     /// content. Mirrors Swift `effectiveFrame(forCutID:)`: the layer's image
@@ -1013,7 +1023,7 @@ impl PreviewEngine {
                 continue;
             }
             let local = tl::transport::material_time(layer, tl::layer_local_time(layer, time));
-            let source_time = match self.resource_for(layer) {
+            let source_time = match self.clock_resource(layer, time) {
                 Some(res) => {
                     let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
                     tl::source_time_for_layer(&view, local, layer.beyond_end).unwrap_or(local)
@@ -2609,7 +2619,7 @@ impl PreviewEngine {
                 // its material — paused, sought, or running since its start.
                 let local =
                     tl::transport::material_time(layer, tl::layer_local_time(layer, centre));
-                match self.resource_for(layer) {
+                match self.clock_resource(layer, centre) {
                     Some(res) => {
                         // A layer naming a cut plays that sub-range; the
                         // mapping is the same code either way.
@@ -2753,7 +2763,15 @@ impl PreviewEngine {
                         })
                         .cloned()
                         .and_then(|res| {
-                            self.composition_frame(layer, &res, source_time, tier, doc.depth, &used)
+                            // Its own clock mapping: trims and length are
+                            // the outgoing composition's, not the arrival's.
+                            let local = tl::transport::material_time(
+                                layer,
+                                tl::layer_local_time(layer, centre),
+                            );
+                            let view = tl::resource_for_cut(&res, layer.media_cut_id.as_deref());
+                            let at = tl::source_time_for_layer(&view, local, layer.beyond_end)?;
+                            self.composition_frame(layer, &res, at, tier, doc.depth, &used)
                         });
                     // The outgoing material's shadow is discarded: one
                     // shadow per layer, and the incoming quad carries it.

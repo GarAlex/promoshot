@@ -2567,6 +2567,87 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// White text pixels in the rows `y0..y1` (x 20..400) of a BGRA frame.
+    fn white_rows(frame: &[u8], w: usize, y0: usize, y1: usize) -> usize {
+        (y0..y1)
+            .flat_map(|y| (20..400).map(move |x| (y * w + x) * 4))
+            .filter(|&i| frame[i] > 200 && frame[i + 1] > 200 && frame[i + 2] > 200)
+            .count()
+    }
+
+    /// Issue #11: after a takeover the ARRIVING composition's clock is its
+    /// own — its length, its loop. A starts the layer (3.5 s long), B (12 s,
+    /// four captions stacked at y 40/100/160/220) takes over at 3 s, fresh.
+    /// B used to be mapped through A's length: frozen at B-local 3.5, or with
+    /// `beyondEnd: "loop"` wrapped at 3.5.
+    #[test]
+    fn a_takeover_runs_on_the_arriving_compositions_clock() {
+        if promo_gpu::gpu_for_test().is_none() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("promo-swap-clock-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let cap = |id: &str, start: f64, dur: f64, text: &str, y: u32| {
+            format!(
+                r#"{{"id":"{id}","name":"{id}","sortIndex":0,"kind":"caption","isEnabled":true,"startTime":{start},"duration":{dur},
+                    "captionText":"{text}","captionStyle":{{"fontSize":40,"placement":{{"anchor":"topLeft","offset":[40,{y}]}},"backgroundOpacity":0}},"keyframes":[]}}"#
+            )
+        };
+        let comp = |id: &str, dur: f64, layers: Vec<String>| {
+            format!(
+                r#"{{"id":"{id}","kind":"composition","filename":"","displayName":"{id}","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+                    "pixelWidth":640,"pixelHeight":360,"duration":{dur},"composition":{{"canvasWidth":640,"canvasHeight":360,"layers":[{}]}}}}"#,
+                layers.join(",")
+            )
+        };
+        let write = |beyond: &str| {
+            let json = format!(
+                r#"{{"id":"R1","name":"R1","createdAt":0,"state":"recorded","minReaderVersion":50,"trimStart":0,"trimEnd":12,"videoDuration":12,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":640,"canvasHeight":360,"backgroundColorHex":"222222","fps":30}},
+                "resources":[{a},{b}],
+                "layers":[{{"id":"show","name":"show","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":12,"resourceID":"A",{beyond}
+                  "keyframes":[{{"id":"k0","time":0,"placement":{{"height":360,"anchor":"topLeft","offset":[0,0]}}}},
+                               {{"id":"k1","time":3,"resourceID":"B","sourceTime":0}}]}}]}}"#,
+                a = comp("A", 3.5, vec![cap("a0", 0.0, 3.5, "A", 40)]),
+                b = comp(
+                    "B",
+                    12.0,
+                    vec![
+                        cap("b0", 0.0, 2.0, "B 0-2", 40),
+                        cap("b1", 2.0, 2.0, "B 2-4", 100),
+                        cap("b2", 4.0, 2.0, "B 4-6", 160),
+                        cap("b3", 6.0, 6.0, "B 6-12", 220),
+                    ]
+                ),
+            );
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+        };
+        // Which caption band lights up: 0 for y 40, 1 for 100, …
+        let band = |renderer: &mut Renderer, t: f64| -> Vec<usize> {
+            let frame = renderer.frame_bgra(t).expect("frame");
+            [40usize, 100, 160, 220]
+                .iter()
+                .enumerate()
+                .filter(|(_, &y)| white_rows(&frame, 640, y, y + 50) > 30)
+                .map(|(i, _)| i)
+                .collect()
+        };
+        for beyond in ["", r#""beyondEnd":"loop","#] {
+            write(beyond);
+            let project = crate::project::Project::open(&dir).expect("project");
+            let mut renderer = Renderer::new(&project, 640, 360).expect("renderer");
+            for (t, want) in [(4.0, 0usize), (6.0, 1), (8.0, 2), (10.0, 3), (11.5, 3)] {
+                assert_eq!(
+                    band(&mut renderer, t),
+                    vec![want],
+                    "{beyond:?} t={t}: B-local {} shows its caption band {want}",
+                    t - 3.0
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Models (rung 29): a generated cube glb on a model layer renders lit
     /// — face-on it is one shade, from a keyed three-quarter camera it is
     /// several with the top face brightest — and a `@accent` material
