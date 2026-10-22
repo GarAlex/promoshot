@@ -4887,13 +4887,31 @@ impl ProjectMetadata {
         {
             return 47;
         }
+        // A picture layer swapping across kinds — a video layer to a
+        // composition (the takeover), a clip or a still; an image layer to a
+        // clip or a composition — is one an older reader ignores: it never
+        // switches. Stamped with the takeover's rung, which every reader
+        // that draws these swaps also reads.
         if all.iter().any(|l| {
-            l.kind == ProjectLayerKind::Video
+            matches!(l.kind, ProjectLayerKind::Video | ProjectLayerKind::Image)
                 && l.keyframes.iter().any(|k| {
                     k.resource_id.as_deref().is_some_and(|id| {
-                        resources
-                            .iter()
-                            .any(|r| r.id == id && r.kind == ProjectResourceKind::Composition)
+                        resources.iter().any(|r| {
+                            r.id == id
+                                && match l.kind {
+                                    ProjectLayerKind::Video => matches!(
+                                        r.kind,
+                                        ProjectResourceKind::Composition
+                                            | ProjectResourceKind::Video
+                                            | ProjectResourceKind::Image
+                                    ),
+                                    _ => matches!(
+                                        r.kind,
+                                        ProjectResourceKind::Composition
+                                            | ProjectResourceKind::Video
+                                    ),
+                                }
+                        })
                     })
                 })
         }) {

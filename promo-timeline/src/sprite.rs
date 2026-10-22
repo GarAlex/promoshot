@@ -83,18 +83,17 @@ pub fn frame_at(
 /// straight through it, which is the whole point — the alternative is a second
 /// layer with every keyframe duplicated.
 ///
-/// Three rules, all of them refusals:
+/// The rules:
 ///
 /// - The swap is a STEP. It lands at the keyframe's own time, not at the
-///   start of a ramp, and no transition applies to it.
-/// - Image, caption, drawing and background layers swap to their OWN kind.
-///   Anything else is ignored rather than drawn, because an image layer
-///   handed a video has no sensible thing to do with it.
-/// - A VIDEO layer swaps to a COMPOSITION (rung 47): the takeover. "Where
-///   does the second clip start" is the swap keyframe's `sourceTime` — the
-///   consumer's transport — and absent, wherever the layer's clock already
-///   is. A video swapping to another video waits on the hosts' decoders,
-///   which key on the layer.
+///   start of a ramp; a keyframe `transition` blends the two materials
+///   over its duration, the outgoing drawn whole underneath.
+/// - Caption, drawing and background layers swap to their OWN kind.
+/// - A picture layer — VIDEO or IMAGE — swaps among pictures: a video, an
+///   image or a composition. A composition is the takeover (rung 47);
+///   any clocked material arrives where the swap keyframe's `sourceTime`
+///   says — the consumer's transport — and absent, wherever the layer's
+///   clock already is. A still ignores the clock.
 ///
 /// The resource `id` names, if this layer could actually swap to it —
 /// it exists and is the kind this layer draws.
@@ -106,27 +105,33 @@ pub fn swappable<'a>(
     id: &str,
     resources: &'a [ProjectResource],
 ) -> Option<&'a ProjectResource> {
-    let wanted = swappable_kind(layer)?;
-    resources.iter().find(|r| r.id == id && r.kind == wanted)
+    resources
+        .iter()
+        .find(|r| r.id == id && can_swap_to(layer, r.kind))
 }
 
-/// The resource kind this layer's swaps must name, or `None` for a kind that
-/// does not swap at all.
-pub fn swappable_kind(layer: &ProjectLayer) -> Option<promo_model::ProjectResourceKind> {
+/// Whether this layer's swaps may name a resource of `kind`.
+pub fn can_swap_to(layer: &ProjectLayer, kind: promo_model::ProjectResourceKind) -> bool {
+    use promo_model::{ProjectLayerKind as L, ProjectResourceKind as R};
     match layer.kind {
-        promo_model::ProjectLayerKind::Image => Some(promo_model::ProjectResourceKind::Image),
-        promo_model::ProjectLayerKind::Caption => Some(promo_model::ProjectResourceKind::Caption),
-        promo_model::ProjectLayerKind::Drawing => Some(promo_model::ProjectResourceKind::Drawing),
+        // A picture replaces a picture, whatever it is made of: a clip, a
+        // still, a whole composition (the takeover, rung 47).
+        L::Image | L::Video => matches!(kind, R::Image | R::Video | R::Composition),
+        L::Caption => kind == R::Caption,
+        L::Drawing => kind == R::Drawing,
         // A background swaps like an image: one plate replaces another.
-        // "Replace the background" on a keyframe is exactly this rule.
-        promo_model::ProjectLayerKind::Background => {
-            Some(promo_model::ProjectResourceKind::Background)
-        }
-        // The takeover (rung 47): a video layer swaps to a composition —
-        // the next film, arriving where its `sourceTime` says.
-        promo_model::ProjectLayerKind::Video => Some(promo_model::ProjectResourceKind::Composition),
-        _ => None,
+        L::Background => kind == R::Background,
+        _ => false,
     }
+}
+
+/// Whether this layer's keyframes can swap what it shows at all.
+pub fn swaps_at_all(layer: &ProjectLayer) -> bool {
+    use promo_model::ProjectLayerKind as L;
+    matches!(
+        layer.kind,
+        L::Image | L::Video | L::Caption | L::Drawing | L::Background
+    )
 }
 
 pub fn layer_resource_id<'a>(
@@ -135,12 +140,9 @@ pub fn layer_resource_id<'a>(
     resources: &[ProjectResource],
 ) -> Option<&'a str> {
     let base = layer.resource_id.as_deref();
-    // A drawing swaps like an image: the vector document is just as
-    // replaceable as a bitmap. A video layer swaps to a composition — the
-    // takeover of rung 47 — its clock answered by the keyframe's transport.
-    let Some(wanted) = swappable_kind(layer) else {
+    if !swaps_at_all(layer) {
         return base;
-    };
+    }
     let local = crate::layer_local_time(layer, time);
     let mut swaps: Vec<&promo_model::ProjectLayerKeyframe> = layer
         .keyframes
@@ -159,7 +161,7 @@ pub fn layer_resource_id<'a>(
             k.time <= local
                 && k.resource_id
                     .as_deref()
-                    .is_some_and(|id| resources.iter().any(|r| r.id == id && r.kind == wanted))
+                    .is_some_and(|id| swappable(layer, id, resources).is_some())
         })
         .and_then(|k| k.resource_id.as_deref())
         .or(base)
@@ -255,7 +257,7 @@ mod tests {
         assert!(sheet_for(&video).is_none());
     }
 
-    /// The swap, and the three things it refuses to do.
+    /// The swap, what a picture layer may swap to, and what it refuses.
     #[test]
     fn a_keyframe_can_change_what_a_layer_shows() {
         let resources: Vec<ProjectResource> = serde_json::from_str(
@@ -264,6 +266,8 @@ mod tests {
                 {"id":"B","kind":"image","filename":"b.png","displayName":"B",
                  "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]},
                 {"id":"V","kind":"video","filename":"v.mp4","displayName":"V",
+                 "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]},
+                {"id":"S","kind":"audio","filename":"s.wav","displayName":"S",
                  "addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[]}]"#,
         )
         .unwrap();
@@ -285,26 +289,40 @@ mod tests {
         assert_eq!(layer_resource_id(&swapping, 2.0, &resources), Some("B"));
         assert_eq!(layer_resource_id(&swapping, 99.0, &resources), Some("B"));
 
-        // A swap to the wrong KIND is ignored, not drawn: an image layer
-        // handed a video has nothing sensible to do with it.
-        let mismatched: ProjectLayer = serde_json::from_str(
+        // A picture layer swaps among pictures, whatever they are made of:
+        // an image layer handed a clip plays it, a video layer handed a
+        // still shows it.
+        let to_clip: ProjectLayer = serde_json::from_str(
             r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
                 "startTime":0,"resourceID":"A","keyframes":[
                   {"id":"K","time":1,"resourceID":"V","transitionDuration":0}]}"#,
         )
         .unwrap();
-        assert_eq!(layer_resource_id(&mismatched, 5.0, &resources), Some("A"));
-
-        // Video and audio layers do not honour swaps at all — that would make
-        // the layer a playlist and leave "where does the second clip start"
-        // unanswered.
+        assert_eq!(layer_resource_id(&to_clip, 5.0, &resources), Some("V"));
         let video: ProjectLayer = serde_json::from_str(
             r#"{"id":"L","name":"L","sortIndex":0,"kind":"video","isEnabled":true,
                 "startTime":0,"resourceID":"V","keyframes":[
                   {"id":"K","time":1,"resourceID":"A","transitionDuration":0}]}"#,
         )
         .unwrap();
-        assert_eq!(layer_resource_id(&video, 5.0, &resources), Some("V"));
+        assert_eq!(layer_resource_id(&video, 5.0, &resources), Some("A"));
+
+        // A swap to a kind the layer cannot draw is ignored, not drawn: a
+        // sound is not a picture, and an audio layer does not swap at all.
+        let mismatched: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                "startTime":0,"resourceID":"A","keyframes":[
+                  {"id":"K","time":1,"resourceID":"S","transitionDuration":0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(layer_resource_id(&mismatched, 5.0, &resources), Some("A"));
+        let audio: ProjectLayer = serde_json::from_str(
+            r#"{"id":"L","name":"L","sortIndex":0,"kind":"audio","isEnabled":true,
+                "startTime":0,"resourceID":"S","keyframes":[
+                  {"id":"K","time":1,"resourceID":"A","transitionDuration":0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(layer_resource_id(&audio, 5.0, &resources), Some("S"));
 
         // A swap naming something the project does not have falls back rather
         // than drawing nothing.

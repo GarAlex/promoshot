@@ -46,9 +46,9 @@ constant. The fields that matter first:
   source the layer shows. `[0,0,1,1]` is everything; ramping to
   `[0.25,0.25,0.5,0.5]` is the Ken Burns push. Keep `w == h` to keep the
   layer's shape; the layer's own rect never moves, only what it shows.
-- `resourceID` on a keyframe SWAPS what the layer shows (image, caption,
-  drawing, background; a video layer only to a COMPOSITION, the takeover,
-  `sourceTime` saying where it starts): a sequence on ONE layer. Add
+- `resourceID` on a keyframe SWAPS what the layer shows (video/image layers
+  among clips, stills and compositions, `sourceTime` saying where clocked
+  material starts; others to their own kind): a sequence on ONE layer. Add
   `"transition": { "kind": "wipe", "from": "left", "duration": 0.6 }` and
   the cut becomes a blend. This is how a still-image slideshow crossfades
   with no second layer.
@@ -128,9 +128,11 @@ pushes in over a palette ground, title above, 6 seconds:
     {"id":"t1","time":0.3,"opacity":1,"transitionDuration":0.3}]}]}
 ```
 
-**Two-clip sequence with a wipe** — a video layer cannot swap to another
-video, so two clips are two layers, overlapped by the wipe (for STILLS, do this on one
-layer with a swap keyframe carrying the same `transition` object):
+**Two-clip sequence with a wipe** — two layers overlapped by the wipe, so
+each clip keeps its own sound. (One video layer may also swap to the second
+clip with a keyframe carrying the same `transition` object — the picture
+switches, but the layer's sound stays its first clip's; for STILLS one layer
+is the way.)
 
 ```json
 {"id":"seq","name":"Two Clips","createdAt":0,"state":"recorded",

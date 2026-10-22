@@ -29,7 +29,10 @@ struct HostState {
     /// the redirect is keyed by LAYER and applies only while the layer shows
     /// its own resource, so a keyframe swap still swaps.
     cuts: HashMap<String, (String, Vec<u8>, u32, u32, i32)>,
-    /// layer id → its clip, decoder opened only while it is on screen.
+    /// [`video_key`] (layer, resource) → the clip, decoder opened only while
+    /// it is on screen. Keyed by the resource too: a layer whose keyframes
+    /// swap one clip for another plays both, and during the swap's
+    /// transition both at once.
     videos: HashMap<String, VideoLayer>,
     /// Opens a nested clip's decoder when the engine first asks for it.
     registry: Registry,
@@ -67,6 +70,12 @@ struct VideoLayer {
     nested: bool,
     /// Parent time of the last frame the engine asked this clip for.
     last_used: f64,
+}
+
+/// Where a clip is registered: the layer the engine asks with and the
+/// resource it names.
+fn video_key(layer_id: &str, resource_id: &str) -> String {
+    format!("{layer_id}\u{1f}{resource_id}")
 }
 
 impl HostState {
@@ -173,7 +182,7 @@ extern "C" fn provider(
         now,
         ..
     } = &mut *state;
-    let Some(video) = videos.get_mut(&id) else {
+    let Some(video) = videos.get_mut(&video_key(&id, &resource)) else {
         return 1; // Not ours to draw — the engine skips the layer.
     };
     if video.nested {
@@ -487,7 +496,7 @@ impl Renderer {
                     let start = layer.start_time.max(0.0);
                     let end = layer.duration.map(|d| start + d).unwrap_or(f64::MAX);
                     videos.insert(
-                        format!("slot\u{1f}{}", resource.id),
+                        video_key(&format!("slot\u{1f}{}", resource.id), &resource.id),
                         VideoLayer {
                             path,
                             start,
@@ -508,12 +517,21 @@ impl Renderer {
                 });
             }
             candidates.dedup();
-            // Only stills are preloaded; video opens while it is on screen.
-            // Video keys on the BASE resource (swaps never target video).
-            if layer.kind == promo_model::ProjectLayerKind::Video {
-                let Some(resource) = candidates.first().and_then(|id| project.resource(id)) else {
+            // Stills are preloaded; a clip opens while its layer is on
+            // screen. Every clip the layer can show — its own and each one a
+            // keyframe swaps to — under (layer, resource), so a swap from
+            // one clip to another, and its transition, has both.
+            for candidate in &candidates {
+                let Some(resource) = project
+                    .resource(candidate)
+                    .filter(|r| r.kind == promo_model::ProjectResourceKind::Video)
+                else {
                     continue;
                 };
+                let key = video_key(&layer.id, &resource.id);
+                if videos.contains_key(&key) {
+                    continue;
+                }
                 let Some(source) = project.resource_path(resource) else {
                     continue;
                 };
@@ -524,7 +542,7 @@ impl Renderer {
                 let start = layer.start_time.max(0.0);
                 let end = layer.duration.map(|d| start + d).unwrap_or(f64::MAX);
                 videos.insert(
-                    layer.id.clone(),
+                    key,
                     VideoLayer {
                         path,
                         start,
@@ -537,8 +555,12 @@ impl Renderer {
                         last_used: f64::NEG_INFINITY,
                     },
                 );
-                continue;
             }
+            candidates.retain(|id| {
+                project
+                    .resource(id)
+                    .is_some_and(|r| r.kind != promo_model::ProjectResourceKind::Video)
+            });
             for candidate in &candidates {
                 let Some(resource) = project.resource(candidate) else {
                     continue;
@@ -1941,7 +1963,9 @@ mod tests {
         let staged = |policy: ProxyPolicy, long_edge: u32| -> (bool, PathBuf) {
             let (_, _, videos) =
                 Renderer::stage_with(&project, &registry, policy, long_edge).expect("stage");
-            let v = videos.get("L").expect("staged by layer");
+            let v = videos
+                .get(&video_key("L", "V"))
+                .expect("staged by layer and clip");
             (v.proxied, v.path.clone())
         };
         // Nothing built yet: auto reads the source.
@@ -3777,6 +3801,223 @@ mod tests {
                 );
             }
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The outgoing clip runs on its OWN mapping through the transition: a
+    /// clip trimmed to start at 5 s, taken over by a composition fresh at
+    /// 3 s through a wipe from the left, still shows source 5.3 s on the
+    /// right at t=3.3 — the frame the layer shows at material 0.3 without
+    /// the swap. Mapped through the arriving composition it would read 0.3.
+    #[test]
+    fn an_outgoing_clip_keeps_its_own_trim_through_a_takeover() {
+        let dir = std::env::temp_dir().join(format!("promo-outgoing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let ok = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg("testsrc2=size=320x180:rate=30:duration=10")
+            .args(["-pix_fmt", "yuv420p"])
+            .arg(dir.join("Resources/clip.mp4"))
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok || promo_gpu::gpu_for_test().is_none() {
+            return;
+        }
+        let write = |swap: &str| {
+            let json = format!(
+                r#"{{"id":"P","name":"P","createdAt":0,"state":"recorded","minReaderVersion":50,"trimStart":0,"trimEnd":8,"videoDuration":8,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"000000","fps":30}},
+                "resources":[
+                  {{"id":"clip","kind":"video","filename":"clip.mp4","displayName":"clip","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+                    "videoNaturalWidth":320,"videoNaturalHeight":180,"duration":10,"trimStart":5,"trimEnd":10}},
+                  {{"id":"C","kind":"composition","filename":"","displayName":"C","addedAt":0,"imageCuts":[],"disabledAudioTrackIndices":[],
+                    "pixelWidth":320,"pixelHeight":180,"duration":20,"composition":{{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"3050C0","layers":[]}}}}],
+                "layers":[{{"id":"L","name":"L","sortIndex":0,"kind":"video","isEnabled":true,"startTime":0,"duration":8,"resourceID":"clip",
+                  "keyframes":[{{"id":"k0","time":0,"placement":{{"height":180,"anchor":"topLeft","offset":[0,0]}}}}{swap}]}}]}}"#
+            );
+            std::fs::write(dir.join("metadata.json"), json).unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            Renderer::new(&project, 320, 180).expect("renderer")
+        };
+        let mut swapped = write(
+            r#",{"id":"k1","time":3,"resourceID":"C","sourceTime":0,
+                "transition":{"kind":"wipe","from":"left","duration":1.0}}"#,
+        );
+        let during = swapped.frame_bgra(3.3).expect("frame");
+        let mut alone = write("");
+        let reference = alone.frame_bgra(0.3).expect("frame");
+        // The right fifth is still the outgoing clip at 30% of the wipe.
+        let right = |f: &[u8]| -> Vec<u8> {
+            (0..180)
+                .flat_map(|y| {
+                    (260..320).flat_map(move |x| (0..3).map(move |c| (y * 320 + x) * 4 + c))
+                })
+                .map(|i| f[i])
+                .collect()
+        };
+        let (a, b) = (right(&during), right(&reference));
+        let worst = a
+            .iter()
+            .zip(&b)
+            .map(|(x, y)| x.abs_diff(*y))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            worst <= 8,
+            "the outgoing clip shows its own source 5.3 s (worst channel diff {worst})"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A swap's transition draws the OUTGOING picture underneath the
+    /// arriving one, whatever each is made of: video → composition, video →
+    /// video, video → image, composition → video and image → video, under
+    /// every transition kind. Red goes out, blue comes in over black: at 30%
+    /// of the transition red must still be on screen (where a wipe has not
+    /// reached, under a fade, beside a push…), before it only red, after it
+    /// none. The engine used to drop a video layer's own clip as the
+    /// outgoing material (the swap rule filtered it), and the headless host
+    /// served one clip per layer, so a second clip could not arrive at all.
+    #[test]
+    fn the_outgoing_picture_stays_through_every_swap_transition() {
+        let dir = std::env::temp_dir().join(format!("promo-swap-out-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let make = |args: &[&str], out: &str| {
+            Command::new("ffmpeg")
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+                .args(args)
+                .arg(dir.join("Resources").join(out))
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        };
+        let ok = make(
+            &["color=c=red:s=160x90:r=30:d=6", "-pix_fmt", "yuv420p"],
+            "red.mp4",
+        ) && make(
+            &["color=c=blue:s=160x90:r=30:d=6", "-pix_fmt", "yuv420p"],
+            "blue.mp4",
+        ) && make(&["color=c=red:s=160x90", "-frames:v", "1"], "red.png")
+            && make(&["color=c=blue:s=160x90", "-frames:v", "1"], "blue.png");
+        if !ok || promo_gpu::gpu_for_test().is_none() {
+            return;
+        }
+        let video = |id: &str, file: &str| {
+            format!(
+                r#"{{"id":"{id}","kind":"video","filename":"{file}","displayName":"{id}","addedAt":0,"imageCuts":[],
+                    "disabledAudioTrackIndices":[],"videoNaturalWidth":160,"videoNaturalHeight":90,"duration":6}}"#
+            )
+        };
+        let image = |id: &str, file: &str| {
+            format!(
+                r#"{{"id":"{id}","kind":"image","filename":"{file}","displayName":"{id}","addedAt":0,"imageCuts":[],
+                    "disabledAudioTrackIndices":[],"pixelWidth":160,"pixelHeight":90}}"#
+            )
+        };
+        let comp = |id: &str, hex: &str| {
+            format!(
+                r#"{{"id":"{id}","kind":"composition","filename":"","displayName":"{id}","addedAt":0,"imageCuts":[],
+                    "disabledAudioTrackIndices":[],"pixelWidth":160,"pixelHeight":90,"duration":6,
+                    "composition":{{"canvasWidth":160,"canvasHeight":90,"backgroundColorHex":"{hex}","layers":[]}}}}"#
+            )
+        };
+        let resources = [
+            video("Vr", "red.mp4"),
+            video("Vb", "blue.mp4"),
+            image("Ir", "red.png"),
+            image("Ib", "blue.png"),
+            comp("Cr", "FF0000"),
+            comp("Cb", "0000FF"),
+        ]
+        .join(",");
+        // (name, layer kind, outgoing, incoming)
+        let pairs = [
+            ("video → composition", "video", "Vr", "Cb"),
+            ("video → video", "video", "Vr", "Vb"),
+            ("video → image", "video", "Vr", "Ib"),
+            ("composition → video", "video", "Cr", "Vb"),
+            ("image → video", "image", "Ir", "Vb"),
+        ];
+        // Each sampled where its arrival is still partial (see `at`).
+        let kinds = [
+            "fade",
+            "wipe",
+            "slide",
+            "push",
+            "scale",
+            "blurDissolve",
+            "zoom",
+            "flash",
+            "glitch",
+            "dip",
+        ];
+        // BGRA: red-dominant pixels can only be the outgoing picture.
+        let red = |f: &[u8]| {
+            f.chunks_exact(4)
+                .filter(|p| p[2] > 100 && p[2] as i32 > p[0] as i32 + 60)
+                .count()
+        };
+        let blue = |f: &[u8]| {
+            f.chunks_exact(4)
+                .filter(|p| p[0] > 100 && p[0] as i32 > p[2] as i32 + 60)
+                .count()
+        };
+        let total = 160 * 90;
+        let mut failures = Vec::new();
+        for (name, kind, from, to) in pairs {
+            for transition in kinds {
+                let json = format!(
+                    r#"{{"id":"P","name":"P","createdAt":0,"state":"recorded","minReaderVersion":50,"trimStart":0,"trimEnd":5,
+                    "videoDuration":5,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":160,"canvasHeight":90,"backgroundColorHex":"000000","fps":30}},
+                    "resources":[{resources}],
+                    "layers":[{{"id":"L","name":"L","sortIndex":0,"kind":"{kind}","isEnabled":true,"startTime":0,"duration":5,
+                      "resourceID":"{from}","keyframes":[
+                        {{"id":"k0","time":0,"placement":{{"height":90,"anchor":"topLeft","offset":[0,0]}}}},
+                        {{"id":"k1","time":2,"resourceID":"{to}",
+                          "transition":{{"kind":"{transition}","from":"left","duration":1.0}}}}]}}]}}"#
+                );
+                std::fs::write(dir.join("metadata.json"), json).unwrap();
+                let project = crate::project::Project::open(&dir).expect("project");
+                let mut r = Renderer::new(&project, 160, 90).expect("renderer");
+                let before = r.frame_bgra(1.5).expect("frame");
+                // 30% in — earlier for the kinds whose arrival is nearly
+                // opaque at once (a flash, a glitch) or whose departure
+                // fades (zoom), so the departure is still there to see.
+                let at = match transition {
+                    "flash" => 2.1,
+                    "glitch" => 2.05,
+                    "zoom" => 2.15,
+                    _ => 2.3,
+                };
+                let during = r.frame_bgra(at).expect("frame");
+                let after = r.frame_bgra(3.5).expect("frame");
+                let (rb, rd, ra, ba) = (red(&before), red(&during), red(&after), blue(&after));
+                if rb < total * 9 / 10 || rd < total / 10 || ra > 0 || ba < total * 9 / 10 {
+                    failures.push(format!(
+                        "{name} {transition}: red before {rb}, during {rd}, after {ra}; blue after {ba} (of {total})"
+                    ));
+                }
+                if transition == "wipe" {
+                    // From the left: at 30% the left edge is the arrival,
+                    // the right edge — not yet reached — the departure.
+                    let px = |x: usize, y: usize| {
+                        let i = (y * 160 + x) * 4;
+                        (during[i + 2], during[i])
+                    };
+                    let (left, right) = (px(10, 45), px(150, 45));
+                    if !(left.1 > 150 && left.0 < 80 && right.0 > 150 && right.1 < 80) {
+                        failures.push(format!(
+                            "{name} wipe: left (r,b) {left:?} should be blue, right {right:?} red"
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

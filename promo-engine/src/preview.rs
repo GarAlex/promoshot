@@ -806,6 +806,30 @@ impl PreviewEngine {
         self.meta.resources.as_ref()?.iter().find(|r| &r.id == rid)
     }
 
+    /// Whether the layer shows CLOCKED material at `time` — a video or a
+    /// composition — which an image layer does once a swap brings one in.
+    fn shows_clocked(&self, layer: &ProjectLayer, time: f64) -> bool {
+        let resources = self.meta.resources.as_deref().unwrap_or(&[]);
+        tl::layer_resource_id(layer, time, resources)
+            .and_then(|id| resources.iter().find(|r| r.id == id))
+            .is_some_and(|r| {
+                matches!(
+                    r.kind,
+                    promo_model::ProjectResourceKind::Video
+                        | promo_model::ProjectResourceKind::Composition
+                )
+            })
+    }
+
+    /// Whether the layer shows a STILL image at `time` (a video layer a
+    /// swap handed a picture).
+    fn shows_still(&self, layer: &ProjectLayer, time: f64) -> bool {
+        let resources = self.meta.resources.as_deref().unwrap_or(&[]);
+        tl::layer_resource_id(layer, time, resources)
+            .and_then(|id| resources.iter().find(|r| r.id == id))
+            .is_some_and(|r| r.kind == promo_model::ProjectResourceKind::Image)
+    }
+
     /// True when an image layer's device frame animates its tilt — the baked
     /// bitmap then changes over time, so the layer can't be cached as static
     /// content. Mirrors Swift `effectiveFrame(forCutID:)`: the layer's image
@@ -1009,7 +1033,9 @@ impl PreviewEngine {
         let layers: Vec<ProjectLayer> = self.meta.layers.clone().unwrap_or_default();
         let mut fetched = 0;
         for layer in &layers {
-            if layer.kind != ProjectLayerKind::Video || !tl::layer_is_visible(layer, time) {
+            let plays_video = layer.kind == ProjectLayerKind::Video
+                || (layer.kind == ProjectLayerKind::Image && self.shows_clocked(layer, time));
+            if !plays_video || !tl::layer_is_visible(layer, time) {
                 continue;
             }
             // `Hide` past its material: nothing to fetch.
@@ -2602,7 +2628,13 @@ impl PreviewEngine {
                 _ => continue,
             };
 
-            let source_time = if layer.kind == ProjectLayerKind::Video {
+            // A video layer runs its clock unless a swap has put a STILL
+            // there; an image layer runs one once a swap brings in a clip or
+            // a composition.
+            let source_time = if (layer.kind == ProjectLayerKind::Video
+                && !self.shows_still(layer, centre))
+                || self.shows_clocked(layer, centre)
+            {
                 // The consumer's transport (rung 47): where the layer has
                 // its material — paused, sought, or running since its start.
                 // Through the resource it shows now (a takeover's
@@ -2740,23 +2772,41 @@ impl PreviewEngine {
                     // A composition going out (the takeover, rung 47) is
                     // drawn by recursion at the clock it was on, as the one
                     // arriving is; a picture or a video rides the host path.
-                    let outgoing = resources
-                        .iter()
-                        .find(|r| {
-                            r.id == previous
-                                && r.kind == promo_model::ProjectResourceKind::Composition
-                        })
-                        .cloned()
-                        .and_then(|res| {
-                            // Its own clock mapping: trims and length are
-                            // the outgoing composition's, not the arrival's.
+                    // The outgoing material runs on its OWN mapping — its
+                    // trims, length and loop, not the arrival's — and a
+                    // still ignores the clock.
+                    let previous_resource = resources.iter().find(|r| r.id == previous).cloned();
+                    let previous_time = match &previous_resource {
+                        Some(res)
+                            if matches!(
+                                res.kind,
+                                promo_model::ProjectResourceKind::Video
+                                    | promo_model::ProjectResourceKind::Composition
+                            ) =>
+                        {
                             let local = tl::transport::material_time(
                                 layer,
                                 tl::layer_local_time(layer, centre),
                             );
-                            let view = tl::resource_for_cut(&res, layer.media_cut_id.as_deref());
-                            let at = tl::source_time_for_layer(&view, local, layer.beyond_end)?;
-                            self.composition_frame(layer, &res, at, tier, doc.depth, &used)
+                            let view = tl::resource_for_cut(res, layer.media_cut_id.as_deref());
+                            tl::source_time_for_layer(&view, local, layer.beyond_end)
+                                .unwrap_or(source_time)
+                        }
+                        Some(_) if self.image_has_animated_tilt(layer) => centre,
+                        Some(_) => -1.0,
+                        None => source_time,
+                    };
+                    let outgoing = previous_resource
+                        .filter(|r| r.kind == promo_model::ProjectResourceKind::Composition)
+                        .and_then(|res| {
+                            self.composition_frame(
+                                layer,
+                                &res,
+                                previous_time,
+                                tier,
+                                doc.depth,
+                                &used,
+                            )
                         });
                     // The outgoing material's shadow is discarded: one
                     // shadow per layer, and the incoming quad carries it.
@@ -2766,7 +2816,7 @@ impl PreviewEngine {
                         &settings,
                         canvas,
                         time,
-                        source_time,
+                        previous_time,
                         tier,
                         is_drawing,
                         &resources,

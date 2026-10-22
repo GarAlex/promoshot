@@ -788,14 +788,31 @@ fn transport_warnings(meta: &ProjectMetadata, out: &mut Report) {
             promo_model::ProjectLayerKind::Video
                 | promo_model::ProjectLayerKind::Audio
                 | promo_model::ProjectLayerKind::Model
-        ) || (layer.kind == promo_model::ProjectLayerKind::Image
-            && layer.resource_id.as_deref().is_some_and(|id| {
-                meta.resources
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .any(|r| r.id == id && r.sprite.is_some())
-            }));
+        ) || (layer.kind == promo_model::ProjectLayerKind::Image && {
+            // A sprite sheet runs on the layer's clock, and so does a clip
+            // or a composition an image layer swaps to.
+            let resources = meta.resources.as_deref().unwrap_or(&[]);
+            layer
+                .resource_id
+                .iter()
+                .chain(
+                    layer
+                        .keyframes
+                        .iter()
+                        .filter_map(|k| k.resource_id.as_ref()),
+                )
+                .any(|id| {
+                    resources.iter().any(|r| {
+                        &r.id == id
+                            && (r.sprite.is_some()
+                                || matches!(
+                                    r.kind,
+                                    promo_model::ProjectResourceKind::Video
+                                        | promo_model::ProjectResourceKind::Composition
+                                ))
+                    })
+                })
+        });
         if clocked {
             continue;
         }
@@ -804,8 +821,8 @@ fn transport_warnings(meta: &ProjectMetadata, out: &mut Report) {
                 out.breaks(format!(
                     "layer \"{}\" keyframe at {}s carries sourceTime/playback, but a {:?} \
                      layer plays nothing with a clock — it is ignored; the transport is \
-                     for a video, an audio, a composition on a video layer, a sprite, \
-                     or a model's screen",
+                     for a video, an audio, a clip or composition on a video or image \
+                     layer, a sprite, or a model's screen",
                     layer.name, k.time, layer.kind
                 ));
                 break;
@@ -861,12 +878,11 @@ fn swap_warnings(meta: &ProjectMetadata, out: &mut Report) {
             if crate::sprite::swappable(layer, id, resources).is_some() {
                 continue;
             }
-            let hint = match (layer.kind, named.kind) {
-                (promo_model::ProjectLayerKind::Image, promo_model::ProjectResourceKind::Composition) => {
-                    "; a composition is shown, and swapped to, by a video layer"
-                }
-                (promo_model::ProjectLayerKind::Video, promo_model::ProjectResourceKind::Video) => {
-                    "; a video layer swaps to a composition — for a second clip, place another layer"
+            let hint = match named.kind {
+                promo_model::ProjectResourceKind::Video
+                | promo_model::ProjectResourceKind::Image
+                | promo_model::ProjectResourceKind::Composition => {
+                    "; a picture — a video, an image or a composition — is swapped to by a video or image layer"
                 }
                 _ => "",
             };
@@ -2689,10 +2705,9 @@ mod tests {
             "{found:?}"
         );
         assert!(
-            has("layer \"still\" keyframe at 2s swaps to \"B\""),
-            "{found:?}"
+            !has("layer \"still\" keyframe"),
+            "an image layer swaps to a composition too: {found:?}"
         );
-        assert!(has("shown, and swapped to, by a video layer"), "{found:?}");
         assert_eq!(meta.minimum_reader_version(), 47);
     }
 

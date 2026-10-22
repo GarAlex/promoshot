@@ -1505,6 +1505,8 @@ mod tests {
             "think no more about it",
             "never video",
             "video layers cannot swap",
+            "cannot swap to another",
+            "a video layer only to a COMPOSITION",
             "codec: \"prores\"",
             // `ok` came back beside missing media and fields nothing read;
             // the verdict is NOT OK / ok now, and "ok" no longer promises.

@@ -389,12 +389,22 @@ pub fn active_swap_sampled(
     // What it is replacing: the swap before it, else the layer's own. Also
     // filtered, so a deleted predecessor falls back the way the resolver
     // does rather than naming a resource nothing can draw.
+    // The layer's OWN resource needs no swap rule — it is what the layer
+    // shows before any swap, of whatever kind — only to exist. Filtering it
+    // like a swap target dropped a video layer's own clip as the outgoing
+    // material of its takeover, so a wipe showed nothing where the clip
+    // should still be.
     let previous = if index == 0 {
-        layer.resource_id.clone()
+        layer
+            .resource_id
+            .clone()
+            .filter(|id| resources.iter().any(|r| &r.id == id))
     } else {
-        swaps[index - 1].resource_id.clone()
+        swaps[index - 1]
+            .resource_id
+            .clone()
+            .filter(|id| crate::sprite::swappable(layer, id, resources).is_some())
     };
-    let previous = previous.filter(|id| crate::sprite::swappable(layer, id, resources).is_some());
     // Nothing to fade FROM, and nothing to fade INTO that is not already
     // showing: without a distinct predecessor this is a cut.
     if previous.as_deref() == current.resource_id.as_deref() {

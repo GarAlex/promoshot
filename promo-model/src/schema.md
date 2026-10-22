@@ -582,12 +582,15 @@ flash layer, or delete it, and the flash generator goes with it.
   is a STEP landing at the keyframe's own time: there is no halfway
   between two images, and on a keyframe that only swaps,
   transitionDuration has nothing to ramp and does nothing. The
-  layer's own resourceID shows before the first swap. Image, caption,
-  drawing and background layers swap to a resource of their own kind;
-  a VIDEO layer swaps to a COMPOSITION (rung 47) — the takeover: the
-  next film arriving where the keyframe's `sourceTime` says, or, with
-  none, wherever the layer's clock already is. Anything else is
-  ignored, and promo_validate names it. A caption swap replaces the
+  layer's own resourceID shows before the first swap. Caption, drawing
+  and background layers swap to a resource of their own kind. A VIDEO
+  or IMAGE layer swaps among pictures — a clip, a still or a
+  composition (a composition is the takeover); clocked material
+  arrives where the keyframe's `sourceTime` says, or, with none,
+  wherever the layer's clock already is, and a still ignores the clock.
+  The layer's SOUND stays its own resource's: a swapped-in clip or
+  composition is picture only. Anything else is ignored, and
+  promo_validate names it. A caption swap replaces the
   WORDS (each caption resource carries its own text and style), a
   drawing swap the marks. Height is preserved across a swap (it is
   canvasHeight * zoom) while width follows the new source's aspect,
@@ -605,7 +608,7 @@ flash layer, or delete it, and the flash generator goes with it.
   composition at different points, or one paused; the same clocks
   compose in order — the layer's local time, the transport, then the
   resource's own trims, speed, media cuts and beyondEnd. A project using
-  the transport, or a composition swap on a video layer, carries
+  the transport, or a swap across kinds on a video or image layer, carries
   `minReaderVersion: 47`.
 
 ## Motion — motionPath, path, curve, arc
