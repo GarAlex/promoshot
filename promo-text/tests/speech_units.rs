@@ -15,10 +15,14 @@ fn metadata_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
         if path.is_dir() {
-            if name != "target" && !name.starts_with('.') {
+            // A demo's runs/ are git-ignored agent output: walking them made
+            // the sweep pass here and find a handful of projects on CI.
+            if name != "target" && name != "runs" && !name.starts_with('.') {
                 metadata_files(&path, out);
             }
-        } else if name == "metadata.json" {
+        } else if name == "metadata.json"
+            || (name.starts_with("reference") && name.ends_with(".json"))
+        {
             out.push(path);
         }
     }

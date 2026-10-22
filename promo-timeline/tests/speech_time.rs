@@ -572,10 +572,14 @@ fn seconds_only_and_beat_projects_are_unchanged() {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
             if path.is_dir() {
-                if name != "target" && !name.starts_with('.') {
+                // A demo's runs/ are git-ignored agent output: walking them made
+                // the sweep pass here and find a handful of projects on CI.
+                if name != "target" && name != "runs" && !name.starts_with('.') {
                     files(&path, out);
                 }
-            } else if name == "metadata.json" {
+            } else if name == "metadata.json"
+                || (name.starts_with("reference") && name.ends_with(".json"))
+            {
                 out.push(path);
             }
         }
@@ -630,7 +634,9 @@ fn seconds_only_and_beat_projects_are_unchanged() {
         );
         checked += 1;
     }
-    assert!(checked > 100, "only {checked} projects");
+    // The tracked tree holds 47 (7 examples, 40 demo references); a
+    // walk that found far fewer has stopped looking.
+    assert!(checked > 40, "only {checked} projects");
 }
 
 /// `validate` lists each speech value with its seconds, word and source,
