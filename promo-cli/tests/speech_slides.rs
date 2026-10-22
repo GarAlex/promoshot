@@ -162,3 +162,101 @@ fn one_slide_per_sentence() {
     assert!(record.timing.words.iter().all(|w| w.prominence.is_some()));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// AC9: the narrated recipe as shipped (`examples/Narrated.promo`, its
+/// placeholder take timed on an estimate) validates — saying it is a
+/// placeholder — and renders: one still per sentence, cut 0.1 s before
+/// it, and its captions lighting the word being said.
+#[test]
+fn narrated_recipe_validates_and_renders() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/Narrated.promo");
+    let dir = std::env::temp_dir().join(format!("promo-narrated-recipe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("Resources/.words")).unwrap();
+    std::fs::copy(source.join("metadata.json"), dir.join("metadata.json")).unwrap();
+    for sub in ["Resources", "Resources/.words"] {
+        for entry in std::fs::read_dir(source.join(sub)).unwrap().flatten() {
+            if entry.path().is_file() {
+                std::fs::copy(entry.path(), dir.join(sub).join(entry.file_name())).unwrap();
+            }
+        }
+    }
+    let said = Command::new(env!("CARGO_BIN_EXE_promo"))
+        .arg("validate")
+        .arg(&dir)
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&said.stdout);
+    assert!(said.starts_with("ok"), "{said}");
+    assert!(said.contains("is a silent placeholder"), "{said}");
+    assert!(said.contains("Speech times"), "{said}");
+    let still = |time: f64| -> image::RgbImage {
+        let out = dir.join(format!("still-{time}.png"));
+        let run = Command::new(env!("CARGO_BIN_EXE_promo"))
+            .arg("still")
+            .arg(&dir)
+            .arg("--out")
+            .arg(&out)
+            .args(["--time", &time.to_string(), "--size", "480x270"])
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        image::open(&out).unwrap().to_rgb8()
+    };
+    let dominant = |p: &image::Rgb<u8>| {
+        if p[0] > p[1] && p[0] > p[2] {
+            "red"
+        } else if p[2] > p[0] && p[2] > p[1] {
+            "blue"
+        } else if p[1] > p[0] && p[1] > p[2] {
+            "green"
+        } else {
+            "black"
+        }
+    };
+    let record: promo_model::speech::TakeTiming = serde_json::from_str(
+        &std::fs::read_to_string(
+            std::fs::read_dir(source.join("Resources/.words"))
+                .unwrap()
+                .flatten()
+                .next()
+                .unwrap()
+                .path(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let cut = |k: usize| 0.5 + record.sentences[k].start - 0.1;
+    for (time, colour) in [
+        (cut(0) - 0.2, "black"),
+        (cut(0) + 0.2, "red"),
+        (cut(1) - 0.1, "red"),
+        (cut(1) + 0.1, "blue"),
+        (cut(2) - 0.1, "blue"),
+        (cut(2) + 0.1, "green"),
+    ] {
+        let picture = still(time);
+        assert_eq!(
+            dominant(picture.get_pixel(60, 60)),
+            colour,
+            "at {time:.3} s"
+        );
+    }
+    // A generated caption lights the word being said: yellow ink low on
+    // the frame, mid-word.
+    let w = &record.words[1];
+    let picture = still(0.5 + (w.start + w.end) / 2.0);
+    let lit = picture
+        .enumerate_pixels()
+        .filter(|(_, y, p)| *y > 150 && p[0] > 200 && p[1] > 170 && p[2] < 90)
+        .count();
+    assert!(
+        lit > 20,
+        "the caption's highlighted word: {lit} yellow pixels"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -197,6 +197,9 @@ A keyframe animates a layer over its LOCAL time:
 
 ## Timing — time, timeline, wait, waits, durationRule, duration, startTime
 
+Times can also be musical (`{"beats": 4}`, topic `beats`) or name a
+narration's words (`{"word": 12, "of": "intro"}`, topic `speech`).
+
 - `timing` puts a layer on the timeline as a RULE instead of numbers:
   its start and end anchor to a NEIGHBOUR in the stack, plus an
   offset in seconds. { "timing": { "start": { "from":
@@ -271,6 +274,8 @@ A keyframe animates a layer over its LOCAL time:
   fitDependents nothing is anchored to.
 
 ## Beats — beats, bars, beat, bar, snap, beatClock, beatGrid, bpm, tempo, music, sequence, after
+
+Words instead of beats: topic `speech`.
 
 Times can be musical. These fields take an object in place of seconds:
 a layer's `startTime`, `duration`, `fadeIn`, `fadeOut` and the
@@ -403,7 +408,11 @@ keyed by the audio and the text — `promo words` (promo_words) shows it.
 A take with no timing yet lays out on an estimate, validate says so, and
 a render waits for it. Rewrite a line and re-voice it, and every cut on
 its words moves with them. validate lists "Speech times": each value, the
-word it landed on, and the timing's source.
+word it landed on, and the timing's source. A recording's script is its
+`transcript` (a narration's is `speech.text`); a word the timing got
+wrong is fixed by hand with `speech.wordFixes`: `[{"word": 7, "start":
+3.42, "end": 3.80}]` in the take's own seconds, over whatever record it
+has.
 
 ## Speech cuts — sync, captions, karaoke, emphasised, per, until, slides per sentence, generators on words
 
@@ -754,6 +763,9 @@ flies a title in from the left.
   and `promo_validate` says so.
 
 ## Reveal — kinetic, typewriter, reveals
+
+A reveal can arrive on a narration's words instead of at its own pace —
+`"sync": {"of": "intro"}`, topic `speech cuts`.
 
 - `reveal` in a caption's style makes the text arrive a piece at a
   time — a typewriter, word-by-word kinetic type, a karaoke

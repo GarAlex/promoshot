@@ -112,9 +112,10 @@ its defaults are the source of the first, the person of the second.
 ## The loop
 
 1. **Learn the format** — `promo_schema` once: the authoring subset plus
-   five complete, validated recipes (a device-framed product card, two
+   six complete, validated recipes (a device-framed product card, two
    clips under a wipe, a Ken Burns push with a lower caption, a 9:16
-   re-stamp, a beat-cut stills slideshow). `promo_schema_full` is the whole format when a field is not
+   re-stamp, a beat-cut stills slideshow, a narrated slideshow with one
+   slide per sentence and karaoke captions). `promo_schema_full` is the whole format when a field is not
    in the subset; `promo_schema_types` is a generated, types-only JSON
    Schema to fill structured output against.
 2. **Look at the footage first** — the senses, before composing:
@@ -151,7 +152,12 @@ its defaults are the source of the first, the person of the second.
      bought, else the take aligned to its script offline (no model, no
      key). `file` + `script` for a bare recording; `timeline` adds the
      times on the output timeline. `transcribe` (openai|elevenlabs) spends
-     the person's key — only when asked, `check` first.
+     the person's key — only when asked, `check` first. Times can then
+     say `{"word": 12, "of": "intro"}` or `{"sentence": 2, "of": "intro"}`,
+     a layer `during` a sentence, a caption reveal `sync` on the take,
+     `captions` on the voice-over layer, a sequence `per` sentence — the
+     narrated recipe; promo_schema_full topics `speech` and `speech cuts`.
+     validate lists "Speech times" with the word each value landed on.
    - `promo_transcribe` — a transcript with timings, the draft captions
      are cut from (headless it needs whisper-cli + WHISPER_MODEL; the
      app uses Apple's recognizer; without either, captions are typed).

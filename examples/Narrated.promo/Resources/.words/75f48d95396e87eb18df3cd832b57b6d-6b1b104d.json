@@ -1,0 +1,244 @@
+{
+  "timingVersion": 1,
+  "audio": {
+    "filename": "narration-vo.mp3",
+    "sha256": "75f48d95396e87eb18df3cd832b57b6d",
+    "bytes": 31968
+  },
+  "script": "PromoShot cuts on the words. Every slide changes with a sentence. And the captions light up as each word is said.",
+  "scriptHash": "6b1b104d",
+  "duration": 7.992,
+  "source": "estimate",
+  "estimated": true,
+  "confidence": 0.3,
+  "words": [
+    {
+      "text": "PromoShot",
+      "start": 0.2,
+      "end": 0.916677,
+      "chars": [
+        0,
+        9
+      ]
+    },
+    {
+      "text": "cuts",
+      "start": 0.916677,
+      "end": 1.15557,
+      "chars": [
+        10,
+        14
+      ]
+    },
+    {
+      "text": "on",
+      "start": 1.15557,
+      "end": 1.394462,
+      "chars": [
+        15,
+        17
+      ]
+    },
+    {
+      "text": "the",
+      "start": 1.394462,
+      "end": 1.633354,
+      "chars": [
+        18,
+        21
+      ]
+    },
+    {
+      "text": "words",
+      "start": 1.633354,
+      "end": 1.872247,
+      "chars": [
+        22,
+        27
+      ]
+    },
+    {
+      "text": "Every",
+      "start": 2.323753,
+      "end": 3.04043,
+      "chars": [
+        29,
+        34
+      ]
+    },
+    {
+      "text": "slide",
+      "start": 3.04043,
+      "end": 3.279323,
+      "chars": [
+        35,
+        40
+      ]
+    },
+    {
+      "text": "changes",
+      "start": 3.279323,
+      "end": 3.757108,
+      "chars": [
+        41,
+        48
+      ]
+    },
+    {
+      "text": "with",
+      "start": 3.757108,
+      "end": 3.996,
+      "chars": [
+        49,
+        53
+      ]
+    },
+    {
+      "text": "a",
+      "start": 3.996,
+      "end": 4.234892,
+      "chars": [
+        54,
+        55
+      ]
+    },
+    {
+      "text": "sentence",
+      "start": 4.234892,
+      "end": 4.712677,
+      "chars": [
+        56,
+        64
+      ]
+    },
+    {
+      "text": "And",
+      "start": 5.164184,
+      "end": 5.403076,
+      "chars": [
+        66,
+        69
+      ]
+    },
+    {
+      "text": "the",
+      "start": 5.403076,
+      "end": 5.641969,
+      "chars": [
+        70,
+        73
+      ]
+    },
+    {
+      "text": "captions",
+      "start": 5.641969,
+      "end": 6.119753,
+      "chars": [
+        74,
+        82
+      ]
+    },
+    {
+      "text": "light",
+      "start": 6.119753,
+      "end": 6.358646,
+      "chars": [
+        83,
+        88
+      ]
+    },
+    {
+      "text": "up",
+      "start": 6.358646,
+      "end": 6.597538,
+      "chars": [
+        89,
+        91
+      ]
+    },
+    {
+      "text": "as",
+      "start": 6.597538,
+      "end": 6.83643,
+      "chars": [
+        92,
+        94
+      ]
+    },
+    {
+      "text": "each",
+      "start": 6.83643,
+      "end": 7.075323,
+      "chars": [
+        95,
+        99
+      ]
+    },
+    {
+      "text": "word",
+      "start": 7.075323,
+      "end": 7.314215,
+      "chars": [
+        100,
+        104
+      ]
+    },
+    {
+      "text": "is",
+      "start": 7.314215,
+      "end": 7.553108,
+      "chars": [
+        105,
+        107
+      ]
+    },
+    {
+      "text": "said",
+      "start": 7.553108,
+      "end": 7.792,
+      "chars": [
+        108,
+        112
+      ]
+    }
+  ],
+  "sentences": [
+    {
+      "start": 0.2,
+      "end": 1.872247,
+      "words": [
+        0,
+        4
+      ],
+      "chars": [
+        0,
+        28
+      ]
+    },
+    {
+      "start": 2.323753,
+      "end": 4.712677,
+      "words": [
+        5,
+        10
+      ],
+      "chars": [
+        29,
+        65
+      ]
+    },
+    {
+      "start": 5.164184,
+      "end": 7.792,
+      "words": [
+        11,
+        20
+      ],
+      "chars": [
+        66,
+        113
+      ]
+    }
+  ],
+  "alignerVersion": 1
+}

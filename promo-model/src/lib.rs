@@ -57,7 +57,7 @@ pub const LOSSLESS_READER: i64 = 48;
 /// is how they start disagreeing. `MCPTools.schemaText` reads this through
 /// the FFI, so the app and the CLI answer with the same bytes.
 pub const SCHEMA: &str = include_str!("schema.md");
-/// The authoring subset plus five complete recipes — what `promo_schema`
+/// The authoring subset plus six complete recipes — what `promo_schema`
 /// serves, sized to be READ rather than searched. Every fenced ```json
 /// block in it is a whole project that must decode and validate clean;
 /// a test extracts and runs them, so a recipe cannot rot as the format
@@ -82,7 +82,7 @@ pub fn wire_schema() -> serde_json::Value {
     value
 }
 
-/// The five complete projects embedded in `SCHEMA_QUICK`, in document
+/// The six complete projects embedded in `SCHEMA_QUICK`, in document
 /// order — every ```json fence is one. The recipe tests, the machine-schema
 /// tests and the examples' own golden all read THIS, so "the recipes" is
 /// one list everywhere.
@@ -1174,7 +1174,7 @@ mod wire_schema_tests {
     use super::*;
 
     /// The generated schema must accept everything the format calls a
-    /// project: the fully populated fixture (every wire key), and all five
+    /// project: the fully populated fixture (every wire key), and all six
     /// quick-schema recipes. Held with a real validator, so "generated
     /// from the structs" is proven against documents, not assumed.
     #[test]
@@ -1183,7 +1183,7 @@ mod wire_schema_tests {
         let validator = jsonschema::validator_for(&schema).expect("schema compiles");
 
         let recipes = quick_schema_recipes();
-        assert_eq!(recipes.len(), 5);
+        assert_eq!(recipes.len(), 6);
         for (index, text) in recipes.iter().enumerate() {
             let recipe: serde_json::Value = serde_json::from_str(text).expect("recipe parses");
             let errors: Vec<String> = validator
@@ -1228,6 +1228,10 @@ mod wire_schema_tests {
             (
                 "BeatCut",
                 include_str!("../../examples/BeatCut.promo/metadata.json"),
+            ),
+            (
+                "Narrated",
+                include_str!("../../examples/Narrated.promo/metadata.json"),
             ),
         ];
         let recipes = quick_schema_recipes();

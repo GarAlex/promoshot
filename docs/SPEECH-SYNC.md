@@ -1468,6 +1468,34 @@ criteria.
   - **AC9** `narrated_recipe_validates_and_renders`, `the_examples_are_the_recipes`
   - `schema_md_mentions_every_authorable_wire_field` (the kitchen sink carries every speech field)
 
+**Slice 10 as built** (2026-10-21):
+- **schema.md.** The speech format is two topic sections, "Speech"
+  (values, the clock, `during`, where times come from, `transcript`,
+  `speech.wordFixes`) and "Speech cuts" (reveal `sync`, `captions`,
+  generators on words, `until`, `per`). One section would be over the
+  5 KB a section may be. Timing, Reveal and Beats point at them.
+- **schema-quick.md, sixth recipe:** "Narrated slideshow", identical to
+  `examples/Narrated.promo`. It has three stills `per` sentence (lead
+  0.1), `captions` on the voice-over (a word highlight, at most six words
+  each), and the first slide starting on sentence 1 − 0.1 s.
+  - The take is a silent placeholder made by `promo_speech::placehold`,
+    committed with its estimate record in `Resources/.words/`, so it
+    renders with no key and validate says it is a placeholder.
+  - The recipe's clean-validation test allows that one warning.
+  - The recipe counts (`promo schema`, the machine-schema test, the
+    skill) say six.
+- **SKILL.md and the app's bundled copy** (identical): six recipes;
+  `promo_words` names what times can then say and the topics to read.
+- **Tests:**
+  - **AC9** `narrated_recipe_validates_and_renders` (promo-cli): the
+    shipped example copied, validated (ok, placeholder said, Speech
+    times), then rendered. Each slide's colour sits either side of its
+    cut, and a generated caption's highlighted word shows mid-word.
+  - `the_examples_are_the_recipes` (now six) and
+    `schema_md_mentions_every_authorable_wire_field` (the kitchen sink
+    carries every speech field).
+  - Both break-tested.
+
 **Acceptance criteria:**
 1. **AC1.** Captions reveal each word within ±1 frame of the provider's word start (S7).
 2. **AC2.** Changing a line's text re-times the dependent cuts and nothing else (S6).
