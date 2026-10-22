@@ -593,6 +593,16 @@ fn seconds_only_and_beat_projects_are_unchanged() {
         let Ok(meta) = ProjectMetadata::from_json(&text) else {
             continue;
         };
+        // The narrated recipe is timed on speech by design (S10); every
+        // other project is seconds or beats.
+        if promo_model::speech::needs_speech_reader(&meta) {
+            assert!(
+                file.to_string_lossy().contains("Narrated.promo"),
+                "{}",
+                file.display()
+            );
+            continue;
+        }
         assert!(meta.minimum_reader_version() < 50, "{}", file.display());
         let mut plain = meta.clone();
         let report = resolve_timing(&mut plain, &BeatGrids::default());
