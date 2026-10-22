@@ -1126,6 +1126,41 @@ criteria.
     `testAlignmentWritesTheCoreCache` (both suites),
     `testPromoWordsAlignsCachesAndAnswers` (Mac).
 
+**Aligner 2** (2026-10-21, issue #10). On an edge-tts take, the 0.4.0
+aligner put the 0.30 s comma pause after "bit" instead of after
+"light", and gave the words it pushed late 0.95 confidence. This was
+reproduced with Kitten's Luna voice saying the same line: "of light
+caught" came out 0.3–0.6 s late at 0.95, with or without loudnorm, and
+with the pause stretched to 0.30 s. Kokoro was unaffected. The fixture
+is `fixtures/speech/kitten-comma.wav` with the voice's own timing in
+`kitten-comma.json`. Changes:
+- Each frame of a pause costs 0.08 where the script runs on and earns
+  0.02 at punctuation (`PAUSE_FRAME_COST`, `PAUSE_FRAME_REWARD`), on top
+  of the old ±1, so a long pause is pulled to its comma.
+- A word that swallows a real pause (a quiet run of 8 frames or more)
+  pays 0.12 a frame, or a pause the script puts nowhere hides inside a
+  word.
+- A pause of 12 frames or more left where the script runs on, with a
+  comma within three words that got no pause, caps the words between at
+  0.3 (`DOUBTFUL`): they are as likely on the wrong side as the right one.
+- `ALIGNER_VERSION` is 2, so cached aligned records are aligned again.
+- Measured before → after:
+
+  | Take | Before | After |
+  |---|---|---|
+  | Kitten comma fixture (`kitten-comma`), "of / light / caught" | +0.49 / +0.54 / +0.31 s | +0.10 / +0.01 / −0.01 s |
+  | Kitten comma fixture, median | 90 ms | 46 ms |
+  | Kitten comma fixture, worst | 535 ms | 250 ms |
+  | Pause stretched to 0.30 s, with or without loudnorm, worst | 609 ms | 250 ms |
+  | Kokoro, the same line | 144 ms worst | unchanged |
+  | Synthetic truth | median 1.9 ms, p95 2.5 ms | identical; the golden changed only in `alignerVersion` |
+  | AC3 Kokoro | median 31.5 ms, p95 129.5 ms | unchanged |
+  | AC3 Kitten (varies run to run) | median 32.5 ms, p95 181–188 ms | median 31–32 ms, p95 181–204 ms |
+
+  The provider fixtures still pass, and all are within their guards.
+- `promo words <project>` with no take now says how to give one a
+  script, or how to time its file directly.
+
 **S6 — Speech values, the clock and resolution (rung 50).**
 - Build: `TimeValue::Speech` with lift, fold and labels; `speechClock`; `during`; `TimingInputs` with every caller moved; the clock rebuild in the loop; `missingWords` with the export guard (CLI, app); validate, explain and inspect output; schema.md and schema-quick.md entries.
 - Tests:

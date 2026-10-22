@@ -283,3 +283,93 @@ fn prominence_marks_the_stressed_word() {
         "deterministic"
     );
 }
+
+/// Issue #10: a real TTS take (Kitten's Luna saying the reporter's line)
+/// whose comma pause, after "light", the 0.4.0 aligner put before "of" —
+/// "of light caught" 0.3–0.6 s late at 0.95 confidence. A pause now
+/// belongs at the script's punctuation: the words around the comma land
+/// within 120 ms of the voice's own timing, and the take within 60 ms at
+/// the median.
+#[test]
+fn a_comma_pause_lands_at_its_comma() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/speech");
+    let truth: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("kitten-comma.json")).unwrap())
+            .unwrap();
+    let script = truth["script"].as_str().unwrap();
+    let timing = promo_media::words::align_file(
+        &dir.join("kitten-comma.wav"),
+        script,
+        &AlignOptions::default(),
+    )
+    .unwrap();
+    let starts: Vec<(String, f64)> = truth["words"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| (w[0].as_str().unwrap().to_string(), w[1].as_f64().unwrap()))
+        .collect();
+    let mut errors: Vec<f64> = Vec::new();
+    for ((text, start), word) in starts.iter().zip(&timing.words) {
+        assert_eq!(*text, word.text);
+        let error = (word.start - start).abs();
+        if ["of", "light", "caught"].contains(&text.as_str()) {
+            assert!(
+                error <= 0.12,
+                "{text}: {:.3} against {start:.3}",
+                word.start
+            );
+        }
+        errors.push(error);
+    }
+    errors.sort_by(f64::total_cmp);
+    let median = errors[errors.len() / 2];
+    eprintln!(
+        "kitten comma: median {:.1} ms, worst {:.1} ms",
+        median * 1000.0,
+        errors[errors.len() - 1] * 1000.0
+    );
+    assert!(median <= 0.060, "median {median}");
+}
+
+/// A pause that sits away from the script's comma — the speaker paused
+/// after "bit", the script's comma is after "light" — leaves the words
+/// between doubtful: whichever side of the pause they land on, they read
+/// at most 0.3, never 0.95.
+#[test]
+fn a_pause_away_from_its_comma_reads_doubtful() {
+    let said = "Every photo is a little, bit of light caught and kept.";
+    let script = "Every photo is a little bit of light, caught and kept.";
+    let (samples, _) = synthetic_speech(said, &syllables(said), 24_000.0);
+    let mut aligner = WordAligner::new(1, 24_000.0, script, AlignOptions::default()).unwrap();
+    aligner.push(&samples);
+    let timing = aligner.finish();
+    let conf = |text: &str| {
+        timing
+            .words
+            .iter()
+            .find(|w| w.text == text)
+            .and_then(|w| w.confidence)
+            .unwrap()
+    };
+    assert!(
+        conf("of") <= 0.3 && conf("light") <= 0.3,
+        "{:?}",
+        timing.words
+    );
+    assert!(
+        conf("Every") > 0.5,
+        "words far from it stay sure: {}",
+        conf("Every")
+    );
+    // Where the script and the take agree, nothing is doubted.
+    let (samples, _) = synthetic_speech(script, &syllables(script), 24_000.0);
+    let mut aligner = WordAligner::new(1, 24_000.0, script, AlignOptions::default()).unwrap();
+    aligner.push(&samples);
+    let agreed = aligner.finish();
+    assert!(
+        agreed.words.iter().all(|w| w.confidence.unwrap() > 0.3),
+        "{:?}",
+        agreed.words
+    );
+}

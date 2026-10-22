@@ -34,6 +34,20 @@ const HOP: usize = 160;
 /// 25 ms.
 const WIN: usize = 400;
 const FFT: usize = 512;
+/// What each frame of a pause between two words the script runs together
+/// costs, and what each frame of one at its punctuation earns (issue #10).
+const PAUSE_FRAME_COST: f64 = 0.08;
+const PAUSE_FRAME_REWARD: f64 = 0.02;
+/// A pause this many frames long between words the script runs together
+/// is a stray: with a comma within `MISPLACED_REACH` words that got no
+/// pause, the words between read `DOUBTFUL` at most.
+const STRAY_PAUSE: usize = 12;
+/// A quiet run this long is a pause, and every frame of one inside a word
+/// costs this much.
+const HELD_PAUSE: usize = 8;
+const SWALLOWED_FRAME_COST: f64 = 0.12;
+const MISPLACED_REACH: usize = 3;
+const DOUBTFUL: f64 = 0.3;
 
 /// What the aligner reads the script as.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -538,6 +552,15 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
             quiet_behind[t - 1] + 1
         };
     }
+    // Frames inside a real pause (a quiet run the detector kept, not a
+    // dip it filled): a word that swallows one pays for every frame, more
+    // than the pause would cost between words — or a long pause the script
+    // puts nowhere hides inside a word (issue #10).
+    let mut held = vec![0usize; count + 1];
+    for t in 0..count {
+        let run = quiet_ahead[t] + quiet_behind[t];
+        held[t + 1] = held[t] + usize::from(!f.speech[t] && run >= HELD_PAUSE);
+    }
     // Edge quality at each boundary.
     let edge: Vec<f64> = (0..=count)
         .map(|b| {
@@ -577,16 +600,29 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
         let mut cost = ratio * ratio / (2.0 * SIGMA * SIGMA);
         cost += 0.5 * ((nuc[b] - nuc[s]) as f64 - syllables[i]).abs();
         cost += 2.0 * (quiet[b] - quiet[s]) as f64 / len;
+        cost += SWALLOWED_FRAME_COST * (held[b] - held[s]) as f64;
         let span = b - s;
         cost += 0.15 * (quiet_ahead[s].min(span) + quiet_behind[b].min(span)) as f64;
         cost += edge[s] + edge[b];
         cost
     };
+    // A pause after word i: where the script has punctuation it is
+    // expected — the longer the better, up to the length the punctuation
+    // asks for; where it has none, every frame of silence is paid for, so
+    // a long pause is pulled to the comma it belongs to rather than left
+    // between two words that run on (issue #10).
     let pause_cost = |i: usize| {
         if weights[i].pause_after > 0.0 {
             -1.0
         } else {
             1.0
+        }
+    };
+    let pause_frame_cost = |i: usize| {
+        if weights[i].pause_after > 0.0 {
+            -PAUSE_FRAME_REWARD
+        } else {
+            PAUSE_FRAME_COST
         }
     };
 
@@ -643,7 +679,7 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
                 continue;
             }
             let start_here = d[i * width + s - 1] + pause_cost(i);
-            let extend = g[i * width + s - 1];
+            let extend = g[i * width + s - 1] + pause_frame_cost(i);
             if start_here < extend {
                 g[i * width + s] = start_here;
                 pause_from[i * width + s] = s - 1;
@@ -732,6 +768,35 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
             1.0
         }
     };
+    // A pause the programme had to put where the script runs on, while a
+    // comma near it went without one: the words between are as likely on
+    // the wrong side of it as the right one, whatever their edges look
+    // like (issue #10). They read as doubtful.
+    let pause_after: Vec<usize> = (0..n)
+        .map(|i| {
+            if i + 1 < n {
+                spans[i + 1].0.saturating_sub(spans[i].1)
+            } else {
+                0
+            }
+        })
+        .collect();
+    let punctuated = |i: usize| weights[i].pause_after > 0.0;
+    let mut doubtful = vec![false; n];
+    for i in 0..n.saturating_sub(1) {
+        if punctuated(i) || pause_after[i] < STRAY_PAUSE {
+            continue;
+        }
+        let lo = i.saturating_sub(MISPLACED_REACH);
+        let hi = (i + MISPLACED_REACH).min(n - 2);
+        for (j, after) in pause_after.iter().enumerate().take(hi + 1).skip(lo) {
+            if j != i && punctuated(j) && *after < STRAY_PAUSE / 2 {
+                for flag in doubtful.iter_mut().take(i.max(j) + 2).skip(i.min(j)) {
+                    *flag = true;
+                }
+            }
+        }
+    }
     let mut words: Vec<Word> = Vec::with_capacity(n);
     let mut confidences = Vec::with_capacity(n);
     for (i, w) in tokens.words.iter().enumerate() {
@@ -749,7 +814,10 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
                 margin
             }
         };
-        let c = sure(rise, margin(i, s, true)).min(sure(fall, margin(i, b, false)));
+        let mut c = sure(rise, margin(i, s, true)).min(sure(fall, margin(i, b, false)));
+        if doubtful[i] {
+            c = c.min(DOUBTFUL);
+        }
         confidences.push(c);
         words.push(Word {
             text: w.text.clone(),

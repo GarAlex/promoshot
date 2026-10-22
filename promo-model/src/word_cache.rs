@@ -264,7 +264,13 @@ pub fn choose_take<'a>(
             .ok_or_else(|| format!("no resource `{id}` in the project"))?;
         if crate::speech::take_script(found).is_none() {
             return Err(format!(
-                "`{id}` says nothing: give it `speech.text`, or a `transcript` for a recording"
+                "`{id}` says nothing: give it a `transcript` (a recording) or `speech.text` (a \
+                 narration), or time its file directly: `promo words Resources/{} --script \"…\"`",
+                if found.filename.is_empty() {
+                    "<file>"
+                } else {
+                    found.filename.as_str()
+                }
             ));
         }
         return Ok(found);
@@ -280,11 +286,31 @@ pub fn choose_take<'a>(
         .collect();
     match takes.as_slice() {
         [one] => Ok(one),
-        [] => Err(
-            "the project has no take: no audio or video resource with `speech.text` or \
-                   a `transcript`"
-                .into(),
-        ),
+        [] => {
+            // Say which file could be the take, and the two ways to time it.
+            let audio: Vec<&crate::ProjectResource> = meta
+                .resources
+                .iter()
+                .flatten()
+                .filter(|r| {
+                    matches!(
+                        r.kind,
+                        ProjectResourceKind::Audio | ProjectResourceKind::Video
+                    ) && !r.filename.is_empty()
+                })
+                .collect();
+            let (id, file) = match audio.first() {
+                Some(r) => (r.id.as_str(), r.filename.as_str()),
+                None => ("<id>", "<file>"),
+            };
+            Err(format!(
+                "the project has no take: no audio or video resource with `speech.text` or a \
+                 `transcript`. Give the voice-over its script — `\"transcript\": \"…\"` on \
+                 resource `{id}` (a recording) or `speech.text` (a narration) — then \
+                 `promo words <project> --resource {id}`; or time the file directly: \
+                 `promo words Resources/{file} --script \"…\"`"
+            ))
+        }
         many => Err(format!(
             "name the take with --resource — the project's takes are {}",
             many.iter()

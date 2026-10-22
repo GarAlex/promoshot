@@ -23,7 +23,8 @@ pub const TIMING_VERSION: u32 = 1;
 /// the alignment of the same samples could change, so a record from an
 /// older aligner is aligned again (§1.3). Here, beside the record, so a
 /// reader that never aligns (the apps' cache check) knows it too.
-pub const ALIGNER_VERSION: u32 = 1;
+/// 2: pauses belong at the script's punctuation (issue #10).
+pub const ALIGNER_VERSION: u32 = 2;
 
 /// The version of the syllable estimate (`source: "estimate"`), written as
 /// an estimate record's `alignerVersion`: a record from an older estimate

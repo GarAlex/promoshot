@@ -293,3 +293,37 @@ fn promo_words_names_what_it_needs() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Issue #10's note: a project whose audio says no script answers how to
+/// give it one, or how to time its file directly.
+#[test]
+fn a_project_with_no_take_says_how_to_time_one() {
+    let dir = std::env::temp_dir().join(format!("promo-words-notake-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("Resources")).unwrap();
+    let meta = json!({
+        "id": "P", "name": "W", "createdAt": 0, "state": "recorded",
+        "trimStart": 0, "trimEnd": 5, "videoDuration": 5, "subtitles": [],
+        "compositionSettings": {},
+        "layers": [],
+        "resources": [{"id": "v01", "kind": "audio", "filename": "v01_norm.wav",
+                       "displayName": "V", "addedAt": 0}]
+    });
+    std::fs::write(dir.join("metadata.json"), meta.to_string()).unwrap();
+    let said = fail(&["words", dir.to_str().unwrap()]);
+    assert!(
+        said.contains("\"transcript\": \"…\"` on resource `v01`"),
+        "{said}"
+    );
+    assert!(
+        said.contains("promo words Resources/v01_norm.wav --script"),
+        "{said}"
+    );
+    let said = fail(&["words", dir.to_str().unwrap(), "--resource", "v01"]);
+    assert!(said.contains("`v01` says nothing"), "{said}");
+    assert!(
+        said.contains("promo words Resources/v01_norm.wav --script"),
+        "{said}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
