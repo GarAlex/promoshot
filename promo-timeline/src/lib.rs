@@ -36,10 +36,10 @@ pub mod viewport;
 
 pub use attachment::{run_containing, runs, AttachmentProblem};
 pub use audio::{
-    amplitude_for_fraction, audio_focus_intervals, audio_inputs, duck_gate, gain_ramp_segments,
-    layer_gain, level_points, merge_intervals, placed_segments, sample_automation, scaled_segments,
-    AudioInput, AudioSource, GainRampSegment, PlacedSegment, ScaledSegment, VolumePoint,
-    DUCK_FACTOR, DUCK_RAMP,
+    amplitude_for_fraction, audio_focus_intervals, audio_graph, audio_inputs, duck_gate,
+    gain_ramp_segments, layer_gain, level_points, level_points_ducked, merge_intervals,
+    placed_segments, sample_automation, scaled_segments, AudioInput, AudioSource, FocusSpan,
+    GainRampSegment, PlacedSegment, ScaledSegment, VolumePoint, DUCK_FACTOR, DUCK_RAMP,
 };
 pub use beats::Grid;
 pub use frame::{bake_slab, framed_pixel_size, rotate_bgra, slab_geometry, SlabGeometry};
@@ -702,6 +702,41 @@ mod tests {
             (focus[0].0 - 2.0).abs() < 1e-9 && (focus[0].1 - 3.75).abs() < 1e-9,
             "{focus:?}"
         );
+    }
+
+    /// Issue #14: the graph's focus spans carry each focused layer's
+    /// `duckDb`/`duckRamp` (absent: the apps' 0.2 over 0.1 s), and where two
+    /// ducks overlap the deeper one wins.
+    #[test]
+    fn each_focused_layer_ducks_by_its_own_settings() {
+        let raw = r#"{"id":"P","name":"d","createdAt":0,"state":"recorded",
+            "trimStart":0,"trimEnd":0,"videoDuration":0,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"000000"},
+            "resources":[{"id":"M","kind":"audio","filename":"m.wav","displayName":"m","addedAt":0,"duration":20,
+                          "imageCuts":[],"disabledAudioTrackIndices":[]}],
+            "layers":[{"id":"A","name":"a","sortIndex":0,"kind":"audio","isEnabled":true,"startTime":2,"duration":4,"resourceID":"M",
+                       "audioFocus":true,"keyframes":[]},
+                      {"id":"B","name":"b","sortIndex":1,"kind":"audio","isEnabled":true,"startTime":4,"duration":4,"resourceID":"M",
+                       "audioFocus":true,"duckDb":-6,"duckRamp":0.5,"keyframes":[]}]}"#;
+        let p = ProjectMetadata::from_json(raw).expect("decode");
+        let (_, spans) = audio_graph(&p, &|_| true);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(
+            (spans[0].duck_factor, spans[0].ramp),
+            (DUCK_FACTOR, DUCK_RAMP)
+        );
+        assert!((spans[1].duck_factor - 0.501_187).abs() < 1e-5, "{spans:?}");
+        assert_eq!(spans[1].ramp, 0.5);
+        let flat = [VolumePoint {
+            time: 0.0,
+            volume: 1.0,
+        }];
+        let points = level_points_ducked(&flat, 0.0, 10.0, &spans, false);
+        let at = |t: f64| sample_automation(t, &points);
+        assert!((at(3.0) - 0.2).abs() < 1e-6, "A alone: {}", at(3.0));
+        assert!((at(5.0) - 0.2).abs() < 1e-6, "both: the deeper wins");
+        assert!((at(7.0) - 0.501_187).abs() < 1e-5, "B alone: {}", at(7.0));
+        assert!((at(9.0) - 1.0).abs() < 1e-6, "open after B's ramp");
     }
 
     #[test]

@@ -422,6 +422,7 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
     wrong_level_warnings(meta, &mut out);
     floor_warnings(meta, &mut out);
     transport_warnings(meta, &mut out);
+    duck_warnings(meta, &mut out);
     framing_on_model_layers(meta, &mut out);
     swap_warnings(meta, &mut out);
     placement_no_ops(meta, &mut out);
@@ -809,6 +810,36 @@ fn transport_warnings(meta: &ProjectMetadata, out: &mut Report) {
                 ));
                 break;
             }
+        }
+    }
+}
+
+/// A duck setting nothing reads (`duckDb`/`duckRamp` on a layer without
+/// `audioFocus`), or one the mixer clamps.
+fn duck_warnings(meta: &ProjectMetadata, out: &mut Report) {
+    for layer in promo_model::nesting::all_layers(meta) {
+        if layer.duck_db.is_none() && layer.duck_ramp.is_none() {
+            continue;
+        }
+        if !layer.is_audio_focused() {
+            out.breaks(format!(
+                "layer \"{}\" sets duckDb/duckRamp without \"audioFocus\": true — ignored; \
+                 the duck belongs on the layer that ducks the others",
+                layer.name
+            ));
+            continue;
+        }
+        if let Some(db) = layer.duck_db.filter(|d| !(-60.0..=0.0).contains(d)) {
+            out.warn(format!(
+                "layer \"{}\" duckDb {db} is clamped to -60…0 dB (a duck only lowers)",
+                layer.name
+            ));
+        }
+        if let Some(ramp) = layer.duck_ramp.filter(|r| !(0.0..=5.0).contains(r)) {
+            out.warn(format!(
+                "layer \"{}\" duckRamp {ramp} is clamped to 0…5 seconds",
+                layer.name
+            ));
         }
     }
 }
@@ -2612,6 +2643,29 @@ mod tests {
     /// composition swap on a video layer say nothing and lift the ladder;
     /// a seek on a caption (nothing to seek) and a composition swap on an
     /// image layer (which cannot show one) are each named.
+    #[test]
+    fn a_duck_is_checked() {
+        let meta = project(
+            r#"{"id":"V","name":"voice","sortIndex":0,"kind":"audio","isEnabled":true,"startTime":0,"duration":4,
+                "audioFocus":true,"duckDb":-9,"duckRamp":0.3,"keyframes":[]},
+               {"id":"B","name":"bed","sortIndex":1,"kind":"audio","isEnabled":true,"startTime":0,"duration":4,
+                "duckDb":-9,"keyframes":[]},
+               {"id":"W","name":"loud","sortIndex":2,"kind":"audio","isEnabled":true,"startTime":0,"duration":4,
+                "audioFocus":true,"duckDb":6,"duckRamp":9,"keyframes":[]}"#,
+            "",
+        );
+        let found = super::warnings(&meta);
+        let has = |needle: &str| found.iter().any(|w| w.contains(needle));
+        assert!(!has("\"voice\""), "{found:?}");
+        assert!(
+            has("layer \"bed\" sets duckDb/duckRamp without \"audioFocus\""),
+            "{found:?}"
+        );
+        assert!(has("\"loud\" duckDb 6 is clamped"), "{found:?}");
+        assert!(has("\"loud\" duckRamp 9 is clamped"), "{found:?}");
+        assert_eq!(meta.minimum_reader_version(), promo_model::LOSSLESS_READER);
+    }
+
     #[test]
     fn a_transport_is_checked() {
         let meta = project(

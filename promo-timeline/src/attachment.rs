@@ -918,6 +918,8 @@ mod tests {
             caption_style: None,
             caption_voice_clip: None,
             audio_focus: None,
+            duck_db: None,
+            duck_ramp: None,
             timing: None,
             releases: Vec::new(),
             duration_rule: None,

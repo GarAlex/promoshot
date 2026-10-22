@@ -3558,8 +3558,18 @@ pub struct ProjectLayer {
     pub caption_style: Option<SubtitleStyle>,
     #[serde(default, skip_serializing_if = "is_none")]
     pub caption_voice_clip: Option<SubtitleVoiceClip>,
+    /// While this layer sounds, every other sound is ducked (it never is).
     #[serde(default, skip_serializing_if = "is_none")]
     pub audio_focus: Option<bool>,
+    /// How far an `audioFocus` layer ducks the others, in dB (negative).
+    /// `None` is [`DEFAULT_DUCK_DB`]; clamped to `-60…0`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub duck_db: Option<f64>,
+    /// Seconds an `audioFocus` layer's duck takes to fade in before it
+    /// starts and out after it ends. `None` is [`DEFAULT_DUCK_RAMP`];
+    /// clamped to `0…5`.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub duck_ramp: Option<f64>,
     /// Duration derived by rule instead of stated outright. Like `timing`,
     /// the stored `duration` stays the resolved answer (and the floor, for
     /// `fitDependents`).
@@ -3707,9 +3717,33 @@ pub enum DurationRuleKind {
     FitDependents,
 }
 
+/// An `audioFocus` layer's duck when it names no `duckDb`: the apps' long
+/// standing amplitude factor 0.2, ≈ −14 dB.
+pub const DEFAULT_DUCK_DB: f64 = -13.979_400_086_720_377;
+/// An `audioFocus` layer's ramp when it names no `duckRamp`, in seconds.
+pub const DEFAULT_DUCK_RAMP: f64 = 0.1;
+
 impl ProjectLayer {
     pub fn is_audio_focused(&self) -> bool {
         self.audio_focus.unwrap_or(false)
+    }
+
+    /// The linear amplitude every other sound is multiplied by while this
+    /// focused layer plays — `duckDb` as a factor, clamped to −60…0 dB.
+    pub fn duck_factor(&self) -> f32 {
+        match self.duck_db.filter(|d| d.is_finite()) {
+            Some(db) => 10f64.powf(db.clamp(-60.0, 0.0) / 20.0) as f32,
+            // Exactly the factor the apps have always used.
+            None => 0.2,
+        }
+    }
+
+    /// Seconds of fade into and out of this layer's duck, clamped to 0…5.
+    pub fn duck_ramp_seconds(&self) -> f64 {
+        self.duck_ramp
+            .filter(|r| r.is_finite())
+            .unwrap_or(DEFAULT_DUCK_RAMP)
+            .clamp(0.0, 5.0)
     }
 }
 
@@ -4616,6 +4650,8 @@ fn lift_layers(layers: &[ProjectLayer]) -> Vec<ProjectLayer> {
         stage.caption_style = None;
         stage.caption_voice_clip = None;
         stage.audio_focus = None;
+        stage.duck_db = None;
+        stage.duck_ramp = None;
         stage.keyframes = first
             .keyframes
             .iter()
@@ -4834,10 +4870,12 @@ impl ProjectMetadata {
         // An older reader drops the fields on save and the material runs
         // on, or ignores the swap and never switches: a different film.
         let all = crate::nesting::all_layers(self);
-        if all
-            .iter()
-            .any(|l| l.auto_zoom.is_some() || l.keyframes.iter().any(|k| k.needs_rung_48()))
-            || resources.iter().any(|r| r.activity.is_some())
+        if all.iter().any(|l| {
+            l.auto_zoom.is_some()
+                || l.duck_db.is_some()
+                || l.duck_ramp.is_some()
+                || l.keyframes.iter().any(|k| k.needs_rung_48())
+        }) || resources.iter().any(|r| r.activity.is_some())
             || crate::musical::carries_ignorable_beat_fields(self)
             || crate::speech::carries_ignorable_speech_fields(self)
         {

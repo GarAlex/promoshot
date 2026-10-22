@@ -565,8 +565,9 @@ mod schema_doc_tests {
             caption_style: Some(full_caption_style()),
             // Narration the app records against a caption — its own workflow.
             caption_voice_clip: None,
-            // App-side audio ducking toggle, undocumented on purpose.
-            audio_focus: None,
+            audio_focus: Some(true),
+            duck_db: Some(-9.0),
+            duck_ramp: Some(0.3),
             duration_rule: Some(DurationRule {
                 kind: DurationRuleKind::FitDependents,
                 tail: Some(2.5),

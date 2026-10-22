@@ -289,6 +289,10 @@ white flash marks bar 2. No `beatGrid`: promo measures the song on open
    "keyframes":[]}]}
 ```
 
+Sound mixes at each resource's `volume`; a layer with `"audioFocus":
+true` ducks every other sound while it plays (−14 dB over 0.1 s, or
+its own `"duckDb": -9, "duckRamp": 0.4`) — the voice over a music bed.
+
 **Narrated slideshow** — one still per sentence of a narration, with
 karaoke captions made from it: each slide cuts 0.1 s before its sentence,
 the captions light each word as it is said. The take here is a silent

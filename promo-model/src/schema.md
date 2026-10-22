@@ -1103,7 +1103,7 @@ A reveal can arrive on a narration's words instead of at its own pace —
   project using a rect or a corner radius carries
   `minReaderVersion: 42`.
 
-## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits
+## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits, audioFocus, duck, ducking
 
 - `provenance` on any resource says where it came from, for credits and
   AI labels: `{"tool": "ace-step", "model": "v1.5", "license":
@@ -1132,6 +1132,17 @@ A reveal can arrive on a narration's words instead of at its own pace —
   another. `looped` on the RESOURCE is the blunter form of the same
   idea, for material that is inherently a loop: it repeats for every
   layer that plays it.
+- `"audioFocus": true` on a layer that makes sound (video, audio, a
+  caption's narration) DUCKS every other sound while it plays: music
+  and other clips drop under it, it is never ducked itself, and several
+  focused layers each duck the rest. The duck is −14 dB (amplitude ×0.2)
+  faded over 0.1 s before the layer starts and after it ends. On the
+  same layer `"duckDb": -9` sets the depth (−60…0, a duck only lowers)
+  and `"duckRamp": 0.4` the fade in seconds (0…5); where two ducks
+  overlap, the deeper one holds. For narration over a music bed −8 to
+  −12 dB with a 0.3–0.5 s ramp keeps the bed alive; −14 or deeper is a
+  clip's own sound taking over. Inside a composition it ducks the sound
+  around it on the parent's clock.
 - fps is optional and renders at 30 when absent. Screen recordings are
   captured at up to 60, so a scrolling UI demo wants 60 (or 59.94, the
   rate a Mac capture actually reports); 24 makes scrolling judder.

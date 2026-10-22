@@ -1021,8 +1021,7 @@ pub fn build_soundtrack_between(
     use promo_engine::{mix_chunk, MixInput};
     use promo_media::TrackSelection;
     use promo_timeline::{
-        audio_inputs, level_points, scaled_segments, AudioSource, VolumePoint, DUCK_FACTOR,
-        DUCK_RAMP,
+        audio_graph, level_points_ducked, scaled_segments, AudioSource, VolumePoint,
     };
 
     const SAMPLE_RATE: u32 = 48_000;
@@ -1044,7 +1043,7 @@ pub fn build_soundtrack_between(
     // Stage members (rung 33) sound like any layer, so the mix walks the
     // lowered form the engine draws.
     let lowered = project.meta.lowered();
-    let (inputs, focus) = audio_inputs(&lowered, &renderable);
+    let (inputs, focus) = audio_graph(&lowered, &renderable);
 
     // One placed slice of decoded PCM with its level curve.
     struct Placed {
@@ -1166,14 +1165,12 @@ pub fn build_soundtrack_between(
                 volume: base_volume,
             }]
         });
-        let points = level_points(
+        let points = level_points_ducked(
             &automation,
             track_start,
             track_end,
             &focus,
             input.is_focused,
-            DUCK_FACTOR,
-            DUCK_RAMP,
         );
 
         let frame = CHANNELS as usize;
@@ -1512,6 +1509,76 @@ mod tests {
             (lufs(&last) + 16.0).abs() < 0.2,
             "normalize listed last: {}",
             lufs(&last)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Issue #14: an `audioFocus` layer's duck depth and ramp come from the
+    /// project — `duckDb` and `duckRamp` on the focused layer — and without
+    /// them the duck is the long-standing ≈ −14 dB over 0.1 s. A 220 Hz bed
+    /// under a SILENT focused "voice" from 3 to 6 s, so the mix is the bed
+    /// alone and its level is read straight off the buffer.
+    #[test]
+    fn a_focused_layer_ducks_by_its_own_depth_and_ramp() {
+        let dir = std::env::temp_dir().join(format!("promo-duck-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        if !tone(&dir.join("Resources/bed.wav"), 220, 9.0) {
+            eprintln!("no ffmpeg; skipping");
+            return;
+        }
+        write_wav(&dir.join("Resources/voice.wav"), &vec![0.0f32; 48_000 * 3]);
+        let mix = |duck: &str| {
+            std::fs::write(
+                dir.join("metadata.json"),
+                format!(
+                    r#"{{"id":"P","name":"duck","createdAt":0,"state":"recorded","minReaderVersion":50,
+                    "trimStart":0,"trimEnd":9,"videoDuration":9,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"}},
+                    "resources":[{{"id":"bed","kind":"audio","filename":"bed.wav","displayName":"bed","addedAt":0,
+                      "duration":9,"imageCuts":[],"disabledAudioTrackIndices":[]}},
+                      {{"id":"voice","kind":"audio","filename":"voice.wav","displayName":"voice","addedAt":0,
+                      "duration":3,"imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                    "layers":[{{"id":"bedL","name":"bed","sortIndex":0,"kind":"audio","isEnabled":true,
+                      "startTime":0,"duration":9,"resourceID":"bed","keyframes":[]}},
+                      {{"id":"voiceL","name":"voice","sortIndex":1,"kind":"audio","isEnabled":true,
+                      "startTime":3,"duration":3,"resourceID":"voice","keyframes":[],"audioFocus":true{duck}}}]}}"#
+                ),
+            )
+            .unwrap();
+            let project = crate::project::Project::open(&dir).expect("project");
+            build_soundtrack(&project, 9.0)
+                .expect("mixes")
+                .expect("has sound")
+        };
+        let db = |audio: &promo_media::AudioBuffer, a: f64, b: f64| {
+            20.0 * rms(audio, a, b).max(1e-6).log10()
+        };
+        let near = |what: &str, got: f32, want: f32| {
+            assert!(
+                (got - want).abs() < 0.3,
+                "{what}: {got:.2} dB, want {want:.2} dB"
+            );
+        };
+
+        // Today's duck: ≈ -14 dB, fully in at the voice's start.
+        let default = mix("");
+        let open = db(&default, 1.0, 2.0);
+        near("default duck", db(&default, 3.2, 5.8) - open, -13.98);
+        near("default: in by 3.0", db(&default, 3.0, 3.1) - open, -13.98);
+        near("default: out by 6.1", db(&default, 6.1, 6.6) - open, 0.0);
+
+        // A gentler, slower duck from the project.
+        let set = mix(r#","duckDb":-6,"duckRamp":0.5"#);
+        near("duckDb -6", db(&set, 3.2, 5.8) - open, -6.0);
+        near("before the ramp", db(&set, 2.0, 2.45) - open, 0.0);
+        near("after the ramp out", db(&set, 6.55, 7.5) - open, 0.0);
+        // Half way down the 0.5 s ramp the gate is half way in amplitude:
+        // 1 + (0.501 - 1) * 0.5 ≈ 0.75, ≈ -2.5 dB.
+        let mid = db(&set, 2.74, 2.76) - open;
+        assert!(
+            (-3.2..-1.8).contains(&mid),
+            "mid-ramp ({mid:.2} dB) is between open and ducked"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

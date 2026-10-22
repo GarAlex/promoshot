@@ -2730,6 +2730,20 @@
             }
           ]
         },
+        "duckDb": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "duckRamp": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "duration": {
           "anyOf": [
             {

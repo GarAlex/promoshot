@@ -270,6 +270,29 @@ pub fn sample_automation(t: f64, points: &[VolumePoint]) -> f32 {
     last.volume
 }
 
+/// One focused layer's duck on the output timeline: while it plays
+/// (`start..end`), every other sound is multiplied by `duck_factor`, faded
+/// in over `ramp` seconds before and out over `ramp` after.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FocusSpan {
+    pub start: f64,
+    pub end: f64,
+    pub duck_factor: f32,
+    pub ramp: f64,
+}
+
+impl FocusSpan {
+    /// `layer`'s duck (its `duckDb` and `duckRamp`) over `start..end`.
+    pub fn of(layer: &ProjectLayer, start: f64, end: f64) -> FocusSpan {
+        FocusSpan {
+            start,
+            end,
+            duck_factor: layer.duck_factor(),
+            ramp: layer.duck_ramp_seconds(),
+        }
+    }
+}
+
 /// Swift `levelPoints(...)` — the final per-track amplitude breakpoints:
 /// user automation through the perceptual taper, multiplied by the focus
 /// duck gate. Empty when the result is constant full amplitude.
@@ -283,25 +306,61 @@ pub fn level_points(
     duck_factor: f32,
     ramp: f64,
 ) -> Vec<VolumePoint> {
+    let spans: Vec<FocusSpan> = focus_intervals
+        .iter()
+        .map(|&(start, end)| FocusSpan {
+            start,
+            end,
+            duck_factor,
+            ramp,
+        })
+        .collect();
+    level_points_ducked(automation, track_start, track_end, &spans, is_focused)
+}
+
+/// [`level_points`] with each focus span carrying its own depth and ramp
+/// (layer `duckDb` / `duckRamp`). Spans of one depth and ramp merge as
+/// before; where ducks of different settings overlap, the deepest wins.
+pub fn level_points_ducked(
+    automation: &[VolumePoint],
+    track_start: f64,
+    track_end: f64,
+    focus: &[FocusSpan],
+    is_focused: bool,
+) -> Vec<VolumePoint> {
     if track_end <= track_start {
         return Vec::new();
     }
     let Some(first_auto) = automation.first() else {
         return Vec::new();
     };
-    let merged_focus: Vec<(f64, f64)> = if is_focused {
-        Vec::new()
-    } else {
-        merge_intervals(
-            &focus_intervals
-                .iter()
-                .filter_map(|&(lo, hi)| {
-                    let lo = lo.max(track_start);
-                    let hi = hi.min(track_end);
-                    (hi > lo).then_some((lo, hi))
-                })
-                .collect::<Vec<_>>(),
-        )
+    // One merged list per (depth, ramp): the gate of each, the lowest wins.
+    type Group = (f32, f64, Vec<(f64, f64)>);
+    let mut groups: Vec<Group> = Vec::new();
+    if !is_focused {
+        for span in focus {
+            let lo = span.start.max(track_start);
+            let hi = span.end.min(track_end);
+            if hi <= lo {
+                continue;
+            }
+            match groups
+                .iter_mut()
+                .find(|g| g.0 == span.duck_factor && g.1 == span.ramp)
+            {
+                Some(group) => group.2.push((lo, hi)),
+                None => groups.push((span.duck_factor, span.ramp, vec![(lo, hi)])),
+            }
+        }
+        for group in groups.iter_mut() {
+            group.2 = merge_intervals(&group.2);
+        }
+    }
+    let gate = |t: f64| {
+        groups
+            .iter()
+            .map(|(factor, ramp, merged)| duck_gate(t, merged, *factor, *ramp))
+            .fold(1.0f32, f32::min)
     };
 
     let mut times = vec![track_start, track_end];
@@ -310,10 +369,12 @@ pub fn level_points(
             times.push(p.time);
         }
     }
-    for &(lo, hi) in &merged_focus {
-        for edge in [lo - ramp, lo, hi, hi + ramp] {
-            if edge > track_start && edge < track_end {
-                times.push(edge);
+    for (_, ramp, merged) in &groups {
+        for &(lo, hi) in merged {
+            for edge in [lo - ramp, lo, hi, hi + ramp] {
+                if edge > track_start && edge < track_end {
+                    times.push(edge);
+                }
             }
         }
     }
@@ -332,7 +393,7 @@ pub fn level_points(
         } else {
             sample_automation(t, automation)
         };
-        let amp = amplitude_for_fraction(frac) * duck_gate(t, &merged_focus, duck_factor, ramp);
+        let amp = amplitude_for_fraction(frac) * gate(t);
         if let Some(last) = points.last_mut() {
             if (last.time - t).abs() < 0.000_1 {
                 *last = VolumePoint {
@@ -690,7 +751,7 @@ fn nested_inputs(
     resources: &[promo_model::ProjectResource],
     is_renderable: &dyn Fn(&ProjectLayer) -> bool,
     depth: usize,
-) -> (Vec<AudioInput>, Vec<(f64, f64)>) {
+) -> (Vec<AudioInput>, Vec<FocusSpan>) {
     let mut inputs = Vec::new();
     let mut focus = Vec::new();
     let Some(composition) = shown.composition.as_ref() else {
@@ -741,10 +802,14 @@ fn nested_inputs(
                     inputs.push(input);
                 }
             }
-            for (a, b) in spans {
-                let (a, b) = (map(a).max(p_start), map(b).min(p_end));
+            for span in spans {
+                let (a, b) = (map(span.start).max(p_start), map(span.end).min(p_end));
                 if b > a {
-                    focus.push((a, b));
+                    focus.push(FocusSpan {
+                        start: a,
+                        end: b,
+                        ..span
+                    });
                 }
             }
             continue;
@@ -838,7 +903,7 @@ fn nested_inputs(
             speed: crate::mapping::effective_speed(&res) * rate,
         });
         if layer.is_audio_focused() {
-            focus.push((start_time, start_time + duration_cap));
+            focus.push(FocusSpan::of(layer, start_time, start_time + duration_cap));
         }
     }
     (inputs, focus)
@@ -927,10 +992,24 @@ fn shift_ranges(ranges: Vec<VideoTrimRange>, seconds: f64) -> Vec<VideoTrimRange
     out
 }
 
+/// [`audio_graph`] with the focus spans as bare `(start, end)` pairs — the
+/// form the apps' graph door reads; their duck depth and ramp are in
+/// [`audio_graph`]'s spans.
 pub fn audio_inputs(
     project: &ProjectMetadata,
     is_renderable: &dyn Fn(&ProjectLayer) -> bool,
 ) -> (Vec<AudioInput>, Vec<(f64, f64)>) {
+    let (inputs, spans) = audio_graph(project, is_renderable);
+    (inputs, spans.iter().map(|s| (s.start, s.end)).collect())
+}
+
+/// Every enabled, renderable layer that makes sound, and the spans its
+/// focused layers duck the rest through — each with that layer's own
+/// `duckDb` and `duckRamp`.
+pub fn audio_graph(
+    project: &ProjectMetadata,
+    is_renderable: &dyn Fn(&ProjectLayer) -> bool,
+) -> (Vec<AudioInput>, Vec<FocusSpan>) {
     let mut inputs = Vec::new();
     let mut focus = Vec::new();
 
@@ -1054,7 +1133,7 @@ pub fn audio_inputs(
             // made such a layer audible while ducking nothing.
             let end = start + layer.duration.unwrap_or(played_length).max(0.0);
             if end > start {
-                focus.push((start, end));
+                focus.push(FocusSpan::of(layer, start, end));
             }
         }
     }

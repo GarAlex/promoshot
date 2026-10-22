@@ -456,6 +456,11 @@ is for; the schema section says how to write it.
 - **Chroma key** (`chroma`) — key a green screen on a video or image
   layer, tolerance and softness per layer.
 - **Audio effects** (`audio`) — normalize, compress, EQ on a resource.
+- **Ducking** (`audioFocus`) — `"audioFocus": true` on the voice (or a
+  clip whose own sound should come through) lowers every other sound
+  while it plays: −14 dB over 0.1 s by default, `"duckDb"` and
+  `"duckRamp"` on the same layer to set it. Under narration, −9 dB with
+  a 0.4 s ramp keeps a music bed audible.
 - **Markers and chapters** (`markers`) — named times that become the
   mp4's chapter list.
 - **A look from a `.cube`** (`lut`) — a LUT resource, applied per layer
