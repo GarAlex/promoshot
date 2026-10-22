@@ -215,6 +215,12 @@ pub(crate) fn any_sync(layers: &[ProjectLayer], resources: &[ProjectResource]) -
 
 /// No caption in these layers shows a synced reveal: none carries word
 /// arrivals of its own (an app form made before the sync went keeps none).
+/// The middle of a caption's life, the instant that says which play of a
+/// looping take it shows (its start when it has no set length).
+fn caption_middle(layer: &ProjectLayer) -> f64 {
+    layer.start_time + layer.duration.unwrap_or(0.0).max(0.0) / 2.0
+}
+
 pub(crate) fn clear_reveal_times(layers: &mut [ProjectLayer]) {
     for layer in layers {
         layer.reveal_times = None;
@@ -306,6 +312,8 @@ pub(crate) fn sync_reveals(
                         problems.push(estimated);
                     }
                 }
+                // A looping take: the play the caption sits in.
+                let take = take.play_holding(caption_middle(layer));
                 unit_times(&text, &sync, &take, layer.start_time)
             });
             let (times, ends) = match answer {
@@ -622,7 +630,10 @@ pub fn reveal_match(
     let found = speech
         .take_for(layer.speech_clock.as_ref(), &layer.name, sync.of.as_deref())
         .map_err(|f| f.why())
-        .and_then(|(take, _)| unit_times(&text, &sync, &take, layer.start_time));
+        .and_then(|(take, _)| {
+            let take = take.play_holding(caption_middle(layer));
+            unit_times(&text, &sync, &take, layer.start_time)
+        });
     Some(match found {
         Ok(t) => RevealMatch {
             sync,

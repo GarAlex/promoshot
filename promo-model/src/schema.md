@@ -376,6 +376,11 @@ a layer's `startTime` and `duration`, and a keyframe's `time`.
 - `{"word": 12, "text": "Euclid"}` guards the index: when the line is
   rewritten and word 12 is no longer "Euclid", the time follows "Euclid"
   and validate says so.
+- `"play": 2` — on a layer that loops its take (`beyondEnd: "loop"`)
+  each word is said once per play; this picks the second. Without it a
+  keyframe lands in the play its layer shows, anything else in the play
+  nearest where it stands (the first, for a new value), and validate
+  warns that the take is said more than once.
 
 A speech value is a position: in `startTime` the layer starts there, in
 `duration` it ENDS there (`{"sentence": 2, "of": "intro"}` = "until

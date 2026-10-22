@@ -1208,6 +1208,16 @@ is `fixtures/speech/kitten-comma.wav` with the voice's own timing in
   piecewise inverse of §6.3. It honours trims, trim keyframes, pauses,
   resource speed and cuts; a loop maps to its first play, with no
   warning yet.
+  *Closed since:* a value may name `"play": n` (1-based; past the
+  layer's last play is a break). Without it, a keyframe lands in the
+  play inside its layer's life when exactly one is (quietly); anything
+  else lands in the play nearest the field's current number — a new
+  value's is the first — with a `SpeechLoopAmbiguous` warning naming
+  the play used and suggesting `"play"`. Snaps (`snap: …` values,
+  `snap_speech`, `snap_speech_time`) and `word_ticks` see every play,
+  and the editor's snap writes the play; a synced reveal uses the play
+  holding the caption's middle. Still on the first play: `during`, the
+  captions generator, and generators firing on words.
 - **Circular.** A scope whose loop runs out of rounds while still moving
   (a beat clock and a speech clock placing each other) gives every layer
   the last round moved its stored numbers back, and a `Circular` break.

@@ -4355,6 +4355,10 @@
             "object"
           ]
         },
+        "play": {
+          "minimum": 1,
+          "type": "integer"
+        },
         "quantize": {
           "enum": [
             "beat",

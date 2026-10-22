@@ -309,6 +309,16 @@ pub enum TimingProblem {
         take: String,
         layers: Vec<String>,
     },
+    /// A value on a looping take said more than once in its layer, with
+    /// no `play`: counted on the play nearest the field's number.
+    SpeechLoopAmbiguous {
+        layer: String,
+        spec: String,
+        take: String,
+        player: String,
+        plays: u32,
+        used: u32,
+    },
     /// A take with no word timing yet: laid out on an estimate, and an
     /// export waits for timing.
     SpeechEstimated {
@@ -588,6 +598,19 @@ impl std::fmt::Display for TimingProblem {
                  first, \"{}\"; name the layer in \"of\" to choose",
                 layers.join(", "),
                 layers.first().map(String::as_str).unwrap_or_default()
+            ),
+            Self::SpeechLoopAmbiguous {
+                layer,
+                spec,
+                take,
+                player,
+                plays,
+                used,
+            } => write!(
+                f,
+                "layer \"{layer}\": {spec} — \"{take}\" loops in layer \"{player}\", so it \
+                 is said {plays} times; counted on play {used}; add \"play\": n (1–{plays}) \
+                 to choose"
             ),
             Self::SpeechEstimated { take } => write!(
                 f,
@@ -2122,22 +2145,26 @@ impl Plan {
                     Value::Number(n) => n.as_f64().ok_or_else(|| "not a number".to_string()),
                     Value::Object(object) if promo_model::speech::is_speech_object(object) => {
                         match (promo_model::speech::SpeechTime::from_object(object), speech) {
-                            (Ok(value), Some(speech)) => speech
-                                .resolve(
-                                    &*layer,
-                                    &value,
-                                    promo_model::speech::SpeechEdge::Start,
-                                    &grid,
-                                )
-                                .map(|r| r.seconds)
-                                .map_err(|f| {
+                            (Ok(value), Some(speech)) => match speech.resolve(
+                                &*layer,
+                                &value,
+                                promo_model::speech::SpeechEdge::Start,
+                                &grid,
+                                layer.duration.map(|d| (start + d, start + d)),
+                            ) {
+                                Ok(r) => {
+                                    late.extend(r.warnings);
+                                    Ok(r.seconds)
+                                }
+                                Err(f) => {
                                     late.push(f.problem(
                                         &name,
                                         "sequence.until",
                                         until.to_string(),
                                     ));
-                                    String::new()
-                                }),
+                                    Err(String::new())
+                                }
+                            },
                             (Err(why), _) => Err(why),
                             (_, None) => Err("no take to count on here".into()),
                         }

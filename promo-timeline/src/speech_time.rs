@@ -25,6 +25,8 @@ pub(crate) struct Player {
     pub start: f64,
     pub end: Option<f64>,
     pub cut: Option<String>,
+    /// The layer's own beyond-the-end policy (None: the resource's).
+    pub beyond_end: Option<promo_model::BeyondEnd>,
 }
 
 /// One scope's speech clock and the takes its layers play.
@@ -56,6 +58,8 @@ pub(crate) struct Take {
     placement: Placement,
     /// No record: laid out on an estimate.
     pub estimated_now: bool,
+    /// Which play of a looping layer, 0-based: `out` lands in it.
+    play: usize,
 }
 
 impl Take {
@@ -68,13 +72,71 @@ impl Take {
             }
             Placement::Player(p) => {
                 let material = crate::mapping::resource_for_cut(&self.resource, p.cut.as_deref());
-                let t = p.start + crate::mapping::timeline_output_time_for_source(&material, s)?;
+                let t = p.start
+                    + self.play as f64 * self.period().unwrap_or(0.0)
+                    + crate::mapping::timeline_output_time_for_source(&material, s)?;
                 match p.end {
                     Some(end) if t > end + 1e-6 => None,
                     _ => Some(t),
                 }
             }
         }
+    }
+
+    /// One play's length on the timeline, when the layer that plays the
+    /// take loops it.
+    fn period(&self) -> Option<f64> {
+        let p = self.player()?;
+        let material = crate::mapping::resource_for_cut(&self.resource, p.cut.as_deref());
+        let looped = match p.beyond_end {
+            Some(promo_model::BeyondEnd::Loop) => true,
+            Some(_) => false,
+            None => material.is_looped(),
+        };
+        let period = crate::mapping::timeline_loop_period(&material);
+        (looped && period.is_finite() && period > 1e-6).then_some(period)
+    }
+
+    /// How many times the layer plays the take: more than one only for a
+    /// looping layer with a set end.
+    pub fn plays(&self) -> usize {
+        match (
+            self.period(),
+            self.player().and_then(|p| Some((p.start, p.end?))),
+        ) {
+            (Some(period), Some((start, end))) if end > start => {
+                (((end - start) / period - 1e-6).ceil() as usize).clamp(1, 10_000)
+            }
+            _ => 1,
+        }
+    }
+
+    /// The same take in play `k` (0-based).
+    pub fn in_play(&self, k: usize) -> Take {
+        Take {
+            play: k,
+            ..self.clone()
+        }
+    }
+
+    /// Every play, in order.
+    pub fn each_play(&self) -> Vec<Take> {
+        (0..self.plays()).map(|k| self.in_play(k)).collect()
+    }
+
+    /// The same take in the play whose window holds output second `t`
+    /// (the first before it, the last after it).
+    pub fn play_holding(&self, t: f64) -> Take {
+        let k = match (self.period(), self.player()) {
+            (Some(period), Some(p)) if t.is_finite() => ((t - p.start) / period).floor().max(0.0),
+            _ => 0.0,
+        };
+        self.in_play((k as usize).min(self.plays() - 1))
+    }
+
+    /// The play (0-based) now in use.
+    pub fn play(&self) -> usize {
+        self.play
     }
 
     /// The layer that plays it, when one does.
@@ -111,6 +173,9 @@ pub(crate) struct Resolved {
     pub seconds: f64,
     pub word: Option<(u32, String)>,
     pub take: String,
+    /// The play of a looping take it landed in, 1-based, when the take
+    /// plays more than once (or the value names one).
+    pub play: Option<u32>,
     pub warnings: Vec<TimingProblem>,
 }
 
@@ -136,6 +201,7 @@ impl<'a> Speech<'a> {
                             start: layer.start_time,
                             end: layer.duration.map(|d| layer.start_time + d),
                             cut: layer.media_cut_id.clone(),
+                            beyond_end: layer.beyond_end,
                         });
                     }
                 }
@@ -308,27 +374,61 @@ impl<'a> Speech<'a> {
                 timing,
                 placement,
                 estimated_now,
+                play: 0,
             },
             warnings,
         ))
     }
 
-    /// `value` (a field of `owner`) in output seconds.
+    /// `value` (a field of `owner`) in output seconds. On a looping take
+    /// with no `play`, `near` says which play counts: a span (a keyframe's
+    /// owner's life) settles it when exactly one play lands inside; else
+    /// the play landing nearest its start (the field's current number)
+    /// counts, and a warning says the take is said more than once.
     pub fn resolve(
         &self,
         owner: &ProjectLayer,
         value: &SpeechTime,
         default: SpeechEdge,
         grid: &Grid,
+        near: Option<(f64, f64)>,
     ) -> Result<Resolved, Fault> {
         let (take, mut warnings) = self.take_for(
             owner.speech_clock.as_ref(),
             &owner.name,
             value.of.as_deref(),
         )?;
+        let plays = take.plays();
+        // The plays a value may land in: the one it names, else all.
+        let pool: Vec<Take> = match value.play {
+            Some(n) if n as usize > plays => {
+                return Err(Fault::Word(format!(
+                    "play {n} is past the end: layer \"{}\" plays \"{}\" {plays} time{}",
+                    take.player().map(|p| p.id.as_str()).unwrap_or("?"),
+                    take.id,
+                    if plays == 1 { "" } else { "s" }
+                )))
+            }
+            Some(n) => vec![take.in_play(n as usize - 1)],
+            None => take.each_play(),
+        };
         let edge = value.edge.unwrap_or(default);
         let words = &take.timing.words;
-        let (mut seconds, word) = match &value.at {
+        let finish = |mut seconds: f64| {
+            match value.offset {
+                Some(SpeechOffset::Seconds(n)) => seconds += n,
+                Some(SpeechOffset::Beats(n)) => seconds = grid.time_at(grid.index_at(seconds) + n),
+                Some(SpeechOffset::Bars(n)) => {
+                    seconds = grid.time_at(grid.index_at(seconds) + grid.bars(n))
+                }
+                None => {}
+            }
+            if let Some(unit) = value.quantize {
+                seconds = grid.time_at(grid.snap(unit, seconds));
+            }
+            seconds
+        };
+        let (seconds, word, play) = match &value.at {
             SpeechPoint::Snap { to, near } => {
                 let candidates: Vec<(f64, Option<usize>)> = match to {
                     SpeechSnap::Word => words
@@ -353,9 +453,15 @@ impl<'a> Speech<'a> {
                         .map(|s| (s.start, Some(s.words[0] as usize)))
                         .collect(),
                 };
-                let best = candidates
+                // A snap names its own instant, so every play is a
+                // candidate and the nearest wins: nothing is ambiguous.
+                let best = pool
                     .iter()
-                    .filter_map(|(s, i)| Some((take.out(*s)?, *i)))
+                    .flat_map(|t| {
+                        candidates
+                            .iter()
+                            .filter_map(move |(s, i)| Some((t.out(*s)?, *i, t.play())))
+                    })
                     .min_by(|a, b| (a.0 - near).abs().total_cmp(&(b.0 - near).abs()))
                     .ok_or_else(|| {
                         Fault::Word(format!(
@@ -365,7 +471,7 @@ impl<'a> Speech<'a> {
                         ))
                     })?;
                 let word = best.1.map(|i| (i as u32 + 1, words[i].text.clone()));
-                (best.0, word)
+                (finish(best.0), word, best.2)
             }
             point => {
                 let (source, index) = self.point(
@@ -377,8 +483,12 @@ impl<'a> Speech<'a> {
                     &mut warnings,
                 )?;
                 let word = index.map(|i| (i as u32 + 1, words[i].text.clone()));
-                let out = take.out(source).ok_or_else(|| {
-                    Fault::Trimmed(match &word {
+                let landed: Vec<(f64, usize)> = pool
+                    .iter()
+                    .filter_map(|t| Some((finish(t.out(source)?), t.play())))
+                    .collect();
+                let Some(&first) = landed.first() else {
+                    return Err(Fault::Trimmed(match &word {
                         Some((n, text)) => format!(
                             "word {n} \"{text}\" is trimmed out of layer \"{}\"",
                             take.player().map(|p| p.id.as_str()).unwrap_or("?")
@@ -388,11 +498,46 @@ impl<'a> Speech<'a> {
                             value.label(),
                             take.player().map(|p| p.id.as_str()).unwrap_or("?")
                         ),
+                    }));
+                };
+                // Said more than once: the play nearest the field's number
+                // (where it was, or where the editor put it), else the
+                // first — and say so, so the file can name one.
+                let near = near.filter(|(a, b)| a.is_finite() && b.is_finite());
+                let inside: Vec<(f64, usize)> = match near {
+                    Some((a, b)) if b > a + 1e-9 => landed
+                        .iter()
+                        .copied()
+                        .filter(|(t, _)| *t >= a - 1e-6 && *t <= b + 1e-6)
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                let chosen = inside
+                    .first()
+                    .copied()
+                    .or_else(|| {
+                        let (n, _) = near?;
+                        landed
+                            .iter()
+                            .copied()
+                            .min_by(|a, b| (a.0 - n).abs().total_cmp(&(b.0 - n).abs()))
                     })
-                })?;
-                (out, word)
+                    .unwrap_or(first);
+                if value.play.is_none() && landed.len() > 1 && inside.len() != 1 {
+                    warnings.push(TimingProblem::SpeechLoopAmbiguous {
+                        layer: owner.name.clone(),
+                        spec: value.canonical_text(),
+                        take: take.id.clone(),
+                        player: take.player().map(|p| p.id.clone()).unwrap_or_default(),
+                        plays: landed.len() as u32,
+                        used: chosen.1 as u32 + 1,
+                    });
+                }
+                (chosen.0, word, chosen.1)
             }
         };
+        // Which play, when there is a choice to name.
+        let play = (value.play.is_some() || plays > 1).then_some(play as u32 + 1);
         // A word the timing itself doubts: said beside the value.
         if let Some((n, text)) = &word {
             if let Some(c) = words[*n as usize - 1]
@@ -408,21 +553,11 @@ impl<'a> Speech<'a> {
                 });
             }
         }
-        match value.offset {
-            Some(SpeechOffset::Seconds(n)) => seconds += n,
-            Some(SpeechOffset::Beats(n)) => seconds = grid.time_at(grid.index_at(seconds) + n),
-            Some(SpeechOffset::Bars(n)) => {
-                seconds = grid.time_at(grid.index_at(seconds) + grid.bars(n))
-            }
-            None => {}
-        }
-        if let Some(unit) = value.quantize {
-            seconds = grid.time_at(grid.snap(unit, seconds));
-        }
         Ok(Resolved {
             seconds,
             word,
             take: take.id.clone(),
+            play,
             warnings,
         })
     }
@@ -875,7 +1010,13 @@ pub(crate) fn speech_pass(
             else {
                 continue;
             };
-            match speech.resolve(layer, &value, *default, &grid) {
+            // Where the field is now, on the output timeline.
+            let near = match *key {
+                "duration" => layer.duration.map(|d| layer.start_time + d),
+                _ => Some(layer.start_time),
+            }
+            .map(|n| (n, n));
+            match speech.resolve(layer, &value, *default, &grid, near) {
                 Ok(resolved) => {
                     used.insert(resolved.take.clone());
                     problems.extend(resolved.warnings.iter().cloned());
@@ -955,7 +1096,10 @@ pub(crate) fn speech_pass(
                 continue;
             };
             let field = format!("keyframes[{}].time", keyframe.id);
-            match speech.resolve(&owner, &value, SpeechEdge::Start, &grid) {
+            // The owner's life: a keyframe on a word falls in the play
+            // the layer is showing.
+            let near = Some((start, start + owner.duration.unwrap_or(0.0).max(0.0)));
+            match speech.resolve(&owner, &value, SpeechEdge::Start, &grid, near) {
                 Ok(resolved) => {
                     used.insert(resolved.take.clone());
                     problems.extend(resolved.warnings.iter().cloned());
@@ -999,6 +1143,14 @@ pub(crate) fn speech_pass(
 /// The core's words for a resolved value: "word 12 ‘Euclid’", "ends with
 /// sentence 2".
 fn label(value: &SpeechTime, resolved: &Resolved, ends: bool) -> String {
+    let out = label_in_play(value, resolved, ends);
+    match resolved.play {
+        Some(n) if !out.contains(&format!("(play {n})")) => format!("{out} (play {n})"),
+        _ => out,
+    }
+}
+
+fn label_in_play(value: &SpeechTime, resolved: &Resolved, ends: bool) -> String {
     let word = resolved
         .word
         .as_ref()
@@ -1342,9 +1494,21 @@ impl<'a> Speech<'a> {
     }
 }
 
-/// The candidates a unit offers on a take, in output seconds: (time, word
-/// index 0-based, sentence index 0-based).
-fn candidates(take: &Take, unit: SpeechUnit, end: bool) -> Vec<(f64, usize, usize)> {
+/// The candidates a unit offers on a take, in output seconds, in every
+/// play of a looping take: (time, word index 0-based, sentence index
+/// 0-based, play 0-based).
+fn candidates(take: &Take, unit: SpeechUnit, end: bool) -> Vec<(f64, usize, usize, usize)> {
+    take.each_play()
+        .iter()
+        .flat_map(|t| {
+            candidates_in_play(t, unit, end)
+                .into_iter()
+                .map(|(at, w, s)| (at, w, s, t.play()))
+        })
+        .collect()
+}
+
+fn candidates_in_play(take: &Take, unit: SpeechUnit, end: bool) -> Vec<(f64, usize, usize)> {
     let t = &take.timing;
     let sentence_of = |i: usize| {
         t.sentences
@@ -1412,9 +1576,9 @@ pub fn snap_speech(
         start
     };
     let take = speech.take_at(layer, near)?;
-    let (at, word, sentence) = candidates(&take, unit, end_edge)
+    let (at, word, sentence, play) = candidates(&take, unit, end_edge)
         .into_iter()
-        .filter(|(t, _, _)| !end_edge || *t > start + 1e-4)
+        .filter(|(t, _, _, _)| !end_edge || *t > start + 1e-4)
         .min_by(|a, b| (a.0 - near).abs().total_cmp(&(b.0 - near).abs()))
         .ok_or_else(|| {
             format!(
@@ -1443,6 +1607,14 @@ pub fn snap_speech(
     if end_edge && unit != SpeechUnit::Gap {
         value["edge"] = json!("end");
     }
+    // A looping take says the word more than once: name the play. A gap
+    // names its own instant, so it needs none.
+    let base = if take.plays() > 1 && unit != SpeechUnit::Gap {
+        value["play"] = json!(play + 1);
+        format!("{base} (play {})", play + 1)
+    } else {
+        base
+    };
     let label = if end_edge {
         match unit {
             SpeechUnit::Gap => format!("ends at {base}"),
@@ -1474,7 +1646,7 @@ pub fn snap_speech_time(
     let take = speech.take_at(layer, seconds).ok()?;
     candidates(&take, unit, false)
         .into_iter()
-        .map(|(t, _, _)| t)
+        .map(|(t, _, _, _)| t)
         .min_by(|a, b| (a - seconds).abs().total_cmp(&(b - seconds).abs()))
 }
 
@@ -1494,21 +1666,27 @@ pub fn word_ticks(
         .take_for(None, &layer.name, Some(layer_id))
         .map_err(Fault::why)?;
     let starts: BTreeSet<u32> = take.timing.sentences.iter().map(|s| s.words[0]).collect();
+    // A looping layer says its words once per play: a tick for each.
     Ok(take
-        .timing
-        .words
+        .each_play()
         .iter()
-        .enumerate()
-        .filter_map(|(i, w)| {
-            Some(WordTick {
-                index: i as u32 + 1,
-                text: w.text.clone(),
-                start: take.out(w.start)?,
-                end: take.out(w.end)?,
-                sentence_start: starts.contains(&(i as u32)),
-                confidence: w.confidence.or(Some(take.timing.confidence)),
-                prominence: w.prominence,
-            })
+        .flat_map(|take| {
+            take.timing
+                .words
+                .iter()
+                .enumerate()
+                .filter_map(|(i, w)| {
+                    Some(WordTick {
+                        index: i as u32 + 1,
+                        text: w.text.clone(),
+                        start: take.out(w.start)?,
+                        end: take.out(w.end)?,
+                        sentence_start: starts.contains(&(i as u32)),
+                        confidence: w.confidence.or(Some(take.timing.confidence)),
+                        prominence: w.prominence,
+                    })
+                })
+                .collect::<Vec<_>>()
         })
         .collect())
 }

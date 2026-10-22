@@ -761,10 +761,14 @@ pub struct SpeechTime {
     /// The word an index is meant to be: followed (with a warning) when the
     /// index has moved.
     pub guard: Option<String>,
+    /// Which play of a looping take, 1-based. None: the play the field's
+    /// current number falls in, else the first — with a warning when the
+    /// take plays more than once.
+    pub play: Option<u32>,
 }
 
 const SPEECH_KEYS: &[&str] = &[
-    "word", "sentence", "snap", "near", "of", "nth", "edge", "offset", "quantize", "text",
+    "word", "sentence", "snap", "near", "of", "nth", "edge", "offset", "quantize", "text", "play",
 ];
 
 /// Whether a time-field object is a speech value rather than a musical one.
@@ -909,6 +913,7 @@ impl SpeechTime {
                 )
             }
         };
+        let play = object.get("play").map(|v| whole(v, "play")).transpose()?;
         Ok(SpeechTime {
             at,
             of,
@@ -916,6 +921,7 @@ impl SpeechTime {
             offset,
             quantize,
             guard,
+            play,
         })
     }
 
@@ -977,6 +983,9 @@ impl SpeechTime {
         if let Some(t) = &self.guard {
             map.insert("text".into(), Value::from(t.clone()));
         }
+        if let Some(play) = self.play {
+            map.insert("play".into(), Value::from(play));
+        }
         Value::Object(map)
     }
 
@@ -1011,6 +1020,9 @@ impl SpeechTime {
         if let Some(of) = &self.of {
             out.push_str(&format!(" of {of}"));
         }
+        if let Some(play) = self.play {
+            out.push_str(&format!(" (play {play})"));
+        }
         match self.offset {
             Some(SpeechOffset::Seconds(n)) if n != 0.0 => out.push_str(&format!(" {n:+} s")),
             Some(SpeechOffset::Beats(n)) => out.push_str(&format!(" {n:+} beats")),
@@ -1041,7 +1053,8 @@ impl schemars::JsonSchema for SpeechTime {
                 "edge": { "type": "string", "enum": ["start", "end"] },
                 "offset": { "type": ["number", "object"] },
                 "quantize": { "type": "string", "enum": ["beat", "downbeat", "bar"] },
-                "text": { "type": "string" }
+                "text": { "type": "string" },
+                "play": { "type": "integer", "minimum": 1 }
             },
             "additionalProperties": false
         })
@@ -1391,6 +1404,28 @@ mod tests {
     fn the_script_hash_is_eight_hex_of_sha256() {
         assert_eq!(script_hash(""), "e3b0c442");
         assert_eq!(script_hash("abc"), "ba7816bf");
+    }
+
+    /// `play` picks a looping take's play: a whole number from 1, kept by
+    /// the canonical form and named by the label.
+    #[test]
+    fn a_play_is_strict_and_canonical() {
+        let parse = |v: serde_json::Value| SpeechTime::from_object(v.as_object().unwrap());
+        let value = parse(serde_json::json!({"word": 4, "of": "intro", "play": 2})).unwrap();
+        assert_eq!(value.play, Some(2));
+        assert_eq!(
+            value.canonical_text(),
+            r#"{"of":"intro","play":2,"word":4}"#
+        );
+        assert_eq!(value.label(), "word 4 of intro (play 2)");
+        for bad in [0.0, 2.5, -1.0] {
+            assert!(
+                parse(serde_json::json!({"word": 4, "play": bad})).is_err(),
+                "{bad}"
+            );
+        }
+        assert!(parse(serde_json::json!({"word": 4, "play": "2"})).is_err());
+        assert_eq!(parse(serde_json::json!({"word": 4})).unwrap().play, None);
     }
 
     #[test]
