@@ -43,7 +43,13 @@ pub const LEXICON: &str = "pronunciations.dict";
 /// on macOS, `$XDG_DATA_HOME/promoshot/voices` (or
 /// `~/.local/share/promoshot/voices`) on Linux, `%APPDATA%\PromoShot\Voices`
 /// on Windows.
+///
+/// A host that keeps its own folder — the apps, whose sandbox container is
+/// theirs alone — names it with [`set_voices_dir`], which wins over both.
 pub fn voices_dir() -> PathBuf {
+    if let Some(dir) = host_dir().lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        return dir;
+    }
     if let Some(dir) = std::env::var_os("PROMOSHOT_VOICES").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
@@ -70,6 +76,29 @@ pub fn voices_dir() -> PathBuf {
     }
 }
 
+fn host_dir() -> &'static Mutex<Option<PathBuf>> {
+    static DIR: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+    DIR.get_or_init(|| Mutex::new(None))
+}
+
+/// The host's voices folder, explicitly: the apps pass their container's
+/// `Application Support/PromoShot/Voices` once at launch rather than
+/// through the environment (an iOS process has no headless default, and
+/// the Mac app's must not depend on how it was launched). `None` returns
+/// to [`voices_dir`]'s own rule. Engines loaded from the old folder are
+/// dropped.
+pub fn set_voices_dir(dir: Option<PathBuf>) {
+    let changed = {
+        let mut held = host_dir().lock().unwrap_or_else(|e| e.into_inner());
+        let changed = *held != dir;
+        *held = dir;
+        changed
+    };
+    if changed {
+        cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
 /// Kitten's speakers by the names its card gives them.
 const KITTEN: [(&str, &str); 8] = [
     ("Bella", "female"),
@@ -88,8 +117,8 @@ const GRADES: [&str; 13] = [
 ];
 
 /// The speakers a package offers, each with a line of detail; Kokoro's
-/// best-graded first.
-fn speakers(package: &str) -> Vec<(String, String)> {
+/// best-graded first. Empty for a package this build cannot speak.
+pub fn speakers(package: &str) -> Vec<(String, String)> {
     match package {
         "kokoro-en-q8" => {
             let mut voices = local_tts_core::kokoro::voices();
@@ -126,7 +155,7 @@ fn speakers(package: &str) -> Vec<(String, String)> {
 /// Is this speaker's file in the installed package? Only Kokoro's voices
 /// are separate files; a package installed before they were pinned has
 /// af_heart alone until it is installed again.
-fn speaker_installed(package: &str, speaker: &str) -> bool {
+pub fn speaker_installed(package: &str, speaker: &str) -> bool {
     package != "kokoro-en-q8"
         || voices_dir()
             .join(package)
@@ -547,6 +576,22 @@ mod tests {
         assert!((snapped[1].end - 0.90).abs() < 0.008, "{snapped:?}");
         assert!((snapped[2].start - 1.30).abs() < 0.008, "{snapped:?}");
         assert!((snapped[2].end - 2.00).abs() < 0.008, "{snapped:?}");
+    }
+
+    /// The host's folder wins over the environment and the default, and
+    /// clearing it returns to them.
+    #[test]
+    fn a_host_named_voices_folder_wins() {
+        let before = voices_dir();
+        let dir = std::env::temp_dir().join(format!("host-voices-{}", std::process::id()));
+        set_voices_dir(Some(dir.clone()));
+        assert_eq!(voices_dir(), dir);
+        assert!(catalog::installed(&voices_dir()).is_empty());
+        assert!(unavailable(DEFAULT_VOICE)
+            .unwrap()
+            .contains("not installed"));
+        set_voices_dir(None);
+        assert_eq!(voices_dir(), before);
     }
 
     #[test]

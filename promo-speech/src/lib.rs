@@ -600,19 +600,29 @@ fn with_audio_extension(name: &str, extension: &str) -> String {
 /// editing a pronunciation re-voices the project's local takes (they cost
 /// nothing). Cloud receipts are exactly the apps' fingerprint.
 fn receipt(script: &Script, resources_dir: &Path) -> String {
-    if is_keyless(&script.provider) {
+    receipt_in(
+        &script.provider,
+        &script.voice,
+        &script.words,
+        resources_dir,
+    )
+}
+
+/// The receipt a take of `text` in `provider`/`voice` is bought under in
+/// the project whose resources are `resources_dir` — [`fingerprint`],
+/// with the project's pronunciations folded in for a local voice. The
+/// apps keep the same receipt through the FFI, so a take either side
+/// wrote is settled for the other.
+pub fn receipt_in(provider: &str, voice: &str, text: &str, resources_dir: &Path) -> String {
+    if is_keyless(provider) {
         if let Ok(lexicon) = std::fs::read(resources_dir.join("pronunciations.dict")) {
             use sha2::Digest;
             let hash = sha2::Sha256::digest(&lexicon);
             let short: String = hash[..8].iter().map(|b| format!("{b:02x}")).collect();
-            return fingerprint(
-                &script.provider,
-                &format!("{}#lexicon:{short}", script.voice),
-                &script.words,
-            );
+            return fingerprint(provider, &format!("{voice}#lexicon:{short}"), text);
         }
     }
-    fingerprint(&script.provider, &script.voice, &script.words)
+    fingerprint(provider, voice, text)
 }
 
 fn is_settled(
