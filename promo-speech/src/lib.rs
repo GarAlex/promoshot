@@ -269,10 +269,14 @@ pub fn synthesize_with_key_timed(
             }
             if google_supports_marks(voice) {
                 let (ssml, marks) = google_ssml_marked(text);
+                // PCM, not MP3: the marks are on the synthesizer's sample
+                // timeline, and Google's MP3 has no gapless header, so its
+                // encoder delay (~46 ms at 24 kHz, 22 of it left in by
+                // AVFoundation) would put the voice that much after them.
                 let body = json!({
                     "input": { "ssml": ssml },
                     "voice": spoken,
-                    "audioConfig": { "audioEncoding": "MP3" },
+                    "audioConfig": { "audioEncoding": GOOGLE_MARKED_ENCODING },
                     "enableTimePointing": ["SSML_MARK"],
                 });
                 match post_bytes(
@@ -288,7 +292,8 @@ pub fn synthesize_with_key_timed(
                     // A refusal that names the marks or the SSML: once more
                     // as the plain request (a refused request is not billed).
                     Err(e) if timing::google_refused_marks(&e) => {
-                        let mut take = google_plain(text, &spoken, key)?;
+                        // Still PCM: the take is named .wav before it is asked for.
+                        let mut take = google_plain(text, &spoken, key, GOOGLE_MARKED_ENCODING)?;
                         take.note = Some(format!(
                             "Google refused the marked request ({}) — the take will be aligned",
                             e.chars().take(160).collect::<String>()
@@ -298,18 +303,34 @@ pub fn synthesize_with_key_timed(
                     Err(e) => return Err(e),
                 }
             }
-            google_plain(text, &spoken, key)
+            google_plain(text, &spoken, key, "MP3")
         }
         other => Err(format!("provider `{other}` — openai, elevenlabs or google")),
     }
 }
 
-/// Google's untimed request: `v1`, the text (or the script's own SSML).
-fn google_plain(text: &str, voice: &Value, key: &str) -> Result<Take, String> {
+/// What a marked Google request asks for: `LINEAR16`, a WAV.
+const GOOGLE_MARKED_ENCODING: &str = "LINEAR16";
+
+/// The file extension a take from `provider` in `voice` is written under:
+/// what the provider sends. WAV from a local voice and from Google's
+/// marked voices (their word marks need the PCM, [`timing::google_take`]),
+/// MP3 from the others.
+pub fn take_extension(provider: &str, voice: &str) -> &'static str {
+    if is_keyless(provider) || (provider == "google" && google_supports_marks(voice)) {
+        "wav"
+    } else {
+        "mp3"
+    }
+}
+
+/// Google's untimed request: `v1`, the text (or the script's own SSML),
+/// in `encoding` (`MP3`, or `LINEAR16` for a voice whose take is a WAV).
+fn google_plain(text: &str, voice: &Value, key: &str, encoding: &str) -> Result<Take, String> {
     let body = json!({
         "input": google_input(text),
         "voice": voice,
-        "audioConfig": { "audioEncoding": "MP3" },
+        "audioConfig": { "audioEncoding": encoding },
     });
     let answer = post_bytes(
         "https://texttospeech.googleapis.com/v1/text:synthesize",
@@ -497,6 +518,10 @@ struct Script {
     voice: String,
     receipt: Option<String>,
     filename: String,
+    /// The name the resource has now, when it has one: a take settled
+    /// under it stays there though a new take would be named otherwise
+    /// (a Google take from before marked takes became WAV).
+    existing: Option<String>,
 }
 
 fn script(index: usize, resource: &Value) -> Option<Script> {
@@ -519,32 +544,39 @@ fn script(index: usize, resource: &Value) -> Option<Script> {
         .and_then(Value::as_str)
         .unwrap_or("openai")
         .to_string();
-    // The extension follows what the provider sends: WAV from a local
-    // voice, MP3 from the others — a take never sits under the wrong name.
-    let extension = if is_keyless(&provider) { "wav" } else { "mp3" };
-    let filename = match resource.get("filename").and_then(Value::as_str) {
-        Some(name) if !name.is_empty() => with_audio_extension(name, extension),
-        _ => format!("narration-{id}.{extension}"),
-    };
     let default_voice = if is_keyless(&provider) {
         LOCAL_DEFAULT_VOICE
     } else {
         "alloy"
     };
+    let voice = speech
+        .get("voiceID")
+        .and_then(Value::as_str)
+        .unwrap_or(default_voice)
+        .to_string();
+    // The extension follows what the provider sends (`take_extension`) —
+    // a take never sits under the wrong name.
+    let extension = take_extension(&provider, &voice);
+    let existing = resource
+        .get("filename")
+        .and_then(Value::as_str)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string);
+    let filename = match resource.get("filename").and_then(Value::as_str) {
+        Some(name) if !name.is_empty() => with_audio_extension(name, extension),
+        _ => format!("narration-{id}.{extension}"),
+    };
     Some(Script {
         id,
         words,
-        voice: speech
-            .get("voiceID")
-            .and_then(Value::as_str)
-            .unwrap_or(default_voice)
-            .to_string(),
+        voice,
         provider,
         receipt: speech
             .get("renderedHash")
             .and_then(Value::as_str)
             .map(str::to_string),
         filename,
+        existing,
     })
 }
 
@@ -588,12 +620,18 @@ fn is_settled(
     resources_dir: &Path,
     measure: &dyn Fn(&Path) -> Result<f64, String>,
 ) -> Option<f64> {
-    let destination = resources_dir.join(&script.filename);
     let print = receipt(script, resources_dir);
-    if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
-        return measure(&destination).ok();
+    if script.receipt.as_deref() != Some(print.as_str()) {
+        return None;
     }
-    None
+    // Under the name a new take would get, else the one it has.
+    [Some(script.filename.as_str()), script.existing.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter(|name| plain_name(name))
+        .map(|name| resources_dir.join(name))
+        .find(|destination| destination.exists())
+        .and_then(|destination| measure(&destination).ok())
 }
 
 /// The plan for `doc` without touching anything.
@@ -1192,6 +1230,38 @@ mod tests {
             third[0].contains("generated"),
             "editing the words spends again"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A Google take from a marked voice is a WAV, named one; an older
+    /// take of it settled under its .mp3 name is reused, not bought again.
+    #[test]
+    fn a_marked_google_take_is_wav_and_an_older_mp3_take_stands() {
+        assert_eq!(take_extension("google", "en-US-Neural2-F"), "wav");
+        assert_eq!(take_extension("google", "en-US-Chirp3-HD-Kore"), "mp3");
+        assert_eq!(take_extension("local", LOCAL_DEFAULT_VOICE), "wav");
+        assert_eq!(take_extension("elevenlabs", "v"), "mp3");
+        let dir = std::env::temp_dir().join(format!("promo-speech-gwav-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let resources = dir.join("Resources");
+        std::fs::create_dir_all(&resources).unwrap();
+        let measure = |_: &Path| Ok(2.0);
+        let mut nop = |_: &Value| Ok(());
+        let voice = "en-US-Neural2-F";
+        std::fs::write(resources.join("n.mp3"), b"ID3old").unwrap();
+        let mut doc = json!({ "resources": [
+            { "id": "G", "kind": "audio", "filename": "n.mp3", "displayName": "g", "addedAt": 0,
+              "speech": { "text": "Hello there", "provider": "google", "voiceID": voice,
+                          "renderedHash": fingerprint("google", voice, "Hello there") } }
+        ] });
+        let reused = settle(&mut doc, &resources, &Fake, &measure, &mut nop).unwrap();
+        assert!(reused[0].contains("reused"), "{reused:?}");
+        assert_eq!(doc["resources"][0]["filename"], "n.mp3");
+        doc["resources"][0]["speech"]["text"] = json!("Hello again");
+        let fresh = settle(&mut doc, &resources, &Fake, &measure, &mut nop).unwrap();
+        assert!(fresh[0].contains("generated"), "{fresh:?}");
+        assert_eq!(doc["resources"][0]["filename"], "n.wav");
+        assert!(resources.join("n.wav").is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

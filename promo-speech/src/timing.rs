@@ -270,11 +270,17 @@ pub fn google_refused_marks(error: &str) -> bool {
 }
 
 /// A take from Google's `v1beta1` answer to a marked request for `text`:
-/// the audio, and each marked word's start (its mark's time). A word ends
-/// where the next mark is — the pull-back to the end of voiced energy
-/// waits for the aligner's VAD (S5) — and the last where the take ends.
-/// Fewer timepoints than marks: the audio is used, the marks are not, and
-/// the take is aligned instead.
+/// the audio, and each marked word's start and end. A mark is a word
+/// BOUNDARY on the synthesizer's own sample timeline, not where the voice
+/// begins: before a word that follows silence it sits 40–60 ms ahead of
+/// the sound, and the next mark is where a word "ends" even across a
+/// pause. So when the audio is PCM (the marked request asks for
+/// `LINEAR16`, a WAV whose samples are the timeline the marks are on —
+/// an MP3 carries an encoder delay nothing can strip, [`google_marks_on_voice`])
+/// each start moves forward to the voice and each end back to it. Without
+/// PCM a word ends where the next mark is and the last where the take
+/// ends. Fewer timepoints than marks: the audio is used, the marks are
+/// not, and the take is aligned instead.
 pub fn google_take(text: &str, answer: &Value, marks: &[usize]) -> Result<Take, String> {
     let audio = answer
         .get("audioContent")
@@ -308,17 +314,31 @@ pub fn google_take(text: &str, answer: &Value, marks: &[usize]) -> Result<Take, 
     let script = tokenize(text);
     let mut points = points;
     points.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+    let points: Vec<(usize, f64)> = points
+        .into_iter()
+        .filter(|(k, _)| *k < script.words.len())
+        .collect();
+    let times: Vec<f64> = points.iter().map(|p| p.1).collect();
+    let spans: Vec<(f64, Option<f64>)> = match wav_mono(&audio) {
+        Some((samples, rate)) => google_marks_on_voice(&times, &samples, rate)
+            .into_iter()
+            .map(|(start, end)| (start, Some(end)))
+            .collect(),
+        None => (0..times.len())
+            .map(|i| (times[i], times.get(i + 1).copied()))
+            .collect(),
+    };
     let words: Vec<SpokenWord> = points
         .iter()
-        .enumerate()
-        .filter_map(|(i, &(k, time))| {
-            let word = script.words.get(k)?;
-            Some(SpokenWord {
+        .zip(spans)
+        .map(|(&(k, _), (start, end))| {
+            let word = &script.words[k];
+            SpokenWord {
                 text: word.text.clone(),
-                start: round_us(time),
-                end: points.get(i + 1).map(|next| round_us(next.1)),
+                start: round_us(start),
+                end: end.map(round_us),
                 chars: Some(word.chars),
-            })
+            }
         })
         .collect();
     Ok(Take {
@@ -331,6 +351,147 @@ pub fn google_take(text: &str, answer: &Value, marks: &[usize]) -> Result<Take, 
         }),
         note: None,
     })
+}
+
+/// How far past its mark a word's start may move to find the voice.
+const ONSET_REACH: f64 = 0.150;
+/// Quiet this long before the next word is a pause the word does not
+/// hold; a shorter one (a stop's closure) stays with it.
+const PAUSE_MIN: f64 = 0.040;
+
+/// Each marked word's (start, end) from its mark `times` (sorted, one per
+/// marked word) and the take's PCM. A start that sits in quiet moves to
+/// where the voice rises, within [`ONSET_REACH`] and never past the next
+/// mark; a start already in sound (connected speech, the mark before a
+/// stop's closure) stays. A word ends where the next one starts — or,
+/// when quiet of at least [`PAUSE_MIN`] stands before that start, where
+/// its own sound falls; the last word ends where the take's sound does.
+///
+/// Measured on Google's own takes (en-US-Neural2-F, 2026-10-22): after
+/// the MP3's encoder delay, the marks of words after silence still sat
+/// 40–60 ms before the voice, and "kept" held a 0.8 s pause to the next
+/// sentence's mark.
+pub fn google_marks_on_voice(times: &[f64], samples: &[f32], rate: u32) -> Vec<(f64, f64)> {
+    let n = times.len();
+    let total = samples.len() as f64 / rate.max(1) as f64;
+    if n == 0 || samples.is_empty() {
+        return times
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| (t, times.get(i + 1).copied().unwrap_or(total.max(t))))
+            .collect();
+    }
+    // A 10 ms centred RMS read every millisecond.
+    let ms = (rate as usize / 1000).max(1);
+    let half = (rate as usize / 200).max(1);
+    let mut prefix = Vec::with_capacity(samples.len() + 1);
+    prefix.push(0.0f64);
+    for s in samples {
+        let v = *s as f64;
+        prefix.push(prefix.last().unwrap() + v * v);
+    }
+    let steps = samples.len().div_ceil(ms);
+    let level: Vec<f64> = (0..steps)
+        .map(|k| {
+            let c = k * ms;
+            let a = c.saturating_sub(half);
+            let b = (c + half).min(samples.len());
+            let e = (prefix[b] - prefix[a]) / (b - a).max(1) as f64;
+            10.0 * (e + 1e-10).log10()
+        })
+        .collect();
+    // The take's own scale: its speech level (90th percentile of 10 ms
+    // frames) and floor (the 10th, or 50 dB under the speech for a
+    // synthesized take's digital silence). Sound is within 35 dB of the
+    // speech and 12 dB over the floor: a breathy onset ("Here") counts,
+    // a pause's noise does not.
+    let mut frames: Vec<f64> = level.iter().step_by(10).copied().collect();
+    frames.sort_by(f64::total_cmp);
+    let speech = frames[frames.len() * 9 / 10];
+    let floor = frames[frames.len() / 10].max(speech - 50.0);
+    let threshold = (floor + 12.0).max(speech - 35.0);
+    let sound = |t: f64| -> bool {
+        let k = ((t.max(0.0) * 1000.0).round() as usize).min(steps - 1);
+        level[k] >= threshold
+    };
+    let at_ms = |t: f64| (t.max(0.0) * 1000.0).round() as usize;
+    let starts: Vec<f64> = (0..n)
+        .map(|i| {
+            let mark = times[i];
+            if sound(mark) {
+                return mark;
+            }
+            let limit = (mark + ONSET_REACH)
+                .min(times.get(i + 1).copied().unwrap_or(total))
+                .min(total);
+            (at_ms(mark)..=at_ms(limit))
+                .map(|k| k as f64 / 1000.0)
+                .find(|t| *t < limit && sound(*t))
+                .unwrap_or(mark)
+        })
+        .collect();
+    (0..n)
+        .map(|i| {
+            let start = starts[i];
+            let next = starts.get(i + 1).copied().unwrap_or(total).max(start);
+            // Back from the next start to this word's last sound.
+            let last = (at_ms(start)..at_ms(next))
+                .rev()
+                .map(|k| k as f64 / 1000.0)
+                .find(|t| sound(*t));
+            let end = match last {
+                Some(t) if next - (t + 0.001) >= PAUSE_MIN => (t + 0.001).min(next),
+                _ => next,
+            };
+            (start, end.max(start))
+        })
+        .collect()
+}
+
+/// A WAV's samples, mixed to mono, and its rate — None for anything that
+/// is not 16-bit PCM WAV (Google's `LINEAR16` answer is one: a RIFF
+/// header, then the samples).
+pub fn wav_mono(bytes: &[u8]) -> Option<(Vec<f32>, u32)> {
+    if bytes.get(0..4)? != b"RIFF" || bytes.get(8..12)? != b"WAVE" {
+        return None;
+    }
+    let u16_at = |i: usize| Some(u16::from_le_bytes(bytes.get(i..i + 2)?.try_into().ok()?));
+    let u32_at = |i: usize| Some(u32::from_le_bytes(bytes.get(i..i + 4)?.try_into().ok()?));
+    let mut at = 12;
+    let mut format: Option<(u16, u32, u16)> = None;
+    while at + 8 <= bytes.len() {
+        let id = &bytes[at..at + 4];
+        let size = u32_at(at + 4)? as usize;
+        let body = at + 8;
+        if id == b"fmt " {
+            format = Some((u16_at(body + 2)?, u32_at(body + 4)?, u16_at(body + 14)?));
+            if u16_at(body)? != 1 {
+                return None;
+            }
+        } else if id == b"data" {
+            let (channels, rate, bits) = format?;
+            if bits != 16 || channels == 0 || rate == 0 {
+                return None;
+            }
+            // A streamed header may give no size (or too large a one).
+            let end = body.saturating_add(size).min(bytes.len());
+            let data = &bytes[body..end];
+            let channels = channels as usize;
+            let samples = data
+                .chunks_exact(2 * channels)
+                .map(|frame| {
+                    let sum: f32 = frame
+                        .chunks_exact(2)
+                        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+                        .sum();
+                    sum / channels as f32
+                })
+                .collect();
+            return Some((samples, rate));
+        }
+        at = body.checked_add(size + (size & 1))?;
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -1056,6 +1217,115 @@ mod tests {
         assert!(take.spoken.is_none());
         assert_eq!(take.audio, fixture_mp3("google-timepoints.mp3"));
         assert!(take.note.unwrap().contains("5 of 7 word marks"));
+    }
+
+    /// 16-bit mono WAV of `rate` Hz, `seconds` long, a 200 Hz tone over
+    /// each of `spans` (the voice), digital silence elsewhere.
+    fn tone_wav(spans: &[(f64, f64)], seconds: f64, rate: u32) -> Vec<u8> {
+        let n = (seconds * rate as f64) as usize;
+        let samples: Vec<i16> = (0..n)
+            .map(|i| {
+                let t = i as f64 / rate as f64;
+                let on = spans.iter().any(|(a, b)| t >= *a && t < *b);
+                if on {
+                    (0.3 * (2.0 * std::f64::consts::PI * 200.0 * t).sin() * 32767.0) as i16
+                } else {
+                    0
+                }
+            })
+            .collect();
+        let data = (n * 2) as u32;
+        let mut out = Vec::new();
+        out.extend_from_slice(b"RIFF");
+        out.extend_from_slice(&(36 + data).to_le_bytes());
+        out.extend_from_slice(b"WAVEfmt ");
+        out.extend_from_slice(&16u32.to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&rate.to_le_bytes());
+        out.extend_from_slice(&(rate * 2).to_le_bytes());
+        out.extend_from_slice(&2u16.to_le_bytes());
+        out.extend_from_slice(&16u16.to_le_bytes());
+        out.extend_from_slice(b"data");
+        out.extend_from_slice(&data.to_le_bytes());
+        for s in samples {
+            out.extend_from_slice(&s.to_le_bytes());
+        }
+        out
+    }
+
+    fn base64(bytes: &[u8]) -> String {
+        const ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let b = [
+                chunk[0],
+                *chunk.get(1).unwrap_or(&0),
+                *chunk.get(2).unwrap_or(&0),
+            ];
+            let v = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+            for k in 0..4 {
+                if k <= chunk.len() {
+                    out.push(ABC[(v >> (18 - 6 * k) & 63) as usize] as char);
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    /// A marked Google take in PCM: the marks move onto the voice. Words
+    /// after silence start where the sound does (the mark sat 50 ms
+    /// ahead, as measured on Neural2), a word joined to the one before
+    /// keeps its mark, a pause is no word's, and a mark whose sound is
+    /// further than the reach away stays.
+    #[test]
+    fn google_marks_move_onto_the_voice_in_a_wav_take() {
+        let script = "Every photo, caught and kept. Here.";
+        let (_, marks) = google_ssml_marked(script);
+        // The voice: "Every photo" one run, "caught and" one run, "kept"
+        // to 2.40, a 0.8 s pause, "Here" 0.25 s after its mark.
+        let voice = [(0.10, 0.90), (1.20, 1.90), (2.00, 2.40), (3.45, 3.80)];
+        let wav = tone_wav(&voice, 4.0, 24_000);
+        let answer = serde_json::json!({
+            "audioContent": base64(&wav),
+            "timepoints": [
+                {"markName": "w0", "timeSeconds": 0.05},
+                {"markName": "w1", "timeSeconds": 0.45},
+                {"markName": "w2", "timeSeconds": 1.15},
+                {"markName": "w3", "timeSeconds": 1.55},
+                {"markName": "w4", "timeSeconds": 1.95},
+                {"markName": "w5", "timeSeconds": 3.20}
+            ]
+        });
+        let take = google_take(script, &answer, &marks).unwrap();
+        assert_eq!(take.audio, wav);
+        let spoken = take.spoken.expect("timed");
+        let got: Vec<(&str, f64, f64)> = spoken
+            .words
+            .iter()
+            .map(|w| (w.text.as_str(), w.start, w.end.unwrap()))
+            .collect();
+        let near = |a: f64, b: f64| (a - b).abs() <= 0.006;
+        let want = [
+            ("Every", 0.10, 0.45),
+            ("photo", 0.45, 0.90),
+            ("caught", 1.20, 1.55),
+            ("and", 1.55, 1.90),
+            ("kept", 2.00, 2.40),
+            ("Here", 3.20, 3.80),
+        ];
+        assert_eq!(got.len(), want.len());
+        for (g, w) in got.iter().zip(want) {
+            assert_eq!(g.0, w.0);
+            assert!(near(g.1, w.1) && near(g.2, w.2), "{g:?} vs {w:?}");
+        }
+        let timing = record(script, &spoken, 4.0);
+        assert!(
+            near(timing.words[4].end, 2.40),
+            "the pause is not \"kept\"'s"
+        );
     }
 
     /// Marks by voice family: the classic classes take them; Chirp,

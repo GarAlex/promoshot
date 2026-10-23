@@ -211,6 +211,7 @@ The ElevenLabs path is still "UNVERIFIED against a live key", as
   - A word's start is its mark's time.
   - Its end is the next mark's time, pulled back to the end of voiced energy before it. A pause, a comma or a sentence break sits between marks. The pull-back uses the aligner's VAD (§4.2) on the decoded take, limited to the gap.
   - The last word ends at the end of voiced energy.
+  - As built: the take is `LINEAR16` (WAV), and the start moves forward to the voice too (the S3 as-built Google notes).
 - The result is `source: "provider:google"`, confidence 0.95.
 
 **Which voices** (decided by name, in `google_supports_marks(voice)`):
@@ -892,10 +893,26 @@ criteria.
   `&lt;`). In an SSML script, marks go before words in text nodes, and
   once before a `say-as`/`sub`/`phoneme` element whose other words share
   it (and are interpolated). A word ends at the next mark's time and the
-  last word at the take's end. **The pull-back to the end of voiced energy
-  waits for the aligner's VAD (S5)**, so until then a word's end includes
-  the pause after it. A 400 that names SSML, marks or time pointing is
-  retried once as the plain v1 request, with a note. Fewer timepoints than
+  last word at the take's end. A 400 that names SSML, marks or time
+  pointing is retried once as the plain v1 request, with a note.
+  **As built (2026-10-22): marked takes are PCM, and the marks move onto
+  the voice.** Measured live on `en-US-Neural2-F`, the marks sat 85–120 ms
+  before the voice in the MP3 take, and "kept" held a 0.8 s pause. Two
+  causes: Google's MP3 has no Xing/Info header, so its encoder delay
+  cannot be stripped (ffmpeg leaves ~46 ms at 24 kHz, AVFoundation ~24 ms,
+  so the two decoders also disagree with each other); and a mark is a
+  word boundary, 40–60 ms before the sound of a word after silence. So the
+  marked request (and its plain retry) asks for `LINEAR16`, the take is a
+  `.wav` (`take_extension`; the apps rename by the bytes), and
+  `google_take` runs `google_marks_on_voice` on the samples: a start in
+  quiet moves to the first sound (10 ms RMS within 35 dB of the take's
+  speech level), at most 150 ms and never past the next mark; a start
+  already in sound stays; a word ends at its own last sound when 40 ms or
+  more of quiet stands before the next start, else at that start; the last
+  word at the take's last sound. Unmarked Google takes stay MP3 (they are
+  aligned on their own decoded audio). A settled `.mp3` take under a
+  receipt is reused, not bought again; records of older MP3 takes stand
+  (provider records are authoritative) until the take is re-voiced. Fewer timepoints than
   marks: the audio is kept, there is no record, and the note says so.
   Whether marks are billed is still unverified.
 - **The mapper** (`timing::record`). The chars path runs when `against`
