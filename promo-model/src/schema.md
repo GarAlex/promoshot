@@ -133,7 +133,25 @@ A keyframe animates a layer over its LOCAL time:
   down the curve. A project using it carries `minReaderVersion: 41`,
   because a reader that does not know it writes "linear" back on save.
   Every other unknown value falls back to linear rather than failing
-  the file. It applies to whatever the
+  the file.
+- The overshoot curves are for a POP — a sticker or card arriving with
+  life, in two keyframes instead of four: `{"time": t, "zoom": 0}` then
+  `{"time": t + 0.3, "zoom": 1, "transitionDuration": 0.3,
+  "easing": "easeOutBack"}`. "easeOutBack" arrives past the target and
+  settles; `"overshoot": 0.1` beside it is how far past, as a share of
+  the move (0.1 when absent, 0 for none, at most 1 — 0.2 on a zoom of
+  0 → 1 peaks at 1.2). "easeInBack" pulls back by `overshoot` first,
+  "easeInOutBack" does both and passes each end by it. "easeOutElastic"
+  springs past by about a third and rings down inside the ramp;
+  "easeOutBounce" drops onto the target and bounces, never past it.
+  The swing is the VALUE's: zoom, position, rotation, tilt, depth and a
+  viewport travel past their keyframes; what has a range clamps after
+  the curve — opacity and the grade stay in theirs, a colour never
+  leaves its two ends, a morph stays 0…1, a viewport stays inside the
+  source. On a transition, a caption reveal or a motion path's
+  progress the curve is clamped to its ends — it arrives early and
+  holds instead of swinging.
+- `easing` applies to whatever the
   keyframe carries — zoom, position, viewport, rotation, opacity,
   gradient — and to the SPEED along a motion path, so an eased move
   travels its curve on the clock it grows on. Because each track

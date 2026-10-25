@@ -615,7 +615,9 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "tiltX": { "type": "number" },
                     "tiltY": { "type": "number" },
                     "easing": { "type": "string",
-                        "enum": ["linear", "easeIn", "easeOut", "easeInOut", "smooth"] },
+                        "enum": promo_model::Easing::wire().values },
+                    "overshoot": { "type": "number", "description":
+                        "Back easings: share of the move past the target (0.1)" },
                     "transitionDuration": { "type": "number", "description":
                         "Seconds of ramp INTO this keyframe" },
                     "preview": preview

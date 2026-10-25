@@ -150,10 +150,13 @@ fn progress(raw: f64) -> f64 {
 fn shape(transition: &LayerTransition, progress: f64) -> Effect {
     // Eased HERE, once per half, so all five kinds share the ramp's clock —
     // the same central-easing rule the keyframe tracks follow.
+    // A transition is a clock from absent to present: an overshoot curve
+    // arrives early and holds rather than swinging past either end.
     let progress = transition
         .easing
         .unwrap_or(promo_model::Easing::Linear)
-        .apply(progress);
+        .apply(progress)
+        .clamp(0.0, 1.0);
     let edge = transition.edge();
     match transition.kind {
         TransitionKind::Fade | TransitionKind::Unknown(_) => Effect {
@@ -229,7 +232,8 @@ pub fn departing(transition: &LayerTransition, progress: f64) -> Effect {
     let progress = transition
         .easing
         .unwrap_or(promo_model::Easing::Linear)
-        .apply(progress);
+        .apply(progress)
+        .clamp(0.0, 1.0);
     match transition.kind {
         TransitionKind::Push => Effect {
             travel: match transition.edge() {

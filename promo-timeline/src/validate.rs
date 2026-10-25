@@ -63,6 +63,7 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
     placeholder_narration_warnings(meta, &mut out);
     trailing_blank_warnings(meta, &mut out);
     sound_resource_warnings(meta, &mut out);
+    overshoot_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -1848,6 +1849,31 @@ fn legacy_2_5d_warnings(meta: &ProjectMetadata, out: &mut Report) {
     }
 }
 
+/// `overshoot` where it shapes nothing — the easing into its keyframe is
+/// not a Back curve — and an amount outside 0…1, which the curve clamps.
+fn overshoot_warnings(meta: &ProjectMetadata, out: &mut Report) {
+    for layer in promo_model::nesting::all_layers(meta) {
+        for k in &layer.keyframes {
+            let Some(amount) = k.overshoot else { continue };
+            let easing = k.easing.unwrap_or(promo_model::Easing::Linear).known();
+            let at = format!("layer \"{}\" keyframe at {}s", layer.name, k.time);
+            if !easing.takes_overshoot() {
+                out.breaks(format!(
+                    "{at}: overshoot does nothing with easing \"{}\" — it shapes \
+                     easeOutBack, easeInBack and easeInOutBack",
+                    easing.as_str()
+                ));
+            } else if !(0.0..=promo_model::MAX_OVERSHOOT).contains(&amount) {
+                out.warn(format!(
+                    "{at}: overshoot {amount} is outside 0–{} — the curve uses {}",
+                    promo_model::MAX_OVERSHOOT,
+                    amount.clamp(0.0, promo_model::MAX_OVERSHOOT)
+                ));
+            }
+        }
+    }
+}
+
 fn tilt_keyframe_warnings(meta: &ProjectMetadata, out: &mut Report) {
     let resources = meta.resources.as_deref().unwrap_or(&[]);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
@@ -3408,6 +3434,47 @@ mod trailing_blank_tests {
         assert!(
             !warnings(&fixed).iter().any(|w| w.contains("of nothing")),
             "the suggestion works"
+        );
+    }
+
+    /// Issue #19: the overshoot curves validate clean; `overshoot` beside an
+    /// easing it does not shape is a value with no effect, and one outside
+    /// 0…1 is named with what the curve uses.
+    #[test]
+    fn overshoot_easings_validate_and_a_stray_overshoot_is_named() {
+        let meta = ProjectMetadata::from_json(
+            r#"{"id":"P","name":"Pop","createdAt":0,"state":"recorded","trimStart":0,
+                "trimEnd":4,"videoDuration":4,"subtitles":[],
+                "compositionSettings":{"canvasWidth":320,"canvasHeight":320},
+                "resources":[],
+                "layers":[{"id":"L","name":"bg","sortIndex":0,"kind":"background","isEnabled":true,
+                  "startTime":0,"duration":4,"keyframes":[
+                  {"id":"A","time":0,"zoom":0,"transitionDuration":0},
+                  {"id":"B","time":1,"zoom":1,"transitionDuration":1,"easing":"easeOutBack","overshoot":0.2},
+                  {"id":"C","time":2,"rotation":10,"transitionDuration":1,"easing":"easeOutElastic"},
+                  {"id":"D","time":3,"zoom":2,"transitionDuration":1,"easing":"easeOutBounce"},
+                  {"id":"E","time":3.5,"rotation":0,"transitionDuration":0.5,"easing":"easeInOut","overshoot":0.2},
+                  {"id":"F","time":4,"zoom":1,"transitionDuration":0.5,"easing":"easeInBack","overshoot":3}]}]}"#,
+        )
+        .unwrap();
+        let said = warnings(&meta);
+        let about: Vec<&String> = said.iter().filter(|w| w.contains("overshoot")).collect();
+        assert_eq!(about.len(), 2, "{said:?}");
+        assert!(
+            about
+                .iter()
+                .any(|w| w.contains("at 3.5s: overshoot does nothing with easing \"easeInOut\"")),
+            "{about:?}"
+        );
+        assert!(
+            about
+                .iter()
+                .any(|w| w.contains("at 4s: overshoot 3 is outside 0–1 — the curve uses 1")),
+            "{about:?}"
+        );
+        assert!(
+            !said.iter().any(|w| w.contains("not read here")),
+            "{said:?}"
         );
     }
 }

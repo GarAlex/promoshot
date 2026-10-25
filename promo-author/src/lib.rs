@@ -680,15 +680,24 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
         .ok_or_else(|| format!("no layer `{layer_id}` — promo_inspect lists the ids"))?;
 
     if let Some(spelling) = args.get("easing").and_then(Value::as_str) {
-        if !matches!(
-            spelling,
-            "linear" | "easeIn" | "easeOut" | "easeInOut" | "smooth"
-        ) {
+        let known = promo_model::Easing::wire().values;
+        if !known.contains(&spelling) {
             return Err(format!(
-                "easing `{spelling}` — linear, easeIn, easeOut, easeInOut or smooth \
-                 (the renderer would degrade a typo to linear silently; \
-                 this tool refuses it instead)"
+                "easing `{spelling}` — {} (the renderer would degrade a typo to linear \
+                 silently; this tool refuses it instead)",
+                known.join(", ")
             ));
+        }
+    }
+    if let Some(v) = args.get("overshoot") {
+        match v.as_f64() {
+            Some(o) if (0.0..=promo_model::MAX_OVERSHOOT).contains(&o) => {}
+            _ => {
+                return Err(format!(
+                    "overshoot {v} — a share of the move, 0 to {} (0.1 when absent)",
+                    promo_model::MAX_OVERSHOOT
+                ))
+            }
         }
     }
     let placement: Option<Placement> = match args.get("placement") {
@@ -744,6 +753,9 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
             if let Some(v) = number("tiltY") {
                 k.tilt_y = Some(v);
             }
+            if let Some(v) = number("overshoot") {
+                k.overshoot = Some(v);
+            }
             if let Some(hex) = args.get("colorHex").and_then(Value::as_str) {
                 k.color_hex = Some(hex.to_string());
             }
@@ -771,7 +783,7 @@ pub fn upsert_keyframe(args: &Value, root: Option<&Path>) -> Result<String, Stri
                 "id": wanted_id.clone().unwrap_or_else(mint),
                 "time": t, "transitionDuration": ramp,
             });
-            for key in ["opacity", "zoom", "fontSize", "tiltX", "tiltY"] {
+            for key in ["opacity", "zoom", "fontSize", "tiltX", "tiltY", "overshoot"] {
                 if let Some(v) = number(key) {
                     record[key] = json!(v);
                 }
@@ -3469,6 +3481,26 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("promo_inspect"), "{err}");
+        // The overshoot curves (issue #19) are easings like any other, and
+        // `overshoot` is a share of the move.
+        let err = upsert_keyframe(
+            &json!({"project": project, "layer": "bg", "time": 1, "easing": "easeOutBack",
+                    "overshoot": 3}),
+            Some(&root),
+        )
+        .unwrap_err();
+        assert!(err.contains("overshoot"), "{err}");
+        upsert_keyframe(
+            &json!({"project": project, "layer": "bg", "time": 1, "zoom": 1.2,
+                    "easing": "easeOutBack", "overshoot": 0.2}),
+            Some(&root),
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
+        assert!(
+            text.contains(r#""easing":"easeOutBack""#) && text.contains(r#""overshoot":0.2"#),
+            "{text}"
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

@@ -17,8 +17,9 @@ use promo_model::{
 
 use crate::interpolation::{interpolate_color_hex, layer_local_time, ramp_seconds};
 
-/// Linearly between two gradients of the same shape. `progress` outside 0…1
-/// is clamped by the caller.
+/// Linearly between two gradients of the same shape. `progress` may leave
+/// 0…1 (an overshoot easing): the geometry follows it, each colour and stop
+/// position stays inside its range.
 fn blend(
     a: &BackgroundGradient,
     b: &BackgroundGradient,
@@ -55,7 +56,7 @@ fn blend(
                     settings.resolve_color(&y.color_hex),
                     progress,
                 ),
-                at: lerp(x.at, y.at),
+                at: lerp(x.at, y.at).clamp(0.0, 1.0),
             })
             .collect(),
     }
@@ -129,10 +130,9 @@ pub fn layer_background_gradient(
         };
         // Same easing rule as every other track: a background that eases
         // while the layers over it do not would read as two different scenes.
-        let eased = b
-            .easing
-            .unwrap_or(promo_model::Easing::Linear)
-            .apply(progress);
+        // Its keyframe's overshoot too: the geometry may swing past and
+        // settle; the colours and stop positions stay inside their range.
+        let eased = b.eased(progress);
         return Some(blend(&from, &to, eased, defaults));
     }
     Some(at(first))

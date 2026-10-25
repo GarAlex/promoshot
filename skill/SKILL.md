@@ -543,7 +543,10 @@ neighbouring keyframes that keeps the speed, never leaving their two
 values, and holding when they are equal. It shapes keyframed NUMBERS;
 a gradient, a transition or a reveal still ramps linearly under it, and
 on a motion path it means even speed along the curve. Ease only the two
-ends. A body that TURNS is the
+ends. A sticker or card that POPS in is two keyframes, not four: zoom 0
+then zoom 1 with `"easing": "easeOutBack"` over 0.25–0.4 s (`overshoot`
+0.1–0.2 of the move; "easeOutElastic" for a spring, "easeOutBounce" for
+a drop). A body that TURNS is the
 exception: spin it in one continuous linear turn (a camera or a member
 yaw of 0 → 360 over the shot) under a light that stays put, so each
 side passes the light; do not chop a spin into moves.

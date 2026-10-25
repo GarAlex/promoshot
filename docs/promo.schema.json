@@ -1422,7 +1422,12 @@
         "easeIn",
         "easeOut",
         "easeInOut",
-        "smooth"
+        "smooth",
+        "easeInBack",
+        "easeOutBack",
+        "easeInOutBack",
+        "easeOutElastic",
+        "easeOutBounce"
       ],
       "type": "string"
     },
@@ -3202,6 +3207,13 @@
           ]
         },
         "opacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "overshoot": {
           "format": "double",
           "type": [
             "number",

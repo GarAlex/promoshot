@@ -367,7 +367,10 @@ pub(crate) fn track_window<'a>(
             // along a motion path all move together. Easing them separately
             // is how a layer ends up sliding along its curve at a different
             // rate than it grows.
-            return Some((a, b, b.easing.unwrap_or(Easing::Linear).apply(progress)));
+            // An overshoot curve leaves 0…1 here on purpose: the value
+            // swings past its keyframe and settles. Each consumer whose value
+            // has a range (opacity, a grade, a morph's progress) clamps it.
+            return Some((a, b, b.eased(progress)));
         }
     }
     Some((first, first, 1.0))
@@ -620,8 +623,11 @@ pub fn layer_adjustments(layer: &ProjectLayer, time: f64) -> Option<ResolvedAdju
 /// Layer opacity at `time` — 0…1, and 1 when the layer has no opacity
 /// keyframes, so an un-keyed layer is fully visible as before.
 pub fn layer_opacity(layer: &ProjectLayer, time: f64) -> f64 {
+    // Clamped before the transition multiplies it: an overshoot easing
+    // swings the track past 1, and a fade over that must still be a fade.
     let keyed = layer_interpolated_scalar(layer, layer_local_time(layer, time), |k| k.opacity)
-        .unwrap_or(1.0);
+        .unwrap_or(1.0)
+        .clamp(0.0, 1.0);
     // The transition multiplies rather than replaces, so a layer that fades
     // in and also dips in the middle does both. `fadeIn`/`fadeOut` are the
     // shorthand for a fade transition and resolve through the same path.
@@ -1489,6 +1495,90 @@ mod tests {
         assert_eq!(EaseOut.apply(0.5), 0.75, "fast start");
         assert_eq!(EaseInOut.apply(0.5), 0.5, "symmetric");
         assert_eq!(EaseInOut.apply(0.25), 0.15625, "smoothstep");
+    }
+
+    /// Issue #19: the overshoot curves. Pinned at 0 and 1; a Back curve
+    /// passes its target by exactly `overshoot` of the move (0.1 absent, 0
+    /// none), the in-out one passes both ends by it; elastic rings past;
+    /// bounce never leaves 0…1.
+    #[test]
+    fn overshoot_curves_swing_by_their_amount_and_settle() {
+        use promo_model::Easing::*;
+        let peak = |e: promo_model::Easing, o: Option<f64>| {
+            (0..=20_000)
+                .map(|i| e.curve(i as f64 / 20_000.0, o))
+                .fold(f64::MIN, f64::max)
+        };
+        let dip = |e: promo_model::Easing, o: Option<f64>| {
+            (0..=20_000)
+                .map(|i| e.curve(i as f64 / 20_000.0, o))
+                .fold(f64::MAX, f64::min)
+        };
+        for e in [
+            EaseInBack,
+            EaseOutBack,
+            EaseInOutBack,
+            EaseOutElastic,
+            EaseOutBounce,
+        ] {
+            assert!(e.apply(0.0).abs() < 1e-12, "{e:?} starts at 0");
+            assert!((e.apply(1.0) - 1.0).abs() < 1e-12, "{e:?} ends at 1");
+            assert_eq!(e.apply(-1.0), e.apply(0.0), "clamped clock");
+            assert_eq!(e.apply(2.0), e.apply(1.0), "clamped clock");
+            assert!(e.needs_rung_48());
+        }
+        assert!(
+            (peak(EaseOutBack, None) - 1.1).abs() < 1e-6,
+            "Penner's tenth"
+        );
+        assert!((promo_model::back_constant(0.1) - 1.70158).abs() < 1e-4);
+        assert!((peak(EaseOutBack, Some(0.25)) - 1.25).abs() < 1e-6);
+        assert!(
+            (peak(EaseOutBack, Some(0.0)) - 1.0).abs() < 1e-12,
+            "0 is none"
+        );
+        assert!((dip(EaseInBack, Some(0.2)) + 0.2).abs() < 1e-6);
+        assert!((peak(EaseInOutBack, Some(0.1)) - 1.1).abs() < 1e-6);
+        assert!((dip(EaseInOutBack, Some(0.1)) + 0.1).abs() < 1e-6);
+        assert!((EaseInOutBack.apply(0.5) - 0.5).abs() < 1e-12, "symmetric");
+        assert!(peak(EaseOutElastic, None) > 1.3, "a spring rings past");
+        assert!(peak(EaseOutBounce, None) <= 1.0 && dip(EaseOutBounce, None) >= 0.0);
+        assert!(!EaseOutBounce.overshoots() && EaseOutElastic.overshoots());
+        assert!(!EaseInOut.needs_rung_48() && !Smooth.needs_rung_48());
+    }
+
+    /// The keyframed value overshoots with the curve; a value with a range
+    /// clamps after the easing: opacity, and a transition's clock, never
+    /// leave 0…1.
+    #[test]
+    fn overshoot_moves_values_and_ranged_values_clamp() {
+        let l = layer(
+            r#"{"id": "a", "time": 0, "transitionDuration": 0, "zoom": 0, "opacity": 0},
+               {"id": "b", "time": 1, "transitionDuration": 0, "transitionPercent": 100,
+                "zoom": 1, "easing": "easeOutBack", "overshoot": 0.2},
+               {"id": "c", "time": 1, "transitionDuration": 0, "transitionPercent": 100,
+                "opacity": 1, "easing": "easeOutElastic"}"#,
+        );
+        let peak = (0..=1000)
+            .map(|i| transform(&l, i as f64 / 1000.0).zoom)
+            .fold(f64::MIN, f64::max);
+        assert!((peak - 1.2).abs() < 1e-3, "the pop: {peak}");
+        assert!(
+            (transform(&l, 1.0).zoom - 1.0).abs() < 1e-12,
+            "and it settles"
+        );
+        for i in 0..=1000 {
+            let o = layer_opacity(&l, i as f64 / 1000.0);
+            assert!((0.0..=1.0).contains(&o), "opacity {o} at {i}");
+        }
+        let transition: promo_model::LayerTransition = serde_json::from_value(
+            serde_json::json!({"kind": "push", "duration": 1, "easing": "easeOutBack"}),
+        )
+        .unwrap();
+        for i in 0..=100 {
+            let e = crate::transition::departing(&transition, i as f64 / 100.0);
+            assert!(e.travel.iter().all(|v| v.abs() <= 1.0), "{e:?}");
+        }
     }
 
     /// Absent easing is linear — every project written before this existed

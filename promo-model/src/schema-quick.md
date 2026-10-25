@@ -33,8 +33,8 @@ This is the authoring subset; `promo_schema_full` is the whole format.
 
 Keyframes animate a layer over its LOCAL time, hold-then-ease: a value
 holds until `transitionDuration` seconds before the keyframe, then ramps
-into it; `"easing": "easeInOut"` shapes the ramp. One keyframe is a
-constant. The fields that matter first:
+into it; `"easing": "easeInOut"` shapes the ramp ("easeOutBack" swings
+past and settles: a pop-in). One keyframe is a constant. The fields that matter first:
 
 - `placement` — size/position as a RULE: one of `height`/`width` (canvas
   px) or `mode: "fit"|"fill"`, plus `anchor` (nine-point grid,

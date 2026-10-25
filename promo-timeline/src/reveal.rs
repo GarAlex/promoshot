@@ -53,7 +53,12 @@ pub fn progress(reveal: &TextReveal, layer: &ProjectLayer, time: f64, units: usi
     let elapsed = crate::layer_local_time(layer, time) - tenure_start;
     let raw = if total > 0.0 { elapsed / total } else { 1.0 };
     let clamped = raw.clamp(0.0, 1.0);
-    let fraction = reveal.easing.unwrap_or(Easing::Linear).apply(clamped);
+    // A share of the units: an overshoot curve holds at its ends.
+    let fraction = reveal
+        .easing
+        .unwrap_or(Easing::Linear)
+        .apply(clamped)
+        .clamp(0.0, 1.0);
 
     // At least one, so the caption is never on screen with nothing in it:
     // an empty first frame reads as a caption that failed to appear rather

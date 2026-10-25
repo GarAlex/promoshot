@@ -1324,9 +1324,9 @@ tolerant_enum!(
 //
 // Tolerant, and falling back to `Linear`: a file written by a newer build
 // that knows more curves should still play here, and playing it with the
-// wrong FEEL is a far better failure than refusing to open it. That is also
-// why no reader-version gate goes with this — an older reader dropping
-// `easing` changes how a move looks, never what the composition contains.
+// wrong FEEL is a far better failure than refusing to open it. A reader
+// from rung 48 on keeps a value it does not know, so a curve added since
+// stamps 48 (see `ProjectLayerKeyframe::needs_rung_48`) and never more.
 tolerant_enum!(
     Easing,
     Linear,
@@ -1336,15 +1336,43 @@ tolerant_enum!(
         (EaseOut, "easeOut"),
         (EaseInOut, "easeInOut"),
         (Smooth, "smooth"),
+        (EaseInBack, "easeInBack"),
+        (EaseOutBack, "easeOutBack"),
+        (EaseInOutBack, "easeInOutBack"),
+        (EaseOutElastic, "easeOutElastic"),
+        (EaseOutBounce, "easeOutBounce"),
     ]
 );
 
+/// How far a `Back` curve swings past its target when the keyframe names
+/// no `overshoot`: a tenth of the move (Penner's classic s = 1.70158).
+pub const DEFAULT_OVERSHOOT: f64 = 0.1;
+
+/// The largest `overshoot` a keyframe may ask for: the swing is at most the
+/// whole move again.
+pub const MAX_OVERSHOOT: f64 = 1.0;
+
 impl Easing {
-    /// Reshapes ramp progress. In at 0, out at 1, monotonic between — a
-    /// curve that overshot would let a layer arrive somewhere its keyframes
-    /// never mention.
+    /// Reshapes ramp progress: 0 at 0, 1 at 1. The first five are monotonic
+    /// and stay inside 0…1; the overshoot curves (`Back`, `Elastic`) leave
+    /// it on purpose — a keyframed NUMBER swings past its target and settles
+    /// — and `Bounce` stays inside it. A caller easing a CLOCK (a
+    /// transition, a reveal, a gradient's colours) clamps the answer.
     pub fn apply(self, t: f64) -> f64 {
+        self.curve(t, None)
+    }
+
+    /// [`Easing::apply`] with a keyframe's `overshoot`: for the `Back`
+    /// curves, how far past the target the value swings as a share of the
+    /// move (0.1 when absent, 0 for none, at most 1); the other curves
+    /// ignore it.
+    pub fn curve(self, t: f64, overshoot: Option<f64>) -> f64 {
         let t = t.clamp(0.0, 1.0);
+        let back = |overshoot: f64| back_constant(overshoot);
+        let amount = overshoot
+            .filter(|o| o.is_finite())
+            .unwrap_or(DEFAULT_OVERSHOOT)
+            .clamp(0.0, MAX_OVERSHOOT);
         match self {
             // An easing a newer build wrote runs as the fallback, linear.
             Easing::Linear | Easing::Unknown(_) => t,
@@ -1360,12 +1388,111 @@ impl Easing {
             // through several keyframes keeps its speed at each one
             // instead of stopping there the way per-ramp easing does.
             Easing::Smooth => t,
+            // Pulls back first, by `overshoot` of the move, then goes.
+            Easing::EaseInBack => back_in(t, back(amount)),
+            // Arrives past the target by `overshoot` and settles: a pop.
+            Easing::EaseOutBack => 1.0 - back_in(1.0 - t, back(amount)),
+            // Both, each half covering half the move — so each swings by
+            // twice its own share to pass the ends by `overshoot` of the move.
+            Easing::EaseInOutBack => {
+                let s = back((2.0 * amount).min(2.0 * MAX_OVERSHOOT));
+                if t < 0.5 {
+                    back_in(2.0 * t, s) / 2.0
+                } else {
+                    1.0 - back_in(2.0 - 2.0 * t, s) / 2.0
+                }
+            }
+            // A spring: past the target by about a third, ringing down
+            // inside the ramp (easings.net's easeOutElastic).
+            Easing::EaseOutElastic => {
+                if t <= 0.0 {
+                    0.0
+                } else if t >= 1.0 {
+                    1.0
+                } else {
+                    let c4 = 2.0 * std::f64::consts::PI / 3.0;
+                    (-10.0 * t).exp2() * ((t * 10.0 - 0.75) * c4).sin() + 1.0
+                }
+            }
+            // Drops onto the target and bounces three times, never past it.
+            Easing::EaseOutBounce => bounce_out(t),
         }
     }
+
     /// The ramp whose value is a spline through its neighbours rather
     /// than a lerp of its two ends.
     pub fn is_smooth(self) -> bool {
         matches!(self, Easing::Smooth)
+    }
+
+    /// The curves that leave 0…1 — a value eased by one passes its
+    /// keyframes on the way.
+    pub fn overshoots(self) -> bool {
+        matches!(
+            self,
+            Easing::EaseInBack
+                | Easing::EaseOutBack
+                | Easing::EaseInOutBack
+                | Easing::EaseOutElastic
+        )
+    }
+
+    /// The curves a keyframe's `overshoot` shapes.
+    pub fn takes_overshoot(self) -> bool {
+        matches!(
+            self,
+            Easing::EaseInBack | Easing::EaseOutBack | Easing::EaseInOutBack
+        )
+    }
+
+    /// The curves added at rung 48: an older reader plays them linear and,
+    /// from 48, keeps them on save.
+    pub fn needs_rung_48(self) -> bool {
+        self.overshoots() || matches!(self, Easing::EaseOutBounce)
+    }
+}
+
+/// Penner's back-in, `(s + 1) t³ − s t²`: dips below 0 before rising.
+fn back_in(t: f64, s: f64) -> f64 {
+    (s + 1.0) * t * t * t - s * t * t
+}
+
+/// The back constant `s` whose curve dips by `overshoot`: the dip of
+/// `back_in` is `4 s³ / (27 (s + 1)²)`, increasing in `s`, solved by
+/// bisection — a fixed 64 halvings, so every host reaches the same `s`.
+pub fn back_constant(overshoot: f64) -> f64 {
+    let target = overshoot.clamp(0.0, 2.0 * MAX_OVERSHOOT);
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let dip = |s: f64| 4.0 * s * s * s / (27.0 * (s + 1.0) * (s + 1.0));
+    let (mut lo, mut hi) = (0.0_f64, 64.0_f64);
+    for _ in 0..64 {
+        let mid = (lo + hi) / 2.0;
+        if dip(mid) < target {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    (lo + hi) / 2.0
+}
+
+/// easings.net's easeOutBounce: four parabolas, each a quarter as high as
+/// the last.
+fn bounce_out(t: f64) -> f64 {
+    let (n1, d1) = (7.5625, 2.75);
+    if t < 1.0 / d1 {
+        n1 * t * t
+    } else if t < 2.0 / d1 {
+        let t = t - 1.5 / d1;
+        n1 * t * t + 0.75
+    } else if t < 2.5 / d1 {
+        let t = t - 2.25 / d1;
+        n1 * t * t + 0.9375
+    } else {
+        let t = t - 2.625 / d1;
+        n1 * t * t + 0.984375
     }
 }
 
@@ -2771,7 +2898,19 @@ impl ProjectLayerKeyframe {
     /// A framing word on the camera (rung 48, the lossless reader: an
     /// older reader keeps it and draws the stated or default distance).
     pub fn needs_rung_48(&self) -> bool {
-        self.camera.as_ref().is_some_and(|c| c.framing.is_some()) || self.auto.is_some()
+        self.camera.as_ref().is_some_and(|c| c.framing.is_some())
+            || self.auto.is_some()
+            || self.overshoot.is_some()
+            || self.easing.is_some_and(Easing::needs_rung_48)
+    }
+
+    /// Ramp progress `t` (0…1) through this keyframe's easing and its
+    /// `overshoot` — the clock every track's ramp INTO it runs on. May
+    /// leave 0…1 for the overshoot curves.
+    pub fn eased(&self, t: f64) -> f64 {
+        self.easing
+            .unwrap_or(Easing::Linear)
+            .curve(t, self.overshoot)
     }
 }
 
@@ -2981,6 +3120,11 @@ pub struct ProjectLayerKeyframe {
     /// another track does not, since each track's ramp is its own.
     #[serde(default, skip_serializing_if = "is_none")]
     pub easing: Option<Easing>,
+    /// For a `Back` easing: how far past its target the value swings, as a
+    /// share of the move — 0.1 when absent (a tenth), 0 for none, at most 1.
+    /// The other curves ignore it.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub overshoot: Option<f64>,
     /// Which part of the source this layer shows — `[x, y, w, h]` in UNIT
     /// source coordinates (0…1), absent meaning the whole frame. Unit rather
     /// than pixels so the window survives a re-recorded source at another
@@ -6408,6 +6552,55 @@ mod placement_model_tests {
             .to_json()
             .unwrap()
             .contains(r#""easing":"smooth""#));
+    }
+
+    /// The overshoot curves and `overshoot` (issue #19) are ignorable: a
+    /// reader from 48 plays them linear and keeps them on save, so they
+    /// stamp the lossless reader and no rung of their own; they round-trip.
+    #[test]
+    fn overshoot_easings_stamp_the_lossless_reader() {
+        let doc = |extra: &str| {
+            ProjectMetadata::from_json(&format!(
+                r#"{{"id":"P","name":"Ease","createdAt":0,"state":"recorded","trimStart":0,
+                    "trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":320,"canvasHeight":320}},
+                    "resources":[],
+                    "layers":[{{"id":"L","name":"L","sortIndex":0,"kind":"image","isEnabled":true,
+                      "startTime":0,"duration":4,
+                      "keyframes":[{{"id":"A","time":0,"zoom":0,"transitionDuration":0}},
+                                   {{"id":"B","time":1,"zoom":1,"transitionDuration":1{extra}}}]}}]}}"#
+            ))
+            .expect("decodes")
+        };
+        for easing in [
+            "easeInBack",
+            "easeOutBack",
+            "easeInOutBack",
+            "easeOutElastic",
+            "easeOutBounce",
+        ] {
+            let d = doc(&format!(r#","easing":"{easing}""#));
+            assert_eq!(
+                d.minimum_reader_version(),
+                crate::LOSSLESS_READER,
+                "{easing}"
+            );
+            assert!(d
+                .to_json()
+                .unwrap()
+                .contains(&format!(r#""easing":"{easing}""#)));
+        }
+        let d = doc(r#","easing":"easeOutBack","overshoot":0.25"#);
+        assert_eq!(
+            d.layers.as_ref().unwrap()[0].keyframes[1].overshoot,
+            Some(0.25)
+        );
+        assert!(d.to_json().unwrap().contains(r#""overshoot":0.25"#));
+        assert_eq!(
+            doc(r#","overshoot":0.25"#).minimum_reader_version(),
+            crate::LOSSLESS_READER
+        );
+        assert!(doc(r#","easing":"easeOut""#).minimum_reader_version() < crate::LOSSLESS_READER);
     }
 
     /// A path in the stage (rung 40): a route on a path resource, a camera

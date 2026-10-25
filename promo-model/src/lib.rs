@@ -471,6 +471,7 @@ mod schema_doc_tests {
                 end_at: Some(1.0),
             }),
             easing: Some(Easing::EaseInOut),
+            overshoot: Some(0.2),
             viewport: Some([0.25, 0.25, 0.5, 0.5]),
             auto: Some("3f9a1c07".into()),
             placement: Some(Placement {
@@ -996,6 +997,11 @@ mod schema_doc_tests {
         "easeOut",
         "easeInOut",
         "smooth",
+        "easeInBack",
+        "easeOutBack",
+        "easeInOutBack",
+        "easeOutElastic",
+        "easeOutBounce",
         // Reveal units and modes.
         "character",
         "word",

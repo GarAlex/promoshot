@@ -1175,8 +1175,9 @@ mod tests {
         assert!(
             // 45,000 until promo_beats (BEAT-SYNC slice 4) joined at 0.7 KB,
             // its prose already cut to the bone; 47,000 since promo_words
-            // (SPEECH-SYNC slice 5), another 0.9 KB.
-            bytes < 47_000,
+            // (SPEECH-SYNC slice 5), another 0.9 KB; 47,300 since the
+            // overshoot easings and `overshoot` (issue #19), 0.15 KB.
+            bytes < 47_300,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
