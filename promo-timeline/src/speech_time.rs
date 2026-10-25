@@ -1325,34 +1325,47 @@ pub(crate) fn findings(
             }
         }
     }
-    // Visual edges through a word of a take playing then.
-    fn walk(layers: &[ProjectLayer], out: &mut Vec<(String, f64)>) {
+    // Edges of layers that carry sound, through a word of a take playing
+    // then: a sound that starts or stops mid-word cuts the word. A picture
+    // that comes or goes during one cuts nothing heard (issue #18: 38 such
+    // warnings on a cut, all on silent image layers, buried the real ones).
+    fn walk(
+        layers: &[ProjectLayer],
+        resources: &[ProjectResource],
+        silent: &BTreeSet<String>,
+        out: &mut Vec<(String, String, f64)>,
+    ) {
         for l in layers {
             if let Some(m) = l.members.as_deref() {
-                walk(m, out);
+                walk(m, resources, silent, out);
             }
-            if !l.is_enabled
-                || l.generated_by.is_some()
-                || matches!(
-                    l.kind,
-                    ProjectLayerKind::Audio | ProjectLayerKind::Background
-                )
+            if !l.is_enabled || l.generated_by.is_some() || !carries_sound(l, resources, silent, 0)
             {
                 continue;
             }
-            out.push((l.name.clone(), l.start_time));
+            out.push((l.id.clone(), l.name.clone(), l.start_time));
             if let Some(d) = l.duration {
-                out.push((l.name.clone(), l.start_time + d));
+                out.push((l.id.clone(), l.name.clone(), l.start_time + d));
             }
         }
     }
     let mut edges = Vec::new();
-    walk(layers, &mut edges);
-    for (name, at) in edges {
+    walk(
+        layers,
+        speech.resources,
+        &speech.inputs.silent_media,
+        &mut edges,
+    );
+    for (layer_id, name, at) in edges {
         if at <= frame {
             continue;
         }
         for (id, take) in &takes {
+            // The take's own layer ending inside it is the take being
+            // longer than its layer, said once as that.
+            if take.player().is_some_and(|p| p.id == layer_id) {
+                continue;
+            }
             let t = &take.timing;
             let spans: Vec<Option<(f64, f64)>> = t
                 .words
@@ -1383,6 +1396,44 @@ pub(crate) fn findings(
                 gap,
             });
         }
+    }
+}
+
+/// Whether a layer makes sound an edge of it could cut: an audio layer on
+/// something with sound, a video whose file is not known to be silent and
+/// whose volume is not zero, a composition with such a layer inside, a
+/// caption with a narration clip. Pictures — images, drawings, models, a
+/// background, a stage itself — carry none.
+fn carries_sound(
+    layer: &ProjectLayer,
+    resources: &[ProjectResource],
+    silent: &BTreeSet<String>,
+    depth: usize,
+) -> bool {
+    match layer.kind {
+        ProjectLayerKind::Audio | ProjectLayerKind::Video => {
+            if let Some(shown) = promo_model::nesting::composition_of(layer, resources) {
+                return depth < promo_model::nesting::MAX_DEPTH
+                    && shown.composition.as_ref().is_some_and(|c| {
+                        c.layers.iter().any(|inner| {
+                            inner.is_enabled && carries_sound(inner, resources, silent, depth + 1)
+                        })
+                    });
+            }
+            crate::audio::sound_resource(layer, resources).is_some_and(|r| {
+                r.effective_volume() > 0.0
+                    && !(r.kind == ProjectResourceKind::Video && silent.contains(&r.id))
+            })
+        }
+        ProjectLayerKind::Caption => {
+            layer.caption_voice_clip.is_some()
+                || layer.resource_id.as_deref().is_some_and(|id| {
+                    resources
+                        .iter()
+                        .any(|r| r.id == id && r.caption_voice_clip.is_some())
+                })
+        }
+        _ => false,
     }
 }
 

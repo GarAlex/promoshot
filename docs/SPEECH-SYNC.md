@@ -694,7 +694,7 @@ the arrival of each unit in **layer-local seconds**, plus `reveal.unitEnds`
 | `"intro" was aligned with confidence 0.42 — word starts may be ±0.2 s; transcribe or fix by hand` | warn |
 | `"intro"'s text changed since its take was voiced — times follow the old take` | warn |
 | `the recording "vo.m4a" may not say its transcript (speech 14.2 s, the script reads about 31 s)` | warn |
-| `layer "s4" at 6.31s: cuts mid-word "proved" (6.18–6.52 s of "intro") — the nearest gap is 6.55 s`. Checked for every visual edge in a scope that uses speech sync anywhere, against takes playing at that instant, ±1 frame | warn |
+| `layer "s4" at 6.31s: cuts mid-word "proved" (6.18–6.52 s of "intro") — the nearest gap is 6.55 s`. Checked for every edge of a layer that carries sound (an audio layer on sound, a video not measured silent and not at volume 0, a composition with sound inside, a caption with narration) in a scope that uses speech sync anywhere, against takes playing at that instant other than the layer's own, ±1 frame; a picture coming or going cuts nothing heard (issue #18) | warn |
 | a caption reveal `sync` with unmatched units, or one matching under 50% of its words | warn |
 | a resource played by several layers named by resource id | warn |
 | `the take is longer than its layer — words 31–40 are never heard` | warn |

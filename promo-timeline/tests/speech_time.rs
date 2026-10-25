@@ -451,45 +451,91 @@ fn missing_timing_lays_out_on_estimate_and_holds_render() {
     assert_eq!(report.speech_clocks[0].words, 11);
 }
 
-/// A visual edge inside a word of a playing take warns, with the nearest
-/// gap; an edge between words does not.
+/// An edge of a layer that carries sound inside a word of a playing take
+/// warns, with the nearest gap; an edge between words does not, and a
+/// silent layer's edge never does (issue #18) — an image, a muted clip, a
+/// video the caller measured as having no audio track.
 #[test]
-fn cut_mid_word_warns_with_the_gap() {
+fn cut_mid_word_warns_on_sound_with_the_gap() {
     let t = timing(SCRIPT);
     let inside = 2.0 + (t.words[4].start + t.words[4].end) / 2.0;
-    let file = project(
+    let ends_inside = json!({"startTime": {"word": 2, "of": "intro"},
+                             "duration": inside - 2.0 - t.words[1].start});
+    let sound = |id: &str, resource: &str, extra: Value| {
+        let mut layer = image(id, extra);
+        layer["kind"] = json!("audio");
+        layer["resourceID"] = json!(resource);
+        layer
+    };
+    let mut clip = sound("clip", "clipV", ends_inside.clone());
+    clip["kind"] = json!("video");
+    let mut file = project(
         json!({}),
         json!([
             voice(json!({})),
-            image(
-                "a",
-                json!({"startTime": {"word": 2, "of": "intro"}, "duration": inside - 2.0 - t.words[1].start})
-            ),
-            image(
+            image("a", ends_inside.clone()),
+            sound("s", "song", ends_inside.clone()),
+            sound(
                 "b",
+                "song",
                 json!({"startTime": 2.0 + t.words[6].start, "duration": 0.5})
             ),
+            clip,
         ]),
         json!({}),
     );
-    let (_, report) = resolved(&file);
-    let cuts: Vec<String> = report
-        .problems
-        .iter()
-        .filter(|p| matches!(p, TimingProblem::CutMidWord { .. }))
-        .map(|p| p.to_string())
-        .collect();
+    file["resources"].as_array_mut().unwrap().push(json!(
+        {"id": "clipV", "kind": "video", "filename": "clip.mp4", "displayName": "Clip",
+         "addedAt": 0, "duration": 30}));
+    let cuts = |file: &Value, grids: &BeatGrids| -> Vec<String> {
+        resolved_with(file, grids)
+            .1
+            .problems
+            .iter()
+            .filter(|p| matches!(p, TimingProblem::CutMidWord { .. }))
+            .map(|p| p.to_string())
+            .collect()
+    };
+    let found = cuts(&file, &inputs());
     assert!(
-        cuts.iter().any(|m| m.contains("layer \"a\"")
+        found.iter().any(|m| m.contains("layer \"s\"")
             && m.contains("cuts mid-word \"never\"")
             && m.contains("the nearest gap is")),
-        "{cuts:?}"
+        "an audio layer ending mid-word warns: {found:?}"
+    );
+    assert!(
+        found.iter().any(|m| m.contains("layer \"clip\"")),
+        "a video with sound warns: {found:?}"
+    );
+    assert!(
+        !found.iter().any(|m| m.contains("layer \"a\"")),
+        "an image cuts no sound: {found:?}"
     );
     // b starts on a word's start: not mid-word.
     assert!(
-        !cuts.iter().any(|m| m.contains("layer \"b\" at")
+        !found.iter().any(|m| m.contains("layer \"b\" at")
             && m.contains(&format!("{:.2}s", 2.0 + t.words[6].start))),
-        "{cuts:?}"
+        "{found:?}"
+    );
+    assert!(
+        !found.iter().any(|m| m.contains("layer \"VO\"")),
+        "the take's own layer is not a cut through it: {found:?}"
+    );
+    // The clip measured silent, or turned all the way down: no warning.
+    let mut silent = inputs();
+    silent.silent_media.insert("clipV".into());
+    assert!(
+        !cuts(&file, &silent)
+            .iter()
+            .any(|m| m.contains("layer \"clip\"")),
+        "a video with no audio track cuts no sound"
+    );
+    file["resources"][2]["volume"] = json!(0);
+    assert!(
+        !cuts(&file, &inputs())
+            .iter()
+            .any(|m| m.contains("layer \"clip\"")),
+        "a muted video cuts no sound"
     );
 }
 
