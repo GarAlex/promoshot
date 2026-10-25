@@ -25,7 +25,10 @@ USAGE:
     promo schema [--full|--types]
     promo skill [install [--home DIR | --into DIR] [--dry-run]]
         print the agent skill, or install it for every agent tool found
-    promo inspect <project-dir>
+    promo inspect <project-dir> [--json]
+    promo proxy   <project-dir>
+        a playback proxy for every video resource, built into the proxy
+        cache (never into the project folder); idempotent
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
     promo frames  <project-dir> --out <dir> [--times <s,s,…>|--sample <n>|--fps <n>]
                   [--from <s>] [--to <s>] [--size <WxH>] [--sheet <file.png>] [--cap <n>]
@@ -69,7 +72,8 @@ AUTHORING — the MCP tools' own functions, so the defaults and checks match:
         --args is the tool's arguments as one JSON object (inline, @file.json,
         or - for stdin) — the same keys promo_<verb> takes, minus `project`.
 
-OPTIONS:
+OPTIONS (`promo <command> --help` lists the ones a command takes):
+    --out <path>   Where the render, frames or model is written
     --time <s>     Timestamp for a still (default 0)
     --fps <n>      Frames per second, overriding the project's own
                    (default: the project's `fps`, else 30). Fractional rates
@@ -85,7 +89,51 @@ OPTIONS:
     --json         Machine output: one JSON object on stdout (errors too)
     --no-analyse   A beat clock's song with no beatGrid is read from the
                    project's cache (Resources/.beats/) only — by default it
-                   is analysed on open and the analysis cached
+                   is analysed on open and the analysis cached; for `words`,
+                   a take with no record answers an estimate instead of
+                   being aligned
+    --strict       validate: exit 1 when anything is reported, and list the
+                   notes too
+    --full         schema: the whole format, not the authoring subset
+    --types        schema: the wire types as JSON Schema
+    --home <dir>   skill install: look for agent tools under this home folder
+    --into <dir>   skill install: install into this one folder only
+    --dry-run      skill install: say what would be written, write nothing
+    --count <n>    turntable: how many views around the model (1–64)
+    --resource <id>
+                   beats, words: the project's resource to measure (default:
+                   the beat clock's song / the take a speech value names)
+    --refresh      beats, words: measure again, replacing the cached answer
+    --meter <n>    beats: beats per bar, 1–16 (default 4)
+    --bpm-hint <n> beats: the tempo to look near; on a project it is kept as
+                   the song's bpmHint for every later measure
+    --clear-hint   beats: drop the song's stored bpmHint
+    --script <text>, --script-file <f>
+                   words: what an audio file says, to align it to
+    --timeline     words: also the times on the output timeline, through the
+                   first layer that plays the take
+    --transcribe openai|elevenlabs
+                   words: ask a provider to time the take, on the person's
+                   key — never automatic
+    --check        words, with --transcribe: say what it would cost, spend
+                   nothing
+    --import <timings.json>
+                   words: store word timings the voice handed over (edge-tts
+                   WordBoundary events, or [{\"text\",\"start\",\"end\"}] in
+                   seconds) as the take's provider timing
+    --provider <name>
+                   words, with --import: whose timing it is (edge-tts is
+                   guessed)
+    --prune        words: remove the records no file in Resources/ has
+    --rate <n>     media activity: frames a second to measure at (0–120)
+    --pointer <pointer.json>
+                   media activity: the recorder's pointer track (or a
+                   resource carrying one under `pointer`)
+    --masks auto|phone|desktop|none
+                   media activity: the screen regions to ignore (status bar,
+                   clock…)
+    --args <json>  authoring: the tool's arguments as one JSON object
+                   (inline, @file.json, or - for stdin)
 
     `validate` decodes the project and reports, first, anything that will not
     render or has no effect — a field nothing reads, a value that does
@@ -133,6 +181,21 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> Result<ExitCode, String> {
     let command = args[0].as_str();
     let rest = &args[1..];
+    // `promo <command> --help`, for every command: its usage and the
+    // options it takes, before any command reads its arguments (issue #20).
+    if rest.iter().any(|a| a == "--help" || a == "-h") {
+        let verb = match (command, rest.first().map(String::as_str)) {
+            ("media", Some(sub)) if !sub.starts_with('-') => format!("media {sub}"),
+            _ => command.to_string(),
+        };
+        return match command_help(&verb) {
+            Some(help) => {
+                print!("{help}");
+                Ok(ExitCode::SUCCESS)
+            }
+            None => Err(format!("unknown command `{verb}`\n\n{USAGE}")),
+        };
+    }
     // Describes the FORMAT, not a project, so it takes no directory — and
     // must be answered before the prelude below demands one.
     if command == "schema" {
@@ -260,6 +323,96 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     }?;
     println!("{answer}");
     Ok(ExitCode::SUCCESS)
+}
+
+/// One command's help, cut from [`USAGE`] so the two never disagree: its
+/// usage lines and description, every option it names with that option's
+/// entry under OPTIONS, and its own paragraph below them (`validate`,
+/// `schema`). None for a word that is not a command. `media` alone is
+/// every `promo media …` verb.
+fn command_help(command: &str) -> Option<String> {
+    let lines: Vec<&str> = USAGE.lines().collect();
+    let options_at = lines.iter().position(|l| l.starts_with("OPTIONS"))?;
+    let head = format!("promo {command}");
+    // The usage block: its `promo <command>` lines, each with the deeper
+    // lines under it.
+    let mut block: Vec<&str> = Vec::new();
+    let mut i = 0;
+    while i < options_at {
+        let line = lines[i].trim_start();
+        let named = line == head
+            || line
+                .strip_prefix(head.as_str())
+                .is_some_and(|after| after.starts_with(' '));
+        if named && lines[i].starts_with("    promo ") {
+            block.push(lines[i]);
+            i += 1;
+            while i < options_at
+                && lines[i].starts_with("      ")
+                && !lines[i].trim_start().starts_with("promo ")
+            {
+                block.push(lines[i]);
+                i += 1;
+            }
+            continue;
+        }
+        i += 1;
+    }
+    if block.is_empty() {
+        return None;
+    }
+    let mut out = String::from("USAGE:\n");
+    for line in &block {
+        out.push_str(line);
+        out.push('\n');
+    }
+    // The authoring verbs share one note, which sits under the last.
+    if AUTHORING.contains(&command) && !block.iter().any(|l| l.contains("--args is")) {
+        out.push_str(
+            "        --args is the tool's arguments as one JSON object (inline, @file.json,\n        \
+             or - for stdin) — the same keys promo_<verb> takes, minus `project`.\n",
+        );
+    }
+    // The flags the block names, and each one's entry under OPTIONS.
+    let named: std::collections::BTreeSet<String> = block
+        .iter()
+        .flat_map(|l| l.split(|c: char| c.is_whitespace() || "[]|,(){}".contains(c)))
+        .filter(|w| w.starts_with("--") && w.len() > 2)
+        .map(|w| w.trim_end_matches(['.', ';', ':']).to_string())
+        .collect();
+    let mut options = String::new();
+    let mut j = options_at + 1;
+    while j < lines.len() && !lines[j].is_empty() {
+        let entry_start = j;
+        j += 1;
+        while j < lines.len() && lines[j].starts_with("     ") {
+            j += 1;
+        }
+        let first = lines[entry_start].trim_start();
+        let flags = first
+            .split(|c: char| c.is_whitespace() || c == '/' || c == ',')
+            .filter(|w| w.starts_with("--"));
+        if flags.into_iter().any(|f| named.contains(f)) {
+            for line in &lines[entry_start..j] {
+                options.push_str(line);
+                options.push('\n');
+            }
+        }
+    }
+    if !options.is_empty() {
+        out.push_str("\nOPTIONS:\n");
+        out.push_str(&options);
+    }
+    // Its own paragraph after the options, when it has one.
+    let own = format!("    `{command}`");
+    if let Some(at) = lines.iter().position(|l| l.starts_with(&own)) {
+        out.push('\n');
+        for line in lines[at..].iter().take_while(|l| !l.is_empty()) {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    Some(out)
 }
 
 /// The authoring verbs, each the MCP tool of the same name.
