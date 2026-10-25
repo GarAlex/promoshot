@@ -1154,6 +1154,13 @@ A reveal can arrive on a narration's words instead of at its own pace —
   may carry its own trimKeyframes, so a single cut can skip a dull
   stretch in the middle. Use cuts instead of importing the same
   recording several times.
+- An `audio` layer plays an audio resource, or the SOUND of a video
+  resource without its picture — a clip's original audio under a
+  different shot, for instance. It plays the video the way a video layer
+  would: its cut or trim, speed, volume, every track not in
+  `disabledAudioTrackIndices`. promo_validate names one whose video has
+  no audio track (or every track disabled); on any other kind of
+  resource an audio layer plays nothing, and that is a break.
 - beyondEnd on a LAYER says what happens once it outlives its source:
   "hold" freezes the last frame (the default), "loop" starts over,
   "hide" stops drawing. Without it a layer may not be given a duration

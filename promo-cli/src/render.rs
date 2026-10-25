@@ -1383,6 +1383,81 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Issue #17: an audio layer on a VIDEO resource (an mp4 with AAC)
+    /// plays the video's sound, through its media cut — it used to render no
+    /// audio stream at all. The clip sounds only in source 7–13 s; the cut
+    /// 7.1–13.1 under a layer at 1 s for 6 s is heard from 1 s to 7 s, and
+    /// only there (a cut ignored would play the silent first seconds).
+    #[test]
+    fn an_audio_layer_plays_a_videos_sound_through_its_cut() {
+        let dir = std::env::temp_dir().join(format!("promo-audio-video-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let made = Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=gray:s=64x64:r=10:d=20",
+                "-f",
+                "lavfi",
+                "-i",
+                "aevalsrc=0.5*sin(2*PI*440*t)*between(t\\,7\\,13):s=48000:d=20",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+            ])
+            .arg(dir.join("Resources/av.mp4"))
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !made {
+            eprintln!("no ffmpeg with libx264; skipping");
+            return;
+        }
+        std::fs::write(
+            dir.join("metadata.json"),
+            r#"{"id":"P","name":"av","createdAt":0,"state":"recorded",
+                "trimStart":0,"trimEnd":10,"videoDuration":10,"subtitles":[],
+                "compositionSettings":{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"},
+                "resources":[{"id":"snd","kind":"video","filename":"av.mp4","displayName":"av","addedAt":0,
+                  "duration":20,"imageCuts":[],"disabledAudioTrackIndices":[],
+                  "mediaCuts":[{"id":"c","trimStart":7.1,"trimEnd":13.1}]}],
+                "layers":[{"id":"orig","name":"orig","sortIndex":0,"kind":"audio","isEnabled":true,
+                  "startTime":1,"duration":6,"resourceID":"snd","mediaCutID":"c","keyframes":[]}]}"#,
+        )
+        .unwrap();
+        let project = crate::project::Project::open(&dir).expect("project");
+        let mix = build_soundtrack(&project, 10.0)
+            .expect("mixes")
+            .expect("an audio layer on a video has sound");
+        let db = |a: f64, b: f64| 20.0 * rms(&mix, a, b).max(1e-6).log10();
+        assert!(
+            db(0.0, 0.9) < -60.0,
+            "silent before the layer: {:.1}",
+            db(0.0, 0.9)
+        );
+        for from in [1.2, 3.0, 5.0, 6.2] {
+            assert!(
+                db(from, from + 0.5) > -20.0,
+                "the cut sounds at {from} s: {:.1} dB",
+                db(from, from + 0.5)
+            );
+        }
+        assert!(
+            db(7.2, 9.5) < -60.0,
+            "silent after the layer: {:.1}",
+            db(7.2, 9.5)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// An export's sound is the window it writes (review 2026-09-27,
     /// P2-31): a voice starting at 1 s is heard from the first sample of
     /// an export that starts at 1 s. `promo video --from 1` used to mix

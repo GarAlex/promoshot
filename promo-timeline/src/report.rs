@@ -368,6 +368,23 @@ pub fn file_report_with(
             out.warn(problem.to_string());
         }
     }
+    // An audio layer on a video with no sound track plays nothing (issue
+    // #17) — known when the caller measured the media.
+    for layer in promo_model::nesting::all_layers(&meta) {
+        if layer.kind != promo_model::ProjectLayerKind::Audio || !layer.is_enabled {
+            continue;
+        }
+        let resources = meta.resources.as_deref().unwrap_or(&[]);
+        if let Some(video) = crate::audio::sound_resource(layer, resources).filter(|r| {
+            r.kind == promo_model::ProjectResourceKind::Video && grids.silent_media.contains(&r.id)
+        }) {
+            out.warn(format!(
+                "layer \"{}\" plays the sound of the video \"{}\", which has no audio track \
+                 (or every one is disabled) — it is silent",
+                layer.name, video.display_name
+            ));
+        }
+    }
     for resource in &timing.missing_grids {
         out.warn(
             crate::TimingProblem::MissingGrid {

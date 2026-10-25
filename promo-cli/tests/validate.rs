@@ -145,3 +145,98 @@ fn a_video_is_written_at_the_projects_export_size() {
     assert!(at(160, 300)[0] < 40, "a bar below: {:?}", at(160, 300));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Issue #17: an audio layer on a video plays its sound; `validate` names
+/// the one it cannot — a video with no audio track, or every track
+/// disabled — and an audio layer on a resource with no sound at all (an
+/// image) is a break. A video with sound is clean.
+#[test]
+fn an_audio_layer_on_a_silent_video_is_named() {
+    let dir = std::env::temp_dir().join(format!("promo-silent-video-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("Resources")).unwrap();
+    let encode = |name: &str, with_audio: bool| {
+        let mut command = Command::new("ffmpeg");
+        command.args([
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=gray:s=64x64:r=10:d=2",
+        ]);
+        if with_audio {
+            command.args([
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=2",
+                "-c:a",
+                "aac",
+            ]);
+        }
+        command
+            .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest"])
+            .arg(dir.join("Resources").join(name))
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    if !encode("loud.mp4", true) || !encode("mute.mp4", false) {
+        eprintln!("no ffmpeg with libx264; skipping");
+        return;
+    }
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([255, 0, 0, 255]))
+        .save(dir.join("Resources/still.png"))
+        .unwrap();
+    let write = |resource: &str, disabled: &str| {
+        std::fs::write(
+            dir.join("metadata.json"),
+            format!(
+                r#"{{"id":"P","name":"Silent","createdAt":0,"state":"recorded",
+                "trimStart":0,"trimEnd":2,"videoDuration":2,"subtitles":[],
+                "compositionSettings":{{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"}},
+                "resources":[
+                  {{"id":"loud","kind":"video","filename":"loud.mp4","displayName":"loud","addedAt":0,
+                    "duration":2,"imageCuts":[],"disabledAudioTrackIndices":[{disabled}]}},
+                  {{"id":"mute","kind":"video","filename":"mute.mp4","displayName":"mute","addedAt":0,
+                    "duration":2,"imageCuts":[],"disabledAudioTrackIndices":[]}},
+                  {{"id":"still","kind":"image","filename":"still.png","displayName":"still","addedAt":0,
+                    "pixelWidth":8,"pixelHeight":8,"imageCuts":[],"disabledAudioTrackIndices":[]}}],
+                "layers":[{{"id":"bg","name":"Ground","sortIndex":0,"kind":"background","isEnabled":true,
+                    "startTime":0,"duration":2,"keyframes":[]}},
+                  {{"id":"S","name":"sound","sortIndex":1,"kind":"audio","isEnabled":true,
+                    "startTime":0,"duration":2,"resourceID":"{resource}","keyframes":[]}}]}}"#
+            ),
+        )
+        .unwrap();
+    };
+    write("loud", "");
+    let (_, text) = validate(&dir, &["--strict"]);
+    assert!(
+        text.starts_with("ok — nothing"),
+        "a video with sound is clean: {text}"
+    );
+    write("mute", "");
+    let (_, text) = validate(&dir, &[]);
+    assert!(
+        text.contains(
+            r#"layer "sound" plays the sound of the video "mute", which has no audio track"#
+        ),
+        "{text}"
+    );
+    write("loud", "0");
+    let (_, text) = validate(&dir, &[]);
+    assert!(
+        text.contains(r#"the video "loud", which has no audio track"#),
+        "every track disabled: {text}"
+    );
+    write("still", "");
+    let (_, text) = validate(&dir, &[]);
+    assert!(text.starts_with("NOT OK"), "{text}");
+    assert!(
+        text.contains(r#"is an audio layer on "still" (kind image), which has no sound"#),
+        "{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

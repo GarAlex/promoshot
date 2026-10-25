@@ -814,16 +814,7 @@ fn nested_inputs(
             }
             continue;
         }
-        let want = if layer.kind == ProjectLayerKind::Video {
-            ProjectResourceKind::Video
-        } else {
-            ProjectResourceKind::Audio
-        };
-        let Some(stored) = layer
-            .resource_id
-            .as_deref()
-            .and_then(|rid| resources.iter().find(|r| r.id == rid && r.kind == want))
-        else {
+        let Some(stored) = sound_resource(layer, resources) else {
             continue;
         };
         let res = crate::mapping::resource_for_cut(stored, layer.media_cut_id.as_deref());
@@ -870,7 +861,7 @@ fn nested_inputs(
         if duration_cap <= 0.0 || start_time >= p_end {
             continue;
         }
-        let is_video = layer.kind == ProjectLayerKind::Video;
+        let is_video = stored.kind == ProjectResourceKind::Video;
         let volume_points = automation_points(layer, res.effective_volume()).map(|points| {
             points
                 .into_iter()
@@ -907,6 +898,28 @@ fn nested_inputs(
         }
     }
     (inputs, focus)
+}
+
+/// The resource whose sound a video or audio layer plays: a video layer's
+/// video, an audio layer's audio — or an audio layer's VIDEO, whose sound
+/// track it plays the way a video layer would (its cut, trims, held-frame
+/// pauses, speed, volume and disabled tracks; every track not disabled),
+/// without the picture. Until this an audio layer on a video resource was
+/// silent on every path (issue #17).
+pub fn sound_resource<'a>(
+    layer: &ProjectLayer,
+    resources: &'a [promo_model::ProjectResource],
+) -> Option<&'a promo_model::ProjectResource> {
+    let rid = layer.resource_id.as_deref()?;
+    resources.iter().find(|r| {
+        r.id == rid
+            && matches!(
+                (layer.kind, r.kind),
+                (ProjectLayerKind::Video, ProjectResourceKind::Video)
+                    | (ProjectLayerKind::Audio, ProjectResourceKind::Audio)
+                    | (ProjectLayerKind::Audio, ProjectResourceKind::Video)
+            )
+    })
 }
 
 /// The ranges a layer plays, repeated for every pass when it LOOPS —
@@ -1039,16 +1052,7 @@ pub fn audio_graph(
                     focus.extend(spans);
                     continue;
                 }
-                let want = if layer.kind == ProjectLayerKind::Video {
-                    ProjectResourceKind::Video
-                } else {
-                    ProjectResourceKind::Audio
-                };
-                let Some(stored) = layer
-                    .resource_id
-                    .as_deref()
-                    .and_then(|rid| resources.iter().find(|r| r.id == rid && r.kind == want))
-                else {
+                let Some(stored) = sound_resource(layer, resources) else {
                     continue;
                 };
                 // The layer's cut decides which part plays and at what speed.
@@ -1066,7 +1070,7 @@ pub fn audio_graph(
                     .map(|rs| rs.iter().map(|r| (r.end - r.start).max(0.0)).sum())
                     .unwrap_or_else(|| res.duration.unwrap_or(0.0))
                     / rate;
-                let is_video = layer.kind == ProjectLayerKind::Video;
+                let is_video = stored.kind == ProjectResourceKind::Video;
                 inputs.extend(transported(
                     layer,
                     vec![AudioInput {

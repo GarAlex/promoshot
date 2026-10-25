@@ -355,7 +355,10 @@ fn retime_layers_for_resource(
     }
     let layers = meta.layers.get_or_insert_with(Vec::new);
     for layer in layers.iter_mut() {
-        if layer.resource_id.as_deref() != Some(updated.id.as_str()) || layer.kind != kind {
+        // A video's audio layer (issue #17) plays what its video layer does.
+        let plays = layer.kind == kind
+            || (kind == ProjectLayerKind::Video && layer.kind == ProjectLayerKind::Audio);
+        if layer.resource_id.as_deref() != Some(updated.id.as_str()) || !plays {
             continue;
         }
         if layer.media_cut_id.is_some() {
@@ -1922,7 +1925,10 @@ impl Document {
                         .iter()
                         .find(|r| r.id == *rid)
                         .ok_or_else(|| format!("no resource with id {rid}"))?;
-                    if resource.kind != wanted {
+                    // An audio layer also plays a video's sound track (issue #17).
+                    let video_sound = layer_kind == promo_model::ProjectLayerKind::Audio
+                        && resource.kind == promo_model::ProjectResourceKind::Video;
+                    if resource.kind != wanted && !video_sound {
                         return Err(format!(
                             "resource {rid} is {:?}, not what a {layer_kind:?} layer shows",
                             resource.kind
@@ -2927,6 +2933,27 @@ mod tests {
             None,
             "a background may show nothing; it paints the settings ground"
         );
+
+        // An audio layer plays an audio resource or a video's sound (issue
+        // #17), and nothing else.
+        doc.apply(&command(
+            serde_json::json!({"kind": "addResource", "resource": {
+            "id": "V1", "kind": "video", "filename": "v.mp4",
+            "displayName": "V", "addedAt": 0}}),
+        ))
+        .unwrap();
+        doc.apply(&command(serde_json::json!({"kind": "addLayer", "layer": {
+            "id": "SND", "name": "Sound", "sortIndex": 99, "kind": "audio",
+            "isEnabled": true, "startTime": 0.0, "duration": 2.0,
+            "resourceID": "A1", "keyframes": []}})))
+            .unwrap();
+        doc.apply(&command(serde_json::json!({
+            "kind": "setLayerResource", "layerID": "SND", "resourceID": "V1"})))
+            .expect("an audio layer may play a video's sound");
+        assert!(doc
+            .apply(&command(serde_json::json!({
+                "kind": "setLayerResource", "layerID": "SND", "resourceID": "R2"})))
+            .is_err());
     }
 
     /// The settings form's commands: wholesale settings replace (with the

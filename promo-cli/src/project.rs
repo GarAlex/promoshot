@@ -194,7 +194,8 @@ impl Project {
         } else {
             Vec::new()
         };
-        let grids = grids.with_words(dir, &meta);
+        let mut grids = grids.with_words(dir, &meta);
+        grids.silent_media = Self::silent_videos(dir, &meta);
         // Attached layers and musical values become plain numbers before
         // anything reads them, so the renderer never has to know the
         // difference.
@@ -229,6 +230,49 @@ impl Project {
             timing,
             missing_words,
         })
+    }
+
+    /// The video resources whose file has no sound to play — no audio track,
+    /// or every one disabled — among those whose sound a layer could carry:
+    /// an audio layer's (issue #17), and a video layer's when the project
+    /// cuts on speech (issue #18: a silent video's edge cuts no word). Only
+    /// those are probed; a file ffprobe cannot read is left unknown.
+    fn silent_videos(dir: &Path, meta: &ProjectMetadata) -> std::collections::BTreeSet<String> {
+        use promo_model::ProjectResourceKind;
+        let speech = promo_timeline::speech_time::project_uses_speech(meta);
+        let wanted: std::collections::BTreeSet<&str> = promo_model::nesting::all_layers(meta)
+            .into_iter()
+            .filter(|l| {
+                l.kind == ProjectLayerKind::Audio || (speech && l.kind == ProjectLayerKind::Video)
+            })
+            .filter_map(|l| l.resource_id.as_deref())
+            .collect();
+        let mut silent = std::collections::BTreeSet::new();
+        for resource in meta.resources.iter().flatten() {
+            if resource.kind != ProjectResourceKind::Video
+                || !wanted.contains(resource.id.as_str())
+                || !plain_filename(&resource.filename)
+            {
+                continue;
+            }
+            let Some(file) = ["Resources", "Images"]
+                .into_iter()
+                .map(|sub| dir.join(sub).join(&resource.filename))
+                .find(|p| p.is_file())
+            else {
+                continue; // a missing file is reported as one
+            };
+            let Some(tracks) = promo_media::ffmpeg::audio_track_count(&file) else {
+                continue;
+            };
+            let enabled = (0..tracks as i64)
+                .filter(|i| !resource.disabled_audio_track_indices.contains(i))
+                .count();
+            if enabled == 0 {
+                silent.insert(resource.id.clone());
+            }
+        }
+        silent
     }
 
     /// Every take whose file is there gets word timing on the way in, as a

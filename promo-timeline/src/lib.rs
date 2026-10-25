@@ -739,6 +739,60 @@ mod tests {
         assert!((at(9.0) - 1.0).abs() < 1e-6, "open after B's ramp");
     }
 
+    /// Issue #17: an audio layer on a VIDEO resource plays the video's
+    /// sound — the input a video layer of the same cut would make (its
+    /// ranges, speed, volume, disabled tracks, every track), focused as the
+    /// layer says. Until this it made no input at all, on every path.
+    #[test]
+    fn an_audio_layer_plays_a_video_resources_sound() {
+        let raw = r#"{"id":"P","name":"d","createdAt":0,"state":"recorded",
+            "trimStart":0,"trimEnd":0,"videoDuration":0,"subtitles":[],
+            "compositionSettings":{"canvasWidth":320,"canvasHeight":180,"backgroundColorHex":"000000"},
+            "resources":[{"id":"V","kind":"video","filename":"av.mp4","displayName":"av","addedAt":0,"duration":20,
+                          "volume":0.5,"imageCuts":[],"disabledAudioTrackIndices":[1],
+                          "mediaCuts":[{"id":"c","trimStart":7.1,"trimEnd":13.1,"speed":2}]},
+                         {"id":"I","kind":"image","filename":"i.png","displayName":"i","addedAt":0}],
+            "layers":[{"id":"A","name":"a","sortIndex":0,"kind":"audio","isEnabled":true,"startTime":1,"duration":6,
+                       "resourceID":"V","mediaCutID":"c","audioFocus":true,"keyframes":[]},
+                      {"id":"W","name":"w","sortIndex":1,"kind":"video","isEnabled":true,"startTime":1,"duration":6,
+                       "resourceID":"V","mediaCutID":"c","keyframes":[]},
+                      {"id":"X","name":"x","sortIndex":2,"kind":"audio","isEnabled":true,"startTime":0,"duration":6,
+                       "resourceID":"I","keyframes":[]}]}"#;
+        let p = ProjectMetadata::from_json(raw).expect("decode");
+        let (inputs, focus) = audio_inputs(&p, &|_| true);
+        assert_eq!(
+            inputs.len(),
+            2,
+            "the audio and video layers; an image is silent"
+        );
+        let (audio, video) = (&inputs[0], &inputs[1]);
+        assert_eq!(audio.layer_id, "A");
+        assert_eq!(audio.source, AudioSource::Resource("V".into()));
+        let ranges = audio.included_ranges.as_ref().expect("the cut's range");
+        assert!(
+            (ranges[0].start - 7.1).abs() < 1e-9 && (ranges[0].end - 13.1).abs() < 1e-9,
+            "{ranges:?}"
+        );
+        assert_eq!(audio.speed, 2.0);
+        assert!((audio.volume - 0.5).abs() < 1e-6);
+        assert_eq!(audio.disabled_audio_track_indices, vec![1]);
+        assert!(
+            !audio.single_track,
+            "a video's tracks, as its video layer mixes them"
+        );
+        assert!(audio.is_focused);
+        // Everything but who plays it and the focus matches the video layer.
+        let mut same = audio.clone();
+        same.layer_id = video.layer_id.clone();
+        same.is_focused = video.is_focused;
+        assert_eq!(&same, video);
+        assert_eq!(focus.len(), 1);
+        assert!(
+            (focus[0].0 - 1.0).abs() < 1e-9 && (focus[0].1 - 7.0).abs() < 1e-9,
+            "{focus:?}"
+        );
+    }
+
     #[test]
     fn audio_inputs_derive_the_apps_mix_graph() {
         let p = fixture_project();

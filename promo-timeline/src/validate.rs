@@ -62,6 +62,7 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
     stage_warnings(meta, &mut out);
     placeholder_narration_warnings(meta, &mut out);
     trailing_blank_warnings(meta, &mut out);
+    sound_resource_warnings(meta, &mut out);
     for layer in meta.layers.as_deref().unwrap_or(&[]) {
         let honours_viewport = matches!(
             layer.kind,
@@ -483,6 +484,38 @@ fn placeholder_narration_warnings(meta: &ProjectMetadata, out: &mut Report) {
              until voiced: add a {provider} key and run promo_speak (or generate it in the app)",
             resource.display_name,
             resource.duration.unwrap_or(0.0)
+        ));
+    }
+}
+
+/// An audio layer whose resource has no sound to give: an image, a
+/// drawing, a caption… (a video's sound track plays, issue #17, and a
+/// composition's sound is its layers'). Whether a video HAS a sound track
+/// is the media's answer, not the file's — the CLI's open measures it
+/// (`BeatGrids::silent_media`) and the report names a silent one.
+fn sound_resource_warnings(meta: &ProjectMetadata, out: &mut Report) {
+    use promo_model::ProjectResourceKind as R;
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    for layer in promo_model::nesting::all_layers(meta) {
+        if layer.kind != ProjectLayerKind::Audio {
+            continue;
+        }
+        let Some(resource) = layer
+            .resource_id
+            .as_deref()
+            .and_then(|id| resources.iter().find(|r| r.id == id))
+        else {
+            continue; // a missing resource is named elsewhere
+        };
+        if matches!(resource.kind, R::Audio | R::Video | R::Composition) {
+            continue;
+        }
+        out.breaks(format!(
+            "layer \"{}\" is an audio layer on \"{}\" (kind {}), which has no sound \
+             — it plays nothing; an audio layer plays an audio or video resource",
+            layer.name,
+            resource.display_name,
+            resource.kind.as_str()
         ));
     }
 }

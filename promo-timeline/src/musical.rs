@@ -60,6 +60,13 @@ pub struct BeatGrids {
     /// The takes' word timing (docs/SPEECH-SYNC.md §6.4) — what speech
     /// values count on; a take with none is laid out on an estimate.
     pub words: promo_model::word_cache::TakeWords,
+    /// Video resources, by id, whose file has no sound to play — no audio
+    /// track, or every one disabled. The media's answer, measured by a
+    /// caller that can open the files (the CLI's open); empty means
+    /// unknown, and a video is taken to have sound. Read by the report (an
+    /// audio layer on one plays nothing, issue #17) and by the cut-mid-word
+    /// check (a silent video's edge cuts no sound, issue #18).
+    pub silent_media: std::collections::BTreeSet<String>,
 }
 
 /// What the timing pass reads from outside the file: beat grids and word

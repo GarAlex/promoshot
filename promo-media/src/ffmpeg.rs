@@ -648,6 +648,34 @@ impl AudioReader for FfmpegAudioReader {
     }
 }
 
+/// How many audio tracks the file carries, or None when ffprobe cannot say
+/// (missing, or the file is not media it reads) — unknown, not silent.
+pub fn audio_track_count(path: &Path) -> Option<usize> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(crate::tool_path(path))
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .count(),
+    )
+}
+
 /// How many audio streams the asset carries (0 when ffprobe is missing or
 /// the file has none).
 fn audio_stream_count(path: &Path) -> usize {
