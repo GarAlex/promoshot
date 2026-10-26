@@ -26,6 +26,9 @@ COPY examples /usr/local/share/promoshot/examples
 # Local voice packages (`promoshot-mcp voices install …`) live on a volume,
 # not in the image: mount one at /voices and install into it once.
 ENV PROMOSHOT_VOICES=/voices
+# The music model (`promoshot-mcp music install ace-step-base`, 6.3 GB)
+# likewise: mount a volume at /music. Generation runs on the CPU here.
+ENV PROMOSHOT_MUSIC_MODELS=/music
 # Mount your projects here; promo_workspace points at it.
 LABEL io.modelcontextprotocol.server.name="io.github.GarAlex/promoshot"
 ENV PROMOSHOT_WORKSPACE=/projects
