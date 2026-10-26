@@ -1,0 +1,36 @@
+[package]
+name = "promo-music"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Generated music layers for PromoShot: ACE-Step 1.5 lego inference in native Rust (candle), the model store and its install"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The LayerGenerator trait and the Stereo buffer the layer comes back in.
+promo-midi = { path = "../promo-midi", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+# Inference: Hugging Face candle (MIT OR Apache-2.0), the published
+# safetensors loaded as they are.
+candle-core = "0.11"
+candle-nn = "0.11"
+# The Qwen3 tokenizer (Apache-2.0); fancy-regex, no C regex library.
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
+# silence_latent.pt is a PyTorch zip (stored); candle's pickle reader parses it.
+zip = { version = "8", default-features = false }
+ureq = { version = "2", optional = true }
+
+[features]
+default = ["download"]
+# Installing the weights from Hugging Face (`promo music install`).
+download = ["dep:ureq"]
+# Apple GPUs. The Mac app and macOS headless builds turn it on.
+metal = ["candle-core/metal", "candle-nn/metal"]
+# Apple's Accelerate for the CPU path (macOS).
+accelerate = ["candle-core/accelerate", "candle-nn/accelerate"]
+# NVIDIA GPUs on headless Linux (needs the CUDA toolkit to build).
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
