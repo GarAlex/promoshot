@@ -281,6 +281,12 @@ impl AceStep {
         let src = self
             .encode(&audio, &mut |len| Tensor::from_vec(post.fill(ACOUSTIC * len), (1, ACOUSTIC, len), &Device::Cpu))
             .map_err(err)?;
+        // Wait for the GPU before the context is used: on Metal, candle
+        // recycles a dropped tensor's buffer (here the posterior noise
+        // uploaded per window) while kernels queued on it may still be
+        // pending, and the context came out wrong without this (the same
+        // seed: −4.7 dB against the CPU; with it, 95 dB).
+        self.device.synchronize().map_err(err)?;
         timings.encode_s = t.elapsed().as_secs_f64();
         progress(0.05);
         if cancel() {
@@ -293,6 +299,7 @@ impl AceStep {
         let cond = self.condition(&p)?;
         let kv = self.cross_kv(&cond).map_err(err)?;
         let context = self.context(&src).map_err(err)?;
+        self.device.synchronize().map_err(err)?;
         timings.text_s = t.elapsed().as_secs_f64();
 
         let mut noise_rng = Normal::new(req.seed);

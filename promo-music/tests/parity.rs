@@ -223,3 +223,40 @@ fn m5_mlx_path_from_dumped_noise() {
     }
     assert!(snr > 10.0, "{snr}");
 }
+
+/// The whole lego run on the GPU equals the CPU's for one seed (the 32 s
+/// context — two encode windows — and 1 step). This caught candle's Metal buffer reuse: the
+/// context came out wrong when the encode was not waited for.
+#[test]
+fn m6_gpu_equals_cpu_end_to_end() {
+    let Some((refs, ckpt)) = dirs() else { return };
+    let gpu = device();
+    if gpu.is_cpu() {
+        return;
+    }
+    let ctx = load(&refs.join("vae32.safetensors"))["audio"].clone();
+    let req = promo_music::pipeline::Lego {
+        left: ctx.get(0).unwrap().to_vec1().unwrap(),
+        right: ctx.get(1).unwrap().to_vec1().unwrap(),
+        track_name: "strings".into(),
+        caption: "lush legato string section".into(),
+        keyscale: Some("C minor".into()),
+        bpm: 120.0,
+        time_signature: 4,
+        seed: 2,
+        steps: 1,
+        guidance: 7.0,
+        shift: 3.0,
+    };
+    let run = |dev: Device| {
+        let m = promo_music::pipeline::AceStep::load(&ckpt, dev, DType::F32).unwrap();
+        let mut t = promo_music::pipeline::Timings::default();
+        let (l, r) = m.lego(&req, &mut |_| {}, &|| false, &mut t).unwrap().unwrap();
+        let n = l.len();
+        Tensor::from_vec([l, r].concat(), (2, n), &Device::Cpu).unwrap()
+    };
+    let a = run(gpu);
+    let b = run(Device::Cpu);
+    let (_, _, snr) = report("lego GPU vs CPU", &a, &b);
+    assert!(snr > 60.0, "{snr}");
+}

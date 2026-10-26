@@ -249,7 +249,11 @@ impl Encoder {
         let sample = |x: &Tensor, noise: &mut dyn FnMut(usize) -> Result<Tensor>| -> Result<Tensor> {
             let (m, s) = self.moments(x)?;
             let n = noise(m.dim(2)?)?.to_dtype(m.dtype())?.to_device(m.device())?.reshape(m.shape())?;
-            m + s.mul(&n)?
+            let z = (m + s.mul(&n)?)?;
+            // Finish this window before its inputs drop (see pipeline.rs:
+            // candle's Metal buffer reuse).
+            z.device().synchronize()?;
+            Ok(z)
         };
         if samples <= ENCODE_CHUNK {
             return sample(audio, noise);
