@@ -32,12 +32,13 @@ use crate::{
 pub const APP_PROJECT_KEYS: &[&str] = &["handles"];
 /// Resource keys this model keeps in its bag that the apps' Swift model
 /// reads and writes: a library reference, the theme plate, a resource's
-/// own motion, where it came from, a narration's speech. Checked against
-/// the Swift coding keys on 2026-09-27 (no layer, keyframe, cut, export or
-/// settings key is one); the app's suite fails when a key it writes lands
-/// in a bag unnamed here.
+/// own motion, where it came from, a narration's speech, a MIDI-sequenced
+/// sound's `midi` block (MIDI.md §0). Checked against the Swift coding keys
+/// on 2026-09-27 (no layer, keyframe, cut, export or settings key is one);
+/// the app's suite fails when a key it writes lands in a bag unnamed here.
 pub const APP_RESOURCE_KEYS: &[&str] = &[
     "libraryID",
+    "midi",
     "motionKeyframes",
     "origin",
     "speech",

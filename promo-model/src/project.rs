@@ -5022,6 +5022,7 @@ impl ProjectMetadata {
         }) || resources.iter().any(|r| r.activity.is_some())
             || crate::musical::carries_ignorable_beat_fields(self)
             || crate::speech::carries_ignorable_speech_fields(self)
+            || crate::midi::carries_midi(self)
         {
             return crate::LOSSLESS_READER;
         }

@@ -22,6 +22,9 @@ This is the authoring subset; `promo_schema_full` is the whole format.
   A layer: `id`, `name`, `sortIndex`, `kind`, `isEnabled: true`,
   `startTime`, `duration` (seconds on the output timeline), usually a
   `resourceID`, and `keyframes`.
+- Music and effects authored as MIDI: an `audio` resource with a `midi`
+  block (steps, notes in beats, a GM program per track, or a `.mid`),
+  rendered by promo_midi to a WAV with its own `beatGrid` (topic `midi`).
 - Cutting to music: a `beatClock` song, `{"beats": 2}`, `sequence`, `pulse`,
   `flash` (topic `beats`); on words: `{"word": 12, "of": "intro"}` (`speech`).
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
