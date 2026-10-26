@@ -1207,20 +1207,21 @@ A reveal can arrive on a narration's words instead of at its own pace —
   `renderedHash` is written by the app — do not set it by hand, it is
   what stops unchanged text from being paid for twice.
 
-## MIDI — midi, sequence, steps, notes, instrument, program, drums, loop, sound effect, soundfont, mid
+## MIDI — midi, sequence, steps, notes, piano roll, instrument, program, drums, loop, tempo map, level, sound effect, soundfont, mid
 
 An `audio` resource may carry a `midi` block instead of a recording:
 sound authored as MIDI and rendered to an ordinary 48 kHz 24-bit WAV in
-`Resources/` (promo_midi headless, the app's editor), which every layer,
-trim and effect then plays like any audio. The resource keeps
-`kind: "audio"`; the render writes `filename`, `duration`, the receipt
-`midi.renderedHash` and the bank in `midi.bank` (never set those by
-hand), and `beatGrid {bpm, offset: 0, timeSignature}` from the sequence —
-so the beat detector never runs on it and a beat clock counts it exactly.
+`Resources/` (promo_midi headless, the app's editor), which every layer
+and effect then plays like any audio. The resource keeps `kind:
+"audio"`; the render writes `filename`, `duration`, `looped`, the
+receipt `midi.renderedHash`, `midi.bank` and `midi.take {loudness,
+gainDb, peakDbfs}` (never set those by hand), and `beatGrid {bpm,
+offset: 0, timeSignature}` from the sequence — so the beat detector
+never runs on it and a beat clock counts it exactly.
 
 ```json
-"midi": { "source": "steps", "tempo": 120, "timeSignature": [4, 4],
-  "bars": 4, "swing": 0, "loop": true,
+"midi": { "tempo": 120, "timeSignature": [4, 4], "bars": 4,
+  "loop": { "from": 1, "to": 5 }, "level": 0,
   "tracks": [
     { "name": "Drums", "bank": "drums", "program": 0, "volume": 0.9,
       "steps": { "resolution": 16, "length": 16, "lanes": [
@@ -1230,24 +1231,30 @@ so the beat detector never runs on it and a beat clock counts it exactly.
       "notes": [ { "t": 0, "d": 1, "n": 36, "v": 100 } ] } ] }
 ```
 
-- `source`: `steps` (each track's step lanes and/or `notes`), `file` (an
-  imported `.mid`, its bytes in `Resources/.midi/<file>`; tracks are its
-  channels, by `channel`, their notes read from the file) or `effect`
-  (`effect {preset, pitch, length, program}`; presets rise, hit,
-  whoosh, ding, stinger, sparkle, coin, powerUp).
-- `notes` are in beats: `t` start, `d` length, `n` key (60 = middle C),
-  `v` velocity 1–127 (default 100). A beat is one count of the time
-  signature at `tempo` (default 120, 4/4).
+- Tracks carry `notes` (beats: `t` start, `d` length, `n` key, 60 =
+  middle C, `v` velocity 1–127, default 100), step `lanes`, and
+  `controls` (`{t, cc, v}`, `{t, bend}` 0–16383, `{t, program}`). A
+  beat is one count of the time signature at `tempo` (default 120, 4/4);
+  `tempoMap: [{beat, bpm}]` changes it, and the notes move with it (the
+  grid keeps the first tempo, and the render says the tempo changes).
+- An imported `.mid` becomes this same block: one track per channel,
+  notes and controls inline, its tempo map and meter, and `original`
+  naming its bytes in `Resources/.midi/` (kept for a revert; edits never
+  touch it). `source: "effect"` with `effect {preset, pitch, length,
+  program}` plays a preset: rise, hit, whoosh, ding, stinger, sparkle,
+  coin, powerUp.
 - Step lanes: `resolution` steps per bar (default 16); `on` lists the
-  0-based steps a `note` is struck on, counted across the whole loop —
-  or, with `length`, across a pattern of that many steps repeated to
-  fill the bars. `hold` is a hit's length in steps (default 1).
-  `swing` 0…1 delays every odd step, 1 a full triplet shuffle.
-- `loop` (default true for steps, false otherwise) renders exactly
-  `bars` (default: what the notes reach) with the tail folded onto the
-  head, so a looping layer repeats it without a gap or a click; a
-  one-shot runs until its tail is silent.
-- Tracks: `program` is the GM program 0–127 (families from 0 piano, 8
+  0-based steps a `note` is struck on across the song — or, with
+  `length`, across a pattern of that many steps repeated through the
+  bars. `hold` is a hit's length in steps; `swing` 0…1 delays every odd
+  step, 1 a full triplet shuffle.
+- `loop: {from, to}` is a bar range, 1-based, `to` exclusive: the take
+  is exactly those bars, notes held over the end wrapping to the start
+  and tails folded over, so a looping layer repeats it seamlessly
+  (`looped: true`, no trims). No `loop`: the whole song as a one-shot
+  that runs until its tail is silent. `bars` is the song's length
+  (default: what the notes reach).
+- `program` is the GM program 0–127 (families from 0 piano, 8
   chromatic percussion, 16 organ, 24 guitar, 32 bass, 40 strings, 48
   ensemble, 56 brass, 64 reed, 72 pipe, 80 synth lead, 88 synth pad, 96
   synth effects, 104 ethnic, 112 percussive, 120 sound effects);
@@ -1256,13 +1263,16 @@ so the beat detector never runs on it and a beat clock counts it exactly.
   standard, 8 room, 16 power, 24 electronic, 25 TR-808, 32 jazz, 40
   brush). `volume` is a linear gain 0–2 (default 1), `pan` −1…1, and
   `mute` / `solo`.
-- An imported file plays its own tempo map; the grid keeps its first
-  tempo, and the render says so when the tempo changes.
-- The bank is GeneralUser GS (bundled in the apps; headless,
-  `promoshot-mcp sounds install generaluser`). Changing the block, the
-  `.mid` or the bank renders again; anything else reuses the take.
-  promo_validate warns "MIDI not rendered" while the take is missing or
-  older than its block.
+- Every take is normalised: music to −16 LUFS (the normalize stage's
+  own default), an effect to −20, under −1 dBTP; `level` (dB) trims on
+  top.
+- A take is written when a layer uses the resource (a nested
+  composition's layers count): promo_midi, `promo midi render` and
+  `promo video` settle the used ones; changing the block or the bank
+  renders again, anything else reuses the take. promo_validate warns
+  "MIDI not rendered" for a used one whose take is missing or stale.
+  The bank is GeneralUser GS (bundled in the apps; headless,
+  `promoshot-mcp sounds install generaluser`).
 
 Nested compositions (rung 19). A **composition is a resource**
 (`"kind": "composition"`) and it is shown by an ordinary `video`-kind

@@ -13,7 +13,7 @@
 //!
 //! The receipt ([`receipt`]) is SHA-256 over the block's canonical
 //! encoding — keys sorted, nulls dropped, numbers by value — minus
-//! `renderedHash` and `bank`, then the `.mid` bytes when there are any,
+//! `renderedHash`, `bank` and `take`, then the `.mid` bytes when there are any,
 //! then the bank's SHA-256. A take whose receipt matches is reused;
 //! anything else renders again.
 
@@ -45,22 +45,35 @@ pub struct MidiBlock {
     /// `[beats per bar, beat unit]`, default `[4, 4]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_signature: Option<[u32; 2]>,
-    /// The loop's length in bars (default 1 for steps; a file's own
-    /// length rounded up to whole bars).
+    /// The song's length in bars (default: what the notes reach). A
+    /// `loop: true` loops all of it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bars: Option<u32>,
     /// 0 straight … 1 a full triplet shuffle: every odd step is late by
     /// `swing / 3` of a step (a straight pair becomes 2:1). Steps only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swing: Option<f64>,
-    /// A seamless loop of exactly `bars` (the tail folded onto the head);
-    /// false renders a one-shot until its tail is silent. Default true for
-    /// steps, false for files and effects.
+    /// The loop: `{from, to}` in bars, 1-based, `to` exclusive — the take
+    /// is exactly that range, held notes wrapping and tails folded onto
+    /// the head. Absent (or `false`): no loop, the whole song as a
+    /// one-shot. `true` loops the whole length.
     #[serde(rename = "loop", default, skip_serializing_if = "Option::is_none")]
-    pub looped: Option<bool>,
+    pub looped: Option<MidiLoop>,
+    /// Tempo changes, `[{beat, bpm}]` in beats from the start; the first
+    /// holds from beat 0. Absent: `tempo` throughout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tempo_map: Option<Vec<MidiTempo>>,
+    /// The imported `.mid` this block came from, in `Resources/.midi/`:
+    /// kept for "Revert to file", never read by the render.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original: Option<String>,
+    /// dB on top of the take's loudness normalisation (default 0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracks: Option<Vec<MidiTrack>>,
-    /// The imported file's name in `Resources/.midi/`.
+    /// Slice 1's imported file, in `Resources/.midi/`: a `file` block
+    /// whose tracks carry no notes is expanded from it on read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -105,6 +118,53 @@ pub struct MidiTrack {
     pub steps: Option<MidiSteps>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<Vec<MidiNote>>,
+    /// Controller moves, pitch bends and program changes in time, as an
+    /// imported file had them (sustain, expression, bends…).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controls: Option<Vec<MidiControl>>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// One move at beat `t`: a controller (`cc` 0–127 to `v` 0–127), a pitch
+/// bend (`bend` 0–16383, 8192 centre) or a program change (`program`).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct MidiControl {
+    pub t: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cc: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub v: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bend: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<u8>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// `midi.loop`: a bar range, or (read only) `true`/`false`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MidiLoop {
+    Whole(bool),
+    Range(MidiRange),
+}
+
+/// Bars, 1-based, `to` exclusive.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct MidiRange {
+    pub from: f64,
+    pub to: f64,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// A tempo from `beat` on.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct MidiTempo {
+    pub beat: f64,
+    pub bpm: f64,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -231,9 +291,31 @@ impl MidiBlock {
         }
     }
 
+    /// The loop as a bar range (1-based, `to` exclusive), `whole_bars`
+    /// standing in for `loop: true`; None for no loop.
+    pub fn loop_bars(&self, whole_bars: f64) -> Option<(f64, f64)> {
+        match &self.looped {
+            None | Some(MidiLoop::Whole(false)) => None,
+            Some(MidiLoop::Whole(true)) => Some((1.0, 1.0 + whole_bars)),
+            Some(MidiLoop::Range(r)) if r.from.is_finite() && r.to.is_finite() => {
+                let from = r.from.max(1.0);
+                (r.to > from).then_some((from, r.to))
+            }
+            Some(MidiLoop::Range(_)) => None,
+        }
+    }
+
     /// Whether the take is a seamless loop.
     pub fn is_loop(&self) -> bool {
-        self.looped.unwrap_or(self.source() == "steps")
+        self.loop_bars(1.0).is_some()
+    }
+
+    /// The level trim in dB, clamped to ±24.
+    pub fn level_db(&self) -> f64 {
+        self.level
+            .filter(|l| l.is_finite())
+            .unwrap_or(0.0)
+            .clamp(-24.0, 24.0)
     }
 }
 
@@ -256,7 +338,7 @@ pub fn carries_midi(meta: &crate::ProjectMetadata) -> bool {
 /// The renderer's version (promo-midi's expansion and synthesis): part of
 /// every receipt, bumped whenever the same block and bank could sound
 /// different, so takes from an older renderer render again.
-pub const RENDERER: u32 = 1;
+pub const RENDERER: u32 = 2;
 
 /// The canonical encoding of a JSON value: object keys sorted, null
 /// members dropped, every number written from its f64 value (an integral
@@ -314,7 +396,8 @@ fn write_canonical(value: &Value, out: &mut String) {
 }
 
 /// The receipt a take is rendered under, lowercase hex: SHA-256 over the
-/// canonical block minus `renderedHash` and `bank`, a zero byte, the
+/// canonical block minus `renderedHash`, `bank` and `take` (what the
+/// render writes), a zero byte, the
 /// `.mid` bytes (when the source has a file), a zero byte, and the bank's
 /// SHA-256 as hex text, a zero byte and [`RENDERER`]. The bank enters by its hash alone, so a renamed
 /// bank is the same bank and a different file is a re-render.
@@ -324,6 +407,7 @@ pub fn receipt(block: &Value, mid: Option<&[u8]>, bank_sha256: &str) -> String {
     if let Some(map) = stripped.as_object_mut() {
         map.remove("renderedHash");
         map.remove("bank");
+        map.remove("take");
     }
     let mut hasher = sha2::Sha256::new();
     hasher.update(canonical(&stripped).as_bytes());
@@ -351,12 +435,15 @@ mod tests {
     fn block() -> Value {
         json!({
             "source": "steps", "tempo": 120, "timeSignature": [4, 4], "bars": 4,
-            "swing": 0.25, "loop": true, "futureKey": {"deep": [1, 2]},
+            "swing": 0.25, "loop": {"from": 1, "to": 3, "fade": 1}, "futureKey": {"deep": [1, 2]},
+            "tempoMap": [{"beat": 0, "bpm": 120, "ramp": "x"}, {"beat": 8, "bpm": 90}],
+            "original": "Song.mid", "level": -3,
             "tracks": [{ "name": "Drums", "program": 0, "bank": "drums",
                 "volume": 0.8, "pan": -0.5, "mute": false, "laneColour": "red",
                 "steps": { "resolution": 16, "length": 16, "pager": 2,
                     "lanes": [{ "note": 36, "on": [0, 4, 8, 12], "velocity": 100, "accent": true }] },
-                "notes": [{ "t": 0, "d": 0.5, "n": 60, "v": 100, "tie": "x" }] }],
+                "notes": [{ "t": 0, "d": 0.5, "n": 60, "v": 100, "tie": "x" }],
+                "controls": [{ "t": 1, "cc": 64, "v": 127, "lsb": 3 }, { "t": 2, "bend": 9000 }] }],
             "effect": { "preset": "rise", "pitch": 2, "length": 1.5, "program": 81, "curve": "exp" },
             "bank": { "name": "GeneralUser GS 2.0.3", "sha256": "ab", "build": 7 },
             "renderedHash": "cd"
@@ -377,6 +464,12 @@ mod tests {
         assert_eq!(track.steps.as_ref().unwrap().lanes[0].extra["accent"], true);
         assert_eq!(track.notes.as_ref().unwrap()[0].extra["tie"], "x");
         assert_eq!(typed.effect.as_ref().unwrap().extra["curve"], "exp");
+        assert_eq!(track.controls.as_ref().unwrap()[0].extra["lsb"], 3);
+        assert_eq!(typed.tempo_map.as_ref().unwrap()[0].extra["ramp"], "x");
+        match typed.looped.as_ref().unwrap() {
+            MidiLoop::Range(r) => assert_eq!(r.extra["fade"], 1),
+            other => panic!("{other:?}"),
+        }
         assert_eq!(typed.bank.as_ref().unwrap().extra["build"], 7);
         let back = serde_json::to_value(&typed).unwrap();
         assert_eq!(canonical(&back), canonical(&original));
@@ -461,7 +554,15 @@ mod tests {
         assert!(!file.is_loop());
         let steps = MidiBlock::from_value(&json!({"source": "notes"})).unwrap();
         assert_eq!(steps.source(), "steps");
-        assert!(steps.is_loop());
+        assert!(!steps.is_loop(), "absent is no loop");
         assert_eq!(steps.time_signature(), [4, 4]);
+        let whole = MidiBlock::from_value(&json!({"loop": true})).unwrap();
+        assert_eq!(whole.loop_bars(4.0), Some((1.0, 5.0)));
+        let range = MidiBlock::from_value(&json!({"loop": {"from": 2, "to": 4}})).unwrap();
+        assert_eq!(range.loop_bars(8.0), Some((2.0, 4.0)));
+        let backwards = MidiBlock::from_value(&json!({"loop": {"from": 4, "to": 2}})).unwrap();
+        assert!(!backwards.is_loop());
+        let level = MidiBlock::from_value(&json!({"level": -40})).unwrap();
+        assert_eq!(level.level_db(), -24.0);
     }
 }
