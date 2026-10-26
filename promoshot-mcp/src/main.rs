@@ -33,6 +33,7 @@
 #![recursion_limit = "256"]
 
 mod media;
+mod midi;
 mod preview;
 mod speak;
 
@@ -50,6 +51,18 @@ fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.first().map(String::as_str) == Some("voices") {
         match speak::voices_command(&argv[1..]) {
+            Ok(answer) => {
+                println!("{answer}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        }
+    }
+    if argv.first().map(String::as_str) == Some("sounds") {
+        match midi::sounds_command(&argv[1..]) {
             Ok(answer) => {
                 println!("{answer}");
                 return;
@@ -640,6 +653,7 @@ where
             run(config, &argv)
         }
         "promo_voices" => speak::voices(args, &promo_speech::SystemKeys),
+        "promo_midi" => midi::midi(args, config.root.as_deref()),
         "promo_speak" => speak::speak(
             args,
             config.root.as_deref(),
@@ -999,7 +1013,8 @@ mod tests {
                 "promo_explain",
                 "promo_diff",
                 "promo_voices",
-                "promo_speak"
+                "promo_speak",
+                "promo_midi"
             ],
             "everything the app offers except promo_open, which needs a window"
         );
@@ -1176,15 +1191,17 @@ mod tests {
             // 45,000 until promo_beats (BEAT-SYNC slice 4) joined at 0.7 KB,
             // its prose already cut to the bone; 47,000 since promo_words
             // (SPEECH-SYNC slice 5), another 0.9 KB; 47,300 since the
-            // overshoot easings and `overshoot` (issue #19), 0.15 KB.
-            bytes < 47_300,
+            // overshoot easings and `overshoot` (issue #19), 0.15 KB; 49,000
+            // since promo_midi (MIDI.md slice 1a), 1.7 KB with the compact
+            // instrument catalog an agent writes a block from.
+            bytes < 49_000,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
         // And the ceiling is not met by dropping tools or their prose.
         let tools = Value::Array(contract::tools(Host::Headless));
         let tools = tools.as_array().unwrap();
-        assert_eq!(tools.len(), 28);
+        assert_eq!(tools.len(), 29);
         assert!(
             tools
                 .iter()

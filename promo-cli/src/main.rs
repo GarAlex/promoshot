@@ -56,6 +56,13 @@ USAGE:
         --import stores word timings the voice handed over (edge-tts
         WordBoundary events, or [{\"text\",\"start\",\"end\"}] in seconds) as the
         take's provider timing (--provider names it; edge-tts is guessed)
+    promo midi render <project-dir> [resource] [--bank <file.sf2>] [--check] [--json]
+        render a MIDI-sequenced audio resource (every one, when none is
+        named) into Resources/ with the sound bank, writing its filename,
+        duration, beatGrid and receipt; an unchanged block is reused
+    promo sounds [list | install generaluser]
+        the sound banks MIDI renders with (PROMOSHOT_SOUNDS, else the
+        per-user folder); install fetches GeneralUser GS and its licence
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -116,7 +123,11 @@ OPTIONS (`promo <command> --help` lists the ones a command takes):
                    words: ask a provider to time the take, on the person's
                    key — never automatic
     --check        words, with --transcribe: say what it would cost, spend
-                   nothing
+                   nothing; midi render: render nothing, say whether each
+                   take is current
+    --bank <file.sf2>
+                   midi render: the SoundFont to render with (default: the
+                   installed GeneralUser GS)
     --import <timings.json>
                    words: store word timings the voice handed over (edge-tts
                    WordBoundary events, or [{\"text\",\"start\",\"end\"}] in
@@ -225,6 +236,15 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     // Word timing takes a take or a project, with options of its own.
     if command == "words" {
         println!("{}", words(rest)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    // MIDI renders take a project and a verb; the banks take neither.
+    if command == "midi" {
+        println!("{}", midi(rest)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    if command == "sounds" {
+        println!("{}", sounds(rest)?);
         return Ok(ExitCode::SUCCESS);
     }
     // Media senses take a FILE and a verb, not a project.
@@ -661,6 +681,120 @@ fn with_credits(answer: String, command: &str, project: &Project, opts: &Options
 
 /// `promo beats`: the tracker on one audio file, or on a project's audio
 /// resource through the project's cache.
+/// `promo midi render <project> [resource] [--bank f] [--check] [--json]`:
+/// promo-midi's settle for one MIDI resource, or every one.
+fn midi(args: &[String]) -> Result<String, String> {
+    let usage =
+        "usage: promo midi render <project-dir> [resource] [--bank <file.sf2>] [--check] [--json]";
+    if args.first().map(String::as_str) != Some("render") {
+        return Err(usage.into());
+    }
+    let (mut positional, mut bank, mut check, mut json) = (Vec::new(), None, false, false);
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--bank" => {
+                bank = Some(PathBuf::from(
+                    args.get(i + 1).ok_or("--bank expects a .sf2 file")?,
+                ));
+                i += 1;
+            }
+            "--check" => check = true,
+            "--json" => json = true,
+            other if other.starts_with("--") => {
+                return Err(format!("midi: unknown option `{other}`\n{usage}"))
+            }
+            other => positional.push(other.to_string()),
+        }
+        i += 1;
+    }
+    let dir = PathBuf::from(positional.first().ok_or(usage)?);
+    let text = std::fs::read_to_string(dir.join("metadata.json"))
+        .map_err(|_| format!("no metadata.json in {}", dir.display()))?;
+    let doc: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("decode: {e}"))?;
+    let ids = match positional.get(1) {
+        Some(id) => vec![id.clone()],
+        None => promo_midi::settle::midi_resources(&doc),
+    };
+    if ids.is_empty() {
+        return Ok("no MIDI resources — nothing to render".into());
+    }
+    let bank = if check {
+        promo_midi::bank(bank.as_deref()).ok()
+    } else {
+        Some(promo_midi::bank(bank.as_deref())?)
+    };
+    let mut answers = Vec::new();
+    let mut lines = Vec::new();
+    for id in &ids {
+        if check {
+            let sha = bank.as_ref().map(|b| b.sha256.clone()).unwrap_or_else(|| {
+                doc["resources"]
+                    .as_array()
+                    .and_then(|l| l.iter().find(|r| r["id"] == id.as_str()))
+                    .and_then(|r| r["midi"]["bank"]["sha256"].as_str())
+                    .unwrap_or_default()
+                    .to_string()
+            });
+            let why = promo_midi::stale(&doc, &dir.join("Resources"), id, &sha)?;
+            lines.push(match &why {
+                None => format!("{id}: current"),
+                Some(why) => format!("{id}: not current — {why}"),
+            });
+            answers
+                .push(serde_json::json!({ "resource": id, "current": why.is_none(), "why": why }));
+        } else {
+            let bank = bank.as_ref().ok_or("no bank")?;
+            let settled = promo_midi::settle(&dir, id, bank)?;
+            lines.push(settled.report());
+            answers.push(settled.to_json());
+        }
+    }
+    Ok(if json {
+        serde_json::Value::Array(answers).to_string()
+    } else {
+        lines.join("\n")
+    })
+}
+
+/// `promo sounds [list | install <bank>]`.
+fn sounds(args: &[String]) -> Result<String, String> {
+    let dir = promo_midi::sounds::sounds_dir();
+    match (args.first().map(String::as_str), args.get(1)) {
+        (None | Some("list"), None) => {
+            let mut lines = vec![format!("sound banks in {}:", dir.display())];
+            for bank in promo_midi::sounds::BANKS {
+                let installed = std::fs::metadata(promo_midi::sounds::bank_path(&bank, &dir))
+                    .is_ok_and(|m| m.len() == bank.bytes);
+                lines.push(format!(
+                    "  {:<12} {:<2} {:>4.0} MB  {}  {}",
+                    bank.id,
+                    if installed { "✓" } else { "-" },
+                    bank.bytes as f64 / 1e6,
+                    bank.title,
+                    bank.license
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+        (Some("install"), Some(id)) => {
+            let mut shown = 0u64;
+            let path = promo_midi::sounds::install(id, &dir, &mut |done, total| {
+                let percent = (done * 100).checked_div(total).unwrap_or(0).min(100);
+                if percent >= shown + 10 {
+                    shown = percent;
+                    eprintln!("{id}: {percent}% of {:.0} MB", total as f64 / 1e6);
+                }
+            })?;
+            Ok(format!(
+                "{id}: installed and verified at {}",
+                path.display()
+            ))
+        }
+        _ => Err("usage: promo sounds [list | install generaluser]".into()),
+    }
+}
+
 fn beats(args: &[String]) -> Result<String, String> {
     use promo_media::beats::{self, BeatOptions};
     let mut path: Option<PathBuf> = None;
@@ -1437,6 +1571,12 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
             // Audio never reaches a frame, and that is not a fault.
             None | Some(crate::project::Unsupported::Audio) => {}
             Some(why) => report.breaks(format!("layer \"{}\" will not render — {why}", layer.name)),
+        }
+    }
+    // A MIDI resource whose take is missing or older than its block.
+    if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&raw) {
+        for finding in promo_midi::findings(&doc, &project.dir.join("Resources")) {
+            report.warn(finding);
         }
     }
     // A camera that frames its own shot and comes too close cuts its

@@ -30,6 +30,8 @@ promo-author = { path = "../promo-author" }
 # `promo words`: the syllable estimate of a take's word times. Without the
 # keyring: the apps' FFI links this crate and keeps its own key store.
 promo-speech = { path = "../promo-speech", default-features = false }
+# `promo midi render`, `promo sounds`, validate's "MIDI not rendered".
+promo-midi = { path = "../promo-midi" }
 serde_json.workspace = true
 # PNG/JPEG only: this decodes project images and writes frames, it is not an
 # image-processing tool.

@@ -277,6 +277,13 @@ AA2 T`), then call `promo_speak` again — editing that file re-voices the
 project's local takes. Symbols
 like `&`, `…` and digits inside words (`MP4`) need spelling out too.
 
+Music beds and sound effects can be AUTHORED: an audio resource with a
+`midi` block (step lanes, notes in beats, GM programs, an effect preset,
+or an imported `.mid`; `promo_schema_full {"topics": ["midi"]}`) that
+`promo_midi` renders to a WAV with its own `beatGrid` — a loop exactly its
+bars. It needs the sound bank once (`promoshot-mcp sounds install
+generaluser`); an unchanged block is reused.
+
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`, and the authoring tools as verbs taking the
 tool's arguments as `--args '<json>'`), and `promo_workspace` names a

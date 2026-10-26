@@ -87,6 +87,12 @@ pub const HOST_DIFFERENCES: &[Difference] = &[
         why: "the app's own library",
     },
     Difference {
+        tool: "promo_midi",
+        aspect: Aspect::Tool,
+        only: Host::Headless,
+        why: "the app renders MIDI in its editor; its promo_midi is MIDI.md slice 3a",
+    },
+    Difference {
         tool: "promo_render_still",
         aspect: Aspect::Argument("proxy"),
         only: Host::Headless,
@@ -838,6 +844,31 @@ pub fn tools(host: Host) -> Vec<Value> {
                          estimated length. false: refuse instead, writing nothing." } },
                 "required": [] }
         }),
+        json!({
+            "name": "promo_midi",
+            "description": "Render a MIDI-sequenced audio resource to Resources/<name>.wav (48 kHz \
+                24-bit, a loop exactly its bars) with the installed sound bank, writing its \
+                filename, duration, beatGrid (the sequence's: never measured) and receipt; an \
+                unchanged block is reused. Answers the tracks with GM names and any note. `midi` \
+                sets the resource's block first (creating the resource): {source: steps|file|\
+                effect, tempo, timeSignature, bars, swing, loop, tracks: [{name, program, bank: \
+                \"drums\", volume, pan, mute, solo, steps: {resolution, length, lanes: [{note, \
+                on: [step], velocity}]}, notes: [{t, d (beats), n, v}]}], effect: {preset, pitch, \
+                length, program}}. Programs by family from 0 piano, 8 chromatic, 16 organ, 24 \
+                guitar, 32 bass, 40 strings, 48 ensemble, 56 brass, 64 reed, 72 pipe, 80 lead, 88 \
+                pad, 96 synth fx, 104 ethnic, 112 percussive, 120 sfx; drums 36 kick, 38 snare, 39 \
+                clap, 42/46 hat, 49 crash, 51 ride. Effects: rise, hit, whoosh, ding, stinger, \
+                sparkle, coin, powerUp. No bank: `promoshot-mcp sounds install generaluser`.",
+            "inputSchema": { "type": "object",
+                "properties": { "project": project,
+                    "resource": { "type": "string", "description": "The audio resource's id" },
+                    "midi": { "type": "object", "description": "The block to set first" },
+                    "file": { "type": "string", "description": "A .mid to import (a path)" },
+                    "midBase64": { "type": "string", "description": "A .mid's bytes, base64" },
+                    "check": { "type": "boolean", "description":
+                        "Render nothing: say whether the take is current, and why not" } },
+                "required": ["project", "resource"] }
+        }),
     ];
     if app {
         list.push(json!({
@@ -941,6 +972,7 @@ pub fn annotations(host: Host, name: &str) -> Value {
         // The one door that can DELETE: a layer, a resource, a keyframe.
         "promo_apply" => ("Apply editor commands", false, true, false, false),
         "promo_speak" => ("Synthesize the narration", false, false, false, true),
+        "promo_midi" => ("Render a MIDI sound", false, false, true, false),
         "promo_list_projects" => ("The projects on this Mac", true, false, true, false),
         "promo_context" => ("What the person is looking at", true, false, true, false),
         "promo_open" => ("Open the project in PromoShot", false, false, true, false),

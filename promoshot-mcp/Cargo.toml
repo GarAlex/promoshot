@@ -17,6 +17,8 @@ path = "src/main.rs"
 promo-author = { path = "../promo-author" }
 promo-editor = { path = "../promo-editor" }
 promo-model = { path = "../promo-model" }
+# promo_midi and `sounds install`: the MIDI renderer and its bank.
+promo-midi = { path = "../promo-midi" }
 # `local`: keyless narration from installed voice packages (local-tts).
 promo-speech = { path = "../promo-speech", features = ["local"] }
 serde_json.workspace = true
