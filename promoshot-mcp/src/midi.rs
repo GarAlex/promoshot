@@ -37,6 +37,9 @@ pub fn midi(args: &Value, root: Option<&Path>) -> Result<String, String> {
         .map_err(|_| format!("no metadata.json in {}", dir.display()))?;
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| format!("decode: {e}"))?;
     let resources = dir.join("Resources");
+    if let Some(spec) = args.get("generate") {
+        return generate(spec, &dir, id);
+    }
     let check = args.get("check").and_then(Value::as_bool) == Some(true);
     if check {
         let found = promo_midi::settle::midi_resources(&doc)
@@ -152,6 +155,53 @@ pub fn midi(args: &Value, root: Option<&Path>) -> Result<String, String> {
     Ok(settled?.to_json().to_string())
 }
 
+/// `generate: {track, caption?, seed?, range?: {from, to}, model?}`: a
+/// generated layer from the ACE-Step server the environment names
+/// (`PROMOSHOT_ACESTEP_URL`, default localhost:8001; MIDI.md §7). Blocks
+/// until it is made, refused, or the request times out.
+fn generate(spec: &Value, dir: &Path, id: &str) -> Result<String, String> {
+    use promo_midi::generate::{self, Endpoint, Request};
+    let track = spec
+        .get("track")
+        .and_then(Value::as_str)
+        .filter(|t| !t.trim().is_empty())
+        .ok_or("`generate.track` names the layer: a new track, or a generated one to redo")?;
+    let mut request = Request::new(track);
+    request.caption = spec
+        .get("caption")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    request.seed = spec.get("seed").and_then(Value::as_i64);
+    request.model = spec
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    request.track_name = spec
+        .get("trackName")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    if let Some(range) = spec.get("range") {
+        match (range["from"].as_f64(), range["to"].as_f64()) {
+            (Some(from), Some(to)) => request.range = Some((from, to)),
+            _ => {
+                return Err(
+                    "`generate.range` is {from, to} in bars (1-based, `to` exclusive)".into(),
+                )
+            }
+        }
+    }
+    let bank = promo_midi::bank(None)?;
+    let (made, settled) = generate::generate(
+        dir,
+        id,
+        &request,
+        &Endpoint::resolve(None, None),
+        &bank,
+        &mut generate::Quiet,
+    )?;
+    Ok(json!({ "generated": made.to_json(), "result": settled.to_json() }).to_string())
+}
+
 fn write(path: &Path, doc: &Value) -> Result<(), String> {
     let text = serde_json::to_string(doc).map_err(|e| e.to_string())?;
     let temporary = path.with_file_name(format!(".metadata.json.partial-{}", std::process::id()));
@@ -229,8 +279,51 @@ pub fn sounds_command(args: &[String]) -> Result<String, String> {
 }
 
 #[cfg(test)]
+#[path = "../../promo-midi/tests/support/mock_ace.rs"]
+mod mock_ace;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `generate` through the tool: a layer from the server the
+    /// environment names, kept and mixed; a missing track is refused.
+    #[test]
+    fn the_tool_generates_a_layer() {
+        let dir = std::env::temp_dir().join(format!("mcp-midi-gen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let block = json!({ "tempo": 120, "bars": 2, "loop": { "from": 1, "to": 3 },
+            "tracks": [{ "name": "Drums", "bank": "drums", "steps": { "resolution": 16,
+                "length": 16, "lanes": [{ "note": 36, "on": [0, 4, 8, 12] }] } }] });
+        std::fs::write(dir.join("metadata.json"), json!({ "resources": [{ "id": "M",
+            "kind": "audio", "filename": "", "displayName": "Beat", "addedAt": 0, "midi": block }] })
+            .to_string()).unwrap();
+        let project = dir.to_string_lossy().into_owned();
+        let missing = midi(
+            &json!({ "project": project, "resource": "M", "generate": {} }),
+            None,
+        );
+        assert!(missing.unwrap_err().contains("generate.track"));
+        if promo_midi::sounds::installed_default().is_none() {
+            eprintln!("SKIPPED: {}", promo_midi::sounds::missing_bank_message());
+            return;
+        }
+        let mock = super::mock_ace::MockAce::start();
+        std::env::set_var(promo_midi::generate::URL_ENV, &mock.url);
+        let out = midi(
+            &json!({ "project": project, "resource": "M",
+            "generate": { "track": "Shaker", "caption": "shaker 16ths", "seed": 7 } }),
+            None,
+        );
+        std::env::remove_var(promo_midi::generate::URL_ENV);
+        let out: Value = serde_json::from_str(&out.unwrap()).unwrap();
+        assert_eq!(out["generated"]["file"], "Beat · Shaker.wav", "{out}");
+        assert_eq!(out["result"]["layers"][0]["status"], "current");
+        assert!(dir.join("Resources/.midi/Beat · Shaker.wav").is_file());
+        assert!(dir.join("Resources/Beat.wav").is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn base64_decodes() {

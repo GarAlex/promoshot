@@ -200,9 +200,81 @@ fn track(
     Ok((left, right))
 }
 
+/// Stereo samples at [`SAMPLE_RATE`]: a generated layer as the mix takes it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Stereo {
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+}
+
+impl Stereo {
+    pub fn frames(&self) -> usize {
+        self.left.len()
+    }
+
+    /// Interleaved, for the meters.
+    pub fn interleaved(&self) -> Vec<f32> {
+        self.left
+            .iter()
+            .zip(&self.right)
+            .flat_map(|(a, b)| [*a, *b])
+            .collect()
+    }
+}
+
+/// A WAV file's audio as 48 kHz stereo: another rate resampled with the
+/// core's one kernel, mono doubled, more channels than two taking the
+/// first two. Refuses anything that is not a WAV (the apps run no ffmpeg).
+pub fn read_stereo(bytes: &[u8]) -> Result<Stereo, String> {
+    let pcm = promo_media::dsp::read_wav(bytes).ok_or("not a WAV file this can read")?;
+    let channels = pcm.channels.max(1);
+    let frames = pcm.samples.len() / channels;
+    let channel = |c: usize| -> Vec<f32> {
+        let c = c.min(channels - 1);
+        (0..frames).map(|i| pcm.samples[i * channels + c]).collect()
+    };
+    let (left, right) = (channel(0), channel(1));
+    let rate = f64::from(SAMPLE_RATE);
+    if (pcm.rate - rate).abs() < 1e-9 {
+        return Ok(Stereo { left, right });
+    }
+    let convert = |x: &[f32]| -> Vec<f32> {
+        promo_media::dsp::resample(x, pcm.rate, rate)
+            .into_iter()
+            .map(|v| v as f32)
+            .collect()
+    };
+    Ok(Stereo {
+        left: convert(&left),
+        right: convert(&right),
+    })
+}
+
+/// The 48 kHz stereo 24-bit WAV of `audio`.
+pub fn stereo_wav(audio: &Stereo) -> Vec<u8> {
+    wav(&Take {
+        left: audio.left.clone(),
+        right: audio.right.clone(),
+        peak_dbfs: 0.0,
+        loudness: None,
+        gain_db: 0.0,
+        notes: Vec::new(),
+    })
+}
+
 /// Renders the score with the bank: deterministic, so the same score and
 /// bank give the same samples.
 pub fn render(score: &Score, bank: &Bank) -> Result<Take, String> {
+    render_mix(score, bank, &[])
+}
+
+/// [`render`] with the score's generated layers mixed in: `layers[i]` is
+/// `score.layers[i]`'s audio (None: its file is missing — it plays
+/// silent, and the take says so). A layer starts at the take's first
+/// sample; a loop keeps its exact length (a longer layer is cut), a
+/// one-shot runs to the longer of the two. Mixed before the loudness
+/// stage, so the take is normalised with its layers in it.
+pub fn render_mix(score: &Score, bank: &Bank, layers: &[Option<Stereo>]) -> Result<Take, String> {
     if score.length > LENGTH_CAP {
         return Err(format!(
             "midi: {:.0} s is longer than a take may be ({:.0} s)",
@@ -256,6 +328,48 @@ pub fn render(score: &Score, bank: &Bank) -> Result<Take, String> {
         }
         (left, right)
     };
+    for (index, layer) in score.layers.iter().enumerate() {
+        let Some(audio) = layers.get(index).and_then(Option::as_ref) else {
+            if !layer.muted {
+                notes.push(format!(
+                    "generated layer \"{}\": its file {} is missing — it plays silent until \
+                     it is generated again",
+                    layer.name,
+                    layer.file.as_deref().unwrap_or("(none)")
+                ));
+            }
+            continue;
+        };
+        if layer.muted {
+            continue;
+        }
+        let filtered;
+        let audio = match layer.high_pass_hz {
+            Some(hz) => {
+                let mut copy = audio.clone();
+                crate::layer::high_pass(&mut copy, hz, score.looped);
+                filtered = copy;
+                &filtered
+            }
+            None => audio,
+        };
+        if !score.looped && audio.frames() > left.len() {
+            left.resize(audio.frames(), 0.0);
+            right.resize(audio.frames(), 0.0);
+        }
+        // A balance on the stereo file: the far side turned down.
+        let (gl, gr) = (
+            layer.gain * (1.0 - layer.pan.max(0.0)),
+            layer.gain * (1.0 + layer.pan.min(0.0)),
+        );
+        for (i, (a, b)) in audio.left.iter().zip(&audio.right).enumerate() {
+            if i >= left.len() {
+                break;
+            }
+            left[i] += a * gl;
+            right[i] += b * gr;
+        }
+    }
     // Loudness: one static gain to the take's target (music or effect),
     // the level trim on top, held under the true-peak ceiling.
     let interleaved: Vec<f32> = left

@@ -15,6 +15,8 @@ promo-model = { path = "../promo-model" }
 promo-media = { path = "../promo-media" }
 serde_json.workspace = true
 sha2 = "0.10"
+# The layer gate and high-pass: libm transcendentals, the same bits everywhere.
+libm = "0.2"
 # The synth: a pure-Rust SoundFont renderer (MIT).
 rustysynth = "1.3.8"
 # Reading an imported .mid (Unlicense); no rayon.
@@ -24,8 +26,11 @@ ureq = { version = "2", optional = true }
 [features]
 # Installing the bank from its pinned URL. The apps bundle their copy and
 # leave it out.
-default = ["download"]
+default = ["download", "generate"]
 download = ["dep:ureq"]
+# Generated layers: the ACE-Step REST client (MIDI.md §7). The apps keep it
+# (the Mac generates; every host mixes the stored file either way).
+generate = ["dep:ureq"]
 
 [dev-dependencies]
 midly = { version = "0.5", default-features = false, features = ["std"] }

@@ -2620,6 +2620,7 @@ dependencies = [
 name = "promo-midi"
 version = "0.4.5"
 dependencies = [
+ "libm",
  "midly",
  "promo-media",
  "promo-model",

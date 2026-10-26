@@ -61,6 +61,16 @@ USAGE:
         when none is named) into Resources/ with the sound bank, writing its
         filename, duration, beatGrid and receipt; an unchanged block is
         reused. `promo video` settles the used ones itself
+    promo midi generate <project-dir> <resource> --track <name> [--caption <text>]
+                  [--seed <n>] [--range <from>-<to>] [--as <track_name>] [--model <dit>]
+                  [--url <acestep>] [--key <k>] [--timeout <s>] [--bank <file.sf2>] [--json]
+        a generated layer: ACE-Step's lego task hears the MIDI and adds the
+        track (a new one needs --caption; an existing one regenerates), kept in
+        Resources/.midi/ when it keeps to the grid (drums, percussion) or the
+        chords (the rest), mixed into the take. --as is lego's track_name
+        (strings, synth, keyboard, drums…; else read from the caption).
+        The server is yours to run (PROMOSHOT_ACESTEP_URL, default
+        http://localhost:8001; PROMOSHOT_ACESTEP_KEY). --check-server only asks it
     promo sounds [list | install generaluser]
         the sound banks MIDI renders with (PROMOSHOT_SOUNDS, else the
         per-user folder); install fetches GeneralUser GS and its licence
@@ -693,7 +703,13 @@ fn with_credits(answer: String, command: &str, project: &Project, opts: &Options
 /// promo-midi's settle for one MIDI resource, or every one.
 fn midi(args: &[String]) -> Result<String, String> {
     let usage =
-        "usage: promo midi render <project-dir> [resource] [--bank <file.sf2>] [--check] [--json]";
+        "usage: promo midi render <project-dir> [resource] [--bank <file.sf2>] [--check] [--json]\n       \
+         promo midi generate <project-dir> <resource> --track <name> [--caption <text>] [--seed <n>] \
+         [--range <from>-<to>] [--as strings|synth|drums|…] [--model <dit>] [--url <acestep>] [--key <k>] \
+         [--timeout <s>] [--bank <file.sf2>] [--json] | --check-server [--url]";
+    if args.first().map(String::as_str) == Some("generate") {
+        return midi_generate(&args[1..], usage);
+    }
     if args.first().map(String::as_str) != Some("render") {
         return Err(usage.into());
     }
@@ -765,6 +781,139 @@ fn midi(args: &[String]) -> Result<String, String> {
         serde_json::Value::Array(answers).to_string()
     } else {
         lines.join("\n")
+    })
+}
+
+/// `promo midi generate`: one generated layer over the MIDI (MIDI.md §7),
+/// progress on stderr.
+fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
+    use promo_midi::generate::{self, Endpoint, Progress, Request};
+    let mut positional = Vec::new();
+    let (mut track, mut caption, mut seed, mut range, mut model) = (None, None, None, None, None);
+    let (mut url, mut key, mut timeout, mut bank) = (None, None, None, None);
+    let mut track_name = None;
+    let (mut json, mut check_server) = (false, false);
+    let mut i = 0;
+    while i < args.len() {
+        let value = |i: usize| {
+            args.get(i + 1)
+                .cloned()
+                .ok_or_else(|| format!("{} expects a value\n{usage}", args[i]))
+        };
+        match args[i].as_str() {
+            "--track" => track = Some(value(i)?),
+            "--caption" => caption = Some(value(i)?),
+            "--seed" => {
+                seed = Some(
+                    value(i)?
+                        .parse::<i64>()
+                        .map_err(|_| "--seed expects a whole number")?,
+                )
+            }
+            "--range" => {
+                let text = value(i)?;
+                let (from, to) = text
+                    .split_once(['-', ':', ','])
+                    .and_then(|(a, b)| {
+                        Some((a.trim().parse::<f64>().ok()?, b.trim().parse::<f64>().ok()?))
+                    })
+                    .ok_or("--range expects bars as <from>-<to> (1-based, `to` exclusive)")?;
+                range = Some((from, to));
+            }
+            "--model" => model = Some(value(i)?),
+            "--as" => track_name = Some(value(i)?),
+            "--url" => url = Some(value(i)?),
+            "--key" => key = Some(value(i)?),
+            "--timeout" => {
+                timeout = Some(
+                    value(i)?
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|t| t.is_finite() && *t > 0.0)
+                        .ok_or("--timeout expects seconds")?,
+                )
+            }
+            "--bank" => bank = Some(PathBuf::from(value(i)?)),
+            "--json" => {
+                json = true;
+                i += 1;
+                continue;
+            }
+            "--check-server" => {
+                check_server = true;
+                i += 1;
+                continue;
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("midi generate: unknown option `{other}`\n{usage}"))
+            }
+            other => {
+                positional.push(other.to_string());
+                i += 1;
+                continue;
+            }
+        }
+        i += 2;
+    }
+    let endpoint = Endpoint::resolve(url.as_deref(), key.as_deref());
+    if check_server {
+        let status = generate::status(&endpoint, std::time::Duration::from_secs(10))?;
+        return Ok(if json {
+            status.to_string()
+        } else {
+            format!(
+                "ACE-Step answers at {} ({} {}){}",
+                endpoint.url,
+                status["service"].as_str().unwrap_or("ACE-Step"),
+                status["version"].as_str().unwrap_or_default(),
+                status["models"]
+                    .as_array()
+                    .map(|m| format!(
+                        "; models: {}",
+                        m.iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .unwrap_or_default()
+            )
+        });
+    }
+    let (Some(dir), Some(resource)) = (positional.first(), positional.get(1)) else {
+        return Err(usage.into());
+    };
+    let track = track.ok_or_else(|| format!("--track names the layer\n{usage}"))?;
+    let bank = promo_midi::bank(bank.as_deref())?;
+    let mut request = Request::new(&track);
+    request.caption = caption;
+    request.seed = seed;
+    request.range = range;
+    request.model = model;
+    request.track_name = track_name;
+    if let Some(t) = timeout {
+        request.timeout = std::time::Duration::from_secs_f64(t);
+    }
+    struct Stderr(std::time::Instant);
+    impl Progress for Stderr {
+        fn phase(&mut self, phase: &str) {
+            eprintln!(
+                "generate: {phase} ({:.1} s)",
+                self.0.elapsed().as_secs_f64()
+            );
+        }
+    }
+    let (made, settled) = generate::generate(
+        Path::new(dir),
+        resource,
+        &request,
+        &endpoint,
+        &bank,
+        &mut Stderr(std::time::Instant::now()),
+    )?;
+    Ok(if json {
+        serde_json::json!({ "generated": made.to_json(), "result": settled.to_json() }).to_string()
+    } else {
+        format!("{}\n{}", made.report(), settled.report())
     })
 }
 

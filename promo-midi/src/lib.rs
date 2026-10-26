@@ -11,7 +11,10 @@
 //! apps hand their bundled copy's path to [`Bank::open`].
 
 pub mod effects;
+#[cfg(feature = "generate")]
+pub mod generate;
 pub mod gm;
+pub mod layer;
 pub mod render;
 pub mod score;
 pub mod settle;
@@ -21,8 +24,8 @@ pub mod tempo;
 
 pub use render::{Bank, Take};
 pub use settle::{
-    findings, import_mid, preview, settle, settle_doc, settle_used, stale, used_midi, Imported,
-    Settled, TrackInfo,
+    findings, import_mid, mark_context, preview, settle, settle_doc, settle_used, stale, used_midi,
+    Imported, LayerInfo, Settled, TrackInfo,
 };
 
 /// The bank to render with: `path` when given, else the installed default

@@ -55,9 +55,36 @@ pub struct Track {
     pub events: Vec<Event>,
 }
 
+/// A generated layer (MIDI.md §7) as the mix plays it: its file in
+/// `Resources/.midi/`, aligned at the take's start, under the track's
+/// gain, pan, mute and solo.
+#[derive(Debug, Clone)]
+pub struct Layer {
+    pub name: String,
+    /// The plain file name in `Resources/.midi/` (None: the track names none).
+    pub file: Option<String>,
+    pub gain: f32,
+    /// −1 left … 1 right, a balance on the stereo file.
+    pub pan: f32,
+    pub muted: bool,
+    /// `generated.status` as the block holds it.
+    pub status: Option<String>,
+    /// The high-pass the mix gives it, Hz ([`crate::layer::high_pass_hz`]).
+    pub high_pass_hz: Option<f64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Score {
     pub tracks: Vec<Track>,
+    /// Generated layers, in track order — not synthesized, mixed.
+    pub layers: Vec<Layer>,
+    /// Beats to seconds for the song.
+    pub map: TempoMap,
+    /// The beat the take starts at (a loop's `from`), and its seconds.
+    pub start_beat: f64,
+    pub start_seconds: f64,
+    /// Beats per bar.
+    pub bar_beats: f64,
     pub looped: bool,
     /// A loop's exact length; a one-shot's last event.
     pub length: f64,
@@ -175,6 +202,8 @@ pub fn merged_tracks(block: &MidiBlock, file: &crate::smf::File) -> Vec<MidiTrac
             }
             track
         })
+        // A generated layer is the block's own, not the file's.
+        .chain(listed.iter().filter(|t| t.is_generated()).cloned())
         .collect()
 }
 
@@ -264,7 +293,34 @@ fn beat_events(
     out
 }
 
-fn notes(block: &MidiBlock, tracks: Vec<MidiTrack>, file: Option<&crate::smf::File>) -> Score {
+/// The generated tracks of `all` as layers; mute and solo count across
+/// every track, so soloing a layer silences the synths and the reverse.
+fn layers(all: &[MidiTrack]) -> Vec<Layer> {
+    all.iter()
+        .filter_map(|t| {
+            let g = t.generated.as_ref()?;
+            Some(Layer {
+                name: t.name.clone().unwrap_or_else(|| "Generated".into()),
+                file: g.file.clone().filter(|f| !f.is_empty()),
+                gain: gain(t),
+                pan: t
+                    .pan
+                    .filter(|p| p.is_finite())
+                    .unwrap_or(0.0)
+                    .clamp(-1.0, 1.0) as f32,
+                muted: muted(all, t),
+                status: g.status.clone(),
+                high_pass_hz: crate::layer::high_pass_hz(
+                    &serde_json::to_value(g).unwrap_or_default(),
+                ),
+            })
+        })
+        .collect()
+}
+
+fn notes(block: &MidiBlock, all: Vec<MidiTrack>, file: Option<&crate::smf::File>) -> Score {
+    let generated = layers(&all);
+    let tracks: Vec<MidiTrack> = all.iter().filter(|t| !t.is_generated()).cloned().collect();
     let ts = match (block.time_signature, file) {
         (None, Some(file)) => file.time_signature,
         _ => block.time_signature(),
@@ -393,7 +449,7 @@ fn notes(block: &MidiBlock, tracks: Vec<MidiTrack>, file: Option<&crate::smf::Fi
             program,
             drums,
             gain: gain(track),
-            muted: muted(&tracks, track),
+            muted: muted(&all, track),
             notes: count,
             events,
         });
@@ -428,6 +484,11 @@ fn notes(block: &MidiBlock, tracks: Vec<MidiTrack>, file: Option<&crate::smf::Fi
     }
     Score {
         tracks: out,
+        layers: generated,
+        start_beat: start,
+        start_seconds: zero,
+        map,
+        bar_beats,
         looped,
         length,
         bpm,
@@ -498,6 +559,11 @@ fn effect(block: &MidiBlock) -> Result<Score, String> {
     };
     Ok(Score {
         tracks: vec![track],
+        layers: Vec::new(),
+        map: TempoMap::from_block(block),
+        start_beat: 0.0,
+        start_seconds: 0.0,
+        bar_beats: f64::from(block.time_signature()[0]),
         looped: false,
         length,
         bpm: block.tempo(),
@@ -511,4 +577,14 @@ fn effect(block: &MidiBlock) -> Result<Score, String> {
 /// The tracks an imported file lists, notes and controls inline.
 pub fn file_tracks(mid: &[u8]) -> Result<Vec<MidiTrack>, String> {
     Ok(crate::smf::read(mid)?.tracks)
+}
+
+/// Each generated track's `status`, in track order (as [`Score::layers`]).
+pub fn layer_statuses(block: &MidiBlock) -> Vec<Option<String>> {
+    block
+        .tracks
+        .iter()
+        .flatten()
+        .filter_map(|t| t.generated.as_ref().map(|g| g.status.clone()))
+        .collect()
 }

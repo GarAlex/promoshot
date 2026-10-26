@@ -122,9 +122,66 @@ pub struct MidiTrack {
     /// imported file had them (sustain, expression, bends…).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub controls: Option<Vec<MidiControl>>,
+    /// A generated layer (MIDI.md §7): an audio file in `Resources/.midi/`
+    /// made by a model that heard the rest of the block, mixed like a
+    /// track. A track with this plays no notes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated: Option<MidiGenerated>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
+
+/// `track.generated` (MIDI.md §7): what made the layer and the file it
+/// made. Only `file` reaches the take (with its bytes); the rest is the
+/// record a Regenerate starts from.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MidiGenerated {
+    /// `ace-step`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// The provider's task, `lego` (a layer over the context).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+    /// The bars it plays, 1-based, `to` exclusive (absent: the whole take).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<MidiRange>,
+    /// Its file in `Resources/.midi/`, 48 kHz stereo WAV, sample 0 at the
+    /// take's start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// [`context_hash`] of the block it heard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_hash: Option<String>,
+    /// ACE-Step's `track_name` (strings, synth, drums…): it decides the gate
+    /// and whether the mix high-passes the layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_name: Option<String>,
+    /// The key the layer was asked for ("C minor").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyscale: Option<String>,
+    /// `false`: no high-pass in the mix; a number: its corner in Hz;
+    /// absent: 90 Hz on a tonal layer (its low register stacks on the bass).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub high_pass: Option<Value>,
+    /// `current`, or `contextChanged` once the MIDI it heard has changed —
+    /// marked by a settle, never regenerated silently.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// `generated.status` for a layer whose context is unchanged.
+pub const STATUS_CURRENT: &str = "current";
+/// `generated.status` once the MIDI the layer heard has changed.
+pub const STATUS_CONTEXT_CHANGED: &str = "contextChanged";
 
 /// One move at beat `t`: a controller (`cc` 0–127 to `v` 0–127), a pitch
 /// bend (`bend` 0–16383, 8192 centre) or a program change (`program`).
@@ -170,6 +227,11 @@ pub struct MidiTempo {
 }
 
 impl MidiTrack {
+    /// Whether the track is a generated layer rather than a synth.
+    pub fn is_generated(&self) -> bool {
+        self.generated.is_some()
+    }
+
     /// Whether the track plays the percussion bank.
     pub fn is_drums(&self) -> bool {
         match &self.bank {
@@ -402,12 +464,40 @@ fn write_canonical(value: &Value, out: &mut String) {
 /// SHA-256 as hex text, a zero byte and [`RENDERER`]. The bank enters by its hash alone, so a renamed
 /// bank is the same bank and a different file is a re-render.
 pub fn receipt(block: &Value, mid: Option<&[u8]>, bank_sha256: &str) -> String {
+    receipt_with_layers(block, mid, &[], bank_sha256)
+}
+
+/// A generated layer's bytes as the receipt takes them: `None` for a file
+/// that is not there (so its return renders again).
+pub type LayerBytes = Option<Vec<u8>>;
+
+/// [`receipt`] for a block with generated layers: of each `generated`
+/// only `file`, `highPass` and `trackName` count (the mix's high-pass
+/// follows them; caption, seed, status and the rest made the file, they
+/// do not change the take), and after [`RENDERER`] each layer's
+/// bytes in track order — a zero byte, then the length and bytes, or
+/// `0xFF` for a missing file. With no layers it is [`receipt`] exactly,
+/// so a block without generated tracks keeps the receipt it had.
+pub fn receipt_with_layers(
+    block: &Value,
+    mid: Option<&[u8]>,
+    layers: &[LayerBytes],
+    bank_sha256: &str,
+) -> String {
     use sha2::Digest;
     let mut stripped = block.clone();
     if let Some(map) = stripped.as_object_mut() {
         map.remove("renderedHash");
         map.remove("bank");
         map.remove("take");
+        if let Some(tracks) = map.get_mut("tracks").and_then(Value::as_array_mut) {
+            for track in tracks {
+                if let Some(generated) = track.get_mut("generated").and_then(Value::as_object_mut) {
+                    generated
+                        .retain(|k, _| matches!(k.as_str(), "file" | "highPass" | "trackName"));
+                }
+            }
+        }
     }
     let mut hasher = sha2::Sha256::new();
     hasher.update(canonical(&stripped).as_bytes());
@@ -420,11 +510,55 @@ pub fn receipt(block: &Value, mid: Option<&[u8]>, bank_sha256: &str) -> String {
     hasher.update(bank_sha256.trim().to_ascii_lowercase().as_bytes());
     hasher.update([0u8]);
     hasher.update(RENDERER.to_le_bytes());
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    for layer in layers {
+        hasher.update([0u8]);
+        match layer {
+            Some(bytes) => {
+                hasher.update((bytes.len() as u64).to_le_bytes());
+                hasher.update(bytes);
+            }
+            None => hasher.update([0xFFu8]),
+        }
+    }
+    hex(hasher.finalize().as_slice())
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// What a generated layer heard, as a hash (MIDI.md §7): the canonical
+/// block with every generated track taken out and the mix left out — the
+/// render's own keys, `level`, and each track's `volume`, `pan`, `mute`
+/// and `solo` — then the `.mid` bytes of a slice-1 file block. Notes,
+/// steps, programs, tempo, meter and loop count, so an edit to the music
+/// marks the layer `contextChanged`; balancing the mix does not.
+pub fn context_hash(block: &Value, mid: Option<&[u8]>) -> String {
+    use sha2::Digest;
+    let mut stripped = block.clone();
+    if let Some(map) = stripped.as_object_mut() {
+        for key in ["renderedHash", "bank", "take", "level"] {
+            map.remove(key);
+        }
+        if let Some(tracks) = map.get_mut("tracks").and_then(Value::as_array_mut) {
+            tracks.retain(|t| t.get("generated").is_none_or(Value::is_null));
+            for track in tracks.iter_mut() {
+                if let Some(track) = track.as_object_mut() {
+                    for key in ["volume", "pan", "mute", "solo"] {
+                        track.remove(key);
+                    }
+                }
+            }
+        }
+    }
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(canonical(&stripped).as_bytes());
+    hasher.update([0u8]);
+    if let Some(bytes) = mid {
+        hasher.update((bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
+    }
+    hex(hasher.finalize().as_slice())
 }
 
 #[cfg(test)]
@@ -513,6 +647,91 @@ mod tests {
         assert_ne!(receipt(&block(), None, "ac"), base);
     }
 
+    fn with_layer() -> Value {
+        let mut b = block();
+        b["tracks"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "name": "Rhodes", "volume": 0.7,
+            "generated": { "provider": "ace-step", "task": "lego", "caption": "warm Rhodes",
+                "model": "acestep-v15-base", "seed": 1234, "range": { "from": 1, "to": 5 },
+                "file": "Loop · Rhodes.wav", "contextHash": "ab", "status": "current",
+                "steps": 32 } }));
+        b
+    }
+
+    /// The generated track reads typed and keeps what it does not model.
+    #[test]
+    fn a_generated_track_round_trips() {
+        let original = with_layer();
+        let typed = MidiBlock::from_value(&original).unwrap();
+        let track = &typed.tracks.as_ref().unwrap()[1];
+        assert!(track.is_generated() && !typed.tracks.as_ref().unwrap()[0].is_generated());
+        let g = track.generated.as_ref().unwrap();
+        assert_eq!(g.seed, Some(1234));
+        assert_eq!(g.range.as_ref().unwrap().to, 5.0);
+        assert_eq!(g.status.as_deref(), Some(STATUS_CURRENT));
+        assert_eq!(g.extra["steps"], 32);
+        let back = serde_json::to_value(&typed).unwrap();
+        assert_eq!(canonical(&back), canonical(&original));
+    }
+
+    /// Of a layer, the receipt follows the file and its bytes, not its
+    /// record; without layers it is the plain receipt.
+    #[test]
+    fn the_receipt_follows_the_layer_bytes() {
+        assert_eq!(
+            receipt_with_layers(&block(), None, &[], "ab"),
+            receipt(&block(), None, "ab")
+        );
+        let base = receipt_with_layers(&with_layer(), None, &[Some(b"RIFF1".to_vec())], "ab");
+        let mut marked = with_layer();
+        marked["tracks"][1]["generated"]["status"] = json!("contextChanged");
+        marked["tracks"][1]["generated"]["caption"] = json!("other");
+        assert_eq!(
+            receipt_with_layers(&marked, None, &[Some(b"RIFF1".to_vec())], "ab"),
+            base
+        );
+        assert_ne!(
+            receipt_with_layers(&with_layer(), None, &[Some(b"RIFF2".to_vec())], "ab"),
+            base
+        );
+        assert_ne!(
+            receipt_with_layers(&with_layer(), None, &[None], "ab"),
+            base
+        );
+        let mut renamed = with_layer();
+        renamed["tracks"][1]["generated"]["file"] = json!("Other.wav");
+        assert_ne!(
+            receipt_with_layers(&renamed, None, &[Some(b"RIFF1".to_vec())], "ab"),
+            base
+        );
+    }
+
+    /// The context is the music without the layers and without the mix.
+    #[test]
+    fn the_context_is_the_music_not_the_mix() {
+        let heard = context_hash(&block(), None);
+        assert_eq!(
+            context_hash(&with_layer(), None),
+            heard,
+            "layers are not context"
+        );
+        let mut mixed = block();
+        mixed["tracks"][0]["volume"] = json!(0.2);
+        mixed["tracks"][0]["mute"] = json!(true);
+        mixed["level"] = json!(6);
+        mixed["renderedHash"] = json!("x");
+        assert_eq!(context_hash(&mixed, None), heard);
+        let mut edited = block();
+        edited["tracks"][0]["notes"][0]["n"] = json!(61);
+        assert_ne!(context_hash(&edited, None), heard);
+        let mut retimed = block();
+        retimed["tempo"] = json!(100);
+        assert_ne!(context_hash(&retimed, None), heard);
+        assert_ne!(context_hash(&block(), Some(b"MThd")), heard);
+    }
+
     fn project(resource: Value) -> crate::ProjectMetadata {
         let doc = json!({ "id": "P", "name": "T", "createdAt": 0, "state": "recorded",
             "subtitles": [], "trimStart": 0, "trimEnd": 0, "videoDuration": 0,
@@ -531,6 +750,10 @@ mod tests {
         let midi = project(json!({ "id": "M", "kind": "audio", "filename": "",
             "displayName": "Loop", "addedAt": 0, "midi": { "source": "steps" } }));
         assert_eq!(midi.minimum_reader_version(), crate::LOSSLESS_READER);
+        // A generated layer is one more ignorable field: still 48.
+        let layered = project(json!({ "id": "M", "kind": "audio", "filename": "",
+            "displayName": "Loop", "addedAt": 0, "midi": with_layer() }));
+        assert_eq!(layered.minimum_reader_version(), crate::LOSSLESS_READER);
         assert!(crate::unread::APP_RESOURCE_KEYS.contains(&KEY));
     }
 

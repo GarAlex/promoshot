@@ -47,6 +47,20 @@ pub struct Settled {
     /// The normalisation gain the take got, dB.
     pub gain_db: Option<f64>,
     pub bank: String,
+    /// The generated layers the take mixed (or would have).
+    pub layers: Vec<LayerInfo>,
+}
+
+/// One generated layer as a result lists it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerInfo {
+    pub name: String,
+    pub file: Option<String>,
+    /// Its file is in `Resources/.midi/`.
+    pub present: bool,
+    pub muted: bool,
+    /// `current` or `contextChanged` (as the settle left it).
+    pub status: Option<String>,
 }
 
 impl Settled {
@@ -78,6 +92,10 @@ impl Settled {
             "loudness": self.loudness.map(|l| (l * 10.0).round() / 10.0),
             "gainDb": self.gain_db.map(|g| (g * 10.0).round() / 10.0),
             "bank": self.bank,
+            "layers": self.layers.iter().map(|l| json!({
+                "name": l.name, "file": l.file, "present": l.present, "muted": l.muted,
+                "status": l.status,
+            })).collect::<Vec<_>>(),
         })
     }
 
@@ -106,6 +124,20 @@ impl Settled {
                 t.program,
                 t.notes,
                 if t.muted { ", muted" } else { "" }
+            ));
+        }
+        for l in &self.layers {
+            lines.push(format!(
+                "  {}: generated layer {}{}{}",
+                l.name,
+                l.file.as_deref().unwrap_or("(no file)"),
+                if l.present { "" } else { " — missing" },
+                match l.status.as_deref() {
+                    Some(midi::STATUS_CONTEXT_CHANGED) =>
+                        ", context changed since it was generated",
+                    _ if l.muted => ", muted",
+                    _ => "",
+                }
             ));
         }
         for note in &self.notes {
@@ -262,7 +294,8 @@ pub fn stale(
     if !resources_dir.join(filename).is_file() {
         return Ok(Some(format!("its file {filename} is missing")));
     }
-    let print = midi::receipt(block, mid.as_deref(), bank_sha256);
+    let (layers, _) = layer_bytes(block, resources_dir);
+    let print = midi::receipt_with_layers(block, mid.as_deref(), &layers, bank_sha256);
     match block.get("renderedHash").and_then(Value::as_str) {
         Some(held) if held == print => Ok(None),
         Some(_) => Ok(Some("the block changed since it was rendered".into())),
@@ -270,8 +303,42 @@ pub fn stale(
     }
 }
 
-/// A resource's index, its slice-1 `.mid` bytes, its score and receipt.
-type Prepared = (usize, Option<Vec<u8>>, Score, String);
+/// The generated layers' files, in track order: each one's bytes (None
+/// when the track names no plain file or the file is not there), and the
+/// names. Only `Resources/.midi/` is read.
+pub fn layer_bytes(
+    block: &Value,
+    resources_dir: &Path,
+) -> (Vec<midi::LayerBytes>, Vec<Option<String>>) {
+    let mut bytes = Vec::new();
+    let mut names = Vec::new();
+    for track in block["tracks"].as_array().into_iter().flatten() {
+        let Some(generated) = track.get("generated").filter(|g| !g.is_null()) else {
+            continue;
+        };
+        let name = generated["file"]
+            .as_str()
+            .filter(|f| plain(f))
+            .map(str::to_string);
+        bytes.push(
+            name.as_deref()
+                .and_then(|n| std::fs::read(mid_path(resources_dir, n)).ok()),
+        );
+        names.push(name);
+    }
+    (bytes, names)
+}
+
+/// A resource's index, its slice-1 `.mid` bytes, its score, receipt and
+/// its layers' audio.
+struct Prepared {
+    index: usize,
+    mid: Option<Vec<u8>>,
+    score: Score,
+    print: String,
+    layers: Vec<Option<render::Stereo>>,
+    present: Vec<bool>,
+}
 
 /// The block, its score and its receipt under `bank`.
 fn prepare(
@@ -283,12 +350,78 @@ fn prepare(
     let index = index_of(doc, resource_id)?;
     let (block, mid) = read_block(&doc["resources"][index], resources_dir)?;
     let score = score::expand(&block, mid.as_deref()).map_err(|e| format!("{resource_id}: {e}"))?;
-    let print = midi::receipt(
-        &doc["resources"][index][midi::KEY],
-        mid.as_deref(),
-        &bank.sha256,
-    );
-    Ok((index, mid, score, print))
+    let value = &doc["resources"][index][midi::KEY];
+    let (bytes, _) = layer_bytes(value, resources_dir);
+    let print = midi::receipt_with_layers(value, mid.as_deref(), &bytes, &bank.sha256);
+    let mut layers = Vec::new();
+    for (layer, data) in score.layers.iter().zip(&bytes) {
+        layers.push(match data {
+            Some(data) => Some(render::read_stereo(data).map_err(|e| {
+                format!(
+                    "{resource_id}: generated layer \"{}\" ({}): {e}",
+                    layer.name,
+                    layer.file.as_deref().unwrap_or_default()
+                )
+            })?),
+            None => None,
+        });
+    }
+    let present = bytes.iter().map(Option::is_some).collect();
+    Ok(Prepared {
+        index,
+        mid,
+        score,
+        print,
+        layers,
+        present,
+    })
+}
+
+/// Marks each generated track of the resource's block against the MIDI
+/// it now holds: `contextChanged` when its `contextHash` no longer
+/// matches, `current` again when it does (an edit undone). Nothing is
+/// regenerated. True when a status changed.
+pub fn mark_context(resource: &mut Value, mid: Option<&[u8]>) -> bool {
+    let Some(block) = resource.get(midi::KEY).filter(|b| b.is_object()) else {
+        return false;
+    };
+    let heard = midi::context_hash(block, mid);
+    let mut changed = false;
+    if let Some(tracks) = resource[midi::KEY]["tracks"].as_array_mut() {
+        for track in tracks {
+            let Some(generated) = track.get_mut("generated").and_then(Value::as_object_mut) else {
+                continue;
+            };
+            let Some(held) = generated.get("contextHash").and_then(Value::as_str) else {
+                continue;
+            };
+            let status = if held == heard {
+                midi::STATUS_CURRENT
+            } else {
+                midi::STATUS_CONTEXT_CHANGED
+            };
+            if generated.get("status").and_then(Value::as_str) != Some(status) {
+                generated.insert("status".into(), json!(status));
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn layer_infos(score: &Score, present: &[bool]) -> Vec<LayerInfo> {
+    score
+        .layers
+        .iter()
+        .enumerate()
+        .map(|(i, l)| LayerInfo {
+            name: l.name.clone(),
+            file: l.file.clone(),
+            present: present.get(i).copied().unwrap_or(false),
+            muted: l.muted,
+            status: l.status.clone(),
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -303,6 +436,7 @@ fn settled(
     take: Option<&render::Take>,
     held: &Value,
     bank: &Bank,
+    layers: Vec<LayerInfo>,
 ) -> Settled {
     let mut notes = score.notes.clone();
     if let Some(take) = take {
@@ -325,6 +459,7 @@ fn settled(
         loudness: take.map_or_else(|| held["loudness"].as_f64(), |t| t.loudness),
         gain_db: take.map(|t| t.gain_db).or_else(|| held["gainDb"].as_f64()),
         bank: bank.name.clone(),
+        layers,
     }
 }
 
@@ -339,7 +474,22 @@ pub fn settle_doc(
     resource_id: &str,
     bank: &Bank,
 ) -> Result<Settled, String> {
-    let (index, mid, score, print) = prepare(doc, resources_dir, resource_id, bank)?;
+    let Prepared {
+        index,
+        mid,
+        mut score,
+        print,
+        layers,
+        present,
+    } = prepare(doc, resources_dir, resource_id, bank)?;
+    // The layers hear the MIDI as it is now: an edit marks them.
+    mark_context(&mut doc["resources"][index], mid.as_deref());
+    if let Ok(block) = MidiBlock::from_value(&doc["resources"][index][midi::KEY]) {
+        let marked = score::layer_statuses(&block);
+        for (layer, status) in score.layers.iter_mut().zip(marked) {
+            layer.status = status;
+        }
+    }
     let filename = take_name(doc, index);
     let destination = resources_dir.join(&filename);
     let held = doc["resources"][index][midi::KEY]["renderedHash"].as_str() == Some(print.as_str());
@@ -351,7 +501,8 @@ pub fn settle_doc(
             _ => wav_seconds(&destination)?,
         }
     } else {
-        let rendered = render::render(&score, bank).map_err(|e| format!("{resource_id}: {e}"))?;
+        let rendered =
+            render::render_mix(&score, bank, &layers).map_err(|e| format!("{resource_id}: {e}"))?;
         std::fs::create_dir_all(resources_dir).map_err(|e| e.to_string())?;
         crate::sounds::write_atomic(&destination, &render::wav(&rendered))?;
         let seconds = rendered.seconds();
@@ -370,6 +521,7 @@ pub fn settle_doc(
         take.as_ref(),
         &record,
         bank,
+        layer_infos(&score, &present),
     );
     {
         let resource = &mut doc["resources"][index];
@@ -426,8 +578,16 @@ pub fn preview(
     bank: &Bank,
     out: &Path,
 ) -> Result<Settled, String> {
-    let (_, mid, score, print) = prepare(doc, resources_dir, resource_id, bank)?;
-    let take = render::render(&score, bank).map_err(|e| format!("{resource_id}: {e}"))?;
+    let Prepared {
+        mid,
+        score,
+        print,
+        layers,
+        present,
+        ..
+    } = prepare(doc, resources_dir, resource_id, bank)?;
+    let take =
+        render::render_mix(&score, bank, &layers).map_err(|e| format!("{resource_id}: {e}"))?;
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
@@ -443,6 +603,7 @@ pub fn preview(
         Some(&take),
         &Value::Null,
         bank,
+        layer_infos(&score, &present),
     ))
 }
 
@@ -723,6 +884,7 @@ pub fn findings(doc: &Value, resources_dir: &Path) -> Vec<String> {
         let bank = resource[midi::KEY]["bank"]["sha256"]
             .as_str()
             .unwrap_or_default();
+        out.extend(layer_findings(resource, resources_dir, name, &id));
         let why = match stale(doc, resources_dir, &id, bank) {
             Ok(None) => continue,
             Ok(Some(why)) => why,
@@ -736,6 +898,46 @@ pub fn findings(doc: &Value, resources_dir: &Path) -> Vec<String> {
     }
     if stale_any && crate::sounds::installed_default().is_none() {
         out.push(crate::sounds::missing_bank_message());
+    }
+    out
+}
+
+/// Validate's words for a resource's generated layers: a file that is not
+/// in `Resources/.midi/`, and a layer whose MIDI has changed since it was
+/// generated (by its `contextHash`, so it needs no settle to say so).
+fn layer_findings(resource: &Value, resources_dir: &Path, name: &str, id: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let block = &resource[midi::KEY];
+    let mid = read_block(resource, resources_dir)
+        .ok()
+        .and_then(|(_, mid)| mid);
+    let heard = midi::context_hash(block, mid.as_deref());
+    for track in block["tracks"].as_array().into_iter().flatten() {
+        let Some(generated) = track.get("generated").filter(|g| g.is_object()) else {
+            continue;
+        };
+        let track_name = track["name"].as_str().unwrap_or("Generated");
+        let file = generated["file"].as_str().unwrap_or_default();
+        let regenerate = format!("`promo midi generate <project> {id} --track \"{track_name}\"`");
+        if file.is_empty() || !plain(file) || !mid_path(resources_dir, file).is_file() {
+            out.push(format!(
+                "Generated layer missing: \"{track_name}\" on \"{name}\" — its file {} is not \
+                 in Resources/.midi/, so it plays silent; generate it again ({regenerate})",
+                if file.is_empty() { "(none)" } else { file }
+            ));
+            continue;
+        }
+        let changed = generated["status"] == midi::STATUS_CONTEXT_CHANGED
+            || generated["contextHash"]
+                .as_str()
+                .is_some_and(|held| held != heard);
+        if changed {
+            out.push(format!(
+                "Generated layer context changed: \"{track_name}\" on \"{name}\" was generated \
+                 over MIDI that has changed since — it still plays as generated; regenerate it \
+                 ({regenerate}) to follow the edit"
+            ));
+        }
     }
     out
 }

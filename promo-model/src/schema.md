@@ -1207,7 +1207,7 @@ A reveal can arrive on a narration's words instead of at its own pace —
   `renderedHash` is written by the app — do not set it by hand, it is
   what stops unchanged text from being paid for twice.
 
-## MIDI — midi, sequence, steps, notes, piano roll, instrument, program, drums, loop, tempo map, level, sound effect, soundfont, mid
+## MIDI — midi, sequence, steps, notes, piano roll, instrument, program, drums, loop, tempo map, level, sound effect, soundfont, mid, generated, ace-step
 
 An `audio` resource may carry a `midi` block instead of a recording:
 sound authored as MIDI and rendered to an ordinary 48 kHz 24-bit WAV in
@@ -1273,6 +1273,15 @@ never runs on it and a beat clock counts it exactly.
   "MIDI not rendered" for a used one whose take is missing or stale.
   The bank is GeneralUser GS (bundled in the apps; headless,
   `promoshot-mcp sounds install generaluser`).
+- A track with `generated {provider: "ace-step", task: "lego", caption,
+  trackName, keyscale, seed, range: {from, to}, file, contextHash,
+  status, highPass}` is a generated layer: an audio file in
+  `Resources/.midi/`, sample 0 at the take's start, mixed with the
+  track's volume/pan/mute/solo (its bytes are in the receipt); a tonal
+  one is high-passed at 90 Hz unless `highPass: false`. Made by promo_midi `generate` / `promo midi generate`
+  against an ACE-Step server; a settle marks it `contextChanged` when
+  the notes it heard change (never regenerated silently), and validate
+  warns about that or a missing file.
 
 Nested compositions (rung 19). A **composition is a resource**
 (`"kind": "composition"`) and it is shown by an ordinary `video`-kind

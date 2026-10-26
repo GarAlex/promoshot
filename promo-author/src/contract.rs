@@ -867,7 +867,10 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "file": { "type": "string", "description": "A .mid to import (a path)" },
                     "midBase64": { "type": "string", "description": "A .mid's bytes, base64" },
                     "check": { "type": "boolean", "description":
-                        "Render nothing: say whether the take is current, and why not" } },
+                        "Render nothing: say whether the take is current, and why not" },
+                    "generate": { "type": "object", "description":
+                        "{track, caption, seed?, range?: {from, to}}: an ACE-Step layer over the MIDI \
+                        (the person's server)" } },
                 "required": ["project", "resource"] }
         }),
     ];
