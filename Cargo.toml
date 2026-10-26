@@ -11,6 +11,7 @@ members = [
     "promo-engine",
     "promo-author",
     "promo-speech",
+    "promo-midi",
     "promoshot-mcp",
 ]
 

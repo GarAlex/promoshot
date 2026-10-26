@@ -1,0 +1,29 @@
+[package]
+name = "promo-midi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MIDI-sequenced sound for PromoShot: the midi block expanded to events, rendered with a SoundFont to 48 kHz WAV, the receipt and the settle"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The typed `midi` block and its receipt.
+promo-model = { path = "../promo-model" }
+serde_json.workspace = true
+sha2 = "0.10"
+# The synth: a pure-Rust SoundFont renderer (MIT).
+rustysynth = "1.3.8"
+# Reading an imported .mid (Unlicense); no rayon.
+midly = { version = "0.5", default-features = false, features = ["std"] }
+ureq = { version = "2", optional = true }
+
+[features]
+# Installing the bank from its pinned URL. The apps bundle their copy and
+# leave it out.
+default = ["download"]
+download = ["dep:ureq"]
+
+[dev-dependencies]
+midly = { version = "0.5", default-features = false, features = ["std"] }
