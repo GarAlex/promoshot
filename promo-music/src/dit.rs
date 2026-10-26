@@ -32,7 +32,7 @@ pub const TIMBRE_FRAMES: usize = 750;
 /// Layer `i` attends within the sliding window when even, fully when odd
 /// (the config's `layer_types`).
 fn sliding(i: usize) -> bool {
-    i % 2 == 0
+    i.is_multiple_of(2)
 }
 
 /// The masks one sequence length needs: (sliding, full).

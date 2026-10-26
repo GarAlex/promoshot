@@ -194,3 +194,32 @@ fn m4_full_lego_from_dumped_noise() {
     assert!(snr_src > floor(&m, 60.0, 25.0) && snr_dec > floor(&m, 60.0, 25.0));
     assert!(snr_lat > floor(&m, 20.0, 5.0) && snr_a > floor(&m, 15.0, 3.0), "{snr_lat} {snr_a}");
 }
+
+/// The MLX backend's run (the one the experiment's takes came from): its
+/// conditioning, context and noise into this sampler in MLX mode.
+#[test]
+fn m5_mlx_path_from_dumped_noise() {
+    let Some((refs, ckpt)) = dirs() else { return };
+    let path = refs.join("mlx_strings_1234/lego_ref.safetensors");
+    if !path.exists() {
+        return;
+    }
+    let r = load(&path);
+    let dev = device();
+    let dtype = promo_music::default_dtype(&dev);
+    let m = promo_music::pipeline::AceStep::load(&ckpt, dev, dtype).unwrap();
+    let kv = m.cross_kv(&to(&m, &r["mlx.enc"])).unwrap();
+    let context = to(&m, &r["mlx.ctx"]);
+    let c = promo_music::sampler::Conditioning { dit: m.dit(), context: &context, kv: &kv };
+    let mut apg = promo_music::sampler::Apg::new(promo_music::sampler::ApgMode::Mlx);
+    let t = Instant::now();
+    let out = promo_music::sampler::sample_with(&c, &r["mlx.noise"], 50, 7.0, 3.0, &mut apg, &mut |_| true).unwrap().unwrap();
+    eprintln!("diffusion: {:.2?}", t.elapsed());
+    let (_, _, snr) = report("final latents vs MLX", &out, &r["mlx.target_latents"]);
+    let wav = m.decode(&out).unwrap();
+    report("audio vs MLX", &wav, &r["audio"]);
+    if let Ok(dir) = std::env::var("PROMOSHOT_ACE_OUT") {
+        candle_core::safetensors::save(&HashMap::from([("audio".to_string(), wav)]), PathBuf::from(dir).join("rust_mlxmode.safetensors")).unwrap();
+    }
+    assert!(snr > 10.0, "{snr}");
+}

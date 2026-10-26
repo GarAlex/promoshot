@@ -61,6 +61,9 @@ pub fn lyrics() -> &'static str {
     "# Languages\nen\n\n# Lyric\n[Instrumental]<|endoftext|>"
 }
 
+/// A generated layer: (left, right) at 48 kHz.
+pub type Layer = (Vec<f32>, Vec<f32>);
+
 /// Timings and sizes of one run, for the logs and the perf report.
 #[derive(Debug, Clone, Default)]
 pub struct Timings {
@@ -224,10 +227,21 @@ impl AceStep {
         self.vae_enc.encode_tiled(&a, noise)?.transpose(1, 2)?.contiguous()
     }
 
+    /// Decode window in latents: the reference's CPU choice on the CPU
+    /// (`PROMOSHOT_MUSIC_DECODE_CHUNK` overrides), 512 on a GPU, whose
+    /// per-dispatch cost makes small windows slow.
+    pub fn decode_chunk(&self) -> usize {
+        std::env::var("PROMOSHOT_MUSIC_DECODE_CHUNK")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|&v: &usize| v > 2 * vae::DECODE_OVERLAP)
+            .unwrap_or(if self.device.is_cpu() { vae::DECODE_CHUNK } else { 512 })
+    }
+
     /// (1, T, 64) latents → (2, T·1920) audio on the CPU, f32.
     pub fn decode(&self, latents: &Tensor) -> CResult<Tensor> {
         let z = self.to_dev(latents)?.transpose(1, 2)?.contiguous()?;
-        let wav = self.vae_dec.decode_tiled(&z, vae::DECODE_CHUNK, vae::DECODE_OVERLAP)?.squeeze(0)?;
+        let wav = self.vae_dec.decode_tiled(&z, self.decode_chunk(), vae::DECODE_OVERLAP)?.squeeze(0)?;
         // As the reference: a decode peaking over full scale is scaled down to it.
         let peak = wav.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?;
         if peak > 1.0 {
@@ -245,7 +259,7 @@ impl AceStep {
         progress: &mut dyn FnMut(f64),
         cancel: &dyn Fn() -> bool,
         timings: &mut Timings,
-    ) -> std::result::Result<Option<(Vec<f32>, Vec<f32>)>, String> {
+    ) -> std::result::Result<Option<Layer>, String> {
         let n = req.left.len();
         if req.right.len() != n {
             return Err("context channels differ in length".into());

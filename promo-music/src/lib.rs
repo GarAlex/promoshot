@@ -10,22 +10,26 @@
 //! and [`store`] (where the weights live and their pinned install).
 
 pub mod dit;
+pub mod generator;
 pub mod nn;
 pub mod pipeline;
 pub mod rng;
 pub mod sampler;
+pub mod store;
 pub mod text;
 pub mod vae;
 
+pub use generator::{install_generator, AceStepGenerator};
+
 use candle_core::{DType, Device};
 
-/// The compute device this build prefers: the first Metal GPU when the
-/// `metal` feature is on (and `PROMOSHOT_MUSIC_DEVICE` is not `cpu`), else
-/// the first CUDA GPU with `cuda`, else the CPU.
+/// The compute device this build prefers: the first Metal GPU on macOS
+/// (unless `PROMOSHOT_MUSIC_DEVICE` is `cpu`), else the first CUDA GPU
+/// with the `cuda` feature, else the CPU.
 pub fn default_device() -> Device {
     let want_cpu = std::env::var("PROMOSHOT_MUSIC_DEVICE").is_ok_and(|v| v == "cpu");
     if !want_cpu {
-        #[cfg(feature = "metal")]
+        #[cfg(target_os = "macos")]
         if let Ok(d) = Device::new_metal(0) {
             return d;
         }

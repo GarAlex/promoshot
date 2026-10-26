@@ -97,9 +97,32 @@ struct ConvT {
     stride: usize,
 }
 
+/// The decoder's transposed convolutions have kernel 2·stride and padding
+/// stride/2 (every stride is even), so each input frame writes two
+/// stride-long blocks: one matmul and an overlap-add. candle's generic
+/// `conv_transpose1d` kernel is an order of magnitude slower on Metal.
+pub fn conv_transpose_k2s(x: &Tensor, w: &Tensor, stride: usize, padding: usize) -> Result<Tensor> {
+    let (b, cin, len) = x.dims3()?;
+    let (_, cout, k) = w.dims3()?;
+    assert_eq!(k, 2 * stride);
+    let wr = w.reshape((cin, cout * k))?;
+    let mut outs = Vec::with_capacity(b);
+    for i in 0..b {
+        let xt = x.get(i)?.t()?.contiguous()?; // (len, cin)
+        let z = xt.matmul(&wr)?.reshape((len, cout, k))?;
+        let a = z.narrow(2, 0, stride)?.permute((1, 0, 2))?.reshape((cout, len * stride))?;
+        let bb = z.narrow(2, stride, stride)?.permute((1, 0, 2))?.reshape((cout, len * stride))?;
+        let zeros = Tensor::zeros((cout, stride), x.dtype(), x.device())?;
+        let full = (Tensor::cat(&[&a, &zeros], 1)? + Tensor::cat(&[&zeros, &bb], 1)?)?;
+        let out_len = (len - 1) * stride + k - 2 * padding;
+        outs.push(full.narrow(1, padding, out_len)?);
+    }
+    Tensor::stack(&outs, 0)
+}
+
 impl Module for ConvT {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        x.conv_transpose1d(&self.w, self.padding, 0, self.stride, 1, 1)?.broadcast_add(&self.b)
+        conv_transpose_k2s(x, &self.w, self.stride, self.padding)?.broadcast_add(&self.b)
     }
 }
 

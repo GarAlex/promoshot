@@ -32,10 +32,17 @@ promo-author = { path = "../promo-author" }
 promo-speech = { path = "../promo-speech", default-features = false }
 # `promo midi render`, `promo sounds`, validate's "MIDI not rendered".
 promo-midi = { path = "../promo-midi" }
+# `promo music` and the native model behind `midi generate` (candle; Metal
+# on macOS). Off for promo-ffi, which links this crate as a library.
+promo-music = { path = "../promo-music", optional = true }
 serde_json.workspace = true
 # PNG/JPEG only: this decodes project images and writes frames, it is not an
 # image-processing tool.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
+
+[features]
+default = ["music"]
+music = ["dep:promo-music"]
 
 [dev-dependencies]
 # Test pictures carry a real Display P3 profile.

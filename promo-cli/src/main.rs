@@ -73,6 +73,11 @@ USAGE:
     promo sounds [list | install generaluser]
         the sound banks MIDI renders with (PROMOSHOT_SOUNDS, else the
         per-user folder); install fetches GeneralUser GS and its licence
+    promo music [list | install ace-step-base | remove ace-step-base]
+        the music model `midi generate` runs (ACE-Step 1.5 base, native, about
+        6.3 GB; PROMOSHOT_MUSIC_MODELS, else the per-user folder); install
+        downloads the pinned Hugging Face files, verifies each SHA-256 and
+        resumes an interrupted download
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -255,6 +260,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     }
     if command == "sounds" {
         println!("{}", sounds(rest)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    if command == "music" {
+        println!("{}", music(rest)?);
         return Ok(ExitCode::SUCCESS);
     }
     // Media senses take a FILE and a verb, not a project.
@@ -845,6 +854,10 @@ fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
     request.seed = seed;
     request.range = range;
     request.track_name = track_name;
+    // The native model, when its weights are installed (kept loaded: this
+    // process ends after the one generation).
+    #[cfg(feature = "music")]
+    promo_music::install_generator(true);
     let model = generate::generator()?;
     struct Stderr(std::time::Instant);
     impl Progress for Stderr {
@@ -931,6 +944,52 @@ fn settle_used_midi(dir: &Path) -> Result<Vec<String>, String> {
     std::fs::write(&temporary, out).map_err(|e| format!("write: {e}"))?;
     std::fs::rename(&temporary, &meta_path).map_err(|e| format!("write: {e}"))?;
     Ok(lines)
+}
+
+/// `promo music [list | install <id> | remove <id>]`.
+#[cfg(feature = "music")]
+fn music(args: &[String]) -> Result<String, String> {
+    use promo_music::store;
+    let dir = store::models_dir();
+    let usage = "usage: promo music [list | install ace-step-base | remove ace-step-base]";
+    match (args.first().map(String::as_str), args.get(1)) {
+        (None | Some("list"), None) => {
+            let mut lines = vec![format!("music models in {}:", dir.display())];
+            for p in store::catalog() {
+                lines.push(format!(
+                    "  {:<14} {:<2} {:>5.2} GB  {}  {}",
+                    p.id,
+                    if store::installed(&dir, p.id) { "✓" } else { "-" },
+                    p.bytes() as f64 / 1e9,
+                    p.title,
+                    p.license
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+        (Some("install"), Some(id)) => {
+            let mut shown = 0u64;
+            let path = store::install(&dir, id, &mut |p| {
+                let percent = (p.done * 100).checked_div(p.total).unwrap_or(0).min(100);
+                if percent >= shown + 5 {
+                    shown = percent;
+                    eprintln!("{id}: {percent}% of {:.2} GB", p.total as f64 / 1e9);
+                }
+            }, &|| false)?;
+            Ok(format!("{id}: installed and verified at {}", path.display()))
+        }
+        (Some("remove"), Some(id)) => Ok(if store::remove(&dir, id)? {
+            format!("{id}: removed")
+        } else {
+            format!("{id}: not installed")
+        }),
+        _ => Err(usage.into()),
+    }
+}
+
+#[cfg(not(feature = "music"))]
+fn music(_: &[String]) -> Result<String, String> {
+    Err("this build of promo has no music model support".into())
 }
 
 /// `promo sounds [list | install <bank>]`.
