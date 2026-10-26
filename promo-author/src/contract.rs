@@ -850,11 +850,12 @@ pub fn tools(host: Host) -> Vec<Value> {
                 24-bit, a loop exactly its bars) with the installed sound bank, writing its \
                 filename, duration, beatGrid (the sequence's: never measured) and receipt; an \
                 unchanged block is reused. Answers the tracks with GM names and any note. `midi` \
-                sets the resource's block first (creating the resource): {source: steps|file|\
-                effect, tempo, timeSignature, bars, swing, loop, tracks: [{name, program, bank: \
-                \"drums\", volume, pan, mute, solo, steps: {resolution, length, lanes: [{note, \
-                on: [step], velocity}]}, notes: [{t, d (beats), n, v}]}], effect: {preset, pitch, \
-                length, program}}. Programs by family from 0 piano, 8 chromatic, 16 organ, 24 \
+                sets the resource's block first (creating the resource): {source: notes|\
+                effect, tempo, tempoMap, timeSignature, bars, loop: {from, to} (bars), level (dB), \
+                tracks: [{name, program, bank: \"drums\", volume, pan, mute, solo, steps: \
+                {resolution, length, lanes: [{note, on: [step], velocity}]}, notes: [{t, d \
+                (beats), n, v}]}], effect: {preset, pitch, length, program}}; a .mid becomes \
+                notes. Programs by family from 0 piano, 8 chromatic, 16 organ, 24 \
                 guitar, 32 bass, 40 strings, 48 ensemble, 56 brass, 64 reed, 72 pipe, 80 lead, 88 \
                 pad, 96 synth fx, 104 ethnic, 112 percussive, 120 sfx; drums 36 kick, 38 snare, 39 \
                 clap, 42/46 hat, 49 crash, 51 ride. Effects: rise, hit, whoosh, ding, stinger, \

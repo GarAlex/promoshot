@@ -57,9 +57,10 @@ USAGE:
         WordBoundary events, or [{\"text\",\"start\",\"end\"}] in seconds) as the
         take's provider timing (--provider names it; edge-tts is guessed)
     promo midi render <project-dir> [resource] [--bank <file.sf2>] [--check] [--json]
-        render a MIDI-sequenced audio resource (every one, when none is
-        named) into Resources/ with the sound bank, writing its filename,
-        duration, beatGrid and receipt; an unchanged block is reused
+        render a MIDI-sequenced audio resource (every one a layer uses,
+        when none is named) into Resources/ with the sound bank, writing its
+        filename, duration, beatGrid and receipt; an unchanged block is
+        reused. `promo video` settles the used ones itself
     promo sounds [list | install generaluser]
         the sound banks MIDI renders with (PROMOSHOT_SOUNDS, else the
         per-user folder); install fetches GeneralUser GS and its licence
@@ -281,6 +282,13 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     } else {
         promo_cli::project::Analysis::Allowed
     };
+    // An export's sound includes every MIDI take a layer uses: settled
+    // first (rendered when stale), or refused with how to get the bank.
+    if command == "video" {
+        for line in settle_used_midi(Path::new(dir))? {
+            eprintln!("{line}");
+        }
+    }
     let project = Project::open_with(Path::new(dir), analysis)?;
 
     // One report, printed once — text or JSON — and with --strict the exit
@@ -714,10 +722,13 @@ fn midi(args: &[String]) -> Result<String, String> {
     let doc: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("decode: {e}"))?;
     let ids = match positional.get(1) {
         Some(id) => vec![id.clone()],
-        None => promo_midi::settle::midi_resources(&doc),
+        None => promo_midi::used_midi(&doc),
     };
     if ids.is_empty() {
-        return Ok("no MIDI resources — nothing to render".into());
+        return Ok(
+            "no MIDI resource a layer uses — nothing to render (name one to render it anyway)"
+                .into(),
+        );
     }
     let bank = if check {
         promo_midi::bank(bank.as_deref()).ok()
@@ -755,6 +766,69 @@ fn midi(args: &[String]) -> Result<String, String> {
     } else {
         lines.join("\n")
     })
+}
+
+/// Settles every MIDI resource a layer uses (nested compositions too)
+/// whose take is not current, writing metadata.json once; with no bank,
+/// refuses and says how to install it. Answers one line per take settled.
+fn settle_used_midi(dir: &Path) -> Result<Vec<String>, String> {
+    let meta_path = dir.join("metadata.json");
+    let Ok(text) = std::fs::read_to_string(&meta_path) else {
+        return Ok(Vec::new());
+    };
+    let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Ok(Vec::new());
+    };
+    let used = promo_midi::used_midi(&doc);
+    if used.is_empty() {
+        return Ok(Vec::new());
+    }
+    let resources = dir.join("Resources");
+    let bank = promo_midi::bank(None);
+    let mut stale = Vec::new();
+    for id in &used {
+        let sha = match &bank {
+            Ok(bank) => bank.sha256.clone(),
+            Err(_) => doc["resources"]
+                .as_array()
+                .and_then(|l| l.iter().find(|r| r["id"] == id.as_str()))
+                .and_then(|r| r["midi"]["bank"]["sha256"].as_str())
+                .unwrap_or_default()
+                .to_string(),
+        };
+        if let Some(why) = promo_midi::stale(&doc, &resources, id, &sha)? {
+            stale.push((id.clone(), why));
+        }
+    }
+    if stale.is_empty() {
+        return Ok(Vec::new());
+    }
+    let bank = bank.map_err(|e| {
+        format!(
+            "not rendering: MIDI {} not rendered ({}) — {e}",
+            stale
+                .iter()
+                .map(|(id, _)| format!("\"{id}\""))
+                .collect::<Vec<_>>()
+                .join(", "),
+            stale[0].1
+        )
+    })?;
+    let mut lines = Vec::new();
+    for (id, _) in &stale {
+        let settled = promo_midi::settle_doc(&mut doc, &resources, id, &bank)?;
+        lines.push(format!(
+            "midi: {}",
+            settled.report().lines().next().unwrap_or_default()
+        ));
+    }
+    promo_midi::settle::stamp(&mut doc);
+    let out = serde_json::to_string(&doc).map_err(|e| e.to_string())?;
+    let temporary =
+        meta_path.with_file_name(format!(".metadata.json.partial-{}", std::process::id()));
+    std::fs::write(&temporary, out).map_err(|e| format!("write: {e}"))?;
+    std::fs::rename(&temporary, &meta_path).map_err(|e| format!("write: {e}"))?;
+    Ok(lines)
 }
 
 /// `promo sounds [list | install <bank>]`.
@@ -2051,6 +2125,59 @@ fn frame_count(start: f64, end: f64, fps: f64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A video's MIDI: a used take with no bank is refused with how to
+    /// install one; with the bank (PROMOSHOT_SOUNDS) it is settled, the
+    /// nested composition's use counting, and validate is quiet after.
+    #[test]
+    fn a_video_settles_the_midi_it_uses() {
+        let dir = std::env::temp_dir().join(format!("promo-cli-midi-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let doc = serde_json::json!({
+            "id": "P", "name": "T", "createdAt": 0, "state": "recorded", "subtitles": [],
+            "trimStart": 0, "trimEnd": 2, "videoDuration": 2, "compositionSettings": {},
+            "layers": [{ "id": "c", "name": "C", "sortIndex": 0, "kind": "video",
+                "isEnabled": true, "startTime": 0, "duration": 2, "resourceID": "comp",
+                "keyframes": [] }],
+            "resources": [
+                { "id": "M", "kind": "audio", "filename": "", "displayName": "Bed", "addedAt": 0,
+                  "midi": { "tracks": [{ "notes": [{ "t": 0, "d": 1, "n": 60 }] }] } },
+                { "id": "comp", "kind": "composition", "filename": "", "displayName": "comp",
+                  "addedAt": 0, "composition": { "layers": [{ "id": "a", "name": "A",
+                    "sortIndex": 0, "kind": "audio", "isEnabled": true, "startTime": 0,
+                    "duration": 2, "resourceID": "M", "keyframes": [] }] } }]
+        });
+        std::fs::write(dir.join("metadata.json"), doc.to_string()).unwrap();
+        let installed = promo_midi::sounds::installed_default();
+        let empty = dir.join("no-sounds");
+        promo_midi::sounds::set_sounds_dir(Some(empty));
+        let refused = settle_used_midi(&dir).unwrap_err();
+        promo_midi::sounds::set_sounds_dir(None);
+        assert!(
+            refused.contains("\"M\"") && refused.contains("sounds install generaluser"),
+            "{refused}"
+        );
+        let Some(_) = installed else {
+            eprintln!(
+                "SKIPPED the render: {}",
+                promo_midi::sounds::missing_bank_message()
+            );
+            return;
+        };
+        let lines = settle_used_midi(&dir).unwrap();
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(dir.join("Resources/Bed.wav").is_file());
+        assert!(
+            settle_used_midi(&dir).unwrap().is_empty(),
+            "current: nothing to do"
+        );
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        assert!(promo_midi::findings(&doc, &dir.join("Resources")).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// The skill installs once for every agent tool found: the shared home
     /// always, a tool's own folder only when it reads nothing else. The

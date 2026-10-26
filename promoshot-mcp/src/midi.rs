@@ -117,20 +117,17 @@ pub fn midi(args: &Value, root: Option<&Path>) -> Result<String, String> {
     };
     if let Some((name, bytes)) = bytes {
         let imported = promo_midi::import_mid(&resources, &name, &bytes)?;
-        if !doc["resources"][index]["midi"].is_object() {
-            doc["resources"][index]["midi"] = json!({});
-        }
-        let block = &mut doc["resources"][index]["midi"];
-        let changed = block["file"].as_str() != Some(imported.file.as_str());
-        block["source"] = json!("file");
-        block["file"] = json!(imported.file);
-        // A new song lists its own tracks, unless `midi` just named them.
-        let named = args.get("midi").and_then(|m| m.get("tracks")).is_some();
-        if changed && !named {
-            if let Some(map) = block.as_object_mut() {
-                map.remove("tracks");
+        // The song becomes editable notes; what `midi` says on top wins.
+        let mut block = imported.block();
+        if let (Some(given), Some(map)) = (
+            args.get("midi").and_then(Value::as_object),
+            block.as_object_mut(),
+        ) {
+            for (k, v) in given {
+                map.insert(k.clone(), v.clone());
             }
         }
+        doc["resources"][index]["midi"] = block;
     }
     let bank = match promo_midi::bank(None) {
         Ok(bank) => bank,
