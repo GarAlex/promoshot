@@ -115,8 +115,12 @@ pub(crate) fn sha_hex(bytes: &[u8]) -> String {
 pub struct Take {
     pub left: Vec<f32>,
     pub right: Vec<f32>,
-    /// Peak after any lowering, dBFS.
+    /// Sample peak after the gain, dBFS.
     pub peak_dbfs: f64,
+    /// Integrated loudness after the gain, LUFS (None: silent).
+    pub loudness: Option<f64>,
+    /// The normalisation gain applied, dB.
+    pub gain_db: f64,
     pub notes: Vec<String>,
 }
 
@@ -252,25 +256,43 @@ pub fn render(score: &Score, bank: &Bank) -> Result<Take, String> {
         }
         (left, right)
     };
-    let peak = left.iter().chain(&right).fold(0f32, |m, x| m.max(x.abs()));
-    let ceiling = 0.999f32;
-    let mut peak_out = peak;
-    if peak > ceiling {
-        let scale = ceiling / peak;
-        for x in left.iter_mut().chain(right.iter_mut()) {
-            *x *= scale;
+    // Loudness: one static gain to the take's target (music or effect),
+    // the level trim on top, held under the true-peak ceiling.
+    let interleaved: Vec<f32> = left
+        .iter()
+        .zip(&right)
+        .flat_map(|(a, b)| [*a, *b])
+        .collect();
+    let measured = promo_media::loudness::integrated_lufs(&interleaved, 2, f64::from(SAMPLE_RATE));
+    let true_peak = true_peak(&left).max(true_peak(&right));
+    let mut gain_db = match measured {
+        Some(lufs) => score.target_lufs + score.trim_db - lufs,
+        None => 0.0,
+    };
+    if true_peak > 0.0 {
+        let ceiling = TRUE_PEAK_CEILING_DB - 20.0 * f64::from(true_peak).log10();
+        if gain_db > ceiling {
+            notes.push(format!(
+                "held {:.1} dB under its loudness target by the {TRUE_PEAK_CEILING_DB} dBTP ceiling",
+                gain_db - ceiling
+            ));
+            gain_db = ceiling;
         }
-        notes.push(format!(
-            "lowered {:.1} dB so the mix does not clip",
-            -20.0 * f64::from(scale).log10()
-        ));
-        peak_out = ceiling;
     }
-    if peak == 0.0 {
+    gain_db = gain_db.clamp(
+        -promo_media::loudness::MAX_GAIN_DB,
+        promo_media::loudness::MAX_GAIN_DB,
+    );
+    let scale = 10f64.powf(gain_db / 20.0) as f32;
+    for x in left.iter_mut().chain(right.iter_mut()) {
+        *x *= scale;
+    }
+    if measured.is_none() {
         notes.push("the take is silent".into());
     }
-    let peak_dbfs = if peak_out > 0.0 {
-        20.0 * f64::from(peak_out).log10()
+    let peak = left.iter().chain(&right).fold(0f32, |m, x| m.max(x.abs()));
+    let peak_dbfs = if peak > 0.0 {
+        20.0 * f64::from(peak).log10()
     } else {
         f64::NEG_INFINITY
     };
@@ -278,8 +300,55 @@ pub fn render(score: &Score, bank: &Bank) -> Result<Take, String> {
         left,
         right,
         peak_dbfs,
+        loudness: measured.map(|l| l + gain_db),
+        gain_db,
         notes,
     })
+}
+
+/// The true-peak ceiling a take is held under, dBTP.
+pub const TRUE_PEAK_CEILING_DB: f64 = -1.0;
+
+/// The largest absolute value of `x` between its samples too: 4×
+/// oversampled through a 48-tap windowed-sinc interpolator (BS.1770-4
+/// annex 2's method), so a peak between two samples is seen.
+pub fn true_peak(x: &[f32]) -> f32 {
+    const PHASES: usize = 4;
+    const TAPS: usize = 12; // per phase: 48 in all
+    static KERNEL: OnceLock<[[f64; TAPS]; PHASES]> = OnceLock::new();
+    let kernel = KERNEL.get_or_init(|| {
+        let mut k = [[0.0; TAPS]; PHASES];
+        let half = (TAPS / 2) as f64;
+        for (p, row) in k.iter_mut().enumerate() {
+            let frac = p as f64 / PHASES as f64;
+            for (i, tap) in row.iter_mut().enumerate() {
+                let t = i as f64 - half + 1.0 - frac;
+                let sinc = if t.abs() < 1e-12 {
+                    1.0
+                } else {
+                    (std::f64::consts::PI * t).sin() / (std::f64::consts::PI * t)
+                };
+                let w = 0.5 + 0.5 * (std::f64::consts::PI * t / (half + 1.0)).cos();
+                *tap = sinc * w;
+            }
+        }
+        k
+    });
+    let mut peak = x.iter().fold(0f32, |m, v| m.max(v.abs()));
+    let n = x.len();
+    for i in 0..n {
+        for row in kernel.iter().skip(1) {
+            let mut acc = 0.0f64;
+            for (k, tap) in row.iter().enumerate() {
+                let j = i as isize + k as isize - (TAPS / 2) as isize + 1;
+                if j >= 0 && (j as usize) < n {
+                    acc += f64::from(x[j as usize]) * tap;
+                }
+            }
+            peak = peak.max(acc.abs() as f32);
+        }
+    }
+    peak
 }
 
 /// The take as a 48 kHz stereo 24-bit PCM WAV file.

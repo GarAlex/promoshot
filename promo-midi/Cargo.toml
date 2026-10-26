@@ -11,6 +11,8 @@ workspace = true
 [dependencies]
 # The typed `midi` block and its receipt.
 promo-model = { path = "../promo-model" }
+# One loudness for every host: the BS.1770 meter the normalize stage uses.
+promo-media = { path = "../promo-media" }
 serde_json.workspace = true
 sha2 = "0.10"
 # The synth: a pure-Rust SoundFont renderer (MIT).

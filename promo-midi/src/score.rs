@@ -4,6 +4,8 @@
 
 use promo_model::midi::{MidiBlock, MidiTrack};
 
+use crate::tempo::TempoMap;
+
 /// A channel message.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Msg {
@@ -59,11 +61,25 @@ pub struct Score {
     pub looped: bool,
     /// A loop's exact length; a one-shot's last event.
     pub length: f64,
+    /// The grid's tempo: the first one the take plays.
     pub bpm: f64,
     pub time_signature: [u32; 2],
     /// What the take did not keep, in words.
     pub notes: Vec<String>,
+    /// The loudness the take is normalised to, LUFS.
+    pub target_lufs: f64,
+    /// `midi.level`, dB on top.
+    pub trim_db: f64,
 }
+
+/// What music is normalised to: the loudness stage's own default target
+/// (a `normalize` effect with no `targetLufs`).
+pub const MUSIC_LUFS: f64 = promo_media::loudness::DEFAULT_TARGET_LUFS;
+/// What a sound effect is normalised to: 4 LU under music. A one-shot's
+/// integrated loudness is measured over a few 400 ms blocks of mostly
+/// attack, which reads louder than it sits in a mix; at −16 a ding or a
+/// hit would jump over the narration and the bed it is meant to punctuate.
+pub const EFFECT_LUFS: f64 = -20.0;
 
 fn pan_cc(pan: f64) -> u8 {
     (((pan.clamp(-1.0, 1.0) + 1.0) / 2.0) * 127.0).round() as u8
@@ -109,28 +125,163 @@ fn opening(track: &MidiTrack, drums: bool, program: u8) -> Vec<Event> {
     events
 }
 
-/// Expands the block. `mid` is the imported file's bytes for a `file`
-/// source.
+/// Expands the block. `mid` is the slice-1 `file` block's `.mid` bytes —
+/// read only when its tracks carry no notes.
 pub fn expand(block: &MidiBlock, mid: Option<&[u8]>) -> Result<Score, String> {
     match block.source() {
-        "steps" => Ok(steps(block)),
         "effect" => effect(block),
-        "file" => file(block, mid.ok_or("midi: a file source with no .mid bytes")?),
+        "steps" => Ok(notes(block, block.tracks.clone().unwrap_or_default(), None)),
+        "file" if has_notes(block) => {
+            Ok(notes(block, block.tracks.clone().unwrap_or_default(), None))
+        }
+        "file" => {
+            let file = crate::smf::read(mid.ok_or("midi: a file source with no .mid bytes")?)?;
+            Ok(notes(block, merged_tracks(block, &file), Some(&file)))
+        }
         other => Err(format!(
             "midi: unknown source \"{other}\" — steps, notes, file or effect"
         )),
     }
 }
 
-fn steps(block: &MidiBlock) -> Score {
-    let tempo = block.tempo();
-    let ts = block.time_signature();
-    let beat = 60.0 / tempo;
+/// Whether any track carries notes inline (an imported block since v2).
+pub fn has_notes(block: &MidiBlock) -> bool {
+    block
+        .tracks
+        .iter()
+        .flatten()
+        .any(|t| t.notes.as_ref().is_some_and(|n| !n.is_empty()))
+}
+
+/// A slice-1 file block's tracks: the file's, each with the mix the block
+/// lists for its channel.
+pub fn merged_tracks(block: &MidiBlock, file: &crate::smf::File) -> Vec<MidiTrack> {
+    let listed: &[MidiTrack] = block.tracks.as_deref().unwrap_or(&[]);
+    file.tracks
+        .iter()
+        .map(|t| {
+            let mut track = t.clone();
+            if let Some(own) = listed
+                .iter()
+                .find(|l| l.channel.is_some() && l.channel == t.channel)
+            {
+                track.name = own.name.clone().or(track.name);
+                track.program = own.program.or(track.program);
+                track.bank = own.bank.clone().or(track.bank);
+                track.volume = own.volume;
+                track.pan = own.pan.or(track.pan);
+                track.mute = own.mute;
+                track.solo = own.solo;
+            }
+            track
+        })
+        .collect()
+}
+
+/// One track's events in BEATS from the song's start.
+fn beat_events(
+    track: &MidiTrack,
+    bars: u32,
+    bar_beats: f64,
+    swing: f64,
+    dropped: &mut usize,
+) -> Vec<(f64, Msg)> {
+    let mut out = Vec::new();
+    let mut skipped = 0usize;
+    let mut strike = |t: f64, d: f64, key: u8, vel: u8, out: &mut Vec<(f64, Msg)>| {
+        if t < 0.0 || !t.is_finite() {
+            *dropped += 1;
+            return;
+        }
+        let d = if d.is_finite() && d > 0.0 {
+            d
+        } else {
+            1.0 / 64.0
+        };
+        let key = key.min(127);
+        out.push((
+            t,
+            Msg::On {
+                key,
+                vel: vel.clamp(1, 127),
+            },
+        ));
+        out.push((t + d, Msg::Off { key }));
+    };
+    if let Some(grid) = &track.steps {
+        let res = grid.resolution.unwrap_or(16).clamp(1, 192);
+        let step = bar_beats / f64::from(res);
+        let total = bars * res;
+        let cycle = grid.length.filter(|l| *l > 0).unwrap_or(total);
+        for lane in &grid.lanes {
+            let vel = lane.velocity.unwrap_or(100);
+            let hold = lane
+                .hold
+                .filter(|h| h.is_finite() && *h > 0.0)
+                .unwrap_or(1.0);
+            for &on in &lane.on {
+                if on >= cycle {
+                    skipped += 1;
+                    continue;
+                }
+                let mut index = on;
+                while index < total {
+                    let late = if index % 2 == 1 {
+                        swing * step / 3.0
+                    } else {
+                        0.0
+                    };
+                    strike(
+                        f64::from(index) * step + late,
+                        hold * step,
+                        lane.note,
+                        vel,
+                        &mut out,
+                    );
+                    index += cycle;
+                }
+            }
+        }
+    }
+    for note in track.notes.iter().flatten() {
+        strike(note.t, note.d, note.n, note.v.unwrap_or(100), &mut out);
+    }
+    for c in track.controls.iter().flatten() {
+        if !c.t.is_finite() || c.t < 0.0 {
+            continue;
+        }
+        if let Some(p) = c.program {
+            out.push((c.t, Msg::Program(p.min(127))));
+        }
+        if let Some(b) = c.bend {
+            out.push((c.t, Msg::Bend(b.min(16383))));
+        }
+        if let (Some(cc), Some(v)) = (c.cc, c.v) {
+            out.push((c.t, Msg::Control(cc.min(127), v.min(127))));
+        }
+    }
+    *dropped += skipped;
+    out
+}
+
+fn notes(block: &MidiBlock, tracks: Vec<MidiTrack>, file: Option<&crate::smf::File>) -> Score {
+    let ts = match (block.time_signature, file) {
+        (None, Some(file)) => file.time_signature,
+        _ => block.time_signature(),
+    };
+    let map = match (&block.tempo_map, file) {
+        (None, Some(file)) => TempoMap::new(&file.tempo_map, file.first_bpm()),
+        _ => TempoMap::from_block(block),
+    };
     let bar_beats = f64::from(ts[0]);
-    let tracks: &[MidiTrack] = block.tracks.as_deref().unwrap_or(&[]);
+    let swing = block
+        .swing
+        .filter(|s| s.is_finite())
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0);
     let mut notes_out = Vec::new();
-    // Bars: stated, else what the content reaches.
-    let content_beats = tracks
+    // The song's length in bars: stated, else what the content reaches.
+    let content = tracks
         .iter()
         .map(|t| {
             let steps = t.steps.as_ref().map_or(0.0, |s| {
@@ -153,114 +304,146 @@ fn steps(block: &MidiBlock) -> Score {
     let bars = block
         .bars
         .filter(|b| *b > 0)
-        .unwrap_or_else(|| ((content_beats / bar_beats).ceil() as u32).max(1))
-        .min(512);
-    let loop_beats = f64::from(bars) * bar_beats;
-    let looped = block.is_loop();
-    let swing = block
-        .swing
-        .filter(|s| s.is_finite())
-        .unwrap_or(0.0)
-        .clamp(0.0, 1.0);
+        .unwrap_or_else(|| ((content / bar_beats - 1e-9).ceil() as u32).max(1))
+        .min(4096);
+    let range = block
+        .loop_bars(f64::from(bars))
+        .map(|(from, to)| ((from - 1.0) * bar_beats, (to - 1.0) * bar_beats));
+    let start = range.map_or(0.0, |r| r.0);
+    let zero = map.seconds(start);
     let mut dropped = 0usize;
-    let mut skipped = 0usize;
     let mut out = Vec::new();
-    for track in tracks {
+    let mut in_range = 0usize;
+    for track in &tracks {
         let drums = track.is_drums();
         let program = track.program.unwrap_or(0).min(127);
         let mut events = opening(track, drums, program);
         let mut count = 0usize;
-        let mut strike = |t: f64, d: f64, key: u8, vel: u8, events: &mut Vec<Event>| {
-            if t < 0.0 || !t.is_finite() || (looped && t >= loop_beats - 1e-9) {
-                dropped += 1;
-                return;
-            }
-            let d = if d.is_finite() && d > 0.0 {
-                d
-            } else {
-                1.0 / 64.0
-            };
-            let key = key.min(127);
-            events.push(Event {
-                time: t * beat,
-                msg: Msg::On {
-                    key,
-                    vel: vel.clamp(1, 127),
-                },
-            });
-            events.push(Event {
-                time: (t + d) * beat,
-                msg: Msg::Off { key },
-            });
-            count += 1;
-        };
-        if let Some(grid) = &track.steps {
-            let res = grid.resolution.unwrap_or(16).clamp(1, 192);
-            let step = bar_beats / f64::from(res);
-            let total = bars * res;
-            let cycle = grid.length.filter(|l| *l > 0).unwrap_or(total);
-            for lane in &grid.lanes {
-                let vel = lane.velocity.unwrap_or(100);
-                let hold = lane
-                    .hold
-                    .filter(|h| h.is_finite() && *h > 0.0)
-                    .unwrap_or(1.0);
-                for &on in &lane.on {
-                    if on >= cycle {
-                        skipped += 1;
-                        continue;
+        let mut raw = beat_events(track, bars, bar_beats, swing, &mut dropped);
+        raw.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.rank().cmp(&b.1.rank())));
+        match range {
+            None => {
+                for (beat, msg) in raw {
+                    if matches!(msg, Msg::On { .. }) {
+                        count += 1;
                     }
-                    let mut index = on;
-                    while index < total {
-                        let late = if index % 2 == 1 {
-                            swing * step / 3.0
-                        } else {
-                            0.0
-                        };
-                        strike(
-                            f64::from(index) * step + late,
-                            hold * step,
-                            lane.note,
-                            vel,
-                            &mut events,
-                        );
-                        index += cycle;
-                    }
+                    events.push(Event {
+                        time: map.seconds(beat),
+                        msg,
+                    });
                 }
             }
+            Some((from, to)) => {
+                // Where the range starts the song is already under way:
+                // the last of each control before it holds at the head.
+                let mut state: Vec<Msg> = Vec::new();
+                // A note struck in the range keeps its release, wherever
+                // that falls: past the end, it wraps.
+                let mut pending: Vec<(u8, bool)> = Vec::new();
+                for (beat, msg) in raw {
+                    match msg {
+                        Msg::On { key, .. } => {
+                            if beat >= from - 1e-9 && beat < to - 1e-9 {
+                                count += 1;
+                                events.push(Event {
+                                    time: map.seconds(beat) - zero,
+                                    msg,
+                                });
+                                pending.push((key, true));
+                            } else {
+                                pending.push((key, false));
+                            }
+                        }
+                        Msg::Off { key } => {
+                            if let Some(i) = pending.iter().position(|p| p.0 == key) {
+                                let (_, kept) = pending.remove(i);
+                                if kept {
+                                    events.push(Event {
+                                        time: (map.seconds(beat) - zero).max(0.0),
+                                        msg,
+                                    });
+                                }
+                            }
+                        }
+                        _ if beat < from - 1e-9 => {
+                            state.retain(|m| !same_control(m, &msg));
+                            state.push(msg);
+                        }
+                        _ if beat < to - 1e-9 => events.push(Event {
+                            time: map.seconds(beat) - zero,
+                            msg,
+                        }),
+                        _ => {}
+                    }
+                }
+                let mut head: Vec<Event> = state
+                    .into_iter()
+                    .map(|msg| Event { time: 0.0, msg })
+                    .collect();
+                let open = opening(track, drums, program).len();
+                let rest = events.split_off(open);
+                events.append(&mut head);
+                events.extend(rest);
+            }
         }
-        for note in track.notes.iter().flatten() {
-            strike(note.t, note.d, note.n, note.v.unwrap_or(100), &mut events);
-        }
+        in_range += count;
         out.push(Track {
             name: track_name(track, drums, program),
             channel: if drums { 9 } else { 0 },
             program,
             drums,
             gain: gain(track),
-            muted: muted(tracks, track),
+            muted: muted(&tracks, track),
             notes: count,
             events,
         });
     }
-    dropped += skipped;
     if dropped > 0 {
+        notes_out.push(format!("{dropped} note(s) outside the song were left out"));
+    }
+    let (looped, length, bpm, varies) = match range {
+        Some((from, to)) => {
+            if in_range == 0 {
+                notes_out.push("the loop's bars hold no notes".into());
+            }
+            (
+                true,
+                map.seconds(to) - zero,
+                map.bpm_at(from),
+                map.varies(from, to),
+            )
+        }
+        None => (
+            false,
+            last_event(&out),
+            map.bpm_at(0.0),
+            map.varies(0.0, f64::INFINITY),
+        ),
+    };
+    if varies {
         notes_out.push(format!(
-            "{dropped} note(s) outside the loop's {bars} bar(s) were left out"
+            "tempo changes: the take plays them as written, and the beat grid keeps the first \
+             tempo ({bpm:.2} BPM)"
         ));
     }
-    let length = if looped {
-        loop_beats * beat
-    } else {
-        last_event(&out)
-    };
     Score {
         tracks: out,
         looped,
         length,
-        bpm: tempo,
+        bpm,
         time_signature: ts,
         notes: notes_out,
+        target_lufs: MUSIC_LUFS,
+        trim_db: block.level_db(),
+    }
+}
+
+/// Whether two messages set the same thing (the last one wins).
+fn same_control(a: &Msg, b: &Msg) -> bool {
+    match (a, b) {
+        (Msg::Control(x, _), Msg::Control(y, _)) => x == y,
+        (Msg::Program(_), Msg::Program(_)) | (Msg::Bend(_), Msg::Bend(_)) => true,
+        _ => false,
     }
 }
 
@@ -300,9 +483,6 @@ fn effect(block: &MidiBlock) -> Result<Score, String> {
         .iter()
         .filter(|e| matches!(e.msg, Msg::On { .. }))
         .count();
-    let looped = block.looped.unwrap_or(false);
-    let tempo = block.tempo();
-    let ts = block.time_signature();
     let track = Track {
         name: template
             .name
@@ -318,141 +498,17 @@ fn effect(block: &MidiBlock) -> Result<Score, String> {
     };
     Ok(Score {
         tracks: vec![track],
-        looped,
+        looped: false,
         length,
-        bpm: tempo,
-        time_signature: ts,
+        bpm: block.tempo(),
+        time_signature: block.time_signature(),
         notes: Vec::new(),
+        target_lufs: EFFECT_LUFS,
+        trim_db: block.level_db(),
     })
 }
 
-/// The tracks an imported file lists: one per channel that plays notes,
-/// named by its track (else its instrument), with its first program —
-/// what a `file` block gets when it lists none.
+/// The tracks an imported file lists, notes and controls inline.
 pub fn file_tracks(mid: &[u8]) -> Result<Vec<MidiTrack>, String> {
-    let file = crate::smf::read(mid)?;
-    Ok(file
-        .channels
-        .iter()
-        .map(|c| {
-            let drums = c.channel == 9;
-            MidiTrack {
-                name: Some(c.name.clone().unwrap_or_else(|| {
-                    if drums {
-                        format!("{} Kit", crate::gm::kit_name(c.program))
-                    } else {
-                        crate::gm::program_name(c.program).to_string()
-                    }
-                })),
-                program: Some(c.program),
-                bank: drums.then(|| serde_json::json!("drums")),
-                channel: Some(c.channel),
-                ..Default::default()
-            }
-        })
-        .collect())
-}
-
-fn file(block: &MidiBlock, mid: &[u8]) -> Result<Score, String> {
-    let file = crate::smf::read(mid)?;
-    let ts = match block.time_signature {
-        Some(_) => block.time_signature(),
-        None => file.time_signature,
-    };
-    // A beat is one count of the meter: quarters scaled by its unit.
-    let bpm = file.first_qpm * f64::from(ts[1]) / 4.0;
-    let listed: &[MidiTrack] = block.tracks.as_deref().unwrap_or(&[]);
-    let mut notes = Vec::new();
-    if file.tempo_changes > 0 {
-        notes.push(format!(
-            "tempo changes: the file changes tempo {} time(s); it plays as written, and the \
-             beat grid keeps the first tempo ({bpm:.2} BPM)",
-            file.tempo_changes
-        ));
-    }
-    let mut tracks = Vec::new();
-    for channel in &file.channels {
-        let drums = channel.channel == 9;
-        let own = listed
-            .iter()
-            .find(|t| t.channel == Some(channel.channel))
-            .cloned()
-            .unwrap_or_default();
-        let mut events = Vec::new();
-        // The file's own instrument unless the track names another.
-        let program = own.program.unwrap_or(channel.program).min(127);
-        let replace_program = program != channel.program;
-        let replace_pan = own.pan.is_some_and(f64::is_finite);
-        if replace_program {
-            events.push(Event {
-                time: 0.0,
-                msg: Msg::Program(program),
-            });
-        }
-        if let Some(pan) = own.pan.filter(|p| p.is_finite()) {
-            events.push(Event {
-                time: 0.0,
-                msg: Msg::Control(10, pan_cc(pan)),
-            });
-        }
-        events.extend(channel.events.iter().copied().filter(|e| match e.msg {
-            Msg::Program(_) => !replace_program,
-            Msg::Control(10, _) => !replace_pan,
-            _ => true,
-        }));
-        let name = own
-            .name
-            .clone()
-            .or_else(|| channel.name.clone())
-            .unwrap_or_else(|| {
-                if drums {
-                    format!("{} Kit", crate::gm::kit_name(program))
-                } else {
-                    crate::gm::program_name(program).to_string()
-                }
-            });
-        tracks.push(Track {
-            name,
-            channel: channel.channel,
-            program,
-            drums,
-            gain: gain(&own),
-            muted: muted(listed, &own),
-            notes: channel.notes,
-            events,
-        });
-    }
-    let looped = block.is_loop();
-    let length = if looped {
-        let bar = f64::from(ts[0]) * 60.0 / bpm;
-        let bars = block
-            .bars
-            .filter(|b| *b > 0)
-            .unwrap_or_else(|| ((file.end / bar - 1e-6).ceil() as u32).max(1));
-        let length = f64::from(bars) * bar;
-        let mut cut = 0usize;
-        for track in &mut tracks {
-            let before = track.events.len();
-            track
-                .events
-                .retain(|e| !(matches!(e.msg, Msg::On { .. }) && e.time >= length - 1e-9));
-            cut += before - track.events.len();
-        }
-        if cut > 0 {
-            notes.push(format!(
-                "{cut} note(s) past the loop's {bars} bar(s) were left out"
-            ));
-        }
-        length
-    } else {
-        file.end
-    };
-    Ok(Score {
-        tracks,
-        looped,
-        length,
-        bpm,
-        time_signature: ts,
-        notes,
-    })
+    Ok(crate::smf::read(mid)?.tracks)
 }

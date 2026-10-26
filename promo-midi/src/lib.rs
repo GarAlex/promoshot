@@ -17,9 +17,13 @@ pub mod score;
 pub mod settle;
 pub mod smf;
 pub mod sounds;
+pub mod tempo;
 
 pub use render::{Bank, Take};
-pub use settle::{findings, import_mid, settle, settle_doc, stale, Imported, Settled, TrackInfo};
+pub use settle::{
+    findings, import_mid, preview, settle, settle_doc, settle_used, stale, used_midi, Imported,
+    Settled, TrackInfo,
+};
 
 /// The bank to render with: `path` when given, else the installed default
 /// (`PROMOSHOT_SOUNDS` or the per-user sounds folder); the error says how
