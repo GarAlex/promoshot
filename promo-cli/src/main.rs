@@ -141,8 +141,20 @@ OPTIONS (`promo <command> --help` lists the ones a command takes):
                    nothing; midi render: render nothing, say whether each
                    take is current
     --bank <file.sf2>
-                   midi render: the SoundFont to render with (default: the
-                   installed GeneralUser GS)
+                   midi render, midi generate: the SoundFont to render with
+                   (default: the installed GeneralUser GS)
+    --track <name> midi generate: the track the layer is (new, or one to
+                   regenerate)
+    --caption <text>
+                   midi generate: what the layer plays (\"warm Rhodes
+                   comping\"); a new track needs one
+    --seed <n>     midi generate: the take's seed (default: a new one)
+    --range <from>-<to>
+                   midi generate: the bars it plays, 1-based, the upper
+                   bound exclusive (default: the whole take)
+    --as <track_name>
+                   midi generate: lego's track_name (strings, synth,
+                   keyboard, drums…; default: read from the caption)
     --import <timings.json>
                    words: store word timings the voice handed over (edge-tts
                    WordBoundary events, or [{\"text\",\"start\",\"end\"}] in

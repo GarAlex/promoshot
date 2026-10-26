@@ -82,7 +82,13 @@ pub struct Rope {
 }
 
 impl Rope {
-    pub fn new(head_dim: usize, theta: f64, max_len: usize, dtype: DType, dev: &Device) -> Result<Rope> {
+    pub fn new(
+        head_dim: usize,
+        theta: f64,
+        max_len: usize,
+        dtype: DType,
+        dev: &Device,
+    ) -> Result<Rope> {
         // inv_freq as PyTorch computes it: 1 / theta^(arange(0, d, 2) / d) in f32.
         let inv: Vec<f32> = (0..head_dim)
             .step_by(2)
@@ -114,7 +120,13 @@ impl Rope {
 }
 
 /// The attention mask shapes the encoders use, additive, (1, 1, L, L).
-pub fn window_mask(len: usize, window: Option<usize>, causal: bool, dtype: DType, dev: &Device) -> Result<Option<Tensor>> {
+pub fn window_mask(
+    len: usize,
+    window: Option<usize>,
+    causal: bool,
+    dtype: DType,
+    dev: &Device,
+) -> Result<Option<Tensor>> {
     if window.is_none() && !causal {
         return Ok(None);
     }
@@ -133,7 +145,9 @@ pub fn window_mask(len: usize, window: Option<usize>, causal: bool, dtype: DType
             return Ok(None);
         }
     }
-    Ok(Some(Tensor::from_vec(m, (1, 1, len, len), dev)?.to_dtype(dtype)?))
+    Ok(Some(
+        Tensor::from_vec(m, (1, 1, len, len), dev)?.to_dtype(dtype)?,
+    ))
 }
 
 /// Multi-head attention with Qwen3's per-head q/k RMSNorm, grouped KV
@@ -179,26 +193,51 @@ impl Attention {
     /// stay the same over every diffusion step.
     pub fn kv(&self, enc: &Tensor) -> Result<(Tensor, Tensor)> {
         let (b, s, _) = enc.dims3()?;
-        let k = self.k.forward(enc)?.reshape((b, s, self.kv_heads, self.head_dim))?;
+        let k = self
+            .k
+            .forward(enc)?
+            .reshape((b, s, self.kv_heads, self.head_dim))?;
         let k = self.k_norm.forward(&k)?.transpose(1, 2)?;
-        let v = self.v.forward(enc)?.reshape((b, s, self.kv_heads, self.head_dim))?.transpose(1, 2)?;
-        Ok((repeat_kv(&k, self.heads / self.kv_heads)?, repeat_kv(&v, self.heads / self.kv_heads)?))
+        let v = self
+            .v
+            .forward(enc)?
+            .reshape((b, s, self.kv_heads, self.head_dim))?
+            .transpose(1, 2)?;
+        Ok((
+            repeat_kv(&k, self.heads / self.kv_heads)?,
+            repeat_kv(&v, self.heads / self.kv_heads)?,
+        ))
     }
 
     fn query(&self, x: &Tensor) -> Result<Tensor> {
         let (b, l, _) = x.dims3()?;
-        let q = self.q.forward(x)?.reshape((b, l, self.heads, self.head_dim))?;
+        let q = self
+            .q
+            .forward(x)?
+            .reshape((b, l, self.heads, self.head_dim))?;
         self.q_norm.forward(&q)?.transpose(1, 2)
     }
 
     /// Self-attention over `x` (B, L, hidden).
-    pub fn forward_self(&self, x: &Tensor, rope: Option<&Rope>, mask: Option<&Tensor>) -> Result<Tensor> {
+    pub fn forward_self(
+        &self,
+        x: &Tensor,
+        rope: Option<&Rope>,
+        mask: Option<&Tensor>,
+    ) -> Result<Tensor> {
         let mut q = self.query(x)?;
         let (mut k, v) = {
             let (b, l, _) = x.dims3()?;
-            let k = self.k.forward(x)?.reshape((b, l, self.kv_heads, self.head_dim))?;
+            let k = self
+                .k
+                .forward(x)?
+                .reshape((b, l, self.kv_heads, self.head_dim))?;
             let k = self.k_norm.forward(&k)?.transpose(1, 2)?;
-            let v = self.v.forward(x)?.reshape((b, l, self.kv_heads, self.head_dim))?.transpose(1, 2)?;
+            let v = self
+                .v
+                .forward(x)?
+                .reshape((b, l, self.kv_heads, self.head_dim))?
+                .transpose(1, 2)?;
             (k, v)
         };
         if let Some(r) = rope {
@@ -206,7 +245,13 @@ impl Attention {
             k = r.apply(&k)?;
         }
         let rep = self.heads / self.kv_heads;
-        let out = attend(&q, &repeat_kv(&k, rep)?, &repeat_kv(&v, rep)?, mask, self.head_dim)?;
+        let out = attend(
+            &q,
+            &repeat_kv(&k, rep)?,
+            &repeat_kv(&v, rep)?,
+            mask,
+            self.head_dim,
+        )?;
         self.o.forward(&out)
     }
 
@@ -223,11 +268,19 @@ fn repeat_kv(x: &Tensor, rep: usize) -> Result<Tensor> {
         return x.contiguous();
     }
     let (b, h, s, d) = x.dims4()?;
-    x.unsqueeze(2)?.expand((b, h, rep, s, d))?.reshape((b, h * rep, s, d))
+    x.unsqueeze(2)?
+        .expand((b, h, rep, s, d))?
+        .reshape((b, h * rep, s, d))
 }
 
 /// softmax(q kᵀ / √d + mask) v, in f32 for the softmax; returns (B, L, H·D).
-fn attend(q: &Tensor, k: &Tensor, v: &Tensor, mask: Option<&Tensor>, head_dim: usize) -> Result<Tensor> {
+fn attend(
+    q: &Tensor,
+    k: &Tensor,
+    v: &Tensor,
+    mask: Option<&Tensor>,
+    head_dim: usize,
+) -> Result<Tensor> {
     let (b, h, l, d) = q.dims4()?;
     let scale = 1.0 / (head_dim as f64).sqrt();
     let q = q.contiguous()?;
@@ -288,7 +341,9 @@ impl EncoderLayer {
     }
 
     pub fn forward(&self, x: &Tensor, rope: &Rope, mask: Option<&Tensor>) -> Result<Tensor> {
-        let h = self.attn.forward_self(&self.ln1.forward(x)?, Some(rope), mask)?;
+        let h = self
+            .attn
+            .forward_self(&self.ln1.forward(x)?, Some(rope), mask)?;
         let x = (x + h)?;
         let h = self.mlp.forward(&self.ln2.forward(&x)?)?;
         x + h
@@ -297,5 +352,9 @@ impl EncoderLayer {
 
 /// Mean over the last dim, used by tests and metrics.
 pub fn max_abs(t: &Tensor) -> Result<f32> {
-    t.abs()?.flatten_all()?.max(D::Minus1)?.to_dtype(DType::F32)?.to_scalar::<f32>()
+    t.abs()?
+        .flatten_all()?
+        .max(D::Minus1)?
+        .to_dtype(DType::F32)?
+        .to_scalar::<f32>()
 }

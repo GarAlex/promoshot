@@ -24,7 +24,10 @@ fn main() {
         shift: 3.0,
     };
     let mut tm = promo_music::pipeline::Timings::default();
-    let (l, r) = m.lego(&req, &mut |_| {}, &|| false, &mut tm).unwrap().unwrap();
+    let (l, r) = m
+        .lego(&req, &mut |_| {}, &|| false, &mut tm)
+        .unwrap()
+        .unwrap();
     eprintln!("{tm:?}");
     let n = l.len();
     let out = Tensor::from_vec([l, r].concat(), (2, n), &Device::Cpu).unwrap();

@@ -37,7 +37,10 @@ fn sliding(i: usize) -> bool {
 
 /// The masks one sequence length needs: (sliding, full).
 fn masks(len: usize, dtype: DType, dev: &Device) -> Result<(Option<Tensor>, Option<Tensor>)> {
-    Ok((window_mask(len, Some(SLIDING_WINDOW), false, dtype, dev)?, None))
+    Ok((
+        window_mask(len, Some(SLIDING_WINDOW), false, dtype, dev)?,
+        None,
+    ))
 }
 
 struct Stack {
@@ -61,7 +64,11 @@ impl Stack {
         let mut h = self.embed.forward(x)?;
         let (slide, full) = masks(h.dim(1)?, h.dtype(), h.device())?;
         for (i, layer) in self.layers.iter().enumerate() {
-            let m = if sliding(i) { slide.as_ref() } else { full.as_ref() };
+            let m = if sliding(i) {
+                slide.as_ref()
+            } else {
+                full.as_ref()
+            };
             h = layer.forward(&h, rope, m)?;
         }
         self.norm.forward(&h)
@@ -134,8 +141,13 @@ impl TimestepEmbedding {
             rows.extend(sin);
         }
         let freq = Tensor::from_vec(rows, (t.len(), 256), dev)?.to_dtype(dtype)?;
-        let temb = self.linear_2.forward(&candle_nn::ops::silu(&self.linear_1.forward(&freq)?)?)?;
-        let proj = self.time_proj.forward(&candle_nn::ops::silu(&temb)?)?.reshape((t.len(), 6, HIDDEN))?;
+        let temb = self
+            .linear_2
+            .forward(&candle_nn::ops::silu(&self.linear_1.forward(&freq)?)?)?;
+        let proj = self
+            .time_proj
+            .forward(&candle_nn::ops::silu(&temb)?)?
+            .reshape((t.len(), 6, HIDDEN))?;
         Ok((temb, proj))
     }
 }
@@ -192,12 +204,16 @@ impl Dit {
         // proj_in: Conv1d(192 → 2048, k = stride = 2) is a linear map of each
         // pair of frames: weight (out, in, k) → (out, k·in), frames (k, in).
         let w_in = vb.get((HIDDEN, IN_CHANNELS, PATCH), "proj_in.1.weight")?;
-        let w_in = w_in.permute((0, 2, 1))?.reshape((HIDDEN, PATCH * IN_CHANNELS))?;
+        let w_in = w_in
+            .permute((0, 2, 1))?
+            .reshape((HIDDEN, PATCH * IN_CHANNELS))?;
         let proj_in = Linear::new(w_in, Some(vb.get(HIDDEN, "proj_in.1.bias")?))?;
         // proj_out: ConvTranspose1d(2048 → 64, k = stride = 2): each token
         // makes two frames; weight (in, out, k) → (k·out, in).
         let w_out = vb.get((HIDDEN, ACOUSTIC, PATCH), "proj_out.1.weight")?;
-        let w_out = w_out.permute((2, 1, 0))?.reshape((PATCH * ACOUSTIC, HIDDEN))?;
+        let w_out = w_out
+            .permute((2, 1, 0))?
+            .reshape((PATCH * ACOUSTIC, HIDDEN))?;
         let proj_out = Linear::new(w_out, None)?;
         Ok(Dit {
             layers,
@@ -234,7 +250,10 @@ impl Dit {
     pub fn cross_kv(&self, enc: &Tensor) -> Result<CrossKv> {
         let enc = self.condition_embedder.forward(enc)?;
         Ok(CrossKv(
-            self.layers.iter().map(|l| l.cross_attn.kv(&enc)).collect::<Result<Vec<_>>>()?,
+            self.layers
+                .iter()
+                .map(|l| l.cross_attn.kv(&enc))
+                .collect::<Result<Vec<_>>>()?,
         ))
     }
 
@@ -246,7 +265,9 @@ impl Dit {
         let (b, frames, _) = x.dims3()?;
         let (temb_t, proj_t) = self.time_embed.forward(t, self.dtype, &self.device)?;
         let zeros = vec![0f32; t.len()];
-        let (temb_r, proj_r) = self.time_embed_r.forward(&zeros, self.dtype, &self.device)?;
+        let (temb_r, proj_r) = self
+            .time_embed_r
+            .forward(&zeros, self.dtype, &self.device)?;
         let temb = (temb_t + temb_r)?;
         let tproj = (proj_t + proj_r)?;
 
@@ -257,7 +278,9 @@ impl Dit {
             h = Tensor::cat(&[h, z], 1)?;
         }
         let tokens = h.dim(1)? / PATCH;
-        let mut h = self.proj_in.forward(&h.reshape((b, tokens, PATCH * IN_CHANNELS))?)?;
+        let mut h = self
+            .proj_in
+            .forward(&h.reshape((b, tokens, PATCH * IN_CHANNELS))?)?;
         let (slide, full) = masks(tokens, self.dtype, &self.device)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
@@ -267,20 +290,33 @@ impl Dit {
             let (c_shift, c_scale, c_gate) = (m(3)?, m(4)?, m(5)?);
             let n = layer.self_attn_norm.forward(&h)?;
             let n = n.broadcast_mul(&(scale + 1.0)?)?.broadcast_add(&shift)?;
-            let mask = if sliding(i) { slide.as_ref() } else { full.as_ref() };
+            let mask = if sliding(i) {
+                slide.as_ref()
+            } else {
+                full.as_ref()
+            };
             let a = layer.self_attn.forward_self(&n, Some(&self.rope), mask)?;
             h = (h + a.broadcast_mul(&gate)?)?;
             let n = layer.cross_attn_norm.forward(&h)?;
             h = (&h + layer.cross_attn.forward_cross(&n, &kv.0[i])?)?;
             let n = layer.mlp_norm.forward(&h)?;
-            let n = n.broadcast_mul(&(c_scale + 1.0)?)?.broadcast_add(&c_shift)?;
+            let n = n
+                .broadcast_mul(&(c_scale + 1.0)?)?
+                .broadcast_add(&c_shift)?;
             h = (&h + layer.mlp.forward(&n)?.broadcast_mul(&c_gate)?)?;
         }
 
         let mods = self.scale_shift.broadcast_add(&temb.unsqueeze(1)?)?;
         let (shift, scale) = (mods.narrow(1, 0, 1)?, mods.narrow(1, 1, 1)?);
-        let h = self.norm_out.forward(&h)?.broadcast_mul(&(scale + 1.0)?)?.broadcast_add(&shift)?;
-        let y = self.proj_out.forward(&h)?.reshape((b, tokens * PATCH, ACOUSTIC))?;
+        let h = self
+            .norm_out
+            .forward(&h)?
+            .broadcast_mul(&(scale + 1.0)?)?
+            .broadcast_add(&shift)?;
+        let y = self
+            .proj_out
+            .forward(&h)?
+            .reshape((b, tokens * PATCH, ACOUSTIC))?;
         y.broadcast_add(&self.proj_out_bias)?.narrow(1, 0, frames)
     }
 }

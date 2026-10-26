@@ -18,7 +18,11 @@ pub fn timesteps(steps: usize, shift: f32) -> Vec<f32> {
             // torch.linspace: start + i·step for the first half, end − (n−1−i)·step after.
             let n = steps + 1;
             let step = (0.0f32 - 1.0) / steps as f32;
-            let t = if i < n / 2 { 1.0 + step * i as f32 } else { 0.0 - step * (steps - i) as f32 };
+            let t = if i < n / 2 {
+                1.0 + step * i as f32
+            } else {
+                0.0 - step * (steps - i) as f32
+            };
             if shift != 1.0 {
                 shift * t / (1.0 + (shift - 1.0) * t)
             } else {
@@ -75,12 +79,23 @@ impl Apg {
     }
 
     /// `cond`, `uncond`: (T, C) row-major. Returns the guided velocity.
-    pub fn guide(&mut self, cond: &[f32], uncond: &[f32], frames: usize, channels: usize, scale: f64) -> Vec<f32> {
+    pub fn guide(
+        &mut self,
+        cond: &[f32],
+        uncond: &[f32],
+        frames: usize,
+        channels: usize,
+        scale: f64,
+    ) -> Vec<f32> {
         let n = frames * channels;
         // In f32 as the reference does: diff, the momentum and the clip.
         let mut diff: Vec<f32> = (0..n).map(|i| cond[i] - uncond[i]).collect();
         // MomentumBuffer.update: running = diff + momentum · running.
-        let m = if self.mode == ApgMode::Mlx { 1.0 } else { self.momentum };
+        let m = if self.mode == ApgMode::Mlx {
+            1.0
+        } else {
+            self.momentum
+        };
         if let Some(prev) = &self.running {
             for (d, p) in diff.iter_mut().zip(prev) {
                 *d += m * p;
@@ -89,7 +104,10 @@ impl Apg {
         let eps = if self.mode == ApgMode::Mlx { 1e-8 } else { 0.0 };
         self.running = Some(diff.clone());
         for c in 0..channels {
-            let norm = (0..frames).map(|t| (diff[t * channels + c] as f64).powi(2)).sum::<f64>().sqrt() as f32;
+            let norm = (0..frames)
+                .map(|t| (diff[t * channels + c] as f64).powi(2))
+                .sum::<f64>()
+                .sqrt() as f32;
             let f = (self.norm_threshold / (norm + eps as f32)).min(1.0);
             for t in 0..frames {
                 diff[t * channels + c] *= f;
@@ -98,9 +116,14 @@ impl Apg {
         // project(): in f64, v1 = normalize(cond) along time; orthogonal part.
         let mut out = vec![0f32; n];
         for c in 0..channels {
-            let raw = (0..frames).map(|t| (cond[t * channels + c] as f64).powi(2)).sum::<f64>().sqrt();
+            let raw = (0..frames)
+                .map(|t| (cond[t * channels + c] as f64).powi(2))
+                .sum::<f64>()
+                .sqrt();
             let norm = if eps > 0.0 { raw + eps } else { raw.max(1e-12) };
-            let dot: f64 = (0..frames).map(|t| diff[t * channels + c] as f64 * (cond[t * channels + c] as f64 / norm)).sum();
+            let dot: f64 = (0..frames)
+                .map(|t| diff[t * channels + c] as f64 * (cond[t * channels + c] as f64 / norm))
+                .sum();
             for t in 0..frames {
                 let i = t * channels + c;
                 let v1 = cond[i] as f64 / norm;
@@ -153,7 +176,9 @@ pub fn sample_with(
     let mut xt: Vec<f32> = noise.flatten_all()?.to_vec1()?;
     for i in 0..steps {
         let (t_curr, t_prev) = (ts[i], ts[i + 1]);
-        let x = Tensor::from_slice(&xt, (1, frames, channels), &Device::Cpu)?.to_dtype(dtype)?.to_device(&dev)?;
+        let x = Tensor::from_slice(&xt, (1, frames, channels), &Device::Cpu)?
+            .to_dtype(dtype)?
+            .to_device(&dev)?;
         let x2 = Tensor::cat(&[&x, &x], 0)?;
         let v = c.dit.forward(&x2, &context2, &[t_curr, t_curr], c.kv)?;
         let v = v.to_dtype(DType::F32)?.to_device(&Device::Cpu)?;
@@ -172,5 +197,9 @@ pub fn sample_with(
             return Ok(None);
         }
     }
-    Ok(Some(Tensor::from_vec(xt, (1, frames, channels), &Device::Cpu)?))
+    Ok(Some(Tensor::from_vec(
+        xt,
+        (1, frames, channels),
+        &Device::Cpu,
+    )?))
 }

@@ -38,7 +38,10 @@ impl Tokenizer {
     /// Token ids as the reference's `tokenizer(text, truncation=True,
     /// max_length=max)` gives them.
     pub fn encode(&self, text: &str, max: usize) -> std::result::Result<Vec<u32>, String> {
-        let enc = self.0.encode(text, true).map_err(|e| format!("tokenize: {e}"))?;
+        let enc = self
+            .0
+            .encode(text, true)
+            .map_err(|e| format!("tokenize: {e}"))?;
         let mut ids = enc.get_ids().to_vec();
         ids.truncate(max);
         Ok(ids)
@@ -64,7 +67,13 @@ impl TextEncoder {
             embed: vb.get((VOCAB, HIDDEN), "embed_tokens.weight")?,
             layers,
             norm: RmsNorm::load(&vb.pp("norm"), HIDDEN, SHAPE.eps)?,
-            rope: Rope::new(SHAPE.head_dim, 1_000_000.0, MAX_LYRIC_TOKENS, vb.dtype(), vb.device())?,
+            rope: Rope::new(
+                SHAPE.head_dim,
+                1_000_000.0,
+                MAX_LYRIC_TOKENS,
+                vb.dtype(),
+                vb.device(),
+            )?,
             device: vb.device().clone(),
             dtype: vb.dtype(),
         })

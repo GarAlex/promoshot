@@ -54,7 +54,8 @@ fn weight_norm(vb: &VarBuilder, shape: (usize, usize, usize)) -> Result<Tensor> 
     let v = vb.get(shape, "weight_v")?.to_dtype(DType::F32)?;
     let g = vb.get((shape.0, 1, 1), "weight_g")?.to_dtype(DType::F32)?;
     let norm = v.sqr()?.sum_keepdim(2)?.sum_keepdim(1)?.sqrt()?;
-    v.broadcast_mul(&g.broadcast_div(&norm)?)?.to_dtype(vb.dtype())
+    v.broadcast_mul(&g.broadcast_div(&norm)?)?
+        .to_dtype(vb.dtype())
 }
 
 #[derive(Debug, Clone)]
@@ -68,10 +69,23 @@ struct Conv {
 
 impl Conv {
     #[allow(clippy::too_many_arguments)]
-    fn load(vb: &VarBuilder, cin: usize, cout: usize, k: usize, padding: usize, stride: usize, dilation: usize, bias: bool) -> Result<Conv> {
+    fn load(
+        vb: &VarBuilder,
+        cin: usize,
+        cout: usize,
+        k: usize,
+        padding: usize,
+        stride: usize,
+        dilation: usize,
+        bias: bool,
+    ) -> Result<Conv> {
         Ok(Conv {
             w: weight_norm(vb, (cout, cin, k))?,
-            b: if bias { Some(vb.get(cout, "bias")?.reshape((1, cout, 1))?) } else { None },
+            b: if bias {
+                Some(vb.get(cout, "bias")?.reshape((1, cout, 1))?)
+            } else {
+                None
+            },
             padding,
             stride,
             dilation,
@@ -110,8 +124,14 @@ pub fn conv_transpose_k2s(x: &Tensor, w: &Tensor, stride: usize, padding: usize)
     for i in 0..b {
         let xt = x.get(i)?.t()?.contiguous()?; // (len, cin)
         let z = xt.matmul(&wr)?.reshape((len, cout, k))?;
-        let a = z.narrow(2, 0, stride)?.permute((1, 0, 2))?.reshape((cout, len * stride))?;
-        let bb = z.narrow(2, stride, stride)?.permute((1, 0, 2))?.reshape((cout, len * stride))?;
+        let a = z
+            .narrow(2, 0, stride)?
+            .permute((1, 0, 2))?
+            .reshape((cout, len * stride))?;
+        let bb = z
+            .narrow(2, stride, stride)?
+            .permute((1, 0, 2))?
+            .reshape((cout, len * stride))?;
         let zeros = Tensor::zeros((cout, stride), x.dtype(), x.device())?;
         let full = (Tensor::cat(&[&a, &zeros], 1)? + Tensor::cat(&[&zeros, &bb], 1)?)?;
         let out_len = (len - 1) * stride + k - 2 * padding;
@@ -210,7 +230,16 @@ impl Encoder {
             blocks.push(EncBlock {
                 res: res3(&b, cin)?,
                 snake: Snake::load(&b.pp("snake1"), cin)?,
-                conv: Conv::load(&b.pp("conv1"), cin, cout, 2 * stride, stride.div_ceil(2), stride, 1, true)?,
+                conv: Conv::load(
+                    &b.pp("conv1"),
+                    cin,
+                    cout,
+                    2 * stride,
+                    stride.div_ceil(2),
+                    stride,
+                    1,
+                    true,
+                )?,
             });
         }
         let d = HIDDEN * MULTS[5];
@@ -244,17 +273,25 @@ impl Encoder {
     /// `mean + std · noise`. `noise(len)` gives the standard normals for one
     /// window's (64, len) posterior, in order — seeded noise in production,
     /// the reference's dumped noise in the parity tests.
-    pub fn encode_tiled(&self, audio: &Tensor, noise: &mut dyn FnMut(usize) -> Result<Tensor>) -> Result<Tensor> {
+    pub fn encode_tiled(
+        &self,
+        audio: &Tensor,
+        noise: &mut dyn FnMut(usize) -> Result<Tensor>,
+    ) -> Result<Tensor> {
         let samples = audio.dim(2)?;
-        let sample = |x: &Tensor, noise: &mut dyn FnMut(usize) -> Result<Tensor>| -> Result<Tensor> {
-            let (m, s) = self.moments(x)?;
-            let n = noise(m.dim(2)?)?.to_dtype(m.dtype())?.to_device(m.device())?.reshape(m.shape())?;
-            let z = (m + s.mul(&n)?)?;
-            // Finish this window before its inputs drop (see pipeline.rs:
-            // candle's Metal buffer reuse).
-            z.device().synchronize()?;
-            Ok(z)
-        };
+        let sample =
+            |x: &Tensor, noise: &mut dyn FnMut(usize) -> Result<Tensor>| -> Result<Tensor> {
+                let (m, s) = self.moments(x)?;
+                let n = noise(m.dim(2)?)?
+                    .to_dtype(m.dtype())?
+                    .to_device(m.device())?
+                    .reshape(m.shape())?;
+                let z = (m + s.mul(&n)?)?;
+                // Finish this window before its inputs drop (see pipeline.rs:
+                // candle's Metal buffer reuse).
+                z.device().synchronize()?;
+                Ok(z)
+            };
         if samples <= ENCODE_CHUNK {
             return sample(audio, noise);
         }
@@ -344,7 +381,11 @@ impl Decoder {
             let trim_start = (core_start - win_start) * up;
             let trim_end = (win_end - core_end) * up;
             let len = a.dim(2)?;
-            parts.push(a.narrow(2, trim_start, len - trim_start - trim_end)?.to_dtype(DType::F32)?.to_device(&cpu)?);
+            parts.push(
+                a.narrow(2, trim_start, len - trim_start - trim_end)?
+                    .to_dtype(DType::F32)?
+                    .to_device(&cpu)?,
+            );
         }
         Tensor::cat(&parts, 2)
     }

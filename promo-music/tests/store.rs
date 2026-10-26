@@ -12,11 +12,18 @@ use promo_music::store::{self, File, Package};
 
 #[test]
 fn pins_match_the_reference_checkpoints() {
-    let Some(ckpt) = std::env::var_os("PROMOSHOT_ACE_CKPT").map(PathBuf::from) else { return };
+    let Some(ckpt) = std::env::var_os("PROMOSHOT_ACE_CKPT").map(PathBuf::from) else {
+        return;
+    };
     let p = store::package(store::ACE_STEP_BASE).unwrap();
     for f in p.files {
         let path = ckpt.join(f.path);
-        assert_eq!(std::fs::metadata(&path).unwrap().len(), f.bytes, "{}", f.path);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().len(),
+            f.bytes,
+            "{}",
+            f.path
+        );
         assert_eq!(store::sha256_file(&path).unwrap(), f.sha256, "{}", f.path);
     }
     eprintln!("{} files, {} bytes", p.files.len(), p.bytes());
@@ -56,8 +63,16 @@ fn serve(body: Vec<u8>) -> (String, Arc<AtomicUsize>) {
                 }
             }
             let part = &body[from.min(body.len())..];
-            let status = if from > 0 { "206 Partial Content" } else { "200 OK" };
-            let _ = write!(s, "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", part.len());
+            let status = if from > 0 {
+                "206 Partial Content"
+            } else {
+                "200 OK"
+            };
+            let _ = write!(
+                s,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                part.len()
+            );
             let _ = s.write_all(part);
         }
     });
@@ -66,7 +81,10 @@ fn serve(body: Vec<u8>) -> (String, Arc<AtomicUsize>) {
 
 fn sha(b: &[u8]) -> String {
     use sha2::Digest;
-    sha2::Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+    sha2::Sha256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
 }
 
 fn leak(s: String) -> &'static str {
@@ -84,30 +102,56 @@ fn install_verifies_resumes_and_refuses_a_bad_hash() {
         bytes: body.len() as u64,
         sha256: leak(sha(&body)),
     }]));
-    let p = Package { id: "test-pkg", title: "t", license: "t", source: "t", files };
+    let p = Package {
+        id: "test-pkg",
+        title: "t",
+        license: "t",
+        source: "t",
+        files,
+    };
     let url = |_: &File| format!("{base}/w");
 
     // A partial file from an earlier attempt is resumed, not refetched.
     let partial = tmp.join(".partial/test-pkg/sub/weights.bin");
     std::fs::create_dir_all(partial.parent().unwrap()).unwrap();
-    std::fs::File::create(&partial).unwrap().write_all(&body[..1_000_000]).unwrap();
+    std::fs::File::create(&partial)
+        .unwrap()
+        .write_all(&body[..1_000_000])
+        .unwrap();
     let mut last = store::Progress::default();
     let out = store::install_from(&tmp, &p, &url, &mut |pr| last = pr, &|| false).unwrap();
     let mut got = Vec::new();
-    std::fs::File::open(out.join("sub/weights.bin")).unwrap().read_to_end(&mut got).unwrap();
+    std::fs::File::open(out.join("sub/weights.bin"))
+        .unwrap()
+        .read_to_end(&mut got)
+        .unwrap();
     assert_eq!(got, body);
-    assert_eq!((last.done, last.total), (body.len() as u64, body.len() as u64));
+    assert_eq!(
+        (last.done, last.total),
+        (body.len() as u64, body.len() as u64)
+    );
     assert!(!tmp.join(".partial/test-pkg").exists(), "staging moved in");
 
     // A wrong pin: refused, nothing installed, the bad download removed.
-    let bad: &'static [File] = Box::leak(Box::new([File { path: "w.bin", bytes: body.len() as u64, sha256: "00" }]));
-    let q = Package { id: "bad-pkg", files: bad, ..p };
+    let bad: &'static [File] = Box::leak(Box::new([File {
+        path: "w.bin",
+        bytes: body.len() as u64,
+        sha256: "00",
+    }]));
+    let q = Package {
+        id: "bad-pkg",
+        files: bad,
+        ..p
+    };
     let e = store::install_from(&tmp, &q, &url, &mut |_| {}, &|| false).unwrap_err();
     assert!(e.contains("sha256"), "{e}");
     assert!(!tmp.join("bad-pkg").exists() && !tmp.join(".partial/bad-pkg/w.bin").exists());
 
     // Cancel.
-    let r = Package { id: "cancel-pkg", ..p };
+    let r = Package {
+        id: "cancel-pkg",
+        ..p
+    };
     let e = store::install_from(&tmp, &r, &url, &mut |_| {}, &|| true).unwrap_err();
     assert_eq!(e, store::CANCELLED);
     assert!(!tmp.join("cancel-pkg").exists());

@@ -3,8 +3,7 @@
 A project is a FOLDER: `metadata.json` + `Resources/` holding the media it
 names. Write the JSON, `promo validate` it (the renderers' own parser:
 "ok" renders as written, "NOT OK" lists what will not), then render or
-open it.
-This is the authoring subset; `promo_schema_full` is the whole format.
+open it. Here, the authoring subset; `promo_schema_full` is the whole format.
 
 - Never guess `minReaderVersion`: copy what `promo_validate` names (the
   recipes carry theirs). Ids are unique strings; short ones ("bg", "k0")
@@ -22,9 +21,8 @@ This is the authoring subset; `promo_schema_full` is the whole format.
   A layer: `id`, `name`, `sortIndex`, `kind`, `isEnabled: true`,
   `startTime`, `duration` (seconds on the output timeline), usually a
   `resourceID`, and `keyframes`.
-- Music and effects authored as MIDI: an `audio` resource with a `midi`
-  block (steps, notes in beats, a GM program per track, or a `.mid`),
-  rendered by promo_midi to a WAV with its own `beatGrid` (topic `midi`).
+- MIDI music and effects: an `audio` resource with a `midi` block (steps,
+  notes in beats, GM programs, a `.mid`) promo_midi renders (topic `midi`).
 - Cutting to music: a `beatClock` song, `{"beats": 2}`, `sequence`, `pulse`,
   `flash` (topic `beats`); on words: `{"word": 12, "of": "intro"}` (`speech`).
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
@@ -75,15 +73,14 @@ must never cross-fade; give each a life clear of both dissolves.
 
 A device is a BODY, and the easiest body is a RECIPE — a model resource
 with no file: `"recipe": { "device": { "kind": "phone" } }` (tablet,
-laptop too) is a model with `Body` and `Screen` slots the engine builds
-at load — a laptop has a `Deck` as well. Or from
-a file: `promo device phone --out phone.glb`. A model RESOURCE names the
-recipe or the file and binds the slots — `"materials": { "Body": "@edge",
-"Screen": { "resourceID": "<shot>" } }` puts the screenshot on the
-screen — and a model LAYER places it; `placement` sizes the whole body,
-its keyframes' `camera` turns it. The old `frame` on a picture resource
-is legacy 2.5D and `promo_validate` says so. `"kind": "border"` with
-`borderWidth`/`cornerRadius` is still the flat card.
+laptop too) is a model with `Body` and `Screen` slots (a laptop adds a
+`Deck`) the engine builds at load; or from a file: `promo device phone
+--out phone.glb`. A model RESOURCE names the recipe or the file and binds
+the slots — `"materials": { "Body": "@edge", "Screen": { "resourceID":
+"<shot>" } }` puts the screenshot on the screen — and a model LAYER places
+it; `placement` sizes the whole body, its keyframes' `camera` turns it.
+The old `frame` on a picture resource is legacy 2.5D and `promo_validate`
+says so; `"kind": "border"` with `borderWidth`/`cornerRadius` is the card.
 
 Five recipes. Each is a complete `metadata.json` — copy one beside your
 media, rename ids/filenames, validate.

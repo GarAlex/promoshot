@@ -29,7 +29,12 @@ impl AceStepGenerator {
 }
 
 impl LayerGenerator for AceStepGenerator {
-    fn generate(&self, request: LegoRequest, progress: &mut dyn FnMut(f64), cancel: &dyn Fn() -> bool) -> Result<LayerAudio, String> {
+    fn generate(
+        &self,
+        request: LegoRequest,
+        progress: &mut dyn FnMut(f64),
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<LayerAudio, String> {
         let mut slot = self.loaded.lock().unwrap_or_else(|e| e.into_inner());
         if slot.is_none() {
             let dev = crate::default_device();

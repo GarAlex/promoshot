@@ -39,7 +39,8 @@ impl Package {
 /// ACE-Step/Ace-Step1.5 (the VAE and the text encoder) and
 /// ACE-Step/acestep-v15-base (the DiT), at the commits the port was
 /// verified against (2026-10-26).
-const MAIN: &str = "https://huggingface.co/ACE-Step/Ace-Step1.5/resolve/19671f406d603126926c1b7e2adc169acbcade22";
+const MAIN: &str =
+    "https://huggingface.co/ACE-Step/Ace-Step1.5/resolve/19671f406d603126926c1b7e2adc169acbcade22";
 const BASE: &str = "https://huggingface.co/ACE-Step/acestep-v15-base/resolve/e432212fec32b8965a14ffa57ae653438d6abd14";
 
 pub const ACE_STEP_BASE: &str = "ace-step-base";
@@ -85,16 +86,23 @@ pub fn catalog() -> &'static [Package] {
 }
 
 pub fn package(id: &str) -> Result<&'static Package, String> {
-    CATALOG
-        .iter()
-        .find(|p| p.id == id)
-        .ok_or_else(|| format!("unknown music model {id:?} (known: {})", CATALOG.iter().map(|p| p.id).collect::<Vec<_>>().join(", ")))
+    CATALOG.iter().find(|p| p.id == id).ok_or_else(|| {
+        format!(
+            "unknown music model {id:?} (known: {})",
+            CATALOG.iter().map(|p| p.id).collect::<Vec<_>>().join(", ")
+        )
+    })
 }
 
 /// A file's download URL.
 pub fn url(file: &File) -> String {
     let (base, rel) = if file.path.starts_with(DIT_DIR) {
-        (BASE, file.path.trim_start_matches(DIT_DIR).trim_start_matches('/'))
+        (
+            BASE,
+            file.path
+                .trim_start_matches(DIT_DIR)
+                .trim_start_matches('/'),
+        )
     } else {
         (MAIN, file.path)
     };
@@ -124,11 +132,19 @@ pub fn models_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("PROMOSHOT_MUSIC_MODELS").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
     }
-    let home = || std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let home = || {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+    };
     if cfg!(target_os = "macos") {
         home().join("Library/Application Support/PromoShot/Music")
     } else if cfg!(windows) {
-        std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(home).join("PromoShot").join("Music")
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(home)
+            .join("PromoShot")
+            .join("Music")
     } else {
         std::env::var_os("XDG_DATA_HOME")
             .filter(|d| !d.is_empty())
@@ -191,7 +207,12 @@ pub const CANCELLED: &str = "install cancelled";
 /// whole folder moved to `<id>/` once all match. `progress` is called as
 /// bytes arrive; `cancel` is polled between reads.
 #[cfg(feature = "download")]
-pub fn install(dir: &Path, id: &str, progress: &mut dyn FnMut(Progress), cancel: &dyn Fn() -> bool) -> Result<PathBuf, String> {
+pub fn install(
+    dir: &Path,
+    id: &str,
+    progress: &mut dyn FnMut(Progress),
+    cancel: &dyn Fn() -> bool,
+) -> Result<PathBuf, String> {
     install_from(dir, package(id)?, &url, progress, cancel)
 }
 
@@ -207,7 +228,10 @@ pub fn install_from(
     let id = p.id;
     let target = package_dir(dir, id);
     if installed_package(dir, p) {
-        progress(Progress { done: p.bytes(), total: p.bytes() });
+        progress(Progress {
+            done: p.bytes(),
+            total: p.bytes(),
+        });
         return Ok(target);
     }
     let staging = partial_dir(dir, id);
@@ -224,14 +248,26 @@ pub fn install_from(
         if std::fs::metadata(&done_file).is_ok_and(|m| m.len() == f.bytes) && !dest.exists() {
             std::fs::copy(&done_file, &dest).map_err(|e| format!("{}: {e}", dest.display()))?;
         }
-        fetch(f, &url_of(f), &dest, &mut |n| progress(Progress { done: base + n, total }), cancel)?;
+        fetch(
+            f,
+            &url_of(f),
+            &dest,
+            &mut |n| {
+                progress(Progress {
+                    done: base + n,
+                    total,
+                })
+            },
+            cancel,
+        )?;
         base += f.bytes;
     }
     // Every file verified: move the package in.
     if target.exists() {
         std::fs::remove_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
     }
-    std::fs::rename(&staging, &target).map_err(|e| format!("{} → {}: {e}", staging.display(), target.display()))?;
+    std::fs::rename(&staging, &target)
+        .map_err(|e| format!("{} → {}: {e}", staging.display(), target.display()))?;
     progress(Progress { done: total, total });
     Ok(target)
 }
@@ -239,7 +275,13 @@ pub fn install_from(
 /// Hashes what is already at `dest` (a previous attempt), fetches the rest
 /// with a Range request, and checks the whole file.
 #[cfg(feature = "download")]
-fn fetch(f: &File, url: &str, dest: &Path, progress: &mut dyn FnMut(u64), cancel: &dyn Fn() -> bool) -> Result<(), String> {
+fn fetch(
+    f: &File,
+    url: &str,
+    dest: &Path,
+    progress: &mut dyn FnMut(u64),
+    cancel: &dyn Fn() -> bool,
+) -> Result<(), String> {
     let mut hasher = Sha256::new();
     let mut have = 0u64;
     if let Ok(mut existing) = std::fs::File::open(dest) {
@@ -253,7 +295,9 @@ fn fetch(f: &File, url: &str, dest: &Path, progress: &mut dyn FnMut(u64), cancel
                 if cancel() {
                     return Err(CANCELLED.into());
                 }
-                let n = existing.read(&mut buf).map_err(|e| format!("{}: {e}", dest.display()))?;
+                let n = existing
+                    .read(&mut buf)
+                    .map_err(|e| format!("{}: {e}", dest.display()))?;
                 if n == 0 {
                     break;
                 }
@@ -264,15 +308,23 @@ fn fetch(f: &File, url: &str, dest: &Path, progress: &mut dyn FnMut(u64), cancel
         }
     }
     if have < f.bytes {
-        let agent = ureq::AgentBuilder::new().timeout_connect(std::time::Duration::from_secs(30)).build();
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(std::time::Duration::from_secs(30))
+            .build();
         let mut req = agent.get(url).set("User-Agent", "PromoShot");
         if have > 0 {
             req = req.set("Range", &format!("bytes={have}-"));
         }
-        let resp = req.call().map_err(|e| format!("download {}: {e}", f.path))?;
+        let resp = req
+            .call()
+            .map_err(|e| format!("download {}: {e}", f.path))?;
         if have > 0 && resp.status() != 206 {
             // No range support: start over.
-            return Err(format!("download {}: the server did not resume (HTTP {}); retry the install", f.path, resp.status()));
+            return Err(format!(
+                "download {}: the server did not resume (HTTP {}); retry the install",
+                f.path,
+                resp.status()
+            ));
         }
         let mut out = std::fs::OpenOptions::new()
             .create(true)
@@ -285,11 +337,14 @@ fn fetch(f: &File, url: &str, dest: &Path, progress: &mut dyn FnMut(u64), cancel
             if cancel() {
                 return Err(CANCELLED.into());
             }
-            let n = reader.read(&mut buf).map_err(|e| format!("download {}: {e}", f.path))?;
+            let n = reader
+                .read(&mut buf)
+                .map_err(|e| format!("download {}: {e}", f.path))?;
             if n == 0 {
                 break;
             }
-            out.write_all(&buf[..n]).map_err(|e| format!("{}: {e}", dest.display()))?;
+            out.write_all(&buf[..n])
+                .map_err(|e| format!("{}: {e}", dest.display()))?;
             hasher.update(&buf[..n]);
             have += n as u64;
             if have > f.bytes {
@@ -297,9 +352,14 @@ fn fetch(f: &File, url: &str, dest: &Path, progress: &mut dyn FnMut(u64), cancel
             }
             progress(have);
         }
-        out.flush().map_err(|e| format!("{}: {e}", dest.display()))?;
+        out.flush()
+            .map_err(|e| format!("{}: {e}", dest.display()))?;
     }
-    let digest = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let digest = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     if have != f.bytes || digest != f.sha256 {
         let _ = std::fs::remove_file(dest);
         return Err(format!(
@@ -316,7 +376,9 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
     loop {
-        let n = f.read(&mut buf).map_err(|e| format!("{}: {e}", path.display()))?;
+        let n = f
+            .read(&mut buf)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
         if n == 0 {
             break;
         }
@@ -330,7 +392,8 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
 #[cfg(feature = "download")]
 pub fn command(program: &str, args: &[String]) -> Result<String, String> {
     let dir = models_dir();
-    let usage = format!("usage: {program} music [list | install {ACE_STEP_BASE} | remove {ACE_STEP_BASE}]");
+    let usage =
+        format!("usage: {program} music [list | install {ACE_STEP_BASE} | remove {ACE_STEP_BASE}]");
     match (args.first().map(String::as_str), args.get(1)) {
         (None | Some("list"), None) => {
             let mut lines = vec![format!("music models in {}:", dir.display())];
@@ -360,7 +423,10 @@ pub fn command(program: &str, args: &[String]) -> Result<String, String> {
                 },
                 &|| false,
             )?;
-            Ok(format!("{id}: installed and verified at {}", path.display()))
+            Ok(format!(
+                "{id}: installed and verified at {}",
+                path.display()
+            ))
         }
         (Some("remove"), Some(id)) => Ok(if remove(&dir, id)? {
             format!("{id}: removed")

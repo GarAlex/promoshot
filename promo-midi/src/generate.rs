@@ -105,8 +105,9 @@ pub trait LayerGenerator: Send + Sync {
 
 /// What a host without the model answers.
 pub fn not_installed() -> String {
-    "the music model is not installed — generated layers need it (Settings ▸ Music on the Mac \
-     downloads it once it ships); the MIDI and every stored layer still play"
+    "the music model is not installed — generated layers need it, installed once: Settings ▸ \
+     Music on the Mac, or promo music install ace-step-base (6.3 GB); the MIDI and every stored \
+     layer still play"
         .into()
 }
 

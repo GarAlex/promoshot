@@ -46,11 +46,29 @@ pub struct Lego {
 }
 
 /// The DiT prompt, exactly as `SFT_GEN_PROMPT` formats it.
-pub fn prompt(track_name: &str, caption: &str, bpm: f64, time_signature: u32, keyscale: Option<&str>, seconds: usize) -> String {
-    let bpm = if bpm > 0.0 { format!("{}", bpm.round() as i64) } else { "N/A".into() };
-    let ts = if time_signature > 0 { time_signature.to_string() } else { "N/A".into() };
+pub fn prompt(
+    track_name: &str,
+    caption: &str,
+    bpm: f64,
+    time_signature: u32,
+    keyscale: Option<&str>,
+    seconds: usize,
+) -> String {
+    let bpm = if bpm > 0.0 {
+        format!("{}", bpm.round() as i64)
+    } else {
+        "N/A".into()
+    };
+    let ts = if time_signature > 0 {
+        time_signature.to_string()
+    } else {
+        "N/A".into()
+    };
     let key = keyscale.filter(|k| !k.trim().is_empty()).unwrap_or("N/A");
-    let instruction = format!("Generate the {} track based on the audio context:", track_name.to_uppercase());
+    let instruction = format!(
+        "Generate the {} track based on the audio context:",
+        track_name.to_uppercase()
+    );
     format!(
         "# Instruction\n{instruction}\n\n# Caption\n{caption}\n\n# Metas\n- bpm: {bpm}\n- timesignature: {ts}\n- keyscale: {key}\n- duration: {seconds} seconds\n<|endoftext|>\n"
     )
@@ -110,7 +128,8 @@ pub fn silence_latent(path: &Path) -> std::result::Result<Tensor, String> {
     use std::io::Read;
     let bad = |e: String| format!("{}: {e}", path.display());
     let file = std::fs::File::open(path).map_err(|e| bad(e.to_string()))?;
-    let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| bad(e.to_string()))?;
+    let mut zip =
+        zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| bad(e.to_string()))?;
     let pkl = zip
         .file_names()
         .find(|f| f.ends_with("data.pkl"))
@@ -118,9 +137,12 @@ pub fn silence_latent(path: &Path) -> std::result::Result<Tensor, String> {
         .ok_or_else(|| bad("no data.pkl".into()))?;
     let dir = std::path::PathBuf::from(pkl.trim_end_matches(".pkl"));
     let obj = {
-        let mut reader = std::io::BufReader::new(zip.by_name(&pkl).map_err(|e| bad(e.to_string()))?);
+        let mut reader =
+            std::io::BufReader::new(zip.by_name(&pkl).map_err(|e| bad(e.to_string()))?);
         let mut stack = Stack::empty();
-        stack.read_loop(&mut reader).map_err(|e| bad(e.to_string()))?;
+        stack
+            .read_loop(&mut reader)
+            .map_err(|e| bad(e.to_string()))?;
         stack.finalize().map_err(|e| bad(e.to_string()))?
     };
     let info = obj
@@ -136,9 +158,16 @@ pub fn silence_latent(path: &Path) -> std::result::Result<Tensor, String> {
         .read_to_end(&mut bytes)
         .map_err(|e| bad(e.to_string()))?;
     let shape = info.layout.shape().clone();
-    let t = Tensor::from_raw_buffer(&bytes[..shape.elem_count() * info.dtype.size_in_bytes()], info.dtype, shape.dims(), &Device::Cpu)
-        .map_err(err)?;
-    t.to_dtype(DType::F32).and_then(|t| t.transpose(1, 2)?.contiguous()).map_err(err)
+    let t = Tensor::from_raw_buffer(
+        &bytes[..shape.elem_count() * info.dtype.size_in_bytes()],
+        info.dtype,
+        shape.dims(),
+        &Device::Cpu,
+    )
+    .map_err(err)?;
+    t.to_dtype(DType::F32)
+        .and_then(|t| t.transpose(1, 2)?.contiguous())
+        .map_err(err)
 }
 
 impl AceStep {
@@ -151,7 +180,11 @@ impl AceStep {
         let dvb = vb(&p(DIT_DIR, "model.safetensors"), dtype, &device)?;
         let encoder = ConditionEncoder::load(&dvb).map_err(err)?;
         let dit = Dit::load(&dvb).map_err(err)?;
-        let vvb = vb(&p(VAE_DIR, "diffusion_pytorch_model.safetensors"), dtype, &device)?;
+        let vvb = vb(
+            &p(VAE_DIR, "diffusion_pytorch_model.safetensors"),
+            dtype,
+            &device,
+        )?;
         let vae_enc = vae::Encoder::load(&vvb).map_err(err)?;
         let vae_dec = vae::Decoder::load(&vvb).map_err(err)?;
         let silence = silence_latent(&p(DIT_DIR, "silence_latent.pt"))?;
@@ -191,7 +224,10 @@ impl AceStep {
     /// The timbre reference with no reference audio: the first 30 s of
     /// the silence latent, (1, 750, 64).
     pub fn timbre(&self) -> CResult<Tensor> {
-        self.silence.narrow(1, 0, TIMBRE_FRAMES)?.to_dtype(self.dtype)?.to_device(&self.device)
+        self.silence
+            .narrow(1, 0, TIMBRE_FRAMES)?
+            .to_dtype(self.dtype)?
+            .to_device(&self.device)
     }
 
     fn to_dev(&self, t: &Tensor) -> CResult<Tensor> {
@@ -205,7 +241,9 @@ impl AceStep {
         let lyric_ids = self.tokenizer.encode(lyrics(), MAX_LYRIC_TOKENS)?;
         let text = self.text.hidden(&ids).map_err(err)?;
         let lyric = self.text.embed(&lyric_ids).map_err(err)?;
-        self.encoder.forward(&text, &lyric, &self.timbre().map_err(err)?).map_err(err)
+        self.encoder
+            .forward(&text, &lyric, &self.timbre().map_err(err)?)
+            .map_err(err)
     }
 
     /// Both branches' K/V stacked as batch 2 (conditioned, null).
@@ -222,9 +260,16 @@ impl AceStep {
     }
 
     /// (1, 2, N) audio → (1, T, 64) latents with posterior noise from `noise`.
-    pub fn encode(&self, audio: &Tensor, noise: &mut dyn FnMut(usize) -> CResult<Tensor>) -> CResult<Tensor> {
+    pub fn encode(
+        &self,
+        audio: &Tensor,
+        noise: &mut dyn FnMut(usize) -> CResult<Tensor>,
+    ) -> CResult<Tensor> {
         let a = self.to_dev(&audio.clamp(-1f32, 1f32)?)?;
-        self.vae_enc.encode_tiled(&a, noise)?.transpose(1, 2)?.contiguous()
+        self.vae_enc
+            .encode_tiled(&a, noise)?
+            .transpose(1, 2)?
+            .contiguous()
     }
 
     /// Decode window in latents: the reference's CPU choice on the CPU
@@ -235,13 +280,20 @@ impl AceStep {
             .ok()
             .and_then(|v| v.parse().ok())
             .filter(|&v: &usize| v > 2 * vae::DECODE_OVERLAP)
-            .unwrap_or(if self.device.is_cpu() { vae::DECODE_CHUNK } else { 512 })
+            .unwrap_or(if self.device.is_cpu() {
+                vae::DECODE_CHUNK
+            } else {
+                512
+            })
     }
 
     /// (1, T, 64) latents → (2, T·1920) audio on the CPU, f32.
     pub fn decode(&self, latents: &Tensor) -> CResult<Tensor> {
         let z = self.to_dev(latents)?.transpose(1, 2)?.contiguous()?;
-        let wav = self.vae_dec.decode_tiled(&z, self.decode_chunk(), vae::DECODE_OVERLAP)?.squeeze(0)?;
+        let wav = self
+            .vae_dec
+            .decode_tiled(&z, self.decode_chunk(), vae::DECODE_OVERLAP)?
+            .squeeze(0)?;
         // As the reference: a decode peaking over full scale is scaled down to it.
         let peak = wav.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?;
         if peak > 1.0 {
@@ -266,7 +318,11 @@ impl AceStep {
         }
         let latents = n / HOP;
         if latents < MIN_LATENTS {
-            return Err(format!("context too short: {} s (the model needs at least {} s)", n / 48_000, MIN_LATENTS * HOP / 48_000));
+            return Err(format!(
+                "context too short: {} s (the model needs at least {} s)",
+                n / 48_000,
+                MIN_LATENTS * HOP / 48_000
+            ));
         }
         let n = latents * HOP;
         timings.latents = latents;
@@ -279,7 +335,9 @@ impl AceStep {
         let mut post = Normal::new(req.seed ^ 0x5A5A_0F0F_C3C3_9696);
         let t = Instant::now();
         let src = self
-            .encode(&audio, &mut |len| Tensor::from_vec(post.fill(ACOUSTIC * len), (1, ACOUSTIC, len), &Device::Cpu))
+            .encode(&audio, &mut |len| {
+                Tensor::from_vec(post.fill(ACOUSTIC * len), (1, ACOUSTIC, len), &Device::Cpu)
+            })
             .map_err(err)?;
         // Wait for the GPU before the context is used: on Metal, candle
         // recycles a dropped tensor's buffer (here the posterior noise
@@ -295,7 +353,14 @@ impl AceStep {
 
         let t = Instant::now();
         let seconds = n / 48_000;
-        let p = prompt(&req.track_name, &req.caption, req.bpm, req.time_signature, req.keyscale.as_deref(), seconds);
+        let p = prompt(
+            &req.track_name,
+            &req.caption,
+            req.bpm,
+            req.time_signature,
+            req.keyscale.as_deref(),
+            seconds,
+        );
         let cond = self.condition(&p)?;
         let kv = self.cross_kv(&cond).map_err(err)?;
         let context = self.context(&src).map_err(err)?;
@@ -303,7 +368,12 @@ impl AceStep {
         timings.text_s = t.elapsed().as_secs_f64();
 
         let mut noise_rng = Normal::new(req.seed);
-        let noise = Tensor::from_vec(noise_rng.fill(latents * ACOUSTIC), (1, latents, ACOUSTIC), &Device::Cpu).map_err(err)?;
+        let noise = Tensor::from_vec(
+            noise_rng.fill(latents * ACOUSTIC),
+            (1, latents, ACOUSTIC),
+            &Device::Cpu,
+        )
+        .map_err(err)?;
         let c = Conditioning {
             dit: &self.dit,
             context: &context,
@@ -311,10 +381,17 @@ impl AceStep {
         };
         let t = Instant::now();
         let steps = req.steps.max(1);
-        let out = sampler::sample(&c, &noise, steps, req.guidance, req.shift as f32, &mut |i| {
-            progress(0.05 + 0.85 * i as f64 / steps as f64);
-            !cancel()
-        })
+        let out = sampler::sample(
+            &c,
+            &noise,
+            steps,
+            req.guidance,
+            req.shift as f32,
+            &mut |i| {
+                progress(0.05 + 0.85 * i as f64 / steps as f64);
+                !cancel()
+            },
+        )
         .map_err(err)?;
         timings.diffusion_s = t.elapsed().as_secs_f64();
         let Some(out) = out else { return Ok(None) };
