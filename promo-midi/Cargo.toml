@@ -26,11 +26,8 @@ ureq = { version = "2", optional = true }
 [features]
 # Installing the bank from its pinned URL. The apps bundle their copy and
 # leave it out.
-default = ["download", "generate"]
+default = ["download"]
 download = ["dep:ureq"]
-# Generated layers: the ACE-Step REST client (MIDI.md §7). The apps keep it
-# (the Mac generates; every host mixes the stored file either way).
-generate = ["dep:ureq"]
 
 [dev-dependencies]
 midly = { version = "0.5", default-features = false, features = ["std"] }

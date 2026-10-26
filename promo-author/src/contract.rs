@@ -869,8 +869,8 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "check": { "type": "boolean", "description":
                         "Render nothing: say whether the take is current, and why not" },
                     "generate": { "type": "object", "description":
-                        "{track, caption, seed?, range?: {from, to}}: an ACE-Step layer over the MIDI \
-                        (the person's server)" } },
+                        "{track, caption, seed?, range?: {from, to}}: a layer the music model adds \
+                        over the MIDI" } },
                 "required": ["project", "resource"] }
         }),
     ];

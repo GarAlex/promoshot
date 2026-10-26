@@ -1,31 +1,32 @@
 //! Generated layers (core-private docs/MIDI.md §7): one track of a MIDI
-//! block made by ACE-Step's `lego` task, which hears the rest of the
-//! block's mix and adds a layer to it. The MIDI stays the timing
+//! block made by a lego model (ACE-Step 1.5's task), which hears the rest
+//! of the block's mix and adds a layer to it. The MIDI stays the timing
 //! backbone; the layer is a stored file in `Resources/.midi/` that every
 //! host mixes the same way ([`crate::render::render_mix`]), so only making
-//! it needs ACE-Step.
+//! it needs the model.
 //!
-//! This is the client for ACE-Step's REST API (`acestep-api`): `POST
-//! /release_task` (multipart, the context take as `src_audio`), `POST
-//! /query_result` until the task ends, then `GET` the audio it names.
-//! Blocking, with a timeout, a poll interval and a cancel hook, so the
-//! CLI, the headless MCP server and the apps (over promo-ffi, on a thread
-//! of their own) share one implementation. The endpoint and optional key
-//! come from `PROMOSHOT_ACESTEP_URL` / `PROMOSHOT_ACESTEP_KEY` or the
-//! caller. PromoShot never installs or runs ACE-Step.
+//! The model sits behind one trait, [`LayerGenerator`]: it takes a
+//! [`LegoRequest`] (the context as 48 kHz stereo, already tiled and padded,
+//! and the conditioning) and answers the layer's audio. Everything around
+//! it is here and provider-free: the context, the cut, the seam, the gate,
+//! the loudness, the record and the settle. The native Rust port of the
+//! model registers itself with [`set_generator`]; until one is installed
+//! [`generator`] says the music model is not installed. PromoShot runs no
+//! Python and no server.
 //!
-//! The request, the context's length, the cut and the gate follow the
-//! experiment (2026-10-26, ACE-Step 1.5 base on MLX): lego returns the
-//! layer alone, starting at the context's sample 0, its length cut to a
-//! multiple of [`LATENT_FRAMES`]; it needs ~30 s of context (an 8 s loop
-//! as is comes back as noise), so a loop is tiled to [`LOOP_PERIODS`]
-//! periods and the third is kept, its last [`SEAM_CROSSFADE_MS`] crossed
-//! into its own pre-roll. The gate ([`crate::layer::gate`]) refuses a
-//! percussive layer off the sixteenth grid and a tonal one that misses the
-//! chords or sits out bars; the kept layer is loudness-normalised.
+//! The context's length, the cut and the gate follow the experiment
+//! (2026-10-26, ACE-Step 1.5 base): lego returns the layer alone, starting
+//! at the context's sample 0, its length cut to a multiple of
+//! [`LATENT_FRAMES`]; it needs ~30 s of context (an 8 s loop as is comes
+//! back as noise), so a loop is tiled to [`LOOP_PERIODS`] periods and the
+//! third is kept, its last [`SEAM_CROSSFADE_MS`] crossed into its own
+//! pre-roll. The gate ([`crate::layer::gate`]) refuses a percussive layer
+//! off the sixteenth grid and a tonal one that misses the chords or sits
+//! out bars; the kept layer is loudness-normalised.
 
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 
 use promo_model::midi::{self, MidiBlock};
 use serde_json::{json, Map, Value};
@@ -33,15 +34,9 @@ use serde_json::{json, Map, Value};
 use crate::render::{self, Bank, Stereo, SAMPLE_RATE};
 use crate::score;
 
-/// Where ACE-Step's API answers when nothing says otherwise.
-pub const DEFAULT_URL: &str = "http://localhost:8001";
-pub const URL_ENV: &str = "PROMOSHOT_ACESTEP_URL";
-pub const KEY_ENV: &str = "PROMOSHOT_ACESTEP_KEY";
 /// The provider and task a generated track records.
 pub const PROVIDER: &str = "ace-step";
 pub const TASK: &str = "lego";
-/// The ACE-Step project, for the setup help.
-pub const REPOSITORY: &str = "https://github.com/ace-step/ACE-Step-1.5";
 
 /// The equal-power crossfade at a loop layer's seam, ms: 50 removed every
 /// click in the experiment's takes (10–25 did not).
@@ -58,52 +53,81 @@ pub const LOOP_PERIOD_KEPT: usize = 2;
 /// from the end: the context is padded with silence up to one and the
 /// answer trimmed back.
 pub const LATENT_FRAMES: usize = 1920;
-/// The DiT the experiment used (and lego needs: the turbo model is not it).
-pub const DEFAULT_MODEL: &str = "acestep-v15-base";
+/// The sampling the experiment found right for the base model.
 pub const INFERENCE_STEPS: u32 = 50;
 pub const GUIDANCE_SCALE: f64 = 7.0;
 pub const SHIFT: f64 = 3.0;
-/// ~30 s per 32 s of audio warm, plus ~24 s to load the model the first time.
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(900);
-pub const DEFAULT_POLL: Duration = Duration::from_secs(2);
 
 /// The error a cancelled generation ends with.
 pub const CANCELLED: &str = "generation cancelled";
 
-/// An ACE-Step API endpoint.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Endpoint {
-    /// No trailing slash.
-    pub url: String,
-    pub key: Option<String>,
+/// What a lego model is asked: the layer over `context`.
+#[derive(Debug, Clone)]
+pub struct LegoRequest {
+    /// The context, 48 kHz stereo, already tiled to ~30 s and padded with
+    /// silence to a multiple of [`LATENT_FRAMES`]. The answer starts at its
+    /// sample 0.
+    pub context: Stereo,
+    /// The layer's part: one of [`crate::layer::TRACK_NAMES`].
+    pub track_name: String,
+    pub caption: String,
+    /// "C minor"; None when the MIDI has no pitched notes.
+    pub keyscale: Option<String>,
+    pub bpm: f64,
+    /// Beats per bar (2, 3, 4 or 6).
+    pub time_signature: u32,
+    pub seed: i64,
+    pub steps: u32,
+    pub guidance: f64,
+    pub shift: f64,
 }
 
-impl Endpoint {
-    /// `url` / `key` when given, else `PROMOSHOT_ACESTEP_URL` /
-    /// `PROMOSHOT_ACESTEP_KEY`, else [`DEFAULT_URL`] and no key.
-    pub fn resolve(url: Option<&str>, key: Option<&str>) -> Endpoint {
-        let env = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
-        let url = url
-            .map(str::to_string)
-            .filter(|u| !u.trim().is_empty())
-            .or_else(|| env(URL_ENV))
-            .unwrap_or_else(|| DEFAULT_URL.to_string());
-        let key = key
-            .map(str::to_string)
-            .filter(|k| !k.trim().is_empty())
-            .or_else(|| env(KEY_ENV));
-        Endpoint {
-            url: url.trim().trim_end_matches('/').to_string(),
-            key: key.map(|k| k.trim().to_string()),
-        }
-    }
+/// What a lego model answers: the layer alone (any rate the core can
+/// resample; 48 kHz stereo is what it should be), from the context's
+/// sample 0, and the model's name for the record.
+#[derive(Debug, Clone, Default)]
+pub struct LayerAudio {
+    pub audio: Stereo,
+    pub model: Option<String>,
+}
 
-    fn auth(&self, request: ureq::Request) -> ureq::Request {
-        match &self.key {
-            Some(key) => request.set("Authorization", &format!("Bearer {key}")),
-            None => request,
-        }
-    }
+/// A lego model. `progress` takes the fraction done (0…1); `cancel` turns
+/// true once the caller wants it stopped — the model should check it
+/// between steps and answer `Err(CANCELLED)`.
+pub trait LayerGenerator: Send + Sync {
+    fn generate(
+        &self,
+        request: LegoRequest,
+        progress: &mut dyn FnMut(f64),
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<LayerAudio, String>;
+}
+
+/// What a host without the model answers.
+pub fn not_installed() -> String {
+    "the music model is not installed — generated layers need it (Settings ▸ Music on the Mac \
+     downloads it once it ships); the MIDI and every stored layer still play"
+        .into()
+}
+
+fn slot() -> &'static Mutex<Option<Arc<dyn LayerGenerator>>> {
+    static SLOT: OnceLock<Mutex<Option<Arc<dyn LayerGenerator>>>> = OnceLock::new();
+    SLOT.get_or_init(|| Mutex::new(None))
+}
+
+/// Installs the process's lego model (the native port, once its weights
+/// are downloaded), or removes it with None.
+pub fn set_generator(generator: Option<Arc<dyn LayerGenerator>>) {
+    *slot().lock().unwrap_or_else(|e| e.into_inner()) = generator;
+}
+
+/// The installed lego model, or the words for its absence.
+pub fn generator() -> Result<Arc<dyn LayerGenerator>, String> {
+    slot()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .ok_or_else(not_installed)
 }
 
 /// What to generate.
@@ -119,13 +143,9 @@ pub struct Request {
     /// Bars, 1-based, `to` exclusive; None keeps the track's own, else the
     /// whole take.
     pub range: Option<(f64, f64)>,
-    /// The DiT model; None is [`DEFAULT_MODEL`].
-    pub model: Option<String>,
     /// ACE-Step's `track_name` ([`crate::layer::TRACK_NAMES`]); None keeps
     /// the track's own, else follows the caption.
     pub track_name: Option<String>,
-    pub timeout: Duration,
-    pub poll: Duration,
 }
 
 impl Request {
@@ -135,19 +155,17 @@ impl Request {
             caption: None,
             seed: None,
             range: None,
-            model: None,
             track_name: None,
-            timeout: DEFAULT_TIMEOUT,
-            poll: DEFAULT_POLL,
         }
     }
 }
 
 /// Where a generation is, for a progress line.
 pub trait Progress {
-    /// A new phase: `rendering`, `uploading`, `queued`, `generating`,
-    /// `downloading`, `aligning`, `mixing`.
+    /// A new phase: `rendering`, `generating`, `aligning`, `mixing`.
     fn phase(&mut self, phase: &str);
+    /// The model's fraction done while `generating` (0…1).
+    fn fraction(&mut self, _done: f64) {}
     /// True once the caller wants it stopped; checked between steps and
     /// while waiting.
     fn cancelled(&self) -> bool {
@@ -176,7 +194,7 @@ pub struct Generated {
     pub keyscale: Option<String>,
     /// What the gate measured (it kept the layer).
     pub gate: crate::layer::Gate,
-    /// Wall-clock seconds, upload to download.
+    /// Wall-clock seconds the model took.
     pub seconds: f64,
     pub created: bool,
 }
@@ -213,53 +231,20 @@ impl Generated {
     }
 }
 
-// ------------------------------------------------------------------ status
-
-/// Whether ACE-Step answers at `endpoint`: `{url, ok, service, version,
-/// models: [name], defaultModel}`. The error says how to start it.
-pub fn status(endpoint: &Endpoint, timeout: Duration) -> Result<Value, String> {
-    let agent = agent(timeout);
-    let health = get_json(&agent, endpoint, "/health")?;
-    let data = &health["data"];
-    let mut out = json!({
-        "url": endpoint.url, "ok": data["status"].as_str().is_none_or(|s| s == "ok"),
-        "service": data["service"], "version": data["version"],
-    });
-    if let Ok(models) = get_json(&agent, endpoint, "/v1/models") {
-        out["models"] = json!(models["data"]["models"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|m| m["name"].as_str())
-            .collect::<Vec<_>>());
-        out["defaultModel"] = models["data"]["default_model"].clone();
-    }
-    Ok(out)
-}
-
-fn not_answering(endpoint: &Endpoint, why: &str) -> String {
-    format!(
-        "ACE-Step is not answering at {} ({why}). PromoShot does not install it: set it up from \
-         {REPOSITORY} (download the main model bundle once, plus the base DiT), start its API \
-         server with the base model — `ACESTEP_CONFIG_PATH={DEFAULT_MODEL} acestep-api`, port \
-         8001 — and set {URL_ENV} if it listens elsewhere",
-        endpoint.url
-    )
-}
-
 // ---------------------------------------------------------------- generate
 
 /// Generates (or regenerates) the layer `request.track` of the MIDI
 /// resource `resource_id` in `doc`, writes its file into
 /// `resources_dir/.midi/`, records it on the track, then settles the take
-/// with it mixed in. On any failure — refused for drift, cancelled, the
-/// server's error — `doc` and the project's files are as they were.
+/// with it mixed in, with `model` as the lego model. On any failure —
+/// refused by the gate, cancelled, the model's error — `doc` and the
+/// project's files are as they were.
 pub fn generate_doc(
     doc: &mut Value,
     resources_dir: &Path,
     resource_id: &str,
     request: &Request,
-    endpoint: &Endpoint,
+    model: &dyn LayerGenerator,
     bank: &Bank,
     progress: &mut dyn Progress,
 ) -> Result<(Generated, crate::Settled), String> {
@@ -321,11 +306,6 @@ pub fn generate_doc(
         }
     }
     let seed = request.seed.unwrap_or_else(fresh_seed);
-    let model = request
-        .model
-        .clone()
-        .filter(|m| !m.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_MODEL.to_string());
     let track_name: String = match request.track_name.clone().or_else(|| {
         held.get("trackName")
             .and_then(Value::as_str)
@@ -335,7 +315,7 @@ pub fn generate_doc(
             let t = t.trim().to_ascii_lowercase();
             if !crate::layer::TRACK_NAMES.contains(&t.as_str()) {
                 return Err(format!(
-                    "track name \"{t}\": ACE-Step's lego knows {}",
+                    "track name \"{t}\": lego knows {}",
                     crate::layer::TRACK_NAMES.join(", ")
                 ));
             }
@@ -411,29 +391,37 @@ pub fn generate_doc(
         return Err(CANCELLED.into());
     }
 
-    // ACE-Step.
+    // The model.
+    progress.phase("generating");
     let started = Instant::now();
-    let agent = agent(request.timeout);
-    let fields = form_fields(&FormInput {
-        caption: &caption,
-        track_name: &track_name,
-        bpm: score.bpm,
-        key: keyscale.clone(),
-        meter: score.time_signature,
-        seed,
-        model: &model,
-    });
-    progress.phase("uploading");
-    let task = release_task(&agent, endpoint, &fields, &render::stereo_wav(&context))?;
-    progress.phase("queued");
-    let (file_url, dit_model) = wait(&agent, endpoint, &task, request, started, progress)?;
+    let answer = {
+        // The model reports and asks through the one `progress`, never at
+        // once: a RefCell lends it to each closure in turn.
+        let shared = std::cell::RefCell::new(&mut *progress);
+        let cancel = || shared.borrow().cancelled();
+        let mut report = |f: f64| shared.borrow_mut().fraction(f.clamp(0.0, 1.0));
+        model.generate(
+            LegoRequest {
+                context,
+                track_name: track_name.clone(),
+                caption: caption.clone(),
+                keyscale: keyscale.clone(),
+                bpm: score.bpm,
+                time_signature: score.time_signature[0],
+                seed,
+                steps: INFERENCE_STEPS,
+                guidance: GUIDANCE_SCALE,
+                shift: SHIFT,
+            },
+            &mut report,
+            &cancel,
+        )?
+    };
     if progress.cancelled() {
         return Err(CANCELLED.into());
     }
-    progress.phase("downloading");
-    let audio = download(&agent, endpoint, &file_url)?;
-    let made = render::read_stereo(&audio)
-        .map_err(|e| format!("ACE-Step's audio: {e} (ask it for audio_format=wav)"))?;
+    let dit_model = answer.model.clone();
+    let made = answer.audio;
     let seconds = started.elapsed().as_secs_f64();
 
     // The layer: one take long, aligned at the take's start.
@@ -500,10 +488,10 @@ pub fn generate_doc(
     record.insert("provider".into(), json!(PROVIDER));
     record.insert("task".into(), json!(TASK));
     record.insert("caption".into(), json!(caption));
-    record.insert(
-        "model".into(),
-        json!(dit_model.clone().unwrap_or_else(|| model.clone())),
-    );
+    match &dit_model {
+        Some(m) => record.insert("model".into(), json!(m)),
+        None => record.remove("model"),
+    };
     record.insert("trackName".into(), json!(track_name));
     match &keyscale {
         Some(k) => record.insert("keyscale".into(), json!(k)),
@@ -559,7 +547,7 @@ pub fn generate_doc(
             file,
             caption,
             seed,
-            model: Some(dit_model.unwrap_or(model)),
+            model: dit_model,
             range,
             track_name,
             keyscale,
@@ -577,7 +565,7 @@ pub fn generate(
     project_dir: &Path,
     resource_id: &str,
     request: &Request,
-    endpoint: &Endpoint,
+    model: &dyn LayerGenerator,
     bank: &Bank,
     progress: &mut dyn Progress,
 ) -> Result<(Generated, crate::Settled), String> {
@@ -590,7 +578,7 @@ pub fn generate(
         &project_dir.join("Resources"),
         resource_id,
         request,
-        endpoint,
+        model,
         bank,
         progress,
     )?;
@@ -808,247 +796,6 @@ pub fn key_scale(block: &MidiBlock) -> Option<String> {
     Some(best.1)
 }
 
-// ------------------------------------------------------------------- HTTP
-
-struct FormInput<'a> {
-    caption: &'a str,
-    track_name: &'a str,
-    bpm: f64,
-    key: Option<String>,
-    meter: [u32; 2],
-    seed: i64,
-    model: &'a str,
-}
-
-/// The `release_task` fields for a lego layer over the uploaded context —
-/// the request the experiment found working, in one place. Lego locks the
-/// duration to the context and builds its instruction from `track_name`,
-/// so neither `audio_duration` nor `instruction` is sent.
-fn form_fields(input: &FormInput) -> Vec<(&'static str, String)> {
-    let mut fields = vec![
-        ("task_type", TASK.to_string()),
-        ("track_name", input.track_name.to_string()),
-        ("prompt", input.caption.to_string()),
-        ("lyrics", "[Instrumental]".into()),
-        ("vocal_language", "en".into()),
-        (
-            "bpm",
-            format!("{}", input.bpm.round().clamp(30.0, 300.0) as i64),
-        ),
-        ("timesignature", input.meter[0].to_string()),
-        ("model", input.model.to_string()),
-        ("thinking", "false".into()),
-        ("use_cot_caption", "false".into()),
-        ("use_cot_language", "false".into()),
-        ("use_random_seed", "false".into()),
-        ("seed", input.seed.to_string()),
-        ("batch_size", "1".into()),
-        ("inference_steps", INFERENCE_STEPS.to_string()),
-        ("guidance_scale", format!("{GUIDANCE_SCALE:.1}")),
-        ("shift", format!("{SHIFT:.1}")),
-        ("repainting_start", "0".into()),
-        ("repainting_end", "-1".into()),
-        ("audio_format", "wav".into()),
-    ];
-    if let Some(key) = &input.key {
-        fields.push(("keyscale", key.clone()));
-    }
-    fields
-}
-
-fn agent(timeout: Duration) -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(5))
-        .timeout_read(timeout.min(Duration::from_secs(120)))
-        .timeout_write(Duration::from_secs(300))
-        .build()
-}
-
-/// The endpoint's words for a failed call — never the request, which may
-/// carry the key.
-fn failure(endpoint: &Endpoint, path: &str, e: ureq::Error) -> String {
-    match e {
-        ureq::Error::Status(code, response) => {
-            let body = response.into_string().unwrap_or_default();
-            let detail = serde_json::from_str::<Value>(&body)
-                .ok()
-                .and_then(|v| {
-                    v["detail"]
-                        .as_str()
-                        .or(v["error"].as_str())
-                        .map(str::to_string)
-                })
-                .unwrap_or(body);
-            let hint = if code == 401 {
-                format!(" — set the key ({KEY_ENV}, or Settings ▸ Music ▸ ACE-Step)")
-            } else {
-                String::new()
-            };
-            format!("ACE-Step {path} answered {code}: {}{hint}", detail.trim())
-        }
-        other => not_answering(endpoint, &other.to_string()),
-    }
-}
-
-fn get_json(agent: &ureq::Agent, endpoint: &Endpoint, path: &str) -> Result<Value, String> {
-    let response = endpoint
-        .auth(agent.get(&format!("{}{path}", endpoint.url)))
-        .call()
-        .map_err(|e| failure(endpoint, path, e))?;
-    let text = response.into_string().map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| format!("ACE-Step {path}: {e}"))
-}
-
-/// The wrapper's `data`, or its `error`.
-fn data(answer: Value, path: &str) -> Result<Value, String> {
-    if let Some(error) = answer["error"].as_str().filter(|e| !e.is_empty()) {
-        return Err(format!("ACE-Step {path}: {error}"));
-    }
-    if answer["code"].as_i64().is_some_and(|c| c != 200) {
-        return Err(format!("ACE-Step {path} answered code {}", answer["code"]));
-    }
-    Ok(answer["data"].clone())
-}
-
-fn release_task(
-    agent: &ureq::Agent,
-    endpoint: &Endpoint,
-    fields: &[(&str, String)],
-    context_wav: &[u8],
-) -> Result<String, String> {
-    let boundary = format!("promoshot-{:016x}", fresh_seed() as u64 ^ 0x5eed_1e60);
-    let mut body = Vec::with_capacity(context_wav.len() + 4096);
-    for (name, value) in fields {
-        body.extend_from_slice(
-            format!(
-                "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
-            )
-            .as_bytes(),
-        );
-    }
-    body.extend_from_slice(
-        format!(
-            "--{boundary}\r\nContent-Disposition: form-data; name=\"src_audio\"; \
-             filename=\"context.wav\"\r\nContent-Type: audio/wav\r\n\r\n"
-        )
-        .as_bytes(),
-    );
-    body.extend_from_slice(context_wav);
-    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
-    let path = "/release_task";
-    let response = endpoint
-        .auth(agent.post(&format!("{}{path}", endpoint.url)))
-        .set(
-            "Content-Type",
-            &format!("multipart/form-data; boundary={boundary}"),
-        )
-        .send_bytes(&body)
-        .map_err(|e| failure(endpoint, path, e))?;
-    let text = response.into_string().map_err(|e| e.to_string())?;
-    let answer: Value = serde_json::from_str(&text).map_err(|e| format!("ACE-Step {path}: {e}"))?;
-    let data = data(answer, path)?;
-    data["task_id"]
-        .as_str()
-        .map(str::to_string)
-        .ok_or_else(|| format!("ACE-Step {path} gave no task_id"))
-}
-
-/// Polls `query_result` until the task ends: the audio's URL and the DiT
-/// model the result names.
-fn wait(
-    agent: &ureq::Agent,
-    endpoint: &Endpoint,
-    task: &str,
-    request: &Request,
-    started: Instant,
-    progress: &mut dyn Progress,
-) -> Result<(String, Option<String>), String> {
-    let path = "/query_result";
-    let mut generating = false;
-    loop {
-        if progress.cancelled() {
-            return Err(CANCELLED.into());
-        }
-        if started.elapsed() > request.timeout {
-            return Err(format!(
-                "ACE-Step did not finish within {:.0} s (task {task})",
-                request.timeout.as_secs_f64()
-            ));
-        }
-        let response = endpoint
-            .auth(agent.post(&format!("{}{path}", endpoint.url)))
-            .set("Content-Type", "application/json")
-            .send_string(&json!({ "task_id_list": [task] }).to_string())
-            .map_err(|e| failure(endpoint, path, e))?;
-        let text = response.into_string().map_err(|e| e.to_string())?;
-        let answer: Value =
-            serde_json::from_str(&text).map_err(|e| format!("ACE-Step {path}: {e}"))?;
-        let data = data(answer, path)?;
-        let entry = data
-            .as_array()
-            .and_then(|l| l.iter().find(|t| t["task_id"] == task).or(l.first()))
-            .cloned()
-            .unwrap_or(Value::Null);
-        let results = match &entry["result"] {
-            Value::String(s) => serde_json::from_str::<Value>(s).unwrap_or(Value::Null),
-            other => other.clone(),
-        };
-        let first = results
-            .as_array()
-            .and_then(|l| l.first())
-            .cloned()
-            .unwrap_or(results.clone());
-        match entry["status"].as_i64() {
-            Some(1) => {
-                let file = first["file"]
-                    .as_str()
-                    .filter(|f| !f.is_empty())
-                    .ok_or_else(|| format!("ACE-Step finished task {task} with no audio file"))?;
-                let model = first["dit_model"].as_str().map(str::to_string);
-                return Ok((file.to_string(), model));
-            }
-            Some(2) => {
-                let why = first["error"]
-                    .as_str()
-                    .or(entry["error"].as_str())
-                    .or(first["generation_info"].as_str())
-                    .unwrap_or("no reason given");
-                return Err(format!("ACE-Step failed the generation: {why}"));
-            }
-            _ => {
-                if !generating {
-                    generating = true;
-                    progress.phase("generating");
-                }
-            }
-        }
-        // Sleep in slices, so a cancel lands quickly.
-        let until = Instant::now() + request.poll;
-        while Instant::now() < until {
-            if progress.cancelled() {
-                return Err(CANCELLED.into());
-            }
-            std::thread::sleep((until - Instant::now()).min(Duration::from_millis(25)));
-        }
-    }
-}
-
-fn download(agent: &ureq::Agent, endpoint: &Endpoint, file: &str) -> Result<Vec<u8>, String> {
-    let url = if file.starts_with("http://") || file.starts_with("https://") {
-        file.to_string()
-    } else {
-        format!("{}/{}", endpoint.url, file.trim_start_matches('/'))
-    };
-    let response = endpoint
-        .auth(agent.get(&url))
-        .call()
-        .map_err(|e| failure(endpoint, "/v1/audio", e))?;
-    let mut bytes = Vec::new();
-    std::io::Read::read_to_end(&mut response.into_reader(), &mut bytes)
-        .map_err(|e| format!("ACE-Step audio: {e}"))?;
-    Ok(bytes)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1088,12 +835,5 @@ mod tests {
         .unwrap();
         assert_eq!(key_scale(&block).as_deref(), Some("A minor"));
         assert_eq!(key_scale(&MidiBlock::default()), None);
-    }
-
-    #[test]
-    fn the_endpoint_prefers_what_it_is_given() {
-        let e = Endpoint::resolve(Some("http://h:9/ "), Some(" k "));
-        assert_eq!(e.url, "http://h:9");
-        assert_eq!(e.key.as_deref(), Some("k"));
     }
 }

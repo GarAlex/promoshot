@@ -284,14 +284,11 @@ or an imported `.mid`; `promo_schema_full {"topics": ["midi"]}`) that
 bars. It needs the sound bank once (`promoshot-mcp sounds install
 generaluser`); an unchanged block is reused. A track can also be a
 GENERATED layer (`promo_midi {"generate": {"track": "Rhodes", "caption":
-"warm Rhodes comping"}}`): ACE-Step's lego task hears the MIDI and adds
+"warm Rhodes comping"}}`): the music model (lego) hears the MIDI and adds
 it, refused when off the grid or off the chords (try another seed). It
-needs the person's own ACE-Step server (`acestep-api` with the main model
-bundle and `ACESTEP_CONFIG_PATH=acestep-v15-base`;
-`PROMOSHOT_ACESTEP_URL`, default localhost:8001) — never install it;
-point them to github.com/ace-step/ACE-Step-1.5. A generation takes ~30 s
-(a minute the first time). After a MIDI edit validate says the layer's
-context changed; regenerate only if asked.
+needs the music model installed; without it `promo_midi` says so. After
+a MIDI edit validate says the layer's context changed; regenerate only
+if asked.
 
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`, and the authoring tools as verbs taking the

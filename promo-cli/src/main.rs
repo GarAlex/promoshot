@@ -62,15 +62,14 @@ USAGE:
         filename, duration, beatGrid and receipt; an unchanged block is
         reused. `promo video` settles the used ones itself
     promo midi generate <project-dir> <resource> --track <name> [--caption <text>]
-                  [--seed <n>] [--range <from>-<to>] [--as <track_name>] [--model <dit>]
-                  [--url <acestep>] [--key <k>] [--timeout <s>] [--bank <file.sf2>] [--json]
-        a generated layer: ACE-Step's lego task hears the MIDI and adds the
+                  [--seed <n>] [--range <from>-<to>] [--as <track_name>] [--bank <file.sf2>]
+                  [--json]
+        a generated layer: the music model (lego) hears the MIDI and adds the
         track (a new one needs --caption; an existing one regenerates), kept in
         Resources/.midi/ when it keeps to the grid (drums, percussion) or the
         chords (the rest), mixed into the take. --as is lego's track_name
-        (strings, synth, keyboard, drums…; else read from the caption).
-        The server is yours to run (PROMOSHOT_ACESTEP_URL, default
-        http://localhost:8001; PROMOSHOT_ACESTEP_KEY). --check-server only asks it
+        (strings, synth, keyboard, drums…; else read from the caption). Needs
+        the music model installed; without it, it says so
     promo sounds [list | install generaluser]
         the sound banks MIDI renders with (PROMOSHOT_SOUNDS, else the
         per-user folder); install fetches GeneralUser GS and its licence
@@ -705,8 +704,7 @@ fn midi(args: &[String]) -> Result<String, String> {
     let usage =
         "usage: promo midi render <project-dir> [resource] [--bank <file.sf2>] [--check] [--json]\n       \
          promo midi generate <project-dir> <resource> --track <name> [--caption <text>] [--seed <n>] \
-         [--range <from>-<to>] [--as strings|synth|drums|…] [--model <dit>] [--url <acestep>] [--key <k>] \
-         [--timeout <s>] [--bank <file.sf2>] [--json] | --check-server [--url]";
+         [--range <from>-<to>] [--as strings|synth|drums|…] [--bank <file.sf2>] [--json]";
     if args.first().map(String::as_str) == Some("generate") {
         return midi_generate(&args[1..], usage);
     }
@@ -787,12 +785,11 @@ fn midi(args: &[String]) -> Result<String, String> {
 /// `promo midi generate`: one generated layer over the MIDI (MIDI.md §7),
 /// progress on stderr.
 fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
-    use promo_midi::generate::{self, Endpoint, Progress, Request};
+    use promo_midi::generate::{self, Progress, Request};
     let mut positional = Vec::new();
-    let (mut track, mut caption, mut seed, mut range, mut model) = (None, None, None, None, None);
-    let (mut url, mut key, mut timeout, mut bank) = (None, None, None, None);
-    let mut track_name = None;
-    let (mut json, mut check_server) = (false, false);
+    let (mut track, mut caption, mut seed, mut range) = (None, None, None, None);
+    let (mut track_name, mut bank) = (None, None);
+    let mut json = false;
     let mut i = 0;
     while i < args.len() {
         let value = |i: usize| {
@@ -820,27 +817,10 @@ fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
                     .ok_or("--range expects bars as <from>-<to> (1-based, `to` exclusive)")?;
                 range = Some((from, to));
             }
-            "--model" => model = Some(value(i)?),
             "--as" => track_name = Some(value(i)?),
-            "--url" => url = Some(value(i)?),
-            "--key" => key = Some(value(i)?),
-            "--timeout" => {
-                timeout = Some(
-                    value(i)?
-                        .parse::<f64>()
-                        .ok()
-                        .filter(|t| t.is_finite() && *t > 0.0)
-                        .ok_or("--timeout expects seconds")?,
-                )
-            }
             "--bank" => bank = Some(PathBuf::from(value(i)?)),
             "--json" => {
                 json = true;
-                i += 1;
-                continue;
-            }
-            "--check-server" => {
-                check_server = true;
                 i += 1;
                 continue;
             }
@@ -855,30 +835,6 @@ fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
         }
         i += 2;
     }
-    let endpoint = Endpoint::resolve(url.as_deref(), key.as_deref());
-    if check_server {
-        let status = generate::status(&endpoint, std::time::Duration::from_secs(10))?;
-        return Ok(if json {
-            status.to_string()
-        } else {
-            format!(
-                "ACE-Step answers at {} ({} {}){}",
-                endpoint.url,
-                status["service"].as_str().unwrap_or("ACE-Step"),
-                status["version"].as_str().unwrap_or_default(),
-                status["models"]
-                    .as_array()
-                    .map(|m| format!(
-                        "; models: {}",
-                        m.iter()
-                            .filter_map(serde_json::Value::as_str)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ))
-                    .unwrap_or_default()
-            )
-        });
-    }
     let (Some(dir), Some(resource)) = (positional.first(), positional.get(1)) else {
         return Err(usage.into());
     };
@@ -888,11 +844,8 @@ fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
     request.caption = caption;
     request.seed = seed;
     request.range = range;
-    request.model = model;
     request.track_name = track_name;
-    if let Some(t) = timeout {
-        request.timeout = std::time::Duration::from_secs_f64(t);
-    }
+    let model = generate::generator()?;
     struct Stderr(std::time::Instant);
     impl Progress for Stderr {
         fn phase(&mut self, phase: &str) {
@@ -906,7 +859,7 @@ fn midi_generate(args: &[String], usage: &str) -> Result<String, String> {
         Path::new(dir),
         resource,
         &request,
-        &endpoint,
+        model.as_ref(),
         &bank,
         &mut Stderr(std::time::Instant::now()),
     )?;

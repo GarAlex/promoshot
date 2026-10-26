@@ -1278,8 +1278,9 @@ never runs on it and a beat clock counts it exactly.
   status, highPass}` is a generated layer: an audio file in
   `Resources/.midi/`, sample 0 at the take's start, mixed with the
   track's volume/pan/mute/solo (its bytes are in the receipt); a tonal
-  one is high-passed at 90 Hz unless `highPass: false`. Made by promo_midi `generate` / `promo midi generate`
-  against an ACE-Step server; a settle marks it `contextChanged` when
+  one is high-passed at 90 Hz unless `highPass: false`. Made by
+  promo_midi `generate` / `promo midi generate` with the music model
+  installed; a settle marks it `contextChanged` when
   the notes it heard change (never regenerated silently), and validate
   warns about that or a missing file.
 

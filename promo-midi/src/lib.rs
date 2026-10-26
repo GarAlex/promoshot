@@ -11,7 +11,6 @@
 //! apps hand their bundled copy's path to [`Bank::open`].
 
 pub mod effects;
-#[cfg(feature = "generate")]
 pub mod generate;
 pub mod gm;
 pub mod layer;

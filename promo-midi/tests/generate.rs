@@ -1,19 +1,20 @@
-//! Generated layers (MIDI.md §7) against a mock ACE-Step: the request the
-//! client sends, the file it keeps (aligned, a take long, 48 kHz stereo),
-//! the receipt that follows its bytes, `contextChanged` after a MIDI edit,
-//! the drift refusal, cancel, the server's errors and validate's words.
-//! The context take needs the bank (`PROMOSHOT_SOUNDS`); without it a
-//! test says so and passes.
+//! Generated layers (MIDI.md §7) with a fake lego model behind
+//! `LayerGenerator`: the request it is given (context tiled and padded),
+//! the file kept (aligned, a take long, 48 kHz stereo, normalised), the
+//! receipt that follows its bytes, `contextChanged` after a MIDI edit, the
+//! gate's refusals, cancel, the model's errors and validate's words. The
+//! context take needs the bank (`PROMOSHOT_SOUNDS`); without it a test
+//! says so and passes.
 
-#[path = "support/mock_ace.rs"]
-mod mock_ace;
+#[path = "support/fake_lego.rs"]
+mod fake_lego;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use mock_ace::MockAce;
-use promo_midi::generate::{self, Endpoint, Progress, Request};
+use fake_lego::FakeLego;
+use promo_midi::generate::{self, Progress, Request};
 use promo_midi::{settle, sounds, Bank};
 use serde_json::{json, Value};
 
@@ -77,13 +78,7 @@ fn request(track: &str, caption: Option<&str>) -> Request {
     let mut r = Request::new(track);
     r.caption = caption.map(str::to_string);
     r.seed = Some(1234);
-    r.poll = Duration::from_millis(5);
-    r.timeout = Duration::from_secs(30);
     r
-}
-
-fn endpoint(mock: &MockAce) -> Endpoint {
-    Endpoint::resolve(Some(&mock.url), None)
 }
 
 fn read(dir: &Path) -> Value {
@@ -119,9 +114,8 @@ fn generate_writes_an_aligned_layer_and_a_new_take() {
     let first = settle::settle(&dir, "M", &bank).unwrap();
     let before_take = std::fs::read(resources.join("Groove.wav")).unwrap();
 
-    let mock = MockAce::start();
+    let mock = FakeLego::new();
     mock.with(|s| {
-        s.polls_before_done = 2;
         s.answer_rate = Some(44_100);
         s.tones = Some(harmony());
     });
@@ -130,7 +124,7 @@ fn generate_writes_an_aligned_layer_and_a_new_take() {
         &dir,
         "M",
         &request("Pad", Some("warm string pad")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut phases,
     )
@@ -138,41 +132,22 @@ fn generate_writes_an_aligned_layer_and_a_new_take() {
     assert!(made.created);
     assert_eq!(made.file, "Groove · Pad.wav");
     assert_eq!(made.seed, 1234);
-    assert_eq!(made.model.as_deref(), Some("acestep-v15-base"));
+    assert_eq!(made.model.as_deref(), Some("fake-lego"));
     assert_eq!(made.track_name, "strings");
     assert_eq!(made.gate.kind, "tonal");
     assert!(made.gate.measured, "{:?}", made.gate);
     assert!(made.gate.chord_fit.unwrap() > 0.7, "{:?}", made.gate);
-    assert_eq!(
-        phases.0,
-        [
-            "rendering",
-            "uploading",
-            "queued",
-            "generating",
-            "downloading",
-            "aligning",
-            "mixing"
-        ]
-    );
+    assert_eq!(phases.0, ["rendering", "generating", "aligning", "mixing"]);
 
-    // What went to ACE-Step.
-    let (fields, frames) = mock.with(|s| (s.releases[0].clone(), s.context_frames[0]));
-    assert_eq!(fields["task_type"], "lego");
-    assert_eq!(fields["prompt"], "warm string pad");
-    assert_eq!(fields["track_name"], "strings");
-    assert_eq!(fields["bpm"], "120");
-    assert_eq!(fields["timesignature"], "4");
-    assert_eq!(fields["keyscale"], "A minor");
-    assert_eq!(fields["seed"], "1234");
-    assert_eq!(fields["use_random_seed"], "false");
-    assert_eq!(fields["model"], "acestep-v15-base");
-    assert_eq!(fields["thinking"], "false");
-    assert_eq!(fields["inference_steps"], "50");
-    assert_eq!(fields["audio_format"], "wav");
-    assert_eq!(fields["repainting_start"], "0");
-    assert_eq!(fields["repainting_end"], "-1");
-    assert!(!fields.contains_key("instruction") && !fields.contains_key("audio_duration"));
+    // What the model was asked.
+    let (asked, frames) = mock.with(|s| s.requests[0].clone());
+    assert_eq!(asked.caption, "warm string pad");
+    assert_eq!(asked.track_name, "strings");
+    assert_eq!(asked.bpm, 120.0);
+    assert_eq!(asked.time_signature, 4);
+    assert_eq!(asked.keyscale.as_deref(), Some("A minor"));
+    assert_eq!(asked.seed, 1234);
+    assert_eq!((asked.steps, asked.guidance, asked.shift), (50, 7.0, 3.0));
     assert_eq!(frames, 8 * 192_000, "the 4 s loop tiled to 32 s");
     assert_eq!(frames % 1920, 0, "a whole number of latents");
 
@@ -230,15 +205,8 @@ fn generate_writes_an_aligned_layer_and_a_new_take() {
     // Regenerate keeps the caption and the file, takes a new seed.
     let mut again = request("Pad", None);
     again.seed = Some(99);
-    let (redo, _) = generate::generate(
-        &dir,
-        "M",
-        &again,
-        &endpoint(&mock),
-        &bank,
-        &mut generate::Quiet,
-    )
-    .unwrap();
+    let (redo, _) =
+        generate::generate(&dir, "M", &again, &mock, &bank, &mut generate::Quiet).unwrap();
     assert!(!redo.created);
     assert_eq!(redo.caption, "warm string pad");
     assert_eq!(redo.file, "Groove · Pad.wav");
@@ -261,13 +229,13 @@ fn a_midi_edit_marks_the_context_changed() {
     let Some(bank) = bank() else { return };
     let dir = scratch("ctx");
     project(&dir, groove());
-    let mock = MockAce::start();
+    let mock = FakeLego::new();
     mock.with(|s| s.tones = Some(harmony()));
     generate::generate(
         &dir,
         "M",
         &request("Pad", Some("pad")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut generate::Quiet,
     )
@@ -305,7 +273,7 @@ fn a_midi_edit_marks_the_context_changed() {
         layer
     );
     assert_eq!(
-        mock.with(|s| s.releases.len()),
+        mock.with(|s| s.requests.len()),
         1,
         "never regenerated silently"
     );
@@ -325,13 +293,13 @@ fn a_percussive_layer_off_the_grid_is_refused() {
     let dir = scratch("drift");
     project(&dir, groove());
     let before = std::fs::read(dir.join("metadata.json")).unwrap();
-    let mock = MockAce::start();
+    let mock = FakeLego::new();
     mock.with(|s| s.offset_ms = 80.0);
     let err = generate::generate(
         &dir,
         "M",
         &request("Shaker", Some("shaker sixteenths")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut generate::Quiet,
     )
@@ -343,7 +311,7 @@ fn a_percussive_layer_off_the_grid_is_refused() {
     assert!(!dir.join("Resources/.midi/Groove · Shaker.wav").exists());
     assert_eq!(std::fs::read(dir.join("metadata.json")).unwrap(), before);
     assert_eq!(
-        mock.with(|s| s.releases[0]["track_name"].clone()),
+        mock.with(|s| s.requests[0].0.track_name.clone()),
         "percussion"
     );
 
@@ -352,7 +320,7 @@ fn a_percussive_layer_off_the_grid_is_refused() {
         &dir,
         "M",
         &request("Shaker", Some("shaker sixteenths")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut generate::Quiet,
     )
@@ -378,13 +346,13 @@ fn a_tonal_layer_off_the_chords_is_refused() {
     let Some(bank) = bank() else { return };
     let dir = scratch("chords");
     project(&dir, groove());
-    let mock = MockAce::start();
+    let mock = FakeLego::new();
     mock.with(|s| s.tones = Some((2.0, vec![vec![185.0, 277.18], vec![233.08, 311.13]])));
     let off = generate::generate(
         &dir,
         "M",
         &request("Pad", Some("warm pad")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut generate::Quiet,
     )
@@ -398,7 +366,7 @@ fn a_tonal_layer_off_the_chords_is_refused() {
         &dir,
         "M",
         &request("Pad", Some("warm pad")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut generate::Quiet,
     )
@@ -420,30 +388,29 @@ impl Progress for CancelAfter<'_> {
     }
 }
 
-/// Cancel while the server works: the client stops polling, keeps
-/// nothing, and says it was cancelled.
+/// Cancel while the model works: it stops, nothing is kept, and the
+/// answer says it was cancelled.
 #[test]
 fn cancel_stops_and_keeps_nothing() {
     let Some(bank) = bank() else { return };
     let dir = scratch("cancel");
     project(&dir, groove());
     let before = std::fs::read(dir.join("metadata.json")).unwrap();
-    let mock = MockAce::start();
-    mock.with(|s| s.polls_before_done = 1_000_000);
+    let mock = FakeLego::new();
+    mock.with(|s| s.hang = true);
     let flag = AtomicBool::new(false);
     let started = std::time::Instant::now();
     let err = generate::generate(
         &dir,
         "M",
         &request("Pad", Some("pad")),
-        &endpoint(&mock),
+        &mock,
         &bank,
         &mut CancelAfter("generating", &flag),
     )
     .unwrap_err();
     assert_eq!(err, generate::CANCELLED);
     assert!(started.elapsed() < Duration::from_secs(10));
-    assert!(mock.with(|s| s.polls) < 5, "stopped polling");
     assert_eq!(std::fs::read(dir.join("metadata.json")).unwrap(), before);
     assert!(!dir
         .join("Resources/.midi")
@@ -452,95 +419,36 @@ fn cancel_stops_and_keeps_nothing() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The server's own words come through: a failed task, a missing key
-/// (401, with where to set it), a server that is not there (how to run
-/// it); a new layer needs a caption and a MIDI track is not a layer.
+/// The model's own words come through, and a host without one says so;
+/// a new layer needs a caption and a MIDI track is not a layer.
 #[test]
 fn errors_say_what_happened() {
     let Some(bank) = bank() else { return };
     let dir = scratch("errors");
     project(&dir, groove());
-    let mock = MockAce::start();
+    let mock = FakeLego::new();
     mock.with(|s| s.tones = Some(harmony()));
     let quiet = &mut generate::Quiet;
-    let none = generate::generate(
-        &dir,
-        "M",
-        &request("Pad", None),
-        &endpoint(&mock),
-        &bank,
-        quiet,
-    )
-    .unwrap_err();
+    let none =
+        generate::generate(&dir, "M", &request("Pad", None), &mock, &bank, quiet).unwrap_err();
     assert!(none.contains("needs a caption"), "{none}");
-    let midi = generate::generate(
-        &dir,
-        "M",
-        &request("Bass", Some("x")),
-        &endpoint(&mock),
-        &bank,
-        quiet,
-    )
-    .unwrap_err();
+    let midi = generate::generate(&dir, "M", &request("Bass", Some("x")), &mock, &bank, quiet)
+        .unwrap_err();
     assert!(midi.contains("is a MIDI track"), "{midi}");
     mock.with(|s| s.fail = Some("out of memory".into()));
-    let failed = generate::generate(
-        &dir,
-        "M",
-        &request("Pad", Some("x")),
-        &endpoint(&mock),
-        &bank,
-        quiet,
-    )
-    .unwrap_err();
+    let failed =
+        generate::generate(&dir, "M", &request("Pad", Some("x")), &mock, &bank, quiet).unwrap_err();
     assert!(failed.contains("out of memory"), "{failed}");
-    mock.with(|s| {
-        s.fail = None;
-        s.require_key = Some("sesame".into());
-    });
-    let locked = generate::generate(
-        &dir,
-        "M",
-        &request("Pad", Some("x")),
-        &endpoint(&mock),
-        &bank,
-        quiet,
-    )
-    .unwrap_err();
-    assert!(
-        locked.contains("401") && locked.contains("PROMOSHOT_ACESTEP_KEY"),
-        "{locked}"
-    );
-    assert!(!locked.contains("sesame"));
-    let keyed = Endpoint::resolve(Some(&mock.url), Some("sesame"));
-    generate::generate(&dir, "M", &request("Pad", Some("x")), &keyed, &bank, quiet).unwrap();
-    let gone = Endpoint::resolve(Some("http://127.0.0.1:9"), None);
-    let err =
-        generate::generate(&dir, "M", &request("Pad", Some("x")), &gone, &bank, quiet).unwrap_err();
-    assert!(
-        err.contains("not answering") && err.contains("ACE-Step-1.5"),
-        "{err}"
-    );
+    mock.with(|s| s.fail = None);
+    generate::generate(&dir, "M", &request("Pad", Some("x")), &mock, &bank, quiet).unwrap();
+    // A host without the model says so.
+    generate::set_generator(None);
+    let absent = generate::generator().err().unwrap();
+    assert!(absent.contains("music model is not installed"), "{absent}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The endpoint's status: health and models, or how to start it.
-#[test]
-fn status_reports_the_endpoint() {
-    let mock = MockAce::start();
-    let status = generate::status(&endpoint(&mock), Duration::from_secs(5)).unwrap();
-    assert_eq!(status["ok"], true);
-    assert_eq!(status["service"], "ACE-Step API");
-    assert_eq!(status["models"], json!(["acestep-v15-base"]));
-    let gone = generate::status(
-        &Endpoint::resolve(Some("http://127.0.0.1:9"), None),
-        Duration::from_secs(2),
-    )
-    .unwrap_err();
-    assert!(gone.contains("does not install it"), "{gone}");
-}
-
-/// The stored file is mixed like a track on every host — no ACE-Step
+/// The stored file is mixed like a track on every host — no model
 /// needed: muted it leaves the take byte for byte the MIDI's; soloed it
 /// is all you hear; gone, the take plays without it, says so, and
 /// validate warns.

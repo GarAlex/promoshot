@@ -155,12 +155,11 @@ pub fn midi(args: &Value, root: Option<&Path>) -> Result<String, String> {
     Ok(settled?.to_json().to_string())
 }
 
-/// `generate: {track, caption?, seed?, range?: {from, to}, model?}`: a
-/// generated layer from the ACE-Step server the environment names
-/// (`PROMOSHOT_ACESTEP_URL`, default localhost:8001; MIDI.md §7). Blocks
-/// until it is made, refused, or the request times out.
+/// `generate: {track, caption?, seed?, range?: {from, to}, trackName?}`: a
+/// generated layer from the installed music model (MIDI.md §7). Blocks
+/// until it is made or refused; without the model it says so.
 fn generate(spec: &Value, dir: &Path, id: &str) -> Result<String, String> {
-    use promo_midi::generate::{self, Endpoint, Request};
+    use promo_midi::generate::{self, Request};
     let track = spec
         .get("track")
         .and_then(Value::as_str)
@@ -172,10 +171,6 @@ fn generate(spec: &Value, dir: &Path, id: &str) -> Result<String, String> {
         .and_then(Value::as_str)
         .map(str::to_string);
     request.seed = spec.get("seed").and_then(Value::as_i64);
-    request.model = spec
-        .get("model")
-        .and_then(Value::as_str)
-        .map(str::to_string);
     request.track_name = spec
         .get("trackName")
         .and_then(Value::as_str)
@@ -195,7 +190,7 @@ fn generate(spec: &Value, dir: &Path, id: &str) -> Result<String, String> {
         dir,
         id,
         &request,
-        &Endpoint::resolve(None, None),
+        generate::generator()?.as_ref(),
         &bank,
         &mut generate::Quiet,
     )?;
@@ -279,15 +274,15 @@ pub fn sounds_command(args: &[String]) -> Result<String, String> {
 }
 
 #[cfg(test)]
-#[path = "../../promo-midi/tests/support/mock_ace.rs"]
-mod mock_ace;
+#[path = "../../promo-midi/tests/support/fake_lego.rs"]
+mod fake_lego;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// `generate` through the tool: a layer from the server the
-    /// environment names, kept and mixed; a missing track is refused.
+    /// `generate` through the tool: a layer from the installed model, kept
+    /// and mixed; a missing track is refused; no model, it says so.
     #[test]
     fn the_tool_generates_a_layer() {
         let dir = std::env::temp_dir().join(format!("mcp-midi-gen-{}", std::process::id()));
@@ -309,14 +304,16 @@ mod tests {
             eprintln!("SKIPPED: {}", promo_midi::sounds::missing_bank_message());
             return;
         }
-        let mock = super::mock_ace::MockAce::start();
-        std::env::set_var(promo_midi::generate::URL_ENV, &mock.url);
-        let out = midi(
-            &json!({ "project": project, "resource": "M",
-            "generate": { "track": "Shaker", "caption": "shaker 16ths", "seed": 7 } }),
-            None,
-        );
-        std::env::remove_var(promo_midi::generate::URL_ENV);
+        let ask = json!({ "project": project, "resource": "M",
+            "generate": { "track": "Shaker", "caption": "shaker 16ths", "seed": 7 } });
+        promo_midi::generate::set_generator(None);
+        let absent = midi(&ask, None).unwrap_err();
+        assert!(absent.contains("music model is not installed"), "{absent}");
+        promo_midi::generate::set_generator(Some(std::sync::Arc::new(
+            super::fake_lego::FakeLego::new(),
+        )));
+        let out = midi(&ask, None);
+        promo_midi::generate::set_generator(None);
         let out: Value = serde_json::from_str(&out.unwrap()).unwrap();
         assert_eq!(out["generated"]["file"], "Beat · Shaker.wav", "{out}");
         assert_eq!(out["result"]["layers"][0]["status"], "current");
