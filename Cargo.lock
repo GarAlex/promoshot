@@ -3287,6 +3287,7 @@ dependencies = [
  "promo-editor",
  "promo-midi",
  "promo-model",
+ "promo-music",
  "promo-speech",
  "promo-timeline",
  "serde_json",

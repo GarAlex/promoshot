@@ -324,3 +324,49 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
     }
     Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
+
+/// The `music` door of `promo` and `promoshot-mcp`: `list` (default),
+/// `install <id>` (progress on stderr), `remove <id>`.
+#[cfg(feature = "download")]
+pub fn command(program: &str, args: &[String]) -> Result<String, String> {
+    let dir = models_dir();
+    let usage = format!("usage: {program} music [list | install {ACE_STEP_BASE} | remove {ACE_STEP_BASE}]");
+    match (args.first().map(String::as_str), args.get(1)) {
+        (None | Some("list"), None) => {
+            let mut lines = vec![format!("music models in {}:", dir.display())];
+            for p in catalog() {
+                lines.push(format!(
+                    "  {:<14} {:<2} {:>5.2} GB  {}  {}",
+                    p.id,
+                    if installed(&dir, p.id) { "✓" } else { "-" },
+                    p.bytes() as f64 / 1e9,
+                    p.title,
+                    p.license
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+        (Some("install"), Some(id)) => {
+            let mut shown = 0u64;
+            let path = install(
+                &dir,
+                id,
+                &mut |p| {
+                    let percent = (p.done * 100).checked_div(p.total).unwrap_or(0).min(100);
+                    if percent >= shown + 5 {
+                        shown = percent;
+                        eprintln!("{id}: {percent}% of {:.2} GB", p.total as f64 / 1e9);
+                    }
+                },
+                &|| false,
+            )?;
+            Ok(format!("{id}: installed and verified at {}", path.display()))
+        }
+        (Some("remove"), Some(id)) => Ok(if remove(&dir, id)? {
+            format!("{id}: removed")
+        } else {
+            format!("{id}: not installed")
+        }),
+        _ => Err(usage),
+    }
+}

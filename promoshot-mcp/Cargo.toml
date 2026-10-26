@@ -21,6 +21,8 @@ promo-model = { path = "../promo-model" }
 promo-midi = { path = "../promo-midi" }
 # `local`: keyless narration from installed voice packages (local-tts).
 promo-speech = { path = "../promo-speech", features = ["local"] }
+# `music install` and the native lego model behind promo_midi's generate.
+promo-music = { path = "../promo-music" }
 serde_json.workspace = true
 uuid = { version = "1", features = ["v4"] }
 

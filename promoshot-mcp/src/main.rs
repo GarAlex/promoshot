@@ -73,6 +73,18 @@ fn main() {
             }
         }
     }
+    if argv.first().map(String::as_str) == Some("music") {
+        match promo_music::store::command("promoshot-mcp", &argv[1..]) {
+            Ok(answer) => {
+                println!("{answer}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        }
+    }
     if argv.first().map(String::as_str) == Some("key") {
         match speak::key_command(&argv[1..], &mut std::io::stdin()) {
             Ok(answer) => {
@@ -92,6 +104,9 @@ fn main() {
             std::process::exit(2);
         }
     };
+    // The native music model, when its weights are installed (MIDI.md §7):
+    // promo_midi's generate runs it; loaded per generation, then dropped.
+    promo_music::install_generator(false);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {

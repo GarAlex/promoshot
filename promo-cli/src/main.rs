@@ -946,45 +946,11 @@ fn settle_used_midi(dir: &Path) -> Result<Vec<String>, String> {
     Ok(lines)
 }
 
-/// `promo music [list | install <id> | remove <id>]`.
+/// `promo music [list | install <id> | remove <id>]` (promoshot-mcp's
+/// `music` door is the same function).
 #[cfg(feature = "music")]
 fn music(args: &[String]) -> Result<String, String> {
-    use promo_music::store;
-    let dir = store::models_dir();
-    let usage = "usage: promo music [list | install ace-step-base | remove ace-step-base]";
-    match (args.first().map(String::as_str), args.get(1)) {
-        (None | Some("list"), None) => {
-            let mut lines = vec![format!("music models in {}:", dir.display())];
-            for p in store::catalog() {
-                lines.push(format!(
-                    "  {:<14} {:<2} {:>5.2} GB  {}  {}",
-                    p.id,
-                    if store::installed(&dir, p.id) { "✓" } else { "-" },
-                    p.bytes() as f64 / 1e9,
-                    p.title,
-                    p.license
-                ));
-            }
-            Ok(lines.join("\n"))
-        }
-        (Some("install"), Some(id)) => {
-            let mut shown = 0u64;
-            let path = store::install(&dir, id, &mut |p| {
-                let percent = (p.done * 100).checked_div(p.total).unwrap_or(0).min(100);
-                if percent >= shown + 5 {
-                    shown = percent;
-                    eprintln!("{id}: {percent}% of {:.2} GB", p.total as f64 / 1e9);
-                }
-            }, &|| false)?;
-            Ok(format!("{id}: installed and verified at {}", path.display()))
-        }
-        (Some("remove"), Some(id)) => Ok(if store::remove(&dir, id)? {
-            format!("{id}: removed")
-        } else {
-            format!("{id}: not installed")
-        }),
-        _ => Err(usage.into()),
-    }
+    promo_music::store::command("promo", args)
 }
 
 #[cfg(not(feature = "music"))]
