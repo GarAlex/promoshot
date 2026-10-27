@@ -289,7 +289,9 @@ it, refused when off the grid or off the chords (try another seed). It
 needs the music model installed once by the person (`promoshot-mcp music
 install ace-step-base`, 6.3 GB; the Mac app downloads it in Settings ▸
 Music); without it `promo_midi` says so. After a MIDI edit validate says
-the layer's context changed; regenerate only if asked.
+the layer's context changed; regenerate only if asked. The app's server
+has no `promo_midi`: there, set the `midi` block with `promo_apply` and
+the app renders the take itself once a layer uses it.
 
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`, and the authoring tools as verbs taking the

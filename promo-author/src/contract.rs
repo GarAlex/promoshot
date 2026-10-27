@@ -90,7 +90,8 @@ pub const HOST_DIFFERENCES: &[Difference] = &[
         tool: "promo_midi",
         aspect: Aspect::Tool,
         only: Host::Headless,
-        why: "the app renders MIDI in its editor; its promo_midi is MIDI.md slice 3a",
+        why: "the app renders a MIDI resource's take itself, on save, once a layer uses it \
+              (an agent sets the block with promo_apply); its promo_midi is MIDI.md slice 3a",
     },
     Difference {
         tool: "promo_render_still",
