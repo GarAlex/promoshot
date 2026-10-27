@@ -712,11 +712,27 @@ pub fn render_source(
     resources_dir: &Path,
     resource: &ProjectResource,
 ) -> Result<(Vec<u8>, bool), String> {
-    let path = resources_dir.join(&resource.filename);
-    let original = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let block = promo_model::vector::block(resource).unwrap_or_default();
-    if let (Some(name), Some(hash)) = (block.outlines.as_deref(), block.source_hash.as_deref()) {
-        let outlines = resources_dir.join(OUTLINES_DIR).join(name);
+    render_source_at(
+        &resources_dir.join(&resource.filename),
+        promo_model::vector::block(resource).as_ref(),
+    )
+}
+
+/// [`render_source`] for the file at `path` (its outlines beside it, in
+/// `.svg/`) and the block it was imported with.
+pub fn render_source_at(
+    path: &Path,
+    block: Option<&VectorBlock>,
+) -> Result<(Vec<u8>, bool), String> {
+    let original = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if let Some((Some(name), Some(hash))) =
+        block.map(|b| (b.outlines.as_deref(), b.source_hash.as_deref()))
+    {
+        let outlines = path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join(OUTLINES_DIR)
+            .join(name);
         if let Ok(bytes) = std::fs::read(&outlines) {
             if sha256_hex(&original) == hash {
                 return Ok((bytes, true));
@@ -728,9 +744,25 @@ pub fn render_source(
 
 /// The picture a vector resource draws.
 pub fn load(resources_dir: &Path, resource: &ProjectResource) -> Result<Picture, String> {
-    let (bytes, _) = render_source(resources_dir, resource)?;
-    Picture::parse(&bytes, &Context::for_resources(resources_dir))
-        .map_err(|e| format!("{}: {e}", resource.filename))
+    load_path(
+        &resources_dir.join(&resource.filename),
+        promo_model::vector::block(resource).as_ref(),
+    )
+    .map_err(|e| format!("{}: {e}", resource.filename))
+}
+
+/// The picture the file at `path` draws, with the block it was imported
+/// with; hrefs may reach the project folder above its `Resources/`.
+pub fn load_path(path: &Path, block: Option<&VectorBlock>) -> Result<Picture, String> {
+    let (bytes, _) = render_source_at(path, block)?;
+    let dir = path.parent().unwrap_or(Path::new("."));
+    Picture::parse(&bytes, &Context::for_resources(dir)).map_err(|e| e.to_string())
+}
+
+/// The stamp a picture parsed from these bytes carries — to skip a parse
+/// when the engine already holds them.
+pub fn stamp(bytes: &[u8]) -> u64 {
+    fnv(bytes)
 }
 
 /// What validate says about a project's vector resources, read from the
