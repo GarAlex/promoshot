@@ -121,6 +121,8 @@ impl Context {
 struct Survey {
     nodes: u64,
     text_elements: usize,
+    /// SMIL elements or CSS animation in the file — never played.
+    animated: bool,
 }
 
 /// The cheap pass before the real parse: the byte cap, the XML's own
@@ -154,12 +156,23 @@ fn survey(bytes: &[u8], limits: &Limits) -> Result<Survey, Refusal> {
         })?;
     let mut ids = std::collections::HashMap::new();
     let mut text_elements = 0;
+    let mut animated = false;
     for node in doc.descendants().filter(|n| n.is_element()) {
         if let Some(id) = node.attribute("id") {
             ids.entry(id.to_string()).or_insert(node.id());
         }
-        if node.tag_name().name() == "text" {
-            text_elements += 1;
+        match node.tag_name().name() {
+            "text" => text_elements += 1,
+            "animate" | "animateTransform" | "animateMotion" | "animateColor" | "set" => {
+                animated = true
+            }
+            "style" => {
+                let css: String = node.descendants().filter_map(|n| n.text()).collect();
+                if css.contains("@keyframes") || css.contains("animation") {
+                    animated = true;
+                }
+            }
+            _ => {}
         }
     }
     let mut memo = std::collections::HashMap::new();
@@ -174,6 +187,7 @@ fn survey(bytes: &[u8], limits: &Limits) -> Result<Survey, Refusal> {
     Ok(Survey {
         nodes,
         text_elements,
+        animated,
     })
 }
 
@@ -593,6 +607,8 @@ pub struct Picture {
     text_elements: usize,
     /// Elements with every `<use>` expanded.
     elements: u64,
+    /// Whether the file animates itself (SMIL or CSS).
+    animated: bool,
 }
 
 impl std::fmt::Debug for Picture {
@@ -628,6 +644,7 @@ impl Picture {
             refused: notes.refused,
             text_elements: survey.text_elements,
             elements: survey.nodes,
+            animated: survey.animated,
         })
     }
 
@@ -649,6 +666,13 @@ impl Picture {
     /// `<text>` elements in what was parsed (none in an outlines file).
     pub fn text_elements(&self) -> usize {
         self.text_elements
+    }
+
+    /// Whether the file animates itself (SMIL elements or CSS animation).
+    /// Never played: it draws as its still frame, and motion comes from
+    /// the layer's keyframes.
+    pub fn animated(&self) -> bool {
+        self.animated
     }
 
     /// Elements, every `<use>` expanded — what a render walks.
@@ -794,6 +818,12 @@ pub fn findings(meta: &ProjectMetadata, resources_dir: &Path) -> Vec<String> {
         for href in parsed.refused() {
             out.push(format!(
                 "the SVG \"{name}\" names {href}: refused, that part draws nothing"
+            ));
+        }
+        if parsed.animated() {
+            out.push(format!(
+                "the SVG \"{name}\" animates itself (SMIL or CSS animation), which does not \
+                 play: it draws as its still frame — move it with keyframes"
             ));
         }
         let block = promo_model::vector::block(resource);

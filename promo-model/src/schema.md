@@ -1189,8 +1189,8 @@ A reveal can arrive on a narration's words instead of at its own pace —
   is refused whole. promo_validate names each of these, text without
   outlines and a missing font; promo_inspect lists every vector, its
   size, and the layers that show it or wear it as a mask. Animation
-  inside the file (SMIL, CSS) does not play: motion comes from
-  keyframes.
+  inside the file (SMIL, CSS) does not play — it draws as its still
+  frame, validate says so, and motion comes from keyframes.
 - A file in `Resources/` ending `.svg` with no entry is adopted as a
   vector by its derived id, like any media — but only an import makes
   its text into outlines and states its size.

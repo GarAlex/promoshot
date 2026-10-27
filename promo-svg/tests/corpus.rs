@@ -388,3 +388,41 @@ fn render_cost() {
     measure("complex", 1920, 1080);
     measure("complex", 3840, 2160);
 }
+
+/// Animation inside a file is noticed (and never played): validate says
+/// it draws as its still frame.
+#[test]
+fn animation_inside_a_file_is_named() {
+    let project = std::env::temp_dir().join(format!("promo-svg-anim-{}", std::process::id()));
+    let resources = project.join("Resources");
+    std::fs::create_dir_all(&resources).unwrap();
+    std::fs::write(
+        resources.join("spin.svg"),
+        "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='5' \
+         height='5'><animateTransform attributeName='transform' type='rotate' from='0' \
+         to='360' dur='1s'/></rect></svg>",
+    )
+    .unwrap();
+    std::fs::write(
+        resources.join("still.svg"),
+        "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='5' \
+         height='5'/></svg>",
+    )
+    .unwrap();
+    let meta = promo_model::ProjectMetadata::from_json(
+        r#"{"id":"P","name":"P","createdAt":0,"state":"recorded","trimStart":0,"trimEnd":1,
+            "videoDuration":1,"subtitles":[],"compositionSettings":{},"resources":[
+            {"id":"A","kind":"vector","filename":"spin.svg","displayName":"Spin","addedAt":0,
+             "pixelWidth":10,"pixelHeight":10},
+            {"id":"B","kind":"vector","filename":"still.svg","displayName":"Still","addedAt":0,
+             "pixelWidth":10,"pixelHeight":10}]}"#,
+    )
+    .unwrap();
+    let findings = promo_svg::findings(&meta, &resources);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(
+        findings[0].contains("\"Spin\" animates itself"),
+        "{findings:?}"
+    );
+    let _ = std::fs::remove_dir_all(&project);
+}
