@@ -664,23 +664,23 @@ fn validate_names_overrides_that_do_not_apply() {
     let words = promo_svg::install(&resources, "text.svg").unwrap();
     let meta = promo_model::ProjectMetadata::from_json(
         &serde_json::json!({"id": "P", "name": "P", "createdAt": 0, "state": "recorded",
-            "trimStart": 0, "trimEnd": 2, "videoDuration": 2, "subtitles": [],
-            "compositionSettings": {},
-            "resources": [
-                {"id": "L", "kind": "vector", "filename": "logo.svg", "displayName": "Logo",
-                 "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
-                 "pixelWidth": 240, "pixelHeight": 80,
-                 "svg": {"size": [240, 80], "overrides": [
-                     {"node": "gone", "opacity": 0.5},
-                     {"node": "badge", "fill": "FF0000"},
-                     {"node": "glyph", "fill": "FF0000"}]}},
-                {"id": "T", "kind": "vector", "filename": "text.svg", "displayName": "Words",
-                 "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
-                 "pixelWidth": 360, "pixelHeight": 140,
-                 "svg": {"size": [360, 140], "outlines": words["svg"]["outlines"],
-                         "sourceHash": words["svg"]["sourceHash"],
-                         "overrides": [{"node": "tagline", "text": "Hello"}]}}
-            ]})
+        "trimStart": 0, "trimEnd": 2, "videoDuration": 2, "subtitles": [],
+        "compositionSettings": {},
+        "resources": [
+            {"id": "L", "kind": "vector", "filename": "logo.svg", "displayName": "Logo",
+             "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+             "pixelWidth": 240, "pixelHeight": 80,
+             "svg": {"size": [240, 80], "overrides": [
+                 {"node": "gone", "opacity": 0.5},
+                 {"node": "badge", "fill": "FF0000"},
+                 {"node": "glyph", "fill": "FF0000"}]}},
+            {"id": "T", "kind": "vector", "filename": "text.svg", "displayName": "Words",
+             "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+             "pixelWidth": 360, "pixelHeight": 140,
+             "svg": {"size": [360, 140], "outlines": words["svg"]["outlines"],
+                     "sourceHash": words["svg"]["sourceHash"],
+                     "overrides": [{"node": "tagline", "text": "Hello"}]}}
+        ]})
         .to_string(),
     )
     .unwrap();
@@ -689,6 +689,10 @@ fn validate_names_overrides_that_do_not_apply() {
     assert!(has("\"gone\", which names no element"), "{found:#?}");
     assert!(has("takes no paint"), "{found:#?}");
     assert!(has("not outlined yet"), "{found:#?}");
-    assert_eq!(found.iter().filter(|f| f.contains("\"Logo\"")).count(), 2, "{found:#?}");
+    assert_eq!(
+        found.iter().filter(|f| f.contains("\"Logo\"")).count(),
+        2,
+        "{found:#?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
