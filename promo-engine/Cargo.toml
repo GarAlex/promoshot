@@ -14,6 +14,9 @@ promo-timeline = { path = "../promo-timeline" }
 promo-media = { path = "../promo-media" }
 promo-gpu = { path = "../promo-gpu" }
 promo-text = { path = "../promo-text" }
+# SVG pictures (vector resources): parsed and drawn on the CPU by resvg at
+# the size a layer shows, then uploaded like any frame.
+promo-svg = { path = "../promo-svg" }
 # glTF 2.0 binaries for model layers (3D plan P0). `import` decodes the
 # buffers and embedded images; nothing here touches the GPU.
 gltf = { version = "1.4", default-features = false, features = ["import", "utils", "names", "KHR_materials_unlit"] }

@@ -78,6 +78,10 @@ USAGE:
         6.3 GB; PROMOSHOT_MUSIC_MODELS, else the per-user folder); install
         downloads the pinned Hugging Face files, verifies each SHA-256 and
         resumes an interrupted download
+    promo resource add <project-dir> <file> [--id <id>] [--name <text>] [--json]
+        copy a picture, a clip or an SVG into Resources/ and declare it. An
+        SVG stays itself: a vector resource the core draws sharp at any size,
+        its text kept as outlines in Resources/.svg/ (no fonts at render)
     promo media activity <video> [--rate <n>] [--pointer <pointer.json>]
                   [--masks auto|phone|desktop|none]
         where a screen recording's picture changed, as the resource's
@@ -122,6 +126,8 @@ OPTIONS (`promo <command> --help` lists the ones a command takes):
     --into <dir>   skill install: install into this one folder only
     --dry-run      skill install: say what would be written, write nothing
     --count <n>    turntable: how many views around the model (1–64)
+    --id <id>      resource add: the new resource's id (default: a UUID)
+    --name <text>  resource add: its display name (default: the file's name)
     --resource <id>
                    beats, words: the project's resource to measure (default:
                    the beat clock's song / the take a speech value names)
@@ -276,6 +282,11 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     }
     if command == "music" {
         println!("{}", music(rest)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    // `resource add` takes a project AND a file.
+    if command == "resource" {
+        println!("{}", resource(rest)?);
         return Ok(ExitCode::SUCCESS);
     }
     // Media senses take a FILE and a verb, not a project.
@@ -484,6 +495,70 @@ const AUTHORING: [&str; 7] = [
     "diff",
 ];
 
+/// Measured the way the renderer will read it: a clip's DISPLAYED size,
+/// and a picture upright in sRGB — rewritten as a PNG when it needed
+/// anything to get there (HEIC, an EXIF rotation, a wide-gamut profile),
+/// so the file in Resources/ reads the same on every host.
+fn host_probe(path: &Path, video: bool) -> promo_author::MediaInfo {
+    if !video {
+        if let Ok(Some((png, width, height))) = promo_media::still::normalized_png(path) {
+            return promo_author::MediaInfo {
+                duration: None,
+                pixels: Some((width as f64, height as f64)),
+                normalized: Some(png),
+            };
+        }
+    }
+    match promo_media::probe_stream(path) {
+        Ok(info) => promo_author::MediaInfo {
+            duration: (info.duration_s > 0.0).then_some(info.duration_s),
+            pixels: (info.width > 0 && info.height > 0)
+                .then_some((info.width as f64, info.height as f64)),
+            normalized: None,
+        },
+        Err(_) => promo_author::MediaInfo::default(),
+    }
+}
+
+/// `promo resource add <project> <file> [--id] [--name] [--json]`.
+fn resource(rest: &[String]) -> Result<String, String> {
+    let usage = "resource: expected `add <project-dir> <file>`";
+    let (Some("add"), Some(dir), Some(file)) = (
+        rest.first().map(String::as_str),
+        rest.get(1).filter(|a| !a.starts_with("--")),
+        rest.get(2).filter(|a| !a.starts_with("--")),
+    ) else {
+        return Err(usage.into());
+    };
+    let mut args = serde_json::json!({ "project": dir, "file": file });
+    let mut json = false;
+    let mut i = 3;
+    while i < rest.len() {
+        let value = || {
+            rest.get(i + 1)
+                .cloned()
+                .ok_or_else(|| format!("{}: expected a value", rest[i]))
+        };
+        match rest[i].as_str() {
+            "--id" => args["resourceId"] = serde_json::json!(value()?),
+            "--name" => args["name"] = serde_json::json!(value()?),
+            "--json" => {
+                json = true;
+                i += 1;
+                continue;
+            }
+            other => return Err(format!("resource add: unknown option `{other}`")),
+        }
+        i += 2;
+    }
+    let answer = promo_author::add_resource(&args, None, &host_probe)?;
+    Ok(if json {
+        serde_json::json!({ "ok": true, "answer": answer }).to_string()
+    } else {
+        answer
+    })
+}
+
 /// An authoring verb through promo-author — the functions the headless MCP
 /// server calls (review 2026-09-27, P1-22). A CLI-only agent hand-wrote
 /// JSON and met none of the tools' guardrails: a keyframe created by
@@ -532,30 +607,7 @@ fn author(command: &str, dir: &str, rest: &[String]) -> Result<String, String> {
     }
     args.insert("project".into(), serde_json::Value::String(dir.to_string()));
     let args = serde_json::Value::Object(args);
-    // Measured the way the renderer will read it: a clip's DISPLAYED size,
-    // and a picture upright in sRGB — rewritten as a PNG when it needed
-    // anything to get there (HEIC, an EXIF rotation, a wide-gamut profile),
-    // so the file in Resources/ reads the same on every host.
-    let probe = |path: &Path, video: bool| {
-        if !video {
-            if let Ok(Some((png, width, height))) = promo_media::still::normalized_png(path) {
-                return promo_author::MediaInfo {
-                    duration: None,
-                    pixels: Some((width as f64, height as f64)),
-                    normalized: Some(png),
-                };
-            }
-        }
-        match promo_media::probe_stream(path) {
-            Ok(info) => promo_author::MediaInfo {
-                duration: (info.duration_s > 0.0).then_some(info.duration_s),
-                pixels: (info.width > 0 && info.height > 0)
-                    .then_some((info.width as f64, info.height as f64)),
-                normalized: None,
-            },
-            Err(_) => promo_author::MediaInfo::default(),
-        }
-    };
+    let probe = host_probe;
     let answer = match command {
         "init" => promo_author::init(&args, None),
         "upsert-layer" => promo_author::upsert_layer(&args, None, &probe),
@@ -1796,6 +1848,9 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
     // subject off; the engine measures it here rather than a render later
     // (3D plan §6½, R1).
     promo_cli::framing::report_into(&mut report, project);
+    // An SVG picture that will not draw as written: refused hrefs, text
+    // without outlines, a font the import lacked.
+    promo_cli::vectors::report_into(&mut report, project);
     report
 }
 

@@ -15,3 +15,4 @@ pub mod placement;
 pub mod project;
 pub mod render;
 pub mod sheet;
+pub mod vectors;

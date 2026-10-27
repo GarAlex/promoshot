@@ -32,6 +32,8 @@ promo-author = { path = "../promo-author" }
 promo-speech = { path = "../promo-speech", default-features = false }
 # `promo midi render`, `promo sounds`, validate's "MIDI not rendered".
 promo-midi = { path = "../promo-midi" }
+# Vector resources: the engine's pictures, `promo resource add`, validate.
+promo-svg = { path = "../promo-svg" }
 # `promo music` and the native model behind `midi generate` (candle; Metal
 # on macOS). Off for promo-ffi, which links this crate as a library.
 promo-music = { path = "../promo-music", optional = true }

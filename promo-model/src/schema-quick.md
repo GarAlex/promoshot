@@ -28,9 +28,9 @@ open it. Here, the authoring subset; `promo_schema_full` is the whole format.
 - `resources` hold per-asset state: `id`, `kind`, `filename` (in
   `Resources/`), `displayName`, `addedAt: 0`, `imageCuts: []`,
   `disabledAudioTrackIndices: []`; videos also carry `duration`,
-  `trimStart`, `trimEnd`; images `pixelWidth`/`pixelHeight` — placement
-  anchors against the aspect, and an unmeasured source positions as a
-  SQUARE (validate names it). Declare what you use.
+  `trimStart`, `trimEnd`; images `pixelWidth`/`pixelHeight` (placement
+  anchors on the aspect; unmeasured, a SQUARE). An SVG stays itself: `promo
+  resource add` makes a `vector` an image layer draws sharp (`vectors`).
 
 Keyframes animate a layer over its LOCAL time, hold-then-ease: a value
 holds until `transitionDuration` seconds before the keyframe, then ramps

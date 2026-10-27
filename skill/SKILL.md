@@ -466,6 +466,11 @@ is for; the schema section says how to write it.
 - **A rect** (`rect`) — a drawing shape with an optional `cornerRadius`:
   the accent bar under a headline, the plate behind it, the rounded
   window a screenshot sits in, or a mask.
+- **SVG** (`vectors`) — a logo, an icon or an illustration as the file
+  itself: `promo_upsert_layer {"kind": "image", "file": "logo.svg"}` (or
+  `promo resource add`) keeps it a `vector` the core draws sharp at any
+  size, its text as outlines; it can be a mask. Never redraw an SVG as
+  drawing shapes.
 - **Transitions** (`transition`) — ten kinds, on a layer's own edges or
   at a swap between two resources.
 - **Image effects** (`effects`) — blur, glow, vignette, grain, sharpen,

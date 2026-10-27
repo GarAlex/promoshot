@@ -369,6 +369,24 @@ pub fn upsert_layer(args: &Value, root: Option<&Path>, probe: Probe) -> Result<S
     }
     let resource_id = match (kind_name, file_arg) {
         ("caption", _) | (_, None) => None,
+        (_, Some(file)) if kind_name == "image" && is_svg(Path::new(file)) => {
+            // An SVG stays itself: a vector resource the core draws.
+            let id = args
+                .get("resourceId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(mint);
+            let (record, note) = vector_record(&dir, Path::new(file), &id, None)?;
+            let mut record = record;
+            if let Some(dress) = &frame {
+                record["frame"] = dress.clone();
+            }
+            let resource: ProjectResource = serde_json::from_value(record)
+                .map_err(|e| format!("resource template rejected by the format: {e}"))?;
+            resource_note = note;
+            meta.resources.get_or_insert_with(Vec::new).push(resource);
+            Some(id)
+        }
         (_, Some(file)) => {
             let source = PathBuf::from(file);
             if !source.exists() {
@@ -2019,6 +2037,164 @@ fn copy_into_resources(project: &Path, source: &Path) -> Result<String, String> 
     }
     std::fs::copy(source, &target).map_err(|e| format!("copy: {e}"))?;
     Ok(target.file_name().unwrap().to_string_lossy().into_owned())
+}
+
+fn is_svg(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"))
+}
+
+/// Copies an SVG into `Resources/` exactly as it is and imports it
+/// (promo-svg): the guards, its size, and its text as outlines in
+/// `Resources/.svg/`. Answers the vector resource record and a note of
+/// what the import noticed. A refused file copies nothing.
+fn vector_record(
+    dir: &Path,
+    source: &Path,
+    id: &str,
+    name: Option<&str>,
+) -> Result<(Value, String), String> {
+    if !source.exists() {
+        return Err(format!("file {} does not exist", source.display()));
+    }
+    // The guards first, from the source: a refused file never lands.
+    let bytes = std::fs::read(source).map_err(|e| format!("{}: {e}", source.display()))?;
+    promo_svg::Picture::parse(
+        &bytes,
+        &promo_svg::Context {
+            file_dir: dir.join("Resources"),
+            project_root: dir.to_path_buf(),
+        },
+    )
+    .map_err(|e| format!("{}: {e}", source.display()))?;
+    let filename = copy_into_resources(dir, source)?;
+    let installed = match promo_svg::install(&dir.join("Resources"), &filename) {
+        Ok(installed) => installed,
+        Err(why) => {
+            let _ = std::fs::remove_file(dir.join("Resources").join(&filename));
+            return Err(why);
+        }
+    };
+    let mut record = json!({
+        "id": id, "kind": "vector", "filename": filename,
+        "displayName": name.map(str::to_string).unwrap_or_else(|| {
+            source.file_stem().unwrap_or_default().to_string_lossy().into_owned()
+        }),
+        "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": []
+    });
+    promo_svg::apply_install(&mut record, &installed);
+    let mut note = format!(
+        ", vector resource {id} ({filename}, {}x{})",
+        installed["pixelWidth"], installed["pixelHeight"]
+    );
+    if installed["svg"].get("outlines").is_some() {
+        note.push_str(", its text kept as outlines");
+    }
+    for font in installed["missingFonts"].as_array().into_iter().flatten() {
+        note.push_str(&format!(
+            "; the font {font} is not on this machine — that text is in a fallback face"
+        ));
+    }
+    for href in installed["refused"].as_array().into_iter().flatten() {
+        note.push_str(&format!(
+            "; refused {} — that part draws nothing",
+            href.as_str().unwrap_or_default()
+        ));
+    }
+    Ok((record, note))
+}
+
+/// `promo resource add`: copies a file into `Resources/` and declares it —
+/// an SVG as a vector resource (imported: guards, size, text outlines), a
+/// picture or a clip measured by `probe`. Args: `project`, `file`, and
+/// optionally `resourceId` and `name`. Answers what was added.
+pub fn add_resource(args: &Value, root: Option<&Path>, probe: Probe) -> Result<String, String> {
+    let dir = PathBuf::from(required_str(args, "project")?);
+    let dir = std::fs::canonicalize(&dir).map_err(|e| format!("project: {e}"))?;
+    if let Some(root) = root {
+        let root = std::fs::canonicalize(root).map_err(|e| format!("--root: {e}"))?;
+        if !dir.starts_with(&root) {
+            return Err(format!(
+                "project is outside the served root {}",
+                root.display()
+            ));
+        }
+    }
+    let meta_path = dir.join("metadata.json");
+    let text = std::fs::read_to_string(&meta_path)
+        .map_err(|_| format!("no metadata.json in {} — promo_init first", dir.display()))?;
+    editable(&text, &dir)?;
+    let mut meta = ProjectMetadata::from_json(&text).map_err(|e| format!("decode: {e}"))?;
+    let source = PathBuf::from(required_str(args, "file")?);
+    let id = args
+        .get("resourceId")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(mint);
+    if meta.resources.iter().flatten().any(|r| r.id == id) {
+        return Err(format!("a resource \"{id}\" already exists"));
+    }
+    let name = args.get("name").and_then(Value::as_str);
+    let (record, note) = if is_svg(&source) {
+        vector_record(&dir, &source, &id, name)?
+    } else {
+        if !source.exists() {
+            return Err(format!("file {} does not exist", source.display()));
+        }
+        let ext = source
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let video = matches!(ext.as_str(), "mp4" | "mov" | "m4v");
+        let picture = matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "heic" | "gif" | "tiff" | "bmp"
+        );
+        if !video && !picture {
+            return Err(format!(
+                "{}: add takes an SVG, a picture or a clip",
+                source.display()
+            ));
+        }
+        let info = probe(&source, video);
+        let filename = stage_into_resources(&dir, &source, &info)?;
+        let mut record = json!({
+            "id": id, "kind": if video { "video" } else { "image" }, "filename": filename,
+            "displayName": name.map(str::to_string).unwrap_or_else(|| {
+                source.file_stem().unwrap_or_default().to_string_lossy().into_owned()
+            }),
+            "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": []
+        });
+        if let Some((w, h)) = info.pixels {
+            let (kw, kh) = if video {
+                ("videoNaturalWidth", "videoNaturalHeight")
+            } else {
+                ("pixelWidth", "pixelHeight")
+            };
+            record[kw] = json!(w);
+            record[kh] = json!(h);
+        }
+        if video {
+            let seconds = info
+                .duration
+                .ok_or_else(|| format!("no duration for {}", source.display()))?;
+            record["duration"] = json!(seconds);
+            record["trimStart"] = json!(0);
+            record["trimEnd"] = json!(seconds);
+        }
+        let note = format!(", resource {id} ({filename})");
+        (record, note)
+    };
+    let resource: ProjectResource = serde_json::from_value(record)
+        .map_err(|e| format!("resource template rejected by the format: {e}"))?;
+    meta.resources.get_or_insert_with(Vec::new).push(resource);
+    write_metadata(&meta, &meta_path)?;
+    Ok(format!(
+        "added{} — show it with promo_upsert_layer {{kind: image}} or a layer's resourceID",
+        note
+    ))
 }
 
 /// Stages a source into `Resources/`: the host's normalised picture when it

@@ -107,6 +107,57 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             })
         })
         .collect();
+    // SVG pictures (vector resources): the file, its size, whether its
+    // text draws (from outlines the import made) and who shows it — the
+    // layers naming it, the swap keyframes that bring it in, the layers it
+    // masks.
+    let vectors: Vec<serde_json::Value> = resources
+        .iter()
+        .filter(|r| r.kind == promo_model::ProjectResourceKind::Vector)
+        .map(|r| {
+            let id = r.id.as_str();
+            let placed_by: Vec<String> = all_layers
+                .iter()
+                .filter(|l| l.resource_id.as_deref() == Some(id))
+                .map(|l| l.id.clone())
+                .collect();
+            let swapped_in_by: Vec<serde_json::Value> = all_layers
+                .iter()
+                .flat_map(|l| {
+                    l.keyframes
+                        .iter()
+                        .filter(move |k| k.resource_id.as_deref() == Some(id))
+                        .map(move |k| serde_json::json!({ "layer": l.id, "time": k.time }))
+                })
+                .collect();
+            let masks: Vec<String> = all_layers
+                .iter()
+                .filter(|l| l.mask_resource_id.as_deref() == Some(id))
+                .map(|l| l.id.clone())
+                .collect();
+            let dir = project.dir.join("Resources");
+            let picture = promo_svg::load(&dir, r);
+            let text = match promo_svg::render_source(&dir, r) {
+                Ok((_, true)) => "outlines",
+                _ => match &picture {
+                    Ok(p) if p.text_elements() > 0 => "no outlines — text draws nothing",
+                    _ => "none",
+                },
+            };
+            let block = promo_model::vector::block(r);
+            serde_json::json!({
+                "id": r.id, "name": r.display_name, "file": r.filename,
+                "size": promo_svg::natural_size(r)
+                    .or_else(|| picture.as_ref().ok().map(|p| p.size()))
+                    .map(|(w, h)| [w, h]),
+                "elements": picture.as_ref().ok().map(|p| p.elements()),
+                "text": text,
+                "missingFonts": block.and_then(|b| b.missing_fonts).unwrap_or_default(),
+                "problem": picture.as_ref().err(),
+                "placedBy": placed_by, "swappedInBy": swapped_in_by, "masks": masks,
+            })
+        })
+        .collect();
     // Beat clocks and their grids, each musical value in both forms, and
     // the credits of what the project uses (docs/BEAT-SYNC.md §7–8).
     let beats: Vec<serde_json::Value> = project
@@ -229,6 +280,7 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             "duration": project.duration(),
             "updated": project.meta.updated_at,
             "compositions": compositions,
+            "vectors": vectors,
             "layers": layers
                 .iter()
                 .map(|l| serde_json::json!({
@@ -449,6 +501,64 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                 c["name"].as_str().unwrap_or(""),
                 c["duration"].as_f64().unwrap_or(0.0),
                 c["layers"],
+            ));
+        }
+    }
+    if !vectors.is_empty() {
+        out.push_str(&format!("vectors:   {}\n", vectors.len()));
+        for v in &vectors {
+            let count = |key: &str| v[key].as_array().map_or(0, |a| a.len());
+            let mut uses = format!(
+                "placed by {} layer{}",
+                count("placedBy"),
+                plural(count("placedBy"))
+            );
+            if count("swappedInBy") > 0 {
+                uses.push_str(&format!(
+                    ", swapped in by {} keyframe{}",
+                    count("swappedInBy"),
+                    plural(count("swappedInBy"))
+                ));
+            }
+            if count("masks") > 0 {
+                uses.push_str(&format!(
+                    ", masks {} layer{}",
+                    count("masks"),
+                    plural(count("masks"))
+                ));
+            }
+            let size = v["size"]
+                .as_array()
+                .map(|s| {
+                    format!(
+                        "{}x{}",
+                        s[0].as_f64().unwrap_or(0.0),
+                        s[1].as_f64().unwrap_or(0.0)
+                    )
+                })
+                .unwrap_or_else(|| "no size".into());
+            let mut notes = Vec::new();
+            match v["text"].as_str() {
+                Some("outlines") => notes.push("text as outlines".to_string()),
+                Some("none") | None => {}
+                Some(other) => notes.push(other.to_string()),
+            }
+            for font in v["missingFonts"].as_array().into_iter().flatten() {
+                notes.push(format!("font {font} was missing"));
+            }
+            if let Some(problem) = v["problem"].as_str() {
+                notes.push(problem.to_string());
+            }
+            out.push_str(&format!(
+                "  {}  \"{}\"  {}  {size}  {uses}{}\n",
+                v["id"].as_str().unwrap_or(""),
+                v["name"].as_str().unwrap_or(""),
+                v["file"].as_str().unwrap_or(""),
+                if notes.is_empty() {
+                    String::new()
+                } else {
+                    format!("  ({})", notes.join("; "))
+                }
             ));
         }
     }

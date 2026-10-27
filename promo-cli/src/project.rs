@@ -575,6 +575,20 @@ impl Project {
                 let resource = layer.resource_id.as_ref().and_then(|id| self.resource(id));
                 match resource {
                     None => Some(Unsupported::MissingFile(self.dir.join("Resources"))),
+                    // A vector the core cannot parse draws nothing.
+                    Some(r) if r.kind == promo_model::ProjectResourceKind::Vector && decoders => {
+                        match self.resource_path(r) {
+                            Some(path) => {
+                                match promo_svg::load(path.parent().unwrap_or(&self.dir), r) {
+                                    Ok(_) => None,
+                                    Err(why) => Some(Unsupported::Undecodable(why)),
+                                }
+                            }
+                            None => Some(Unsupported::MissingFile(
+                                self.dir.join("Resources").join(&r.filename),
+                            )),
+                        }
+                    }
                     Some(r) => match self.resource_path(r) {
                         Some(_) => None,
                         None => Some(Unsupported::MissingFile(

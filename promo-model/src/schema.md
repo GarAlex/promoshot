@@ -98,7 +98,8 @@ The rest is in sections headed by the words each answers to, and
 `promo_schema_full {"topics": [...]}` takes any of them: keyframes,
 placement, timing, beats, beat effects, transitions, swaps, motion, viewport,
 captions, type,
-reveal, backgrounds, palette, frames, look, masks, drawings, media, midi, and
+reveal, backgrounds, palette, frames, look, masks, drawings, vectors, media,
+midi, and
 each feature by its own word.
 
 ## Keyframes — keyframe, easing, ramp, hold, transitionDuration, transitionPercent, tracks
@@ -1088,9 +1089,9 @@ A reveal can arrive on a narration's words instead of at its own pace —
 ## Masks — mask, maskResourceID, cutout, window
 
 - `maskResourceID` on a video or image layer windows it by a
-  DRAWING: the drawing's ink is the mask, and the layer only shows
-  where that drawing has ink — a filled oval for a porthole, a
-  pen-tool star, an imported SVG shape. The mask keeps its OWN
+  DRAWING or an SVG (a `vector` resource, Vectors below): its ink is
+  the mask, and the layer only shows where it has ink — a filled oval
+  for a porthole, a pen-tool star, a logo. The mask keeps its OWN
   proportions: it is aspect-fitted into the layer's rect and
   centred, so a circle drawn round renders round whatever shape the
   layer is. It does NOT move with the content: a keyframe viewport
@@ -1116,7 +1117,8 @@ A reveal can arrive on a narration's words instead of at its own pace —
   keyframes fly; swaps, transitions, grades, blends and motion blur
   all happen INSIDE the window.
   promo_validate names a mask on any other layer kind, one pointing
-  at nothing or at a non-drawing, and an inkless mask drawing. Known
+  at nothing or at something neither a drawing nor an SVG, and an
+  inkless mask drawing. Known
   limit: `imageBorderWidth` / `imageBorderColorHex` still trace the
   rounded rect, not the mask outline, so a border on a masked layer
   is clipped by the window rather than following it. A mask is an
@@ -1150,6 +1152,48 @@ A reveal can arrive on a narration's words instead of at its own pace —
   canvas as its bounds: add a `rect` from [0,0] to [canvasWidth,
   canvasHeight] with `strokeOpacity: 0` and `fillOpacity: 0` — then
   every point is a canvas pixel, with no placement needed.
+
+## Vectors — vector, svg, logo, icon, illustration, outlines, import
+
+- An SVG is a `vector` resource: the file stays in `Resources/`
+  exactly as it came, and the core draws it — usvg parses it, resvg
+  draws it, the same pixels on every machine. Add one with `promo
+  resource add <project> logo.svg` (or `promo_upsert_layer` with
+  `kind: "image"` and the `.svg` as `file`); that is the IMPORT:
+    { "id": "logo", "kind": "vector", "filename": "logo.svg",
+      "displayName": "Logo", "addedAt": 0, "imageCuts": [],
+      "disabledAudioTrackIndices": [], "pixelWidth": 240,
+      "pixelHeight": 80,
+      "svg": { "size": [240, 80], "outlines": "logo.svg",
+               "sourceHash": "<sha256 of Resources/logo.svg>",
+               "missingFonts": ["Brand Sans"] } }
+  `size` is the file's own size (its width/height, else its viewBox),
+  stamped as `pixelWidth`/`pixelHeight` too. `outlines` is written
+  only for a file with `<text>`: the text turned into shapes with the
+  fonts of the machine that imported it, kept in `Resources/.svg/`,
+  so drawing never needs a font. While `sourceHash` matches the file
+  the outlines are what draws; edit the SVG and import it again, or
+  its text draws nothing. `missingFonts` names a family the import
+  did not have — that text is in a fallback face.
+- An IMAGE layer shows it like a picture: `placement`, zoom, shifts,
+  a keyframe `viewport`, an `imageCuts` cut (a crop of the drawing
+  itself — the cut's `filename` may be empty), transitions, swaps,
+  nested compositions. It is drawn at the size it shows, so a zoom
+  stays sharp. Vector art is ink, not a screen: the composition's
+  default corner, border and drop shadow stay off it unless the
+  resource carries its own `frame`. As a mask its alpha is the ink.
+- What loads: an `<image>` with an embedded `data:` URI, or a file
+  inside the project. A URL or a path outside it is refused and draws
+  nothing. A file over 16 MB, past 200 000 elements with every
+  `<use>` expanded, or with a filter region over 16 times the picture
+  is refused whole. promo_validate names each of these, text without
+  outlines and a missing font; promo_inspect lists every vector, its
+  size, and the layers that show it or wear it as a mask. Animation
+  inside the file (SMIL, CSS) does not play: motion comes from
+  keyframes.
+- A file in `Resources/` ending `.svg` with no entry is adopted as a
+  vector by its derived id, like any media — but only an import makes
+  its text into outlines and states its size.
 
 ## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits, audioFocus, duck, ducking
 

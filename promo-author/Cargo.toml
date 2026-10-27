@@ -13,6 +13,8 @@ workspace = true
 promo-model = { path = "../promo-model" }
 promo-editor = { path = "../promo-editor" }
 promo-timeline = { path = "../promo-timeline" }
+# An SVG staged as a vector resource: the import (guards, size, outlines).
+promo-svg = { path = "../promo-svg" }
 serde_json.workspace = true
 uuid = { version = "1", features = ["v4"] }
 

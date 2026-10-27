@@ -401,6 +401,10 @@ pub struct PreviewEngine {
     /// Recipe bodies built so far, by resource id, with the recipe they
     /// were built from — rebuilt when it changes.
     built_recipes: HashMap<String, String>,
+    /// SVG pictures by resource id (vector resources), parsed — handed in
+    /// by the host through `provide_vector`, drawn here on the CPU at the
+    /// size each layer shows (`vector_frame`).
+    vectors: HashMap<String, std::sync::Arc<promo_svg::Picture>>,
     /// Surface samples for morphs (rung 39), by body, count and seed —
     /// taken once, cleared when a body's bytes change.
     morph_samples: HashMap<String, Vec<crate::morph::Sample>>,
@@ -511,6 +515,7 @@ impl PreviewEngine {
             reveal_cache: HashMap::new(),
             models: HashMap::new(),
             built_recipes: HashMap::new(),
+            vectors: HashMap::new(),
             morph_samples: HashMap::new(),
             dissolved: Vec::new(),
             model_pass: None,
@@ -1417,12 +1422,29 @@ impl PreviewEngine {
         prepared: Option<u64>,
     ) -> Option<(SceneQuad, Option<SceneQuad>, u64, Option<u64>)> {
         let mut lut_frame: Option<u64> = None;
-        let frame_id = match prepared {
-            Some(id) => id,
-            None => self.frame(&layer.id, showing, source_time, tier, used)?,
+        // A vector (an SVG) is drawn here, at the size it shows, rather
+        // than asked of the host; it lays out at its NATURAL size, which
+        // its raster only approximates.
+        let picture = prepared
+            .is_none()
+            .then(|| self.vectors.get(showing).cloned())
+            .flatten();
+        let mut natural: Option<(f64, f64)> = None;
+        let frame_id = match (prepared, picture) {
+            (Some(id), _) => id,
+            (None, Some(picture)) => {
+                let (id, size) =
+                    self.vector_frame(layer, showing, &picture, settings, canvas, time, used)?;
+                natural = Some(size);
+                id
+            }
+            (None, None) => self.frame(&layer.id, showing, source_time, tier, used)?,
         };
         let frame = self.cached_frame(frame_id);
-        let (mut fw, mut fh) = (frame.frame.width as f64, frame.frame.height as f64);
+        let (mut fw, mut fh) = match natural {
+            Some((w, h)) => (w, h),
+            None => (frame.frame.width as f64, frame.frame.height as f64),
+        };
         // A stage frame with a content box (a morph's spill around the
         // bodies): the layout measures the box, and the whole frame is
         // drawn scaled and placed around it afterwards.
@@ -1505,35 +1527,37 @@ impl PreviewEngine {
             None
         };
         let sized: Vec<promo_model::ProjectResource>;
-        let placement_resources: &[promo_model::ProjectResource] =
-            if layer.kind == ProjectLayerKind::Model || layer.stage.is_some() {
-                let mut with_size: Vec<promo_model::ProjectResource> = self
-                    .meta
-                    .resources
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .cloned()
-                    .map(|mut r| {
-                        if r.id == showing {
-                            r.pixel_width = Some(fw);
-                            r.pixel_height = Some(fh);
-                        }
-                        r
-                    })
-                    .collect();
-                if stand_in.is_some() {
-                    with_size.push(promo_model::ProjectResource::stand_in_picture(
-                        STAGE_PICTURE,
-                        fw,
-                        fh,
-                    ));
-                }
-                sized = with_size;
-                &sized
-            } else {
-                self.meta.resources.as_deref().unwrap_or(&[])
-            };
+        let placement_resources: &[promo_model::ProjectResource] = if natural.is_some() {
+            sized = self.vector_sized_resources(showing);
+            &sized
+        } else if layer.kind == ProjectLayerKind::Model || layer.stage.is_some() {
+            let mut with_size: Vec<promo_model::ProjectResource> = self
+                .meta
+                .resources
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .cloned()
+                .map(|mut r| {
+                    if r.id == showing {
+                        r.pixel_width = Some(fw);
+                        r.pixel_height = Some(fh);
+                    }
+                    r
+                })
+                .collect();
+            if stand_in.is_some() {
+                with_size.push(promo_model::ProjectResource::stand_in_picture(
+                    STAGE_PICTURE,
+                    fw,
+                    fh,
+                ));
+            }
+            sized = with_size;
+            &sized
+        } else {
+            self.meta.resources.as_deref().unwrap_or(&[])
+        };
         let tr = tl::layer_transform_along_paths(
             stand_in.as_ref().unwrap_or(layer),
             time,
@@ -1580,7 +1604,11 @@ impl PreviewEngine {
             nearest: tl::is_nearest(resource),
             ..Default::default()
         };
-        if !is_drawing && !pre_framed {
+        // Vector art is cut-out ink, not a screen: the composition's default
+        // corner, border and drop shadow (a recording's dressing) stay off
+        // it unless its resource is dressed with a `frame` of its own.
+        let undressed_vector = natural.is_some() && self.effective_frame(layer).is_none();
+        if !is_drawing && !pre_framed && !undressed_vector {
             let style = media_border_style(
                 self.effective_frame(layer),
                 layer,
@@ -1665,7 +1693,7 @@ impl PreviewEngine {
 
         // The drop shadow, as its own soft-edged solid quad under this one.
         // Media only; `media_shadow_suppressed` holds the rest of the rule.
-        let shadow = if is_drawing {
+        let shadow = if is_drawing || undressed_vector {
             None
         } else {
             let frame_ref = self.effective_frame(layer);
@@ -1954,6 +1982,200 @@ impl PreviewEngine {
         Some((quad, id))
     }
 
+    /// The project's resources with a vector's natural size stamped where
+    /// the record states none (a file adopted from `Resources/` without an
+    /// entry), so a placement rule resolves against the picture's shape.
+    fn vector_sized_resources(&self, showing: &str) -> Vec<ProjectResource> {
+        let picture = self.vectors.get(showing).map(|p| p.size());
+        let mut resources: Vec<ProjectResource> = self
+            .meta
+            .resources
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .cloned()
+            .map(|mut r| {
+                if let (true, Some((w, h))) = (r.id == showing, picture) {
+                    if r.pixel_width.is_none() || r.pixel_height.is_none() {
+                        r.pixel_width = Some(w);
+                        r.pixel_height = Some(h);
+                    }
+                }
+                r
+            })
+            .collect();
+        if let Some((w, h)) = picture {
+            if !resources.iter().any(|r| r.id == showing) {
+                resources.push(ProjectResource::stand_in_picture(showing, w, h));
+            }
+        }
+        resources
+    }
+
+    /// The pixels-per-unit a vector is drawn at for a wanted density:
+    /// rounded UP to the next eighth of an octave, so a zoom re-rasterises
+    /// only when it crosses a step (2^(1/8), 9%) and the raster is never
+    /// magnified — at most it is shrunk by a step's worth.
+    fn vector_bucket(density: f64) -> f64 {
+        if !(density.is_finite() && density > 0.0) {
+            return 1.0;
+        }
+        (2f64).powf((density.log2() * 8.0).ceil() / 8.0)
+    }
+
+    /// The raster size for a picture region of `natural` units at the
+    /// wanted `density` (pixels per unit): bucketed, then held under the
+    /// canvas cap the drawing rasterizer uses and promo-svg's own caps,
+    /// both by scale so the aspect survives.
+    fn vector_raster_size(&self, natural: (f64, f64), density: f64, canvas: Size) -> (u32, u32) {
+        let (nw, nh) = (natural.0.max(1e-6), natural.1.max(1e-6));
+        let mut scale = Self::vector_bucket(density);
+        let cap = canvas.width().max(canvas.height()) * 2.0 * self.raster_scale;
+        let side = promo_svg::MAX_RASTER_SIDE as f64;
+        scale = scale.min(cap.min(side) / nw).min(cap.min(side) / nh);
+        let pixels = promo_svg::MAX_RASTER_PIXELS as f64;
+        if nw * nh * scale * scale > pixels {
+            scale = (pixels / (nw * nh)).sqrt();
+        }
+        (
+            ((nw * scale).ceil() as u32).clamp(1, promo_svg::MAX_RASTER_SIDE),
+            ((nh * scale).ceil() as u32).clamp(1, promo_svg::MAX_RASTER_SIDE),
+        )
+    }
+
+    /// A vector picture drawn at `(pw, ph)` — `crop` the unit rect of it —
+    /// served from the cache under a key of (resource, picture stamp,
+    /// crop, size) or rasterised by resvg, uploaded and admitted. Keyed by
+    /// RESOURCE, so every layer showing the same picture at the same size
+    /// shares one texture.
+    fn vector_raster(
+        &mut self,
+        prefix: &str,
+        resource_id: &str,
+        picture: &promo_svg::Picture,
+        crop: Option<[f64; 4]>,
+        (pw, ph): (u32, u32),
+        pinned: &[u64],
+    ) -> Option<u64> {
+        let crop_key = crop.map_or_else(String::new, |c| {
+            format!(
+                "{:x}.{:x}.{:x}.{:x}",
+                c[0].to_bits(),
+                c[1].to_bits(),
+                c[2].to_bits(),
+                c[3].to_bits()
+            )
+        });
+        let key = (
+            format!(
+                "{prefix}:{resource_id}:{:x}:{crop_key}:{pw}x{ph}",
+                picture.stamp()
+            ),
+            0i64,
+            0i32,
+        );
+        if let Some(&id) = self.key_of.get(&key) {
+            self.governor.touch(id);
+            self.hits += 1;
+            return Some(id);
+        }
+        let mut pixels = picture.render(pw, ph, crop)?;
+        // resvg draws premultiplied RGBA; the compositor samples BGRA.
+        for px in pixels.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        let surface = promo_gpu::GpuSurface::CpuPixels {
+            data: pixels,
+            width: pw,
+            height: ph,
+            bytes_per_row: pw * 4,
+        };
+        let frame = Compositor::import(self.ctx, &surface).ok()?;
+        self.misses += 1;
+        let id = self.next_id;
+        self.next_id += 1;
+        for victim in self
+            .governor
+            .admit(id, pw as usize * ph as usize * 4, pinned)
+        {
+            if let Some(k) = self.id_of.remove(&victim) {
+                self.key_of.remove(&k);
+            }
+            self.cache.remove(&victim);
+        }
+        self.cache.insert(
+            id,
+            CachedFrame {
+                frame,
+                flags: 0,
+                caption_origin: None,
+                content_box: None,
+            },
+        );
+        self.key_of.insert(key.clone(), id);
+        self.id_of.insert(id, key);
+        Some(id)
+    }
+
+    /// The frame an image layer shows for a vector resource: the picture —
+    /// or its image cut, while the layer shows its own resource — drawn at
+    /// the pixel size the layer occupies on screen (through any keyframe
+    /// viewport, at the export's raster scale). Answers the cache id and
+    /// the natural size the layer lays out with (the cut's share of the
+    /// picture's size).
+    #[allow(clippy::too_many_arguments)]
+    fn vector_frame(
+        &mut self,
+        layer: &ProjectLayer,
+        showing: &str,
+        picture: &promo_svg::Picture,
+        settings: &promo_model::CompositionSettings,
+        canvas: Size,
+        time: f64,
+        pinned: &[u64],
+    ) -> Option<(u64, (f64, f64))> {
+        let (pw, ph) = picture.size();
+        // An image cut is a crop of the picture itself — no file, the
+        // renderer draws just that region, sharp at any zoom.
+        let crop = (layer.resource_id.as_deref() == Some(showing))
+            .then(|| {
+                let cut_id = layer.image_cut_id.as_ref()?;
+                let resource = self
+                    .meta
+                    .resources
+                    .as_deref()?
+                    .iter()
+                    .find(|r| r.id == showing)?;
+                let cut = resource.image_cuts.iter().find(|c| &c.id == cut_id)?;
+                let r = cut.rect;
+                let (x, y) = (r.x().clamp(0.0, 1.0), r.y().clamp(0.0, 1.0));
+                let (w, h) = (r.width().min(1.0 - x), r.height().min(1.0 - y));
+                (w > 0.0 && h > 0.0).then_some([x, y, w, h])
+            })
+            .flatten();
+        let natural = match crop {
+            Some([_, _, w, h]) => (pw * w, ph * h),
+            None => (pw, ph),
+        };
+        let resources = self.vector_sized_resources(showing);
+        let tr = tl::layer_transform_along_paths(layer, time, settings, &resources);
+        let rect = tl::media_rect(
+            Size::new(natural.0, natural.1),
+            canvas,
+            tr.zoom,
+            tr.horizontal_shift,
+            tr.vertical_shift,
+        );
+        // A keyframe viewport shows a window of the picture across the
+        // whole rect: the picture is that much larger on screen.
+        let window = tl::layer_viewport(layer, time)
+            .map_or(1.0, |vp| (1.0 / vp[2].max(1e-6)).max(1.0 / vp[3].max(1e-6)));
+        let density = rect.width().max(0.0) / natural.0.max(1e-6) * self.raster_scale * window;
+        let size = self.vector_raster_size(natural, density, canvas);
+        let id = self.vector_raster("svg", showing, picture, crop, size, pinned)?;
+        Some((id, natural))
+    }
+
     /// Rasterizes a drawing layer's vector document and returns its quad plus
     /// the cache id of the texture.
     ///
@@ -2106,6 +2328,15 @@ impl PreviewEngine {
     ) -> Option<(u64, f64, f64)> {
         if rect[2] <= 0.0 || rect[3] <= 0.0 {
             return None;
+        }
+        // A vector (an SVG) masks with its ink: its raster's alpha.
+        if let Some(picture) = self.vectors.get(resource_id).cloned() {
+            let (bw, bh) = picture.size();
+            let density = ((rect[2] * self.raster_scale) / bw.max(1e-6))
+                .max((rect[3] * self.raster_scale) / bh.max(1e-6));
+            let size = self.vector_raster_size((bw, bh), density, canvas);
+            let id = self.vector_raster("mask", resource_id, &picture, None, size, pinned)?;
+            return Some((id, bw.max(1.0), bh.max(1.0)));
         }
         let doc = self
             .meta
@@ -3154,6 +3385,45 @@ impl PreviewEngine {
     /// Whether a model has been provided for a resource.
     pub fn has_model(&self, resource_id: &str) -> bool {
         self.models.contains_key(resource_id)
+    }
+
+    /// Hand the engine a vector resource's picture (an SVG, parsed by
+    /// `promo_svg::load` — the host reads the files, as with every pixel
+    /// source). Calling again replaces it; rasters of the old picture are
+    /// never served again (their keys carry its stamp) and leave with the
+    /// LRU.
+    pub fn provide_vector(
+        &mut self,
+        resource_id: &str,
+        picture: std::sync::Arc<promo_svg::Picture>,
+    ) {
+        if self
+            .vectors
+            .get(resource_id)
+            .is_some_and(|old| old.stamp() != picture.stamp())
+        {
+            self.evict_prefix(&format!("svg:{resource_id}:"));
+            self.evict_mask(resource_id);
+        }
+        self.vectors.insert(resource_id.to_string(), picture);
+    }
+
+    /// Whether a picture has been provided for a vector resource, and the
+    /// stamp of the bytes it was parsed from.
+    pub fn vector_stamp(&self, resource_id: &str) -> Option<u64> {
+        self.vectors.get(resource_id).map(|p| p.stamp())
+    }
+
+    /// The vector resources of the current project — what a host reads and
+    /// provides after `set_project`: the declared ones, and an `.svg` in
+    /// `listing` (the files of `Resources/`) that nothing declared, by its
+    /// derived id.
+    pub fn vector_resources(&self, listing: &[String]) -> Vec<ProjectResource> {
+        promo_model::effective_resources(&self.meta, listing)
+            .into_iter()
+            .map(|r| r.resource)
+            .filter(|r| r.kind == promo_model::ProjectResourceKind::Vector)
+            .collect()
     }
 
     /// A model resource's `materials` bindings, applied to its slots: a

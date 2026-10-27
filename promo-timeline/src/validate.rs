@@ -278,9 +278,11 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
                      the layer renders unmasked",
                     layer.name
                 )),
+                // An SVG masks with its ink, as a drawing does.
+                Some(resource) if resource.kind == promo_model::ProjectResourceKind::Vector => {}
                 Some(resource) => match resource.drawing.as_ref() {
                     None => out.breaks(format!(
-                        "layer \"{}\": mask resource \"{}\" is {:?}, not a drawing — \
+                        "layer \"{}\": mask resource \"{}\" is {:?}, not a drawing or an SVG — \
                          a mask is a drawing's ink, and the layer renders unmasked",
                         layer.name, resource.display_name, resource.kind
                     )),
@@ -2578,6 +2580,13 @@ mod tests {
         assert!(
             warnings(&project(&masked("image", &mask("21")), resources)).is_empty(),
             "a drawing mask on an image layer is the feature"
+        );
+        let vector = r#","minReaderVersion":51,"resources":[
+            {"id":"D65E2A61-33DD-4BA1-B1F6-9F2E5C8B0A24","kind":"vector",
+             "filename":"logo.svg","displayName":"Logo","addedAt":0}]"#;
+        assert!(
+            warnings(&project(&masked("image", &mask("24")), vector)).is_empty(),
+            "an SVG masks with its ink"
         );
         assert!(warnings(&project(&masked("image", &mask("99")), resources))
             .iter()

@@ -553,7 +553,8 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "kind": { "type": "string", "enum": ["image", "video", "caption"] },
                     "file": { "type": "string", "description":
                         "Image/video to copy in — required to create, optional on \
-                         update (a repoint)" },
+                         update (a repoint). An .svg stays itself: a vector resource \
+                         the core draws sharp at any size" },
                     "fadeIn": { "type": "number", "description": "Seconds" },
                     "frame": { "type": "object", "description":
                         "Resource dressing: {kind: \"device\"|\"border\", material, \

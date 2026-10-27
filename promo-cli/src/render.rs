@@ -312,6 +312,7 @@ impl Renderer {
         // walk gets the export-grade sample cap rather than the preview's.
         engine.set_export_mode(true);
         Self::provide_models(&mut engine, project);
+        Self::provide_vectors(&mut engine, project);
 
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("promo-cli-target"),
@@ -565,6 +566,10 @@ impl Renderer {
                 let Some(resource) = project.resource(candidate) else {
                     continue;
                 };
+                // A vector is drawn by the engine (`provide_vectors`).
+                if resource.kind == promo_model::ProjectResourceKind::Vector {
+                    continue;
+                }
                 let Some(path) = project.resource_path(resource) else {
                     continue;
                 };
@@ -588,7 +593,11 @@ impl Renderer {
             if let (Some(cut_id), Some(resource_id)) =
                 (layer.image_cut_id.as_ref(), layer.resource_id.as_ref())
             {
-                if let Some(resource) = project.resource(resource_id) {
+                if let Some(resource) = project
+                    .resource(resource_id)
+                    // A vector's cut is drawn by the engine, from the file.
+                    .filter(|r| r.kind != promo_model::ProjectResourceKind::Vector)
+                {
                     let cut = resource.image_cuts.iter().find(|c| &c.id == cut_id);
                     if let Some(cut) = cut.filter(|c| !c.filename.is_empty()) {
                         if let Some(path) = project
@@ -627,6 +636,7 @@ impl Renderer {
                 .resource_id
                 .as_ref()
                 .and_then(|id| project.resource(id))
+                .filter(|r| r.kind != promo_model::ProjectResourceKind::Vector)
             else {
                 continue;
             };
@@ -730,6 +740,27 @@ impl Renderer {
         }
     }
 
+    /// Every vector resource's picture, parsed here (its file, or the
+    /// outlines its import made) and handed over. A file that does not
+    /// parse leaves its layers drawing nothing; validate says why.
+    fn provide_vectors(engine: &mut PreviewEngine, project: &Project) {
+        for resource in project.resources() {
+            if resource.kind != promo_model::ProjectResourceKind::Vector {
+                continue;
+            }
+            let Some(dir) = project
+                .resource_path(&resource)
+                .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+            else {
+                continue;
+            };
+            match promo_svg::load(&dir, &resource) {
+                Ok(picture) => engine.provide_vector(&resource.id, std::sync::Arc::new(picture)),
+                Err(why) => eprintln!("promo: {why}"),
+            }
+        }
+    }
+
     pub fn set_project(&mut self, project: &Project) -> Result<(), String> {
         let (frames, cuts, videos) = Self::stage(project, &self.registry)?;
         {
@@ -743,6 +774,7 @@ impl Renderer {
         }
         self.engine.set_project(project.meta.clone());
         Self::provide_models(&mut self.engine, project);
+        Self::provide_vectors(&mut self.engine, project);
         Ok(())
     }
 
