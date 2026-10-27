@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 promo-model = { path = "../promo-model" }
 serde_json.workspace = true
+serde.workspace = true
 # One parser and one renderer, in Rust, on every host (SVG-PLAN.md):
 # usvg and resvg are Apache-2.0 OR MIT, tiny-skia BSD-3-Clause. Pinned
 # exactly — a renderer upgrade is a pixel change, made on purpose. No
@@ -26,5 +27,6 @@ sha2 = "0.10"
 [dev-dependencies]
 promo-model = { path = "../promo-model" }
 serde_json.workspace = true
+serde.workspace = true
 # Reading and writing the reference images.
 png = "0.18"

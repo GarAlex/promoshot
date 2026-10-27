@@ -3329,6 +3329,7 @@ dependencies = [
  "png",
  "promo-model",
  "resvg",
+ "serde",
  "serde_json",
  "sha2 0.10.9",
  "tiny-skia",

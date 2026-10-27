@@ -25,12 +25,17 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use promo_model::vector::{VectorBlock, KEY, OUTLINES_DIR};
+use promo_model::vector::{VectorBlock, VectorOverride, KEY, OUTLINES_DIR};
 use promo_model::{ProjectMetadata, ProjectResource, ProjectResourceKind};
 use serde_json::{json, Value};
 use usvg::fontdb;
 
 pub use promo_model::vector;
+
+mod edit;
+mod model;
+
+pub use model::{Model, Node, PaintInfo, Tier, MARKER, SYNTHETIC};
 
 /// The caps that keep a hostile file from hanging an import or a render.
 #[derive(Debug, Clone, Copy)]
@@ -512,6 +517,8 @@ pub struct Imported {
     pub missing_fonts: Vec<String>,
     pub refused: Vec<String>,
     pub text_elements: usize,
+    /// The author's names for unnamed elements: address → name.
+    pub handles: std::collections::BTreeMap<String, String>,
 }
 
 /// Reads an SVG once, as the import does: the guards, the size, and the
@@ -521,15 +528,48 @@ pub fn import_bytes(
     context: &Context,
     fonts: Arc<fontdb::Database>,
 ) -> Result<Imported, Refusal> {
+    import_with_texts(bytes, context, fonts, &[])
+}
+
+/// [`import_bytes`] with text elements' words replaced first — `texts`,
+/// address → words: the outlines a `text` override draws, made on the
+/// machine that edits it. Every unnamed element is named by its address
+/// before the parse, so the outlines' nodes can be found by edits.
+pub fn import_with_texts(
+    bytes: &[u8],
+    context: &Context,
+    fonts: Arc<fontdb::Database>,
+    texts: &[(String, String)],
+) -> Result<Imported, Refusal> {
     let limits = Limits::default();
-    let (tree, survey, notes) = parse_tree(bytes, context, &limits, Some(fonts))?;
+    let elements = std::str::from_utf8(bytes)
+        .ok()
+        .and_then(|t| model::Survey::read(t).ok().map(|s| (t, s)));
+    let named = elements
+        .as_ref()
+        .map(|(text, survey)| survey.named_source(text, texts));
+    let parsed = named.as_deref().map_or(bytes, str::as_bytes);
+    let (tree, survey, notes) = parse_tree(parsed, context, &limits, Some(fonts))?;
     let size = (tree.size().width() as f64, tree.size().height() as f64);
     let outlines = (survey.text_elements > 0 || tree.has_text_nodes()).then(|| {
-        tree.to_string(&usvg::WriteOptions {
+        let written = tree.to_string(&usvg::WriteOptions {
             preserve_text: false,
             indent: usvg::Indent::None,
             ..Default::default()
-        })
+        });
+        // The file itself with each text swapped for its glyphs: every
+        // element where it was, named by its address — and marked so.
+        // Where a group cannot stand in for a text (one inside a clip, a
+        // mask, a definition), usvg's writing of the whole picture.
+        named
+            .as_deref()
+            .and_then(|n| edit::splice_outlines(n, &written))
+            .and_then(|spliced| {
+                let mut dom = edit::Dom::parse(&spliced).ok()?;
+                dom.mark(MARKER, "1");
+                Some(dom.write())
+            })
+            .unwrap_or(written)
     });
     Ok(Imported {
         size,
@@ -538,6 +578,7 @@ pub fn import_bytes(
         missing_fonts: notes.missing_fonts,
         refused: notes.refused,
         text_elements: survey.text_elements,
+        handles: elements.map(|(_, s)| s.handles()).unwrap_or_default(),
     })
 }
 
@@ -546,25 +587,68 @@ pub fn outlines_name(filename: &str) -> String {
     filename.to_string()
 }
 
+/// The outlines file for `filename` drawn with `texts` (address → words)
+/// in place of the file's words: the plain name when there are none, else
+/// one named by them — so an undo that brings the old words back finds
+/// their outlines still there.
+pub fn outlines_name_for(filename: &str, texts: &[(String, String)]) -> String {
+    if texts.is_empty() {
+        return outlines_name(filename);
+    }
+    let mut key = String::new();
+    for (address, words) in texts {
+        key.push_str(address);
+        key.push('\u{1f}');
+        key.push_str(words);
+        key.push('\u{1e}');
+    }
+    format!("{}.{filename}", &sha256_hex(key.as_bytes())[..12])
+}
+
+/// The `text` overrides of a block, address → words, in their order.
+pub fn text_overrides(block: &VectorBlock) -> Vec<(String, String)> {
+    block
+        .overrides
+        .iter()
+        .filter_map(|o| o.text.clone().map(|t| (o.node.clone(), t)))
+        .collect()
+}
+
 /// Imports `Resources/<filename>`: writes its outlines (when it has text)
 /// to `Resources/.svg/<filename>` and answers the resource's `svg` block
 /// plus the natural size (`pixelWidth`, `pixelHeight`) and what the import
 /// noticed: `{"svg": {...}, "pixelWidth", "pixelHeight", "refused": [..],
 /// "missingFonts": [..], "textElements": n}`.
 pub fn install(resources_dir: &Path, filename: &str) -> Result<Value, String> {
+    outline(resources_dir, filename, &[])
+}
+
+/// [`install`] with text elements' words replaced (`texts`, address →
+/// words): what a `text` override runs on the machine that edits it. The
+/// outlines land under [`outlines_name_for`]; outlines for other words
+/// stay where they are, for an undo.
+pub fn outline(
+    resources_dir: &Path,
+    filename: &str,
+    texts: &[(String, String)],
+) -> Result<Value, String> {
     let path = resources_dir.join(filename);
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let imported = import_bytes(
+    let imported = import_with_texts(
         &bytes,
         &Context::for_resources(resources_dir),
         system_fonts(),
+        texts,
     )
     .map_err(|e| format!("{filename}: {e}"))?;
     let mut block = json!({
         "size": [round(imported.size.0), round(imported.size.1)],
     });
+    if !imported.handles.is_empty() {
+        block["handles"] = json!(imported.handles);
+    }
     let folder = resources_dir.join(OUTLINES_DIR);
-    let name = outlines_name(filename);
+    let name = outlines_name_for(filename, texts);
     match &imported.outlines {
         Some(text) => {
             std::fs::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
@@ -575,10 +659,11 @@ pub fn install(resources_dir: &Path, filename: &str) -> Result<Value, String> {
             block["outlines"] = json!(name);
             block["sourceHash"] = json!(imported.source_hash);
         }
-        None => {
+        None if texts.is_empty() => {
             // A re-import of a file that lost its text: the old outlines go.
             let _ = std::fs::remove_file(folder.join(&name));
         }
+        None => {}
     }
     if !imported.missing_fonts.is_empty() {
         block["missingFonts"] = json!(imported.missing_fonts);
@@ -598,8 +683,9 @@ fn round(v: f64) -> f64 {
 }
 
 /// A parsed SVG, ready to draw at any size. Built with no fonts.
+#[derive(Clone)]
 pub struct Picture {
-    tree: usvg::Tree,
+    tree: Arc<usvg::Tree>,
     size: (f64, f64),
     stamp: u64,
     refused: Vec<String>,
@@ -609,6 +695,30 @@ pub struct Picture {
     elements: u64,
     /// Whether the file animates itself (SMIL or CSS).
     animated: bool,
+    /// The bytes parsed, and — when those are its outlines — the file.
+    source: Arc<Vec<u8>>,
+    original: Option<Arc<Vec<u8>>>,
+    context: Context,
+    /// The element tree and the drawn tree its edits apply to, built on
+    /// first use.
+    edits: Arc<OnceLock<Result<EditBase, String>>>,
+}
+
+#[derive(Clone)]
+struct EditBase {
+    model: Arc<Model>,
+    /// The XML edits apply to: the file with every unnamed element named,
+    /// or its marked outlines.
+    source: Arc<String>,
+}
+
+/// The bytes a vector resource draws from: its outlines while they are
+/// current, else the file; and the file itself.
+#[derive(Debug, Clone)]
+pub struct Sources {
+    pub render: Vec<u8>,
+    pub from_outlines: bool,
+    pub original: Vec<u8>,
 }
 
 impl std::fmt::Debug for Picture {
@@ -635,16 +745,111 @@ impl Picture {
     /// project only, and no fonts — text in a file without outlines draws
     /// nothing.
     pub fn parse(bytes: &[u8], context: &Context) -> Result<Picture, Refusal> {
+        Self::parse_inner(bytes, None, context)
+    }
+
+    /// Parses what [`sources_at`] read: the outlines (or the file), with
+    /// the file beside them for the element tree.
+    pub fn from_sources(sources: Sources, context: &Context) -> Result<Picture, Refusal> {
+        let original = sources.from_outlines.then_some(sources.original);
+        Self::parse_inner(&sources.render, original, context)
+    }
+
+    fn parse_inner(
+        bytes: &[u8],
+        original: Option<Vec<u8>>,
+        context: &Context,
+    ) -> Result<Picture, Refusal> {
         let (tree, survey, notes) = parse_tree(bytes, context, &Limits::default(), None)?;
         let size = (tree.size().width() as f64, tree.size().height() as f64);
         Ok(Picture {
-            tree,
+            tree: Arc::new(tree),
             size,
             stamp: fnv(bytes),
             refused: notes.refused,
-            text_elements: survey.text_elements,
+            text_elements: original
+                .as_deref()
+                .and_then(survey_text_elements)
+                .unwrap_or(survey.text_elements),
             elements: survey.nodes,
             animated: survey.animated,
+            source: Arc::new(bytes.to_vec()),
+            original: original.map(Arc::new),
+            context: context.clone(),
+            edits: Arc::new(OnceLock::new()),
+        })
+    }
+
+    fn edit_base(&self) -> Result<&EditBase, String> {
+        self.edits
+            .get_or_init(|| {
+                let file = self.original.as_deref().unwrap_or(&self.source);
+                let text = std::str::from_utf8(file)
+                    .map_err(|_| "a compressed SVG's elements are not listed".to_string())?;
+                let survey = model::Survey::read(text)?;
+                let marked = contains(&self.source, MARKER.as_bytes());
+                // What edits change: the marked outlines, or the file
+                // named. Outlines without the mark (made before element
+                // edits, or usvg's whole writing) list the file's elements
+                // against the file named — its text drawing nothing — and
+                // take no edit.
+                let (source, editable) = match (&self.original, marked) {
+                    (Some(_), true) => (String::from_utf8_lossy(&self.source).into_owned(), true),
+                    (Some(_), false) => (survey.named_source(text, &[]), false),
+                    (None, _) => (survey.named_source(text, &[]), true),
+                };
+                let (tree, probes) = match edit::probed(&source) {
+                    Ok((probed, probes)) => (
+                        parse_tree(probed.as_bytes(), &self.context, &Limits::default(), None)
+                            .ok()
+                            .map(|(t, _, _)| t),
+                        probes,
+                    ),
+                    Err(_) => (None, Default::default()),
+                };
+                let editable = editable && tree.is_some();
+                let model = Model::build(survey, tree.as_ref(), &probes, editable);
+                Ok(EditBase {
+                    model: Arc::new(model),
+                    source: Arc::new(source),
+                })
+            })
+            .as_ref()
+            .map_err(|e| e.clone())
+    }
+
+    /// The file's elements, classified (SVG-PLAN.md slice 2).
+    pub fn model(&self) -> Result<Arc<Model>, String> {
+        self.edit_base().map(|b| b.model.clone())
+    }
+
+    /// This picture with `overrides` applied to its tree — itself when
+    /// none changes the tree. An override the element's tier refuses, or
+    /// one naming no element, is skipped (validate names it). The stamp
+    /// names the edits, so a raster of the edited picture never answers
+    /// for the plain one.
+    pub fn with_overrides(&self, overrides: &[VectorOverride]) -> Result<Picture, String> {
+        let edits: Vec<&VectorOverride> = overrides.iter().filter(|o| o.edits_tree()).collect();
+        if edits.is_empty() {
+            return Ok(self.clone());
+        }
+        let base = self.edit_base()?;
+        if !base.model.editable() {
+            return Err(
+                "this SVG's text outlines were made before its elements could be \
+                        edited — import it again"
+                    .into(),
+            );
+        }
+        let text = edit::apply(&base.source, &base.model, overrides)?;
+        let (tree, _, _) = parse_tree(text.as_bytes(), &self.context, &Limits::default(), None)
+            .map_err(|e| e.to_string())?;
+        let mut stamped = self.stamp.to_le_bytes().to_vec();
+        stamped.extend(serde_json::to_vec(&edits).unwrap_or_default());
+        Ok(Picture {
+            tree: Arc::new(tree),
+            stamp: fnv(&stamped),
+            ..self.clone()
         })
     }
 
@@ -729,6 +934,28 @@ impl Picture {
     }
 }
 
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+fn survey_text_elements(bytes: &[u8]) -> Option<usize> {
+    survey(bytes, &Limits::default())
+        .ok()
+        .map(|s| s.text_elements)
+}
+
+/// The stamp the picture drawn with `overrides` carries — `stamp` itself
+/// when none changes its tree. What a host compares to skip work.
+pub fn edited_stamp(stamp: u64, overrides: &[VectorOverride]) -> u64 {
+    let edits: Vec<&VectorOverride> = overrides.iter().filter(|o| o.edits_tree()).collect();
+    if edits.is_empty() {
+        return stamp;
+    }
+    let mut stamped = stamp.to_le_bytes().to_vec();
+    stamped.extend(serde_json::to_vec(&edits).unwrap_or_default());
+    fnv(&stamped)
+}
+
 /// Which bytes draw a vector resource: its outlines while they are the
 /// original's (the block's `sourceHash`), else the original itself.
 /// `(bytes, from_outlines)`.
@@ -748,6 +975,17 @@ pub fn render_source_at(
     path: &Path,
     block: Option<&VectorBlock>,
 ) -> Result<(Vec<u8>, bool), String> {
+    sources_at(path, block).map(|s| {
+        if s.from_outlines {
+            (s.render, true)
+        } else {
+            (s.original, false)
+        }
+    })
+}
+
+/// [`render_source_at`] with the file kept beside its outlines.
+pub fn sources_at(path: &Path, block: Option<&VectorBlock>) -> Result<Sources, String> {
     let original = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if let Some((Some(name), Some(hash))) =
         block.map(|b| (b.outlines.as_deref(), b.source_hash.as_deref()))
@@ -759,11 +997,19 @@ pub fn render_source_at(
             .join(name);
         if let Ok(bytes) = std::fs::read(&outlines) {
             if sha256_hex(&original) == hash {
-                return Ok((bytes, true));
+                return Ok(Sources {
+                    render: bytes,
+                    from_outlines: true,
+                    original,
+                });
             }
         }
     }
-    Ok((original, false))
+    Ok(Sources {
+        render: Vec::new(),
+        from_outlines: false,
+        original,
+    })
 }
 
 /// The picture a vector resource draws.
@@ -778,9 +1024,22 @@ pub fn load(resources_dir: &Path, resource: &ProjectResource) -> Result<Picture,
 /// The picture the file at `path` draws, with the block it was imported
 /// with; hrefs may reach the project folder above its `Resources/`.
 pub fn load_path(path: &Path, block: Option<&VectorBlock>) -> Result<Picture, String> {
-    let (bytes, _) = render_source_at(path, block)?;
+    let mut sources = sources_at(path, block)?;
+    if !sources.from_outlines {
+        sources.render = std::mem::take(&mut sources.original);
+    }
     let dir = path.parent().unwrap_or(Path::new("."));
-    Picture::parse(&bytes, &Context::for_resources(dir)).map_err(|e| e.to_string())
+    Picture::from_sources(sources, &Context::for_resources(dir)).map_err(|e| e.to_string())
+}
+
+/// [`load_path`] with the block's overrides applied — the resource's
+/// look, as a thumbnail or the vector editor shows it.
+pub fn load_edited(path: &Path, block: Option<&VectorBlock>) -> Result<Picture, String> {
+    let picture = load_path(path, block)?;
+    match block {
+        Some(b) if !b.overrides.is_empty() => picture.with_overrides(&b.overrides),
+        _ => Ok(picture),
+    }
 }
 
 /// The stamp a picture parsed from these bytes carries — to skip a parse
@@ -847,6 +1106,40 @@ pub fn findings(meta: &ProjectMetadata, resources_dir: &Path) -> Vec<String> {
                  imported it lacked — that text is drawn in a fallback face; install the font \
                  and import it again"
             ));
+        }
+        // Overrides: each names an element and stays inside its tier; a
+        // word change is drawn from outlines made with those words.
+        if let Some(b) = block.as_ref().filter(|b| !b.overrides.is_empty()) {
+            let drawn = load(resources_dir, resource);
+            let model = drawn.as_ref().ok().and_then(|p| p.model().ok());
+            for o in &b.overrides {
+                let Some(model) = &model else { break };
+                if let Err(why) = model.check(o, false) {
+                    if model.resolve(&o.node).is_err() {
+                        out.push(format!(
+                            "the SVG \"{name}\" has an override for \"{}\", which names no \
+                             element of the file — it does nothing; remove it (Reset in the \
+                             app) or name an element promo_inspect lists",
+                            o.node
+                        ));
+                    } else {
+                        out.push(format!(
+                            "the SVG \"{name}\" has an override that does not apply — {why}"
+                        ));
+                    }
+                }
+            }
+            let texts = text_overrides(b);
+            if !texts.is_empty()
+                && b.outlines.as_deref()
+                    != Some(outlines_name_for(&resource.filename, &texts).as_str())
+            {
+                out.push(format!(
+                    "the SVG \"{name}\" has new words for its text that are not outlined yet, so \
+                     the old words draw — set them again with promo_apply (setVectorOverride) or \
+                     in the app"
+                ));
+            }
         }
         if block.and_then(|b| b.natural_size()).is_none()
             && (resource.pixel_width.is_none() || resource.pixel_height.is_none())

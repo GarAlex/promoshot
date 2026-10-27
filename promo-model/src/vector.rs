@@ -25,7 +25,14 @@
 //!   then draws nothing, and validate says so).
 //! - `missingFonts`: the families the import could not find (their text is
 //!   in a fallback face). Validate names them.
-//! - `overrides` (slice 2) and any other key: kept as written, not read.
+//! - `overrides` (slice 2): edits to the file's elements, applied to the
+//!   parsed tree at render time — the file itself is never rewritten, and
+//!   removing every override gives back exactly its picture
+//!   ([`VectorOverride`]).
+//! - `handles` (slice 2): the author's names for elements the file gives
+//!   no `id` — `{"badge/rect[0]": "Badge fill"}` — minted on import, so a
+//!   tool may name a node the way the file's author did.
+//! - Any other key: kept as written, not read.
 //!
 //! [`VectorBlock`] is the typed reading of the bag value; writers edit the
 //! value itself.
@@ -56,7 +63,13 @@ pub struct VectorBlock {
     pub source_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub missing_fonts: Option<Vec<String>>,
-    /// Everything else — `overrides` (slice 2) among it — as written.
+    /// Edits to the file's elements, in the order they were first made.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<VectorOverride>,
+    /// The author's names for elements without an `id`: address → name.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub handles: std::collections::BTreeMap<String, String>,
+    /// Everything else, as written.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -67,6 +80,127 @@ impl VectorBlock {
         let [w, h] = self.size?;
         (w > 0.0 && h > 0.0 && w.is_finite() && h.is_finite()).then_some((w, h))
     }
+}
+
+/// One element's edits (SVG-PLAN.md slice 2). `node` is the element's
+/// address: its `id`, else its path from the nearest ancestor with one
+/// (`badge/rect[0]`, `g[2]/path[0]` — the tag and its index among siblings
+/// of that tag). Every other key is optional and absent means "as drawn".
+///
+/// - Any element (tier A): `visible`, `opacity` (0–1, the element's own,
+///   replacing what the file gives it), `transform` (about the element's
+///   own centre: `move` in the picture's CSS pixels, `scale`, `rotate` in
+///   degrees) and `order` (its place among its siblings, 0 = drawn first).
+/// - A painted shape (tier B): `fill` and `stroke` colours (`RRGGBB` or
+///   `RRGGBBAA`), `fillStops` / `strokeStops` (one colour per stop of the
+///   shape's gradient, offsets kept), `strokeWidth`.
+/// - Text: `text`, its words — outlined again on the machine that edits
+///   it, so drawing still needs no font.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorOverride {
+    pub node: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<NodeTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_stops: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_stops: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Keys a later build adds, kept as written.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl VectorOverride {
+    /// Whether it changes the picture's tree at render time (`text` is
+    /// in the outlines instead).
+    pub fn edits_tree(&self) -> bool {
+        self.visible.is_some()
+            || self.opacity.is_some()
+            || self.transform.as_ref().is_some_and(|t| !t.is_identity())
+            || self.order.is_some()
+            || self.edits_paint()
+    }
+
+    /// Whether it changes a painted shape's paint (tier B).
+    pub fn edits_paint(&self) -> bool {
+        self.fill.is_some()
+            || self.stroke.is_some()
+            || self.fill_stops.is_some()
+            || self.stroke_stops.is_some()
+            || self.stroke_width.is_some()
+    }
+
+    /// Whether it says nothing at all beyond its node.
+    pub fn is_empty(&self) -> bool {
+        !self.edits_tree()
+            && self.transform.is_none()
+            && self.text.is_none()
+            && self.extra.is_empty()
+    }
+}
+
+/// A move, scale and turn about an element's own centre.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeTransform {
+    /// `[dx, dy]` in the picture's CSS pixels.
+    #[serde(default, rename = "move", skip_serializing_if = "Option::is_none")]
+    pub offset: Option<[f64; 2]>,
+    /// One factor, or `[sx, sy]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<NodeScale>,
+    /// Degrees, clockwise on screen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotate: Option<f64>,
+}
+
+impl NodeTransform {
+    /// `(sx, sy)`, 1 when absent.
+    pub fn scales(&self) -> (f64, f64) {
+        match self.scale {
+            Some(NodeScale::Uniform(s)) => (s, s),
+            Some(NodeScale::Axes([x, y])) => (x, y),
+            None => (1.0, 1.0),
+        }
+    }
+
+    /// Whether it moves nothing.
+    pub fn is_identity(&self) -> bool {
+        let (sx, sy) = self.scales();
+        self.offset.is_none_or(|[x, y]| x == 0.0 && y == 0.0)
+            && sx == 1.0
+            && sy == 1.0
+            && self.rotate.is_none_or(|r| r == 0.0)
+    }
+}
+
+/// A scale: one factor for both axes, or one each.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum NodeScale {
+    Uniform(f64),
+    Axes([f64; 2]),
+}
+
+/// The overrides a vector resource carries (none when the block is absent
+/// or does not decode).
+pub fn overrides(resource: &crate::ProjectResource) -> Vec<VectorOverride> {
+    block(resource).map(|b| b.overrides).unwrap_or_default()
 }
 
 /// The block a resource carries, when it carries one that decodes.
@@ -113,8 +247,10 @@ mod tests {
         let resource = &vector.resources.as_ref().unwrap()[0];
         let read = block(resource).unwrap();
         assert_eq!(read.natural_size(), Some((240.0, 80.0)));
-        // `overrides` is slice 2's: kept, not read.
-        assert!(read.extra.contains_key("overrides"));
+        // `overrides` decode as slice 2 reads them.
+        assert_eq!(read.overrides.len(), 1);
+        assert_eq!(read.overrides[0].node, "badge");
+        assert_eq!(read.overrides[0].opacity, Some(0.5));
         // And the block round-trips through the model untouched.
         let json: Value = serde_json::from_str(&vector.to_json().unwrap()).unwrap();
         assert_eq!(
@@ -130,5 +266,26 @@ mod tests {
         let listed = crate::effective_resources(&meta, &["logo.svg".to_string()]);
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].resource.kind, crate::ProjectResourceKind::Vector);
+    }
+
+    /// An override keeps every key it does not read, and its transform
+    /// takes one scale or two.
+    #[test]
+    fn an_override_round_trips() {
+        let raw = serde_json::json!({
+            "node": "badge/rect[0]", "fill": "FF6A00", "fillRole": "accent",
+            "transform": {"move": [4.0, -2.0], "scale": [1.5, 2.0], "rotate": 12.0}
+        });
+        let o: VectorOverride = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(o.transform.as_ref().unwrap().scales(), (1.5, 2.0));
+        assert!(o.edits_tree() && o.edits_paint());
+        assert_eq!(serde_json::to_value(&o).unwrap(), raw);
+        let uniform: NodeTransform =
+            serde_json::from_value(serde_json::json!({"scale": 2})).unwrap();
+        assert_eq!(uniform.scales(), (2.0, 2.0));
+        assert!(NodeTransform::default().is_identity());
+        let words: VectorOverride =
+            serde_json::from_value(serde_json::json!({"node": "tagline", "text": "Hi"})).unwrap();
+        assert!(!words.edits_tree() && !words.is_empty());
     }
 }
