@@ -146,6 +146,10 @@ jobs:
               print(f"::error title=macOS {esc(name)}::{esc(' | '.join(keep))[:1500] or 'failed'}")
           for crate in re.findall(r"^error: could not compile `([^`]+)`", log, re.M):
               print(f"::error title=macOS compile {esc(crate)}::could not compile")
+          for line in re.findall(r"^error: test failed, to rerun pass (.+)$", log, re.M):
+              print(f"::error title=macOS test binary::{esc(line)[:300]}")
+          for line in re.findall(r"^.*(?:process didn't exit successfully|has overflowed its stack|signal: \d+).*$", log, re.M):
+              print(f"::error title=macOS crash::{esc(line)[:1500]}")
           print(f"::notice title=cargo test (macOS)::{len(failed)} failed test(s)")
           PY
 

@@ -3567,12 +3567,12 @@ mod tests {
     }
 
     fn render(view: ModelView) -> Vec<u8> {
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -3592,7 +3592,7 @@ mod tests {
                 }],
             )
             .expect("model");
-        pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+        pass.render_to_bytes(ctx, &model, &view, &[IDENTITY], 96, 96)
             .expect("render")
     }
 
@@ -3614,12 +3614,12 @@ mod tests {
     /// and returns the mean brightness of two patches on the front face:
     /// the left half (uv.x < 0.5) and the right half.
     fn halves(material: MaterialInput<'_>, light_yaw: f64, light_pitch: f64) -> (u32, u32) {
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -3640,7 +3640,7 @@ mod tests {
             ..ModelView::default()
         };
         let px = pass
-            .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+            .render_to_bytes(ctx, &model, &view, &[IDENTITY], 96, 96)
             .expect("render");
         let mean = |x0: usize, x1: usize| -> u32 {
             let mut sum = 0u32;
@@ -3664,12 +3664,12 @@ mod tests {
     /// with a grain), matte plastic, and thin glass. Each pair reads
     /// differently, and only the glass lets the background through.
     fn finished_cube(finish: SurfaceFinish, metallic: f32, roughness: f32) -> Vec<u8> {
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let mut model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -3689,7 +3689,7 @@ mod tests {
                 }],
             )
             .expect("upload");
-        pass.set_finish(&ctx, &mut model, 0, finish);
+        pass.set_finish(ctx, &mut model, 0, finish);
         let view = ModelView {
             yaw: 25.0,
             pitch: 20.0,
@@ -3703,7 +3703,7 @@ mod tests {
             },
             ..ModelView::default()
         };
-        pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+        pass.render_to_bytes(ctx, &model, &view, &[IDENTITY], 96, 96)
             .expect("render")
     }
 
@@ -3787,13 +3787,13 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let render = |preset: EnvPreset, intensity: f64| -> Vec<u8> {
             let mut model = pass
                 .upload(
-                    &ctx,
+                    ctx,
                     &[MeshInput {
                         positions: &p,
                         normals: &n,
@@ -3814,7 +3814,7 @@ mod tests {
                 )
                 .expect("upload");
             pass.set_finish(
-                &ctx,
+                ctx,
                 &mut model,
                 0,
                 SurfaceFinish {
@@ -3839,7 +3839,7 @@ mod tests {
                 },
                 ..ModelView::default()
             };
-            pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+            pass.render_to_bytes(ctx, &model, &view, &[IDENTITY], 96, 96)
                 .expect("render")
         };
         let lifted = |preset: EnvPreset| -> usize {
@@ -3875,14 +3875,14 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
-        let picture = upload_rgba(&ctx, 4, 4, &[[40u8, 40, 40, 255]; 16].concat());
+        let picture = upload_rgba(ctx, 4, 4, &[[40u8, 40, 40, 255]; 16].concat());
         let render = |coat: f32| -> Vec<u8> {
             let mut model = pass
                 .upload(
-                    &ctx,
+                    ctx,
                     &[MeshInput {
                         positions: &p,
                         normals: &n,
@@ -3903,14 +3903,14 @@ mod tests {
                 )
                 .expect("upload");
             pass.set_texture(
-                &ctx,
+                ctx,
                 &mut model,
                 0,
                 &picture.create_view(&Default::default()),
                 None,
             );
             pass.set_finish(
-                &ctx,
+                ctx,
                 &mut model,
                 0,
                 SurfaceFinish {
@@ -3930,7 +3930,7 @@ mod tests {
                 },
                 ..ModelView::default()
             };
-            pass.render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+            pass.render_to_bytes(ctx, &model, &view, &[IDENTITY], 96, 96)
                 .expect("render")
         };
         let bare = render(0.0);
@@ -4015,12 +4015,12 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4076,9 +4076,9 @@ mod tests {
                 matrices: &[IDENTITY],
             }];
             let texture = pass
-                .render_scene_with_floor(&ctx, &items, &view, side, side, floor)
+                .render_scene_with_floor(ctx, &items, &view, side, side, floor)
                 .expect("render");
-            read_texture(&ctx, &texture, side, side).expect("read")
+            read_texture(ctx, &texture, side, side).expect("read")
         };
         let none = render(None);
         let matte = render(Some(&floor(0.55, 0.0, 0.0)));
@@ -4148,8 +4148,8 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (w, h) = (64u32, 32u32);
         let mut pano = Vec::with_capacity((w * h * 4) as usize);
         for _y in 0..h {
@@ -4163,9 +4163,9 @@ mod tests {
                 pano.extend_from_slice(&px);
             }
         }
-        let picture = upload_rgba(&ctx, w, h, &pano);
+        let picture = upload_rgba(ctx, w, h, &pano);
         let bound = pass.set_environment_picture(
-            &ctx,
+            ctx,
             "pano",
             7,
             &picture.create_view(&Default::default()),
@@ -4176,7 +4176,7 @@ mod tests {
         let (p, n, uv, idx) = cube();
         let model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4210,7 +4210,7 @@ mod tests {
                 ..ModelView::default()
             };
             let px = pass
-                .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 96, 96)
+                .render_to_bytes(ctx, &model, &view, &[IDENTITY], 96, 96)
                 .expect("render");
             let (mut r, mut b) = (0u64, 0u64);
             for y in 30..66 {
@@ -4243,12 +4243,12 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let upload = |color: [f32; 4], metallic: f32, roughness: f32| {
             pass.upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4293,7 +4293,7 @@ mod tests {
         let render = |ior: f32| -> Vec<u8> {
             let mut glass = upload([0.95, 0.95, 0.95, 1.0], 0.0, 0.05);
             pass.set_finish(
-                &ctx,
+                ctx,
                 &mut glass,
                 0,
                 SurfaceFinish {
@@ -4313,9 +4313,9 @@ mod tests {
                 },
             ];
             let texture = pass
-                .render_scene_with_floor(&ctx, &items, &view, side, side, None)
+                .render_scene_with_floor(ctx, &items, &view, side, side, None)
                 .expect("render");
-            read_texture(&ctx, &texture, side, side).expect("read")
+            read_texture(ctx, &texture, side, side).expect("read")
         };
         let bent = render(1.5);
         let flat = render(1.0);
@@ -4357,12 +4357,12 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let mut model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4390,21 +4390,21 @@ mod tests {
                 ..ModelView::default()
             };
             let px = pass
-                .render_to_bytes(&ctx, model, &view, &[IDENTITY], 96, 96)
+                .render_to_bytes(ctx, model, &view, &[IDENTITY], 96, 96)
                 .expect("render");
             px.chunks_exact(4).filter(|c| c[3] > 8).count()
         };
         let whole = opaque(&model);
         assert!(whole > 1000, "the cube is drawn: {whole}");
-        pass.set_dissolve(&ctx, &mut model, 0.5, 0.05);
+        pass.set_dissolve(ctx, &mut model, 0.5, 0.05);
         let half = opaque(&model);
         assert!(
             half > whole / 4 && half < whole * 3 / 4,
             "half dissolved: {half} of {whole}"
         );
-        pass.set_dissolve(&ctx, &mut model, 1.0, 0.05);
+        pass.set_dissolve(ctx, &mut model, 1.0, 0.05);
         assert_eq!(opaque(&model), 0, "all gone");
-        pass.set_dissolve(&ctx, &mut model, 0.0, 0.05);
+        pass.set_dissolve(ctx, &mut model, 0.0, 0.05);
         assert_eq!(opaque(&model), whole, "and back");
     }
 
@@ -4416,12 +4416,12 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let mut model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4450,7 +4450,7 @@ mod tests {
                 checks.extend_from_slice(&[v, v, v, 255]);
             }
         }
-        let picture = upload_rgba(&ctx, w, h, &checks);
+        let picture = upload_rgba(ctx, w, h, &checks);
         let picture_view = picture.create_view(&Default::default());
         // Face on, far away: the face is a few dozen pixels wide, the
         // checks a small fraction of a pixel.
@@ -4462,7 +4462,7 @@ mod tests {
                 ..ModelView::default()
             };
             let px = pass
-                .render_to_bytes(&ctx, model, &view, &[IDENTITY], 96, 96)
+                .render_to_bytes(ctx, model, &view, &[IDENTITY], 96, 96)
                 .expect("render");
             let mut values = Vec::new();
             for y in 44..52 {
@@ -4479,9 +4479,9 @@ mod tests {
                 .unwrap_or(0);
             (mean, spread)
         };
-        pass.set_texture(&ctx, &mut model, 0, &picture_view, None);
+        pass.set_texture(ctx, &mut model, 0, &picture_view, None);
         let (raw_mean, raw_spread) = face(&model);
-        pass.set_texture(&ctx, &mut model, 0, &picture_view, Some((w, h)));
+        pass.set_texture(ctx, &mut model, 0, &picture_view, Some((w, h)));
         let (mip_mean, mip_spread) = face(&model);
         assert!(
             mip_spread < 24 && (90..=170).contains(&mip_mean),
@@ -4504,12 +4504,12 @@ mod tests {
         if crate::gpu_for_test().is_none() {
             return;
         }
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let mut model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4529,7 +4529,7 @@ mod tests {
                 }],
             )
             .expect("upload");
-        let picture = upload_rgba(&ctx, 2, 2, &[170, 120, 60, 255].repeat(4));
+        let picture = upload_rgba(ctx, 2, 2, &[170, 120, 60, 255].repeat(4));
         let picture_view = picture.create_view(&Default::default());
         let face = |model: &GpuModel, light_yaw: f64| -> u32 {
             let view = ModelView {
@@ -4541,7 +4541,7 @@ mod tests {
                 ..ModelView::default()
             };
             let px = pass
-                .render_to_bytes(&ctx, model, &view, &[IDENTITY], 96, 96)
+                .render_to_bytes(ctx, model, &view, &[IDENTITY], 96, 96)
                 .expect("render");
             let mut sum = 0u32;
             let mut count = 0u32;
@@ -4554,25 +4554,25 @@ mod tests {
             }
             sum / count
         };
-        pass.set_texture(&ctx, &mut model, 0, &picture_view, None);
+        pass.set_texture(ctx, &mut model, 0, &picture_view, None);
         let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
         assert!(
             (front as i32 - grazing as i32).abs() < 3,
             "a screen ignores the light: frontal {front}, grazing {grazing}"
         );
-        pass.set_wear(&ctx, &mut model, 0, true, [1.0, 1.0], [0.0, 0.0]);
+        pass.set_wear(ctx, &mut model, 0, true, [1.0, 1.0], [0.0, 0.0]);
         let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
         assert!(
             front as i32 - grazing as i32 > 20,
             "a worn picture is lit: frontal {front}, grazing {grazing}"
         );
-        pass.set_wear(&ctx, &mut model, 0, true, [4.0, 4.0], [0.5, 0.0]);
+        pass.set_wear(ctx, &mut model, 0, true, [4.0, 4.0], [0.5, 0.0]);
         let tiled = face(&model, 0.0);
         assert!(
             (tiled as i32 - front as i32).abs() < 3,
             "a flat picture tiled is the same picture: {tiled} vs {front}"
         );
-        pass.set_wear(&ctx, &mut model, 0, false, [1.0, 1.0], [0.0, 0.0]);
+        pass.set_wear(ctx, &mut model, 0, false, [1.0, 1.0], [0.0, 0.0]);
         let (front, grazing) = (face(&model, 0.0), face(&model, 85.0));
         assert!(
             (front as i32 - grazing as i32).abs() < 3,
@@ -4750,12 +4750,12 @@ mod tests {
     /// its node's matrix shows two faces, two shades.
     #[test]
     fn a_node_matrix_turns_the_mesh() {
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4789,7 +4789,7 @@ mod tests {
             [0.0, 0.0, 0.0, 1.0],
         ];
         let px = pass
-            .render_to_bytes(&ctx, &model, &view, &[turned], 96, 96)
+            .render_to_bytes(ctx, &model, &view, &[turned], 96, 96)
             .expect("render");
         let (lum, opaque) = plateaus(&px);
         assert!(opaque > 96 * 96 / 10, "framed: {opaque}");
@@ -4804,12 +4804,12 @@ mod tests {
     /// middle; the same picture behind the cube is covered by it.
     #[test]
     fn a_billboard_and_a_model_share_one_depth_buffer() {
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4830,7 +4830,7 @@ mod tests {
             )
             .expect("model");
         let green =
-            upload_rgba(&ctx, 2, 2, &[20, 220, 60, 255].repeat(4)).create_view(&Default::default());
+            upload_rgba(ctx, 2, 2, &[20, 220, 60, 255].repeat(4)).create_view(&Default::default());
         let view = ModelView {
             yaw: 0.0,
             pitch: 0.0,
@@ -4855,9 +4855,9 @@ mod tests {
                 },
             ];
             let texture = pass
-                .render_scene(&ctx, &items, &view, 64, 64)
+                .render_scene(ctx, &items, &view, 64, 64)
                 .expect("scene");
-            read_texture(&ctx, &texture, 64, 64).expect("read")
+            read_texture(ctx, &texture, 64, 64).expect("read")
         };
         let front = centre(&render(1.0));
         assert!(
@@ -4873,12 +4873,12 @@ mod tests {
 
     #[test]
     fn a_recoloured_slot_changes_the_pixels() {
-        let ctx = GpuContext::new().expect("gpu");
-        let pass = ModelPass::new(&ctx).expect("pass");
+        let ctx = crate::gpu_for_test().expect("gpu");
+        let pass = ModelPass::new(ctx).expect("pass");
         let (p, n, uv, idx) = cube();
         let mut model = pass
             .upload(
-                &ctx,
+                ctx,
                 &[MeshInput {
                     positions: &p,
                     normals: &n,
@@ -4903,11 +4903,11 @@ mod tests {
             ..Default::default()
         };
         let grey = pass
-            .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 64, 64)
+            .render_to_bytes(ctx, &model, &view, &[IDENTITY], 64, 64)
             .expect("grey");
-        pass.recolor(&ctx, &mut model, 0, [0.9, 0.1, 0.1, 1.0]);
+        pass.recolor(ctx, &mut model, 0, [0.9, 0.1, 0.1, 1.0]);
         let red = pass
-            .render_to_bytes(&ctx, &model, &view, &[IDENTITY], 64, 64)
+            .render_to_bytes(ctx, &model, &view, &[IDENTITY], 64, 64)
             .expect("red");
         let centre = (32 * 64 + 32) * 4;
         assert!(

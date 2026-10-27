@@ -37,6 +37,16 @@ pub enum GpuError {
 /// where a missing adapter FAILS the test. CI sets it: the runners have
 /// lavapipe, and a pixel test that returns early without an adapter passes
 /// having drawn nothing — about eighty did (review 2026-09-27, P2-27).
+///
+/// It is the process's one shared context, and a test draws on it rather
+/// than bringing up its own with `GpuContext::new()`: the apps run one
+/// device, and a test binary that ran many crashed. On Ubuntu 26.04
+/// (Vulkan loader 1.4.341, Mesa 26.0.8 lavapipe) the promo-gpu tests, each
+/// making and dropping its own instance and device on parallel threads,
+/// died with SIGSEGV inside the loader's vkSetDebugUtilsObjectNameEXT
+/// while other threads created or destroyed devices — 15 runs in 20; with
+/// one shared device, 50 in 50 passed. Bookworm's loader 1.3.239 and Mesa
+/// 22.3 never crashed, and neither did one test thread.
 pub fn gpu_for_test() -> Option<&'static GpuContext> {
     match GpuContext::shared() {
         Some(ctx) => Some(ctx),
