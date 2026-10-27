@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A wordmark with live text: a common face, a tspan of another weight,
+     anchored, and one family no machine has. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 140">
+  <rect width="360" height="140" rx="18" fill="#14213d"/>
+  <text id="wordmark" x="180" y="70" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="44" font-weight="700" fill="#fca311">Promo<tspan fill="#ffffff" font-weight="400">Shot</tspan></text>
+  <text id="tagline" x="180" y="108" text-anchor="middle" font-family="No Such Font Family" font-size="18" fill="#e5e5e5">Now on iPad</text>
+</svg>

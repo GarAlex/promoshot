@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A Figma-style app logo: a rounded badge with a gradient and an inner
+     shadow, a glyph drawn as paths, and the wordmark already outlined. -->
+<svg width="240" height="80" viewBox="0 0 240 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g id="badge">
+    <rect width="80" height="80" rx="18" fill="url(#paint0_linear)"/>
+    <rect x="1" y="1" width="78" height="78" rx="17" stroke="white" stroke-opacity="0.25" stroke-width="2"/>
+    <path id="glyph" d="M26 22h18c9.4 0 16 6.2 16 14.5S53.4 51 44 51h-8v9H26V22zm10 9v11h7.5c3.3 0 5.5-2.2 5.5-5.5S46.8 31 43.5 31H36z" fill="white"/>
+    <circle cx="60" cy="58" r="5" fill="#FFD166"/>
+  </g>
+  <g id="wordmark" fill="#1B1B3A">
+    <path d="M98 26h11.5c6.6 0 10.5 3.6 10.5 9s-3.9 9-10.5 9H104v10h-6V26zm6 5v8h5.2c2.8 0 4.5-1.5 4.5-4s-1.7-4-4.5-4H104z"/>
+    <path d="M124 34h5.6v3.3c1.1-2.4 3.2-3.6 6.2-3.6v5.6c-3.7-.3-6 1.4-6 5.2V54H124V34z"/>
+    <path d="M147 33.5c6.2 0 10.6 4.3 10.6 10.5S153.2 54.5 147 54.5 136.4 50.2 136.4 44s4.4-10.5 10.6-10.5zm0 5.1c-2.9 0-5 2.2-5 5.4s2.1 5.4 5 5.4 5-2.2 5-5.4-2.1-5.4-5-5.4z"/>
+    <path d="M161 34h5.4v2.6c1.2-2 3.3-3.1 5.8-3.1 2.8 0 4.9 1.2 6 3.4 1.3-2.2 3.6-3.4 6.4-3.4 4.5 0 7.4 3 7.4 8V54h-5.6V42.5c0-2.5-1.3-3.9-3.5-3.9s-3.7 1.5-3.7 4V54h-5.6V42.5c0-2.5-1.3-3.9-3.5-3.9s-3.6 1.5-3.6 4V54H161V34z"/>
+    <path d="M207 33.5c6.2 0 10.6 4.3 10.6 10.5S213.2 54.5 207 54.5 196.4 50.2 196.4 44s4.4-10.5 10.6-10.5zm0 5.1c-2.9 0-5 2.2-5 5.4s2.1 5.4 5 5.4 5-2.2 5-5.4-2.1-5.4-5-5.4z"/>
+  </g>
+  <defs>
+    <linearGradient id="paint0_linear" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7B5CFF"/>
+      <stop offset="1" stop-color="#FF5C8A"/>
+    </linearGradient>
+  </defs>
+</svg>

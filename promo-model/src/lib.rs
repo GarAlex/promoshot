@@ -14,6 +14,7 @@ pub mod nesting;
 pub mod project;
 pub mod speech;
 pub mod unread;
+pub mod vector;
 pub mod wire;
 pub mod word_cache;
 
@@ -40,8 +41,10 @@ pub use project::*;
 ///
 /// 49 is musical time (`musical`): a time field may hold `{"beats": 4}`,
 /// which a reader before it cannot decode. 50 is speech time (`speech`):
-/// `{"word": 12}`, which a 49 reader's musical decode refuses.
-pub const READER_VERSION: i64 = 50;
+/// `{"word": 12}`, which a 49 reader's musical decode refuses. 51 is the
+/// `vector` resource kind (`vector`): an SVG kept as its file, which a 50
+/// reader's strict kind decode refuses.
+pub const READER_VERSION: i64 = 51;
 
 /// The first reader that keeps what it does not read (see
 /// [`READER_VERSION`]). A file carrying content its writer did not read,

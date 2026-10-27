@@ -3780,7 +3780,8 @@
         "composition",
         "lut",
         "model",
-        "particles"
+        "particles",
+        "vector"
       ],
       "type": "string"
     },

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An Illustrator-style export: a <style> block of classes, style=
+     attributes, and paint inherited from groups. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+  <defs>
+    <style>
+      .cls-1 { fill: #1d3557; }
+      .cls-2 { fill: none; stroke: #e63946; stroke-width: 10px; stroke-linecap: round; }
+      .cls-3 { fill: #a8dadc; opacity: 0.8; }
+      #star { fill: #ffb703; }
+      g.inherit rect { stroke: #457b9d; }
+    </style>
+  </defs>
+  <rect class="cls-1" width="300" height="200"/>
+  <path class="cls-2" d="M30 160 C 80 40, 140 40, 190 160"/>
+  <g class="inherit" fill="#f1faee" stroke-width="4">
+    <rect x="200" y="30" width="70" height="50" rx="6"/>
+    <rect x="200" y="100" width="70" height="50" rx="6" style="fill:#2a9d8f;stroke-dasharray:8 4"/>
+  </g>
+  <circle class="cls-3" cx="110" cy="70" r="40"/>
+  <polygon id="star" points="60,20 66,38 85,38 70,49 76,67 60,56 44,67 50,49 35,38 54,38"/>
+</svg>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Nested transforms, a viewBox in other units, a skew and a matrix. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" viewBox="0 0 400 200">
+  <rect width="400" height="200" fill="#F4F1EA"/>
+  <g transform="translate(70 100)">
+    <g transform="rotate(30)">
+      <rect x="-40" y="-25" width="80" height="50" rx="8" fill="#E4572E"/>
+      <g transform="scale(0.5) translate(0 -90)">
+        <circle r="30" fill="#29335C"/>
+      </g>
+    </g>
+  </g>
+  <g transform="translate(200 100) skewX(-20)">
+    <rect x="-45" y="-45" width="90" height="90" fill="#F3A712"/>
+  </g>
+  <g transform="matrix(0.8 0.3 -0.3 0.8 320 100)">
+    <polygon points="0,-50 47,-15 29,40 -29,40 -47,-15" fill="#669BBC" stroke="#29335C" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+</svg>

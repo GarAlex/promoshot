@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Filters: a Gaussian blur, and a drop shadow built from offset,
+     flood, composite and merge — what design tools export. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+  <defs>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="160%" height="160%">
+      <feOffset in="SourceAlpha" dx="6" dy="8" result="off"/>
+      <feGaussianBlur in="off" stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#000" flood-opacity="0.45"/>
+      <feComposite in2="blur" operator="in" result="shade"/>
+      <feMerge><feMergeNode in="shade"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="320" height="180" fill="#f8f9fa"/>
+  <circle cx="80" cy="90" r="45" fill="#4361ee" filter="url(#soft)"/>
+  <rect x="170" y="45" width="110" height="80" rx="12" fill="#f72585" filter="url(#shadow)"/>
+</svg>

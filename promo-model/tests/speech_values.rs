@@ -164,7 +164,8 @@ fn malformed_speech_value_names_its_path() {
 #[test]
 fn speech_file_stamps_50() {
     assert_eq!(promo_model::speech::SPEECH_READER, 50);
-    assert_eq!(promo_model::READER_VERSION, 50);
+    // 51 since the vector kind (SVG-PLAN.md); speech files stay 50.
+    assert_eq!(promo_model::READER_VERSION, 51);
     let plain = |layer: Value| {
         json!({
             "id": "P", "name": "P", "createdAt": 0, "state": "recorded",

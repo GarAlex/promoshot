@@ -241,6 +241,12 @@ strict_enum!(
         // `ParticleRecipe`; a DRAWING layer plays it. Strict, as every
         // kind before it.
         (Particles, "particles"),
+        // An SVG file kept as it is in `Resources/` (rung 51), with its
+        // `svg` block in the bag (`crate::vector`). An IMAGE layer plays it
+        // like a picture, drawn by the core at the size it shows. Strict,
+        // as every kind before it: an older reader would decode the file
+        // as a raster picture and fail.
+        (Vector, "vector"),
     ]
 );
 
@@ -4995,6 +5001,11 @@ impl ProjectMetadata {
         // 50 is speech time (`crate::speech`): `{"word": 12}` in a time field
         // is refused by a 49 reader's musical decode, and `during` derives
         // numbers an older writer would edit around.
+        // 51 is the vector resource (`crate::vector`): a strict kind, so a
+        // reader before it cannot open the file at all.
+        if crate::vector::carries_vector(self) {
+            return crate::vector::VECTOR_READER;
+        }
         if crate::speech::needs_speech_reader(self) {
             return crate::speech::SPEECH_READER;
         }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Arcs (large-arc and sweep flags), several sub-paths in one path,
+     relative commands, even-odd holes, quadratic and smooth curves. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180">
+  <rect width="360" height="180" fill="#0b132b"/>
+  <path d="M40 90 a50 50 0 1 1 100 0 a50 50 0 1 1 -100 0 z M65 90 a25 25 0 1 0 50 0 a25 25 0 1 0 -50 0 z" fill="#5bc0be" fill-rule="evenodd"/>
+  <path d="M160 140 A 60 40 20 0 1 260 60" fill="none" stroke="#f4d35e" stroke-width="8"/>
+  <path d="M160 140 A 60 40 20 1 0 260 60" fill="none" stroke="#ee964b" stroke-width="3" stroke-dasharray="6 6"/>
+  <path d="M270 150 q 20 -60 40 0 t 40 0" fill="none" stroke="#f95738" stroke-width="5"/>
+  <path d="M280 30 h 40 v 40 h -40 z m 10 10 v 20 h 20 v -20 z" fill="#faf0ca"/>
+</svg>

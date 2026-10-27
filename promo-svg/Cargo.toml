@@ -1,0 +1,30 @@
+[package]
+name = "promo-svg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SVG pictures for PromoShot: the file kept as it is, parsed by usvg, drawn by resvg; text turned to outlines at import"
+
+[lints]
+workspace = true
+
+[dependencies]
+promo-model = { path = "../promo-model" }
+serde_json.workspace = true
+# One parser and one renderer, in Rust, on every host (SVG-PLAN.md):
+# usvg and resvg are Apache-2.0 OR MIT, tiny-skia BSD-3-Clause. Pinned
+# exactly — a renderer upgrade is a pixel change, made on purpose. No
+# system fonts in the render: `text` is only the import's outline pass.
+usvg = { version = "=0.47.0", default-features = false, features = ["text"] }
+resvg = { version = "=0.47.0", default-features = false, features = ["text", "raster-images"] }
+tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd", "png-format"] }
+# The import's fonts: the machine's, read once. Only `import` loads them.
+fontdb = { version = "0.23", default-features = false, features = ["fs", "memmap", "fontconfig"] }
+# The outlines' receipt: SHA-256 of the file they were made from.
+sha2 = "0.10"
+
+[dev-dependencies]
+promo-model = { path = "../promo-model" }
+serde_json.workspace = true
+# Reading and writing the reference images.
+png = "0.18"
