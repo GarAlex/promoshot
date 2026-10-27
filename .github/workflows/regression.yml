@@ -75,6 +75,12 @@ jobs:
               print(f"::error title={esc(name)}::{esc(' | '.join(keep))[:1500] or 'failed'}")
           for crate in re.findall(r"^error: could not compile `([^`]+)`", log, re.M):
               print(f"::error title=compile {esc(crate)}::could not compile")
+          # A test binary that dies (a signal, a stack overflow, an abort)
+          # names no FAILED test; say which binary and how it died.
+          for line in re.findall(r"^error: test failed, to rerun pass (.+)$", log, re.M):
+              print(f"::error title=test binary::{esc(line)[:300]}")
+          for line in re.findall(r"^.*(?:process didn't exit successfully|has overflowed its stack|signal: \d+).*$", log, re.M):
+              print(f"::error title=crash::{esc(line)[:1500]}")
           print(f"::notice title=cargo test::{len(failed)} failed test(s)")
           PY
 
