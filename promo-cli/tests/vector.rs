@@ -13,7 +13,13 @@ fn corpus(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../promo-svg/tests/corpus/{name}.svg"))
 }
 
+/// One `promo` at a time: each render starts a GPU device (lavapipe on
+/// CI), and eight at once beside the rest of the suite is load a shared
+/// runner need not carry.
+static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn promo(args: &[&str]) -> (bool, String) {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let out = Command::new(env!("CARGO_BIN_EXE_promo"))
         .args(args)
         .output()
