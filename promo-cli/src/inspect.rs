@@ -145,7 +145,39 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                 },
             };
             let block = promo_model::vector::block(r);
+            // The element tree (SVG-PLAN.md slice 2): each element's tier
+            // and reason, as drawn with the resource's overrides, and
+            // which ones an override changes.
+            let overrides = block
+                .as_ref()
+                .map(|b| b.overrides.clone())
+                .unwrap_or_default();
+            let model = picture.as_ref().ok().and_then(|p| p.model().ok());
+            let nodes: Vec<serde_json::Value> = model
+                .as_ref()
+                .map(|m| {
+                    m.nodes()
+                        .iter()
+                        .map(|n| {
+                            let mut row = serde_json::to_value(n).unwrap_or_default();
+                            if let Some(o) = overrides
+                                .iter()
+                                .find(|o| m.resolve(&o.node).ok() == Some(n.node.as_str()))
+                            {
+                                let mut keys = serde_json::to_value(o).unwrap_or_default();
+                                if let Some(map) = keys.as_object_mut() {
+                                    map.remove("node");
+                                }
+                                row["override"] = keys;
+                            }
+                            row
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             serde_json::json!({
+                "nodes": nodes,
+                "editable": model.as_ref().map(|m| m.editable()),
                 "id": r.id, "name": r.display_name, "file": r.filename,
                 "size": promo_svg::natural_size(r)
                     .or_else(|| picture.as_ref().ok().map(|p| p.size()))
@@ -560,6 +592,58 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                     format!("  ({})", notes.join("; "))
                 }
             ));
+            // The element tree: address, the author's name, tier and
+            // reason; ● marks an element an override changes, with its keys.
+            let nodes = v["nodes"].as_array().cloned().unwrap_or_default();
+            if !nodes.is_empty() {
+                let tally = |tier: &str| nodes.iter().filter(|n| n["tier"] == tier).count();
+                let changed = nodes.iter().filter(|n| n.get("override").is_some()).count();
+                out.push_str(&format!(
+                    "    elements: {} (A {}, B {}, C {}, locked {}){}{}\n",
+                    nodes.len(),
+                    tally("A"),
+                    tally("B"),
+                    tally("C"),
+                    tally("locked"),
+                    if changed > 0 {
+                        format!(" · {changed} overridden")
+                    } else {
+                        String::new()
+                    },
+                    if v["editable"] == false {
+                        " · edits need a fresh import"
+                    } else {
+                        ""
+                    }
+                ));
+                const SHOWN: usize = 80;
+                for n in nodes.iter().take(SHOWN) {
+                    let depth = n["depth"].as_u64().unwrap_or(0) as usize;
+                    let name = n["name"]
+                        .as_str()
+                        .map(|s| format!(" ← {s}"))
+                        .unwrap_or_default();
+                    let mark = n
+                        .get("override")
+                        .and_then(|o| o.as_object())
+                        .map(|o| format!(" ● {}", o.keys().cloned().collect::<Vec<_>>().join(", ")))
+                        .unwrap_or_default();
+                    out.push_str(&format!(
+                        "      {}{}{name}  {}  {} — {}{mark}\n",
+                        "  ".repeat(depth),
+                        n["node"].as_str().unwrap_or(""),
+                        n["tag"].as_str().unwrap_or(""),
+                        n["tier"].as_str().unwrap_or(""),
+                        n["reason"].as_str().unwrap_or(""),
+                    ));
+                }
+                if nodes.len() > SHOWN {
+                    out.push_str(&format!(
+                        "      … {} more (the JSON form lists every element)\n",
+                        nodes.len() - SHOWN
+                    ));
+                }
+            }
         }
     }
     if let Some(markers) = project.meta.markers.as_deref().filter(|m| !m.is_empty()) {

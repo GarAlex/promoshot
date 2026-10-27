@@ -305,6 +305,27 @@ pub enum Command {
     /// that is negative or not a number, and for an empty or repeated id.
     #[serde(rename_all = "camelCase")]
     SetMarkers { markers: Vec<promo_model::Marker> },
+    /// An SVG element's override (SVG-PLAN.md slice 2), as a merge patch
+    /// (`null` takes a key back to the file's). `node`: the address or the
+    /// author's name promo_inspect lists. Any element: visible, opacity,
+    /// transform {move, scale, rotate}, order; a painted shape also fill,
+    /// stroke, fillStops, strokeStops, strokeWidth; text, text. Refused
+    /// outside the element's tier with its reason.
+    #[serde(rename_all = "camelCase")]
+    SetVectorOverride {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+        node: String,
+        patch: serde_json::Value,
+    },
+    /// An SVG element — with no `node`, every one — back to the file's look.
+    #[serde(rename_all = "camelCase")]
+    ResetVectorOverride {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+        #[serde(default)]
+        node: Option<String>,
+    },
     /// A command addressed INSIDE a composition resource: the same
     /// command, run on the composition's layers as if they were the
     /// document's — with the project's resources and settings, the
@@ -628,6 +649,8 @@ pub struct Document {
     /// them a song that states no `beatGrid` would count on the stand-in
     /// 120 BPM after each edit (docs/BEAT-SYNC.md, slice 8).
     grids: promo_timeline::BeatGrids,
+    /// The project's files, for an SVG's element edits (`crate::vector`).
+    vector_host: Option<Box<dyn crate::vector::VectorHost>>,
 }
 
 /// What an `autoZoom` asks for.
@@ -1025,7 +1048,44 @@ impl Document {
             unread_source: None,
             unread_source_json: None,
             grids: Default::default(),
+            vector_host: None,
         })
+    }
+
+    /// The project's files, for the SVG element edits: what an element may
+    /// change, and outlines for new words (`crate::vector::VectorHost`).
+    /// Without one, those edits are refused.
+    pub fn set_vector_host(&mut self, host: Box<dyn crate::vector::VectorHost>) {
+        self.vector_host = Some(host);
+    }
+
+    /// One command on `meta`: an SVG element edit with the host's files,
+    /// everything else as [`Self::run`] has it.
+    fn run_with_host(
+        &mut self,
+        meta: &mut ProjectMetadata,
+        command: &Command,
+    ) -> Result<(), String> {
+        match command {
+            Command::SetVectorOverride {
+                resource_id,
+                node,
+                patch,
+            } => crate::vector::set(
+                meta,
+                self.vector_host.as_deref_mut(),
+                resource_id,
+                node,
+                patch,
+            ),
+            Command::ResetVectorOverride { resource_id, node } => crate::vector::reset(
+                meta,
+                self.vector_host.as_deref_mut(),
+                resource_id,
+                node.as_deref(),
+            ),
+            other => Self::run(meta, other),
+        }
     }
 
     /// The grids this and every later edit resolves on: the host's measure
@@ -1193,7 +1253,7 @@ impl Document {
     pub fn apply(&mut self, command: &Command) -> Result<(), String> {
         let snapshot = self.to_json()?;
         let mut edited = self.meta.clone();
-        Self::run(&mut edited, command)?;
+        self.run_with_host(&mut edited, command)?;
         // Anchored layers and musical values follow what moved — the Mac
         // reconciles after every edit through the same resolver; a
         // document the core owns must not wait for the app to do it.
@@ -1237,7 +1297,7 @@ impl Document {
         let snapshot = self.to_json()?;
         let mut edited = self.meta.clone();
         for command in commands {
-            Self::run(&mut edited, command)?;
+            self.run_with_host(&mut edited, command)?;
         }
         promo_timeline::resolve_timing(&mut edited, &self.grids);
         let before = std::mem::replace(&mut self.meta, edited);
@@ -2073,6 +2133,13 @@ impl Document {
             }
             Command::InComposition { .. } => {
                 unreachable!("dispatched to run_in_composition before the layer borrow")
+            }
+            Command::SetVectorOverride { .. } | Command::ResetVectorOverride { .. } => {
+                return Err(
+                    "an SVG's overrides belong to the project's resource — send them \
+                            without inComposition"
+                        .into(),
+                );
             }
             Command::PatchResource { resource_id, patch } => {
                 checked_patch(

@@ -470,7 +470,10 @@ is for; the schema section says how to write it.
   itself: `promo_upsert_layer {"kind": "image", "file": "logo.svg"}` (or
   `promo resource add`) keeps it a `vector` the core draws sharp at any
   size, its text as outlines; it can be a mask. Never redraw an SVG as
-  drawing shapes.
+  drawing shapes. To recolour, hide, move or re-word one of its parts,
+  read its elements in promo_inspect (each has a tier and the reason
+  for it) and use `promo_apply` with `setVectorOverride`
+  (`resetVectorOverride` undoes it); the file itself never changes.
 - **Transitions** (`transition`) — ten kinds, on a layer's own edges or
   at a swap between two resources.
 - **Image effects** (`effects`) — blur, glow, vignette, grain, sharpen,

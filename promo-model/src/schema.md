@@ -1195,6 +1195,52 @@ A reveal can arrive on a narration's words instead of at its own pace —
   vector by its derived id, like any media — but only an import makes
   its text into outlines and states its size.
 
+## Vector elements — vectors, svg, elements, overrides, nodes, tiers, setVectorOverride, resetVectorOverride
+
+- ELEMENTS. promo_inspect lists every element of the file (`nodes`):
+  its address — the file's `id`, else its path from the nearest
+  ancestor with one, `badge/rect[0]` (the tag and its index among its
+  siblings of that tag) — the author's name when the file gives one
+  (`inkscape:label`, `data-name`, a `<title>`; kept on import as the
+  block's `handles`, and accepted wherever an address is), a TIER and
+  the reason for it:
+  - `A`, any drawn element: `visible`, `opacity`, `transform`
+    (`{"move": [dx, dy], "scale": 1.2 or [sx, sy], "rotate": 15}` —
+    about the element's own centre, in the picture's CSS pixels) and
+    `order` (its place among its siblings, 0 = drawn first);
+  - `B`, a painted shape (solid, linear or radial paint), also under a
+    clip, mask or filter: A plus `fill` and `stroke` (`RRGGBB` or
+    `RRGGBBAA`), `fillStops` / `strokeStops` (one colour per stop of its
+    gradient, the offsets kept) and `strokeWidth`;
+  - `C`, a B shape with no clip, mask or filter on it or above it: the
+    same edits — plain geometry, the shapes a later point editor takes;
+  - `locked`, with why ("kept as drawn — used as a mask", "— a blur
+    filter", "— copied elsewhere with <use>", "— a pattern tile"): the
+    inside of a mask, clip, pattern, marker or filter, the original of
+    a `<use>`, and what the file never draws. Nothing about it changes;
+    the element that uses it still takes A.
+  A text element takes A and `text`, its words — outlined again with
+  the fonts of the machine that sets them, into `Resources/.svg/`
+  under a name of their own, so drawing still needs no font.
+- OVERRIDES are those edits, kept in the block — the file is never
+  rewritten, and with none the picture is exactly the file's:
+    "svg": { "size": [240, 80],
+             "overrides": [
+               { "node": "glyph", "fill": "FF6A00" },
+               { "node": "badge", "opacity": 0.6,
+                 "transform": { "rotate": 12 } },
+               { "node": "tagline", "text": "Now on iPad" } ] }
+  Make them with promo_apply: `{"kind": "setVectorOverride",
+  "resourceID": "logo", "node": "glyph", "patch": {"fill": "FF6A00"}}`
+  merges into the element's override (`null` takes a key back to the
+  file's); `{"kind": "resetVectorOverride", "resourceID": "logo",
+  "node": "glyph"}` resets one element, and with no `node` every one.
+  An edit outside the element's tier is refused with its reason.
+  Overrides apply wherever the picture draws — layers, masks, nested
+  compositions, the apps' thumbnails. promo_validate names an override
+  for an element the file lacks, one its tier refuses, and words not
+  yet outlined.
+
 ## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits, audioFocus, duck, ducking
 
 - `provenance` on any resource says where it came from, for credits and

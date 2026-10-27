@@ -29,8 +29,8 @@ open it. Here, the authoring subset; `promo_schema_full` is the whole format.
   `Resources/`), `displayName`, `addedAt: 0`, `imageCuts: []`,
   `disabledAudioTrackIndices: []`; videos also carry `duration`,
   `trimStart`, `trimEnd`; images `pixelWidth`/`pixelHeight` (placement
-  anchors on the aspect; unmeasured, a SQUARE). An SVG stays itself: `promo
-  resource add` makes a `vector` an image layer draws sharp (`vectors`).
+  anchors on the aspect; unmeasured, a SQUARE). An SVG stays a `vector` an
+  image layer draws; `setVectorOverride` recolours its parts (`vectors`).
 
 Keyframes animate a layer over its LOCAL time, hold-then-ease: a value
 holds until `transitionDuration` seconds before the keyframe, then ramps

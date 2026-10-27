@@ -405,6 +405,10 @@ pub struct PreviewEngine {
     /// by the host through `provide_vector`, drawn here on the CPU at the
     /// size each layer shows (`vector_frame`).
     vectors: HashMap<String, std::sync::Arc<promo_svg::Picture>>,
+    /// Each vector with its resource's overrides applied (SVG-PLAN.md
+    /// slice 2), by resource: the edited stamp and the picture — one per
+    /// resource, so a drag through many values replaces it.
+    edited_vectors: HashMap<String, (u64, std::sync::Arc<promo_svg::Picture>)>,
     /// Surface samples for morphs (rung 39), by body, count and seed —
     /// taken once, cleared when a body's bytes change.
     morph_samples: HashMap<String, Vec<crate::morph::Sample>>,
@@ -516,6 +520,7 @@ impl PreviewEngine {
             models: HashMap::new(),
             built_recipes: HashMap::new(),
             vectors: HashMap::new(),
+            edited_vectors: HashMap::new(),
             morph_samples: HashMap::new(),
             dissolved: Vec::new(),
             model_pass: None,
@@ -653,6 +658,11 @@ impl PreviewEngine {
         for old_res in &old_resources {
             if new_resources.iter().find(|r| r.id == old_res.id) != Some(old_res) {
                 self.evict_mask(&old_res.id);
+                // An edited SVG's rasters carry the old edits' stamp: never
+                // served again, reclaimed now.
+                if old_res.kind == promo_model::ProjectResourceKind::Vector {
+                    self.evict_prefix(&format!("svg:{}:", old_res.id));
+                }
             }
         }
         self.meta = meta;
@@ -1425,10 +1435,11 @@ impl PreviewEngine {
         // A vector (an SVG) is drawn here, at the size it shows, rather
         // than asked of the host; it lays out at its NATURAL size, which
         // its raster only approximates.
-        let picture = prepared
-            .is_none()
-            .then(|| self.vectors.get(showing).cloned())
-            .flatten();
+        let picture = if prepared.is_none() {
+            self.vector_for(showing)
+        } else {
+            None
+        };
         let mut natural: Option<(f64, f64)> = None;
         let frame_id = match (prepared, picture) {
             (Some(id), _) => id,
@@ -1982,6 +1993,41 @@ impl PreviewEngine {
         Some((quad, id))
     }
 
+    /// The picture a vector resource draws now: the host's, with the
+    /// overrides its `svg` block carries applied to its tree. Its stamp
+    /// names the overrides, so every raster key does too — an override
+    /// set and set again at one instant draws the new picture
+    /// (number-changes-picture-does-not). An edit the picture refuses
+    /// draws the file as it is.
+    fn vector_for(&mut self, resource_id: &str) -> Option<std::sync::Arc<promo_svg::Picture>> {
+        let base = self.vectors.get(resource_id)?.clone();
+        let overrides = self
+            .meta
+            .resources
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .find(|r| r.id == resource_id)
+            .map(promo_model::vector::overrides)
+            .unwrap_or_default();
+        let stamp = promo_svg::edited_stamp(base.stamp(), &overrides);
+        if stamp == base.stamp() {
+            return Some(base);
+        }
+        if let Some((held, picture)) = self.edited_vectors.get(resource_id) {
+            if *held == stamp {
+                return Some(picture.clone());
+            }
+        }
+        let edited = base
+            .with_overrides(&overrides)
+            .map(std::sync::Arc::new)
+            .unwrap_or(base);
+        self.edited_vectors
+            .insert(resource_id.to_string(), (stamp, edited.clone()));
+        Some(edited)
+    }
+
     /// The project's resources with a vector's natural size stamped where
     /// the record states none (a file adopted from `Resources/` without an
     /// entry), so a placement rule resolves against the picture's shape.
@@ -2330,7 +2376,7 @@ impl PreviewEngine {
             return None;
         }
         // A vector (an SVG) masks with its ink: its raster's alpha.
-        if let Some(picture) = self.vectors.get(resource_id).cloned() {
+        if let Some(picture) = self.vector_for(resource_id) {
             let (bw, bh) = picture.size();
             let density = ((rect[2] * self.raster_scale) / bw.max(1e-6))
                 .max((rect[3] * self.raster_scale) / bh.max(1e-6));
@@ -8798,6 +8844,71 @@ mod portable_tests {
         engine.set_project(model_fixture(-145.0));
         let after = render_and_read(&mut engine, 1.0, 96);
         assert_ne!(before, after, "the turned body is a different picture");
+    }
+
+    fn vector_fixture(overrides: serde_json::Value) -> ProjectMetadata {
+        let json = serde_json::json!({
+            "id": "AAAAAAAA-0000-0000-0000-000000000003",
+            "name": "logo", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 3, "videoDuration": 3, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 96, "canvasHeight": 96,
+                "backgroundColorHex": "003300"},
+            "layers": [
+                {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                 "isEnabled": true, "startTime": 0, "keyframes": []},
+                {"id": "LOGO", "name": "logo", "sortIndex": 1, "kind": "image",
+                 "isEnabled": true, "startTime": 0, "duration": 3,
+                 "resourceID": "VEC", "keyframes": []}
+            ],
+            "resources": [
+                {"id": "VEC", "kind": "vector", "filename": "logo.svg",
+                 "displayName": "Logo", "addedAt": 0, "imageCuts": [],
+                 "disabledAudioTrackIndices": [], "pixelWidth": 240, "pixelHeight": 80,
+                 "svg": {"size": [240, 80], "overrides": overrides}}
+            ]
+        });
+        ProjectMetadata::from_json(&json.to_string()).expect("fixture")
+    }
+
+    /// An SVG override set, and set again, at ONE instant draws the new
+    /// picture each time (number-changes-picture-does-not): the edits are
+    /// part of every raster key. Taking them away draws the file again,
+    /// byte for byte.
+    #[test]
+    fn an_svg_override_repaints_at_the_same_instant() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../promo-svg/tests/corpus/logo.svg");
+        let picture = promo_svg::load_path(&path, None).expect("logo");
+        let (mut engine, _state) = make_cpu_engine(vector_fixture(serde_json::json!([])), vec![]);
+        engine.provide_vector("VEC", std::sync::Arc::new(picture));
+        let plain = render_and_read(&mut engine, 1.0, 96);
+        engine.set_project(vector_fixture(serde_json::json!([
+            {"node": "badge/rect[0]", "fillStops": ["FFFF00", "FFFF00"]}
+        ])));
+        let yellow = render_and_read(&mut engine, 1.0, 96);
+        assert_ne!(plain, yellow, "the stops' edit repaints");
+        engine.set_project(vector_fixture(serde_json::json!([
+            {"node": "badge/rect[0]", "fillStops": ["00FFFF", "00FFFF"]}
+        ])));
+        let cyan = render_and_read(&mut engine, 1.0, 96);
+        assert_ne!(
+            yellow, cyan,
+            "a second value at the same instant repaints again"
+        );
+        engine.set_project(vector_fixture(serde_json::json!([])));
+        assert_eq!(
+            render_and_read(&mut engine, 1.0, 96),
+            plain,
+            "reset all is the file"
+        );
+        // An override the element refuses draws the file unchanged.
+        engine.set_project(vector_fixture(serde_json::json!([
+            {"node": "badge", "fill": "FF0000"}
+        ])));
+        assert_eq!(render_and_read(&mut engine, 1.0, 96), plain);
     }
 
     /// The same assertions as `tests::renders_background_and_video_layer`,

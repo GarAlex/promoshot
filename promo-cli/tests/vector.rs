@@ -409,3 +409,70 @@ fn upsert_layer_imports_an_svg_as_a_vector() {
         "a refused file lands nothing"
     );
 }
+
+/// Slice 2 through the binary: `promo apply` edits an SVG's elements, the
+/// still draws the edit (the engine reads the block's overrides), inspect
+/// lists the element tree with ● on the edited row, validate names an
+/// override that points nowhere, and "reset all" draws the file again.
+#[test]
+fn svg_element_overrides_render_inspect_and_validate() {
+    let dir = project("overrides", &["logo"]);
+    edit(&dir, |doc| {
+        doc["layers"].as_array_mut().unwrap().push(image_layer(
+            "L",
+            "logo",
+            1,
+            json!({"height": 240}),
+        ));
+    });
+    let project_arg = dir.to_str().unwrap().to_string();
+    let apply = |commands: Value| {
+        promo(&[
+            "apply",
+            &project_arg,
+            "--args",
+            &json!({ "commands": commands }).to_string(),
+        ])
+    };
+    let Some(plain) = still(&dir, 1.0) else {
+        return;
+    };
+    let (ok, text) = apply(json!([{"kind": "setVectorOverride", "resourceID": "logo",
+        "node": "glyph", "patch": {"fill": "FF0000"}}]));
+    assert!(ok, "{text}");
+    let red = still(&dir, 1.0).unwrap();
+    let reds = |img: &image::RgbaImage| {
+        img.pixels()
+            .filter(|p| p[0] > 200 && p[1] < 60 && p[2] < 60)
+            .count()
+    };
+    assert_eq!(reds(&plain), 0);
+    assert!(reds(&red) > 500, "the glyph draws red: {}", reds(&red));
+    // Out of tier: the element's reason, nothing applied.
+    let (ok, text) = apply(json!([{"kind": "setVectorOverride", "resourceID": "logo",
+        "node": "wordmark", "patch": {"stroke": "FFFFFF"}}]));
+    assert!(!ok && text.contains("takes no paint"), "{text}");
+    let (ok, text) = promo(&["inspect", &project_arg]);
+    assert!(ok, "{text}");
+    assert!(
+        text.contains("elements: 11 (A 2, B 0, C 9, locked 0) · 1 overridden"),
+        "{text}"
+    );
+    assert!(
+        text.contains("glyph  path  C — a plain shape ● fill"),
+        "{text}"
+    );
+    // An override for an element the file lacks: a warning, drawn as is.
+    edit(&dir, |doc| {
+        doc["resources"][0]["svg"]["overrides"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"node": "gone", "opacity": 0.2}));
+    });
+    let (_, text) = promo(&["validate", &project_arg]);
+    assert!(text.contains("names no element of the file"), "{text}");
+    let (ok, text) = apply(json!([{"kind": "resetVectorOverride", "resourceID": "logo"}]));
+    assert!(ok, "{text}");
+    let back = still(&dir, 1.0).unwrap();
+    assert_eq!(back.as_raw(), plain.as_raw(), "reset all draws the file");
+}

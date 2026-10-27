@@ -10,5 +10,7 @@ pub mod author;
 pub mod document;
 mod listing;
 mod theme;
+pub mod vector;
 
 pub use document::{command_schema, Changes, Command, Document};
+pub use vector::VectorHost;

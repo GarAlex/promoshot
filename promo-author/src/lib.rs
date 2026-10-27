@@ -999,6 +999,7 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
         .collect();
 
     let mut document = promo_editor::Document::open(&text)?;
+    document.set_vector_host(Box::new(VectorFolder::new(dir.join("Resources"))));
     document
         .apply_group(&commands)
         .map_err(|e| format!("nothing applied — {e}"))?;
@@ -1006,6 +1007,67 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
         .map_err(|e| format!("the edited document no longer parses: {e}"))?;
     write_metadata(&meta, &meta_path)?;
     Ok(applied_answer(&meta, &kinds))
+}
+
+/// A project's `Resources/` as the document's host for SVG element edits
+/// (SVG-PLAN.md slice 2): promo-svg's classification of each vector's
+/// file, read once per file state, and outlines for new words made with
+/// this machine's fonts. The headless `promo_apply` and the apps' document
+/// (promo-ffi) both use it, so both refuse the same edits in the same
+/// words.
+pub struct VectorFolder {
+    resources: PathBuf,
+    models: std::collections::HashMap<String, (String, std::sync::Arc<promo_svg::Model>)>,
+}
+
+impl VectorFolder {
+    pub fn new(resources: PathBuf) -> VectorFolder {
+        VectorFolder {
+            resources,
+            models: Default::default(),
+        }
+    }
+
+    fn model(
+        &mut self,
+        resource: &ProjectResource,
+    ) -> Result<std::sync::Arc<promo_svg::Model>, String> {
+        let block = promo_model::vector::block(resource).unwrap_or_default();
+        let state = format!(
+            "{}\u{1f}{}\u{1f}{}",
+            resource.filename,
+            block.outlines.as_deref().unwrap_or(""),
+            block.source_hash.as_deref().unwrap_or("")
+        );
+        if let Some((held, model)) = self.models.get(&resource.id) {
+            if *held == state {
+                return Ok(model.clone());
+            }
+        }
+        let model = promo_svg::load(&self.resources, resource)?.model()?;
+        self.models
+            .insert(resource.id.clone(), (state, model.clone()));
+        Ok(model)
+    }
+}
+
+impl promo_editor::VectorHost for VectorFolder {
+    fn check(
+        &mut self,
+        resource: &ProjectResource,
+        o: &promo_model::vector::VectorOverride,
+    ) -> Result<String, String> {
+        self.model(resource)?.check(o, true)
+    }
+
+    fn outline(
+        &mut self,
+        resource: &ProjectResource,
+        texts: &[(String, String)],
+    ) -> Result<Value, String> {
+        promo_svg::outline(&self.resources, &resource.filename, texts)
+            .map(|made| made["svg"].clone())
+    }
 }
 
 /// What `promo_apply` answers once its commands landed: how many, which
@@ -2422,6 +2484,161 @@ mod tests {
             explained.contains(deck) || explained.contains("Deck"),
             "{explained}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A project with the corpus logo and text imported as vectors.
+    fn vector_project(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("author-svg-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let resources = dir.join("Resources");
+        std::fs::create_dir_all(&resources).unwrap();
+        let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../promo-svg/tests/corpus");
+        let mut records = Vec::new();
+        for (id, name) in [("LOGO", "logo.svg"), ("WORDS", "text.svg")] {
+            std::fs::copy(corpus.join(name), resources.join(name)).unwrap();
+            let installed = promo_svg::install(&resources, name).unwrap();
+            let mut record = json!({"id": id, "kind": "image", "filename": name,
+                "displayName": name, "addedAt": 0, "imageCuts": [],
+                "disabledAudioTrackIndices": []});
+            promo_svg::apply_install(&mut record, &installed);
+            records.push(record);
+        }
+        let meta = json!({"id": "P", "name": "n", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 640, "canvasHeight": 360},
+            "resources": records, "layers": []});
+        std::fs::write(dir.join("metadata.json"), meta.to_string()).unwrap();
+        dir
+    }
+
+    fn block_of(dir: &Path, id: &str) -> promo_model::vector::VectorBlock {
+        let meta = ProjectMetadata::from_json(
+            &std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+        )
+        .unwrap();
+        let resource = meta
+            .resources
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == id)
+            .unwrap();
+        promo_model::vector::block(&resource).unwrap()
+    }
+
+    /// promo_apply edits an SVG's elements as merge patches over their
+    /// overrides, refuses what an element's tier does not allow with the
+    /// list's reason, and resets them — the file itself untouched.
+    #[test]
+    fn svg_overrides_through_apply() {
+        let dir = vector_project("apply");
+        let project = dir.display().to_string();
+        let run = |commands: Value| apply(&json!({"project": project, "commands": commands}), None);
+        run(
+            json!([{"kind": "setVectorOverride", "resourceID": "LOGO", "node": "glyph",
+            "patch": {"fill": "FF0000"}}]),
+        )
+        .unwrap();
+        run(
+            json!([{"kind": "setVectorOverride", "resourceID": "LOGO", "node": "glyph",
+            "patch": {"opacity": 0.5, "transform": {"rotate": 10.0}}}]),
+        )
+        .unwrap();
+        let block = block_of(&dir, "LOGO");
+        assert_eq!(block.overrides.len(), 1);
+        assert_eq!(block.overrides[0].fill.as_deref(), Some("FF0000"));
+        assert_eq!(block.overrides[0].opacity, Some(0.5));
+        // null takes a key back to the file's.
+        run(
+            json!([{"kind": "setVectorOverride", "resourceID": "LOGO", "node": "glyph",
+            "patch": {"fill": null}}]),
+        )
+        .unwrap();
+        assert_eq!(block_of(&dir, "LOGO").overrides[0].fill, None);
+        // Out of tier: refused with the element's reason, nothing applied.
+        let before = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
+        let err = run(
+            json!([{"kind": "setVectorOverride", "resourceID": "LOGO", "node": "badge",
+            "patch": {"fill": "00FF00"}}]),
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("nothing applied") && err.contains("takes no paint"),
+            "{err}"
+        );
+        let err = run(json!([{"kind": "setVectorOverride", "resourceID": "LOGO",
+            "node": "nowhere", "patch": {"opacity": 1.0}}]))
+        .unwrap_err();
+        assert!(err.contains("no element \"nowhere\""), "{err}");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+            before
+        );
+        // Reset one, then all; the file never changed.
+        run(
+            json!([{"kind": "setVectorOverride", "resourceID": "LOGO", "node": "badge/rect[0]",
+            "patch": {"fillStops": ["000000", "FFFFFF"]}}]),
+        )
+        .unwrap();
+        run(json!([{"kind": "resetVectorOverride", "resourceID": "LOGO", "node": "glyph"}]))
+            .unwrap();
+        assert_eq!(block_of(&dir, "LOGO").overrides.len(), 1);
+        run(json!([{"kind": "resetVectorOverride", "resourceID": "LOGO"}])).unwrap();
+        assert!(block_of(&dir, "LOGO").overrides.is_empty());
+        let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../promo-svg/tests/corpus");
+        assert_eq!(
+            std::fs::read(dir.join("Resources/logo.svg")).unwrap(),
+            std::fs::read(corpus.join("logo.svg")).unwrap()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// New words are outlined on this machine under a name of their own;
+    /// undo brings back the old words' outlines, which are still there.
+    #[test]
+    fn svg_text_overrides_outline_and_undo() {
+        if promo_svg::system_fonts().is_empty() {
+            return;
+        }
+        let dir = vector_project("text");
+        let text = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
+        let mut document = promo_editor::Document::open(&text).unwrap();
+        document.set_vector_host(Box::new(VectorFolder::new(dir.join("Resources"))));
+        let set = parse_commands(&[json!({"kind": "setVectorOverride", "resourceID": "WORDS",
+            "node": "tagline", "patch": {"text": "Out now"}})])
+        .unwrap();
+        document.apply_group(&set).unwrap();
+        let resource = |doc: &promo_editor::Document| {
+            doc.meta()
+                .resources
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|r| r.id == "WORDS")
+                .cloned()
+                .unwrap()
+        };
+        let edited = promo_model::vector::block(&resource(&document)).unwrap();
+        let name = edited.outlines.clone().unwrap();
+        assert_ne!(name, "text.svg");
+        assert!(dir.join("Resources/.svg").join(&name).is_file());
+        // A text override on a shape is refused.
+        let wrong = parse_commands(&[json!({"kind": "setVectorOverride", "resourceID": "LOGO",
+            "node": "glyph", "patch": {"text": "Hi"}})])
+        .unwrap();
+        assert!(document
+            .apply_group(&wrong)
+            .unwrap_err()
+            .contains("not text"));
+        assert!(document.undo());
+        let undone = promo_model::vector::block(&resource(&document)).unwrap();
+        assert_eq!(undone.outlines.as_deref(), Some("text.svg"));
+        assert!(undone.overrides.is_empty());
+        assert!(dir.join("Resources/.svg/text.svg").is_file());
+        // And without the project's folder, an element edit is refused.
+        let mut bare = promo_editor::Document::open(&text).unwrap();
+        let err = bare.apply_group(&set).unwrap_err();
+        assert!(err.contains("project's folder"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

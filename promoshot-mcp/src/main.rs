@@ -1209,8 +1209,10 @@ mod tests {
             // overshoot easings and `overshoot` (issue #19), 0.15 KB; 49,000
             // since promo_midi (MIDI.md slice 1a), 1.7 KB with the compact
             // instrument catalog an agent writes a block from; 49,200 since
-            // its `generate` (MIDI.md §7), 0.15 KB.
-            bytes < 49_200,
+            // its `generate` (MIDI.md §7), 0.15 KB; 50,100 since an SVG's
+            // element edits, setVectorOverride and resetVectorOverride
+            // (SVG-PLAN.md slice 2), 0.9 KB.
+            bytes < 50_100,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
