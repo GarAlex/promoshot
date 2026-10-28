@@ -63,6 +63,43 @@ Rendering video needs `ffmpeg` (and `ffprobe`) on PATH — frames are composited
 on the GPU and piped to it raw; ffmpeg only decodes and encodes. On a headless
 Linux machine, `mesa-vulkan-drivers` (lavapipe) is enough of a GPU.
 
+### Headless Linux, no GPU
+
+The Linux release tarball carries its own CPU renderer: a `lavapipe/` folder
+(Mesa's lavapipe, its libraries and a Vulkan loader; licences in
+`lavapipe/NOTICES.txt`) beside `promo`. Keep the folder next to the binary
+and a machine with no Vulkan driver at all — a fresh container, or a
+redeploy that dropped `mesa-vulkan-drivers` — still renders. `promo` picks,
+in order: a real GPU; the system's lavapipe; the bundled lavapipe (saying so
+once on stderr); SwiftShader, with a warning, since it is 10–50× slower than
+lavapipe. With none of them it lists what it tried and the fix
+(`sudo apt-get install -y mesa-vulkan-drivers libvulkan1`).
+`PROMO_LAVAPIPE=<dir>` points at the folder elsewhere; `PROMO_LAVAPIPE=off`
+never uses it. The binaries need glibc 2.39 (Ubuntu 24.04, Debian 13).
+
+What a CPU costs, measured on a 703-frame 1080×1920 reel with narration:
+
+| Renderer | `promo video` |
+|---|---|
+| Mac GPU (Apple silicon, Metal) | 13.7 s |
+| lavapipe, 8 cores | 18.9 s |
+| lavapipe, 2 cores | 77 s |
+| lavapipe, 1 core | 179 s |
+
+(lavapipe in an amd64-emulated ubuntu:24.04 container; SwiftShader took
+about half an hour on a comparable reel.)
+
+`promo video` survives being killed. It encodes in segments (10 s of video
+each; `--segment <s>`) into `<out>.promo-parts/` beside the output, and the
+same command run again skips the finished segments and goes on from there,
+saying how many it found. The segments are joined without re-encoding, the
+soundtrack is mixed once for the whole range and muxed in at the join — no
+edge in the sound, in sync to the sample — and the folder is removed on
+success. The folder is keyed by a digest of the project's files and the
+render settings, so an edited project starts over instead of reusing stale
+segments. `--from/--to` take seconds (`12.5`) or frames (`375f`), to split
+a long render into chunks.
+
 ## The CLI
 
 ```
@@ -76,7 +113,7 @@ promo upsert-keyframe <project> --args '{"layer":"bg","time":2,"zoom":1.2}'
                                         # upsert-keyframe, apply, slideshow, explain, diff)
 promo still    <project> --out f.png --time 2.5
 promo frames   <project> --out frames/ --fps 30 --from 0 --to 4
-promo video    <project> --out out.mp4 --fps 30
+promo video    <project> --out out.mp4 --fps 30      # resumable; --from/--to 12.5 or 375f
 ```
 
 Add `--json` to any project command for machine output — one object on

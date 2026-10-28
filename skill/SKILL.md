@@ -296,7 +296,11 @@ the app renders the take itself once a layer uses it.
 The `promo` CLI is the same contract (`promo schema | validate | inspect |
 still | frames | video | gif`, and the authoring tools as verbs taking the
 tool's arguments as `--args '<json>'`), and `promo_workspace` names a
-folder for new projects.
+folder for new projects. `promo video` is resumable: a killed render, run
+again with the same command, finishes from its last segment (kept in
+`<out>.promo-parts/`); `--from/--to` take seconds or frames (`375f`). On a
+Linux box with no GPU, "no GPU adapter available" lists what was tried
+and the fix — say that line to the person, never install drivers yourself.
 
 ## The rules, and where the rest lives
 
