@@ -380,6 +380,34 @@ pub struct PreviewStats {
     pub evictions: u64,
 }
 
+/// Which renderer draws an SVG's raster (SVG-PLAN.md slice 4). The two
+/// draw the same picture but for antialiasing — the GPU path is gated
+/// against resvg in promo-svg's tests — so this is a matter of cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VectorRoute {
+    /// The GPU for a raster with work in it — at least half a megapixel
+    /// or two hundred elements — on a hardware adapter; resvg otherwise.
+    /// On a CPU adapter (lavapipe, SwiftShader) the GPU path measured
+    /// slower than resvg at every size, so resvg draws everything there.
+    Auto,
+    /// Always the GPU path (resvg still draws what the GPU path leaves).
+    Gpu,
+    /// Always resvg, the whole picture.
+    Resvg,
+}
+
+impl VectorRoute {
+    /// Whether a raster of `pixels` from a picture of `elements` goes to
+    /// the GPU on an adapter of this kind.
+    pub fn gpu(self, cpu_adapter: bool, pixels: u64, elements: u64) -> bool {
+        match self {
+            VectorRoute::Gpu => true,
+            VectorRoute::Resvg => false,
+            VectorRoute::Auto => !cpu_adapter && (pixels >= 500_000 || elements >= 200),
+        }
+    }
+}
+
 pub struct PreviewEngine {
     meta: ProjectMetadata,
     ctx: &'static GpuContext,
@@ -452,6 +480,12 @@ pub struct PreviewEngine {
     /// Vector rasterizer for drawing layers, built on first use — a project
     /// without drawings never pays for the pipeline.
     vector: Option<promo_gpu::vector::VectorRenderer>,
+    /// The SVG scene renderer (slice 4), built on the first vector the
+    /// GPU draws, and the pieces resvg drew for recent scenes.
+    svg_scene: Option<promo_gpu::vector::scene::SceneRenderer>,
+    svg_pieces: promo_svg::PieceCache,
+    /// Which renderer draws a vector's raster.
+    vector_route: VectorRoute,
     /// The sub-sample time a blurred layer's GEOMETRY resolves at, while a
     /// motion-blur render walks the shutter. None outside that walk. Layers
     /// without `motionBlur` ignore it entirely — that is what pins them
@@ -537,6 +571,9 @@ impl PreviewEngine {
             scratch: HashMap::new(),
             raster_scale: 1.0,
             vector: None,
+            svg_scene: None,
+            svg_pieces: promo_svg::PieceCache::default(),
+            vector_route: VectorRoute::Auto,
             blur_sample: None,
             retain_scratch: false,
             builds: 0,
@@ -2142,18 +2179,33 @@ impl PreviewEngine {
             self.hits += 1;
             return Some(id);
         }
-        let mut pixels = picture.render(pw, ph, crop)?;
-        // resvg draws premultiplied RGBA; the compositor samples BGRA.
-        for px in pixels.chunks_exact_mut(4) {
-            px.swap(0, 2);
-        }
-        let surface = promo_gpu::GpuSurface::CpuPixels {
-            data: pixels,
-            width: pw,
-            height: ph,
-            bytes_per_row: pw * 4,
+        let cpu_adapter =
+            self.ctx.adapter.get_info().device_type == promo_gpu::wgpu::DeviceType::Cpu;
+        let on_gpu = self
+            .vector_route
+            .gpu(cpu_adapter, pw as u64 * ph as u64, picture.elements());
+        let drawn = if on_gpu {
+            self.vector_scene_frame(picture, crop, (pw, ph))
+        } else {
+            None
         };
-        let frame = Compositor::import(self.ctx, &surface).ok()?;
+        let frame = match drawn {
+            Some(frame) => frame,
+            None => {
+                let mut pixels = picture.render(pw, ph, crop)?;
+                // resvg draws premultiplied RGBA; the compositor samples BGRA.
+                for px in pixels.chunks_exact_mut(4) {
+                    px.swap(0, 2);
+                }
+                let surface = promo_gpu::GpuSurface::CpuPixels {
+                    data: pixels,
+                    width: pw,
+                    height: ph,
+                    bytes_per_row: pw * 4,
+                };
+                Compositor::import(self.ctx, &surface).ok()?
+            }
+        };
         self.misses += 1;
         let id = self.next_id;
         self.next_id += 1;
@@ -2178,6 +2230,25 @@ impl PreviewEngine {
         self.key_of.insert(key.clone(), id);
         self.id_of.insert(id, key);
         Some(id)
+    }
+
+    /// A vector drawn through the GPU scene: its painted paths on the GPU,
+    /// resvg's pieces (served from `svg_pieces` where no edit reaches them)
+    /// between them. `None` when the whole picture is resvg's (a blend
+    /// mode) or the GPU refuses.
+    fn vector_scene_frame(
+        &mut self,
+        picture: &promo_svg::Picture,
+        crop: Option<[f64; 4]>,
+        (pw, ph): (u32, u32),
+    ) -> Option<ImportedFrame> {
+        let build = picture
+            .scene_with(pw, ph, crop, Some(&mut self.svg_pieces))
+            .ok()?;
+        if self.svg_scene.is_none() {
+            self.svg_scene = Some(promo_gpu::vector::scene::SceneRenderer::new(self.ctx).ok()?);
+        }
+        self.svg_scene.as_mut()?.render(self.ctx, &build.scene).ok()
     }
 
     /// The frame an image layer shows for a vector resource: the picture —
@@ -3469,6 +3540,16 @@ impl PreviewEngine {
             self.evict_mask(resource_id);
         }
         self.vectors.insert(resource_id.to_string(), picture);
+    }
+
+    /// Chooses which renderer draws vectors' rasters ([`VectorRoute`]);
+    /// rasters already drawn the other way are dropped.
+    pub fn set_vector_route(&mut self, route: VectorRoute) {
+        if route != self.vector_route {
+            self.vector_route = route;
+            self.evict_prefix("svg:");
+            self.evict_prefix("mask:");
+        }
     }
 
     /// Whether a picture has been provided for a vector resource, and the
@@ -9027,6 +9108,182 @@ mod portable_tests {
             full,
             "the second layer hides its badge, the first shows its own"
         );
+    }
+
+    /// The largest channel difference between two pictures and the mean.
+    fn picture_diff(a: &[u8], b: &[u8]) -> (u8, f64) {
+        let mut max = 0u8;
+        let mut sum = 0u64;
+        for (x, y) in a.iter().zip(b) {
+            let d = x.abs_diff(*y);
+            max = max.max(d);
+            sum += d as u64;
+        }
+        (max, sum as f64 / a.len().max(1) as f64)
+    }
+
+    /// Slice 4: an SVG drawn through the GPU route is resvg's picture but
+    /// for antialiasing, on the preview's own path — cached per instant,
+    /// repainted by an edit at one instant (number-changes-picture-does-
+    /// not), keyed frames moving on.
+    #[test]
+    fn the_gpu_route_draws_vectors_as_resvg_does() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../promo-svg/tests/corpus/logo.svg");
+        let picture = std::sync::Arc::new(promo_svg::load_path(&path, None).expect("logo"));
+        let (mut engine, _state) = make_cpu_engine(vector_fixture(serde_json::json!([])), vec![]);
+        engine.set_raster_scale(4.0);
+        engine.provide_vector("VEC", picture.clone());
+        engine.set_vector_route(VectorRoute::Resvg);
+        let cpu = render_and_read(&mut engine, 1.0, 384);
+        engine.set_vector_route(VectorRoute::Gpu);
+        let gpu = render_and_read(&mut engine, 1.0, 384);
+        assert_ne!(cpu, gpu, "the route changed the renderer");
+        let (max, mean) = picture_diff(&cpu, &gpu);
+        assert!(max <= 128 && mean <= 1.0, "max {max} mean {mean}");
+        let misses = engine.misses;
+        assert_eq!(
+            render_and_read(&mut engine, 1.0, 384),
+            gpu,
+            "the same instant"
+        );
+        assert_eq!(engine.misses, misses, "the cached raster");
+        engine.set_project(vector_fixture(serde_json::json!([
+            {"node": "badge/rect[0]", "fillStops": ["FFFF00", "FFFF00"]}
+        ])));
+        let yellow = render_and_read(&mut engine, 1.0, 384);
+        assert_ne!(yellow, gpu, "an edit repaints at the same instant");
+        engine.set_vector_route(VectorRoute::Resvg);
+        let (max, mean) = picture_diff(&render_and_read(&mut engine, 1.0, 384), &yellow);
+        assert!(max <= 128 && mean <= 1.0, "edited: max {max} mean {mean}");
+        // Keyed frames on the GPU route: the next value is the next picture.
+        let fade = serde_json::json!([
+            {"id": "a", "time": 0.5, "transitionDuration": 0,
+             "nodes": {"badge": {"opacity": 0}}},
+            {"id": "b", "time": 1.5, "transitionPercent": 100,
+             "nodes": {"badge": {"opacity": 1}}}
+        ]);
+        let (mut keyed, _state) = make_cpu_engine(
+            keyed_vector_fixture(serde_json::json!([keyed_logo("L1", fade)])),
+            vec![],
+        );
+        keyed.set_raster_scale(4.0);
+        keyed.set_vector_route(VectorRoute::Gpu);
+        keyed.provide_vector("VEC", picture);
+        let mid = render_and_read(&mut keyed, 1.0, 384);
+        let next = render_and_read(&mut keyed, 1.0 + 1.0 / 30.0, 384);
+        assert_ne!(mid, next);
+        let misses = keyed.misses;
+        assert_eq!(
+            render_and_read(&mut keyed, 0.2, 384),
+            render_and_read(&mut keyed, 0.4, 384)
+        );
+        assert_eq!(keyed.misses, misses + 1, "a hold is one raster");
+    }
+
+    /// The per-frame cost of a keyed SVG through the engine (SVG-PLAN.md
+    /// slice 4, "As built"): a layer showing the logo (the canvas width)
+    /// or the dense file (the whole canvas) with an element keyed so every
+    /// frame has a new value, rendered at 30 fps and waited for, on each
+    /// route. `cargo test --release -p promo-engine --lib -- --ignored
+    /// --nocapture svg_frame_cost`.
+    #[test]
+    #[ignore]
+    fn svg_frame_cost() {
+        let Some(ctx) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        println!("{}", ctx.adapter_summary());
+        let measure =
+            |file: &str, node: &str, w: u32, h: u32, size: (f64, f64), route: VectorRoute| {
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join(format!("../promo-svg/tests/corpus/{file}.svg"));
+                let picture = std::sync::Arc::new(promo_svg::load_path(&path, None).expect("svg"));
+                let json = serde_json::json!({
+                    "id": "AAAAAAAA-0000-0000-0000-000000000009",
+                    "name": "cost", "createdAt": 0, "state": "recorded",
+                    "trimStart": 0, "trimEnd": 10, "videoDuration": 10, "subtitles": [],
+                    "compositionSettings": {"canvasWidth": w, "canvasHeight": h,
+                        "backgroundColorHex": "FFFFFF"},
+                    "layers": [
+                        {"id": "BG", "name": "bg", "sortIndex": 0, "kind": "background",
+                         "isEnabled": true, "startTime": 0, "keyframes": []},
+                        {"id": "V", "name": "v", "sortIndex": 1, "kind": "image",
+                         "isEnabled": true, "startTime": 0, "duration": 10,
+                         "resourceID": "VEC", "keyframes": [
+                            {"id": "a", "time": 0, "transitionDuration": 0,
+                             "nodes": {node: {"opacity": 0.2, "transform": {"rotate": 0}}}},
+                            {"id": "b", "time": 10, "transitionPercent": 100,
+                             "nodes": {node: {"opacity": 1, "transform": {"rotate": 30}}}}
+                        ]}
+                    ],
+                    "resources": [
+                        {"id": "VEC", "kind": "vector", "filename": format!("{file}.svg"),
+                         "displayName": file, "addedAt": 0, "imageCuts": [],
+                         "disabledAudioTrackIndices": [], "pixelWidth": size.0,
+                         "pixelHeight": size.1, "svg": {"size": [size.0, size.1]}}
+                    ]
+                });
+                let meta = ProjectMetadata::from_json(&json.to_string()).expect("fixture");
+                let (mut engine, _state) = make_cpu_engine(meta, vec![]);
+                engine.set_vector_route(route);
+                engine.provide_vector("VEC", picture);
+                let texture = ctx
+                    .device
+                    .create_texture(&promo_gpu::wgpu::TextureDescriptor {
+                        label: None,
+                        size: promo_gpu::wgpu::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: promo_gpu::wgpu::TextureDimension::D2,
+                        format: promo_gpu::wgpu::TextureFormat::Bgra8Unorm,
+                        usage: promo_gpu::wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | promo_gpu::wgpu::TextureUsages::COPY_SRC,
+                        view_formats: &[],
+                    });
+                let frames = if w >= 3840 { 8 } else { 16 };
+                engine
+                    .render_to_texture(0.05, &texture, w, h)
+                    .expect("render");
+                ctx.device.poll(promo_gpu::wgpu::Maintain::Wait);
+                let started = std::time::Instant::now();
+                for i in 0..frames {
+                    let t = 0.1 + i as f64 / 30.0;
+                    engine.render_to_texture(t, &texture, w, h).expect("render");
+                    ctx.device.poll(promo_gpu::wgpu::Maintain::Wait);
+                }
+                let ms = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;
+                println!("{file:8} {w}x{h} {route:?}: {ms:7.2} ms a frame");
+            };
+        for (w, h) in [(1920, 1080), (3840, 2160)] {
+            for route in [VectorRoute::Resvg, VectorRoute::Gpu, VectorRoute::Auto] {
+                measure("logo", "badge", w, h, (240.0, 80.0), route);
+            }
+            for route in [VectorRoute::Resvg, VectorRoute::Gpu, VectorRoute::Auto] {
+                measure("complex", "g[0]", w, h, (1600.0, 900.0), route);
+            }
+        }
+    }
+
+    /// The automatic route: the GPU for rasters with work in them on a
+    /// hardware adapter, resvg on a CPU adapter (where the GPU path
+    /// measured slower at every size) and for small rasters.
+    #[test]
+    fn the_automatic_route_sends_work_to_a_hardware_gpu_only() {
+        let auto = VectorRoute::Auto;
+        assert!(!auto.gpu(true, 3840 * 2160, 10_000), "lavapipe: resvg");
+        assert!(auto.gpu(false, 1920 * 1080, 10), "a full frame");
+        assert!(auto.gpu(false, 640 * 213, 2400), "a dense picture");
+        assert!(!auto.gpu(false, 640 * 213, 20), "a small logo: resvg");
+        assert!(VectorRoute::Gpu.gpu(true, 1, 1));
+        assert!(!VectorRoute::Resvg.gpu(false, 1 << 30, 1 << 20));
     }
 
     /// The same assertions as `tests::renders_background_and_video_layer`,

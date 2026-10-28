@@ -33,7 +33,12 @@ use usvg::fontdb;
 pub use promo_model::vector;
 
 mod edit;
+#[cfg(feature = "gpu")]
+mod gpu;
 mod model;
+
+#[cfg(feature = "gpu")]
+pub use gpu::{PieceCache, SceneBuild, SceneStats};
 
 pub use model::{Model, Node, PaintInfo, Tier, MARKER, SYNTHETIC};
 
@@ -748,6 +753,11 @@ pub struct Picture {
     /// The element tree and the drawn tree its edits apply to, built on
     /// first use.
     edits: Arc<OnceLock<Result<EditBase, String>>>,
+    /// The ids, in the drawn tree, of the elements this picture's edits
+    /// change — what a cached piece of the plain picture must not hold.
+    edited: Arc<Vec<String>>,
+    /// The stamp of the picture before any edit.
+    base_stamp: u64,
 }
 
 #[derive(Clone)]
@@ -823,6 +833,8 @@ impl Picture {
             original: original.map(Arc::new),
             context: context.clone(),
             edits: Arc::new(OnceLock::new()),
+            edited: Arc::new(Vec::new()),
+            base_stamp: fnv(bytes),
         })
     }
 
@@ -892,9 +904,15 @@ impl Picture {
             .map_err(|e| e.to_string())?;
         let mut stamped = self.stamp.to_le_bytes().to_vec();
         stamped.extend(serde_json::to_vec(&edits).unwrap_or_default());
+        let edited = edits
+            .iter()
+            .filter_map(|o| base.model.resolve(&o.node).ok())
+            .map(model::element_id)
+            .collect();
         Ok(Picture {
             tree: Arc::new(tree),
             stamp: fnv(&stamped),
+            edited: Arc::new(edited),
             ..self.clone()
         })
     }

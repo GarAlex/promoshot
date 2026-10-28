@@ -12,6 +12,8 @@
 //! `max(0.5, strokeWidth * scale)` width; shapes render in array order.
 //! Edges are antialiased with 4× MSAA, resolved into the output texture.
 
+pub mod scene;
+
 use crate::{GpuContext, GpuError};
 use lyon_tessellation::geom::{point, Point};
 use lyon_tessellation::path::Path;

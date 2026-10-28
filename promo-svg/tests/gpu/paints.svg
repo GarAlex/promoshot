@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Paints as tiny-skia evaluates them: each spread on a linear and a
+     radial gradient, a focus inside its circle, concentric circles of two
+     radii, a skewed gradient, stop opacity, a hard stop. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240">
+  <defs>
+    <linearGradient id="pad" x1="0.3" x2="0.7"><stop offset="0" stop-color="#e63946"/><stop offset="1" stop-color="#1d3557"/></linearGradient>
+    <linearGradient id="reflect" x1="0.3" x2="0.5" spreadMethod="reflect"><stop offset="0" stop-color="#e63946"/><stop offset="1" stop-color="#1d3557"/></linearGradient>
+    <linearGradient id="repeat" x1="0.3" x2="0.5" spreadMethod="repeat"><stop offset="0" stop-color="#e63946"/><stop offset="1" stop-color="#1d3557"/></linearGradient>
+    <radialGradient id="rpad" r="0.3"><stop offset="0" stop-color="#ffd166"/><stop offset="0.5" stop-color="#06d6a0"/><stop offset="1" stop-color="#118ab2"/></radialGradient>
+    <radialGradient id="rreflect" r="0.2" spreadMethod="reflect"><stop offset="0" stop-color="#ffd166"/><stop offset="1" stop-color="#118ab2"/></radialGradient>
+    <radialGradient id="rrepeat" r="0.2" spreadMethod="repeat"><stop offset="0" stop-color="#ffd166"/><stop offset="1" stop-color="#118ab2"/></radialGradient>
+    <radialGradient id="focal" cx="0.5" cy="0.5" r="0.5" fx="0.3" fy="0.6"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#7209b7"/></radialGradient>
+    <radialGradient id="ring" cx="0.5" cy="0.5" r="0.5" fr="0.2"><stop offset="0" stop-color="#f72585"/><stop offset="1" stop-color="#4cc9f0"/></radialGradient>
+    <linearGradient id="skew" gradientTransform="skewX(30) rotate(20)"><stop offset="0" stop-color="#2b9348"/><stop offset="0.5" stop-color="#eeef20"/><stop offset="1" stop-color="#007f5f"/></linearGradient>
+    <linearGradient id="fade" x1="0" x2="1"><stop offset="0" stop-color="#03045e" stop-opacity="1"/><stop offset="1" stop-color="#03045e" stop-opacity="0"/></linearGradient>
+    <linearGradient id="hard" x1="0" x2="1"><stop offset="0.25" stop-color="#ff7b00"/><stop offset="0.5" stop-color="#ff7b00"/><stop offset="0.5" stop-color="#3f37c9"/><stop offset="0.75" stop-color="#4cc9f0"/></linearGradient>
+  </defs>
+  <rect width="360" height="240" fill="#f1faee"/>
+  <rect x="10" y="10" width="100" height="60" fill="url(#pad)"/>
+  <rect x="130" y="10" width="100" height="60" fill="url(#reflect)"/>
+  <rect x="250" y="10" width="100" height="60" fill="url(#repeat)"/>
+  <rect x="10" y="85" width="100" height="70" fill="url(#rpad)"/>
+  <rect x="130" y="85" width="100" height="70" fill="url(#rreflect)"/>
+  <rect x="250" y="85" width="100" height="70" fill="url(#rrepeat)"/>
+  <circle cx="50" cy="195" r="38" fill="url(#focal)"/>
+  <circle cx="140" cy="195" r="38" fill="url(#ring)"/>
+  <rect x="190" y="160" width="70" height="70" fill="url(#skew)"/>
+  <rect x="270" y="160" width="80" height="30" fill="url(#fade)"/>
+  <rect x="270" y="200" width="80" height="30" fill="url(#hard)"/>
+</svg>

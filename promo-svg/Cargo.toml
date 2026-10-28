@@ -19,10 +19,16 @@ serde.workspace = true
 usvg = { version = "=0.47.0", default-features = false, features = ["text"] }
 resvg = { version = "=0.47.0", default-features = false, features = ["text", "raster-images"] }
 tiny-skia = { version = "=0.12.0", default-features = false, features = ["std", "simd", "png-format"] }
+# The GPU's share of a picture (slice 4): its scene types and renderer.
+# Optional, so a host that only imports and lists elements links no wgpu.
+promo-gpu = { path = "../promo-gpu", optional = true }
 # The import's fonts: the machine's, read once. Only `import` loads them.
 fontdb = { version = "0.23", default-features = false, features = ["fs", "memmap", "fontconfig"] }
 # The outlines' receipt: SHA-256 of the file they were made from.
 sha2 = "0.10"
+
+[features]
+gpu = ["dep:promo-gpu"]
 
 [dev-dependencies]
 promo-model = { path = "../promo-model" }
@@ -30,3 +36,7 @@ serde_json.workspace = true
 serde.workspace = true
 # Reading and writing the reference images.
 png = "0.18"
+
+[[test]]
+name = "gpu"
+required-features = ["gpu"]

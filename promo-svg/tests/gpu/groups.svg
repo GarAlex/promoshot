@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Layers: an opacity over several shapes, nested; a clip in user space
+     with a transform and even-odd; a clip holding a moved group; a clipped
+     group under an opacity. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <clipPath id="star" clip-rule="evenodd">
+      <polygon points="80,10 100,70 160,70 110,105 130,165 80,130 30,165 50,105 0,70 60,70" transform="translate(150 15) scale(0.9)"/>
+    </clipPath>
+    <clipPath id="moved"><g transform="rotate(15 60 150)"><rect x="20" y="120" width="80" height="50" rx="8"/></g><circle cx="110" cy="150" r="20"/></clipPath>
+  </defs>
+  <rect width="320" height="200" fill="#283618"/>
+  <g opacity="0.6">
+    <rect x="10" y="10" width="90" height="70" fill="#fefae0"/>
+    <circle cx="90" cy="70" r="35" fill="#dda15e"/>
+    <g opacity="0.5"><rect x="30" y="40" width="90" height="20" fill="#bc6c25"/><rect x="40" y="30" width="20" height="60" fill="#606c38"/></g>
+  </g>
+  <g clip-path="url(#star)">
+    <rect x="140" y="0" width="180" height="200" fill="#e9c46a"/>
+    <path d="M140 200 L320 0" stroke="#e76f51" stroke-width="30"/>
+  </g>
+  <g clip-path="url(#moved)" opacity="0.8">
+    <rect x="0" y="100" width="150" height="100" fill="#2a9d8f"/>
+    <circle cx="60" cy="150" r="25" fill="#264653"/>
+  </g>
+</svg>

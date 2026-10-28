@@ -1157,7 +1157,9 @@ A reveal can arrive on a narration's words instead of at its own pace —
 
 - An SVG is a `vector` resource: the file stays in `Resources/`
   exactly as it came, and the core draws it — usvg parses it, resvg
-  draws it, the same pixels on every machine. Add one with `promo
+  draws it (on a hardware GPU its painted paths are drawn there to
+  resvg's picture, antialiasing aside: a dense file keyed per frame
+  stays quick), the same picture on every machine. Add one with `promo
   resource add <project> logo.svg` (or `promo_upsert_layer` with
   `kind: "image"` and the `.svg` as `file`); that is the IMPORT:
     { "id": "logo", "kind": "vector", "filename": "logo.svg",

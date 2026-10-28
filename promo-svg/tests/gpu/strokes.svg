@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Strokes the GPU draws from tiny-skia's own outline: every cap, every
+     join, a miter past its limit, dashes with an offset, a gradient stroke,
+     paint-order, and a translucent stroke over its fill under an element
+     opacity (the pair). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff006e"/>
+      <stop offset="1" stop-color="#3a86ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="#fdf0d5"/>
+  <path d="M20 30 h60" stroke="#003049" stroke-width="12" stroke-linecap="butt"/>
+  <path d="M20 60 h60" stroke="#003049" stroke-width="12" stroke-linecap="round"/>
+  <path d="M20 90 h60" stroke="#003049" stroke-width="12" stroke-linecap="square"/>
+  <polyline points="110,20 140,60 170,20" fill="none" stroke="#c1121f" stroke-width="10" stroke-linejoin="miter"/>
+  <polyline points="110,70 140,110 170,70" fill="none" stroke="#c1121f" stroke-width="10" stroke-linejoin="round"/>
+  <polyline points="110,120 140,160 170,120" fill="none" stroke="#c1121f" stroke-width="10" stroke-linejoin="bevel"/>
+  <polyline points="190,20 200,60 210,20" fill="none" stroke="#669bbc" stroke-width="8" stroke-miterlimit="2"/>
+  <polyline points="230,20 240,60 250,20" fill="none" stroke="#669bbc" stroke-width="8" stroke-linejoin="miter-clip" stroke-miterlimit="2"/>
+  <path d="M190 90 C 220 60, 260 120, 300 90" fill="none" stroke="#780000" stroke-width="5" stroke-dasharray="12 6 3 6" stroke-dashoffset="5" stroke-linecap="round"/>
+  <circle cx="60" cy="150" r="30" fill="#ffb703" stroke="url(#ink)" stroke-width="9"/>
+  <rect x="200" y="120" width="90" height="60" rx="10" fill="#219ebc" stroke="#023047" stroke-opacity="0.6" stroke-width="10" opacity="0.7"/>
+  <rect x="120" y="170" width="60" height="20" fill="#8ecae6" stroke="#fb8500" stroke-width="8" paint-order="stroke"/>
+</svg>
