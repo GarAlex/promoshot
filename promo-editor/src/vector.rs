@@ -298,7 +298,23 @@ pub(crate) fn make_editable(
             Some(l)
         }
     };
-    let made = host.convert(&resource, nodes)?;
+    // Theme colours as the theme has them now: a drawing holds hex.
+    let mut bound = resource.clone();
+    if let Some(mut block) = promo_model::vector::block(&bound) {
+        let settings = &meta.composition_settings;
+        for o in &mut block.overrides {
+            for c in o.colours_mut() {
+                if c.starts_with('@') {
+                    *c = settings.resolve_color(c).to_string();
+                }
+            }
+        }
+        bound.extra.insert(
+            KEY.to_string(),
+            serde_json::to_value(&block).map_err(|e| e.to_string())?,
+        );
+    }
+    let made = host.convert(&bound, nodes)?;
     let converted: Vec<String> = serde_json::from_value(made["nodes"].clone())
         .map_err(|e| format!("the host's conversion: {e}"))?;
     if let Some(l) = &source_layer {

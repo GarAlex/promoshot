@@ -1341,6 +1341,27 @@ pub fn findings(meta: &ProjectMetadata, resources_dir: &Path) -> Vec<String> {
                     }
                 }
             }
+            // A theme colour the project's palette lacks draws the file's.
+            let settings = &meta.composition_settings;
+            let mut named: Vec<String> = Vec::new();
+            for o in &b.overrides {
+                let mut o = o.clone();
+                for c in o.colours_mut() {
+                    if c.starts_with('@')
+                        && settings.resolve_color(c) == c.as_str()
+                        && !named.contains(c)
+                    {
+                        named.push(c.clone());
+                    }
+                }
+            }
+            for c in named {
+                out.push(format!(
+                    "the SVG \"{name}\" is coloured {c}, which the project's palette has no \
+                     colour for — that part draws the file's colour; add it to the theme or pick \
+                     another"
+                ));
+            }
             let texts = text_overrides(b);
             if !texts.is_empty()
                 && b.outlines.as_deref()

@@ -309,8 +309,9 @@ pub enum Command {
     /// (`null` takes a key back to the file's). `node`: the address or the
     /// author's name promo_inspect lists. Any element: visible, opacity,
     /// transform {move, scale, rotate}, order; a painted shape also fill,
-    /// stroke, fillStops, strokeStops, strokeWidth; text, text. Refused
-    /// outside the element's tier with its reason.
+    /// stroke (hex or @theme name), fillStops, strokeStops, strokeWidth,
+    /// trimStart, trimEnd; text, text. Refused outside the element's tier
+    /// with its reason.
     #[serde(rename_all = "camelCase")]
     SetVectorOverride {
         #[serde(rename = "resourceID")]

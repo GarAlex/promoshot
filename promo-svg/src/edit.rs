@@ -376,6 +376,26 @@ pub(crate) fn apply(
         if let Some(w) = o.stroke_width {
             decls.push(("stroke-width".into(), number(w)));
         }
+        // A reveal: one dash as long as the shown share, a gap past the
+        // whole, offset to where the share starts. A path of several
+        // sub-paths draws them at one pace (the dash restarts on each):
+        // the longest finishes at the end.
+        if o.trims() {
+            if let Some(length) = place.stroke_length.filter(|l| *l > 0.0) {
+                let l = length as f64;
+                let a = o.trim_start.unwrap_or(0.0).clamp(0.0, 1.0) * l;
+                let b = o.trim_end.unwrap_or(1.0).clamp(0.0, 1.0) * l;
+                if b - a <= 1e-6 {
+                    decls.push(("stroke".into(), "none".into()));
+                } else {
+                    decls.push((
+                        "stroke-dasharray".into(),
+                        format!("{} {}", number(b - a), number(2.0 * l + 1.0)),
+                    ));
+                    decls.push(("stroke-dashoffset".into(), number(-a)));
+                }
+            }
+        }
         for (key, stops, gradient) in [
             ("fill", &o.fill_stops, &place.fill_gradient),
             ("stroke", &o.stroke_stops, &place.stroke_gradient),

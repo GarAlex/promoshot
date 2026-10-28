@@ -477,7 +477,9 @@ is for; the schema section says how to write it.
   for it) and use `promo_apply` with `setVectorOverride`
   (`resetVectorOverride` undoes it); the file itself never changes. To
   animate a part on a layer (a badge pops in, a wordmark shifts colour),
-  key it with `setVectorNodeKey` — quick eased moves with holds. To
+  key it with `setVectorNodeKey` — quick eased moves with holds; draw an
+  outline on with `trimEnd` 0 → 1, and give a part `"fill": "@accent"`
+  to follow the theme. To
   edit plain parts' points (tier C), `makeEditableShapes` moves them into
   a drawing on a layer just above, the picture unchanged — or refuses
   with the reason (a gradient, a miter join…) and the part stays SVG.

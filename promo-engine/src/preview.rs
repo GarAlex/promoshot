@@ -2054,12 +2054,29 @@ impl PreviewEngine {
             .find(|r| r.id == resource_id)
             .map(promo_model::vector::overrides)
             .unwrap_or_default();
+        // A colour bound to the theme (`@accent`, slice 6) is the
+        // palette's now: a theme change repaints, as the stamp says.
+        let settings = &self.meta.composition_settings;
+        let resolve = |c: &mut String| {
+            if c.starts_with('@') {
+                *c = settings.resolve_color(c).to_string();
+            }
+        };
+        for o in &mut overrides {
+            o.colours_mut().for_each(resolve);
+        }
         // One edited picture held per resource, and one per layer that
         // keys it: two layers animating one SVG never evict each other.
         let mut slot = resource_id.to_string();
         if let Some((layer, time)) = keyed.filter(|(l, _)| tl::vector::keys_vector_nodes(l)) {
+            let mut bound = layer.clone();
+            for k in &mut bound.keyframes {
+                for key in k.nodes.iter_mut().flat_map(|n| n.values_mut()) {
+                    key.colours_mut().for_each(resolve);
+                }
+            }
             overrides = tl::vector::layer_vector_overrides(
-                layer,
+                &bound,
                 tl::layer_local_time(layer, time),
                 &overrides,
             );
@@ -9270,6 +9287,47 @@ mod portable_tests {
                 measure("complex", "g[0]", w, h, (1600.0, 900.0), route);
             }
         }
+    }
+
+    /// Slice 6: a fill bound to the theme follows it — the same instant
+    /// repaints when the palette's colour changes, and draws exactly what
+    /// the colour written out draws.
+    #[test]
+    fn a_theme_bound_fill_follows_the_palette() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../promo-svg/tests/corpus/logo.svg");
+        let picture = std::sync::Arc::new(promo_svg::load_path(&path, None).expect("logo"));
+        let themed = |accent: &str, fill: &str| {
+            let mut meta = vector_fixture(serde_json::json!([{"node": "glyph", "fill": fill}]));
+            meta.composition_settings.palette = Some(vec![serde_json::from_value(
+                serde_json::json!({"name": "accent", "colorHex": accent}),
+            )
+            .unwrap()]);
+            meta
+        };
+        let (mut engine, _state) = make_cpu_engine(themed("FF0000", "@accent"), vec![]);
+        engine.provide_vector("VEC", picture.clone());
+        let red = render_and_read(&mut engine, 1.0, 96);
+        engine.set_project(themed("00FF00", "@accent"));
+        let green = render_and_read(&mut engine, 1.0, 96);
+        assert_ne!(red, green, "a theme change repaints at the same instant");
+        engine.set_project(themed("00FF00", "00FF00"));
+        assert_eq!(
+            render_and_read(&mut engine, 1.0, 96),
+            green,
+            "the colour written out"
+        );
+        // A name the palette lacks draws the file's colour.
+        engine.set_project(themed("00FF00", "@missing"));
+        let (mut plain, _s) = make_cpu_engine(vector_fixture(serde_json::json!([])), vec![]);
+        plain.provide_vector("VEC", picture);
+        assert_eq!(
+            render_and_read(&mut engine, 1.0, 96),
+            render_and_read(&mut plain, 1.0, 96)
+        );
     }
 
     /// The automatic route: the GPU for rasters with work in them on a

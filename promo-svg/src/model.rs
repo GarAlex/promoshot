@@ -181,6 +181,11 @@ pub(crate) struct Place {
     /// The ids of its drawn siblings' elements, in order, itself among
     /// them — what `order` moves within.
     pub sibling_ids: Vec<String>,
+    /// A shape's longest sub-path, in its own user units — what a stroke
+    /// reveal (`trimStart` / `trimEnd`) measures — and whether its stroke
+    /// is dashed already.
+    pub stroke_length: Option<f32>,
+    pub dashed: bool,
 }
 
 /// A gradient as usvg resolved it: in the shape's own user space.
@@ -670,6 +675,8 @@ impl Model {
             stroke_width: Option<f32>,
             bounds: usvg::Rect,
             is_path: bool,
+            stroke_length: Option<f32>,
+            dashed: bool,
         }
         let mut mapped: HashMap<String, Mapped> = HashMap::new();
         let mut probe_abs: HashMap<String, usvg::Transform> = HashMap::new();
@@ -731,6 +738,8 @@ impl Model {
                         stroke_width: None,
                         bounds,
                         is_path: false,
+                        stroke_length: None,
+                        dashed: false,
                     };
                     match child {
                         usvg::Node::Path(p) => {
@@ -741,6 +750,8 @@ impl Model {
                             m.stroke_width = p.stroke().map(|s| s.width().get());
                             m.visible = p.is_visible();
                             m.is_path = true;
+                            m.stroke_length = Some(longest_subpath(p.data()));
+                            m.dashed = p.stroke().is_some_and(|s| s.dasharray().is_some());
                         }
                         usvg::Node::Image(img) => m.visible = img.is_visible(),
                         _ => {}
@@ -864,6 +875,8 @@ impl Model {
                         fill_gradient: m.fill_gradient.clone(),
                         stroke_gradient: m.stroke_gradient.clone(),
                         sibling_ids: Vec::new(),
+                        stroke_length: m.stroke_length,
+                        dashed: m.dashed,
                     },
                 );
             }
@@ -961,7 +974,8 @@ impl Model {
             if let Some(key) = o.extra.keys().next() {
                 return Err(format!(
                     "an override takes visible, opacity, transform, order, fill, stroke, \
-                     fillStops, strokeStops, strokeWidth and text — not \"{key}\""
+                     fillStops, strokeStops, strokeWidth, trimStart, trimEnd and text — not \
+                     \"{key}\""
                 ));
             }
         }
@@ -985,9 +999,12 @@ impl Model {
         }
         for (key, value) in [("fill", &o.fill), ("stroke", &o.stroke)] {
             if let Some(v) = value {
-                parse_colour(v).ok_or_else(|| {
-                    format!("{key}: \"{v}\" is not a colour — RRGGBB or RRGGBBAA")
-                })?;
+                if !is_colour(v) {
+                    return Err(format!(
+                        "{key}: \"{v}\" is not a colour — RRGGBB, RRGGBBAA or a theme colour \
+                         (@accent)"
+                    ));
+                }
             }
         }
         for (key, stops, paint) in [
@@ -1012,9 +1029,12 @@ impl Model {
                 ));
             }
             for v in stops {
-                parse_colour(v).ok_or_else(|| {
-                    format!("{key}: \"{v}\" is not a colour — RRGGBB or RRGGBBAA")
-                })?;
+                if !is_colour(v) {
+                    return Err(format!(
+                        "{key}: \"{v}\" is not a colour — RRGGBB, RRGGBBAA or a theme colour \
+                         (@accent)"
+                    ));
+                }
             }
         }
         if let Some(v) = o.opacity {
@@ -1025,6 +1045,26 @@ impl Model {
         if let Some(v) = o.stroke_width {
             if !(v.is_finite() && v >= 0.0) {
                 return Err(format!("strokeWidth {v} must be zero or more"));
+            }
+        }
+        for (key, v) in [("trimStart", o.trim_start), ("trimEnd", o.trim_end)] {
+            if let Some(v) = v {
+                if !(0.0..=1.0).contains(&v) {
+                    return Err(format!("{key} {v} is outside 0–1 (a share of the stroke)"));
+                }
+            }
+        }
+        if o.trim_start.is_some() || o.trim_end.is_some() {
+            if node.stroke.is_none() && o.stroke.is_none() {
+                return Err(format!(
+                    "{shown} has no stroke to reveal — trimStart and trimEnd draw part of a \
+                     stroke; give it one first"
+                ));
+            }
+            if self.places.get(&address).is_some_and(|p| p.dashed) {
+                return Err(format!(
+                    "{shown} has a dashed stroke — a reveal would hide its dashes"
+                ));
             }
         }
         if let Some(v) = o.order {
@@ -1071,6 +1111,78 @@ impl Model {
         probe.extra.clear();
         self.check(&probe, false)
     }
+}
+
+/// A colour an override may name: hex, or a theme colour by name
+/// (`@accent`), which the drawing host resolves through the project's
+/// palette before it draws (an unresolved name draws the file's colour).
+pub(crate) fn is_colour(text: &str) -> bool {
+    match text.trim().strip_prefix('@') {
+        Some(name) => !name.trim().is_empty(),
+        None => parse_colour(text).is_some(),
+    }
+}
+
+/// The longest sub-path of a path, in its own units: lines exact, curves
+/// cut finely.
+pub(crate) fn longest_subpath(path: &usvg::tiny_skia_path::Path) -> f32 {
+    use usvg::tiny_skia_path::PathSegment;
+    let (mut best, mut run) = (0.0f32, 0.0f32);
+    let (mut last, mut first) = (
+        usvg::tiny_skia_path::Point::zero(),
+        usvg::tiny_skia_path::Point::zero(),
+    );
+    let dist = |a: usvg::tiny_skia_path::Point, b: usvg::tiny_skia_path::Point| {
+        ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+    };
+    for seg in path.segments() {
+        match seg {
+            PathSegment::MoveTo(p) => {
+                best = best.max(run);
+                run = 0.0;
+                first = p;
+                last = p;
+            }
+            PathSegment::LineTo(p) => {
+                run += dist(last, p);
+                last = p;
+            }
+            PathSegment::QuadTo(c, p) => {
+                let mut prev = last;
+                for i in 1..=64 {
+                    let t = i as f32 / 64.0;
+                    let u = 1.0 - t;
+                    let q = usvg::tiny_skia_path::Point::from_xy(
+                        u * u * last.x + 2.0 * u * t * c.x + t * t * p.x,
+                        u * u * last.y + 2.0 * u * t * c.y + t * t * p.y,
+                    );
+                    run += dist(prev, q);
+                    prev = q;
+                }
+                last = p;
+            }
+            PathSegment::CubicTo(c1, c2, p) => {
+                let mut prev = last;
+                for i in 1..=64 {
+                    let t = i as f32 / 64.0;
+                    let u = 1.0 - t;
+                    let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                    let q = usvg::tiny_skia_path::Point::from_xy(
+                        a * last.x + b * c1.x + c * c2.x + d * p.x,
+                        a * last.y + b * c1.y + c * c2.y + d * p.y,
+                    );
+                    run += dist(prev, q);
+                    prev = q;
+                }
+                last = p;
+            }
+            PathSegment::Close => {
+                run += dist(last, first);
+                last = first;
+            }
+        }
+    }
+    best.max(run)
 }
 
 /// `RRGGBB` / `RRGGBBAA` (a leading `#` allowed) → (r, g, b, alpha 0–1

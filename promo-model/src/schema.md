@@ -1211,9 +1211,12 @@ A reveal can arrive on a narration's words instead of at its own pace —
     about the element's own centre, in the picture's CSS pixels) and
     `order` (its place among its siblings, 0 = drawn first);
   - `B`, a painted shape (solid, linear or radial paint), also under a
-    clip, mask or filter: A plus `fill` and `stroke` (`RRGGBB` or
-    `RRGGBBAA`), `fillStops` / `strokeStops` (one colour per stop of its
-    gradient, the offsets kept) and `strokeWidth`;
+    clip, mask or filter: A plus `fill` and `stroke` (`RRGGBB`,
+    `RRGGBBAA`, or a theme colour `@accent` that follows the palette),
+    `fillStops` / `strokeStops` (one colour per stop of its gradient,
+    the offsets kept), `strokeWidth`, and `trimStart` / `trimEnd` (the
+    share of its stroke drawn, 0–1, the fill untouched; several sub-paths
+    draw at one pace; not on a dashed stroke);
   - `C`, a B shape with no clip, mask or filter on it or above it: the
     same edits — plain geometry, the shapes a later point editor takes;
   - `locked`, with why ("kept as drawn — used as a mask", "— a blur
@@ -1263,8 +1266,9 @@ A reveal can arrive on a narration's words instead of at its own pace —
                  "glyph": { "fill": "FF6A00" } } }
   Keyed: `visible`, `opacity`, `transform` (`move`, `scale`, `rotate`
   each a track of its own), and on a painted shape `fill`, `stroke`,
-  `fillStops`, `strokeStops`, `strokeWidth` — the same tiers and the
-  same refusals as an override. `order` and `text` are never keyed.
+  `fillStops`, `strokeStops`, `strokeWidth`, `trimStart`, `trimEnd` —
+  the same tiers and the same refusals as an override. `order` and
+  `text` are never keyed.
 - Each (element, key) is a track on the layer's clock, held then eased
   into each keyframe by that keyframe's ramp, like every keyframe value;
   colours mix as a background colour does; `visible` steps on the
@@ -1287,6 +1291,8 @@ A reveal can arrive on a narration's words instead of at its own pace —
   (`easeOutBack`, ramp 0.9); hold two seconds; the wordmark shifts
   colour — `fill` as drawn at 3.0 s, the new colour at 4.0 s
   (`easeInOut`, ramp 1.0). Nothing sits still longer than a hold.
+  DRAW-ON: an outline drawn as if by pen — `trimEnd 0` at 0.4 s (ramp
+  0), `trimEnd 1` at 1.6 s (`easeOut`, ramp 1.2), then fade the fill in.
 
 ## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits, audioFocus, duck, ducking
 

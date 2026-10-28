@@ -695,3 +695,84 @@ fn make_editable_shapes_keeps_the_picture() {
     assert!(!ok && text.contains("a gradient fill"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Slice 6 through the binary: a line drawn on by keying `trimEnd` 0 → 1
+/// over a second — nothing before, half of it at the midpoint, all of it
+/// after — and a stroke bound to the theme following the palette.
+#[test]
+fn a_keyed_reveal_draws_on_and_a_theme_colour_follows() {
+    let line = std::env::temp_dir().join(format!("promo-reveal-{}.svg", std::process::id()));
+    std::fs::write(
+        &line,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+  <path id="line" d="M10 50 H 190" stroke="#ffffff" stroke-width="12" fill="none"/>
+</svg>"##,
+    )
+    .unwrap();
+    let dir = project("reveal", &[]);
+    let (ok, text) = promo(&[
+        "resource",
+        "add",
+        dir.to_str().unwrap(),
+        line.to_str().unwrap(),
+        "--id",
+        "line",
+    ]);
+    assert!(ok, "{text}");
+    edit(&dir, |doc| {
+        // 200x100 at 640 px wide: 3.2 px a unit, the line from 32 to 608.
+        doc["layers"].as_array_mut().unwrap().push(image_layer(
+            "L",
+            "line",
+            1,
+            json!({"width": 640, "anchor": "center"}),
+        ));
+        doc["compositionSettings"]["palette"] = json!([{"name": "accent", "colorHex": "FF0000"}]);
+    });
+    let project_arg = dir.to_str().unwrap().to_string();
+    let (ok, text) = promo(&[
+        "apply",
+        &project_arg,
+        "--args",
+        &json!({"commands": [
+            {"kind": "setVectorNodeKey", "layerID": "L", "node": "line", "time": 0.5,
+             "transitionDuration": 0, "patch": {"trimEnd": 0}},
+            {"kind": "setVectorNodeKey", "layerID": "L", "node": "line", "time": 1.5,
+             "transitionPercent": 100, "patch": {"trimEnd": 1}}
+        ]})
+        .to_string(),
+    ]);
+    assert!(ok, "{text}");
+    let Some(before) = still(&dir, 0.25) else {
+        return;
+    };
+    let lit = |img: &image::RgbaImage, x: u32| img.get_pixel(x, 180)[0] > 200;
+    assert!(
+        !lit(&before, 100) && !lit(&before, 500),
+        "nothing drawn yet"
+    );
+    let mid = still(&dir, 1.0).unwrap();
+    assert!(lit(&mid, 100) && lit(&mid, 300), "the first half");
+    assert!(!lit(&mid, 340) && !lit(&mid, 500), "not the second");
+    let after = still(&dir, 1.9).unwrap();
+    assert!(lit(&after, 100) && lit(&after, 590), "all of it");
+    // The stroke bound to the theme: red, then the palette's green.
+    let (ok, text) = promo(&[
+        "apply",
+        &project_arg,
+        "--args",
+        &json!({"commands": [{"kind": "setVectorOverride", "resourceID": "line",
+            "node": "line", "patch": {"stroke": "@accent"}}]})
+        .to_string(),
+    ]);
+    assert!(ok, "{text}");
+    let red = still(&dir, 1.9).unwrap();
+    assert!(red.get_pixel(300, 180)[0] > 200 && red.get_pixel(300, 180)[1] < 40);
+    edit(&dir, |doc| {
+        doc["compositionSettings"]["palette"] = json!([{"name": "accent", "colorHex": "00FF00"}]);
+    });
+    let green = still(&dir, 1.9).unwrap();
+    assert!(green.get_pixel(300, 180)[1] > 200 && green.get_pixel(300, 180)[0] < 40);
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_file(&line);
+}

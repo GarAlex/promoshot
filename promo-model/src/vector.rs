@@ -122,6 +122,13 @@ pub struct VectorOverride {
     pub stroke_stops: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke_width: Option<f64>,
+    /// How much of the stroke is drawn (slice 6, a draw-on reveal): from
+    /// `trimStart` to `trimEnd`, fractions 0–1 of its length — the stroke
+    /// only, the fill untouched. Absent is 0 and 1: the whole stroke.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_start: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_end: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// Keys a later build adds, kept as written.
@@ -147,6 +154,22 @@ impl VectorOverride {
             || self.fill_stops.is_some()
             || self.stroke_stops.is_some()
             || self.stroke_width.is_some()
+            || self.trims()
+    }
+
+    /// Whether it trims the stroke (a reveal short of the whole).
+    pub fn trims(&self) -> bool {
+        self.trim_start.is_some_and(|v| v != 0.0) || self.trim_end.is_some_and(|v| v != 1.0)
+    }
+
+    /// Every colour it names, mutable — a palette name (`@accent`) is
+    /// resolved through these before drawing.
+    pub fn colours_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        self.fill
+            .iter_mut()
+            .chain(self.stroke.iter_mut())
+            .chain(self.fill_stops.iter_mut().flatten())
+            .chain(self.stroke_stops.iter_mut().flatten())
     }
 
     /// Whether it says nothing at all beyond its node.
@@ -227,12 +250,26 @@ pub struct NodeKey {
     pub stroke_stops: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke_width: Option<f64>,
+    /// The stroke's reveal (slice 6): fractions 0–1 of its length.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_start: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_end: Option<f64>,
     /// Keys a later build adds, kept as written.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
 impl NodeKey {
+    /// Every colour it names, mutable (for a palette name's resolution).
+    pub fn colours_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        self.fill
+            .iter_mut()
+            .chain(self.stroke.iter_mut())
+            .chain(self.fill_stops.iter_mut().flatten())
+            .chain(self.stroke_stops.iter_mut().flatten())
+    }
+
     /// Whether it keys nothing at all.
     pub fn is_empty(&self) -> bool {
         self.visible.is_none()
@@ -246,6 +283,8 @@ impl NodeKey {
             && self.fill_stops.is_none()
             && self.stroke_stops.is_none()
             && self.stroke_width.is_none()
+            && self.trim_start.is_none()
+            && self.trim_end.is_none()
             && self.extra.is_empty()
     }
 
@@ -264,7 +303,7 @@ impl NodeKey {
                 .to_string(),
             other => format!(
                 "a keyframe keys visible, opacity, transform, fill, stroke, fillStops, \
-                 strokeStops and strokeWidth — not \"{other}\""
+                 strokeStops, strokeWidth, trimStart and trimEnd — not \"{other}\""
             ),
         })
     }
@@ -282,6 +321,8 @@ impl NodeKey {
             fill_stops: self.fill_stops.clone(),
             stroke_stops: self.stroke_stops.clone(),
             stroke_width: self.stroke_width,
+            trim_start: self.trim_start,
+            trim_end: self.trim_end,
             extra: self.extra.clone(),
             ..Default::default()
         }

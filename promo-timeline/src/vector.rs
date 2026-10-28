@@ -74,6 +74,12 @@ pub fn layer_vector_overrides(
         if let Some(v) = scalar(layer, t, |k| node_key(k, a)?.stroke_width) {
             o.stroke_width = Some(v.max(0.0));
         }
+        if let Some(v) = scalar(layer, t, |k| node_key(k, a)?.trim_start) {
+            o.trim_start = Some(v.clamp(0.0, 1.0));
+        }
+        if let Some(v) = scalar(layer, t, |k| node_key(k, a)?.trim_end) {
+            o.trim_end = Some(v.clamp(0.0, 1.0));
+        }
         if let Some(v) = colour(layer, t, |k| node_key(k, a)?.fill.clone()) {
             o.fill = Some(v);
         }
@@ -261,16 +267,23 @@ mod tests {
         let l = layer(
             r#"{"id":"A","time":1,"transitionDuration":0,"nodes":{"badge":{
                    "opacity":0,"strokeWidth":2,"fill":"000000","stroke":"00000000",
+                   "trimStart":0,"trimEnd":0,
                    "fillStops":["000000","FF0000"],
                    "transform":{"move":[0,0],"scale":0.5,"rotate":-90}}}},
                {"id":"B","time":3,"transitionPercent":100,"nodes":{"badge":{
                    "opacity":1,"strokeWidth":6,"fill":"FF8040","stroke":"FFFFFFFF",
+                   "trimStart":0.5,"trimEnd":1,
                    "fillStops":["FFFFFF","0000FF"],
                    "transform":{"move":[40,-20],"scale":[1.5,2.5],"rotate":90}}}}"#,
         );
         let mid = at(&l, 2.0, &[], "badge");
         assert_eq!(mid.opacity, Some(0.5));
         assert_eq!(mid.stroke_width, Some(4.0));
+        assert_eq!(
+            (mid.trim_start, mid.trim_end),
+            (Some(0.25), Some(0.5)),
+            "a reveal"
+        );
         assert_eq!(mid.fill.as_deref(), Some("804020"));
         assert_eq!(mid.stroke.as_deref(), Some("80808080"));
         assert_eq!(
