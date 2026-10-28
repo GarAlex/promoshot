@@ -1212,8 +1212,9 @@ mod tests {
             // its `generate` (MIDI.md §7), 0.15 KB; 50,100 since an SVG's
             // element edits, setVectorOverride and resetVectorOverride
             // (SVG-PLAN.md slice 2), 0.9 KB; 51,600 since keyed elements,
-            // setVectorNodeKey and removeVectorNodeKey (slice 3), 1.3 KB.
-            bytes < 51_600,
+            // setVectorNodeKey and removeVectorNodeKey (slice 3), 1.3 KB;
+            // 52,300 since makeEditableShapes (slice 5), 0.5 KB.
+            bytes < 52_300,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );

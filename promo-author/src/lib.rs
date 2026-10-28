@@ -1071,6 +1071,15 @@ impl promo_editor::VectorHost for VectorFolder {
         promo_svg::outline(&self.resources, &resource.filename, texts)
             .map(|made| made["svg"].clone())
     }
+
+    fn convert(&mut self, resource: &ProjectResource, nodes: &[String]) -> Result<Value, String> {
+        let picture = promo_svg::load(&self.resources, resource)?;
+        let overrides = promo_model::vector::overrides(resource);
+        let done = picture
+            .convert(&overrides, Some(nodes), true)
+            .map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({"drawing": done.drawing, "nodes": done.nodes}))
+    }
 }
 
 /// What `promo_apply` answers once its commands landed: how many, which
@@ -2593,6 +2602,101 @@ mod tests {
             std::fs::read(dir.join("Resources/logo.svg")).unwrap(),
             std::fs::read(corpus.join("logo.svg")).unwrap()
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// promo_apply makes an SVG's plain shapes a drawing (slice 5): the
+    /// drawing resource on the picture's frame, the elements hidden in the
+    /// SVG, a drawing layer right above with the image layer's layout in
+    /// the drawing's numbers — and a refusal, or a keyed element, applies
+    /// nothing.
+    #[test]
+    fn svg_make_editable_shapes_through_apply() {
+        let dir = vector_project("editable");
+        let mut meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        meta["layers"] = json!([
+            {"id": "BG", "name": "Ground", "sortIndex": 0, "kind": "background",
+             "isEnabled": true, "startTime": 0, "keyframes": []},
+            {"id": "LG", "name": "Logo", "sortIndex": 1, "kind": "image", "isEnabled": true,
+             "startTime": 1, "duration": 3, "resourceID": "LOGO",
+             "keyframes": [
+                {"id": "A", "time": 0, "transitionDuration": 0,
+                 "placement": {"height": 120}},
+                {"id": "B", "time": 2, "transitionDuration": 1, "easing": "easeOut",
+                 "placement": {"height": 200, "anchor": "bottomRight"}}]},
+            {"id": "TOP", "name": "Top", "sortIndex": 2, "kind": "caption", "isEnabled": true,
+             "startTime": 0, "duration": 4, "captionText": "x", "keyframes": []}
+        ]);
+        std::fs::write(dir.join("metadata.json"), meta.to_string()).unwrap();
+        let project = dir.display().to_string();
+        let run = |commands: Value| apply(&json!({"project": project, "commands": commands}), None);
+        // Refused: a gradient; nothing applied.
+        let before = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
+        let err = run(json!([{"kind": "makeEditableShapes", "resourceID": "LOGO",
+            "nodes": ["badge"], "layerID": "LG"}]))
+        .unwrap_err();
+        assert!(
+            err.contains("a gradient fill") && err.contains("nothing applied"),
+            "{err}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+            before
+        );
+        if let Err(e) = run(json!([{"kind": "makeEditableShapes", "resourceID": "LOGO",
+            "nodes": ["wordmark"], "layerID": "LG", "drawingID": "WORD",
+            "newLayerID": "WL", "name": "Wordmark"}]))
+        {
+            // The check draws on the GPU; without one it says so.
+            assert!(e.contains("no GPU"), "{e}");
+            return;
+        }
+        let meta = ProjectMetadata::from_json(
+            &std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+        )
+        .unwrap();
+        let resources = meta.resources.as_ref().unwrap();
+        let drawing = resources.iter().find(|r| r.id == "WORD").unwrap();
+        assert_eq!(drawing.display_name, "Wordmark");
+        let shapes = &drawing.drawing.as_ref().unwrap().shapes;
+        assert_eq!(shapes.len(), 6, "the frame and five letters");
+        assert_eq!(shapes[0].points[1], promo_model::Point(240.0, 80.0));
+        let block = block_of(&dir, "LOGO");
+        assert_eq!(block.overrides.len(), 1);
+        assert_eq!(block.overrides[0].node, "wordmark");
+        assert_eq!(block.overrides[0].visible, Some(false));
+        let layers = meta.layers.as_ref().unwrap();
+        let order: Vec<&str> = {
+            let mut l: Vec<&promo_model::ProjectLayer> = layers.iter().collect();
+            l.sort_by_key(|l| l.sort_index);
+            l.iter().map(|l| l.id.as_str()).collect()
+        };
+        assert_eq!(
+            order,
+            ["BG", "LG", "WL", "TOP"],
+            "right above the SVG's layer"
+        );
+        let wl = layers.iter().find(|l| l.id == "WL").unwrap();
+        assert_eq!(wl.kind, promo_model::ProjectLayerKind::Drawing);
+        assert_eq!(wl.resource_id.as_deref(), Some("WORD"));
+        assert_eq!((wl.start_time, wl.duration), (1.0, Some(3.0)));
+        assert!(wl
+            .keyframes
+            .iter()
+            .all(|k| k.placement.is_none() && k.zoom.is_some()));
+        assert_eq!(wl.keyframes[1].easing, layers[1].keyframes[1].easing);
+        // A keyed element is refused: its keys would not carry.
+        run(
+            json!([{"kind": "setVectorNodeKey", "layerID": "LG", "node": "glyph", "time": 0,
+            "patch": {"opacity": 0.5}}]),
+        )
+        .unwrap();
+        let err = run(json!([{"kind": "makeEditableShapes", "resourceID": "LOGO",
+            "nodes": ["glyph"], "layerID": "LG"}]))
+        .unwrap_err();
+        assert!(err.contains("keys \"glyph\""), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

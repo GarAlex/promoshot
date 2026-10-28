@@ -362,6 +362,23 @@ pub enum Command {
         #[serde(default)]
         keys: Option<Vec<String>>,
     },
+    /// SVG elements (tier C; a group takes what it draws) as a drawing:
+    /// refused with the reason unless it draws as the file does; hidden in
+    /// the SVG; given `layerID`, a drawing layer goes right above it.
+    #[serde(rename_all = "camelCase")]
+    MakeEditableShapes {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+        nodes: Vec<String>,
+        #[serde(default, rename = "layerID")]
+        layer_id: Option<String>,
+        #[serde(default, rename = "drawingID")]
+        drawing_id: Option<String>,
+        #[serde(default, rename = "newLayerID")]
+        new_layer_id: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+    },
     /// A command addressed INSIDE a composition resource: the same
     /// command, run on the composition's layers as if they were the
     /// document's — with the project's resources and settings, the
@@ -1119,6 +1136,22 @@ impl Document {
                 self.vector_host.as_deref_mut(),
                 resource_id,
                 node.as_deref(),
+            ),
+            Command::MakeEditableShapes {
+                resource_id,
+                nodes,
+                layer_id,
+                drawing_id,
+                new_layer_id,
+                name,
+            } => crate::vector::make_editable(
+                meta,
+                self.vector_host.as_deref_mut(),
+                resource_id,
+                nodes,
+                layer_id.as_deref(),
+                (drawing_id.as_deref(), new_layer_id.as_deref()),
+                name.as_deref(),
             ),
             Command::InComposition {
                 resource_id,
@@ -2198,7 +2231,9 @@ impl Document {
                     "an SVG element's keys read the project's files — this door has none".into(),
                 );
             }
-            Command::SetVectorOverride { .. } | Command::ResetVectorOverride { .. } => {
+            Command::SetVectorOverride { .. }
+            | Command::ResetVectorOverride { .. }
+            | Command::MakeEditableShapes { .. } => {
                 return Err(
                     "an SVG's overrides belong to the project's resource — send them \
                             without inComposition"

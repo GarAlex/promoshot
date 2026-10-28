@@ -1242,6 +1242,16 @@ A reveal can arrive on a narration's words instead of at its own pace —
   compositions, the apps' thumbnails. promo_validate names an override
   for an element the file lacks, one its tier refuses, and words not
   yet outlined.
+- MAKE EDITABLE: `{"kind": "makeEditableShapes", "resourceID": "logo",
+  "nodes": ["wordmark"], "layerID": "L"}` turns tier-C elements (a group
+  takes what it draws) into a drawing resource on the picture's frame,
+  hides them in the SVG, and puts a drawing layer with the layer's timing
+  and layout right above it — the picture unchanged. The core draws the
+  shapes and the file both ways first and refuses, naming the element,
+  when they would differ beyond antialiasing: a gradient or pattern, a
+  dashed stroke, a miter or bevel join, a butt or square cap, a stroke
+  under a stretch, an opacity over a fill and its stroke or over several
+  shapes, text, a picture, something drawn over it, a key on the layer.
 
 ## Vector motion — vectors, svg, nodes, keyed, setVectorNodeKey, removeVectorNodeKey, pop-in
 

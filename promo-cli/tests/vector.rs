@@ -605,3 +605,93 @@ fn keyed_svg_elements_follow_a_nested_clock() {
     // 1.25 s is 2.5 s of a 2 s composition: looped to 0.5 s, half way again.
     assert!(red(1.25).unwrap().abs_diff(128) <= 1, "{:?}", red(1.25));
 }
+
+/// Make editable shapes (slice 5) through the binary: the glyph and the
+/// wordmark leave the SVG for a drawing on a layer just above it, and the
+/// still is the same picture but for antialiasing — the engine drawing
+/// the drawing is the independent check of the core's own.
+#[test]
+fn make_editable_shapes_keeps_the_picture() {
+    let dir = project("editable", &["logo"]);
+    edit(&dir, |doc| {
+        doc["layers"].as_array_mut().unwrap().push(image_layer(
+            "L",
+            "logo",
+            1,
+            json!({"height": 240}),
+        ));
+    });
+    let project_arg = dir.to_str().unwrap().to_string();
+    let Some(before) = still(&dir, 1.0) else {
+        return;
+    };
+    let (ok, text) = promo(&[
+        "apply",
+        &project_arg,
+        "--args",
+        &json!({"commands": [{"kind": "makeEditableShapes", "resourceID": "logo",
+            "nodes": ["glyph", "wordmark"], "layerID": "L"}]})
+        .to_string(),
+    ]);
+    assert!(ok, "{text}");
+    let meta: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap()).unwrap();
+    let drawing = meta["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == "drawing")
+        .expect("a drawing resource");
+    assert_eq!(drawing["drawing"]["shapes"].as_array().unwrap().len(), 7);
+    let layer = meta["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["kind"] == "drawing")
+        .expect("a drawing layer");
+    assert_eq!(layer["resourceID"], drawing["id"]);
+    let after = still(&dir, 1.0).unwrap();
+    let (w, h) = after.dimensions();
+    let premultiplied = |img: &image::RgbaImage| -> Vec<u8> {
+        img.pixels()
+            .flat_map(|p| {
+                let a = p[3] as u32;
+                [
+                    (p[0] as u32 * a / 255) as u8,
+                    (p[1] as u32 * a / 255) as u8,
+                    (p[2] as u32 * a / 255) as u8,
+                    p[3],
+                ]
+            })
+            .collect()
+    };
+    let d = promo_svg::likeness::compare(&premultiplied(&after), &premultiplied(&before), w, h);
+    assert!(d.passes(), "the picture changed: {d:?}");
+    assert_ne!(
+        after.as_raw(),
+        before.as_raw(),
+        "the drawing draws them now"
+    );
+    // Hiding the drawing layer shows what moved: the SVG alone lacks them.
+    edit(&dir, |doc| {
+        for l in doc["layers"].as_array_mut().unwrap() {
+            if l["kind"] == "drawing" {
+                l["isEnabled"] = json!(false);
+            }
+        }
+    });
+    let without = still(&dir, 1.0).unwrap();
+    let ink = |img: &image::RgbaImage| img.pixels().filter(|p| p[0] > 200 && p[1] > 200).count();
+    assert!(ink(&without) < ink(&before), "the glyph left the SVG");
+    // A gradient is refused by name, nothing applied.
+    let (ok, text) = promo(&[
+        "apply",
+        &project_arg,
+        "--args",
+        &json!({"commands": [{"kind": "makeEditableShapes", "resourceID": "logo",
+            "nodes": ["badge"]}]})
+        .to_string(),
+    ]);
+    assert!(!ok && text.contains("a gradient fill"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

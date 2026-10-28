@@ -44,6 +44,15 @@ pub trait VectorHost: Send {
         resource: &ProjectResource,
         texts: &[(String, String)],
     ) -> Result<Value, String>;
+
+    /// `nodes` of the SVG — drawn with the resource's overrides — as a
+    /// drawing on the picture's frame (slice 5), checked by drawing both
+    /// ways: `{"drawing": <DrawingDocument>, "nodes": [addresses]}`, or
+    /// the reason it is refused.
+    fn convert(&mut self, resource: &ProjectResource, nodes: &[String]) -> Result<Value, String> {
+        let _ = (resource, nodes);
+        Err("converting an SVG's shapes needs the core's renderer, which this host lacks".into())
+    }
 }
 
 fn merge_patch(target: &mut Value, patch: &Value) {
@@ -217,6 +226,293 @@ pub(crate) fn reset(
         }
     }
     store(resource, block, &before, host)
+}
+
+/// `makeEditableShapes` (slice 5): the selection converted by the host,
+/// a drawing resource made of it, the elements hidden in the SVG, and —
+/// given the layer showing it — a drawing layer above that layer.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn make_editable(
+    meta: &mut ProjectMetadata,
+    host: Option<&mut (dyn VectorHost + '_)>,
+    resource_id: &str,
+    nodes: &[String],
+    layer_id: Option<&str>,
+    (drawing_id, new_layer_id): (Option<&str>, Option<&str>),
+    name: Option<&str>,
+) -> Result<(), String> {
+    if nodes.is_empty() {
+        return Err("`nodes` names the elements to convert — at least one".into());
+    }
+    let host = host.ok_or(
+        "converting an SVG's shapes reads the file and draws it, which needs the project's folder",
+    )?;
+    let resource = vector(meta, resource_id)?.clone();
+    // The layer first: what it does with the SVG must carry to a drawing.
+    let source_layer = match layer_id {
+        None => None,
+        Some(id) => {
+            let l = find_layer(meta.layers.as_deref_mut().unwrap_or(&mut []), id)
+                .ok_or_else(|| format!("no layer with id {id}"))?
+                .clone();
+            let name = if l.name.is_empty() { &l.id } else { &l.name };
+            if l.resource_id.as_deref() != Some(resource_id) {
+                return Err(format!("the layer \"{name}\" does not show this SVG"));
+            }
+            if l.keyframes.iter().any(|k| k.resource_id.is_some()) {
+                return Err(format!(
+                    "the layer \"{name}\" swaps to other media — convert from a layer that \
+                     shows this SVG throughout"
+                ));
+            }
+            if l.image_cut_id.is_some() {
+                return Err(format!(
+                    "the layer \"{name}\" shows a cut of the SVG — a drawing has no cut; \
+                     convert from a layer showing all of it"
+                ));
+            }
+            if !meta
+                .layers
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .any(|x| x.id == l.id)
+            {
+                return Err(format!(
+                    "the layer \"{name}\" is inside another — convert from one of the \
+                     project's own layers"
+                ));
+            }
+            if l.keyframes.iter().any(|k| k.viewport.is_some()) {
+                return Err(format!(
+                    "the layer \"{name}\" shows the SVG through a viewport, which a drawing \
+                     layer has not"
+                ));
+            }
+            if l.keyframes.iter().any(|k| k.motion_path.is_some()) {
+                return Err(format!(
+                    "the layer \"{name}\" moves along a path, which would not carry to a \
+                     drawing layer exactly"
+                ));
+            }
+            Some(l)
+        }
+    };
+    let made = host.convert(&resource, nodes)?;
+    let converted: Vec<String> = serde_json::from_value(made["nodes"].clone())
+        .map_err(|e| format!("the host's conversion: {e}"))?;
+    if let Some(l) = &source_layer {
+        let keyed = promo_model::vector::keyed_nodes(l);
+        if let Some(n) = converted.iter().find(|n| keyed.contains_key(*n)) {
+            let name = if l.name.is_empty() { &l.id } else { &l.name };
+            return Err(format!(
+                "the layer \"{name}\" keys \"{n}\" — a drawing could not carry its keys; remove \
+                 them first (removeVectorNodeKey)"
+            ));
+        }
+    }
+    let resources = meta.resources.get_or_insert_with(Vec::new);
+    let mut id = drawing_id
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{resource_id}-shapes"));
+    if drawing_id.is_some() && resources.iter().any(|r| r.id == id) {
+        return Err(format!("a resource with id {id} already exists"));
+    }
+    while resources.iter().any(|r| r.id == id) {
+        id.push('b');
+    }
+    let display = name
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{} shapes", resource.display_name));
+    // The frame (the conversion's first shape) spans exactly the SVG's
+    // stated size, so the drawing lays out on the picture's own box.
+    let mut made = made;
+    if let (Some(size), Some(frame)) = (
+        promo_timeline::layout::resource_source_size(&resource),
+        made.pointer_mut("/drawing/shapes/0/points/1"),
+    ) {
+        *frame = serde_json::json!([size.width(), size.height()]);
+    }
+    let drawing: promo_model::ProjectResource = serde_json::from_value(serde_json::json!({
+        "id": id, "kind": "drawing", "filename": "", "displayName": display,
+        "addedAt": resource.added_at, "imageCuts": [], "disabledAudioTrackIndices": [],
+        "drawing": made["drawing"],
+    }))
+    .map_err(|e| format!("the converted drawing: {e}"))?;
+    resources.push(drawing);
+    // The elements, hidden in the SVG: the picture is the same, the shapes
+    // are the drawing's now.
+    for node in &converted {
+        set(
+            meta,
+            Some(host),
+            resource_id,
+            node,
+            &serde_json::json!({"visible": false}),
+        )?;
+    }
+    if let Some(l) = source_layer {
+        let mut layer_json = serde_json::to_value(&l).map_err(|e| e.to_string())?;
+        let mut lid = new_layer_id
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{}-shapes", l.id));
+        let taken = |meta: &ProjectMetadata, id: &str| {
+            promo_model::nesting::all_layers(meta)
+                .iter()
+                .any(|x| x.id == id)
+        };
+        if new_layer_id.is_some() && taken(meta, &lid) {
+            return Err(format!("a layer with id {lid} already exists"));
+        }
+        while taken(meta, &lid) {
+            lid.push('b');
+        }
+        layer_json["id"] = Value::from(lid);
+        layer_json["kind"] = Value::from("drawing");
+        layer_json["resourceID"] = Value::from(id);
+        layer_json["name"] = Value::from(display);
+        if let Some(keys) = layer_json["keyframes"].as_array_mut() {
+            for k in keys {
+                if let Some(o) = k.as_object_mut() {
+                    o.remove("nodes");
+                }
+            }
+        }
+        let mut layer: promo_model::ProjectLayer =
+            serde_json::from_value(layer_json).map_err(|e| format!("the drawing's layer: {e}"))?;
+        carry_layout(meta, &l, &resource, &mut layer)?;
+        insert_above(
+            meta.layers.get_or_insert_with(Vec::new),
+            &l.id,
+            Box::new(layer),
+        )
+        .map_err(|_| format!("no layer with id {}", l.id))?;
+    }
+    Ok(())
+}
+
+/// Moves the image layer `from`'s layout onto the drawing layer `to`. An
+/// image lays out at its height share, from its top-left; a drawing fits
+/// the canvas, centred: so each keyframe that speaks for zoom or position
+/// gets the drawing's numbers for the image's box at that instant
+/// (placement resolved as the image resolves it). Then both boxes are
+/// compared through the layer's time — at every keyframe and inside every
+/// ramp — and a difference refuses: the motion would not carry exactly.
+fn carry_layout(
+    meta: &ProjectMetadata,
+    from: &promo_model::ProjectLayer,
+    vector: &ProjectResource,
+    to: &mut promo_model::ProjectLayer,
+) -> Result<(), String> {
+    use promo_model::Size;
+    let settings = &meta.composition_settings;
+    let canvas = Size::new(settings.canvas_width, settings.canvas_height);
+    let resources = meta.resources.as_deref().unwrap_or(&[]);
+    let natural = promo_timeline::layout::resource_source_size(vector)
+        .ok_or("the SVG has no stated size — import it again")?;
+    let (w, h) = (natural.width(), natural.height());
+    let fit = (canvas.width() / w).min(canvas.height() / h);
+    for (k, src) in to.keyframes.iter_mut().zip(&from.keyframes) {
+        let speaks = src.zoom.is_some()
+            || src.horizontal_shift.is_some()
+            || src.vertical_shift.is_some()
+            || src.placement.is_some();
+        if !speaks {
+            continue;
+        }
+        let tr = promo_timeline::layer_transform_along_paths(
+            from,
+            from.start_time + src.time,
+            settings,
+            resources,
+        );
+        let scale = canvas.height() / h * promo_timeline::layout::clamped_zoom(tr.zoom);
+        k.placement = None;
+        k.zoom = Some(scale / fit);
+        k.horizontal_shift = Some(tr.horizontal_shift - (canvas.width() - w * scale) / 2.0);
+        k.vertical_shift = Some(tr.vertical_shift - (canvas.height() - h * scale) / 2.0);
+    }
+    // The proof: the drawing's box is the picture's, throughout.
+    let mut times: Vec<f64> = vec![0.0];
+    let mut keys: Vec<f64> = from.keyframes.iter().map(|k| k.time).collect();
+    keys.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    for pair in keys.windows(2) {
+        for i in 0..8 {
+            times.push(pair[0] + (pair[1] - pair[0]) * i as f64 / 8.0);
+        }
+    }
+    times.extend(keys.iter().copied());
+    if let Some(d) = from.duration {
+        times.push(d);
+    }
+    for t in times {
+        let at = from.start_time + t;
+        let a = promo_timeline::layer_transform_along_paths(from, at, settings, resources);
+        let b = promo_timeline::layer_transform_along_paths(to, at, settings, resources);
+        let ra = promo_timeline::layout::media_rect(
+            natural,
+            canvas,
+            a.zoom,
+            a.horizontal_shift,
+            a.vertical_shift,
+        );
+        let rb = promo_timeline::layout::drawing_rect(
+            natural,
+            canvas,
+            b.zoom,
+            b.horizontal_shift,
+            b.vertical_shift,
+        );
+        let off = (ra.x() - rb.x())
+            .abs()
+            .max((ra.y() - rb.y()).abs())
+            .max((ra.width() - rb.width()).abs())
+            .max((ra.height() - rb.height()).abs());
+        if off.is_nan() || off > 0.05 {
+            let name = if from.name.is_empty() {
+                &from.id
+            } else {
+                &from.name
+            };
+            return Err(format!(
+                "the layer \"{name}\"'s motion would not carry to a drawing layer exactly (off \
+                 by {off:.2} px at {t:.2} s — its zoom and position are keyed apart); convert \
+                 without the layer, or key them together"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Puts `layer` right above the layer `below` in the list that holds it,
+/// renumbering that list's sort order; hands it back when no list does.
+fn insert_above(
+    layers: &mut Vec<promo_model::ProjectLayer>,
+    below: &str,
+    layer: Box<promo_model::ProjectLayer>,
+) -> Result<(), Box<promo_model::ProjectLayer>> {
+    if layers.iter().any(|l| l.id == below) {
+        layers.sort_by_key(|l| l.sort_index);
+        let at = layers
+            .iter()
+            .position(|l| l.id == below)
+            .unwrap_or(layers.len());
+        layers.insert((at + 1).min(layers.len()), *layer);
+        for (i, l) in layers.iter_mut().enumerate() {
+            l.sort_index = i as i64;
+        }
+        return Ok(());
+    }
+    let mut layer = layer;
+    for l in layers.iter_mut() {
+        if let Some(members) = l.members.as_mut() {
+            match insert_above(members, below, layer) {
+                Ok(()) => return Ok(()),
+                Err(back) => layer = back,
+            }
+        }
+    }
+    Err(layer)
 }
 
 // ---------------------------------------------------------------------------

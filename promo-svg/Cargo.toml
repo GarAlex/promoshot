@@ -40,3 +40,7 @@ png = "0.18"
 [[test]]
 name = "gpu"
 required-features = ["gpu"]
+
+[[test]]
+name = "convert"
+required-features = ["gpu"]

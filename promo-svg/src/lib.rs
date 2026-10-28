@@ -32,11 +32,16 @@ use usvg::fontdb;
 
 pub use promo_model::vector;
 
+#[cfg(feature = "gpu")]
+mod convert;
 mod edit;
 #[cfg(feature = "gpu")]
 mod gpu;
+pub mod likeness;
 mod model;
 
+#[cfg(feature = "gpu")]
+pub use convert::{Converted, Refused};
 #[cfg(feature = "gpu")]
 pub use gpu::{PieceCache, SceneBuild, SceneStats};
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Plain geometry a drawing can hold: rects (one rounded), a circle, an
+     ellipse, a closed polygon with round joins, an open path with round
+     caps and curves, a letter with a counter, an element opacity over a
+     fill alone, a stroke drawn first. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="#0b132b"/>
+  <rect id="card" x="20" y="20" width="120" height="70" rx="14" fill="#5bc0be" stroke="#ffffff" stroke-width="4"/>
+  <circle id="dot" cx="200" cy="55" r="30" fill="#f4d35e"/>
+  <ellipse cx="270" cy="55" rx="30" ry="18" fill="none" stroke="#ee964b" stroke-width="6"/>
+  <polygon points="30,180 70,110 110,180" fill="#f95738" stroke="#faf0ca" stroke-width="5" stroke-linejoin="round"/>
+  <path id="wave" d="M130 150 C 160 110, 190 190, 220 150 S 280 110, 300 150" fill="none" stroke="#3a86ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="letter" d="M140 100 h40 v40 h-40 z m10 10 v20 h20 v-20 z" fill="#ffbe0b" fill-rule="evenodd" opacity="0.8"/>
+  <rect x="240" y="100" width="50" height="40" fill="#8338ec" stroke="#ff006e" stroke-width="8" stroke-linejoin="round" paint-order="stroke"/>
+</svg>

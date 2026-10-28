@@ -18,143 +18,19 @@ fn context() -> Context {
     }
 }
 
-/// How far a GPU picture is from resvg's, channel by channel on
-/// premultiplied RGBA, 0–255.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Diff {
-    /// The largest difference where resvg's picture is flat — the pixel
-    /// and its eight neighbours within 2 levels of each other: inside a
-    /// shape, a gradient, the background.
-    pub interior: u8,
-    /// The largest difference on the rest: the antialiased rims.
-    pub edge: u8,
-    /// The mean difference over every channel of every pixel.
-    pub mean: f64,
-    /// The largest difference between the two pictures' 4×4 block means:
-    /// what is left of a rim's difference once the eye's blur averages
-    /// the samples — a shifted, thickened or missing shape stays large.
-    pub blocks: f64,
-    /// Pixels differing by more than 2 levels, as a share of all.
-    pub changed: f64,
-}
+use promo_svg::likeness::{compare as diff, Diff};
 
-pub fn diff(gpu: &[u8], cpu: &[u8], w: u32, h: u32) -> Diff {
-    let (w, h) = (w as usize, h as usize);
-    let at = |img: &[u8], x: usize, y: usize, c: usize| img[(y * w + x) * 4 + c] as i32;
-    let mut d = Diff::default();
-    let mut sum = 0u64;
-    let mut changed = 0usize;
-    for y in 0..h {
-        for x in 0..w {
-            let mut flat = true;
-            for c in 0..4 {
-                let v = at(cpu, x, y, c);
-                for (dx, dy) in [
-                    (-1i32, -1i32),
-                    (0, -1),
-                    (1, -1),
-                    (-1, 0),
-                    (1, 0),
-                    (-1, 1),
-                    (0, 1),
-                    (1, 1),
-                ] {
-                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
-                        continue;
-                    }
-                    if (at(cpu, nx as usize, ny as usize, c) - v).abs() > 2 {
-                        flat = false;
-                    }
-                }
-            }
-            let mut worst = 0;
-            for c in 0..4 {
-                let e = (at(gpu, x, y, c) - at(cpu, x, y, c)).unsigned_abs();
-                sum += e as u64;
-                worst = worst.max(e);
-            }
-            if worst > 2 {
-                changed += 1;
-            }
-            let worst = worst.min(255) as u8;
-            if flat {
-                d.interior = d.interior.max(worst);
-            } else {
-                d.edge = d.edge.max(worst);
-            }
-        }
-    }
-    d.mean = sum as f64 / (w * h * 4) as f64;
-    d.changed = changed as f64 / (w * h) as f64;
-    for by in (0..h).step_by(4) {
-        for bx in (0..w).step_by(4) {
-            for c in 0..4 {
-                let (mut a, mut b, mut n) = (0i64, 0i64, 0i64);
-                for y in by..(by + 4).min(h) {
-                    for x in bx..(bx + 4).min(w) {
-                        a += at(gpu, x, y, c) as i64;
-                        b += at(cpu, x, y, c) as i64;
-                        n += 1;
-                    }
-                }
-                let e = (a - b).abs() as f64 / n as f64;
-                if e > d.blocks {
-                    d.blocks = e;
-                }
-            }
-        }
-    }
-    d
-}
-
-/// The tolerance the GPU path is held to: antialiasing, and nothing else.
-///
-/// Both pictures are premultiplied RGBA, compared channel by channel.
-///
-/// - **Interior ≤ 3 levels.** Where resvg's picture is flat (a pixel and
-///   its eight neighbours within 2 levels: inside a shape, along a
-///   gradient, the background), the GPU must give the same colour.
-///   tiny-skia blends in 8 bits with its own rounding, the GPU in floats
-///   rounded once per pass, and a layer adds a pass: a level or two, three
-///   at most (lavapipe's rounding).
-/// - **Rims ≤ 128 levels.** Elsewhere a pixel's value is its coverage.
-///   tiny-skia measures coverage on a fine grid (4 rows, quarter-pixel
-///   columns); the GPU counts 4 multisamples at the standard positions. An
-///   edge passing between two samples flips both at once, so the two may
-///   disagree by up to half a pixel's coverage — never more: a shape moved
-///   by a pixel puts 255 on its rim.
-/// - **4×4 blocks ≤ 24 levels.** Averaged over 4×4 pixels (what a viewer's
-///   eye does) the rim's disagreements largely cancel along an edge — 18 at
-///   most across the corpus. An edge moved by half a pixel along four rows
-///   is 32, a shape recoloured or missing far more.
-/// - **Mean ≤ 1 level.** Rims are a small share of any picture; the
-///   densest file, 2,400 shapes at 1080p, measures 0.5.
+/// The tolerance (promo_svg::likeness, where it is argued): antialiasing
+/// and nothing else.
 pub fn gate(name: &str, d: Diff) {
     if std::env::var_os("PROMO_GATE_REPORT").is_some() {
         return;
     }
-    assert!(
-        d.interior <= 3,
-        "{name}: interior differs by {} — {d:?}",
-        d.interior
-    );
-    assert!(d.edge <= 128, "{name}: a rim differs by {} — {d:?}", d.edge);
-    assert!(
-        d.blocks <= 24.0,
-        "{name}: a 4×4 block differs by {:.1} — {d:?}",
-        d.blocks
-    );
-    assert!(
-        d.mean <= 1.0,
-        "{name}: mean difference {:.3} — {d:?}",
-        d.mean
-    );
+    assert!(d.passes(), "{name}: {d:?}");
 }
 
-/// Whether [`gate`] passes, without asserting.
 fn passes(d: Diff) -> bool {
-    d.interior <= 3 && d.edge <= 128 && d.blocks <= 24.0 && d.mean <= 1.0
+    d.passes()
 }
 
 fn render_both(

@@ -2092,12 +2092,21 @@ mod tests {
         let img = r.render_pixels(ctx, &scene).unwrap();
         assert_eq!(px(&img, 64, 1, 1), [255, 0, 0, 255]);
         // The blue alone, at half over red: 0.5 blue + 0.5 red.
-        assert_eq!(px(&img, 64, 6, 10), [128, 0, 128, 255]);
+        // Within a level: a half blend rounds either way on some GPUs.
+        let near = |a: [u8; 4], b: [u8; 4]| a.iter().zip(&b).all(|(x, y)| x.abs_diff(*y) <= 1);
+        assert!(
+            near(px(&img, 64, 6, 10), [128, 0, 128, 255]),
+            "{:?}",
+            px(&img, 64, 6, 10)
+        );
         // Where green covers blue, green alone at half.
         let both = px(&img, 64, 16, 10);
-        assert_eq!(both, [128, 128, 0, 255], "the pair's composite, once");
-        assert_eq!(px(&img, 64, 24, 10), [128, 128, 0, 255]);
-        assert_eq!(px(&img, 64, 40, 8), [0, 0, 128, 128]);
+        assert!(
+            near(both, [128, 128, 0, 255]),
+            "the pair's composite, once: {both:?}"
+        );
+        assert!(near(px(&img, 64, 24, 10), [128, 128, 0, 255]));
+        assert!(near(px(&img, 64, 40, 8), [0, 0, 128, 128]));
         assert_eq!(px(&img, 64, 50, 5), [255, 255, 255, 255]);
         assert_eq!(px(&img, 64, 60, 5), [0, 0, 0, 0], "clipped away");
         assert_eq!(px(&img, 64, 44, 20), [0, 0, 0, 0], "outside the layer");
