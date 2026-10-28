@@ -2044,6 +2044,123 @@
       },
       "type": "object"
     },
+    "NodeKey": {
+      "additionalProperties": true,
+      "properties": {
+        "fill": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fillStops": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "opacity": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stroke": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strokeStops": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "strokeWidth": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeTransform"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visible": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "NodeScale": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      ]
+    },
+    "NodeTransform": {
+      "properties": {
+        "move": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rotate": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeScale"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
     "OneOrMany": {
       "anyOf": [
         {
@@ -3204,6 +3321,15 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "nodes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/NodeKey"
+          },
+          "type": [
+            "object",
+            "null"
           ]
         },
         "opacity": {

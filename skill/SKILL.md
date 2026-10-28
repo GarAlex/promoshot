@@ -475,7 +475,9 @@ is for; the schema section says how to write it.
   drawing shapes. To recolour, hide, move or re-word one of its parts,
   read its elements in promo_inspect (each has a tier and the reason
   for it) and use `promo_apply` with `setVectorOverride`
-  (`resetVectorOverride` undoes it); the file itself never changes.
+  (`resetVectorOverride` undoes it); the file itself never changes. To
+  animate a part on a layer (a badge pops in, a wordmark shifts colour),
+  key it with `setVectorNodeKey` — quick eased moves with holds.
 - **Transitions** (`transition`) — ten kinds, on a layer's own edges or
   at a swap between two resources.
 - **Image effects** (`effects`) — blur, glow, vignette, grain, sharpen,

@@ -153,6 +153,21 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                 .map(|b| b.overrides.clone())
                 .unwrap_or_default();
             let model = picture.as_ref().ok().and_then(|p| p.model().ok());
+            // Keyed elements (slice 3): which layers key which of them.
+            let keyers: Vec<(String, std::collections::BTreeMap<String, Vec<String>>)> = all_layers
+                .iter()
+                .filter(|l| {
+                    l.resource_id.as_deref() == Some(id)
+                        || l.keyframes
+                            .iter()
+                            .any(|k| k.resource_id.as_deref() == Some(id))
+                })
+                .map(|l| {
+                    let name = if l.name.is_empty() { &l.id } else { &l.name };
+                    (name.clone(), promo_model::vector::keyed_nodes(l))
+                })
+                .filter(|(_, keyed)| !keyed.is_empty())
+                .collect();
             let nodes: Vec<serde_json::Value> = model
                 .as_ref()
                 .map(|m| {
@@ -169,6 +184,21 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                                     map.remove("node");
                                 }
                                 row["override"] = keys;
+                            }
+                            let keyed: Vec<serde_json::Value> = keyers
+                                .iter()
+                                .filter_map(|(layer, keyed)| {
+                                    let keys = keyed.get(&n.node).or_else(|| {
+                                        keyed.iter().find_map(|(a, k)| {
+                                            (m.resolve(a).ok() == Some(n.node.as_str()))
+                                                .then_some(k)
+                                        })
+                                    })?;
+                                    Some(serde_json::json!({"layer": layer, "keys": keys}))
+                                })
+                                .collect();
+                            if !keyed.is_empty() {
+                                row["keyed"] = serde_json::Value::Array(keyed);
                             }
                             row
                         })
@@ -598,6 +628,7 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             if !nodes.is_empty() {
                 let tally = |tier: &str| nodes.iter().filter(|n| n["tier"] == tier).count();
                 let changed = nodes.iter().filter(|n| n.get("override").is_some()).count();
+                let keyed = nodes.iter().filter(|n| n.get("keyed").is_some()).count();
                 out.push_str(&format!(
                     "    elements: {} (A {}, B {}, C {}, locked {}){}{}\n",
                     nodes.len(),
@@ -607,6 +638,10 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                     tally("locked"),
                     if changed > 0 {
                         format!(" · {changed} overridden")
+                    } else {
+                        String::new()
+                    } + &if keyed > 0 {
+                        format!(" · {keyed} keyed")
                     } else {
                         String::new()
                     },
@@ -627,7 +662,28 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
                         .get("override")
                         .and_then(|o| o.as_object())
                         .map(|o| format!(" ● {}", o.keys().cloned().collect::<Vec<_>>().join(", ")))
-                        .unwrap_or_default();
+                        .unwrap_or_default()
+                        + &n.get("keyed")
+                            .and_then(|k| k.as_array())
+                            .map(|keyed| {
+                                keyed
+                                    .iter()
+                                    .map(|k| {
+                                        format!(
+                                            " ◆ {}: {}",
+                                            k["layer"].as_str().unwrap_or(""),
+                                            k["keys"]
+                                                .as_array()
+                                                .into_iter()
+                                                .flatten()
+                                                .filter_map(|v| v.as_str())
+                                                .collect::<Vec<_>>()
+                                                .join(", ")
+                                        )
+                                    })
+                                    .collect::<String>()
+                            })
+                            .unwrap_or_default();
                     out.push_str(&format!(
                         "      {}{}{name}  {}  {} — {}{mark}\n",
                         "  ".repeat(depth),

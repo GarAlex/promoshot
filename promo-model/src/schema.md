@@ -98,7 +98,7 @@ The rest is in sections headed by the words each answers to, and
 `promo_schema_full {"topics": [...]}` takes any of them: keyframes,
 placement, timing, beats, beat effects, transitions, swaps, motion, viewport,
 captions, type,
-reveal, backgrounds, palette, frames, look, masks, drawings, vectors, media,
+reveal, backgrounds, palette, frames, look, masks, drawings, vectors, nodes, media,
 midi, and
 each feature by its own word.
 
@@ -1240,6 +1240,41 @@ A reveal can arrive on a narration's words instead of at its own pace —
   compositions, the apps' thumbnails. promo_validate names an override
   for an element the file lacks, one its tier refuses, and words not
   yet outlined.
+
+## Vector motion — vectors, svg, nodes, keyed, setVectorNodeKey, removeVectorNodeKey, pop-in
+
+- KEYS. A layer keyframe's `nodes` keys an SVG's elements on the image
+  layer showing it — element address → values:
+    { "id": "k2", "time": 1.0, "transitionDuration": 0.9,
+      "easing": "easeOutBack",
+      "nodes": { "badge": { "opacity": 1, "transform": { "scale": 1 } },
+                 "glyph": { "fill": "FF6A00" } } }
+  Keyed: `visible`, `opacity`, `transform` (`move`, `scale`, `rotate`
+  each a track of its own), and on a painted shape `fill`, `stroke`,
+  `fillStops`, `strokeStops`, `strokeWidth` — the same tiers and the
+  same refusals as an override. `order` and `text` are never keyed.
+- Each (element, key) is a track on the layer's clock, held then eased
+  into each keyframe by that keyframe's ramp, like every keyframe value;
+  colours mix as a background colour does; `visible` steps on the
+  keyframe that says it. Before the first key the first value holds,
+  after the last the last. A key no keyframe writes is the resource's
+  override, else the file's. Keys live on the LAYER: one SVG animates
+  differently on two layers, and inside a composition it runs on the
+  composition's clock (speed, loops).
+- With promo_apply: `{"kind": "setVectorNodeKey", "layerID": "logo",
+  "node": "badge", "time": 1.0, "patch": {"opacity": 1}, "easing":
+  "easeOut", "transitionDuration": 0.9}` merges into the element's keys
+  on the keyframe at that time (the layer's seconds), or a new one
+  (`null` removes a key); `{"kind": "removeVectorNodeKey", "layerID":
+  "logo", "node": "badge", "time": 1.0}` takes them off — with no time,
+  every keyframe's; a keyframe left empty goes. promo_inspect marks a
+  keyed element `◆ layer: keys`; promo_validate names a key for an
+  element the file lacks or outside its tier.
+- RECIPE, quick moves with holds: the badge pops in — `opacity 0,
+  scale 0.6` at 0.3 s (ramp 0), `opacity 1, scale 1` at 1.2 s
+  (`easeOutBack`, ramp 0.9); hold two seconds; the wordmark shifts
+  colour — `fill` as drawn at 3.0 s, the new colour at 4.0 s
+  (`easeInOut`, ramp 1.0). Nothing sits still longer than a hold.
 
 ## Media — speed, mediaCuts, cuts, beyondEnd, loop, fps, speech, narration, provenance, credits, audioFocus, duck, ducking
 

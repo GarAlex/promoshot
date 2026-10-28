@@ -605,6 +605,52 @@ pub fn outlines_name_for(filename: &str, texts: &[(String, String)]) -> String {
     format!("{}.{filename}", &sha256_hex(key.as_bytes())[..12])
 }
 
+/// Removes the outline variants in `<resources_dir>/.svg/` nothing uses:
+/// a `<hash12>.<file>` made for words a vector resource of `meta` no
+/// longer has. Kept: each vector's current `outlines`, the import's own
+/// (the plain file name — the file's words, which an undo of every word
+/// change returns to), and anything not named like a variant of a vector
+/// the project holds. Call it only where no history can bring old words
+/// back — a document freshly opened, or a headless write. Answers the
+/// names removed.
+pub fn prune_outlines(meta: &ProjectMetadata, resources_dir: &Path) -> Vec<String> {
+    let dir = resources_dir.join(OUTLINES_DIR);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let vectors: Vec<&ProjectResource> = meta
+        .resources
+        .iter()
+        .flatten()
+        .filter(|r| r.kind == ProjectResourceKind::Vector)
+        .collect();
+    let used: std::collections::HashSet<String> = vectors
+        .iter()
+        .flat_map(|r| {
+            let current = promo_model::vector::block(r).and_then(|b| b.outlines);
+            [Some(outlines_name(&r.filename)), current]
+        })
+        .flatten()
+        .collect();
+    let mut removed = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if used.contains(&name) || !entry.path().is_file() {
+            continue;
+        }
+        let variant = name.split_once('.').is_some_and(|(hash, rest)| {
+            hash.len() == 12
+                && hash.chars().all(|c| c.is_ascii_hexdigit())
+                && vectors.iter().any(|r| r.filename == rest)
+        });
+        if variant && std::fs::remove_file(entry.path()).is_ok() {
+            removed.push(name);
+        }
+    }
+    removed.sort();
+    removed
+}
+
 /// The `text` overrides of a block, address → words, in their order.
 pub fn text_overrides(block: &VectorBlock) -> Vec<(String, String)> {
     block
@@ -851,6 +897,149 @@ impl Picture {
             stamp: fnv(&stamped),
             ..self.clone()
         })
+    }
+
+    /// The picture with `overrides` applied, parsed from its named XML —
+    /// every element carrying its address — so geometry can name what it
+    /// finds. Refused for outlines that take no edit.
+    fn named_tree(&self, overrides: &[VectorOverride]) -> Result<(Arc<Model>, usvg::Tree), String> {
+        let base = self.edit_base()?;
+        if !base.model.editable() {
+            return Err(
+                "this SVG's text outlines were made before its elements could be \
+                        edited — import it again"
+                    .into(),
+            );
+        }
+        let text = if overrides.iter().any(|o| o.edits_tree()) {
+            edit::apply(&base.source, &base.model, overrides)?
+        } else {
+            base.source.as_str().to_string()
+        };
+        let (tree, _, _) = parse_tree(text.as_bytes(), &self.context, &Limits::default(), None)
+            .map_err(|e| e.to_string())?;
+        Ok((base.model.clone(), tree))
+    }
+
+    /// Where each drawn element is with `overrides` applied: address →
+    /// the four corners of its box (top-left, top-right, bottom-right,
+    /// bottom-left) in the picture's CSS pixels, through every transform
+    /// above it — its own edits and its ancestors' — so an editor's guide
+    /// turns with a turned group.
+    pub fn element_boxes(
+        &self,
+        overrides: &[VectorOverride],
+    ) -> Result<std::collections::BTreeMap<String, [[f64; 2]; 4]>, String> {
+        let (model, tree) = self.named_tree(overrides)?;
+        let mut out = std::collections::BTreeMap::new();
+        fn walk(
+            group: &usvg::Group,
+            model: &Model,
+            out: &mut std::collections::BTreeMap<String, [[f64; 2]; 4]>,
+        ) {
+            for child in group.children() {
+                if let Some(address) = model::address_of(child.id()) {
+                    if model.node(address).is_some() && !out.contains_key(address) {
+                        let b = match child {
+                            usvg::Node::Path(p) => p.stroke_bounding_box(),
+                            other => other.bounding_box(),
+                        };
+                        if b.width() > 0.0 || b.height() > 0.0 {
+                            let m = child.abs_transform();
+                            let corner = |x: f32, y: f32| {
+                                let mut pt = usvg::tiny_skia_path::Point::from_xy(x, y);
+                                m.map_point(&mut pt);
+                                [round(pt.x as f64), round(pt.y as f64)]
+                            };
+                            out.insert(
+                                address.to_string(),
+                                [
+                                    corner(b.left(), b.top()),
+                                    corner(b.right(), b.top()),
+                                    corner(b.right(), b.bottom()),
+                                    corner(b.left(), b.bottom()),
+                                ],
+                            );
+                        }
+                    }
+                }
+                if let usvg::Node::Group(g) = child {
+                    walk(g, model, out);
+                }
+            }
+        }
+        walk(tree.root(), &model, &mut out);
+        Ok(out)
+    }
+
+    /// The element drawn on top at `(x, y)` (the picture's CSS pixels)
+    /// with `overrides` applied: the address of the innermost element the
+    /// editor can select that holds the ink there — within `slop` pixels
+    /// of it, for a finger on a thin line — or `None` on bare canvas.
+    /// Locked elements are passed over for what holds them (the shape a
+    /// clip belongs to, the `<use>` a copy is drawn by).
+    pub fn hit(
+        &self,
+        overrides: &[VectorOverride],
+        x: f64,
+        y: f64,
+        slop: f64,
+    ) -> Result<Option<String>, String> {
+        let (model, tree) = self.named_tree(overrides)?;
+        let r = slop.clamp(0.0, 16.0).ceil() as u32;
+        let side = 2 * r + 1;
+        let (px, py) = (x as f32, y as f32);
+        let mut found: Option<String> = None;
+        fn inked(node: &usvg::Node, px: f32, py: f32, r: u32, side: u32) -> bool {
+            let reach = r as f32 + 0.5;
+            let b = node.abs_layer_bounding_box();
+            let Some(b) = b else { return false };
+            if px < b.left() - reach
+                || px > b.right() + reach
+                || py < b.top() - reach
+                || py > b.bottom() + reach
+            {
+                return false;
+            }
+            if !matches!(node, usvg::Node::Path(_)) {
+                // A picture or a run of words: its box is what a finger aims at.
+                return true;
+            }
+            let Some(mut pixmap) = tiny_skia::Pixmap::new(side, side) else {
+                return false;
+            };
+            let m = tiny_skia::Transform::from_translate(r as f32 - px, r as f32 - py)
+                .pre_concat(node.abs_transform())
+                .pre_translate(b.x(), b.y());
+            resvg::render_node(node, m, &mut pixmap.as_mut());
+            pixmap.pixels().iter().any(|p| p.alpha() > 0)
+        }
+        fn walk(
+            group: &usvg::Group,
+            owner: Option<&str>,
+            model: &Model,
+            at: (f32, f32, u32, u32),
+            found: &mut Option<String>,
+        ) {
+            for child in group.children() {
+                let mine = model::address_of(child.id())
+                    .filter(|a| model.node(a).is_some_and(|n| n.tier != Tier::Locked));
+                let owner = mine.or(owner);
+                match child {
+                    usvg::Node::Group(g) => walk(g, owner, model, at, found),
+                    leaf => {
+                        if let Some(owner) = owner {
+                            if inked(leaf, at.0, at.1, at.2, at.3) {
+                                // Paint order: a later hit is on top.
+                                *found = Some(owner.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        walk(tree.root(), None, &model, (px, py, r, side), &mut found);
+        Ok(found)
     }
 
     /// The natural size in CSS pixels.
@@ -1139,6 +1328,55 @@ pub fn findings(meta: &ProjectMetadata, resources_dir: &Path) -> Vec<String> {
                      the old words draw — set them again with promo_apply (setVectorOverride) or \
                      in the app"
                 ));
+            }
+        }
+        // Keyed elements (slice 3): every layer showing this SVG keys
+        // elements the file has, each key inside its element's tier.
+        let keyers: Vec<&promo_model::ProjectLayer> = promo_model::nesting::all_layers(meta)
+            .into_iter()
+            .filter(|l| {
+                l.resource_id.as_deref() == Some(resource.id.as_str())
+                    || l.keyframes
+                        .iter()
+                        .any(|k| k.resource_id.as_deref() == Some(resource.id.as_str()))
+            })
+            .filter(|l| l.keyframes.iter().any(|k| k.nodes.is_some()))
+            .collect();
+        if !keyers.is_empty() {
+            let drawn = load(resources_dir, resource);
+            let model = drawn.as_ref().ok().and_then(|p| p.model().ok());
+            for layer in keyers {
+                let Some(model) = &model else { break };
+                let mut said: Vec<String> = Vec::new();
+                for k in &layer.keyframes {
+                    for (address, key) in k.nodes.iter().flatten() {
+                        if said.contains(address) {
+                            continue;
+                        }
+                        let Err(why) = model.check_key(address, key) else {
+                            continue;
+                        };
+                        said.push(address.clone());
+                        let layer_name = if layer.name.is_empty() {
+                            layer.id.as_str()
+                        } else {
+                            layer.name.as_str()
+                        };
+                        if model.resolve(address).is_err() {
+                            out.push(format!(
+                                "the layer \"{layer_name}\" keys \"{address}\" of the SVG \
+                                 \"{name}\", which names no element of the file — those keys do \
+                                 nothing; remove them (removeVectorNodeKey) or name an element \
+                                 promo_inspect lists"
+                            ));
+                        } else {
+                            out.push(format!(
+                                "the layer \"{layer_name}\" keys the SVG \"{name}\" where it \
+                                 does not apply — {why}"
+                            ));
+                        }
+                    }
+                }
             }
         }
         if block.and_then(|b| b.natural_size()).is_none()

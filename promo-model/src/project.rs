@@ -2908,6 +2908,7 @@ impl ProjectLayerKeyframe {
             || self.auto.is_some()
             || self.overshoot.is_some()
             || self.easing.is_some_and(Easing::needs_rung_48)
+            || self.nodes.is_some()
     }
 
     /// Ramp progress `t` (0…1) through this keyframe's easing and its
@@ -3155,6 +3156,19 @@ pub struct ProjectLayerKeyframe {
     /// its place. Image and video layers (sprites included).
     #[serde(default, skip_serializing_if = "is_none")]
     pub placement: Option<Placement>,
+    /// An SVG's elements at this keyframe (SVG-PLAN.md slice 3): element
+    /// address → its keyed values — `visible`, `opacity`, `transform`
+    /// (`move`, `scale`, `rotate`), `fill`, `stroke`, `fillStops`,
+    /// `strokeStops`, `strokeWidth`. On an image layer showing a vector,
+    /// each (element, key) is a track of its own on the layer's clock,
+    /// held then eased like every keyframe value (colours mix as a
+    /// background colour does; `visible` is a step held from the keyframe
+    /// that says it). Keyed on the LAYER, so one SVG animates differently
+    /// on two layers; the resource's static overrides are the base a key
+    /// never written falls back to. Ignorable: a reader that does not know
+    /// it keeps it and draws the static picture.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub nodes: Option<std::collections::BTreeMap<String, crate::vector::NodeKey>>,
     /// What this keyframe's musical time fields said before resolution —
     /// see `ProjectLayer::time_specs`.
     #[serde(default, skip_serializing_if = "is_none")]

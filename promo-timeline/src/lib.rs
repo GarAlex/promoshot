@@ -32,6 +32,7 @@ pub mod sprite;
 pub mod transition;
 pub mod transport;
 pub mod validate;
+pub mod vector;
 pub mod viewport;
 
 pub use attachment::{run_containing, runs, AttachmentProblem};

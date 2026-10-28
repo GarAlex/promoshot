@@ -485,6 +485,17 @@ mod schema_doc_tests {
                 anchor: Some(Anchor::BottomRight),
                 offset: Some([0.0, -40.0]),
             }),
+            nodes: Some(
+                [(
+                    "badge".to_string(),
+                    serde_json::from_value(serde_json::json!({
+                        "opacity": 0.5, "transform": {"scale": 1.2}, "fill": "FF6A00"
+                    }))
+                    .unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            ),
             // The app form's side map, never written to a file.
             time_specs: None,
             extra: Default::default(),

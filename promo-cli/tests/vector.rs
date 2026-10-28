@@ -476,3 +476,132 @@ fn svg_element_overrides_render_inspect_and_validate() {
     let back = still(&dir, 1.0).unwrap();
     assert_eq!(back.as_raw(), plain.as_raw(), "reset all draws the file");
 }
+
+/// The logo at a plain 120 px height, centred (x 140–500, y 120–240, 1.5
+/// px a unit), from `start` for 2 s, with `keys` — the slice-3 fixture.
+fn keyed_logo(id: &str, start: f64, keys: Value) -> Value {
+    let mut keyframes = vec![
+        json!({"id": format!("{id}p"), "time": 0, "transitionDuration": 0,
+        "placement": {"height": 120, "anchor": "center"}}),
+    ];
+    keyframes.extend(keys.as_array().unwrap().iter().cloned());
+    json!({"id": id, "name": id, "sortIndex": 1, "kind": "image", "isEnabled": true,
+           "startTime": start, "duration": 2, "resourceID": "logo", "keyframes": keyframes})
+}
+
+/// The glyph's stem on the centred logo: units (30, 40).
+const STEM: (u32, u32) = (185, 180);
+
+/// Slice 3 through the binary — the independent oracle for keyed SVG
+/// elements: a colour shift on the glyph and a fade on the wordmark,
+/// keyed in the layer's own seconds on a layer that starts at 0.5 s,
+/// rendered at several instants. Before the first key the first value
+/// holds; at the midpoint of a linear ramp the frame is EXACTLY the
+/// static override of the midpoint's values (the slice-2 path, held to
+/// resvg); after the last key the last value holds. Inspect marks the
+/// keyed rows, validate is clean.
+#[test]
+fn keyed_svg_elements_render_at_every_instant() {
+    let dir = project("keyed", &["logo"]);
+    let keys = json!([
+        {"id": "a", "time": 0.5, "transitionDuration": 0,
+         "nodes": {"glyph": {"fill": "000000"}, "wordmark": {"opacity": 1}}},
+        {"id": "b", "time": 1.5, "transitionPercent": 100,
+         "nodes": {"glyph": {"fill": "FF0000"}, "wordmark": {"opacity": 0}}}
+    ]);
+    edit(&dir, |doc| {
+        doc["layers"]
+            .as_array_mut()
+            .unwrap()
+            .push(keyed_logo("L", 0.5, keys));
+    });
+    let arg = dir.to_str().unwrap().to_string();
+    let (ok, text) = promo(&["validate", &arg]);
+    assert!(ok && text.starts_with("ok"), "{text}");
+    let Some(before) = still(&dir, 0.7) else {
+        return;
+    };
+    let stem = |img: &image::RgbaImage| *img.get_pixel(STEM.0, STEM.1);
+    assert_eq!(stem(&before).0[..3], [0, 0, 0], "black before the ramp");
+    let mid = still(&dir, 1.5).unwrap();
+    let px = stem(&mid);
+    assert!(px[0].abs_diff(128) <= 1 && px[1] < 3 && px[2] < 3, "{px:?}");
+    let after = still(&dir, 2.3).unwrap();
+    assert!(stem(&after)[0] > 250, "red after the ramp");
+    // The wordmark: drawn before, gone after.
+    let word = |img: &image::RgbaImage| {
+        (330..500)
+            .flat_map(|x| (150..210).map(move |y| (x, y)))
+            .filter(|&(x, y)| img.get_pixel(x, y)[2] > 20)
+            .count()
+    };
+    assert!(
+        word(&before) > 400 && word(&after) == 0,
+        "{} {}",
+        word(&before),
+        word(&after)
+    );
+    // The midpoint is the static override of the midpoint's values.
+    let inspect = promo(&["inspect", &arg]).1;
+    edit(&dir, |doc| {
+        let layer = &mut doc["layers"].as_array_mut().unwrap().last_mut().unwrap()["keyframes"];
+        layer.as_array_mut().unwrap().truncate(1);
+        doc["resources"][0]["svg"]["overrides"] = json!([
+            {"node": "glyph", "fill": "800000"}, {"node": "wordmark", "opacity": 0.5}
+        ]);
+    });
+    let fixed = still(&dir, 1.5).unwrap();
+    assert_eq!(
+        mid.as_raw(),
+        fixed.as_raw(),
+        "keyed midpoint == static midpoint"
+    );
+    assert!(inspect.contains("· 2 keyed"), "{inspect}");
+    assert!(
+        inspect.contains("glyph  path  C — a plain shape ◆ L: fill"),
+        "{inspect}"
+    );
+    assert!(inspect.contains("◆ L: opacity"), "{inspect}");
+}
+
+/// The layer's clock through a nested composition: the keyed layer lives
+/// inside a composition the project plays at double speed and loops, so
+/// its ramp runs twice as fast and starts over — the composition's own
+/// seconds are what the keys are read on.
+#[test]
+fn keyed_svg_elements_follow_a_nested_clock() {
+    let dir = project("keyed-nested", &["logo"]);
+    edit(&dir, |doc| {
+        let inner = keyed_logo(
+            "inner",
+            0.0,
+            json!([
+                {"id": "a", "time": 0, "transitionDuration": 0,
+                 "nodes": {"glyph": {"fill": "000000"}}},
+                {"id": "b", "time": 1, "transitionPercent": 100,
+                 "nodes": {"glyph": {"fill": "FF0000"}}}
+            ]),
+        );
+        doc["resources"].as_array_mut().unwrap().push(json!({
+            "id": "C", "kind": "composition", "filename": "", "displayName": "Comp",
+            "addedAt": 0, "duration": 2, "speed": 2, "pixelWidth": 640, "pixelHeight": 360,
+            "imageCuts": [], "disabledAudioTrackIndices": [],
+            "composition": {"canvasWidth": 640, "canvasHeight": 360, "layers": [inner]}
+        }));
+        doc["layers"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"id": "V", "name": "V",
+            "sortIndex": 1, "kind": "video", "isEnabled": true, "startTime": 0,
+            "duration": 4, "resourceID": "C", "beyondEnd": "loop", "keyframes": []}));
+    });
+    let (ok, text) = promo(&["validate", dir.to_str().unwrap()]);
+    assert!(ok, "{text}");
+    let red = |t: f64| still(&dir, t).map(|img| img.get_pixel(STEM.0, STEM.1)[0]);
+    let Some(quarter) = red(0.25) else { return };
+    // 0.25 s at double speed is the composition's 0.5 s: half way.
+    assert!(quarter.abs_diff(128) <= 1, "{quarter}");
+    assert!(red(0.75).unwrap() > 250, "1.5 s in: past the ramp");
+    // 1.25 s is 2.5 s of a 2 s composition: looped to 0.5 s, half way again.
+    assert!(red(1.25).unwrap().abs_diff(128) <= 1, "{:?}", red(1.25));
+}

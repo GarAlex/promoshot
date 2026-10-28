@@ -326,6 +326,42 @@ pub enum Command {
         #[serde(default)]
         node: Option<String>,
     },
+    /// An SVG element keyed on a layer (slice 3): a merge patch over its
+    /// keys on the keyframe `keyframeID` names, else the one at `time`
+    /// (layer seconds), else a new one there. Keys as setVectorOverride's,
+    /// less order and text; `null` removes one. The ramp fields set the
+    /// keyframe's.
+    #[serde(rename_all = "camelCase")]
+    SetVectorNodeKey {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        node: String,
+        #[serde(default)]
+        time: Option<f64>,
+        #[serde(default, rename = "keyframeID")]
+        keyframe_id: Option<String>,
+        patch: serde_json::Value,
+        #[serde(default)]
+        transition_duration: Option<f64>,
+        #[serde(default)]
+        transition_percent: Option<f64>,
+        #[serde(default)]
+        easing: Option<promo_model::Easing>,
+    },
+    /// An SVG element's keys off a layer: at `keyframeID` or `time`, else
+    /// everywhere; only `keys` when given.
+    #[serde(rename_all = "camelCase")]
+    RemoveVectorNodeKey {
+        #[serde(rename = "layerID")]
+        layer_id: String,
+        node: String,
+        #[serde(default)]
+        time: Option<f64>,
+        #[serde(default, rename = "keyframeID")]
+        keyframe_id: Option<String>,
+        #[serde(default)]
+        keys: Option<Vec<String>>,
+    },
     /// A command addressed INSIDE a composition resource: the same
     /// command, run on the composition's layers as if they were the
     /// document's — with the project's resources and settings, the
@@ -1084,6 +1120,18 @@ impl Document {
                 resource_id,
                 node.as_deref(),
             ),
+            Command::InComposition {
+                resource_id,
+                command: inner,
+            } if crate::vector::keys_nodes(inner) => {
+                let mut host = self.vector_host.as_deref_mut();
+                Self::run_in_composition_with(meta, resource_id, inner, &mut |m, c| {
+                    crate::vector::run_key(m, host.as_deref_mut(), c)
+                })
+            }
+            other if crate::vector::keys_nodes(other) => {
+                crate::vector::run_key(meta, self.vector_host.as_deref_mut(), other)
+            }
             other => Self::run(meta, other),
         }
     }
@@ -1550,6 +1598,17 @@ impl Document {
         resource_id: &str,
         command: &Command,
     ) -> Result<(), String> {
+        Self::run_in_composition_with(meta, resource_id, command, &mut Self::run)
+    }
+
+    /// [`Self::run_in_composition`], with `runner` running the command on
+    /// the composition's layers — the host's door for an SVG element edit.
+    fn run_in_composition_with(
+        meta: &mut ProjectMetadata,
+        resource_id: &str,
+        command: &Command,
+        runner: &mut dyn FnMut(&mut ProjectMetadata, &Command) -> Result<(), String>,
+    ) -> Result<(), String> {
         let resources = meta.resources.get_or_insert_with(Vec::new);
         let index = resources
             .iter()
@@ -1573,7 +1632,7 @@ impl Document {
             c.layers = meta.layers.clone().unwrap_or_default();
         }
         inner.resources.get_or_insert_with(Vec::new).push(outside);
-        Self::run(&mut inner, command)?;
+        runner(&mut inner, command)?;
         // The composition's own clock, never the project's.
         inner.composition_settings.beat_clock = composition.beat_clock.clone();
         promo_timeline::resolve_timing(&mut inner, &Default::default());
@@ -1596,7 +1655,7 @@ impl Document {
         Ok(())
     }
 
-    fn run(meta: &mut ProjectMetadata, command: &Command) -> Result<(), String> {
+    pub(crate) fn run(meta: &mut ProjectMetadata, command: &Command) -> Result<(), String> {
         if let Command::InComposition {
             resource_id,
             command,
@@ -2133,6 +2192,11 @@ impl Document {
             }
             Command::InComposition { .. } => {
                 unreachable!("dispatched to run_in_composition before the layer borrow")
+            }
+            Command::SetVectorNodeKey { .. } | Command::RemoveVectorNodeKey { .. } => {
+                return Err(
+                    "an SVG element's keys read the project's files — this door has none".into(),
+                );
             }
             Command::SetVectorOverride { .. } | Command::ResetVectorOverride { .. } => {
                 return Err(

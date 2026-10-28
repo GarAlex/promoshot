@@ -389,6 +389,63 @@ fn render_cost() {
     measure("complex", 3840, 2160);
 }
 
+/// The per-frame cost of a keyed element (SVG-PLAN.md slice 3, "As
+/// built"): each frame whose keyed values changed edits the file's XML,
+/// parses the edited tree and draws it; a frame in a hold only stamps the
+/// values (the raster is cached). `cargo test --release -p promo-svg
+/// --test corpus -- --ignored --nocapture keyed_cost`.
+#[test]
+#[ignore]
+fn keyed_cost() {
+    let measure = |name: &str, node: &str, w: u32, h: u32| {
+        let bytes = read(name);
+        let picture = Picture::parse(&bytes, &context()).unwrap();
+        let o = |v: f64| {
+            vec![promo_model::vector::VectorOverride {
+                node: node.into(),
+                opacity: Some(v),
+                transform: Some(promo_model::vector::NodeTransform {
+                    rotate: Some(v * 30.0),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]
+        };
+        let started = std::time::Instant::now();
+        std::hint::black_box(picture.with_overrides(&o(0.01)).unwrap());
+        let first = started.elapsed().as_secs_f64() * 1000.0;
+        let runs = 10;
+        let started = std::time::Instant::now();
+        for i in 0..runs {
+            std::hint::black_box(picture.with_overrides(&o(0.1 + i as f64 * 0.05)).unwrap());
+        }
+        let edit = started.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+        let edited = picture.with_overrides(&o(0.5)).unwrap();
+        let started = std::time::Instant::now();
+        for _ in 0..runs {
+            std::hint::black_box(edited.render(w, h, None).unwrap());
+        }
+        let render = started.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+        let started = std::time::Instant::now();
+        for i in 0..1000 {
+            std::hint::black_box(promo_svg::edited_stamp(
+                picture.stamp(),
+                &o(i as f64 / 1000.0),
+            ));
+        }
+        let stamp = started.elapsed().as_secs_f64() * 1000.0;
+        println!(
+            "{name:8} {w:>4}x{h:<4} first edit {first:7.2} ms  edit+parse {edit:7.2} ms  \
+             render {render:7.2} ms  stamp {stamp:6.4} ms"
+        );
+    };
+    measure("logo", "badge", 640, 213);
+    measure("logo", "badge", 1280, 427);
+    measure("logo", "badge", 1920, 640);
+    measure("complex", "g0", 1920, 1080);
+    measure("complex", "g0", 3840, 2160);
+}
+
 /// Animation inside a file is noticed (and never played): validate says
 /// it draws as its still frame.
 #[test]

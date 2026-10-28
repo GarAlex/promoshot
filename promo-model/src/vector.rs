@@ -34,6 +34,10 @@
 //!   tool may name a node the way the file's author did.
 //! - Any other key: kept as written, not read.
 //!
+//! Motion (slice 3) is not in the block: a layer keyframe's `nodes`
+//! ([`NodeKey`]) keys an element on that layer, over the block's
+//! overrides as the base.
+//!
 //! [`VectorBlock`] is the typed reading of the bag value; writers edit the
 //! value itself.
 
@@ -155,7 +159,7 @@ impl VectorOverride {
 }
 
 /// A move, scale and turn about an element's own centre.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeTransform {
     /// `[dx, dy]` in the picture's CSS pixels.
@@ -190,11 +194,116 @@ impl NodeTransform {
 }
 
 /// A scale: one factor for both axes, or one each.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum NodeScale {
     Uniform(f64),
     Axes([f64; 2]),
+}
+
+/// One element's values on a layer keyframe (SVG-PLAN.md slice 3,
+/// `ProjectLayerKeyframe::nodes`): the keys an override takes that can
+/// move — tier A's `visible`, `opacity` and `transform`, a painted
+/// shape's `fill`, `stroke`, `fillStops`, `strokeStops` and
+/// `strokeWidth`. `order` and `text` are not keyed (an order has no
+/// halfway, and words are outlined on the machine that edits them): they
+/// stay the resource's static overrides. Any other key is kept as written.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeKey {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<NodeTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_stops: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_stops: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<f64>,
+    /// Keys a later build adds, kept as written.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl NodeKey {
+    /// Whether it keys nothing at all.
+    pub fn is_empty(&self) -> bool {
+        self.visible.is_none()
+            && self.opacity.is_none()
+            && self
+                .transform
+                .as_ref()
+                .is_none_or(|t| t.offset.is_none() && t.scale.is_none() && t.rotate.is_none())
+            && self.fill.is_none()
+            && self.stroke.is_none()
+            && self.fill_stops.is_none()
+            && self.stroke_stops.is_none()
+            && self.stroke_width.is_none()
+            && self.extra.is_empty()
+    }
+
+    /// Why a key it carries cannot be keyed, when one cannot: `order`
+    /// (an element has no place halfway between two) and `text` (words
+    /// are outlined on the machine that edits them) stay the resource's,
+    /// and any other unknown key is named.
+    pub fn refused_key(&self) -> Option<String> {
+        let name = self.extra.keys().next()?;
+        Some(match name.as_str() {
+            "order" => "order is not keyed — an element has no place halfway between two; \
+                        set it on the SVG with setVectorOverride"
+                .to_string(),
+            "text" => "words are not keyed — they are outlined on the machine that edits \
+                       them; set them on the SVG with setVectorOverride"
+                .to_string(),
+            other => format!(
+                "a keyframe keys visible, opacity, transform, fill, stroke, fillStops, \
+                 strokeStops and strokeWidth — not \"{other}\""
+            ),
+        })
+    }
+
+    /// As an override of `node` with exactly these keys — what a tier
+    /// check reads.
+    pub fn as_override(&self, node: &str) -> VectorOverride {
+        VectorOverride {
+            node: node.to_string(),
+            visible: self.visible,
+            opacity: self.opacity,
+            transform: self.transform.clone(),
+            fill: self.fill.clone(),
+            stroke: self.stroke.clone(),
+            fill_stops: self.fill_stops.clone(),
+            stroke_stops: self.stroke_stops.clone(),
+            stroke_width: self.stroke_width,
+            extra: self.extra.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+/// Every element a layer keys, with the keyframe times that key it:
+/// `(address, keys)` — what inspect and validate list.
+pub fn keyed_nodes(layer: &crate::ProjectLayer) -> std::collections::BTreeMap<String, Vec<String>> {
+    let mut out: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for k in &layer.keyframes {
+        for (address, key) in k.nodes.iter().flatten() {
+            let keys = out.entry(address.clone()).or_default();
+            let wire = serde_json::to_value(key).unwrap_or_default();
+            for name in wire.as_object().into_iter().flat_map(|m| m.keys()) {
+                if !keys.contains(name) {
+                    keys.push(name.clone());
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The overrides a vector resource carries (none when the block is absent

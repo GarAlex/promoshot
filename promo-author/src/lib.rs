@@ -1006,6 +1006,9 @@ pub fn apply(args: &Value, root: Option<&Path>) -> Result<String, String> {
     let meta = ProjectMetadata::from_json(&document.to_json()?)
         .map_err(|e| format!("the edited document no longer parses: {e}"))?;
     write_metadata(&meta, &meta_path)?;
+    // No history outlives this call, so words no SVG has any more take
+    // their outlines with them.
+    promo_svg::prune_outlines(&meta, &dir.join("Resources"));
     Ok(applied_answer(&meta, &kinds))
 }
 
@@ -2590,6 +2593,146 @@ mod tests {
             std::fs::read(dir.join("Resources/logo.svg")).unwrap(),
             std::fs::read(corpus.join("logo.svg")).unwrap()
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// promo_apply keys an SVG's elements on a layer (slice 3): a key at a
+    /// time makes or joins a keyframe there, merges like an override,
+    /// refuses what the element's tier does not allow in the override's
+    /// words (and `order`), resolves an author's name, works inside a
+    /// composition, and comes off again — the keyframe with it.
+    #[test]
+    fn svg_node_keys_through_apply() {
+        let dir = vector_project("keys");
+        let mut meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("metadata.json")).unwrap())
+                .unwrap();
+        meta["layers"] = json!([
+            {"id": "LG", "name": "Logo", "sortIndex": 1, "kind": "image", "isEnabled": true,
+             "startTime": 1, "duration": 3, "resourceID": "LOGO",
+             "keyframes": [{"id": "Z", "time": 0, "transitionDuration": 0, "zoom": 0.5}]},
+            {"id": "BG", "name": "Ground", "sortIndex": 0, "kind": "background",
+             "isEnabled": true, "startTime": 0, "keyframes": []}
+        ]);
+        meta["resources"].as_array_mut().unwrap().push(json!({
+            "id": "SCENE", "kind": "composition", "filename": "", "displayName": "Scene",
+            "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+            "composition": {"canvasWidth": 320, "canvasHeight": 180, "duration": 2,
+                "layers": [{"id": "IN", "name": "Inner", "sortIndex": 0, "kind": "image",
+                    "isEnabled": true, "startTime": 0, "duration": 2, "resourceID": "LOGO",
+                    "keyframes": []}]}}));
+        std::fs::write(dir.join("metadata.json"), meta.to_string()).unwrap();
+        let project = dir.display().to_string();
+        let run = |commands: Value| apply(&json!({"project": project, "commands": commands}), None);
+        let keyframes = |layer: &str| -> Vec<promo_model::ProjectLayerKeyframe> {
+            let meta = ProjectMetadata::from_json(
+                &std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+            )
+            .unwrap();
+            promo_model::nesting::all_layers(&meta)
+                .into_iter()
+                .find(|l| l.id == layer)
+                .unwrap()
+                .keyframes
+                .clone()
+        };
+        // A pop: from nothing at 0.2 s, joined onto the zoom keyframe at 0,
+        // to full size by 1 s with an ease-out.
+        run(json!([
+            {"kind": "setVectorNodeKey", "layerID": "LG", "node": "badge", "time": 0,
+             "patch": {"opacity": 0, "transform": {"scale": 0.6}}},
+            {"kind": "setVectorNodeKey", "layerID": "LG", "node": "badge", "time": 1,
+             "transitionDuration": 0.8, "easing": "easeOut",
+             "patch": {"opacity": 1, "transform": {"scale": 1}}}
+        ]))
+        .unwrap();
+        let keys = keyframes("LG");
+        assert_eq!(keys.len(), 2, "{keys:?}");
+        assert_eq!(keys[0].id, "Z", "the key joined the keyframe at 0");
+        assert_eq!(keys[0].zoom, Some(0.5));
+        assert_eq!(keys[0].nodes.as_ref().unwrap()["badge"].opacity, Some(0.0));
+        assert_eq!(keys[1].time, 1.0);
+        assert_eq!(keys[1].transition_duration, 0.8);
+        assert_eq!(keys[1].easing, Some(promo_model::Easing::EaseOut));
+        // A merge: a turn joins the scale; null takes the opacity off.
+        run(
+            json!([{"kind": "setVectorNodeKey", "layerID": "LG", "node": "badge",
+            "time": 1.0004, "patch": {"opacity": null, "transform": {"rotate": 15}}}]),
+        )
+        .unwrap();
+        let key = keyframes("LG")[1].nodes.clone().unwrap()["badge"].clone();
+        assert_eq!(key.opacity, None);
+        let tr = key.transform.unwrap();
+        assert_eq!((tr.scales(), tr.rotate), ((1.0, 1.0), Some(15.0)));
+        // Refusals: nothing applied, the override's words.
+        let before = std::fs::read_to_string(dir.join("metadata.json")).unwrap();
+        for (command, words) in [
+            (
+                json!({"kind": "setVectorNodeKey", "layerID": "LG", "node": "badge", "time": 2,
+                    "patch": {"fill": "FF0000"}}),
+                "takes no paint",
+            ),
+            (
+                json!({"kind": "setVectorNodeKey", "layerID": "LG", "node": "glyph", "time": 2,
+                    "patch": {"order": 0}}),
+                "order is not keyed",
+            ),
+            (
+                json!({"kind": "setVectorNodeKey", "layerID": "LG", "node": "nowhere", "time": 2,
+                    "patch": {"opacity": 1}}),
+                "no element \"nowhere\"",
+            ),
+            (
+                json!({"kind": "setVectorNodeKey", "layerID": "BG", "node": "badge", "time": 2,
+                    "patch": {"opacity": 1}}),
+                "shows no SVG",
+            ),
+            (
+                json!({"kind": "upsertKeyframe", "layerID": "LG", "keyframe": {"id": "U",
+                    "time": 2, "nodes": {"badge": {"stroke": "FFFFFF"}}}}),
+                "takes no paint",
+            ),
+        ] {
+            let err = run(json!([command])).unwrap_err();
+            assert!(
+                err.contains("nothing applied") && err.contains(words),
+                "{err}"
+            );
+        }
+        assert_eq!(
+            std::fs::read_to_string(dir.join("metadata.json")).unwrap(),
+            before
+        );
+        // A colour shift on the glyph, through the plain keyframe tool's
+        // command, and inside a composition.
+        run(json!([
+            {"kind": "upsertKeyframe", "layerID": "LG", "keyframe": {"id": "U", "time": 2,
+             "transitionDuration": 1, "nodes": {"glyph": {"fill": "FF6A00"}}}},
+            {"kind": "inComposition", "resourceID": "SCENE", "command":
+             {"kind": "setVectorNodeKey", "layerID": "IN", "node": "glyph", "time": 0.5,
+              "patch": {"visible": false}}}
+        ]))
+        .unwrap();
+        assert_eq!(keyframes("LG").len(), 3);
+        assert_eq!(
+            keyframes("IN")[0].nodes.as_ref().unwrap()["glyph"].visible,
+            Some(false)
+        );
+        // Off again: one key, then the element everywhere; the keyframe
+        // that held only that key goes, the zoom keyframe stays.
+        run(
+            json!([{"kind": "removeVectorNodeKey", "layerID": "LG", "node": "glyph",
+            "keyframeID": "U", "keys": ["fill"]}]),
+        )
+        .unwrap();
+        assert_eq!(keyframes("LG").len(), 2);
+        run(json!([{"kind": "removeVectorNodeKey", "layerID": "LG", "node": "badge"}])).unwrap();
+        let keys = keyframes("LG");
+        assert_eq!(keys.len(), 1);
+        assert_eq!((keys[0].id.as_str(), keys[0].nodes.is_none()), ("Z", true));
+        let err = run(json!([{"kind": "removeVectorNodeKey", "layerID": "LG", "node": "badge"}]))
+            .unwrap_err();
+        assert!(err.contains("nothing to remove"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

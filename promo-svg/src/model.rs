@@ -1053,6 +1053,26 @@ impl Model {
     }
 }
 
+impl Model {
+    /// Whether a layer keyframe's `key` for `node` may apply, and to which
+    /// address (SVG-PLAN.md slice 3): the override check, plus the keys a
+    /// keyframe cannot carry — `order` (no halfway between two places)
+    /// and `text` (words are outlined on the machine that edits them),
+    /// which stay the resource's.
+    pub fn check_key(
+        &self,
+        node: &str,
+        key: &promo_model::vector::NodeKey,
+    ) -> Result<String, String> {
+        if let Some(why) = key.refused_key() {
+            return Err(why);
+        }
+        let mut probe = key.as_override(node);
+        probe.extra.clear();
+        self.check(&probe, false)
+    }
+}
+
 /// `RRGGBB` / `RRGGBBAA` (a leading `#` allowed) → (r, g, b, alpha 0–1
 /// when given).
 pub(crate) fn parse_colour(text: &str) -> Option<([u8; 3], Option<f64>)> {

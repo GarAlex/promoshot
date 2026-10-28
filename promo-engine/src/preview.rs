@@ -1436,7 +1436,7 @@ impl PreviewEngine {
         // than asked of the host; it lays out at its NATURAL size, which
         // its raster only approximates.
         let picture = if prepared.is_none() {
-            self.vector_for(showing)
+            self.vector_for(showing, Some((layer, time)))
         } else {
             None
         };
@@ -1994,14 +1994,21 @@ impl PreviewEngine {
     }
 
     /// The picture a vector resource draws now: the host's, with the
-    /// overrides its `svg` block carries applied to its tree. Its stamp
-    /// names the overrides, so every raster key does too — an override
-    /// set and set again at one instant draws the new picture
-    /// (number-changes-picture-does-not). An edit the picture refuses
-    /// draws the file as it is.
-    fn vector_for(&mut self, resource_id: &str) -> Option<std::sync::Arc<promo_svg::Picture>> {
+    /// overrides its `svg` block carries applied to its tree — and, for a
+    /// layer that keys its elements (slice 3), those keys evaluated at
+    /// `time` on the layer's clock. Its stamp names the overrides as
+    /// evaluated, so every raster key does too: an override set and set
+    /// again at one instant draws the new picture
+    /// (number-changes-picture-does-not), two instants with the same
+    /// values share one raster, and a hold re-rasterises nothing. An edit
+    /// the picture refuses draws the file as it is.
+    fn vector_for(
+        &mut self,
+        resource_id: &str,
+        keyed: Option<(&ProjectLayer, f64)>,
+    ) -> Option<std::sync::Arc<promo_svg::Picture>> {
         let base = self.vectors.get(resource_id)?.clone();
-        let overrides = self
+        let mut overrides = self
             .meta
             .resources
             .as_deref()
@@ -2010,11 +2017,22 @@ impl PreviewEngine {
             .find(|r| r.id == resource_id)
             .map(promo_model::vector::overrides)
             .unwrap_or_default();
+        // One edited picture held per resource, and one per layer that
+        // keys it: two layers animating one SVG never evict each other.
+        let mut slot = resource_id.to_string();
+        if let Some((layer, time)) = keyed.filter(|(l, _)| tl::vector::keys_vector_nodes(l)) {
+            overrides = tl::vector::layer_vector_overrides(
+                layer,
+                tl::layer_local_time(layer, time),
+                &overrides,
+            );
+            slot = format!("{resource_id}\u{1f}{}", layer.id);
+        }
         let stamp = promo_svg::edited_stamp(base.stamp(), &overrides);
         if stamp == base.stamp() {
             return Some(base);
         }
-        if let Some((held, picture)) = self.edited_vectors.get(resource_id) {
+        if let Some((held, picture)) = self.edited_vectors.get(&slot) {
             if *held == stamp {
                 return Some(picture.clone());
             }
@@ -2023,8 +2041,7 @@ impl PreviewEngine {
             .with_overrides(&overrides)
             .map(std::sync::Arc::new)
             .unwrap_or(base);
-        self.edited_vectors
-            .insert(resource_id.to_string(), (stamp, edited.clone()));
+        self.edited_vectors.insert(slot, (stamp, edited.clone()));
         Some(edited)
     }
 
@@ -2376,7 +2393,7 @@ impl PreviewEngine {
             return None;
         }
         // A vector (an SVG) masks with its ink: its raster's alpha.
-        if let Some(picture) = self.vector_for(resource_id) {
+        if let Some(picture) = self.vector_for(resource_id, None) {
             let (bw, bh) = picture.size();
             let density = ((rect[2] * self.raster_scale) / bw.max(1e-6))
                 .max((rect[3] * self.raster_scale) / bh.max(1e-6));
@@ -8909,6 +8926,107 @@ mod portable_tests {
             {"node": "badge", "fill": "FF0000"}
         ])));
         assert_eq!(render_and_read(&mut engine, 1.0, 96), plain);
+    }
+
+    fn keyed_vector_fixture(layers: serde_json::Value) -> ProjectMetadata {
+        let mut meta: serde_json::Value =
+            serde_json::from_str(&vector_fixture(serde_json::json!([])).to_json().unwrap())
+                .unwrap();
+        let mut all = vec![meta["layers"][0].clone()];
+        all.extend(layers.as_array().unwrap().iter().cloned());
+        meta["layers"] = serde_json::Value::Array(all);
+        ProjectMetadata::from_json(&meta.to_string()).expect("keyed fixture")
+    }
+
+    /// The logo layer, laid out as the static fixture's, with `keyframes`.
+    fn keyed_logo(id: &str, keyframes: serde_json::Value) -> serde_json::Value {
+        let keys = keyframes;
+        serde_json::json!({
+            "id": id, "name": id, "sortIndex": 1, "kind": "image", "isEnabled": true,
+            "startTime": 0, "duration": 3, "resourceID": "VEC", "keyframes": keys
+        })
+    }
+
+    /// Keyed SVG elements (slice 3) through the engine's cache: the same
+    /// instant twice is one raster; adjacent instants with different
+    /// values are different pictures; two instants in a hold share one;
+    /// an edit to the keys at one instant repaints; and two layers keying
+    /// one SVG differently each draw their own.
+    #[test]
+    fn keyed_svg_nodes_repaint_per_value_and_cache_per_value() {
+        let Some(_) = promo_gpu::gpu_for_test() else {
+            return;
+        };
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../promo-svg/tests/corpus/logo.svg");
+        let picture = std::sync::Arc::new(promo_svg::load_path(&path, None).expect("logo"));
+        let fade = |to: f64| {
+            serde_json::json!([
+                {"id": "a", "time": 0.5, "transitionDuration": 0,
+                 "nodes": {"badge": {"opacity": 0}}},
+                {"id": "b", "time": 1.5, "transitionPercent": 100,
+                 "nodes": {"badge": {"opacity": to}}}
+            ])
+        };
+        let (mut engine, _state) = make_cpu_engine(
+            keyed_vector_fixture(serde_json::json!([keyed_logo("L1", fade(1.0))])),
+            vec![],
+        );
+        engine.provide_vector("VEC", picture.clone());
+        let hidden = render_and_read(&mut engine, 0.2, 96);
+        let misses = engine.misses;
+        assert_eq!(render_and_read(&mut engine, 0.4, 96), hidden, "a hold");
+        assert_eq!(engine.misses, misses, "a hold draws no new raster");
+        let mid = render_and_read(&mut engine, 1.0, 96);
+        assert_ne!(mid, hidden, "the badge fades in");
+        let misses = engine.misses;
+        assert_eq!(
+            render_and_read(&mut engine, 1.0, 96),
+            mid,
+            "the same instant"
+        );
+        assert_eq!(
+            engine.misses, misses,
+            "the same instant is the cached raster"
+        );
+        let next = render_and_read(&mut engine, 1.0 + 1.0 / 30.0, 96);
+        assert_ne!(next, mid, "the next frame is the next value");
+        let full = render_and_read(&mut engine, 2.0, 96);
+        assert_ne!(full, mid);
+        // The keys edited, at the same instant: a new picture.
+        engine.set_project(keyed_vector_fixture(serde_json::json!([keyed_logo(
+            "L1",
+            fade(0.5)
+        )])));
+        let half = render_and_read(&mut engine, 2.0, 96);
+        assert_ne!(half, full, "an edited key repaints at the same instant");
+        assert_eq!(render_and_read(&mut engine, 1.0, 96).len(), mid.len());
+        // Unkeyed again: the file's picture, as a static layer draws it.
+        engine.set_project(keyed_vector_fixture(serde_json::json!([keyed_logo(
+            "L1",
+            serde_json::json!([])
+        )])));
+        let plain = render_and_read(&mut engine, 1.0, 96);
+        assert_eq!(plain, full, "opacity 1 is the file's own picture");
+        // Two layers on one SVG, keyed apart: the top one's value shows.
+        let (mut two, _state) = make_cpu_engine(
+            keyed_vector_fixture(serde_json::json!([
+                keyed_logo("L1", fade(1.0)),
+                keyed_logo(
+                    "L2",
+                    serde_json::json!([
+                        {"id": "c", "time": 0, "nodes": {"badge": {"visible": false}}}
+                    ])
+                )
+            ])),
+            vec![],
+        );
+        two.provide_vector("VEC", picture);
+        assert_eq!(
+            render_and_read(&mut two, 2.0, 96),
+            full,
+            "the second layer hides its badge, the first shows its own"
+        );
     }
 
     /// The same assertions as `tests::renders_background_and_video_layer`,
