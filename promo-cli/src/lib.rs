@@ -14,5 +14,6 @@ pub mod inspect;
 pub mod placement;
 pub mod project;
 pub mod render;
+pub mod resume;
 pub mod sheet;
 pub mod vectors;

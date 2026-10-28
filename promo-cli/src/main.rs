@@ -33,6 +33,9 @@ USAGE:
     promo frames  <project-dir> --out <dir> [--times <s,s,…>|--sample <n>|--fps <n>]
                   [--from <s>] [--to <s>] [--size <WxH>] [--sheet <file.png>] [--cap <n>]
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
+                  [--from <s|Nf>] [--to <s|Nf>] [--segment <s>]
+        resumable: finished segments wait in <file.mp4>.promo-parts/, and
+        the same command run again after a kill finishes from there
     promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
     promo model   <file.glb> [--json]
     promo device  <phone|tablet|tablet-portrait|laptop> --out <file.glb> [--json]
@@ -105,7 +108,9 @@ OPTIONS (`promo <command> --help` lists the ones a command takes):
                    (default: the project's `fps`, else 30). Fractional rates
                    are allowed — 59.94 matches a typical screen recording
                    exactly, where 30 resamples it.
-    --from/--to    Time range (default: the whole composition)
+    --from/--to    Time range (default: the whole composition): seconds
+                   (12.5 or 12.5s) or frames at the render's rate (375f)
+    --segment <s>  video: seconds of video per resumable segment (default 10)
     --times <list> Render exactly these seconds, comma separated
     --sample <n>   n moments spread evenly across the range — a contact
                    sheet rather than every frame
@@ -305,7 +310,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         println!("{answer}");
         return Ok(ExitCode::SUCCESS);
     }
-    let opts = Options::parse(&rest[1..])?;
+    let mut opts = Options::parse(&rest[1..])?;
     // The model senses take a FILE, not a project: what a glb holds, and
     // how it looks from around — before anyone places it.
     if command == "model" || command == "turntable" || command == "device" {
@@ -331,6 +336,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
     }
     let project = Project::open_with(Path::new(dir), analysis)?;
+    opts.resolve_frames(&project, command);
 
     // One report, printed once — text or JSON — and with --strict the exit
     // code says whether it had anything in it.
@@ -1614,6 +1620,12 @@ struct Options {
     fps: Option<f64>,
     from: Option<f64>,
     to: Option<f64>,
+    /// `--from 375f`: a frame number, made seconds once the rate is known
+    /// ([`Options::resolve_frames`]).
+    from_frames: Option<f64>,
+    to_frames: Option<f64>,
+    /// `video`: seconds of video per resumable segment.
+    segment: Option<f64>,
     /// The exact moments to render, when the caller knows them.
     times: Vec<f64>,
     /// N moments spread evenly across the range instead of every frame —
@@ -1690,8 +1702,21 @@ impl Options {
                     opts.cap = Some(parse_f64(&value()?, flag)?.round().clamp(1.0, 1e6) as usize)
                 }
                 "--sheet" => opts.sheet = Some(PathBuf::from(value()?)),
-                "--from" => opts.from = Some(parse_f64(&value()?, flag)?),
-                "--to" => opts.to = Some(parse_f64(&value()?, flag)?),
+                "--from" => match parse_moment(&value()?, flag)? {
+                    Moment::Seconds(s) => opts.from = Some(s),
+                    Moment::Frames(f) => opts.from_frames = Some(f),
+                },
+                "--to" => match parse_moment(&value()?, flag)? {
+                    Moment::Seconds(s) => opts.to = Some(s),
+                    Moment::Frames(f) => opts.to_frames = Some(f),
+                },
+                "--segment" => {
+                    let s = parse_f64(&value()?, flag)?;
+                    if !(s.is_finite() && s > 0.0) {
+                        return Err("--segment: expected seconds above zero".into());
+                    }
+                    opts.segment = Some(s);
+                }
                 "--size" => {
                     let raw = value()?;
                     let (w, h) = raw
@@ -1724,6 +1749,54 @@ impl Options {
             )
         })
     }
+}
+
+impl Options {
+    /// Turns `--from/--to` frame numbers into seconds at the rate `command`
+    /// renders at: a GIF's own rate for `gif`, else the export rate.
+    fn resolve_frames(&mut self, project: &Project, command: &str) {
+        if self.from_frames.is_none() && self.to_frames.is_none() {
+            return;
+        }
+        let fps = if command == "gif" {
+            self.fps
+                .unwrap_or(project.meta.composition_settings.gif_export_fps)
+                .max(1.0)
+        } else {
+            promo_timeline::export_fps(project.meta.composition_settings.fps, self.fps)
+        };
+        if let Some(f) = self.from_frames.take() {
+            self.from = Some(f / fps);
+        }
+        if let Some(f) = self.to_frames.take() {
+            self.to = Some(f / fps);
+        }
+    }
+}
+
+/// A `--from/--to` value: seconds, or a frame number (`375f`).
+#[derive(Debug, PartialEq)]
+enum Moment {
+    Seconds(f64),
+    Frames(f64),
+}
+
+fn parse_moment(raw: &str, flag: &str) -> Result<Moment, String> {
+    let text = raw.trim();
+    let bad = || format!("{flag}: expected seconds (12.5, 12.5s) or frames (375f), got `{raw}`");
+    if let Some(frames) = text.strip_suffix('f') {
+        let n: f64 = frames.trim().parse().map_err(|_| bad())?;
+        if !(n.is_finite() && n >= 0.0 && n.fract() == 0.0) {
+            return Err(bad());
+        }
+        return Ok(Moment::Frames(n));
+    }
+    let seconds = text.strip_suffix('s').unwrap_or(text);
+    seconds
+        .trim()
+        .parse()
+        .map(Moment::Seconds)
+        .map_err(|_| bad())
 }
 
 fn parse_f64(raw: &str, flag: &str) -> Result<f64, String> {
@@ -2228,19 +2301,72 @@ fn video(project: &Project, opts: &Options) -> Result<String, String> {
         // apps' concern.
         overlay: None,
     };
-    render::export_video(
+    let started = std::time::Instant::now();
+    let mut resumed_frames = 0;
+    promo_cli::resume::export_video_resumable(
         project,
         out,
         &settings,
-        &mut |done, total| {
-            if done % 30 == 0 || done == total {
-                eprint!("\r  {done}/{total} frames");
+        opts.segment
+            .unwrap_or(promo_cli::resume::DEFAULT_SEGMENT_SECONDS),
+        opts.proxy,
+        &mut |event| {
+            use promo_cli::resume::Event;
+            match event {
+                Event::Plan {
+                    frames,
+                    segments,
+                    done_segments,
+                    done_frames,
+                    restarted,
+                    work,
+                } => {
+                    if let Some(why) = restarted {
+                        eprintln!("  starting over: {why}");
+                    }
+                    if done_segments > 0 {
+                        resumed_frames = done_frames;
+                        eprintln!(
+                            "  resuming: {done_segments} of {segments} segments already \
+                             rendered ({done_frames} of {frames} frames) in {}",
+                            work.display()
+                        );
+                    } else {
+                        eprintln!(
+                            "  {frames} frames in {segments} segment{}; a killed render \
+                             resumes from {}",
+                            if segments == 1 { "" } else { "s" },
+                            work.display()
+                        );
+                    }
+                }
+                Event::Frame { done, total } => {
+                    if done % 30 == 0 || done == total {
+                        let rendered = done - resumed_frames;
+                        let secs = started.elapsed().as_secs_f64();
+                        let rate = if secs > 0.0 {
+                            rendered as f64 / secs
+                        } else {
+                            0.0
+                        };
+                        eprint!(
+                            "\r  {done}/{total} frames ({:.0}%, {rate:.1} fps)",
+                            100.0 * done as f64 / total.max(1) as f64
+                        );
+                    }
+                }
+                Event::Segment { .. } => {}
+                Event::Joining { segments } => {
+                    eprintln!();
+                    eprintln!(
+                        "  joining {segments} segment{} and the soundtrack",
+                        if segments == 1 { "" } else { "s" }
+                    );
+                }
             }
             true
         },
-        opts.proxy,
     )?;
-    eprintln!();
 
     if opts.json {
         return Ok(serde_json::json!({
@@ -2528,6 +2654,32 @@ mod tests {
         );
         assert_eq!(frame_count(0.0, 1.0, 30.0), 30);
         assert_eq!(frame_count(2.0, 4.0, 24.0), 48);
+    }
+
+    /// `--from/--to` take seconds or frames; frames become seconds at the
+    /// command's rate once the project is open.
+    #[test]
+    fn a_range_is_seconds_or_frames() {
+        assert_eq!(parse_moment("12.5", "--from"), Ok(Moment::Seconds(12.5)));
+        assert_eq!(parse_moment("12.5s", "--from"), Ok(Moment::Seconds(12.5)));
+        assert_eq!(parse_moment("375f", "--to"), Ok(Moment::Frames(375.0)));
+        assert!(parse_moment("1.5f", "--to").is_err(), "a frame is whole");
+        assert!(parse_moment("-3f", "--to").is_err());
+        assert!(parse_moment("soon", "--to").is_err());
+        let opts = Options::parse(&[
+            "--from".into(),
+            "300f".into(),
+            "--to".into(),
+            "20".into(),
+            "--segment".into(),
+            "5".into(),
+        ])
+        .unwrap();
+        assert_eq!(
+            (opts.from_frames, opts.to, opts.segment),
+            (Some(300.0), Some(20.0), Some(5.0))
+        );
+        assert!(Options::parse(&["--segment".into(), "0".into()]).is_err());
     }
 
     #[test]

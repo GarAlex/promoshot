@@ -997,16 +997,7 @@ pub fn export_video(
         let time = start + i as f64 / fps;
         let mut bgra = renderer.frame_bgra(time)?;
         if settings.alpha {
-            // The compositor's output is premultiplied; the container wants
-            // straight alpha.
-            for px in bgra.chunks_exact_mut(4) {
-                let a = px[3] as u32;
-                if a > 0 && a < 255 {
-                    px[0] = ((px[0] as u32 * 255 + a / 2) / a).min(255) as u8;
-                    px[1] = ((px[1] as u32 * 255 + a / 2) / a).min(255) as u8;
-                    px[2] = ((px[2] as u32 * 255 + a / 2) / a).min(255) as u8;
-                }
-            }
+            unpremultiply(&mut bgra);
         }
         encoder.write_frame(&bgra).map_err(|e| e.to_string())?;
         if !progress(i + 1, count) {
@@ -1032,6 +1023,19 @@ pub fn export_video(
     }
     encoder.finish().map_err(|e| e.to_string())?;
     Ok(ExportOutcome::Finished)
+}
+
+/// The compositor's output is premultiplied; an alpha container wants
+/// straight alpha.
+pub(crate) fn unpremultiply(bgra: &mut [u8]) {
+    for px in bgra.chunks_exact_mut(4) {
+        let a = px[3] as u32;
+        if a > 0 && a < 255 {
+            px[0] = ((px[0] as u32 * 255 + a / 2) / a).min(255) as u8;
+            px[1] = ((px[1] as u32 * 255 + a / 2) / a).min(255) as u8;
+            px[2] = ((px[2] as u32 * 255 + a / 2) / a).min(255) as u8;
+        }
+    }
 }
 
 /// Writes RGBA rows as a PNG.

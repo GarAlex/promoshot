@@ -943,6 +943,108 @@ fn write_wav(audio: &AudioBuffer) -> Result<PathBuf, MediaError> {
     Ok(path)
 }
 
+/// Joins video-only segments, encoded one after another with the same
+/// settings, into `out` WITHOUT re-encoding them (the concat demuxer and a
+/// stream copy: each H.264 segment opens on its own keyframe, ProRes is all
+/// keyframes), then muxes the WHOLE soundtrack and the chapters in once.
+/// The sound is never cut at a segment edge, so it cannot click, drift or
+/// gap there: it is one mix, encoded once, against a picture whose frames
+/// sit where an unbroken encode would put them. `promo video`'s resumable
+/// render ends here.
+pub fn join_segments(
+    segments: &[PathBuf],
+    out: &Path,
+    audio: Option<&AudioBuffer>,
+    chapters: &[(f64, String)],
+    chapters_end: f64,
+) -> Result<(), MediaError> {
+    if segments.is_empty() {
+        return Err(MediaError::Backend("join: no segments".into()));
+    }
+    let dir = std::env::temp_dir().join("promo-media");
+    std::fs::create_dir_all(&dir).map_err(|e| MediaError::Backend(format!("temp dir: {e}")))?;
+    let list = dir.join(format!(
+        "concat-{}-{}.txt",
+        std::process::id(),
+        segments.len()
+    ));
+    let mut text = String::from("ffconcat version 1.0\n");
+    for segment in segments {
+        let absolute = std::path::absolute(segment)
+            .map_err(|e| MediaError::Backend(format!("{}: {e}", segment.display())))?;
+        // The concat list quotes with '...'; a quote inside closes, escapes
+        // and reopens.
+        let quoted = absolute.to_string_lossy().replace('\'', "'\\''");
+        text.push_str(&format!("file '{quoted}'\n"));
+    }
+    std::fs::write(&list, text).map_err(|e| MediaError::Backend(format!("concat list: {e}")))?;
+    let audio_temp = match audio {
+        Some(audio) if !audio.samples.is_empty() => Some(write_wav(audio)?),
+        _ => None,
+    };
+    let chapters_temp = if chapters.is_empty() {
+        None
+    } else {
+        Some(write_chapters(chapters, chapters_end)?)
+    };
+    let mut command = Command::new("ffmpeg");
+    command.args([
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+    ]);
+    command.arg(&list);
+    if let Some(wav) = &audio_temp {
+        command.arg("-i").arg(wav);
+    }
+    if let Some(chapters) = &chapters_temp {
+        command.arg("-i").arg(chapters);
+        let index = if audio_temp.is_some() { "2" } else { "1" };
+        command.args(["-map_metadata", index]);
+    }
+    command.args(["-map", "0:v"]);
+    if audio_temp.is_some() {
+        command.args(["-map", "1:a"]);
+    }
+    command.args(["-c:v", "copy"]);
+    if audio_temp.is_some() {
+        // As the one-pass encoder does: AAC, and -shortest so a soundtrack
+        // longer than the picture cannot extend the file.
+        command.args(["-c:a", "aac", "-b:a", "192k", "-shortest"]);
+    }
+    command.args(["-movflags", "+faststart"]);
+    let result = command
+        .arg(crate::tool_path(out))
+        .stdin(Stdio::null())
+        .output();
+    for temp in [Some(&list), audio_temp.as_ref(), chapters_temp.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        let _ = std::fs::remove_file(temp);
+    }
+    let output = result.map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => {
+            MediaError::ToolMissing("ffmpeg", "not found on PATH — install it".into())
+        }
+        _ => MediaError::Backend(format!("ffmpeg: {e}")),
+    })?;
+    if !output.status.success() {
+        return Err(MediaError::Backend(format!(
+            "ffmpeg join exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
 impl Drop for FfmpegEncoder {
     fn drop(&mut self) {
         // An encoder dropped without finish() is an ABANDONED export, and
