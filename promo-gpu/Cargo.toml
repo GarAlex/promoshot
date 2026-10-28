@@ -10,6 +10,10 @@ wgpu.workspace = true
 thiserror.workspace = true
 lyon_tessellation = "1.0.20"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# dlopen for the release's own Vulkan loader (see adapter.rs).
+libc = "0.2"
+
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 # Must match the versions wgpu-hal's Metal backend uses, so raw-texture
 # interop hands over the same types.

@@ -6,6 +6,7 @@
 //! to by wgpu, and the result visible through the IOSurface's CPU mapping
 //! without any pixel copy.
 
+pub mod adapter;
 pub mod compositor;
 pub mod model_pass;
 mod surface;
@@ -23,8 +24,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GpuError {
-    #[error("no suitable GPU adapter found")]
-    NoAdapter,
+    /// The whole report: every adapter source tried, then the fix.
+    #[error("{0}")]
+    NoAdapter(String),
     #[error("device request failed: {0}")]
     Device(String),
     #[error("surface import failed: {0}")]
@@ -69,18 +71,31 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
-    /// Brings up the default high-performance adapter (Metal on Apple).
+    /// Brings up the best adapter there is (Metal on Apple; on Linux a GPU,
+    /// else lavapipe — the system's or the release's own — else
+    /// SwiftShader with a warning). See [`adapter`].
     pub fn new() -> Result<Self, GpuError> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
-        });
-        let adapter = pollster_block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        }))
-        .ok_or(GpuError::NoAdapter)?;
+        let adapter::Chosen {
+            instance,
+            adapter,
+            kind,
+            bundled,
+        } = adapter::choose().map_err(GpuError::NoAdapter)?;
+        // Said once per process, on stderr: which CPU path a render took
+        // when it was not the system's own driver.
+        static SAID: std::sync::Once = std::sync::Once::new();
+        if kind == adapter::AdapterKind::SwiftShader {
+            SAID.call_once(|| {
+                eprintln!("{}", adapter::swiftshader_warning(&adapter.get_info().name));
+            });
+        } else if let Some(dir) = &bundled {
+            SAID.call_once(|| {
+                eprintln!(
+                    "promo: no usable system Vulkan driver; rendering on the bundled lavapipe ({})",
+                    dir.display()
+                );
+            });
+        }
         // Adapter-specific format features unlock MSAA counts past the
         // spec-guaranteed [1, 4] — the vector rasterizer wants 8, whose
         // finer coverage the stills golden gate measures. QUERYING the
@@ -111,8 +126,17 @@ impl GpuContext {
     /// creation for a second device) — and one device is cheaper anyway, so
     /// every production consumer (compositor FFI, preview engine) shares this.
     pub fn shared() -> Option<&'static GpuContext> {
-        static SHARED: std::sync::OnceLock<Option<GpuContext>> = std::sync::OnceLock::new();
-        SHARED.get_or_init(|| GpuContext::new().ok()).as_ref()
+        Self::shared_or_error().ok()
+    }
+
+    /// [`shared`](Self::shared), keeping why there is none: the adapters
+    /// tried and the fix, for an error a person reads.
+    pub fn shared_or_error() -> Result<&'static GpuContext, &'static str> {
+        static SHARED: std::sync::OnceLock<Result<GpuContext, String>> = std::sync::OnceLock::new();
+        SHARED
+            .get_or_init(|| GpuContext::new().map_err(|e| e.to_string()))
+            .as_ref()
+            .map_err(|e| e.as_str())
     }
 
     /// Human-readable adapter description (backend + name), for logs/gates.

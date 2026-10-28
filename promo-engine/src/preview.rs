@@ -540,7 +540,7 @@ impl PreviewEngine {
         // Stage layers (rung 33) are walked in their flat form; the
         // document keeps the nested one.
         let meta = meta.lowered();
-        let ctx = GpuContext::shared().ok_or(GpuError::NoAdapter)?;
+        let ctx = GpuContext::shared_or_error().map_err(|e| GpuError::NoAdapter(e.to_string()))?;
         let compositor = Compositor::new(ctx)?;
         Ok(PreviewEngine {
             meta,

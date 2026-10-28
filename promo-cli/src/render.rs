@@ -288,7 +288,7 @@ impl Renderer {
         height: u32,
         proxy: ProxyPolicy,
     ) -> Result<Self, String> {
-        let ctx = GpuContext::shared().ok_or("no GPU adapter available")?;
+        let ctx = GpuContext::shared_or_error()?;
 
         let registry = Registry::with_defaults();
         let (frames, cuts, videos) =

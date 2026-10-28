@@ -12,6 +12,9 @@ COPY . .
 RUN cargo build --release -p promo-cli -p promoshot-mcp
 
 FROM debian:bookworm-slim
+# The image installs its lavapipe from the distribution, so it needs none of
+# the release tarball's bundled lavapipe/ (that is for machines whose driver
+# can go away under a redeploy; promo-gpu/src/adapter.rs).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg mesa-vulkan-drivers libvulkan1 fontconfig \
       fonts-liberation fonts-dejavu-core \

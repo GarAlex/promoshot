@@ -1,7 +1,8 @@
 # Prebuilt binaries and a pullable image, on every version tag (issue #2):
 # using the MCP server should be a connect, not a compile. Push a tag like
 # v0.2.0 and this publishes:
-#   - promoshot-<tag>-linux-x64.tar.gz  (promo + promoshot-mcp)
+#   - promoshot-<tag>-linux-x64.tar.gz  (promo + promoshot-mcp + lavapipe/,
+#     the CPU Vulkan driver promo falls back to when the machine has none)
 #   - promoshot-<tag>-macos-arm64.tar.gz
 #   - ghcr.io/garalex/promoshot-mcp:<tag> and :latest
 #
@@ -28,7 +29,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          # Pinned, not ubuntu-latest: the binaries need the builder's
+          # glibc (24.04's 2.39 is the floor users run on), and the bundled
+          # lavapipe is 24.04's Mesa. ubuntu-latest became 26.04 on
+          # 2026-10-19, which would have raised the floor without a word.
+          - os: ubuntu-24.04
             target: linux-x64
           - os: macos-latest
             target: macos-arm64
@@ -44,11 +49,40 @@ jobs:
           toolchain: 1.96.0
       - name: Build the pair
         run: cargo build --release -p promo-cli -p promoshot-mcp
+      # The release carries its own CPU path: a machine whose Vulkan driver
+      # went away (a redeploy without mesa-vulkan-drivers) still renders on
+      # this, found beside promo (promo-gpu/src/adapter.rs).
+      - name: Bundle lavapipe (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1 patchelf
+          scripts/bundle-lavapipe.sh target/release/lavapipe
       - name: Package
         run: |
           mkdir -p dist
+          extra=""
+          if [ -d target/release/lavapipe ]; then extra="lavapipe"; fi
           tar -czf "dist/promoshot-${GITHUB_REF_NAME}-${{ matrix.target }}.tar.gz" \
-            -C target/release promo promoshot-mcp
+            -C target/release promo promoshot-mcp $extra
+      # The tarball must render on a clean machine with NO Vulkan driver
+      # and no loader — the case that sent a user to SwiftShader: unpacked
+      # in a bare ubuntu:24.04, a still of a shipped example, on the
+      # bundled lavapipe (it says so on stderr), and not blank.
+      - name: Smoke render from the tarball on a bare ubuntu:24.04 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/examples:/examples:ro" ubuntu:24.04 sh -c '
+            set -e
+            # Fonts only (a bare image has none, and captions need one) —
+            # nothing that brings a Vulkan driver or loader.
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends fonts-dejavu-core fontconfig > /dev/null
+            if dpkg -l | grep -qE "mesa-vulkan|libvulkan1"; then echo "a Vulkan package got in"; exit 1; fi
+            mkdir /opt/promo && tar -xzf /dist/*.tar.gz -C /opt/promo
+            /opt/promo/promo still /examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300 2> /tmp/err.txt
+            cat /tmp/err.txt
+            grep -q "bundled lavapipe" /tmp/err.txt
+            test $(wc -c < /tmp/smoke.png) -gt 6000
       # Provenance a downloader can verify (`gh attestation verify`), instead
       # of a checksum published on the same page as the file it vouches for.
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
