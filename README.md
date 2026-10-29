@@ -76,6 +76,9 @@ lavapipe. With none of them it lists what it tried and the fix
 (`sudo apt-get install -y mesa-vulkan-drivers libvulkan1`).
 `PROMO_LAVAPIPE=<dir>` points at the folder elsewhere; `PROMO_LAVAPIPE=off`
 never uses it. The binaries need glibc 2.39 (Ubuntu 24.04, Debian 13).
+A machine with no fonts at all still renders: text falls back to a
+built-in face (Tuffy) with a warning; install `fonts-dejavu-core` and
+`fonts-liberation` for real ones.
 
 What a CPU costs, measured on a 703-frame 1080×1920 reel with narration:
 

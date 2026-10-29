@@ -441,6 +441,11 @@ fn parse_tree(
     Ok((tree, survey, notes.into_inner().unwrap()))
 }
 
+/// The face text is outlined in when the machine has no fonts at all —
+/// the same Tuffy file promo-text falls back to.
+const FALLBACK_FONT: &[u8] = include_bytes!("../../promo-text/fonts/Tuffy.ttf");
+const FALLBACK_FAMILY: &str = "Tuffy";
+
 /// The fonts an import turns text into outlines with: this machine's,
 /// read once per process.
 pub fn system_fonts() -> Arc<fontdb::Database> {
@@ -500,6 +505,20 @@ pub fn system_fonts() -> Arc<fontdb::Database> {
                 ],
             ) {
                 db.set_monospace_family(name);
+            }
+            // A machine with no fonts at all would turn every text element
+            // into nothing; outline it in the engine's built-in face instead.
+            if db.is_empty() {
+                db.load_font_data(FALLBACK_FONT.to_vec());
+                db.set_sans_serif_family(FALLBACK_FAMILY);
+                db.set_serif_family(FALLBACK_FAMILY);
+                db.set_monospace_family(FALLBACK_FAMILY);
+                db.set_cursive_family(FALLBACK_FAMILY);
+                db.set_fantasy_family(FALLBACK_FAMILY);
+                eprintln!(
+                    "warning: no fonts found on this machine; SVG text is outlined in the \
+                     built-in Tuffy face"
+                );
             }
             Arc::new(db)
         })

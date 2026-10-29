@@ -74,14 +74,14 @@ jobs:
         run: |
           docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/examples:/examples:ro" ubuntu:24.04 sh -c '
             set -e
-            # Fonts only (a bare image has none, and captions need one) —
-            # nothing that brings a Vulkan driver or loader.
-            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends fonts-dejavu-core fontconfig > /dev/null
+            # Nothing installed: no Vulkan driver or loader, and no fonts
+            # either — captions draw in the built-in face (it says so).
             if dpkg -l | grep -qE "mesa-vulkan|libvulkan1"; then echo "a Vulkan package got in"; exit 1; fi
             mkdir /opt/promo && tar -xzf /dist/*.tar.gz -C /opt/promo
             /opt/promo/promo still /examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300 2> /tmp/err.txt
             cat /tmp/err.txt
             grep -q "bundled lavapipe" /tmp/err.txt
+            grep -q "no fonts found" /tmp/err.txt
             test $(wc -c < /tmp/smoke.png) -gt 6000
       # Provenance a downloader can verify (`gh attestation verify`), instead
       # of a checksum published on the same page as the file it vouches for.

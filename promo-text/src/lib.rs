@@ -1036,6 +1036,27 @@ impl ttf_parser::OutlineBuilder for Flattener {
     }
 }
 
+/// The face text falls back to when the machine has no fonts at all:
+/// Tuffy, public domain, small enough to carry in every binary.
+pub const FALLBACK_FONT: &[u8] = include_bytes!("../fonts/Tuffy.ttf");
+/// The family name inside [`FALLBACK_FONT`].
+pub const FALLBACK_FAMILY: &str = "Tuffy";
+/// What a render prints, once, when it falls back to [`FALLBACK_FONT`].
+pub const FALLBACK_WARNING: &str = "warning: no fonts found on this machine; text is drawn in the \
+     built-in Tuffy face. Install fonts for the project's own fonts \
+     (Debian/Ubuntu: apt-get install fonts-dejavu-core fonts-liberation).";
+
+/// Loads [`FALLBACK_FONT`] into `db` and makes it every generic family, so
+/// `sans-serif`, `serif` and `monospace` all resolve to it.
+pub fn load_fallback_font(db: &mut cosmic_text::fontdb::Database) {
+    db.load_font_data(FALLBACK_FONT.to_vec());
+    db.set_sans_serif_family(FALLBACK_FAMILY);
+    db.set_serif_family(FALLBACK_FAMILY);
+    db.set_monospace_family(FALLBACK_FAMILY);
+    db.set_cursive_family(FALLBACK_FAMILY);
+    db.set_fantasy_family(FALLBACK_FAMILY);
+}
+
 fn font_system() -> &'static Mutex<FontSystem> {
     static FONTS: OnceLock<Mutex<FontSystem>> = OnceLock::new();
     FONTS.get_or_init(|| {
@@ -1052,6 +1073,14 @@ fn font_system() -> &'static Mutex<FontSystem> {
             for dir in ["/System/Library/Fonts", "/Library/Fonts"] {
                 fonts.db_mut().load_fonts_dir(dir);
             }
+        }
+        // A machine with no fonts at all (a bare container) would panic the
+        // same way at the first caption. Draw with the built-in face instead,
+        // and say so: the text is legible but not the font the project asked
+        // for.
+        if fonts.db().is_empty() {
+            load_fallback_font(fonts.db_mut());
+            eprintln!("{FALLBACK_WARNING}");
         }
         Mutex::new(fonts)
     })
@@ -2249,6 +2278,50 @@ mod smoothing_tests {
             let mut db = cosmic_text::fontdb::Database::new();
             db.load_font_data(include_bytes!("../fonts/Tuffy.ttf").to_vec());
             FontSystem::new_with_locale_and_db("en-US".into(), db)
+        }
+
+        /// A machine with no fonts at all: every design and every named
+        /// font lands on the built-in face and shapes real glyphs, where an
+        /// empty database made cosmic-text panic "no default font found".
+        #[test]
+        fn a_fontless_machine_draws_in_the_built_in_face() {
+            let mut db = cosmic_text::fontdb::Database::new();
+            load_fallback_font(&mut db);
+            let mut fonts = FontSystem::new_with_locale_and_db("en-US".into(), db);
+            for wanted in [
+                None,
+                Some("system"),
+                Some("serif"),
+                Some("mono"),
+                Some("rounded"),
+                Some("Not A Font"),
+            ] {
+                let resolved = resolve_family(&mut fonts, wanted);
+                let family = match &resolved {
+                    ResolvedFamily::Named(name) => Family::Name(name),
+                    ResolvedFamily::Serif => Family::Serif,
+                    ResolvedFamily::Monospace => Family::Monospace,
+                    ResolvedFamily::SansSerif => Family::SansSerif,
+                };
+                let mut buffer = Buffer::new(&mut fonts, Metrics::new(40.0, 48.0));
+                let mut buffer = buffer.borrow_with(&mut fonts);
+                buffer.set_text(
+                    "Hello",
+                    &Attrs::new().family(family),
+                    Shaping::Advanced,
+                    None,
+                );
+                buffer.shape_until_scroll(true);
+                let glyphs: Vec<_> = buffer
+                    .layout_runs()
+                    .flat_map(|r| r.glyphs.iter().map(|g| g.glyph_id))
+                    .collect();
+                assert_eq!(glyphs.len(), 5, "{wanted:?}");
+                assert!(
+                    glyphs.iter().all(|&g| g != 0),
+                    "{wanted:?} drew .notdef: {glyphs:?}"
+                );
+            }
         }
 
         /// A chain answers with its first installed family.
