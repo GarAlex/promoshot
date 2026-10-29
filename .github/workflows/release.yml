@@ -83,6 +83,7 @@ jobs:
             grep -q "bundled lavapipe" /tmp/err.txt
             grep -q "no fonts found" /tmp/err.txt
             test $(wc -c < /tmp/smoke.png) -gt 6000
+          '
       # Provenance a downloader can verify (`gh attestation verify`), instead
       # of a checksum published on the same page as the file it vouches for.
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
