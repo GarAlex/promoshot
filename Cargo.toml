@@ -35,7 +35,11 @@ authors = ["Alex"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# float_roundtrip: the default parser can land a number one ulp off, so a
+# value written and read back (the apps' whole-document replace) was not the
+# value the core computed — a generated beat-flash key at 2 - 1/30 came back
+# as 1.9666666666666663.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 serde_ignored = "0.1"
 serde_path_to_error = "0.1"
 thiserror = "2"
