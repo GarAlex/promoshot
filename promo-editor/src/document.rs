@@ -12,6 +12,7 @@
 //! one at a time; a front end that needs a mutation this enum lacks adds
 //! it HERE first.
 
+use promo_model::localized::merge_patch;
 use promo_model::ProjectMetadata;
 use serde::Deserialize;
 
@@ -575,28 +576,6 @@ pub fn write_caption(
             .resource_id = Some(home);
     }
     Ok(())
-}
-
-fn merge_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
-    match patch {
-        serde_json::Value::Object(entries) => {
-            if !target.is_object() {
-                *target = serde_json::Value::Object(Default::default());
-            }
-            let map = target.as_object_mut().expect("object");
-            for (key, value) in entries {
-                if value.is_null() {
-                    map.remove(key);
-                } else {
-                    merge_patch(
-                        map.entry(key.clone()).or_insert(serde_json::Value::Null),
-                        value,
-                    );
-                }
-            }
-        }
-        other => *target = other.clone(),
-    }
 }
 
 /// Refuses a patch that is not an object or that names a protected key.

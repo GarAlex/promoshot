@@ -1350,6 +1350,41 @@ A reveal can arrive on a narration's words instead of at its own pace —
   `renderedHash` is written by the app — do not set it by hand, it is
   what stops unchanged text from being paid for twice.
 
+## Languages — languages, localized, localization, translation, translate, language
+
+A project can exist in several languages. The list is on the project;
+what differs per language is on each resource:
+
+    "languages": { "source": "en", "targets": ["de", "ja"] }
+
+    { "id": "r1", "kind": "caption", "captionText": "Now on iPad",
+      "captionStyle": { "fontSize": 60 },
+      "localized": {
+        "de": { "captionText": "Jetzt auf dem iPad",
+                "captionStyle": { "fontSize": 48 },
+                "sourceHash": "a1b2c3d4", "by": "person" } } }
+
+A language's entry is a merge patch over the resource: only the keys it
+names change, objects merge, `null` removes. Anything that is a resource's
+parameter can differ, and nothing else can: layers, keyframes and the
+timeline are shared by every language. A key the entry does not name, or a
+language with no entry, shows the source. `id`, `kind`, `addedAt` and
+`libraryID` cannot differ, and validate breaks on them.
+
+An entry that names another `filename` brings that file's facts: the
+source's `duration`, trims, cuts and pixel size do not carry over, because
+they describe the source's file. Restate the ones the new file has.
+
+A caption with its text on the LAYER has nowhere to keep a translation and
+shows the source in every language, and validate warns. A translated caption
+is a layer with a `resourceID` naming a caption resource.
+
+`sourceHash` (which source text this came from) and `by` (`"person"` or
+`"machine"`) are about the entry, not the resource.
+
+`promo still|frames|video|gif --language de` renders that language. Without
+it a render is the source.
+
 ## MIDI — midi, sequence, steps, notes, piano roll, instrument, program, drums, loop, tempo map, level, sound effect, soundfont, mid, generated, ace-step
 
 An `audio` resource may carry a `midi` block instead of a recording:

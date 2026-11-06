@@ -8,6 +8,7 @@
 //! supplies a [`VectorHost`] (the headless tools and the apps' document
 //! both use promo-author's, over the project's `Resources/`).
 
+use promo_model::localized::merge_patch;
 use promo_model::vector::{NodeKey, VectorBlock, VectorOverride, KEY};
 use promo_model::{ProjectMetadata, ProjectResource, ProjectResourceKind};
 use serde_json::Value;
@@ -52,25 +53,6 @@ pub trait VectorHost: Send {
     fn convert(&mut self, resource: &ProjectResource, nodes: &[String]) -> Result<Value, String> {
         let _ = (resource, nodes);
         Err("converting an SVG's shapes needs the core's renderer, which this host lacks".into())
-    }
-}
-
-fn merge_patch(target: &mut Value, patch: &Value) {
-    match patch {
-        Value::Object(entries) => {
-            if !target.is_object() {
-                *target = Value::Object(Default::default());
-            }
-            let map = target.as_object_mut().expect("object");
-            for (key, value) in entries {
-                if value.is_null() {
-                    map.remove(key);
-                } else {
-                    merge_patch(map.entry(key.clone()).or_insert(Value::Null), value);
-                }
-            }
-        }
-        other => *target = other.clone(),
     }
 }
 

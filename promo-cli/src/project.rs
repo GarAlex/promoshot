@@ -182,9 +182,30 @@ impl Project {
     }
 
     pub fn from_text_with(dir: &Path, text: &str, analysis: Analysis) -> Result<Self, String> {
+        Self::from_text_in(dir, text, analysis, None)
+    }
+
+    /// The project in `dir`, in `language` when one is named. Applied before
+    /// anything is measured or timed, so all of it counts on that language.
+    pub fn open_in(dir: &Path, analysis: Analysis, language: Option<&str>) -> Result<Self, String> {
+        let meta_path = dir.join("metadata.json");
+        let text = std::fs::read_to_string(&meta_path)
+            .map_err(|e| format!("{}: {e}", meta_path.display()))?;
+        Self::from_text_in(dir, &text, analysis, language)
+    }
+
+    fn from_text_in(
+        dir: &Path,
+        text: &str,
+        analysis: Analysis,
+        language: Option<&str>,
+    ) -> Result<Self, String> {
         let meta_path = dir.join("metadata.json");
         let mut meta = ProjectMetadata::from_json(text)
             .map_err(|e| format!("{}: {e}", meta_path.display()))?;
+        if let Some(language) = language {
+            promo_model::localized::flatten(&mut meta, language)?;
+        }
         // A beat clock's song with no stated grid is measured first.
         let (grids, grid_problems, analyses) = Self::measure_grids(dir, &meta, analysis);
         // A project that times anything on speech gets its takes' word

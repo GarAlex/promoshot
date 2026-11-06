@@ -5046,6 +5046,7 @@ impl ProjectMetadata {
                 || l.keyframes.iter().any(|k| k.needs_rung_48())
         }) || resources.iter().any(|r| r.activity.is_some())
             || crate::musical::carries_ignorable_beat_fields(self)
+            || crate::localized::carries_languages(self)
             || crate::speech::carries_ignorable_speech_fields(self)
             || crate::midi::carries_midi(self)
         {

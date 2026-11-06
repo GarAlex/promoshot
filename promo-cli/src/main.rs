@@ -104,6 +104,8 @@ AUTHORING — the MCP tools' own functions, so the defaults and checks match:
 OPTIONS (`promo <command> --help` lists the ones a command takes):
     --out <path>   Where the render, frames or model is written
     --time <s>     Timestamp for a still (default 0)
+    --language <c> still, frames, video, gif: render this language of the
+                   project's `languages` (default: the source)
     --fps <n>      Frames per second, overriding the project's own
                    (default: the project's `fps`, else 30). Fractional rates
                    are allowed — 59.94 matches a typical screen recording
@@ -335,7 +337,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             eprintln!("{line}");
         }
     }
-    let project = Project::open_with(Path::new(dir), analysis)?;
+    if opts.language.is_some() && !matches!(command, "still" | "frames" | "video" | "gif") {
+        return Err(format!("--language: {command} works on the source file"));
+    }
+    let project = Project::open_in(Path::new(dir), analysis, opts.language.as_deref())?;
     opts.resolve_frames(&project, command);
 
     // One report, printed once — text or JSON — and with --strict the exit
@@ -1608,6 +1613,8 @@ fn words_table(
 #[derive(Default)]
 struct Options {
     json: bool,
+    /// Render the project in this language (`languages`), not its source.
+    language: Option<String>,
     /// Read a beat clock's song from the project's cache only, never
     /// analysing it on the way in.
     no_analyse: bool,
@@ -1670,6 +1677,7 @@ impl Options {
                     continue;
                 }
                 "--out" => opts.out = Some(PathBuf::from(value()?)),
+                "--language" => opts.language = Some(value()?),
                 "--count" => {
                     opts.count = Some(parse_f64(&value()?, flag)?.round().clamp(1.0, 64.0) as u32)
                 }

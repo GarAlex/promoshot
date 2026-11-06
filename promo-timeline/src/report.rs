@@ -308,6 +308,13 @@ pub struct Context<'a> {
 /// context makes visible.
 pub fn report(meta: &ProjectMetadata, context: &Context) -> Report {
     let mut out = validate::findings(meta);
+    let (language_breaks, language_warnings) = promo_model::localized::problems(meta);
+    for problem in language_breaks {
+        out.breaks(problem);
+    }
+    for problem in language_warnings {
+        out.warn(problem);
+    }
     if let Some(json) = context.json {
         unread_keys(meta, json, &mut out);
     }
@@ -452,10 +459,13 @@ fn holder(path: &[PathStep]) -> Holder {
 /// `exitTransition` and `isAudioFocused` are Swift computed properties,
 /// never written or read, so a file that says them is told so.
 fn read_by_someone(holder: Holder, key: &str) -> bool {
+    use promo_model::localized::{LANGUAGES_KEY, LOCALIZED_KEY};
     use promo_model::unread::{APP_PROJECT_KEYS, APP_RESOURCE_KEYS};
     match holder {
-        Holder::Project => key == "$schema" || APP_PROJECT_KEYS.contains(&key),
-        Holder::Resource => APP_RESOURCE_KEYS.contains(&key),
+        Holder::Project => {
+            key == "$schema" || key == LANGUAGES_KEY || APP_PROJECT_KEYS.contains(&key)
+        }
+        Holder::Resource => key == LOCALIZED_KEY || APP_RESOURCE_KEYS.contains(&key),
         Holder::TopLayer | Holder::Layer | Holder::Other => false,
     }
 }
