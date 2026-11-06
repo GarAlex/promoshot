@@ -45,6 +45,17 @@ pub fn wanted(tool: &str, args: &Value) -> bool {
     ) && args.get("preview").and_then(Value::as_bool) != Some(false)
 }
 
+/// The folder holding the sheet to attach when a frames call named
+/// languages: the first one's, the one the call put first.
+fn sheet_language(dir: &Path, args: &Value) -> Option<String> {
+    use promo_model::localized;
+    let choice = args.get("language").and_then(Value::as_str)?;
+    let text = std::fs::read_to_string(dir.join("metadata.json")).ok()?;
+    let meta = promo_model::ProjectMetadata::from_json(&text).ok()?;
+    let first = localized::choose(&meta, choice).into_iter().next()??;
+    localized::folder(&meta, Some(&first))
+}
+
 /// Render the thumbnail and hand back the MCP image block. Any failure is
 /// an Err carrying the one-line note — the caller appends it to the text
 /// and moves on.
@@ -59,7 +70,12 @@ where
     // tool: one call, one picture, instead of a directory the agent then
     // reads one PNG at a time.
     if tool == "promo_render_frames" {
-        let sheet = crate::exports_dir(&project).join("frames-sheet.png");
+        let sheet = crate::exports_dir(&project);
+        let sheet = match sheet_language(dir, args) {
+            Some(folder) => sheet.join(folder),
+            None => sheet,
+        }
+        .join("frames-sheet.png");
         let bytes = std::fs::read(&sheet).map_err(|e| format!("frames-sheet.png: {e}"))?;
         return Ok(image_block(&bytes));
     }

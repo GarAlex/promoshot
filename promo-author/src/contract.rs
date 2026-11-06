@@ -124,6 +124,36 @@ pub const HOST_DIFFERENCES: &[Difference] = &[
         why: "the app writes video at the project's export size, as its Export tab does",
     },
     Difference {
+        tool: "promo_render_still",
+        aspect: Aspect::Argument("language"),
+        only: Host::Headless,
+        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
+    },
+    Difference {
+        tool: "promo_render_frames",
+        aspect: Aspect::Argument("language"),
+        only: Host::Headless,
+        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
+    },
+    Difference {
+        tool: "promo_render_video",
+        aspect: Aspect::Argument("language"),
+        only: Host::Headless,
+        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
+    },
+    Difference {
+        tool: "promo_render_gif",
+        aspect: Aspect::Argument("language"),
+        only: Host::Headless,
+        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
+    },
+    Difference {
+        tool: "promo_strings",
+        aspect: Aspect::Tool,
+        only: Host::Headless,
+        why: "the app serves it with its strings table (LOCALIZATION.md slice 3)",
+    },
+    Difference {
         tool: "promo_workspace",
         aspect: Aspect::Annotation("readOnlyHint"),
         only: Host::App,
@@ -181,6 +211,10 @@ pub fn tools(host: Host) -> Vec<Value> {
          missing proxies first; off never reads one. A full-size render never does." });
     let size = json!({ "type": "string", "description":
         "WxH, keeping the canvas's aspect (default: the canvas)" });
+    let language = json!({ "type": "string", "description":
+        "A language of the project's `languages`, a comma-separated list, or all (default: \
+         the source). The source writes where it always does, any other language into a \
+         folder named for it beside that." });
     // In an open project the app's server writes through the editor, so
     // the person's undo history holds each change.
     let undoable = if app {
@@ -212,6 +246,20 @@ pub fn tools(host: Host) -> Vec<Value> {
                 a composition matches what you meant before rendering it.",
             "inputSchema": { "type": "object",
                 "properties": { "project": project },
+                "required": ["project"] }
+        }),
+        json!({
+            "name": "promo_strings",
+            "description": "Every translatable string in a project (caption text, a title's \
+                words, a narration's script) with each target language's answer: its text, who \
+                wrote it, and whether it is missing, stale or current. Translate from this and \
+                write with promo_apply's setTranslation.",
+            "inputSchema": { "type": "object",
+                "properties": {
+                    "project": project,
+                    "language": { "type": "string", "description":
+                        "Only these target languages: one code or a comma-separated list" }
+                },
                 "required": ["project"] }
         }),
         json!({
@@ -267,6 +315,7 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "time": { "type": "number", "description": "Seconds (default 0)" },
                     "size": size,
                     "proxy": proxy,
+                    "language": language,
                     "out": { "type": "string", "description":
                         "Output file (default: <Name> Exports/still-<time>s.png beside the project)" }
                 },
@@ -296,6 +345,7 @@ pub fn tools(host: Host) -> Vec<Value> {
                          (default: the project's rate when a range is given without `sample`)" },
                     "size": size,
                     "proxy": proxy,
+                    "language": language,
                     "outDir": { "type": "string", "description":
                         "Output directory (default: <Name> Exports/frames beside the project)" },
                     "preview": { "type": "boolean", "description":
@@ -323,6 +373,7 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "size": { "type": "string", "description":
                         "WxH (default: the project's export size, else the canvas)" },
                     "proxy": proxy,
+                    "language": language,
                     "codec": { "type": "string", "enum": ["h264", "prores422", "prores4444"],
                         "description": if app {
                             "h264: the app's automatic H.264/HEVC mp4 (default); ProRes 422 HQ \
@@ -348,6 +399,7 @@ pub fn tools(host: Host) -> Vec<Value> {
                         "Default: the project's GIF rate (gifExportFps, 10 unless set)" },
                     "size": size,
                     "proxy": proxy,
+                    "language": language,
                     "out": { "type": "string", "description":
                         "Output file (default: <Name> Exports/ beside the project)" }
                 },
@@ -649,7 +701,9 @@ pub fn tools(host: Host) -> Vec<Value> {
                 recording's zooms from its clicks and measured activity into tagged \
                 viewport keyframes (a re-plan keeps what a person edited); setMarkers \
                 replaces the timeline's \
-                markers and chapters whole. Every command succeeds or nothing is \
+                markers and chapters whole; setLanguages {{source, targets}} lists the project's \
+                languages, and setTranslation {{resourceID or layerID, language, patch, by?}} \
+                writes one language's entry on a resource, any of its parameters. Every command succeeds or nothing is \
                 written.{undoable} The schema of `commands` IS the editor's Command enum."),
             "inputSchema": { "type": "object",
                 "properties": {
@@ -945,6 +999,7 @@ pub fn annotations(host: Host, name: &str) -> Value {
         "promo_schema_full" => ("The format, in full", true, false, true, false),
         "promo_validate" => ("Check a project", false, false, true, false),
         "promo_inspect" => ("What is in a project", true, false, true, false),
+        "promo_strings" => ("A project's translations", true, false, true, false),
         "promo_explain" => ("Why a layer looks like that", true, false, true, false),
         "promo_diff" => ("What changed since a copy", true, false, true, false),
         "promo_workspace" => (

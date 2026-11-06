@@ -339,6 +339,12 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
             "name": project.meta.name,
             "folder": project.dir.display().to_string(),
             "canvas": { "width": w, "height": h },
+            "languages": promo_model::localized::languages(&project.meta).map(|list| {
+                serde_json::json!({
+                    "source": list.source,
+                    "targets": promo_model::localized::summaries(&project.meta),
+                })
+            }),
             "duration": project.duration(),
             "updated": project.meta.updated_at,
             "compositions": compositions,
@@ -404,6 +410,28 @@ pub fn inspect(project: &Project, json: bool, decoders: bool) -> String {
     if !kinds.is_empty() {
         let each: Vec<String> = kinds.iter().map(|(k, n)| format!("{k} {n}")).collect();
         out.push_str(&format!("kinds:     {}\n", each.join(", ")));
+    }
+    if let Some(list) = promo_model::localized::languages(&project.meta) {
+        let targets: Vec<String> = promo_model::localized::summaries(&project.meta)
+            .iter()
+            .map(|t| {
+                format!(
+                    "{} ({} missing, {} stale)",
+                    t.language,
+                    t.missing.len(),
+                    t.stale.len()
+                )
+            })
+            .collect();
+        out.push_str(&format!(
+            "languages: {} source, {}\n",
+            list.source,
+            if targets.is_empty() {
+                "no targets".to_string()
+            } else {
+                targets.join(", ")
+            }
+        ));
     }
     // Each layer with its ID — the handle promo_upsert_keyframe takes.
     // The trial that validated the keyframe tool (issue #1) had to read

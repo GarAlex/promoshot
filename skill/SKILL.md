@@ -443,6 +443,13 @@ is for; the schema section says how to write it.
   one — and the bodies stand on something; the project's background is
   the table, and a keyed light swings the shadow. The flat form (layers
   sharing a stage name) is read forever and rewritten on open.
+- **Languages** (`languages`) — one project, one timeline, in several
+  languages. List them with `setLanguages`, read every string with
+  `promo_strings`, and write each with `setTranslation`, `by: "machine"` when
+  you translated it: anything that is a resource's parameter can differ,
+  layers and timing cannot. Keep a narration's sentence count and a label's
+  length close to the source, and read validate's Languages block after.
+  `language` on a render picks one, a list or `all`.
 - **Routes** (`route`) — the 3D twin of a motion path, for a member's
   move or the camera's flight, with `target` saying where the camera
   looks on the way. A spiral in on the vase: a helix route, one camera

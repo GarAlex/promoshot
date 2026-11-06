@@ -59,7 +59,8 @@ fn project(tag: &str, resource_extra: Value, languages: Option<Value>) -> PathBu
 }
 
 fn still(dir: &Path, language: Option<&str>) -> Result<Vec<u8>, String> {
-    let out = dir.with_extension(format!("{}.png", language.unwrap_or("none")));
+    let exports = dir.with_extension("stills");
+    let out = exports.join("shot.png");
     let mut args = vec![
         "still",
         dir.to_str().unwrap(),
@@ -75,7 +76,12 @@ fn still(dir: &Path, language: Option<&str>) -> Result<Vec<u8>, String> {
     if !ok {
         return Err(text);
     }
-    Ok(std::fs::read(out).unwrap())
+    // A language other than the source lands in its own folder.
+    let written = match language.filter(|l| *l != "en") {
+        Some(language) => exports.join(language).join("shot.png"),
+        None => out,
+    };
+    Ok(std::fs::read(written).unwrap())
 }
 
 /// Width and height of what is lit, from the PNG's pixels.
@@ -182,4 +188,215 @@ fn only_renders_take_a_language() {
     let dir = project("verbs", json!({}), Some(languages()));
     let (ok, text) = promo(&["validate", dir.to_str().unwrap(), "--language", "de"]);
     assert!(!ok && text.contains("--language"), "{text}");
+}
+
+fn with_three_languages(tag: &str) -> PathBuf {
+    project(
+        tag,
+        json!({"localized": {"de": {"captionText": "Hallo zusammen", "by": "person"}}}),
+        Some(languages()),
+    )
+}
+
+#[test]
+fn a_list_renders_each_language_beside_the_source() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = with_three_languages("list");
+    let exports = dir.with_extension("exports");
+    let _ = std::fs::remove_dir_all(&exports);
+    let out = exports.join("shot.png");
+    let (ok, text) = promo(&[
+        "still",
+        dir.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--time",
+        "1",
+        "--language",
+        "all",
+    ]);
+    assert!(ok, "{text}");
+    let source = std::fs::read(&out).expect("the source stays where it was");
+    let german = std::fs::read(exports.join("de/shot.png")).expect("German in its folder");
+    let japanese = std::fs::read(exports.join("ja/shot.png")).expect("Japanese in its folder");
+    assert_ne!(german, source);
+    assert_eq!(japanese, source, "no entry: the source's words");
+    assert!(!exports.join("en").exists(), "the source has no folder");
+}
+
+#[test]
+fn a_language_that_fails_is_named_and_the_others_finish() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = with_three_languages("partial");
+    let exports = dir.with_extension("partial");
+    let _ = std::fs::remove_dir_all(&exports);
+    let out = exports.join("shot.png");
+    let (ok, text) = promo(&[
+        "still",
+        dir.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--time",
+        "1",
+        "--language",
+        "fr,de",
+        "--json",
+    ]);
+    assert!(!ok, "{text}");
+    assert!(text.contains("fr: \"fr\" is not one"), "{text}");
+    assert!(
+        exports.join("de/shot.png").is_file(),
+        "German still rendered"
+    );
+    assert!(!exports.join("fr").join("shot.png").exists());
+}
+
+#[test]
+fn all_on_a_project_with_no_languages_is_the_source() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = project("none", json!({}), None);
+    let out = dir.with_extension("none.png");
+    let (ok, text) = promo(&[
+        "still",
+        dir.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--time",
+        "1",
+        "--language",
+        "all",
+    ]);
+    assert!(ok, "{text}");
+    assert!(out.is_file());
+}
+
+/// promo apply: setLanguages and setTranslation written, read by strings,
+/// a caption kept on a layer moved, rendered in that language, and the file
+/// stamped for a reader that keeps what it does not read.
+#[test]
+fn translating_through_the_tools_end_to_end() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = project("tools", json!({}), None);
+    let d = dir.to_str().unwrap();
+    let path = dir.join("metadata.json");
+    let mut doc: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    doc["layers"].as_array_mut().unwrap().push(json!({
+        "id": "inline", "name": "inline", "sortIndex": 6, "kind": "caption", "isEnabled": true,
+        "startTime": 0, "duration": 2, "captionText": "Inline",
+        "captionStyle": {"fontSize": 30, "textColorHex": "FFFFFF"},
+        "keyframes": [{"id": "ki", "time": 0, "transitionDuration": 0,
+                       "placement": {"anchor": "top"}}]}));
+    std::fs::write(&path, doc.to_string()).unwrap();
+
+    let apply = |commands: Value| {
+        promo(&[
+            "apply",
+            d,
+            "--args",
+            &json!({ "commands": commands }).to_string(),
+        ])
+    };
+    let (ok, text) = apply(json!([
+        {"kind": "setTranslation", "resourceID": "c", "language": "de",
+         "patch": {"captionText": "x"}}]));
+    assert!(!ok && text.contains("setLanguages first"), "{text}");
+
+    let (ok, text) = apply(json!([
+        {"kind": "setLanguages", "source": "en", "targets": ["de"]},
+        {"kind": "setTranslation", "resourceID": "c", "language": "de",
+         "patch": {"captionText": "Hallo zusammen"}, "by": "machine"},
+        {"kind": "setTranslation", "layerID": "inline", "language": "de",
+         "patch": {"captionText": "Oben"}, "by": "machine"}]));
+    assert!(ok, "{text}");
+
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert!(doc["minReaderVersion"].as_i64().unwrap() >= 48, "stamped");
+
+    let (ok, text) = promo(&["strings", d, "--json"]);
+    assert!(ok, "{text}");
+    let answer: Value = serde_json::from_str(&text).expect(&text);
+    assert_eq!(answer["source"], json!("en"));
+    let rows = answer["strings"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "{text}");
+    for row in rows {
+        assert_eq!(row["translations"][0]["state"], json!("current"), "{row}");
+        assert_eq!(row["translations"][0]["by"], json!("machine"), "{row}");
+    }
+    assert!(
+        rows.iter().any(|r| r["source"] == json!("Inline")),
+        "{text}"
+    );
+
+    let (_, report) = promo(&["validate", d, "--json"]);
+    let report: Value = serde_json::from_str(&report).unwrap();
+    assert_eq!(report["languages"][0]["language"], json!("de"));
+    assert_eq!(report["languages"][0]["missing"], json!([]));
+    assert_eq!(report["breaks"], json!([]), "{report}");
+
+    // The person edits the source: stale, and validate names it.
+    let (ok, text) = apply(json!([
+        {"kind": "patchResource", "resourceID": "c", "patch": {"captionText": "Hello all"}}]));
+    assert!(ok, "{text}");
+    let (ok, text) = promo(&["validate", d, "--strict"]);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("Languages\n  de  2 strings: 0 missing, 1 stale"),
+        "{text}"
+    );
+    assert!(text.contains("c captionText"), "{text}");
+    let (_, inspected) = promo(&["inspect", d]);
+    assert!(
+        inspected.contains("languages: en source, de (0 missing, 1 stale)"),
+        "{inspected}"
+    );
+}
+
+/// A translation that runs off the canvas where the source fit is named
+/// for that language. The source's own words raise nothing.
+#[test]
+fn validate_names_a_translation_that_no_longer_fits() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = project(
+        "fit",
+        json!({"localized": {"de": {"captionStyle": {"fontSize": 400}}}}),
+        Some(languages()),
+    );
+    let (_, text) = promo(&["validate", dir.to_str().unwrap()]);
+    assert!(
+        text.lines()
+            .any(|l| l.contains("- de: ") && l.contains("past")),
+        "{text}"
+    );
+    assert!(
+        !text
+            .lines()
+            .any(|l| l.contains("- ja: ") && l.contains("past")),
+        "{text}"
+    );
+}
+
+/// Frames and their contact sheet go in the language's folder together:
+/// the sheet is what an agent looks at.
+#[test]
+fn frames_and_the_sheet_land_in_the_languages_folder() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = with_three_languages("frames");
+    let exports = dir.with_extension("frames");
+    let _ = std::fs::remove_dir_all(&exports);
+    let (ok, text) = promo(&[
+        "frames",
+        dir.to_str().unwrap(),
+        "--out",
+        exports.join("frames").to_str().unwrap(),
+        "--sheet",
+        exports.join("sheet.png").to_str().unwrap(),
+        "--times",
+        "0.5,1",
+        "--language",
+        "de",
+    ]);
+    assert!(ok, "{text}");
+    assert!(exports.join("de/sheet.png").is_file(), "{text}");
+    assert!(exports.join("de/frames").is_dir(), "{text}");
+    assert!(!exports.join("frames").exists(), "{text}");
 }

@@ -79,6 +79,8 @@ pub struct Report {
     /// keyed track. Kept out of the verdict and the findings; `validate
     /// --strict` lists them ([`Report::with_notes`]).
     pub notes: Vec<String>,
+    /// Each target language's standing: `validate`'s "Languages" block.
+    pub languages: Vec<promo_model::localized::LanguageSummary>,
 }
 
 impl Report {
@@ -185,6 +187,7 @@ impl Report {
                 ));
             }
         }
+        out.push_str(&self.languages_text());
         out
     }
 
@@ -214,6 +217,23 @@ impl Report {
         }
         for line in &warnings {
             out.push_str(&format!("\n  - {line}"));
+        }
+        out
+    }
+
+    fn languages_text(&self) -> String {
+        if self.languages.is_empty() {
+            return String::new();
+        }
+        let mut out = String::from("\n\nLanguages");
+        for row in &self.languages {
+            out.push_str(&format!(
+                "\n  {}  {} strings: {} missing, {} stale",
+                row.language,
+                row.strings,
+                row.missing.len(),
+                row.stale.len()
+            ));
         }
         out
     }
@@ -285,6 +305,7 @@ impl Report {
                 "scope": c.scope, "resource": c.resource, "source": c.source,
                 "bpm": c.bpm, "meter": c.meter, "offset": c.offset, "clock": c.clock,
             })).collect::<Vec<_>>(),
+            "languages": self.languages,
             "text": self.text(),
         })
     }
@@ -419,7 +440,58 @@ pub fn file_report_with(
         },
     );
     out.findings.extend(rest.findings);
+    languages_report(json, grids, &meta, &mut out);
     Ok(out)
+}
+
+/// What each target language needs: strings still showing the source or
+/// written from an old one, and what its own words do to the layout. The
+/// file again for each, because `flatten` runs before timing.
+fn languages_report(
+    json: &str,
+    grids: &crate::BeatGrids,
+    source: &ProjectMetadata,
+    out: &mut Report,
+) {
+    use promo_model::localized;
+    let Ok(original) = ProjectMetadata::from_json(json) else {
+        return;
+    };
+    let summaries = localized::summaries(&original);
+    if summaries.is_empty() {
+        return;
+    }
+    let source_layout = crate::layout_check::layout_warnings(source);
+    for summary in &summaries {
+        if !summary.missing.is_empty() {
+            out.warn(format!(
+                "{}: {} of {} strings have no translation, so they show the source: {}",
+                summary.language,
+                summary.missing.len(),
+                summary.strings,
+                summary.missing.join(", ")
+            ));
+        }
+        if !summary.stale.is_empty() {
+            out.warn(format!(
+                "{}: {} translations were written from text that has changed since: {}",
+                summary.language,
+                summary.stale.len(),
+                summary.stale.join(", ")
+            ));
+        }
+        let mut flat = original.clone();
+        // A language that cannot flatten is already a break.
+        if localized::flatten(&mut flat, &summary.language).is_ok() {
+            crate::resolve_timing(&mut flat, grids);
+            for line in crate::layout_check::layout_warnings(&flat) {
+                if !source_layout.contains(&line) {
+                    out.warn(format!("{}: {line}", summary.language));
+                }
+            }
+        }
+    }
+    out.languages = summaries;
 }
 
 /// The object a key sits in, as far as the bags go: whose bag keeps it.

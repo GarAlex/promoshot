@@ -306,6 +306,31 @@ pub enum Command {
     /// that is negative or not a number, and for an empty or repeated id.
     #[serde(rename_all = "camelCase")]
     SetMarkers { markers: Vec<promo_model::Marker> },
+    /// The project's languages. `source` is what the resources themselves
+    /// say; a language leaving `targets` takes its content off every
+    /// resource.
+    #[serde(rename_all = "camelCase")]
+    SetLanguages {
+        source: String,
+        targets: Vec<String>,
+    },
+    /// One language's entry on a resource, as a merge patch (`null` takes a
+    /// key back to the source). Anything that is a resource's parameter:
+    /// `{"captionText": "Hallo"}`, `{"captionStyle": {"fontSize": 40}}`.
+    /// `layerID` names the caption a layer shows instead of `resourceID`,
+    /// and moves text kept on the layer to a resource. `by`: "person"
+    /// (default) or "machine", and a machine never overwrites a person's text.
+    #[serde(rename_all = "camelCase")]
+    SetTranslation {
+        #[serde(default, rename = "resourceID")]
+        resource_id: Option<String>,
+        #[serde(default, rename = "layerID")]
+        layer_id: Option<String>,
+        language: String,
+        patch: serde_json::Value,
+        #[serde(default)]
+        by: Option<String>,
+    },
     /// An SVG element's override (SVG-PLAN.md slice 2), as a merge patch
     /// (`null` takes a key back to the file's). `node`: the address or the
     /// author's name promo_inspect lists. Any element: visible, opacity,
@@ -2219,6 +2244,30 @@ impl Document {
                             without inComposition"
                         .into(),
                 );
+            }
+            Command::SetLanguages { source, targets } => {
+                promo_model::localized::set_languages(meta, source, targets)?;
+            }
+            Command::SetTranslation {
+                resource_id,
+                layer_id,
+                language,
+                patch,
+                by,
+            } => {
+                use promo_model::localized::{set_translation, TranslationTarget};
+                let target = match (resource_id, layer_id) {
+                    (Some(id), None) => TranslationTarget::Resource(id),
+                    (None, Some(id)) => TranslationTarget::Layer(id),
+                    _ => return Err("name one of resourceID and layerID".into()),
+                };
+                set_translation(
+                    meta,
+                    target,
+                    language,
+                    patch,
+                    by.as_deref().unwrap_or("person"),
+                )?;
             }
             Command::PatchResource { resource_id, patch } => {
                 checked_patch(

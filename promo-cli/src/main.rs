@@ -26,17 +26,20 @@ USAGE:
     promo skill [install [--home DIR | --into DIR] [--dry-run]]
         print the agent skill, or install it for every agent tool found
     promo inspect <project-dir> [--json]
+    promo strings <project-dir> [--language <c>] [--json]
+        every translatable string and where each language stands on it
     promo proxy   <project-dir>
         a playback proxy for every video resource, built into the proxy
         cache (never into the project folder); idempotent
-    promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>]
+    promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>] [--language <c>]
     promo frames  <project-dir> --out <dir> [--times <s,s,…>|--sample <n>|--fps <n>]
                   [--from <s>] [--to <s>] [--size <WxH>] [--sheet <file.png>] [--cap <n>]
+                  [--language <c>]
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
-                  [--from <s|Nf>] [--to <s|Nf>] [--segment <s>]
+                  [--from <s|Nf>] [--to <s|Nf>] [--segment <s>] [--language <c>]
         resumable: finished segments wait in <file.mp4>.promo-parts/, and
         the same command run again after a kill finishes from there
-    promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>]
+    promo gif     <project-dir> --out <file.gif> [--fps <n>] [--size <WxH>] [--language <c>]
     promo model   <file.glb> [--json]
     promo device  <phone|tablet|tablet-portrait|laptop> --out <file.glb> [--json]
     promo turntable <file.glb> --out <sheet.png> [--count <n>] [--size <WxH>] [--json]
@@ -104,8 +107,10 @@ AUTHORING — the MCP tools' own functions, so the defaults and checks match:
 OPTIONS (`promo <command> --help` lists the ones a command takes):
     --out <path>   Where the render, frames or model is written
     --time <s>     Timestamp for a still (default 0)
-    --language <c> still, frames, video, gif: render this language of the
-                   project's `languages` (default: the source)
+    --language <c> still, frames, video, gif: a language of the project's
+                   `languages`, a comma-separated list, or all (default: the
+                   source). The source writes to --out, any other to de/ beside
+                   it. strings: only those languages
     --fps <n>      Frames per second, overriding the project's own
                    (default: the project's `fps`, else 30). Fractional rates
                    are allowed — 59.94 matches a typical screen recording
@@ -337,10 +342,21 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             eprintln!("{line}");
         }
     }
-    if opts.language.is_some() && !matches!(command, "still" | "frames" | "video" | "gif") {
-        return Err(format!("--language: {command} works on the source file"));
+    if command == "strings" {
+        println!("{}", strings(Path::new(dir), &opts)?);
+        return Ok(ExitCode::SUCCESS);
     }
-    let project = Project::open_in(Path::new(dir), analysis, opts.language.as_deref())?;
+    if let Some(choice) = opts.language.take() {
+        if !matches!(command, "still" | "frames" | "video" | "gif") {
+            return Err(format!("--language: {command} works on the source file"));
+        }
+        println!(
+            "{}",
+            render_languages(command, dir, analysis, &mut opts, &choice)?
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    let project = Project::open_with(Path::new(dir), analysis)?;
     opts.resolve_frames(&project, command);
 
     // One report, printed once — text or JSON — and with --strict the exit
@@ -355,6 +371,12 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         });
     }
 
+    println!("{}", answer(command, dir, &project, &opts)?);
+    Ok(ExitCode::SUCCESS)
+}
+
+/// A render or a report on an opened project.
+fn answer(command: &str, dir: &str, project: &Project, opts: &Options) -> Result<String, String> {
     // A render lays out on the beats; with a clock whose audio has no grid
     // it would lay out on the nominal 120 BPM instead — so it waits.
     if matches!(command, "still" | "frames" | "video" | "gif") && !project.missing_grids.is_empty()
@@ -392,17 +414,171 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
              run `promo words {dir} --resource <id>` (promo validate says the same)"
         ));
     }
-    let answer = match command {
-        "inspect" => inspect(&project, &opts),
-        "proxy" => build_proxies(&project, &opts),
-        "still" => still(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
-        "frames" => frames(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
-        "video" => video(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
-        "gif" => gif(&project, &opts).map(|a| with_credits(a, command, &project, &opts)),
+    match command {
+        "inspect" => inspect(project, opts),
+        "proxy" => build_proxies(project, opts),
+        "still" => still(project, opts).map(|a| with_credits(a, command, project, opts)),
+        "frames" => frames(project, opts).map(|a| with_credits(a, command, project, opts)),
+        "video" => video(project, opts).map(|a| with_credits(a, command, project, opts)),
+        "gif" => gif(project, opts).map(|a| with_credits(a, command, project, opts)),
         other => Err(format!("unknown command `{other}`\n\n{USAGE}")),
-    }?;
-    println!("{answer}");
-    Ok(ExitCode::SUCCESS)
+    }
+}
+
+/// `--language`: each chosen language opened on its own, so its takes and
+/// sizes count, and rendered into its own folder beside the source's. One
+/// that fails is named, and the others still finish.
+fn render_languages(
+    command: &str,
+    dir: &str,
+    analysis: promo_cli::project::Analysis,
+    opts: &mut Options,
+    choice: &str,
+) -> Result<String, String> {
+    let path = Path::new(dir).join("metadata.json");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let meta = promo_model::ProjectMetadata::from_json(&text)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let chosen = promo_model::localized::choose(&meta, choice);
+    if chosen.is_empty() {
+        return Err("--language: expected a code, a comma-separated list, or all".into());
+    }
+    let (out, sheet) = (opts.out.clone(), opts.sheet.clone());
+    let mut done: Vec<(String, String)> = Vec::new();
+    let mut failed: Vec<(String, String)> = Vec::new();
+    for language in &chosen {
+        let folder = promo_model::localized::folder(&meta, language.as_deref());
+        opts.out = out.as_deref().map(|p| language_path(p, folder.as_deref()));
+        opts.sheet = sheet
+            .as_deref()
+            .map(|p| language_path(p, folder.as_deref()));
+        let name = language.clone().unwrap_or_else(|| "source".to_string());
+        let result = make_parents(opts).and_then(|()| {
+            let project = Project::open_in(Path::new(dir), analysis, language.as_deref())?;
+            opts.resolve_frames(&project, command);
+            answer(command, dir, &project, opts)
+        });
+        match result {
+            Ok(answer) => done.push((name, answer)),
+            Err(why) => failed.push((name, why)),
+        }
+    }
+    if chosen.len() == 1 {
+        return match (done.pop(), failed.pop()) {
+            (Some((_, answer)), _) => Ok(answer),
+            (_, Some((_, why))) => Err(why),
+            _ => unreachable!("one language ran"),
+        };
+    }
+    let body = if opts.json {
+        let parsed = |answer: &String| {
+            serde_json::from_str::<serde_json::Value>(answer)
+                .unwrap_or_else(|_| serde_json::Value::String(answer.clone()))
+        };
+        serde_json::json!({
+            "languages": done.iter().map(|(name, answer)| (name.clone(), parsed(answer)))
+                .collect::<serde_json::Map<_, _>>(),
+            "failed": failed.iter().map(|(name, why)| (name.clone(), serde_json::json!(why)))
+                .collect::<serde_json::Map<_, _>>(),
+        })
+        .to_string()
+    } else {
+        done.iter()
+            .map(|(name, answer)| format!("{name}: {answer}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    if failed.is_empty() {
+        return Ok(body);
+    }
+    let names = failed
+        .iter()
+        .map(|(name, why)| format!("{name}: {why}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Err(format!("{body}\nnot rendered:\n{names}"))
+}
+
+/// `dir/out.mp4` for the source, `dir/de/out.mp4` for German.
+fn language_path(path: &Path, folder: Option<&str>) -> PathBuf {
+    match (folder, path.file_name()) {
+        (Some(folder), Some(name)) => path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(folder)
+            .join(name),
+        _ => path.to_path_buf(),
+    }
+}
+
+fn make_parents(opts: &Options) -> Result<(), String> {
+    for path in [&opts.out, &opts.sheet].into_iter().flatten() {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// `promo strings`: every translatable string and each language's answer,
+/// off the file as it stands.
+fn strings(dir: &Path, opts: &Options) -> Result<String, String> {
+    use promo_model::localized::{self, StringState};
+    let path = dir.join("metadata.json");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let meta = promo_model::ProjectMetadata::from_json(&text)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut rows = localized::strings(&meta);
+    if let Some(choice) = &opts.language {
+        let chosen = localized::choose(&meta, choice);
+        for row in &mut rows {
+            row.translations
+                .retain(|t| chosen.contains(&Some(t.language.clone())));
+        }
+    }
+    let list = localized::languages(&meta);
+    if opts.json {
+        return Ok(serde_json::json!({
+            "source": list.as_ref().map(|l| l.source.clone()),
+            "targets": list.as_ref().map(|l| l.targets.clone()).unwrap_or_default(),
+            "strings": rows,
+        })
+        .to_string());
+    }
+    let Some(list) = list else {
+        return Ok(format!(
+            "this project lists no languages ({} strings)",
+            rows.len()
+        ));
+    };
+    let mut out = format!(
+        "source {}, targets {}: {} strings",
+        list.source,
+        list.targets.join(", "),
+        rows.len()
+    );
+    for row in &rows {
+        let at = row.resource.as_ref().or(row.layer.as_ref());
+        out.push_str(&format!(
+            "\n{} {}: {}",
+            at.map(String::as_str).unwrap_or("?"),
+            row.key,
+            row.source
+        ));
+        for t in &row.translations {
+            let state = match t.state {
+                StringState::Missing => "missing",
+                StringState::Stale => "stale",
+                StringState::Current => "ok",
+            };
+            out.push_str(&format!(
+                "\n  {} [{state}] {}",
+                t.language,
+                t.text.as_deref().unwrap_or("")
+            ));
+        }
+    }
+    Ok(out)
 }
 
 /// One command's help, cut from [`USAGE`] so the two never disagree: its

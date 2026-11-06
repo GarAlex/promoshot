@@ -570,6 +570,12 @@ where
             let command = name.trim_start_matches("promo_");
             run(config, &[command.into(), project])
         }
+        "promo_strings" => {
+            let project = fenced_project(args, config)?;
+            let mut argv = vec!["strings".to_string(), project, "--json".into()];
+            push_language(&mut argv, args);
+            run(config, &argv)
+        }
         "promo_render_still" => {
             let project = fenced_project(args, config)?;
             let time = args.get("time").and_then(Value::as_f64).unwrap_or(0.0);
@@ -580,6 +586,7 @@ where
             }
             argv.extend(["--time".into(), time.to_string()]);
             push_size(&mut argv, args);
+            push_language(&mut argv, args);
             run(config, &argv)
         }
         "promo_render_frames" => {
@@ -610,6 +617,7 @@ where
             argv.extend(["--cap".into(), contract::FRAME_CAP.to_string()]);
             argv.extend(["--sheet".into(), sheet_path(&project)]);
             push_size(&mut argv, args);
+            push_language(&mut argv, args);
             run(config, &argv)
         }
         "promo_render_video" => {
@@ -648,6 +656,7 @@ where
                 argv.extend(["--fps".into(), fps.to_string()]);
             }
             push_size(&mut argv, args);
+            push_language(&mut argv, args);
             run(config, &argv)
         }
         "promo_proxy" => {
@@ -665,6 +674,7 @@ where
                 argv.extend(["--fps".into(), fps.to_string()]);
             }
             push_size(&mut argv, args);
+            push_language(&mut argv, args);
             run(config, &argv)
         }
         "promo_voices" => speak::voices(args, &promo_speech::SystemKeys),
@@ -719,6 +729,12 @@ fn fenced_project(args: &Value, config: &Config) -> Result<String, String> {
         }
     }
     Ok(path.display().to_string())
+}
+
+fn push_language(argv: &mut Vec<String>, args: &Value) {
+    if let Some(language) = args.get("language").and_then(Value::as_str) {
+        argv.extend(["--language".into(), language.to_string()]);
+    }
 }
 
 /// Where a frames call leaves its contact sheet: one fixed place per
@@ -1003,6 +1019,7 @@ mod tests {
             [
                 "promo_validate",
                 "promo_inspect",
+                "promo_strings",
                 "promo_schema",
                 "promo_schema_types",
                 "promo_schema_full",
@@ -1213,15 +1230,17 @@ mod tests {
             // element edits, setVectorOverride and resetVectorOverride
             // (SVG-PLAN.md slice 2), 0.9 KB; 51,600 since keyed elements,
             // setVectorNodeKey and removeVectorNodeKey (slice 3), 1.3 KB;
-            // 52,300 since makeEditableShapes (slice 5), 0.5 KB.
-            bytes < 52_300,
+            // 52,300 since makeEditableShapes (slice 5), 0.5 KB;
+            // 55,300 since languages: promo_strings, `language` on the four
+            // renders and setLanguages and setTranslation, 2.9 KB.
+            bytes < 55_300,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );
         // And the ceiling is not met by dropping tools or their prose.
         let tools = Value::Array(contract::tools(Host::Headless));
         let tools = tools.as_array().unwrap();
-        assert_eq!(tools.len(), 29);
+        assert_eq!(tools.len(), 30);
         assert!(
             tools
                 .iter()
@@ -1383,6 +1402,53 @@ mod tests {
             "no metadata.json here: {answer}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A render's `language` reaches the CLI, promo_strings asks for JSON,
+    /// and the app's list does not advertise what its handlers do not read yet.
+    #[test]
+    fn a_language_reaches_the_render_and_the_app_is_not_offered_it() {
+        let project = std::env::temp_dir().join(format!("mcp-language-{}", std::process::id()));
+        std::fs::create_dir_all(&project).unwrap();
+        let seen = std::cell::RefCell::new(Vec::<Vec<String>>::new());
+        let run = |_: &Config, argv: &[String]| {
+            seen.borrow_mut().push(argv.to_vec());
+            Ok("done".to_string())
+        };
+        for (tool, extra) in [
+            ("promo_render_still", json!({})),
+            ("promo_render_frames", json!({"preview": false})),
+            ("promo_render_video", json!({})),
+            ("promo_render_gif", json!({})),
+            ("promo_strings", json!({})),
+        ] {
+            let mut arguments = json!({"project": project, "language": "de,ja"});
+            arguments
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": { "name": tool, "arguments": arguments } });
+            handle(&req, &config(), &run).expect("an answer");
+        }
+        for argv in seen.borrow().iter() {
+            let at = argv.iter().position(|a| a == "--language");
+            assert_eq!(at.map(|i| argv[i + 1].as_str()), Some("de,ja"), "{argv:?}");
+        }
+        assert!(seen.borrow()[4].contains(&"--json".to_string()));
+        let app = contract::tools(Host::App);
+        assert!(app.iter().all(|t| t["name"] != "promo_strings"));
+        for tool in app.iter().filter(|t| {
+            t["name"]
+                .as_str()
+                .is_some_and(|n| n.starts_with("promo_render_"))
+        }) {
+            assert!(
+                tool.pointer("/inputSchema/properties/language").is_none(),
+                "{}",
+                tool["name"]
+            );
+        }
     }
 
     #[test]

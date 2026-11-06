@@ -1380,10 +1380,27 @@ shows the source in every language, and validate warns. A translated caption
 is a layer with a `resourceID` naming a caption resource.
 
 `sourceHash` (which source text this came from) and `by` (`"person"` or
-`"machine"`) are about the entry, not the resource.
+`"machine"`) are about the entry. Do not write them: promo_apply's commands do.
 
-`promo still|frames|video|gif --language de` renders that language. Without
-it a render is the source.
+    { "kind": "setLanguages", "source": "en", "targets": ["de", "ja"] }
+    { "kind": "setTranslation", "resourceID": "r1", "language": "de",
+      "patch": { "captionText": "Jetzt auf dem iPad" }, "by": "machine" }
+
+`setTranslation` takes `layerID` to name the caption a layer shows, and moves
+text kept on the layer to a caption resource. Changing a resource's text
+marks its translations stale: they still show, and validate names them. A
+machine never overwrites what a person wrote. A language leaving `targets`
+takes its content off every resource.
+
+`promo_strings` lists every translatable string with each language's text
+and state. Validate has a Languages block: strings missing and stale per
+language, and a warning for a caption that its translation pushes off the
+canvas.
+
+A render's `language` (`--language`) is one code, a list (`de,ja`) or `all`.
+The source writes where it always does, any other language into a folder
+named for it beside that: `<Name> Exports/de/export.mp4`. One that fails is
+named and the others finish. Without it a render is the source.
 
 ## MIDI — midi, sequence, steps, notes, piano roll, instrument, program, drums, loop, tempo map, level, sound effect, soundfont, mid, generated, ace-step
 
