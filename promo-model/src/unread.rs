@@ -28,17 +28,18 @@ use crate::{
 };
 
 /// Project keys this model keeps in its bag that the apps' Swift model
-/// reads and writes: the author's handles.
-pub const APP_PROJECT_KEYS: &[&str] = &["handles"];
+/// reads and writes: the author's handles, the list of languages.
+pub const APP_PROJECT_KEYS: &[&str] = &["handles", "languages"];
 /// Resource keys this model keeps in its bag that the apps' Swift model
 /// reads and writes: a library reference, the theme plate, a resource's
 /// own motion, where it came from, a narration's speech, a MIDI-sequenced
 /// sound's `midi` block (MIDI.md §0), a vector's `svg` block
-/// (`crate::vector`). Checked against the Swift coding keys on 2026-09-27
+/// (`crate::vector`), each language's entries (`crate::localized`). Checked against the Swift coding keys on 2026-09-27
 /// (no layer, keyframe, cut, export or settings key is one); the app's
 /// suite fails when a key it writes lands in a bag unnamed here.
 pub const APP_RESOURCE_KEYS: &[&str] = &[
     "libraryID",
+    "localized",
     "midi",
     "motionKeyframes",
     "origin",

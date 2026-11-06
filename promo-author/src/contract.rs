@@ -124,36 +124,6 @@ pub const HOST_DIFFERENCES: &[Difference] = &[
         why: "the app writes video at the project's export size, as its Export tab does",
     },
     Difference {
-        tool: "promo_render_still",
-        aspect: Aspect::Argument("language"),
-        only: Host::Headless,
-        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
-    },
-    Difference {
-        tool: "promo_render_frames",
-        aspect: Aspect::Argument("language"),
-        only: Host::Headless,
-        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
-    },
-    Difference {
-        tool: "promo_render_video",
-        aspect: Aspect::Argument("language"),
-        only: Host::Headless,
-        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
-    },
-    Difference {
-        tool: "promo_render_gif",
-        aspect: Aspect::Argument("language"),
-        only: Host::Headless,
-        why: "the app's renders take a language with its exports (LOCALIZATION.md slice 3)",
-    },
-    Difference {
-        tool: "promo_strings",
-        aspect: Aspect::Tool,
-        only: Host::Headless,
-        why: "the app serves it with its strings table (LOCALIZATION.md slice 3)",
-    },
-    Difference {
         tool: "promo_workspace",
         aspect: Aspect::Annotation("readOnlyHint"),
         only: Host::App,

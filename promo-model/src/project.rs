@@ -4594,6 +4594,10 @@ pub struct ProjectExport {
     /// `ProjectExport.watermarked`; absent on records from before the field).
     #[serde(default, skip_serializing_if = "is_none")]
     pub watermarked: Option<bool>,
+    /// The language these files show (`crate::localized`); absent for the
+    /// source of a project that lists none.
+    #[serde(default, skip_serializing_if = "is_none")]
+    pub language: Option<String>,
     /// Unknown keys, preserved — see `ProjectMetadata::extra`.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,

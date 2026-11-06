@@ -1407,7 +1407,7 @@ mod tests {
     /// A render's `language` reaches the CLI, promo_strings asks for JSON,
     /// and the app's list does not advertise what its handlers do not read yet.
     #[test]
-    fn a_language_reaches_the_render_and_the_app_is_not_offered_it() {
+    fn a_language_reaches_the_render_on_both_hosts() {
         let project = std::env::temp_dir().join(format!("mcp-language-{}", std::process::id()));
         std::fs::create_dir_all(&project).unwrap();
         let seen = std::cell::RefCell::new(Vec::<Vec<String>>::new());
@@ -1436,15 +1436,16 @@ mod tests {
             assert_eq!(at.map(|i| argv[i + 1].as_str()), Some("de,ja"), "{argv:?}");
         }
         assert!(seen.borrow()[4].contains(&"--json".to_string()));
+        // The app answers the same contract.
         let app = contract::tools(Host::App);
-        assert!(app.iter().all(|t| t["name"] != "promo_strings"));
+        assert!(app.iter().any(|t| t["name"] == "promo_strings"));
         for tool in app.iter().filter(|t| {
             t["name"]
                 .as_str()
                 .is_some_and(|n| n.starts_with("promo_render_"))
         }) {
             assert!(
-                tool.pointer("/inputSchema/properties/language").is_none(),
+                tool.pointer("/inputSchema/properties/language").is_some(),
                 "{}",
                 tool["name"]
             );

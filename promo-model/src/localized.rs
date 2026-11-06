@@ -457,6 +457,27 @@ pub fn choose(meta: &ProjectMetadata, choice: &str) -> Vec<Option<String>> {
     chosen
 }
 
+/// The whole answer about a project's strings: `promo strings --json`, the
+/// tools' `promo_strings`, and the app's. `choice` keeps those target
+/// languages' answers on each row.
+pub fn strings_report(meta: &ProjectMetadata, choice: Option<&str>) -> Value {
+    let mut rows = strings(meta);
+    if let Some(choice) = choice {
+        let chosen = choose(meta, choice);
+        for row in &mut rows {
+            row.translations
+                .retain(|t| chosen.contains(&Some(t.language.clone())));
+        }
+    }
+    let list = languages(meta);
+    serde_json::json!({
+        "source": list.as_ref().map(|l| l.source.clone()),
+        "targets": list.as_ref().map(|l| l.targets.clone()).unwrap_or_default(),
+        "summaries": summaries(meta),
+        "strings": rows,
+    })
+}
+
 /// The folder a language's render goes in, under where the source's goes:
 /// none for the source, so nothing moves for a project with no languages.
 pub fn folder(meta: &ProjectMetadata, language: Option<&str>) -> Option<String> {

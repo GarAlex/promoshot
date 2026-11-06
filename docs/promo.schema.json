@@ -2694,6 +2694,12 @@
         "kind": {
           "$ref": "#/$defs/ProjectExportKind"
         },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "watermarked": {
           "type": [
             "boolean",

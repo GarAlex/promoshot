@@ -528,6 +528,9 @@ fn strings(dir: &Path, opts: &Options) -> Result<String, String> {
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let meta = promo_model::ProjectMetadata::from_json(&text)
         .map_err(|e| format!("{}: {e}", path.display()))?;
+    if opts.json {
+        return Ok(localized::strings_report(&meta, opts.language.as_deref()).to_string());
+    }
     let mut rows = localized::strings(&meta);
     if let Some(choice) = &opts.language {
         let chosen = localized::choose(&meta, choice);
@@ -537,14 +540,6 @@ fn strings(dir: &Path, opts: &Options) -> Result<String, String> {
         }
     }
     let list = localized::languages(&meta);
-    if opts.json {
-        return Ok(serde_json::json!({
-            "source": list.as_ref().map(|l| l.source.clone()),
-            "targets": list.as_ref().map(|l| l.targets.clone()).unwrap_or_default(),
-            "strings": rows,
-        })
-        .to_string());
-    }
     let Some(list) = list else {
         return Ok(format!(
             "this project lists no languages ({} strings)",
