@@ -485,6 +485,15 @@ pub fn reveal_layout(
     );
     // Decided before the buffer borrows the font system.
     let weight = snap_weight(fonts, &resolved, style_weight(style), style.italic);
+    let cjk = cjk_family(fonts, &resolved, text).map(|name| {
+        let weight = snap_weight(
+            fonts,
+            &ResolvedFamily::Named(name.clone()),
+            style_weight(style),
+            style.italic,
+        );
+        (name, weight)
+    });
     let mut buffer = Buffer::new(fonts, metrics);
     let mut buffer = buffer.borrow_with(fonts);
     buffer.set_size(Some(box_.text_width as f32), None);
@@ -502,7 +511,10 @@ pub fn reveal_layout(
         } else {
             Style::Normal
         });
-    buffer.set_text(text, &attrs, Shaping::Advanced, None);
+    let cjk_attrs = cjk
+        .as_ref()
+        .map(|(name, weight)| attrs.clone().family(Family::Name(name)).weight(*weight));
+    set_text_with_cjk(&mut buffer, text, &attrs, cjk_attrs.as_ref());
     buffer.shape_until_scroll(true);
 
     let padding = style.padding;
@@ -516,6 +528,19 @@ pub fn reveal_layout(
     let paragraph_starts: Vec<usize> = std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
         .collect();
+    // Where a word starts inside a run of a script written without spaces,
+    // as the tokenizer cuts it: a synced reveal maps its words unit for unit.
+    let word_starts: std::collections::HashSet<usize> =
+        if by == RevealBy::Word && text.chars().any(promo_model::speech::is_unspaced) {
+            let offsets: Vec<usize> = text.char_indices().map(|(at, _)| at).collect();
+            promo_model::speech::tokenize(text)
+                .units
+                .iter()
+                .filter_map(|unit| offsets.get(unit[0] as usize).copied())
+                .collect()
+        } else {
+            Default::default()
+        };
     for (line, run) in buffer.layout_runs().enumerate() {
         let base = paragraph_starts.get(run.line_i).copied().unwrap_or(0);
         // The same step the rasterizer applies, and the same nudge, so a
@@ -575,6 +600,16 @@ pub fn reveal_layout(
                             units.push(span);
                         }
                         continue;
+                    }
+                    // A script without spaces: the next word starts here.
+                    if word_starts.contains(&(base + glyph.start))
+                        && current
+                            .as_ref()
+                            .is_some_and(|c| c.byte != base + glyph.start)
+                    {
+                        if let Some(span) = current.take() {
+                            units.push(span);
+                        }
                     }
                     let left = padding + glyph.x as f64 + shift(index);
                     let right = padding + (glyph.x + glyph.w) as f64 + shift(index);
@@ -858,6 +893,7 @@ pub fn outlines(
     }
     let mut fonts = font_system().lock().ok()?;
     let resolved = resolve_family(&mut fonts, family);
+    let cjk = cjk_family(&fonts, &resolved, text);
     let placed: Vec<Placed> = {
         let metrics = Metrics::new(EM, EM * 1.2);
         let mut buffer = Buffer::new(&mut fonts, metrics);
@@ -873,7 +909,10 @@ pub fn outlines(
             .family(family)
             .weight(if bold { Weight::BOLD } else { Weight::NORMAL })
             .style(if italic { Style::Italic } else { Style::Normal });
-        buffer.set_text(text, &attrs, Shaping::Advanced, None);
+        let cjk_attrs = cjk
+            .as_ref()
+            .map(|name| attrs.clone().family(Family::Name(name)));
+        set_text_with_cjk(&mut buffer, text, &attrs, cjk_attrs.as_ref());
         buffer.shape_until_scroll(true);
         let mut placed = Vec::new();
         for run in buffer.layout_runs() {
@@ -1036,6 +1075,180 @@ impl ttf_parser::OutlineBuilder for Flattener {
     }
 }
 
+/// Han and kana, with the marks and full-width forms written among them.
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF | 0x20000..=0x2FA1F
+        | 0x3000..=0x30FF | 0x31F0..=0x31FF | 0xFF00..=0xFFEF)
+}
+
+fn is_kana(c: char) -> bool {
+    matches!(c as u32, 0x3040..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9F)
+}
+
+/// Sans families for Japanese and Chinese, best first, across the platforms.
+/// A shaper left to itself looks for one family, and on macOS that one is out
+/// of reach of a font scan: each character then landed in whatever face had
+/// it, thin serif beside bold sans.
+const JAPANESE_FAMILIES: &[&str] = &[
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "Noto Sans CJK JP",
+    "Noto Sans JP",
+    "Source Han Sans JP",
+    "IPAGothic",
+];
+const CHINESE_FAMILIES: &[&str] = &[
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Heiti SC",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "Noto Sans SC",
+    "Source Han Sans SC",
+    "WenQuanYi Micro Hei",
+];
+
+/// Whether `family` draws `c`, by its first face.
+fn family_draws(fonts: &FontSystem, family: &ResolvedFamily, c: char) -> bool {
+    let ResolvedFamily::Named(name) = family else {
+        return false;
+    };
+    fonts
+        .db()
+        .faces()
+        .find(|face| face.families.iter().any(|(n, _)| n == name))
+        .is_some_and(|face| face_draws(fonts, face.id, c))
+}
+
+fn face_draws(fonts: &FontSystem, id: cosmic_text::fontdb::ID, c: char) -> bool {
+    fonts
+        .db()
+        .with_face_data(id, |data, index| {
+            ttf_parser::Face::parse(data, index)
+                .ok()
+                .and_then(|face| face.glyph_index(c))
+                .is_some()
+        })
+        .unwrap_or(false)
+}
+
+/// The family `text`'s Han and kana are drawn in when its own font has none
+/// of them. Text with any kana reads as Japanese, other Han as Chinese: a
+/// caption does not say its language here, and a Japanese label in kanji
+/// alone takes the Chinese family's shapes.
+fn cjk_family(fonts: &FontSystem, family: &ResolvedFamily, text: &str) -> Option<String> {
+    let sample = text
+        .chars()
+        .find(|c| is_cjk(*c) && !matches!(*c as u32, 0x3000..=0x303F | 0xFF00..=0xFF65))?;
+    if family_draws(fonts, family, sample) {
+        return None;
+    }
+    let list = if text.chars().any(is_kana) {
+        JAPANESE_FAMILIES
+    } else {
+        CHINESE_FAMILIES
+    };
+    list.iter()
+        .find(|name| {
+            fonts
+                .db()
+                .faces()
+                .any(|face| face.families.iter().any(|(n, _)| n == *name))
+        })
+        .map(|name| (*name).to_string())
+}
+
+/// `text` into `buffer` in `attrs`, its Han and kana in `cjk` when it has one.
+fn set_text_with_cjk(buffer: &mut Buffer, text: &str, attrs: &Attrs, cjk: Option<&Attrs>) {
+    let Some(cjk) = cjk else {
+        buffer.set_text(text, attrs, Shaping::Advanced, None);
+        return;
+    };
+    let mut spans: Vec<(&str, Attrs)> = Vec::new();
+    let mut start = 0;
+    let mut in_cjk = None;
+    for (at, c) in text.char_indices() {
+        let now = is_cjk(c);
+        if in_cjk.is_some_and(|was| was != now) {
+            spans.push((
+                &text[start..at],
+                if now { attrs.clone() } else { cjk.clone() },
+            ));
+            start = at;
+        }
+        in_cjk = Some(now);
+    }
+    spans.push((
+        &text[start..],
+        if in_cjk == Some(true) {
+            cjk.clone()
+        } else {
+            attrs.clone()
+        },
+    ));
+    buffer.set_rich_text(spans, attrs, Shaping::Advanced, None);
+}
+
+/// The families `text` is drawn in, laid out as a caption is: what says a line
+/// of one script stayed in one face.
+pub fn families_drawing(text: &str, style: &TextStyle) -> Vec<String> {
+    let Ok(mut fonts) = font_system().lock() else {
+        return Vec::new();
+    };
+    let resolved = resolve_family(&mut fonts, style.font_family.as_deref());
+    let cjk = cjk_family(&fonts, &resolved, text);
+    let weight = style_weight(style);
+    let metrics = Metrics::new(style.font_size as f32, style.font_size as f32);
+    let mut buffer = Buffer::new(&mut fonts, metrics);
+    let family = match &resolved {
+        ResolvedFamily::Named(name) => Family::Name(name),
+        ResolvedFamily::Serif => Family::Serif,
+        ResolvedFamily::Monospace => Family::Monospace,
+        ResolvedFamily::SansSerif => Family::SansSerif,
+    };
+    let attrs = Attrs::new().family(family).weight(weight);
+    let cjk_attrs = cjk
+        .as_ref()
+        .map(|name| attrs.clone().family(Family::Name(name)));
+    set_text_with_cjk(&mut buffer, text, &attrs, cjk_attrs.as_ref());
+    buffer.shape_until_scroll(&mut fonts, true);
+    let mut names: Vec<String> = Vec::new();
+    for run in buffer.layout_runs() {
+        for glyph in run.glyphs {
+            let name = fonts
+                .db()
+                .face(glyph.font_id)
+                .and_then(|face| face.families.first())
+                .map(|(name, _)| name.clone())
+                .unwrap_or_default();
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
+/// A character of `text` no font on this machine draws, if any: it would come
+/// out as a box or as nothing. Asked per script, the first of each block.
+pub fn undrawable(text: &str) -> Option<char> {
+    static KNOWN: OnceLock<Mutex<std::collections::HashMap<u32, bool>>> = OnceLock::new();
+    let mut known = KNOWN.get_or_init(Default::default).lock().ok()?;
+    let fonts = font_system().lock().ok()?;
+    text.chars()
+        .filter(|c| c.is_alphanumeric() && !c.is_ascii())
+        .find(|c| {
+            !*known.entry(*c as u32 >> 8).or_insert_with(|| {
+                fonts
+                    .db()
+                    .faces()
+                    .any(|face| face_draws(&fonts, face.id, *c))
+            })
+        })
+}
+
 /// The face text falls back to when the machine has no fonts at all:
 /// Tuffy, public domain, small enough to carry in every binary.
 pub const FALLBACK_FONT: &[u8] = include_bytes!("../fonts/Tuffy.ttf");
@@ -1179,6 +1392,15 @@ fn rasterize_inner(
     // font by name instead, from what the machine actually has. Resolved
     // before the buffer borrows the font system.
     let resolved = resolve_family(&mut fonts, style.font_family.as_deref());
+    let cjk = cjk_family(&fonts, &resolved, text).map(|name| {
+        let weight = snap_weight(
+            &fonts,
+            &ResolvedFamily::Named(name.clone()),
+            style_weight(style),
+            style.italic,
+        );
+        (name, weight)
+    });
 
     let metrics = Metrics::new(
         style.font_size as f32,
@@ -1206,7 +1428,10 @@ fn rasterize_inner(
         } else {
             Style::Normal
         });
-    buffer.set_text(text, &attrs, Shaping::Advanced, None);
+    let cjk_attrs = cjk
+        .as_ref()
+        .map(|(name, weight)| attrs.clone().family(Family::Name(name)).weight(*weight));
+    set_text_with_cjk(&mut buffer, text, &attrs, cjk_attrs.as_ref());
     buffer.shape_until_scroll(&mut fonts, true);
 
     // Letter spacing is not a shaping feature here — cosmic-text has none —

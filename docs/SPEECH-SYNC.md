@@ -698,7 +698,6 @@ the arrival of each unit in **layer-local seconds**, plus `reveal.unitEnds`
 | a caption reveal `sync` with unmatched units, or one matching under 50% of its words | warn |
 | a resource played by several layers named by resource id | warn |
 | `the take is longer than its layer — words 31–40 are never heard` | warn |
-| CJK or Thai scripts: `word sync for "intro" is by character` | note |
 
 **`promo validate`.** Text mode adds:
 
@@ -1601,7 +1600,7 @@ is `fixtures/speech/kitten-comma.wav` with the voice's own timing in
 6. **Swift drops the derived fields.** A copy, paste or rebuild path that constructs a fresh `TextReveal` loses `unitTimes`, and the preview then types uniformly while exports agree with the core. The three-path parity tests are the tripwire, plus model tests per path (BEAT-SYNC risk 4, again).
 7. **Placeholder records and re-takes.** The record must go with the stand-in file. A leftover record is harmless, because it is keyed by bytes no file has, but `.words/` grows. `promo words --prune` removes records with no file (S5).
 8. **Normalization drift.** local-tts and the providers normalize numbers, dates and URLs differently, so §2.5's merges must be generous. A wrong 1:k merge mis-times one word and never shifts the rest, because the DP is monotonic.
-9. **CJK and Thai.** Whitespace words do not exist there, so v1 syncs by character (and sentences). It is noted, not hidden.
+9. **Scripts without spaces.** Han, kana, Thai, Lao, Burmese and Khmer get their words from one dictionary (`icu_segmenter`, pinned), compiled in, so every host counts the same words. A record made when characters were words is regrouped when it is read, keeping its times.
 10. **The dot-folder in `Resources/`.** The scanners already skip `.beats` (the BEAT-SYNC risk 8 audit). Add `.words` to the same test.
 11. **Rung 50 locks out shipped apps** (3.2 and older) for files that use speech sync. This was accepted for 49, and the same rule applies. Seconds-only and beat files are unaffected (AC4).
 12. **Cost.** Timing adds no provider calls: ElevenLabs and Google return it in the same request. Only `--transcribe` spends extra, and only when asked.

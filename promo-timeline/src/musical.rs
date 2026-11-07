@@ -365,10 +365,6 @@ pub enum TimingProblem {
         take: String,
         note: String,
     },
-    /// A script with no spaces between words: synced by character.
-    SpeechByCharacter {
-        take: String,
-    },
     /// Words the layer that plays the take never reaches.
     TakeLongerThanLayer {
         take: String,
@@ -677,9 +673,6 @@ impl std::fmt::Display for TimingProblem {
                 "\"{take}\"'s text changed since its take was voiced — times follow the old take"
             ),
             Self::SpeechMayNotSay { take, note } => write!(f, "\"{take}\": {note}"),
-            Self::SpeechByCharacter { take } => {
-                write!(f, "word sync for \"{take}\" is by character")
-            }
             Self::TakeLongerThanLayer {
                 take,
                 layer,

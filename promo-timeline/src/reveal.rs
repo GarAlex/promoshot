@@ -96,35 +96,31 @@ pub fn effective(rule: TextReveal, layer: &ProjectLayer) -> TextReveal {
 
 /// A synced reveal by character or by line with its times made per unit
 /// of `layout` (docs/SPEECH-SYNC.md §7.1). The core's times are per word
-/// (whitespace-separated, as the timeline matched them); the layout knows
+/// (the tokenizer's units, as the timeline matched them); the layout knows
 /// where each character or line sits in the text, so a character arrives
 /// at its share of its word's span — the letters of a word type across the
 /// time it is said — and a line with its first word, lit until its last
 /// word ends. A space arrives with the next word and is never the active
-/// unit. A word reveal, or times that do not match the text's words, are
-/// returned as they are (the position approximation in `progress`).
+/// unit. Times that do not match the text's words are returned as they are
+/// (the position approximation in `progress`).
 pub fn per_unit(rule: TextReveal, layout: &promo_text::RevealLayout) -> TextReveal {
-    if !matches!(rule.by, RevealUnit::Character | RevealUnit::Line) {
-        return rule;
-    }
     let Some(times) = rule.unit_times.as_deref() else {
         return rule;
     };
     let text = layout.text.as_str();
     let mut words: Vec<(usize, usize)> = Vec::new();
-    let mut open: Option<usize> = None;
-    for (i, c) in text.char_indices() {
-        match (c.is_whitespace(), open) {
-            (false, None) => open = Some(i),
-            (true, Some(start)) => {
-                words.push((start, i));
-                open = None;
-            }
-            _ => {}
-        }
+    let offsets: Vec<usize> = text
+        .char_indices()
+        .map(|(at, _)| at)
+        .chain(std::iter::once(text.len()))
+        .collect();
+    for unit in promo_model::speech::tokenize(text).units {
+        words.push((offsets[unit[0] as usize], offsets[unit[1] as usize]));
     }
-    if let Some(start) = open {
-        words.push((start, text.len()));
+    // By word, the layout's units are these words, unless a line broke inside
+    // one: then each part arrives at its share of the word, as letters do.
+    if rule.by == RevealUnit::Word && layout.units.len() == words.len() {
+        return rule;
     }
     let units = &layout.units;
     if words.is_empty() || words.len() != times.len() || units.is_empty() {
@@ -598,6 +594,7 @@ mod tests {
 
     /// By line, a line arrives with its first word and is lit until its
     /// last word ends; a word walk, or times for other words, are as given.
+    /// A line that broke inside a word shares that word's time out.
     #[test]
     fn a_synced_line_arrives_with_its_first_word() {
         let r = rule(
@@ -613,7 +610,15 @@ mod tests {
             by: RevealUnit::Word,
             ..r.clone()
         };
-        assert_eq!(per_unit(words.clone(), &layout), words);
+        let whole = spans("one two three", &[0, 4, 8], &[0, 0, 0]);
+        assert_eq!(per_unit(words.clone(), &whole), words);
+        let broken = spans("one two three", &[0, 4, 8, 11], &[0, 0, 0, 1]);
+        let walked = per_unit(words, &broken);
+        assert_eq!(
+            walked.unit_times.as_deref(),
+            Some(&[1.0, 2.0, 3.0, 3.3][..])
+        );
+        assert_eq!(walked.unit_ends.as_deref(), Some(&[1.5, 2.5, 3.3, 3.5][..]));
     }
 
     /// The pace comes from the caption's own life unless it is stated, so a

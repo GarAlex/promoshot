@@ -44,7 +44,9 @@ pub struct Found {
 }
 
 fn read(path: &Path) -> Option<TakeTiming> {
-    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+    serde_json::from_str(&std::fs::read_to_string(path).ok()?)
+        .ok()
+        .map(crate::speech::regrouped)
 }
 
 /// Every record of audio `audio32`, with its path.

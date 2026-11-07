@@ -104,6 +104,24 @@ fn caption_checks(
         Some(comp) => format!("caption \"{}\" (in composition \"{comp}\")", layer.name),
         None => format!("caption \"{}\"", layer.name),
     };
+    if let Some(c) = layer
+        .caption_text
+        .as_deref()
+        .or_else(|| {
+            let id = layer.resource_id.as_deref()?;
+            resources
+                .iter()
+                .find(|r| r.id == id)?
+                .caption_text
+                .as_deref()
+        })
+        .and_then(promo_text::undrawable)
+    {
+        out.push(format!(
+            "{named}: no font on this machine draws \"{c}\", so it comes out blank or as a box: \
+             install one for this language"
+        ));
+    }
     let safe = SAFE_SHARE * w.min(h);
     // The worst finding of each kind across the instants, so a caption
     // says one thing about its edges and one about what covers it.

@@ -756,3 +756,83 @@ fn generators_and_validate_follow_the_language() {
         "{lines:#?}"
     );
 }
+
+const JA: &str = "新しいダッシュボードをご紹介します。売上から注文まで、必要なものはすべてワンタップで見つかります。東京のチームにも同じ画面が見えています。";
+
+fn japanese(captions: Value, extra: Vec<Value>) -> (ProjectMetadata, TimingReport) {
+    let mut file = narrated(captions);
+    file["resources"][0]["speech"]["text"] = json!(JA);
+    file["resources"][0]["duration"] = json!(12.0);
+    file["layers"][0]["duration"] = json!(12.0);
+    file["layers"].as_array_mut().unwrap().extend(extra);
+    resolved_with(&file, &inputs_with(timing(JA, 12.0)))
+}
+
+/// A script with no spaces: each piece says its own words, none runs on
+/// through the rest of the narration, and every word is said once.
+#[test]
+fn captions_without_spaces_say_their_own_words() {
+    let (meta, _) = japanese(json!({"by": "sentence"}), Vec::new());
+    let pieces: Vec<String> = generated(&meta)
+        .iter()
+        .map(|l| l.caption_text.clone().unwrap())
+        .collect();
+    assert!(pieces.len() > 3, "{pieces:?}");
+    assert_eq!(pieces.concat(), JA, "nothing lost, nothing said twice");
+    for piece in &pieces {
+        assert!(piece.chars().count() < 40, "ran on: {piece}");
+        // Not "ます", not "を": a piece starts on a word of its own.
+        let first = promo_model::speech::tokenize(piece).words[0].text.clone();
+        assert!(
+            !first
+                .chars()
+                .all(|c| ('\u{3040}'..='\u{309F}').contains(&c)),
+            "starts on a particle: {piece}"
+        );
+    }
+    assert_eq!(pieces[0], "新しいダッシュボードをご紹介します。");
+    // The comma is where the second sentence divides, when it has to.
+    assert!(
+        pieces.iter().any(|p| p == "売上から注文まで、"),
+        "{pieces:?}"
+    );
+}
+
+/// A name in a script with no spaces is found however the dictionary cuts it.
+#[test]
+fn a_name_without_spaces_is_found_as_written() {
+    let at = |name: &str| {
+        let mut anchored = caption("anchor", "x", json!({"by": "word"}), json!({}));
+        anchored["startTime"] = json!({"word": name, "of": "intro"});
+        let (meta, report) = japanese(json!({"by": "sentence"}), vec![anchored]);
+        (layer(&meta, "anchor").start_time, report)
+    };
+    let timed = timing(JA, 12.0);
+    // The layer playing the take starts at 2.
+    let word = |text: &str| 2.0 + timed.words.iter().find(|w| w.text == text).unwrap().start;
+    let (start, report) = at("東京");
+    assert!(close(start, word("東京")), "{start} {report:?}");
+    // Two of the take's words, as one name.
+    let (start, _) = at("同じ画面");
+    assert!(close(start, word("同じ")), "{start}");
+}
+
+/// A reveal on a generated piece arrives word by word on the take's own words.
+#[test]
+fn a_synced_reveal_without_spaces_walks_its_words() {
+    let (meta, report) = japanese(
+        json!({"by": "sentence",
+               "style": {"reveal": {"by": "word", "sync": {"mode": "words", "of": "intro"}}}}),
+        Vec::new(),
+    );
+    let first = generated(&meta)[0];
+    let reveal = first
+        .caption_style
+        .as_ref()
+        .and_then(|s| s.reveal.clone())
+        .expect("a reveal");
+    let times = reveal.unit_times.expect("synced");
+    let units = promo_model::speech::unit_texts(first.caption_text.as_deref().unwrap());
+    assert_eq!(times.len(), units.len(), "{units:?} {report:?}");
+    assert!(times.windows(2).all(|t| t[0] < t[1]), "{times:?}");
+}

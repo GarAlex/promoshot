@@ -449,7 +449,8 @@ is for; the schema section says how to write it.
   a row, `by: "machine"` when you translated it): anything that is a resource's parameter can differ,
   layers and timing cannot. A German screenshot is a patch naming its `filename`
   and pixel size (`promo_media_probe` answers both), a composition of its own is
-  `forkComposition`, then `inComposition` with `language`. Keep a narration's sentence count and a label's
+  `forkComposition`, then `inComposition` with `language`. Japanese, Chinese and Thai have real
+  words like any other language. Keep a narration's sentence count and a label's
   length close to the source, and read validate's Languages block after. A
   narration needs its language's own voice (`setTranslation` patch
   `{"speech": {"provider", "voiceID"}}`), then `promo_speak` with `language`,

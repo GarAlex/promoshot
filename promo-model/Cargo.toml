@@ -18,6 +18,11 @@ sha2 = "0.10"
 # The machine half of the format: a JSON Schema GENERATED from these same
 # structs, so it cannot drift from what the parser accepts.
 schemars = "1"
+# Words in scripts written without spaces: a dictionary for Han and kana, a
+# small compiled-in model for Thai, Lao, Khmer and Burmese, which copes with
+# loanwords no dictionary has. The same cut on every host. Pinned: another
+# version moves word numbers, which anchors and hand corrections count on.
+icu_segmenter = { version = "=2.4.0", default-features = false, features = ["compiled_data", "auto"] }
 
 [dev-dependencies]
 # Holds the generated schema to the recipes and the full fixture.

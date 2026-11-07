@@ -76,14 +76,6 @@ fn tokenizer_words_are_reveal_units() {
     let mut checked = 0;
     for text in &texts {
         let script = promo_model::speech::tokenize(text);
-        // Scripts written without spaces reveal by character; their words
-        // are characters, not units (§1.2).
-        if text
-            .chars()
-            .any(|c| (0x3040..=0x9FFF).contains(&(c as u32)))
-        {
-            continue;
-        }
         let Some(layout) = reveal_layout(text, 1920.0, 1080.0, &style, RevealBy::Word) else {
             continue;
         };
@@ -108,4 +100,61 @@ fn tokenizer_words_are_reveal_units() {
         checked += 1;
     }
     assert!(checked > 50, "only {checked} captions laid out");
+}
+
+/// Scripts written without spaces: a word reveal walks real words, the
+/// tokenizer's, or a synced reveal lights the wrong ones. No project in the
+/// repo says any of these, so the sweep above cannot see them.
+#[test]
+fn a_reveal_by_word_walks_words_without_spaces() {
+    let style = TextStyle {
+        font_size: 48.0,
+        padding: 10.0,
+        left_margin: 40.0,
+        right_margin: 40.0,
+        ..TextStyle::default()
+    };
+    for text in [
+        "東京のチームにも同じ画面が見えています。",
+        "您在东京的团队也能看到。",
+        "ทีมของคุณในโตเกียว",
+        "iPadで見る「東京」",
+    ] {
+        let script = promo_model::speech::tokenize(text);
+        let layout = reveal_layout(text, 1920.0, 1080.0, &style, RevealBy::Word).expect("layout");
+        let offsets: Vec<usize> = text.char_indices().map(|(at, _)| at).collect();
+        let starts: Vec<usize> = script
+            .units
+            .iter()
+            .map(|unit| offsets[unit[0] as usize])
+            .collect();
+        let got: Vec<usize> = layout.units.iter().map(|u| u.byte).collect();
+        assert_eq!(got, starts, "{text}");
+    }
+}
+
+/// One caption, one look: a machine with a Japanese or a Chinese family draws
+/// all of a caption's Han and kana in it. Left to the shaper, 画 came out in a
+/// thin serif in the middle of a bold sans line.
+#[test]
+fn a_caption_without_spaces_is_one_face() {
+    let style = TextStyle {
+        font_size: 48.0,
+        bold: true,
+        padding: 10.0,
+        left_margin: 40.0,
+        right_margin: 40.0,
+        ..TextStyle::default()
+    };
+    for text in [
+        "売上から注文まで、必要なものは画面に見えています。",
+        "您在东京的团队也能看到同样的画面。",
+    ] {
+        // A machine with no such font (the Linux CI) says so: `undrawable`.
+        if promo_text::undrawable(text).is_none() {
+            let families = promo_text::families_drawing(text, &style);
+            assert_eq!(families.len(), 1, "{text}: {families:?}");
+        }
+    }
+    assert_eq!(promo_text::undrawable("plain English, with an é"), None);
 }

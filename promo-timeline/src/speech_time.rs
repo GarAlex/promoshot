@@ -616,10 +616,31 @@ impl<'a> Speech<'a> {
             }
             SpeechPoint::WordText { text, nth } => {
                 let wanted = fold_word(text);
+                // Written without spaces, a name can be several of the take's
+                // words, however the dictionary cuts it there.
+                let whole = text.chars().any(promo_model::speech::is_unspaced).then(|| {
+                    promo_model::speech::tokenize(text)
+                        .words
+                        .iter()
+                        .map(|w| w.text.to_lowercase())
+                        .collect::<String>()
+                });
                 let hits: Vec<usize> = words
                     .iter()
                     .enumerate()
-                    .filter(|(_, w)| fold_word(&w.text) == wanted)
+                    .filter(|(k, w)| match &whole {
+                        Some(whole) => {
+                            let mut said = String::new();
+                            words[*k..].iter().any(|next| {
+                                said.push_str(&next.text.to_lowercase());
+                                if said.len() >= whole.len() {
+                                    return said == *whole;
+                                }
+                                false
+                            })
+                        }
+                        None => fold_word(&w.text) == wanted,
+                    })
                     .map(|(k, _)| k)
                     .collect();
                 match hits.get(*nth as usize - 1) {
@@ -1236,7 +1257,7 @@ pub struct SpeechClockInfo {
 
 /// What a reader of a speech-cut edit wants to hear, for the takes a scope
 /// used: timing that is estimated, unsure, stale or doubted; a take longer
-/// than the layer that plays it; a script synced by character; and every
+/// than the layer that plays it; and every
 /// visual edge that cuts through a word.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn findings(
@@ -1300,12 +1321,6 @@ pub(crate) fn findings(
                     note: note.into(),
                 });
             }
-        }
-        if t.script
-            .chars()
-            .any(|c| matches!(c as u32, 0x3040..=0x30FF | 0x4E00..=0x9FFF | 0x0E00..=0x0E7F))
-        {
-            problems.push(TimingProblem::SpeechByCharacter { take: id.clone() });
         }
         // Words the layer never plays.
         if take.player().is_some() {

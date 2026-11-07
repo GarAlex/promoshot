@@ -7,7 +7,9 @@
 
 use std::collections::BTreeSet;
 
-use promo_model::speech::{fold_word, tokenize, RevealSync, SpeechCaptions, TakeTiming};
+use promo_model::speech::{
+    fold_word, tokenize, unit_texts, RevealSync, SpeechCaptions, TakeTiming,
+};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, TextReveal};
 use serde_json::{json, Value};
 
@@ -100,7 +102,7 @@ pub(crate) fn unit_times(
 ) -> Result<UnitTimes, String> {
     let timing = &take.timing;
     let (from, to) = window(sync, timing)?;
-    let units: Vec<&str> = text.split_whitespace().collect();
+    let units = unit_texts(text);
     // Each unit's own words, folded: a hyphenated unit may be several.
     let mut sub: Vec<String> = Vec::new();
     let mut owner: Vec<usize> = Vec::new();
@@ -357,18 +359,42 @@ pub(crate) fn sync_reveals(
     walk(layers, &speech, meta_text, problems, missing);
 }
 
+/// The script's characters from the end of word `i` up to the next word or
+/// the next space: what closes that word. A script written without spaces
+/// has no space to stop at, so the next word is what ends it.
+fn after_word<'a>(timing: &TakeTiming, chars: &'a [char], i: usize) -> &'a [char] {
+    let from = (timing.words[i].chars[1] as usize).min(chars.len());
+    let next = timing
+        .words
+        .get(i + 1)
+        .map_or(chars.len(), |w| (w.chars[0] as usize).min(chars.len()));
+    let to = chars[from..next.max(from)]
+        .iter()
+        .position(|c| c.is_whitespace())
+        .map_or(next.max(from), |at| from + at);
+    &chars[from..to]
+}
+
 /// Where a piece of a sentence may be split: after word `i` (0-based),
 /// with a comma or semicolon there.
 fn comma_after(timing: &TakeTiming, i: usize) -> bool {
     let chars: Vec<char> = timing.script.chars().collect();
-    let mut k = timing.words[i].chars[1] as usize;
-    while k < chars.len() && !chars[k].is_whitespace() {
-        if matches!(chars[k], ',' | ';' | ':' | '\u{2014}' | '\u{2013}') {
-            return true;
-        }
-        k += 1;
-    }
-    false
+    after_word(timing, &chars, i).iter().any(|c| {
+        matches!(
+            c,
+            ',' | ';' | ':' | '\u{2014}' | '\u{2013}' | '、' | '，' | '；' | '：' | '،' | '؛'
+        )
+    })
+}
+
+/// A word that hangs on the one before it: Japanese particles and verb
+/// endings are written in hiragana alone, and a piece does not start with one.
+fn leans_back(timing: &TakeTiming, i: usize) -> bool {
+    timing.words.get(i).is_some_and(|w| {
+        w.text
+            .chars()
+            .all(|c| ('\u{3040}'..='\u{309F}').contains(&c))
+    })
 }
 
 /// A sentence's words split into pieces of at most `max_words` words and
@@ -396,6 +422,12 @@ fn split(
         .copied()
         .filter(|i| comma_after(timing, *i))
         .min_by(|x, y| near(x).total_cmp(&near(y)))
+        .or_else(|| {
+            cuts.iter()
+                .copied()
+                .filter(|i| !leans_back(timing, *i + 1))
+                .min_by(|x, y| near(x).total_cmp(&near(y)))
+        })
         .or_else(|| {
             cuts.iter()
                 .copied()
@@ -442,10 +474,8 @@ pub(crate) fn pieces(timing: &TakeTiming, config: &SpeechCaptions) -> Vec<(usize
 fn slice(timing: &TakeTiming, a: usize, b: usize) -> String {
     let chars: Vec<char> = timing.script.chars().collect();
     let from = timing.words[a].chars[0] as usize;
-    let mut to = timing.words[b].chars[1] as usize;
-    while to < chars.len() && !chars[to].is_whitespace() {
-        to += 1;
-    }
+    let closing = after_word(timing, &chars, b).len();
+    let to = timing.words[b].chars[1] as usize + closing;
     chars[from.min(chars.len())..to.min(chars.len())]
         .iter()
         .collect::<String>()
@@ -644,7 +674,7 @@ pub fn reveal_match(
         },
         Err(why) => RevealMatch {
             sync,
-            units: text.split_whitespace().count(),
+            units: unit_texts(&text).len(),
             matched: 0,
             span: None,
             error: Some(why),

@@ -1448,6 +1448,14 @@ in the difference. A script of its own has no `renderedHash`, `placeholder` or
 `wordFixes` but its own, and a `speech` naming no text changes nothing yet.
 Taking a script back with `setTranslation` (`key`, no `text`) takes its take too.
 
+Scripts written without spaces (Han, kana, Thai, Lao, Burmese, Khmer) have real
+words, from one dictionary on every host, so a word reveal lights ダッシュボード whole,
+captions break between words, and `{"word": "東京"}` finds a name even when it is
+several of the take's words. Thai marks no sentence ends, so a Thai take is one
+sentence unless a blank line says otherwise. A caption's Han and kana use a
+Japanese or Chinese font when its own font has none (any kana reads as Japanese),
+and validate warns when no font on the machine draws a caption's script.
+
 Sentences are what languages share, so keep a translation's sentence count:
 `{"sentence": 2}` carries over, and validate says when a language's count
 differs. Words do not carry over. Once a language has its own take, a word

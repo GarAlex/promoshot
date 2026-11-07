@@ -296,13 +296,14 @@ pub struct Script {
 }
 
 /// Punctuation a word's margins lose.
-const MARGIN: &str = "\"“”‘’«»()[]{}.,;:!?…—–-";
+const MARGIN: &str =
+    "\"“”‘’«»()[]{}.,;:!?…—–-。、！？，；：「」『』（）【】〈〉《》〔〕｡؟،؛۔।॥။၊។៕";
 
 /// Ends a sentence when whitespace (or the end) follows.
 const TERMINATORS: &str = ".!?…";
 
 /// Ends a sentence wherever it stands: scripts written without spaces.
-const CJK_TERMINATORS: &str = "。！？";
+const CJK_TERMINATORS: &str = "。！？｡؟۔।॥။។";
 
 /// Closing marks that may stand between a terminator and the whitespace.
 const CLOSERS: &str = "\"”’»)]}'";
@@ -314,25 +315,52 @@ fn is_margin(c: char) -> bool {
     MARGIN.contains(c)
 }
 
-/// A character written without spaces between words, which v1 makes a
-/// word of its own: Han and kana.
-fn is_cluster_script(c: char) -> bool {
+/// A character of a script written without spaces between words: Han, kana,
+/// Thai, Lao, Burmese, Khmer. Its words come from [`SEGMENTER`].
+pub fn is_unspaced(c: char) -> bool {
     let u = c as u32;
     matches!(u,
         0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF | 0x20000..=0x2FA1F
-        | 0x3040..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9F)
-}
-
-fn is_thai(c: char) -> bool {
-    (0x0E00..=0x0E7F).contains(&(c as u32))
+        | 0x3005..=0x3007 | 0x3040..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9F
+        | 0x0E00..=0x0E7F | 0x0E80..=0x0EFF | 0x1000..=0x109F | 0x1780..=0x17FF)
 }
 
 /// A mark that belongs to the character before it.
 fn is_combining(c: char) -> bool {
     let u = c as u32;
-    matches!(u,
-        0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F
-        | 0x3099..=0x309A | 0x0E31 | 0x0E34..=0x0E3A | 0x0E47..=0x0E4E)
+    matches!(u, 0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F)
+}
+
+/// Opens what comes next, so it travels with the next word when a run with
+/// no spaces is cut into units.
+const OPENERS: &str = "「『（【〈《〔“‘([{";
+
+/// One segmenter for the process: its data is compiled in, and a caption's
+/// words are asked for many times a frame's worth of times.
+static SEGMENTER: std::sync::LazyLock<icu_segmenter::WordSegmenterBorrowed<'static>> =
+    std::sync::LazyLock::new(|| {
+        icu_segmenter::WordSegmenter::new_auto(
+            icu_segmenter::options::WordBreakInvariantOptions::default(),
+        )
+    });
+
+/// The words of a run with no spaces, as visible-index ends, in order.
+fn unspaced_cuts(vis: &[Visible], start: usize, end: usize) -> Vec<usize> {
+    let text: String = vis[start..end].iter().filter_map(|v| v.c).collect();
+    let mut chars = 0usize;
+    let mut bytes = 0usize;
+    let mut scalars = text.chars();
+    SEGMENTER
+        .segment_str(&text)
+        .filter(|&cut| cut > 0)
+        .map(|cut| {
+            while bytes < cut {
+                bytes += scalars.next().map_or(1, char::len_utf8);
+                chars += 1;
+            }
+            start + chars
+        })
+        .collect()
 }
 
 /// One visible character of the script: the character, the raw scalar span
@@ -450,17 +478,18 @@ fn is_gap(v: &Visible) -> bool {
 /// tokenizer: providers, the aligner, the estimate, the resolver and the
 /// caption mapping all go through it.
 ///
-/// - A unit is a maximal run of non-whitespace (tags count as whitespace in
-///   SSML), the unit a caption reveals by word.
+/// - A unit is what a caption reveals by word: a maximal run of
+///   non-whitespace (tags count as whitespace in SSML), cut again between
+///   the words of a script written without spaces. Punctuation stays with
+///   the word it closes, and an opening mark goes with the word it opens.
 /// - A word is a unit with its outer punctuation stripped; inner
 ///   apostrophes and hyphens stay. A unit with no letter or digit left
-///   ("—", "&") is no word. Han and kana characters are a word each, a
-///   Thai character with its marks too: v1 syncs those scripts by
-///   character.
+///   ("—", "&") is no word. Scripts written without spaces get their words
+///   from a dictionary, the same on every host.
 /// - A sentence ends at `.`, `!`, `?` or `…` followed by whitespace or the
-///   end (closing quotes allowed between), at `。`, `！` or `？`, or at a
-///   blank line — never after a listed abbreviation, never inside a
-///   decimal.
+///   end (closing quotes allowed between), at a mark of a script's own that
+///   ends one wherever it stands (`。`, `！`, `？`, `؟`, `।` …), or at a
+///   blank line — never after a listed abbreviation, never inside a decimal.
 pub fn tokenize(script: &str) -> Script {
     let ssml = script.trim_start().to_lowercase().starts_with("<speak");
     let vis = visible(script, ssml);
@@ -478,42 +507,55 @@ pub fn tokenize(script: &str) -> Script {
         while i < vis.len() && !is_gap(&vis[i]) {
             i += 1;
         }
-        let unit = units.len() as u32;
-        units.push([vis[start].start, vis[i - 1].end]);
-        // Segments: each cluster-script character (and Thai character) with
-        // its marks alone, every other run together.
+        let mut unit_start = start;
+        let mut unit_has_word = false;
+        // Segments: each word of a script without spaces alone, every other
+        // run together.
         let mut s = start;
         while s < i {
             let c = vis[s].c.unwrap_or(' ');
-            let mut e = s + 1;
-            if is_cluster_script(c) || (is_thai(c) && !is_combining(c)) {
-                while e < i && vis[e].c.is_some_and(is_combining) {
+            let ends: Vec<usize> = if is_unspaced(c) {
+                let mut e = s + 1;
+                while e < i && vis[e].c.is_some_and(|n| is_unspaced(n) || is_combining(n)) {
                     e += 1;
                 }
+                unspaced_cuts(&vis, s, e)
             } else {
-                while e < i {
-                    let n = vis[e].c.unwrap_or(' ');
-                    if is_cluster_script(n) || (is_thai(n) && !is_combining(n)) {
-                        break;
-                    }
+                let mut e = s + 1;
+                while e < i && !vis[e].c.is_some_and(is_unspaced) {
                     e += 1;
                 }
+                vec![e]
+            };
+            for e in ends {
+                let (mut a, mut b) = (s, e);
+                while a < b && vis[a].c.is_some_and(is_margin) {
+                    a += 1;
+                }
+                while b > a && vis[b - 1].c.is_some_and(is_margin) {
+                    b -= 1;
+                }
+                if vis[a..b]
+                    .iter()
+                    .any(|v| v.c.is_some_and(char::is_alphanumeric))
+                {
+                    if unit_has_word {
+                        let mut cut = s;
+                        while cut > unit_start + 1
+                            && vis[cut - 1].c.is_some_and(|o| OPENERS.contains(o))
+                        {
+                            cut -= 1;
+                        }
+                        units.push([vis[unit_start].start, vis[cut - 1].end]);
+                        unit_start = cut;
+                    }
+                    unit_has_word = true;
+                    spans.push((a, b, s, e, units.len() as u32));
+                }
+                s = e;
             }
-            let (mut a, mut b) = (s, e);
-            while a < b && vis[a].c.is_some_and(is_margin) {
-                a += 1;
-            }
-            while b > a && vis[b - 1].c.is_some_and(is_margin) {
-                b -= 1;
-            }
-            if vis[a..b]
-                .iter()
-                .any(|v| v.c.is_some_and(char::is_alphanumeric))
-            {
-                spans.push((a, b, s, e, unit));
-            }
-            s = e;
         }
+        units.push([vis[unit_start].start, vis[i - 1].end]);
     }
 
     let words: Vec<ScriptWord> = spans
@@ -588,6 +630,68 @@ fn sentence_ends(gap: &[Visible], word: &str) -> bool {
         }
     }
     false
+}
+
+/// The text of each unit of `text`, as [`tokenize`] cuts it: what a caption
+/// reveals by word.
+pub fn unit_texts(text: &str) -> Vec<&str> {
+    let units = tokenize(text).units;
+    let offsets: Vec<usize> = text
+        .char_indices()
+        .map(|(at, _)| at)
+        .chain(std::iter::once(text.len()))
+        .collect();
+    units
+        .iter()
+        .filter_map(|u| text.get(offsets[u[0] as usize]..offsets[u[1] as usize]))
+        .collect()
+}
+
+/// A record made when the words of its script were cut otherwise, on the
+/// words the script has now: each takes the first start and the last end
+/// of the old words it covers, so what a provider sold stays and nothing is
+/// bought or aligned again. A record already on these words is untouched.
+pub fn regrouped(timing: TakeTiming) -> TakeTiming {
+    let script = tokenize(&timing.script);
+    let same = timing.words.len() == script.words.len()
+        && timing
+            .words
+            .iter()
+            .zip(&script.words)
+            .all(|(old, new)| old.chars == new.chars);
+    if same {
+        return timing;
+    }
+    let mut words = Vec::with_capacity(script.words.len());
+    for new in &script.words {
+        let covered: Vec<&Word> = timing
+            .words
+            .iter()
+            .filter(|old| old.chars[0] < new.chars[1] && new.chars[0] < old.chars[1])
+            .collect();
+        let (Some(first), Some(last)) = (covered.first(), covered.last()) else {
+            // A word no old word touched has nothing to say about time.
+            return timing;
+        };
+        words.push(Word {
+            text: new.text.clone(),
+            start: first.start,
+            end: last.end,
+            chars: new.chars,
+            confidence: first.confidence,
+            interpolated: covered.iter().all(|old| old.interpolated),
+            prominence: covered
+                .iter()
+                .filter_map(|old| old.prominence)
+                .max_by(f64::total_cmp),
+        });
+    }
+    let sentences = sentences_of(&script, &words);
+    TakeTiming {
+        words,
+        sentences,
+        ..timing
+    }
 }
 
 /// The sentences of `words` (times filled in) on the script's sentence
@@ -1423,15 +1527,115 @@ mod tests {
         assert_eq!(amp.words[0].chars, [7, 14]);
     }
 
+    fn texts(script: &str) -> Vec<String> {
+        tokenize(script).words.into_iter().map(|w| w.text).collect()
+    }
+
     #[test]
-    fn scripts_without_spaces_sync_by_character() {
+    fn scripts_without_spaces_have_words() {
         let t = tokenize("你好。世界！ OK");
-        let texts: Vec<&str> = t.words.iter().map(|w| w.text.as_str()).collect();
-        assert_eq!(texts, ["你", "好", "世", "界", "OK"]);
+        assert_eq!(texts("你好。世界！ OK"), ["你好", "世界", "OK"]);
         assert_eq!(t.sentences.len(), 3);
-        assert_eq!(t.units.len(), 2);
-        let thai = tokenize("สวัสดี");
-        assert_eq!(thai.words.len(), 4, "{:?}", thai.words);
+        assert_eq!(t.units.len(), 3, "a unit per word, with what closes it");
+        assert_eq!(unit_texts("你好。世界！ OK"), ["你好。", "世界！", "OK"]);
+
+        assert_eq!(texts("東京のチーム"), ["東京", "の", "チーム"]);
+        // A loanword no dictionary has stays whole beside the word after it.
+        assert_eq!(texts("แดชบอร์ดใหม่"), ["แดชบอร์ด", "ใหม่"]);
+        // Other scripts in the run keep their own word, and an opening mark
+        // goes with the word it opens.
+        assert_eq!(texts("iPadで見る"), ["iPad", "で", "見る"]);
+        assert_eq!(
+            unit_texts("今日は「東京」へ"),
+            ["今日", "は", "「東京」", "へ"]
+        );
+        // The repeat mark and the long vowel stay in their words.
+        assert_eq!(texts("人々とコーヒー"), ["人々", "と", "コーヒー"]);
+    }
+
+    #[test]
+    fn a_word_is_where_the_script_says_it_is() {
+        let script = "東京のチーム";
+        let t = tokenize(script);
+        let chars: Vec<char> = script.chars().collect();
+        for word in &t.words {
+            let said: String = chars[word.chars[0] as usize..word.chars[1] as usize]
+                .iter()
+                .collect();
+            assert_eq!(said, word.text);
+        }
+    }
+
+    #[test]
+    fn spaced_scripts_are_cut_as_they_were() {
+        let t = tokenize("Well-known names, e.g. R&D: 3.5 percent.");
+        assert_eq!(t.units.len(), 6);
+        assert_eq!(t.words.len(), 6);
+        assert_eq!(unit_texts("one, two (three)"), ["one,", "two", "(three)"]);
+        assert_eq!(
+            tokenize("안녕하세요 세계").words.len(),
+            2,
+            "Hangul has spaces"
+        );
+    }
+
+    #[test]
+    fn scripts_end_sentences_with_their_own_marks() {
+        assert_eq!(tokenize("هل أنت هنا؟ نعم").sentences.len(), 2);
+        assert_eq!(tokenize("नमस्ते। आप कैसे हैं").sentences.len(), 2);
+    }
+
+    /// A record from when a script's characters were its words: its times
+    /// stay, on the words the script has now, with nothing bought or aligned.
+    #[test]
+    fn a_record_of_the_old_words_is_regrouped() {
+        let script = "東京の。チーム";
+        let chars: Vec<char> = script.chars().collect();
+        let word = |at: usize, start: f64| Word {
+            text: chars[at].to_string(),
+            start,
+            end: start + 0.5,
+            chars: [at as u32, at as u32 + 1],
+            confidence: None,
+            interpolated: false,
+            prominence: None,
+        };
+        let old = vec![
+            word(0, 0.0),
+            word(1, 0.5),
+            word(2, 1.0),
+            word(4, 2.0),
+            word(5, 2.5),
+            word(6, 3.0),
+        ];
+        let record = TakeTiming {
+            timing_version: TIMING_VERSION,
+            audio: Default::default(),
+            script: script.into(),
+            script_hash: script_hash(script),
+            duration: 4.0,
+            source: TimingSource::Provider("x".into()),
+            estimated: false,
+            confidence: 1.0,
+            words: old,
+            sentences: Vec::new(),
+            aligner_version: None,
+            extra: Default::default(),
+        };
+        let now = regrouped(record.clone());
+        let got: Vec<(&str, f64, f64)> = now
+            .words
+            .iter()
+            .map(|w| (w.text.as_str(), w.start, w.end))
+            .collect();
+        assert_eq!(
+            got,
+            [("東京", 0.0, 1.0), ("の", 1.0, 1.5), ("チーム", 2.0, 3.5)]
+        );
+        assert_eq!(now.sentences.len(), 2);
+        assert_eq!(now.sentences[1].start, 2.0);
+        assert_eq!(now.source, record.source, "still the provider's");
+        assert_eq!(regrouped(now.clone()), now, "and only once");
     }
 
     #[test]
