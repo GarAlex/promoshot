@@ -766,7 +766,7 @@ fn a_replaced_video_plays_its_own_file_and_its_own_length() {
             "keyframes": [{"id": "k", "time": 0, "transitionDuration": 0,
                            "placement": {"anchor": "center", "height": 360}}]}]);
     });
-    assert_eq!(pixel(&still(&dir, None).unwrap(), 320, 180)[0] > 200, true);
+    assert!(pixel(&still(&dir, None).unwrap(), 320, 180)[0] > 200);
     let german = still(&dir, Some("de")).unwrap();
     let centre = pixel(&german, 320, 180);
     assert!(centre[1] > 200 && centre[0] < 60, "{centre:?}");

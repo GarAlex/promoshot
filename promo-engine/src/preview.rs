@@ -6590,7 +6590,7 @@ mod tests {
         );
         let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
         engine.render(1.0, out.raw(), 64, 64).unwrap();
-        let count = |state: &Box<Mutex<ProviderState>>, id: &str| {
+        let count = |state: &Mutex<ProviderState>, id: &str| {
             let state = state.lock().unwrap();
             state.requests.iter().filter(|r| r.0 == id).count()
         };
