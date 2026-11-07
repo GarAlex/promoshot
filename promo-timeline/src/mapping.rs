@@ -4,6 +4,7 @@
 //! same epsilons, clamps and walk order.
 
 use crate::{loop_fold, LoopFold};
+pub use promo_model::video_trim_ranges;
 use promo_model::{ProjectResource, ProjectResourceKind, VideoTrimRange};
 
 /// Swift `VideoExtendedPause`.
@@ -72,72 +73,6 @@ pub fn playback_interval(local_time: f64, pauses: &[ExtendedPause]) -> PlaybackI
         output_end: f64::MAX,
         rate: 1.0,
     }
-}
-
-/// Swift `videoTrimRanges()`.
-pub fn video_trim_ranges(res: &ProjectResource) -> Vec<VideoTrimRange> {
-    let end = res
-        .duration
-        .unwrap_or(0.0)
-        .max(res.trim_end.unwrap_or(0.0))
-        .max(0.0);
-    if end <= 0.0 {
-        return Vec::new();
-    }
-
-    let mut sorted: Vec<_> = res
-        .trim_keyframes
-        .as_deref()
-        .unwrap_or(&[])
-        .iter()
-        .filter(|k| k.time >= 0.0 && k.time <= end)
-        .collect();
-    sorted.sort_by(|a, b| {
-        a.time
-            .partial_cmp(&b.time)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    if sorted.is_empty() {
-        let start = res.trim_start.unwrap_or(0.0).max(0.0);
-        let stop = if res.trim_end.unwrap_or(0.0) > 0.0 {
-            res.trim_end.unwrap_or(end).min(end)
-        } else {
-            end
-        };
-        return if stop > start {
-            vec![VideoTrimRange { start, end: stop }]
-        } else {
-            Vec::new()
-        };
-    }
-
-    let mut ranges = Vec::new();
-    let mut included = if sorted.first().map(|k| k.time) == Some(0.0) {
-        sorted.first().map(|k| k.is_included).unwrap_or(true)
-    } else {
-        true
-    };
-    let mut cursor = 0.0_f64;
-
-    for keyframe in &sorted {
-        let t = keyframe.time.clamp(0.0, end);
-        if included && t > cursor {
-            ranges.push(VideoTrimRange {
-                start: cursor,
-                end: t,
-            });
-        }
-        included = keyframe.is_included;
-        cursor = t;
-    }
-
-    if included && end > cursor {
-        ranges.push(VideoTrimRange { start: cursor, end });
-    }
-
-    ranges.retain(|r| r.end > r.start);
-    ranges
 }
 
 /// Swift `playbackVideoTrimRanges()` — `None` = media metadata unknown (use

@@ -342,13 +342,10 @@ impl<'a> Speech<'a> {
                         Placement::Stated(_) => None,
                     })
                     .unwrap_or(f64::NAN);
-                let voice = resource
+                let language = resource
                     .extra
                     .get("speech")
-                    .and_then(|s| s.get("voiceID"))
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("");
-                let language = promo_model::estimate::voice_language(voice);
+                    .and_then(promo_model::speech::take_language);
                 (
                     promo_model::estimate::estimate_words(
                         &script,

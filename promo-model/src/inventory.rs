@@ -135,7 +135,9 @@ pub fn derived_id(project_id: &str, relative_path: &str) -> String {
 pub fn effective_resources(meta: &ProjectMetadata, filenames: &[String]) -> Vec<ResolvedResource> {
     let present: HashSet<&str> = filenames.iter().map(|s| s.as_str()).collect();
     let declared = meta.resources.clone().unwrap_or_default();
-    let claimed: HashSet<String> = declared.iter().map(|r| r.filename.clone()).collect();
+    let mut claimed: HashSet<String> = declared.iter().map(|r| r.filename.clone()).collect();
+    // A file a language names is that resource's, not a new one.
+    claimed.extend(declared.iter().flat_map(crate::localized::files));
 
     let mut out: Vec<ResolvedResource> = declared
         .into_iter()

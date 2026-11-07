@@ -98,7 +98,9 @@ pub fn speak(
     }
     let resources_dir = dir.join("Resources");
 
-    let plan = promo_speech::plan(&doc, &resources_dir, measure);
+    let languages = promo_speech::choose_languages(&doc, args.get("language"))?;
+    let plan = promo_speech::plan_languages(&doc, &resources_dir, measure, &languages);
+    let no_voice = no_voice_line(&plan);
     let missing = promo_speech::missing_keys(&plan, keys);
     let blockers = promo_speech::local_blockers(&plan);
     // The first reason a provider cannot speak: a missing key, or for
@@ -125,13 +127,19 @@ pub fn speak(
                 blocked_phrase(&missing)
             )
         };
+        let characters: usize = plan.pending.iter().map(|p| p.characters).sum();
         return Ok(format!(
-            "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}",
+            "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}; {characters} characters{}{}",
             key_report(keys, plan.providers(), &blockers),
             dir.display(),
             plan.settled + plan.pending.len(),
             plan.settled,
-            plan.pending.len()
+            plan.pending.len(),
+            language_lines(&plan, &languages),
+            no_voice
+                .as_ref()
+                .map(|line| format!("\n{line}"))
+                .unwrap_or_default(),
         ));
     }
     // No key for a provider: unless asked not to, its narrations get silent
@@ -150,19 +158,27 @@ pub fn speak(
     let mut persist = |doc: &Value| {
         std::fs::write(&meta_path, doc.to_string()).map_err(|e| format!("write: {e}"))
     };
-    let mut report = promo_speech::placehold(&mut doc, &resources_dir, &missing, &mut persist)?;
+    let mut report = promo_speech::placehold_languages(
+        &mut doc,
+        &resources_dir,
+        &missing,
+        &mut persist,
+        &languages,
+    )?;
     let synth = ProjectSynth {
         inner: synth,
         lexicon: resources_dir.join("pronunciations.dict"),
     };
-    report.extend(promo_speech::settle_except(
+    report.extend(promo_speech::settle_languages(
         &mut doc,
         &resources_dir,
         &synth,
         measure,
         &mut persist,
         &missing,
+        &languages,
     )?);
+    report.extend(no_voice);
     if report.is_empty() {
         return Ok("no narration scripts with text — nothing to do".into());
     }
@@ -194,6 +210,41 @@ pub fn speak(
         report.push(format!("silent until voiced: {}", why(&missing[0])));
     }
     Ok(report.join("\n"))
+}
+
+/// The scripts that were left unvoiced because no voice was chosen.
+fn no_voice_line(plan: &promo_speech::Plan) -> Option<String> {
+    (!plan.no_voice.is_empty()).then(|| {
+        let takes: Vec<String> = plan
+            .no_voice
+            .iter()
+            .map(|(id, code)| format!("{id} ({code})"))
+            .collect();
+        format!(
+            "no voice chosen, not voiced: {} — a language's voice is never the source's by \
+             default; setTranslation with patch {{\"speech\": {{\"provider\", \"voiceID\"}}}}",
+            takes.join(", ")
+        )
+    })
+}
+
+/// What each language of the choice would spend, when more than the source
+/// was asked for.
+fn language_lines(plan: &promo_speech::Plan, languages: &[Option<String>]) -> String {
+    if languages == [None] {
+        return String::new();
+    }
+    let mut out = String::new();
+    for language in languages {
+        let pending = || plan.pending.iter().filter(|p| p.language == *language);
+        let characters: usize = pending().map(|p| p.characters).sum();
+        out.push_str(&format!(
+            "\n  {}: {} pending, {characters} characters",
+            language.as_deref().unwrap_or("source"),
+            pending().count(),
+        ));
+    }
+    out
 }
 
 /// Where each provider's key comes from — never the key. One line.
@@ -493,6 +544,89 @@ mod tests {
             .to_string(),
         )
         .unwrap();
+    }
+
+    /// `language` chooses the takes; a check says what each would spend, in
+    /// the characters a provider bills by; no voice is named and never bought.
+    #[test]
+    fn the_tool_voices_the_languages_it_is_asked_for() {
+        let root = std::env::temp_dir().join(format!("mcp-speak-lang-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Talk.promo");
+        project_with_script(&dir);
+        let path = dir.join("metadata.json");
+        let mut doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        doc["languages"] = json!({ "source": "en", "targets": ["de", "ja"] });
+        doc["resources"][0]["localized"] = json!({
+            "de": { "speech": { "text": "Hallo zusammen", "voiceID": "nova" } },
+            "ja": { "speech": { "text": "こんにちは" } } });
+        std::fs::write(&path, doc.to_string()).unwrap();
+        let keys = FixedKeys(vec![("openai".into(), "k".into())]);
+        let project = dir.to_string_lossy().to_string();
+
+        let check = speak(
+            &json!({ "project": project, "check": true, "language": "all" }),
+            Some(&root),
+            &Fake,
+            &keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap();
+        assert!(check.contains("with openai; 25 characters"), "{check}");
+        assert!(
+            check.contains("source: 1 pending, 11 characters"),
+            "{check}"
+        );
+        assert!(check.contains("de: 1 pending, 14 characters"), "{check}");
+        assert!(
+            check.contains("no voice chosen, not voiced: V1 (ja)"),
+            "{check}"
+        );
+
+        let refused = speak(
+            &json!({ "project": project, "language": "it" }),
+            Some(&root),
+            &Fake,
+            &keys,
+            &|_| Ok(1.0),
+        )
+        .unwrap_err();
+        assert!(refused.contains("en, de, ja"), "{refused}");
+
+        // Unasked: the source alone.
+        let answer = speak(
+            &json!({ "project": project }),
+            Some(&root),
+            &Fake,
+            &keys,
+            &|_| Ok(1.5),
+        )
+        .unwrap();
+        assert!(answer.contains("V1: generated"), "{answer}");
+        assert!(!answer.contains("(de)"), "{answer}");
+        let answer = speak(
+            &json!({ "project": project, "language": ["de", "ja"] }),
+            Some(&root),
+            &Fake,
+            &keys,
+            &|_| Ok(2.5),
+        )
+        .unwrap();
+        assert!(answer.contains("V1 (de): generated (2.50s)"), "{answer}");
+        assert!(
+            answer.contains("no voice chosen, not voiced: V1 (ja)"),
+            "{answer}"
+        );
+        let doc: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let entry = &doc["resources"][0]["localized"]["de"];
+        assert_eq!(entry["filename"], "voice.de.mp3");
+        assert_eq!(entry["duration"], 2.5);
+        assert_eq!(doc["resources"][0]["duration"], 1.5);
+        assert!(dir.join("Resources/voice.de.mp3").is_file());
+        assert!(doc["resources"][0]["localized"]["ja"]
+            .get("filename")
+            .is_none());
     }
 
     /// The tool keeps the fence, the file and every unknown key; the walk

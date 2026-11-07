@@ -18,6 +18,14 @@ pub fn calibration(doc: &Value, provider: &str, voice: &str) -> f64 {
         .map(Vec::as_slice)
         .unwrap_or(&[])
         .iter()
+        .flat_map(|resource| {
+            let languages = resource
+                .get("localized")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|all| all.values());
+            std::iter::once(resource).chain(languages)
+        })
         .filter_map(|resource| {
             let speech = resource.get("speech")?;
             if speech.get("placeholder").and_then(Value::as_bool) == Some(true) {

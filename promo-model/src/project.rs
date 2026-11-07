@@ -3888,6 +3888,21 @@ pub const DEFAULT_DUCK_DB: f64 = -13.979_400_086_720_377;
 pub const DEFAULT_DUCK_RAMP: f64 = 0.1;
 
 impl ProjectLayer {
+    /// The layer's answer to what it plays changing length from `old_len` to
+    /// `new_len`: a layer that played all of it follows, one shortened by
+    /// hand is only clamped if it now overruns. A layer on a cut plays the
+    /// cut, not the resource, and one with a beyond-end policy is stretched
+    /// on purpose.
+    pub fn follow_length(&mut self, old_len: f64, new_len: f64) {
+        if self.media_cut_id.is_some() || self.beyond_end.is_some() {
+            return;
+        }
+        let current = self.duration.unwrap_or(old_len);
+        if current >= old_len - 0.05 || current > new_len {
+            self.duration = Some(new_len.max(0.1));
+        }
+    }
+
     pub fn is_audio_focused(&self) -> bool {
         self.audio_focus.unwrap_or(false)
     }
@@ -3935,6 +3950,90 @@ impl VideoTrimRange {
         (self.end - self.start).max(0.0)
     }
 }
+
+/// The Mac editor's `extendBackgroundOverContent`: every background layer
+/// lasts at least as long as the content above it.
+pub fn extend_background_over_content(layers: &mut [ProjectLayer]) {
+    let content_end = layers
+        .iter()
+        .filter(|l| l.kind != ProjectLayerKind::Background)
+        .fold(0.1f64, |end, l| {
+            end.max(l.start_time + l.duration.unwrap_or(0.0))
+        });
+    for layer in layers
+        .iter_mut()
+        .filter(|l| l.kind == ProjectLayerKind::Background)
+    {
+        layer.duration = Some(layer.duration.unwrap_or(0.0).max(content_end));
+    }
+}
+
+/// Swift `videoTrimRanges()`.
+pub fn video_trim_ranges(res: &ProjectResource) -> Vec<VideoTrimRange> {
+    let end = res
+        .duration
+        .unwrap_or(0.0)
+        .max(res.trim_end.unwrap_or(0.0))
+        .max(0.0);
+    if end <= 0.0 {
+        return Vec::new();
+    }
+
+    let mut sorted: Vec<_> = res
+        .trim_keyframes
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .filter(|k| k.time >= 0.0 && k.time <= end)
+        .collect();
+    sorted.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    if sorted.is_empty() {
+        let start = res.trim_start.unwrap_or(0.0).max(0.0);
+        let stop = if res.trim_end.unwrap_or(0.0) > 0.0 {
+            res.trim_end.unwrap_or(end).min(end)
+        } else {
+            end
+        };
+        return if stop > start {
+            vec![VideoTrimRange { start, end: stop }]
+        } else {
+            Vec::new()
+        };
+    }
+
+    let mut ranges = Vec::new();
+    let mut included = if sorted.first().map(|k| k.time) == Some(0.0) {
+        sorted.first().map(|k| k.is_included).unwrap_or(true)
+    } else {
+        true
+    };
+    let mut cursor = 0.0_f64;
+
+    for keyframe in &sorted {
+        let t = keyframe.time.clamp(0.0, end);
+        if included && t > cursor {
+            ranges.push(VideoTrimRange {
+                start: cursor,
+                end: t,
+            });
+        }
+        included = keyframe.is_included;
+        cursor = t;
+    }
+
+    if included && end > cursor {
+        ranges.push(VideoTrimRange { start: cursor, end });
+    }
+
+    ranges.retain(|r| r.end > r.start);
+    ranges
+}
+
 /// A named sub-range of a video or audio resource.
 ///
 /// The same idea as an image cut, in time rather than space: one recording

@@ -17,6 +17,36 @@ use crate::media_cache::MediaSource;
 
 /// The record's format. A reader takes any version it knows; a newer one
 /// is still a record (unknown keys are kept in `extra`).
+/// sha256("provider|voiceID|text"), lowercase hex — the Swift
+/// `SpeechSpec.fingerprint`, exactly. A receipt written by either side
+/// holds on the other.
+pub fn fingerprint(provider: &str, voice: &str, text: &str) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(format!("{provider}|{voice}|{text}").as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The language a take speaks, when anything says: the language a project
+/// is being shown in (`flatten` writes it on the take it applies), else the
+/// voice's own name.
+pub fn take_language(speech: &serde_json::Value) -> Option<String> {
+    speech
+        .get("language")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            speech
+                .get("voiceID")
+                .and_then(serde_json::Value::as_str)
+                .and_then(crate::estimate::voice_language)
+        })
+}
+
 pub const TIMING_VERSION: u32 = 1;
 
 /// The offline aligner's version (`promo_media::words`): bumped whenever

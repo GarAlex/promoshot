@@ -46,6 +46,10 @@ const FILE_BOUND_KEYS: &[&str] = &[
     "videoNaturalHeight",
 ];
 
+/// Facts about one take's bytes, in `speech`: a language's own script makes
+/// a new take, and these say nothing about it unless its entry says them.
+const TAKE_BOUND_SPEECH: &[&str] = &["renderedHash", "placeholder", "wordFixes"];
+
 /// The project's languages, as `languages` says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Languages {
@@ -131,6 +135,17 @@ fn patched(resource: &ProjectResource, entry: &Value) -> Result<ProjectResource,
     for key in ENTRY_KEYS {
         patch.remove(*key);
     }
+    // A voice chosen before there are words for it changes nothing yet, and
+    // a script of its own is a new take.
+    if entry_script(entry).is_some() {
+        if let Some(speech) = map.get_mut("speech").and_then(Value::as_object_mut) {
+            for key in TAKE_BOUND_SPEECH {
+                speech.remove(*key);
+            }
+        }
+    } else {
+        patch.remove("speech");
+    }
     let source_overrides = doc["svg"]["overrides"].as_array().cloned();
     merge_patch(&mut doc, &Value::Object(patch));
     // A list has no keys for a merge patch to name, and a language answers
@@ -147,6 +162,56 @@ fn patched(resource: &ProjectResource, entry: &Value) -> Result<ProjectResource,
         }
     }
     serde_json::from_value(doc).map_err(|e| e.to_string())
+}
+
+/// The words a language's entry has its narration say.
+fn entry_script(entry: &Value) -> Option<&str> {
+    entry["speech"]["text"]
+        .as_str()
+        .filter(|text| !text.trim().is_empty())
+}
+
+/// The files a resource's languages name, each once.
+pub fn files(resource: &ProjectResource) -> Vec<String> {
+    let mut names = Vec::new();
+    for entry in entries(resource).into_iter().flat_map(Map::values) {
+        if let Some(name) = entry["filename"].as_str().filter(|n| !n.is_empty()) {
+            if !names.iter().any(|known| known == name) {
+                names.push(name.to_string());
+            }
+        }
+    }
+    names
+}
+
+/// A sound's playing length, the way the timeline reads it.
+fn played_length(resource: &ProjectResource) -> f64 {
+    crate::video_trim_ranges(resource)
+        .iter()
+        .map(|range| range.duration())
+        .sum()
+}
+
+/// Each language keeps its own length: a layer that played the whole take
+/// plays the whole of this language's, the rule a trim follows.
+fn follow_takes(layers: &mut [crate::ProjectLayer], lengths: &[(String, f64, f64)]) {
+    let mut moved = false;
+    for layer in layers
+        .iter_mut()
+        .filter(|l| l.kind == crate::ProjectLayerKind::Audio)
+    {
+        let id = layer.resource_id.as_deref();
+        if let Some((_, old, new)) = lengths
+            .iter()
+            .find(|(known, _, _)| Some(known.as_str()) == id)
+        {
+            layer.follow_length(*old, *new);
+            moved = true;
+        }
+    }
+    if moved {
+        crate::extend_background_over_content(layers);
+    }
 }
 
 /// The size a caption resource says, for telling what a language changed.
@@ -199,6 +264,7 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
     let is_source = list.is_some_and(|l| l.source == language);
     let default_size = meta.composition_settings.subtitle_font_size;
     let mut ratios = std::collections::BTreeMap::new();
+    let mut lengths = Vec::new();
     for resource in meta.resources.iter_mut().flatten() {
         let entry = entries(resource)
             .filter(|_| !is_source)
@@ -208,8 +274,23 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
             Some(entry) => {
                 let id = resource.id.clone();
                 let size = caption_size(resource, default_size);
+                let length = played_length(resource);
                 *resource = patched(resource, &entry)
                     .map_err(|why| format!("resource \"{id}\", language \"{language}\": {why}"))?;
+                if entry_script(&entry).is_some() {
+                    if let Some(speech) = resource.extra.get_mut("speech") {
+                        speech["language"] = Value::from(language);
+                    }
+                }
+                let now_length = played_length(resource);
+                if resource.kind == crate::ProjectResourceKind::Audio
+                    && !resource.is_looped()
+                    && length > 0.0
+                    && now_length > 0.0
+                    && (now_length - length).abs() > 0.000_1
+                {
+                    lengths.push((id.clone(), length, now_length));
+                }
                 let now = caption_size(resource, default_size);
                 if resource.kind == crate::ProjectResourceKind::Caption && now != size && size > 0.0
                 {
@@ -218,6 +299,14 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
             }
             None => {
                 resource.extra.remove(LOCALIZED_KEY);
+            }
+        }
+    }
+    if !lengths.is_empty() {
+        follow_takes(meta.layers.as_deref_mut().unwrap_or_default(), &lengths);
+        for resource in meta.resources.iter_mut().flatten() {
+            if let Some(composition) = resource.composition.as_mut() {
+                follow_takes(&mut composition.layers, &lengths);
             }
         }
     }
@@ -462,13 +551,127 @@ pub fn strings(meta: &ProjectMetadata) -> Vec<StringRow> {
 }
 
 /// One language's counts over [`strings`].
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LanguageSummary {
     pub language: String,
     pub strings: usize,
     /// Each missing or stale string, as `<resource or layer> <key>`.
     pub missing: Vec<String>,
     pub stale: Vec<String>,
+    /// Each script it has, and where its take stands.
+    pub takes: Vec<TakeRow>,
+}
+
+/// Where one language's narration stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TakeState {
+    /// Words, and no voice chosen: nothing is voiced by accident.
+    NoVoice,
+    /// A voice and no take yet: the source's take plays.
+    NotGenerated,
+    /// Generated from other words or another voice.
+    OutOfDate,
+    /// Silent, of the estimated length.
+    Placeholder,
+    /// A file of its own that no provider made.
+    Recorded,
+    Current,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct TakeRow {
+    pub resource: String,
+    pub name: String,
+    pub state: TakeState,
+    /// What it plays and what the source plays, when they are known.
+    pub seconds: Option<f64>,
+    #[serde(rename = "sourceSeconds")]
+    pub source_seconds: Option<f64>,
+    /// The language the chosen voice speaks, when that is not this one.
+    #[serde(rename = "voiceSpeaks")]
+    pub voice_speaks: Option<String>,
+}
+
+fn base_code(code: &str) -> String {
+    code.split(['-', '_'])
+        .next()
+        .unwrap_or(code)
+        .to_ascii_lowercase()
+}
+
+/// The language a voice's own name says it speaks: Google's `de-DE-…`, a
+/// local package's `kokoro-en-…`. Other providers' names say nothing, and
+/// the apps' rosters know more.
+fn voice_speaks(voice: &str) -> Option<String> {
+    crate::estimate::voice_language(voice)
+        .or_else(|| {
+            let mut parts = voice.split('-');
+            let _package = parts.next()?;
+            let code = parts.next()?;
+            voice
+                .contains('/')
+                .then(|| code.to_string())
+                .filter(|c| c.len() == 2 && c.chars().all(|c| c.is_ascii_lowercase()))
+        })
+        .map(|code| base_code(&code))
+}
+
+/// Each script `language` has, and where its take stands.
+pub fn takes(meta: &ProjectMetadata, language: &str) -> Vec<TakeRow> {
+    let mut rows = Vec::new();
+    for resource in meta.resources.iter().flatten() {
+        let Some(entry) = entries(resource).and_then(|all| all.get(language)) else {
+            continue;
+        };
+        let Some(script) = entry_script(entry) else {
+            continue;
+        };
+        let speech = &entry["speech"];
+        let voice = speech["voiceID"].as_str().filter(|v| !v.is_empty());
+        let provider = speech["provider"]
+            .as_str()
+            .or_else(|| resource.extra.get("speech")?.get("provider")?.as_str())
+            .unwrap_or("openai");
+        let own_file = entry["filename"]
+            .as_str()
+            .is_some_and(|name| !name.is_empty() && name != resource.filename);
+        let state = if speech["placeholder"] == Value::Bool(true) {
+            TakeState::Placeholder
+        } else {
+            match (voice, speech["renderedHash"].as_str()) {
+                (_, None) if own_file => TakeState::Recorded,
+                (None, _) => TakeState::NoVoice,
+                (Some(_), None) => TakeState::NotGenerated,
+                (Some(_), Some(_)) if !own_file => TakeState::NotGenerated,
+                // A local voice's receipt folds in the project's pronunciations,
+                // which this has no folder to read.
+                (Some(voice), Some(receipt)) => {
+                    if provider == "local"
+                        || receipt == crate::speech::fingerprint(provider, voice, script)
+                    {
+                        TakeState::Current
+                    } else {
+                        TakeState::OutOfDate
+                    }
+                }
+            }
+        };
+        let length = patched(resource, entry)
+            .ok()
+            .map(|shown| played_length(&shown));
+        rows.push(TakeRow {
+            resource: resource.id.clone(),
+            name: resource.display_name.clone(),
+            state,
+            seconds: length.filter(|_| own_file).filter(|s| *s > 0.0),
+            source_seconds: Some(played_length(resource)).filter(|s| *s > 0.0),
+            voice_speaks: voice
+                .and_then(voice_speaks)
+                .filter(|speaks| *speaks != base_code(language)),
+        });
+    }
+    rows
 }
 
 /// Each target's standing, for validate's Languages section.
@@ -495,6 +698,7 @@ pub fn summaries(meta: &ProjectMetadata) -> Vec<LanguageSummary> {
                 strings: rows.len(),
                 missing: named(StringState::Missing),
                 stale: named(StringState::Stale),
+                takes: takes(meta, &language),
                 language,
             }
         })
@@ -783,9 +987,13 @@ pub fn set_translation(
         .and_then(|all| all.get(language))
         .cloned()
         .unwrap_or_else(|| Value::Object(Map::new()));
-    let names_text = ["captionText", "recipe", "speech", "svg"]
+    // A voice is not a word: a machine may choose one for a person's script.
+    let names_text = ["captionText", "recipe", "svg"]
         .iter()
-        .any(|key| fields.contains_key(*key));
+        .any(|key| fields.contains_key(*key))
+        || fields
+            .get("speech")
+            .is_some_and(|s| s.get("text").is_some());
     if names_text && by == "machine" && entry["by"].as_str() == Some("person") {
         return Err(format!(
             "resource {resource_id}: a person wrote its {language} text, and a machine does not \
@@ -839,6 +1047,12 @@ fn string_patch(entry: Option<&Value>, key: &str, text: Option<&str>) -> Result<
     Ok(match key {
         "captionText" => serde_json::json!({ "captionText": said }),
         "recipe" => serde_json::json!({ "recipe": { "text": { "text": said } } }),
+        // A script taken back takes its take too: the source's plays again.
+        // The voice stays chosen, for whoever writes the words next.
+        "speech" if text.is_none() => serde_json::json!({
+            "speech": { "text": null, "renderedHash": null, "placeholder": null, "wordFixes": null },
+            "filename": null, "duration": null,
+            "trimStart": null, "trimEnd": null, "trimKeyframes": null }),
         "speech" => serde_json::json!({ "speech": { "text": said } }),
         other => {
             let Some(node) = other.strip_prefix("svg:") else {
@@ -1429,5 +1643,239 @@ mod tests {
             crate::LOSSLESS_READER
         );
         assert_eq!(m.minimum_reader_version(), crate::LOSSLESS_READER);
+    }
+
+    fn narrated() -> ProjectMetadata {
+        ProjectMetadata::from_json(
+            &serde_json::json!({
+                "id": "p", "name": "p", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+                "compositionSettings": { "canvasWidth": 320, "canvasHeight": 180,
+                                         "backgroundColorHex": "000000" },
+                "languages": { "source": "en", "targets": ["de"] },
+                "resources": [
+                    { "id": "r1", "kind": "audio", "filename": "r1.mp3", "displayName": "Intro",
+                      "addedAt": 0, "imageCuts": [], "disabledAudioTrackIndices": [],
+                      "duration": 8.0, "trimEnd": 6.0,
+                      "speech": { "text": "Hello there.", "provider": "openai", "voiceID": "alloy",
+                                  "renderedHash": "english", "placeholder": true,
+                                  "wordFixes": [{ "word": 1, "start": 0.1 }],
+                                  "sourceResourceID": "page" },
+                      "localized": { "de": {
+                          "filename": "r1.de.mp3", "duration": 9.4,
+                          "speech": { "text": "Hallo zusammen.", "provider": "elevenlabs",
+                                      "voiceID": "anna", "renderedHash": "german" },
+                          "sourceHash": "x", "by": "machine" } } } ],
+                "layers": [
+                    { "id": "bg", "kind": "background", "isEnabled": true, "name": "bg",
+                      "startTime": 0, "duration": 6.0, "sortIndex": 0, "keyframes": [] },
+                    { "id": "whole", "kind": "audio", "isEnabled": true, "name": "whole",
+                      "resourceID": "r1", "startTime": 0, "duration": 6.0, "sortIndex": 1,
+                      "keyframes": [] },
+                    { "id": "short", "kind": "audio", "isEnabled": true, "name": "short",
+                      "resourceID": "r1", "startTime": 0, "duration": 2.0, "sortIndex": 2,
+                      "keyframes": [] } ]
+            })
+            .to_string(),
+        )
+        .unwrap()
+    }
+
+    /// A language's take is a new recording: the source's trims and receipt
+    /// say nothing about it, a layer that played the whole take plays the
+    /// whole of this one, the background covers it, and one shortened by hand
+    /// keeps its length.
+    #[test]
+    fn a_layer_follows_a_languages_take() {
+        let mut meta = narrated();
+        flatten(&mut meta, "de").unwrap();
+        let take = &meta.resources.as_ref().unwrap()[0];
+        assert_eq!(take.filename, "r1.de.mp3");
+        assert_eq!(take.trim_end, None);
+        let speech = &take.extra["speech"];
+        assert_eq!(speech["text"], "Hallo zusammen.");
+        assert_eq!(speech["renderedHash"], "german");
+        assert_eq!(speech["language"], "de");
+        assert!(speech.get("placeholder").is_none(), "the source's");
+        assert!(speech.get("wordFixes").is_none(), "the source's words");
+        assert_eq!(speech["sourceResourceID"], "page", "not about the bytes");
+        let layer = |id: &str| {
+            meta.layers
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|l| l.id == id)
+                .unwrap()
+                .duration
+        };
+        assert_eq!(layer("whole"), Some(9.4));
+        assert_eq!(layer("short"), Some(2.0));
+        assert_eq!(layer("bg"), Some(9.4));
+
+        // The source is untouched by any of it.
+        let mut source = narrated();
+        flatten(&mut source, "en").unwrap();
+        let whole = source
+            .layers
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|l| l.id == "whole");
+        assert_eq!(whole.unwrap().duration, Some(6.0));
+        assert_eq!(source.resources.as_ref().unwrap()[0].filename, "r1.mp3");
+    }
+
+    /// Words with no take yet: the source's take plays, and its receipt is
+    /// not taken for this script's. A voice with no words changes nothing.
+    #[test]
+    fn a_script_without_a_take_plays_the_source() {
+        let mut meta = narrated();
+        let entry = |value: serde_json::Value| serde_json::json!({ "de": value });
+        meta.resources.as_mut().unwrap()[0].extra.insert(
+            LOCALIZED_KEY.into(),
+            entry(serde_json::json!({
+                "speech": { "text": "Hallo zusammen." } })),
+        );
+        let mut flat = meta.clone();
+        flatten(&mut flat, "de").unwrap();
+        let take = &flat.resources.as_ref().unwrap()[0];
+        assert_eq!(take.filename, "r1.mp3");
+        assert_eq!(take.trim_end, Some(6.0));
+        assert_eq!(take.extra["speech"]["text"], "Hallo zusammen.");
+        assert_eq!(take.extra["speech"]["voiceID"], "alloy");
+        assert!(take.extra["speech"].get("renderedHash").is_none());
+
+        meta.resources.as_mut().unwrap()[0].extra.insert(
+            LOCALIZED_KEY.into(),
+            entry(serde_json::json!({
+                "speech": { "voiceID": "anna" } })),
+        );
+        let mut flat = meta.clone();
+        flatten(&mut flat, "de").unwrap();
+        let speech = &flat.resources.as_ref().unwrap()[0].extra["speech"];
+        assert_eq!(speech["voiceID"], "alloy");
+        assert_eq!(speech["renderedHash"], "english");
+    }
+
+    /// Taking a script back takes its take with it, and leaves the voice.
+    #[test]
+    fn clearing_a_script_brings_the_source_take_back() {
+        let mut meta = narrated();
+        set_string(
+            &mut meta,
+            TranslationTarget::Resource("r1"),
+            "de",
+            "speech",
+            Some("  "),
+            "person",
+        )
+        .unwrap();
+        let entry = &entries(&meta.resources.as_ref().unwrap()[0]).unwrap()["de"];
+        assert!(entry.get("filename").is_none() && entry.get("duration").is_none());
+        assert!(entry["speech"].get("text").is_none());
+        assert!(entry["speech"].get("renderedHash").is_none());
+        assert_eq!(entry["speech"]["voiceID"], "anna");
+        let mut flat = meta.clone();
+        flatten(&mut flat, "de").unwrap();
+        let take = &flat.resources.as_ref().unwrap()[0];
+        assert_eq!(take.filename, "r1.mp3");
+        assert_eq!(take.extra["speech"]["text"], "Hello there.");
+    }
+
+    /// A machine may choose a voice for a person's script, not change its words.
+    #[test]
+    fn a_machine_may_choose_a_voice_for_a_persons_words() {
+        let mut meta = narrated();
+        let r1 = TranslationTarget::Resource("r1");
+        set_string(&mut meta, r1, "de", "speech", Some("Hallo."), "person").unwrap();
+        let r1 = TranslationTarget::Resource("r1");
+        let voice = serde_json::json!({ "speech": { "voiceID": "karl" } });
+        set_translation(&mut meta, r1, "de", &voice, "machine").unwrap();
+        let r1 = TranslationTarget::Resource("r1");
+        let words = serde_json::json!({ "speech": { "text": "Servus." } });
+        assert!(set_translation(&mut meta, r1, "de", &words, "machine").is_err());
+    }
+
+    /// Where each take stands, for validate and the apps.
+    #[test]
+    fn takes_say_where_they_stand() {
+        let mut meta = narrated();
+        let state = |meta: &ProjectMetadata| takes(meta, "de")[0].state;
+        let write = |meta: &mut ProjectMetadata, entry: serde_json::Value| {
+            meta.resources.as_mut().unwrap()[0]
+                .extra
+                .insert(LOCALIZED_KEY.into(), serde_json::json!({ "de": entry }));
+        };
+        assert_eq!(
+            state(&meta),
+            TakeState::OutOfDate,
+            "\"german\" is no receipt"
+        );
+        assert_eq!(takes(&meta, "de")[0].seconds, Some(9.4));
+        assert_eq!(takes(&meta, "de")[0].source_seconds, Some(6.0));
+        let text = "Hallo zusammen.";
+        write(
+            &mut meta,
+            serde_json::json!({ "filename": "r1.de.mp3", "duration": 9.4, "speech": {
+            "text": text, "provider": "elevenlabs", "voiceID": "anna",
+            "renderedHash": crate::speech::fingerprint("elevenlabs", "anna", text) } }),
+        );
+        assert_eq!(state(&meta), TakeState::Current);
+        write(&mut meta, serde_json::json!({ "speech": { "text": text } }));
+        assert_eq!(state(&meta), TakeState::NoVoice);
+        write(
+            &mut meta,
+            serde_json::json!({ "speech": { "text": text, "voiceID": "anna" } }),
+        );
+        assert_eq!(state(&meta), TakeState::NotGenerated);
+        write(
+            &mut meta,
+            serde_json::json!({ "filename": "mine.m4a", "duration": 3, "speech": {
+            "text": text } }),
+        );
+        assert_eq!(state(&meta), TakeState::Recorded);
+        write(
+            &mut meta,
+            serde_json::json!({ "filename": "r1.de.mp3", "duration": 3, "speech": {
+            "text": text, "voiceID": "anna", "placeholder": true } }),
+        );
+        assert_eq!(state(&meta), TakeState::Placeholder);
+        write(
+            &mut meta,
+            serde_json::json!({ "speech": { "text": text, "provider": "local",
+            "voiceID": "kokoro-en-q8/af_heart" } }),
+        );
+        assert_eq!(takes(&meta, "de")[0].voice_speaks.as_deref(), Some("en"));
+        write(
+            &mut meta,
+            serde_json::json!({ "speech": { "text": text, "provider": "google",
+            "voiceID": "de-DE-Neural2-F" } }),
+        );
+        assert_eq!(takes(&meta, "de")[0].voice_speaks, None);
+        write(
+            &mut meta,
+            serde_json::json!({ "speech": { "text": text, "voiceID": "alloy" } }),
+        );
+        assert_eq!(takes(&meta, "de")[0].voice_speaks, None);
+    }
+
+    /// A language's file is the resource's: the folder listing makes no new
+    /// resource of it.
+    #[test]
+    fn a_languages_file_is_not_a_new_resource() {
+        let meta = narrated();
+        let resolved = crate::inventory::effective_resources(
+            &meta,
+            &[
+                "r1.mp3".to_string(),
+                "r1.de.mp3".to_string(),
+                "new.mp3".to_string(),
+            ],
+        );
+        let names: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.resource.filename.as_str())
+            .collect();
+        assert_eq!(names, ["r1.mp3", "new.mp3"]);
     }
 }

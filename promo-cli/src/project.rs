@@ -330,19 +330,16 @@ impl Project {
         missing
     }
 
-    /// The language a take's voice speaks, when its name says it.
+    /// The language a take speaks, when anything says.
     pub fn take_language(meta: &ProjectMetadata, id: &str) -> Option<String> {
-        let voice = meta
+        let speech = meta
             .resources
             .iter()
             .flatten()
             .find(|r| r.id == id)?
             .extra
-            .get("speech")?
-            .get("voiceID")?
-            .as_str()?
-            .to_string();
-        promo_speech::voice_language(&voice)
+            .get("speech")?;
+        promo_model::speech::take_language(speech)
     }
 
     /// The same folder with other metadata — a what-if the renderer can

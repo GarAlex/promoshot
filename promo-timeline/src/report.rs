@@ -234,6 +234,17 @@ impl Report {
                 row.missing.len(),
                 row.stale.len()
             ));
+            if !row.takes.is_empty() {
+                let voiced = row
+                    .takes
+                    .iter()
+                    .filter(|t| {
+                        use promo_model::localized::TakeState::{Current, Recorded};
+                        matches!(t.state, Current | Recorded)
+                    })
+                    .count();
+                out.push_str(&format!("; {voiced} of {} takes voiced", row.takes.len()));
+            }
         }
         out
     }
@@ -483,6 +494,9 @@ fn languages_report(
         for line in layout_in_language(&original, &summary.language, grids, &source_layout) {
             out.warn(format!("{}: {line}", summary.language));
         }
+        for line in takes_in_language(&original, summary, grids, source) {
+            out.warn(format!("{}: {line}", summary.language));
+        }
     }
     out.languages = summaries;
 }
@@ -505,6 +519,96 @@ fn layout_in_language(
         .into_iter()
         .filter(|line| !source_layout.contains(line))
         .collect()
+}
+
+/// What a language's narration lacks, and how far its length moves the film
+/// from a source whose literal times do not follow it.
+fn takes_in_language(
+    original: &ProjectMetadata,
+    summary: &promo_model::localized::LanguageSummary,
+    grids: &crate::BeatGrids,
+    source: &ProjectMetadata,
+) -> Vec<String> {
+    use promo_model::localized::TakeState;
+    let mut flat = original.clone();
+    if promo_model::localized::flatten(&mut flat, &summary.language).is_err() {
+        return Vec::new();
+    }
+    crate::resolve_timing(&mut flat, grids);
+    let mut lines = Vec::new();
+    for take in &summary.takes {
+        let name = &take.name;
+        match take.state {
+            TakeState::NoVoice => lines.push(format!(
+                "narration \"{name}\" has no voice chosen, so the source's take plays"
+            )),
+            TakeState::NotGenerated => lines.push(format!(
+                "narration \"{name}\" has no take yet, so the source's take plays: promo_speak \
+                 with this language"
+            )),
+            TakeState::OutOfDate => lines.push(format!(
+                "narration \"{name}\" was generated from other words or another voice"
+            )),
+            TakeState::Placeholder => lines.push(format!(
+                "narration \"{name}\" is a silent placeholder: it exports silent until voiced"
+            )),
+            TakeState::Recorded | TakeState::Current => {}
+        }
+        if let Some(speaks) = &take.voice_speaks {
+            lines.push(format!(
+                "narration \"{name}\" has a voice that speaks {speaks}"
+            ));
+        }
+        let (Some(seconds), Some(source_seconds)) = (take.seconds, take.source_seconds) else {
+            continue;
+        };
+        let change = seconds - source_seconds;
+        if change.abs() < 0.05 {
+            continue;
+        }
+        let starts = |meta: &ProjectMetadata| {
+            meta.layers
+                .iter()
+                .flatten()
+                .find(|l| l.resource_id.as_deref() == Some(take.resource.as_str()))
+                .map(|l| l.start_time)
+        };
+        let stayed = match starts(source) {
+            Some(start) => {
+                let begin = start + source_seconds.min(seconds);
+                let end = start + source_seconds.max(seconds);
+                let there = |meta: &ProjectMetadata| -> Vec<String> {
+                    meta.layers
+                        .iter()
+                        .flatten()
+                        .filter(|l| l.kind != promo_model::ProjectLayerKind::Background)
+                        .filter(|l| l.start_time >= begin && l.start_time < end)
+                        .map(|l| format!("{}@{:.3}", l.id, l.start_time))
+                        .collect()
+                };
+                let before = there(source);
+                there(&flat)
+                    .into_iter()
+                    .filter(|layer| before.contains(layer))
+                    .count()
+            }
+            None => 0,
+        };
+        let how = if change > 0.0 { "longer" } else { "shorter" };
+        lines.push(if stayed > 0 {
+            format!(
+                "narration \"{name}\" runs {:.1} s {how} than the source, and {stayed} layer(s) at \
+                 literal times in that stretch stay where they are: speech anchors follow a take",
+                change.abs()
+            )
+        } else {
+            format!(
+                "narration \"{name}\" runs {:.1} s {how} than the source",
+                change.abs()
+            )
+        });
+    }
+    lines
 }
 
 /// Each target language and what its words do to the layout, for the apps'

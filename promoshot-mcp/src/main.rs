@@ -1232,8 +1232,9 @@ mod tests {
             // setVectorNodeKey and removeVectorNodeKey (slice 3), 1.3 KB;
             // 52,300 since makeEditableShapes (slice 5), 0.5 KB;
             // 55,300 since languages: promo_strings, `language` on the four
-            // renders and setLanguages and setTranslation, 2.9 KB.
-            bytes < 55_300,
+            // renders and setLanguages and setTranslation, 2.9 KB;
+            // 55,500 since promo_speak's `language`, 0.15 KB.
+            bytes < 55_500,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );

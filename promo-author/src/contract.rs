@@ -866,6 +866,9 @@ pub fn tools(host: Host) -> Vec<Value> {
                         "Spend nothing: report where each needed provider's key comes from \
                          (never the key) and what a real call would synthesize — ready, blocked, \
                          or nothing to do. With no project, the keys alone." },
+                    "language": { "description":
+                        "One code, a list, or \"all\"; default the source. A language's take \
+                         needs its own speech.voiceID (setTranslation)." },
                     "placeholder": { "type": "boolean", "description":
                         "Default true: a provider with no key gets a silent placeholder of the \
                          estimated length. false: refuse instead, writing nothing." } },

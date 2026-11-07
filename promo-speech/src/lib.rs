@@ -39,19 +39,7 @@ pub use stress::{google_input, marking_stress, marking_stress_mapped};
 pub use timing::{google_ssml_marked, google_supports_marks, Spoken, Take};
 pub use voices::{roster_needs_key, voices_with_key, Voice};
 
-/// sha256("provider|voiceID|text"), lowercase hex — the Swift
-/// `SpeechSpec.fingerprint`, exactly. A receipt written by either side
-/// holds on the other.
-pub fn fingerprint(provider: &str, voice: &str, text: &str) -> String {
-    use sha2::Digest;
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(format!("{provider}|{voice}|{text}").as_bytes());
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
+pub use promo_model::speech::fingerprint;
 
 /// The keyless provider: voices synthesized on this machine by local-tts
 /// (the `local` feature). Its takes are WAV.
@@ -485,6 +473,10 @@ pub struct Pending {
     pub id: String,
     pub provider: String,
     pub voice: String,
+    /// The language this take is in; None is the source.
+    pub language: Option<String>,
+    /// What a provider bills by.
+    pub characters: usize,
 }
 
 /// What a walk over `doc` would find: how many narrations are already
@@ -494,6 +486,9 @@ pub struct Pending {
 pub struct Plan {
     pub settled: usize,
     pub pending: Vec<Pending>,
+    /// Scripts in a language with no voice chosen, as `(id, language)`:
+    /// nothing is voiced by accident, and these are named.
+    pub no_voice: Vec<(String, String)>,
 }
 
 impl Plan {
@@ -509,10 +504,12 @@ impl Plan {
     }
 }
 
-/// A narration resource's words, provider, voice, receipt, id and file —
-/// or None when it has nothing to say.
+/// A narration's words, provider, voice, receipt, id and file — or None
+/// when it has nothing to say. In a language, these are its entry's: a take
+/// of its own, under a file of its own.
 struct Script {
     id: String,
+    language: Option<String>,
     words: String,
     provider: String,
     voice: String,
@@ -524,8 +521,89 @@ struct Script {
     existing: Option<String>,
 }
 
-fn script(index: usize, resource: &Value) -> Option<Script> {
-    let speech = resource.get("speech")?;
+/// Where a take keeps its receipt and its file: the resource, or the
+/// language's entry on it.
+fn take_mut<'a>(resource: &'a mut Value, language: Option<&str>) -> &'a mut Value {
+    match language {
+        Some(code) => &mut resource["localized"][code],
+        None => resource,
+    }
+}
+
+/// The name a language's take gets from the resource's: `r1.mp3` makes
+/// `r1.de.mp3`. Never the source's own file.
+fn language_filename(resource: &Value, id: &str, code: &str, extension: &str) -> String {
+    let stem = resource
+        .get("filename")
+        .and_then(Value::as_str)
+        .filter(|name| !name.is_empty())
+        .map(|name| {
+            name.rsplit_once('.')
+                .map_or(name, |(stem, _)| stem)
+                .to_string()
+        })
+        .unwrap_or_else(|| format!("narration-{id}"));
+    format!("{stem}.{code}.{extension}")
+}
+
+/// The takes `languages` have on one resource, in order. None is the source.
+fn scripts(index: usize, resource: &Value, languages: &[Option<String>]) -> Vec<Script> {
+    languages
+        .iter()
+        .filter_map(|language| script(index, resource, language.as_deref()))
+        .collect()
+}
+
+/// A language with words of its own, a file of its own and nothing that made
+/// it: a person's recording. Not owed, and never voiced over.
+fn recorded(resource: &Value, language: &str) -> bool {
+    let Some(entry) = resource.pointer(&format!("/localized/{language}")) else {
+        return false;
+    };
+    let speech = &entry["speech"];
+    let own_file = entry["filename"]
+        .as_str()
+        .is_some_and(|name| !name.is_empty() && Some(name) != resource["filename"].as_str());
+    own_file
+        && speech["placeholder"] != json!(true)
+        && speech.get("renderedHash").is_none()
+        && voice_of(speech).is_none()
+}
+
+fn voice_of(speech: &Value) -> Option<&str> {
+    speech
+        .get("voiceID")
+        .and_then(Value::as_str)
+        .filter(|voice| !voice.is_empty())
+}
+
+/// A language's voice is chosen, never the source's by default: the resource
+/// whose script `language` has, with no voice and no recording.
+fn no_voice(index: usize, resource: &Value, language: &str) -> Option<String> {
+    let speech = resource.pointer(&format!("/localized/{language}/speech"))?;
+    let says = speech
+        .get("text")
+        .and_then(Value::as_str)
+        .is_some_and(|text| !text.trim().is_empty());
+    (says && voice_of(speech).is_none() && !recorded(resource, language)).then(|| {
+        resource
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("R{index}"))
+    })
+}
+
+fn script(index: usize, resource: &Value, language: Option<&str>) -> Option<Script> {
+    let entry = match language {
+        Some(code) => {
+            let entry = resource.get("localized")?.get(code)?;
+            voice_of(entry.get("speech")?)?;
+            entry
+        }
+        None => resource,
+    };
+    let speech = entry.get("speech")?;
     let words = speech
         .get("text")
         .and_then(Value::as_str)
@@ -542,6 +620,7 @@ fn script(index: usize, resource: &Value) -> Option<Script> {
     let provider = speech
         .get("provider")
         .and_then(Value::as_str)
+        .or_else(|| resource.pointer("/speech/provider")?.as_str())
         .unwrap_or("openai")
         .to_string();
     let default_voice = if is_keyless(&provider) {
@@ -557,17 +636,21 @@ fn script(index: usize, resource: &Value) -> Option<Script> {
     // The extension follows what the provider sends (`take_extension`) —
     // a take never sits under the wrong name.
     let extension = take_extension(&provider, &voice);
-    let existing = resource
+    let source_file = resource.get("filename").and_then(Value::as_str);
+    let existing = entry
         .get("filename")
         .and_then(Value::as_str)
         .filter(|name| !name.is_empty())
+        .filter(|name| language.is_none() || Some(*name) != source_file)
         .map(str::to_string);
-    let filename = match resource.get("filename").and_then(Value::as_str) {
-        Some(name) if !name.is_empty() => with_audio_extension(name, extension),
-        _ => format!("narration-{id}.{extension}"),
+    let filename = match (&existing, language) {
+        (Some(name), _) => with_audio_extension(name, extension),
+        (None, Some(code)) => language_filename(resource, &id, code, extension),
+        (None, None) => format!("narration-{id}.{extension}"),
     };
     Some(Script {
         id,
+        language: language.map(str::to_string),
         words,
         voice,
         provider,
@@ -644,14 +727,92 @@ fn is_settled(
         .and_then(|destination| measure(&destination).ok())
 }
 
-/// The plan for `doc` without touching anything.
+/// The plan for `doc`'s source without touching anything.
 pub fn plan(
     doc: &Value,
     resources_dir: &Path,
     measure: &dyn Fn(&Path) -> Result<f64, String>,
 ) -> Plan {
+    plan_languages(doc, resources_dir, measure, &[None])
+}
+
+/// The project's languages as a tool's `language` chooses them: one code, a
+/// comma-separated list or `all`, as a string or a list. Nothing chosen is
+/// the source, so nothing is bought in ten languages by accident. None is
+/// the source; a code off the project's list is refused before anything is
+/// spent.
+pub fn choose_languages(
+    doc: &Value,
+    choice: Option<&Value>,
+) -> Result<Vec<Option<String>>, String> {
+    let list = doc.get("languages");
+    let source = list.and_then(|l| l.get("source")).and_then(Value::as_str);
+    let targets: Vec<&str> = list
+        .and_then(|l| l.get("targets"))
+        .and_then(Value::as_array)
+        .map(|all| all.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let codes: Vec<String> = match choice {
+        None | Some(Value::Null) => return Ok(vec![None]),
+        Some(Value::String(text)) => text
+            .split(',')
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
+            .map(str::to_string)
+            .collect(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| "`language`: a list holds language codes".to_string())
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err("`language`: one code, a list of them, or \"all\"".to_string()),
+    };
+    if codes.iter().any(|code| code == "all") {
+        let mut all = vec![None];
+        all.extend(targets.iter().map(|code| Some(code.to_string())));
+        return Ok(all);
+    }
+    let mut chosen: Vec<Option<String>> = Vec::new();
+    for code in codes {
+        let language = if Some(code.as_str()) == source {
+            None
+        } else if targets.contains(&code.as_str()) {
+            Some(code)
+        } else {
+            let known: Vec<&str> = source.into_iter().chain(targets.iter().copied()).collect();
+            return Err(if known.is_empty() {
+                format!("\"{code}\": this project lists no languages")
+            } else {
+                format!(
+                    "\"{code}\" is not one of this project's languages ({})",
+                    known.join(", ")
+                )
+            });
+        };
+        if !chosen.contains(&language) {
+            chosen.push(language);
+        }
+    }
+    Ok(if chosen.is_empty() {
+        vec![None]
+    } else {
+        chosen
+    })
+}
+
+/// [`plan`], over the takes of `languages`.
+pub fn plan_languages(
+    doc: &Value,
+    resources_dir: &Path,
+    measure: &dyn Fn(&Path) -> Result<f64, String>,
+    languages: &[Option<String>],
+) -> Plan {
     let mut settled = 0;
     let mut pending = Vec::new();
+    let mut unvoiced = Vec::new();
     for (index, resource) in doc
         .get("resources")
         .and_then(Value::as_array)
@@ -660,20 +821,92 @@ pub fn plan(
         .iter()
         .enumerate()
     {
-        let Some(script) = script(index, resource) else {
-            continue;
-        };
-        if is_settled(&script, resources_dir, measure).is_some() {
-            settled += 1;
-        } else {
-            pending.push(Pending {
-                id: script.id,
-                provider: script.provider,
-                voice: script.voice,
-            });
+        for code in languages.iter().flatten() {
+            if let Some(id) = no_voice(index, resource, code) {
+                unvoiced.push((id, code.clone()));
+            }
+        }
+        for script in scripts(index, resource, languages) {
+            if is_settled(&script, resources_dir, measure).is_some() {
+                settled += 1;
+            } else {
+                pending.push(Pending {
+                    id: script.id,
+                    provider: script.provider,
+                    voice: script.voice,
+                    language: script.language,
+                    characters: script.words.chars().count(),
+                });
+            }
         }
     }
-    Plan { settled, pending }
+    Plan {
+        settled,
+        pending,
+        no_voice: unvoiced,
+    }
+}
+
+fn take_of<'a>(resource: &'a Value, language: Option<&str>) -> &'a Value {
+    match language {
+        Some(code) => &resource["localized"][code],
+        None => resource,
+    }
+}
+
+/// One take of a project, as an app that buys its own takes reads it: the
+/// words, the voice, and the file it goes in. The rule that names a take's
+/// file and refuses to voice a language by accident stays here.
+pub fn takes_json(doc: &Value, resources_dir: &Path, languages: &[Option<String>]) -> Value {
+    let mut rows = Vec::new();
+    for (index, resource) in doc
+        .get("resources")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .enumerate()
+    {
+        for code in languages.iter().flatten() {
+            if recorded(resource, code) {
+                let id = resource["id"].as_str().map(str::to_string);
+                rows.push(json!({
+                    "resource": id.unwrap_or_else(|| format!("R{index}")), "language": code,
+                    "noVoice": false, "recorded": true, "settled": true,
+                    "text": resource.pointer(&format!("/localized/{code}/speech/text")),
+                    "filename": resource.pointer(&format!("/localized/{code}/filename")),
+                }));
+            }
+            if let Some(id) = no_voice(index, resource, code) {
+                let extension = take_extension("openai", "");
+                rows.push(json!({
+                    "resource": id, "language": code, "noVoice": true,
+                    "text": resource.pointer(&format!("/localized/{code}/speech/text")),
+                    "provider": resource.pointer(&format!("/localized/{code}/speech/provider"))
+                        .or_else(|| resource.pointer("/speech/provider")),
+                    "filename": language_filename(resource, &id, code, extension),
+                }));
+            }
+        }
+        for script in scripts(index, resource, languages) {
+            // A settled take stays under the name it has, though a new one
+            // would be named otherwise.
+            let holds = script.receipt.as_deref() == Some(receipt(&script, resources_dir).as_str());
+            let found = [Some(script.filename.as_str()), script.existing.as_deref()]
+                .into_iter()
+                .flatten()
+                .filter(|name| plain_name(name))
+                .find(|name| holds && resources_dir.join(name).exists());
+            rows.push(json!({
+                "resource": script.id, "language": script.language, "noVoice": false,
+                "text": script.words, "provider": script.provider, "voiceID": script.voice,
+                "filename": found.unwrap_or(&script.filename), "settled": found.is_some(),
+                "placeholder": take_of(resource, script.language.as_deref())["speech"]["placeholder"]
+                    == json!(true),
+            }));
+        }
+    }
+    Value::Array(rows)
 }
 
 /// The providers a plan needs that `keys` has no key for — checked BEFORE
@@ -742,6 +975,28 @@ pub fn settle_except(
     persist: &mut dyn FnMut(&Value) -> Result<(), String>,
     skip: &[String],
 ) -> Result<Vec<String>, String> {
+    settle_languages(doc, resources_dir, synth, measure, persist, skip, &[None])
+}
+
+/// `r1`, or `r1 (de)`: which take a report line is about.
+fn take_label(id: &str, language: Option<&str>) -> String {
+    match language {
+        Some(code) => format!("{id} ({code})"),
+        None => id.to_string(),
+    }
+}
+
+/// [`settle_except`], over the takes of `languages`. A language's take goes
+/// in its entry, under its own file; the source's is never touched by it.
+pub fn settle_languages(
+    doc: &mut Value,
+    resources_dir: &Path,
+    synth: &dyn Synth,
+    measure: &dyn Fn(&Path) -> Result<f64, String>,
+    persist: &mut dyn FnMut(&Value) -> Result<(), String>,
+    skip: &[String],
+    languages: &[Option<String>],
+) -> Result<Vec<String>, String> {
     std::fs::create_dir_all(resources_dir).map_err(|e| e.to_string())?;
     let count = doc
         .get("resources")
@@ -750,15 +1005,16 @@ pub fn settle_except(
         .unwrap_or(0);
     let mut report: Vec<String> = Vec::new();
     let mut spent = 0usize;
-    for index in 0..count {
-        let script = {
-            let resource = &doc["resources"][index];
-            match script(index, resource) {
-                Some(script) => script,
-                None => continue,
-            }
-        };
-        let id = script.id.clone();
+    let takes: Vec<(usize, Script)> = (0..count)
+        .flat_map(|index| {
+            scripts(index, &doc["resources"][index], languages)
+                .into_iter()
+                .map(move |script| (index, script))
+        })
+        .collect();
+    for (index, script) in takes {
+        let id = take_label(&script.id, script.language.as_deref());
+        let language = script.language.clone();
         if script.filename.contains('/')
             || script.filename.contains('\\')
             || script.filename.starts_with('.')
@@ -782,7 +1038,7 @@ pub fn settle_except(
         // The bytes this take replaces — under its own name, or a stand-in
         // under another — and so the records that described them.
         let mut replaced: Vec<String> = bytes_key(&destination).into_iter().collect();
-        if let Some(previous) = doc["resources"][index]["filename"].as_str() {
+        if let Some(previous) = script.existing.as_deref() {
             if previous != script.filename && plain_name(previous) {
                 replaced.extend(bytes_key(&resources_dir.join(previous)));
             }
@@ -791,9 +1047,9 @@ pub fn settle_except(
         // A silent stand-in this walk wrote under another name (an .mp3
         // before a local .wav take) is the walk's own file: it goes.
         {
-            let resource = &doc["resources"][index];
-            if resource["speech"]["placeholder"] == json!(true) {
-                if let Some(previous) = resource["filename"].as_str() {
+            let take = take_mut(&mut doc["resources"][index], language.as_deref());
+            if take["speech"]["placeholder"] == json!(true) {
+                if let Some(previous) = script.existing.as_deref() {
                     if previous != script.filename
                         && !previous.contains('/')
                         && !previous.contains('\\')
@@ -828,19 +1084,20 @@ pub fn settle_except(
         };
         {
             let resource = &mut doc["resources"][index];
-            resource["filename"] = json!(script.filename);
-            resource["duration"] = json!(seconds);
             resource["kind"] = json!("audio");
-            if let Some(object) = resource.as_object_mut() {
+            let take = take_mut(resource, language.as_deref());
+            take["filename"] = json!(script.filename);
+            take["duration"] = json!(seconds);
+            if let Some(object) = take.as_object_mut() {
                 object.remove("trimStart");
                 object.remove("trimEnd");
                 object.remove("trimKeyframes");
             }
-            resource["speech"]["renderedHash"] = json!(print);
-            resource["speech"]["provider"] = json!(script.provider);
-            resource["speech"]["voiceID"] = json!(script.voice);
+            take["speech"]["renderedHash"] = json!(print);
+            take["speech"]["provider"] = json!(script.provider);
+            take["speech"]["voiceID"] = json!(script.voice);
             // A real take: whatever stood in for it is gone.
-            if let Some(speech) = resource["speech"].as_object_mut() {
+            if let Some(speech) = take["speech"].as_object_mut() {
                 speech.remove("placeholder");
             }
         }
@@ -869,6 +1126,17 @@ pub fn placehold(
     providers: &[String],
     persist: &mut dyn FnMut(&Value) -> Result<(), String>,
 ) -> Result<Vec<String>, String> {
+    placehold_languages(doc, resources_dir, providers, persist, &[None])
+}
+
+/// [`placehold`], over the takes of `languages`.
+pub fn placehold_languages(
+    doc: &mut Value,
+    resources_dir: &Path,
+    providers: &[String],
+    persist: &mut dyn FnMut(&Value) -> Result<(), String>,
+    languages: &[Option<String>],
+) -> Result<Vec<String>, String> {
     std::fs::create_dir_all(resources_dir).map_err(|e| e.to_string())?;
     let count = doc
         .get("resources")
@@ -876,13 +1144,18 @@ pub fn placehold(
         .map(Vec::len)
         .unwrap_or(0);
     let mut report = Vec::new();
-    for index in 0..count {
-        let Some(script) = script(index, &doc["resources"][index]) else {
-            continue;
-        };
+    let takes: Vec<(usize, Script)> = (0..count)
+        .flat_map(|index| {
+            scripts(index, &doc["resources"][index], languages)
+                .into_iter()
+                .map(move |script| (index, script))
+        })
+        .collect();
+    for (index, script) in takes {
         if !providers.contains(&script.provider) {
             continue;
         }
+        let label = take_label(&script.id, script.language.as_deref());
         let print = receipt(&script, resources_dir);
         let destination = resources_dir.join(&script.filename);
         if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
@@ -893,8 +1166,8 @@ pub fn placehold(
             || script.filename.starts_with('.')
         {
             return Err(format!(
-                "{}: filename \"{}\" must be a plain file name inside Resources/",
-                script.id, script.filename
+                "{label}: filename \"{}\" must be a plain file name inside Resources/",
+                script.filename
             ));
         }
         // The stand-in is a silent MP3 whatever the provider will send, so
@@ -907,23 +1180,25 @@ pub fn placehold(
             &script.provider,
             &script.voice,
             &script.words,
+            script.language.as_deref(),
             Some(doc),
         )
-        .map_err(|e| format!("{}: {e}", script.id))?;
+        .map_err(|e| format!("{label}: {e}"))?;
         {
             let resource = &mut doc["resources"][index];
-            resource["filename"] = json!(filename);
-            resource["duration"] = json!(seconds);
             resource["kind"] = json!("audio");
-            if let Some(object) = resource.as_object_mut() {
+            let take = take_mut(resource, script.language.as_deref());
+            take["filename"] = json!(filename);
+            take["duration"] = json!(seconds);
+            if let Some(object) = take.as_object_mut() {
                 object.remove("trimStart");
                 object.remove("trimEnd");
                 object.remove("trimKeyframes");
             }
-            resource["speech"]["provider"] = json!(script.provider);
-            resource["speech"]["voiceID"] = json!(script.voice);
-            resource["speech"]["placeholder"] = json!(true);
-            if let Some(speech) = resource["speech"].as_object_mut() {
+            take["speech"]["provider"] = json!(script.provider);
+            take["speech"]["voiceID"] = json!(script.voice);
+            take["speech"]["placeholder"] = json!(true);
+            if let Some(speech) = take["speech"].as_object_mut() {
                 speech.remove("renderedHash");
             }
         }
@@ -942,8 +1217,7 @@ pub fn placehold(
             )
         };
         report.push(format!(
-            "{}: silent placeholder ({seconds:.2}s, {how}) — {owed}{}",
-            script.id,
+            "{label}: silent placeholder ({seconds:.2}s, {how}) — {owed}{}",
             unstored
                 .map(|e| format!("; its estimated word times were not stored: {e}"))
                 .unwrap_or_default()
@@ -962,7 +1236,8 @@ pub fn placehold(
 /// length — the same format as a real take's, flagged `estimated`. `doc`
 /// (the project, when known) calibrates the estimate by its own takes in
 /// that voice, and keeps the records of another file with the replaced
-/// bytes. Answers the length, and why the word times could not be stored
+/// bytes. `language` is what the take is in, when the voice's name does not
+/// say. Answers the length, and why the word times could not be stored
 /// (the stand-in is written either way). The headless walk and the apps'
 /// placeholder door are this one function.
 pub fn placeholder_take(
@@ -971,13 +1246,16 @@ pub fn placeholder_take(
     provider: &str,
     voice: &str,
     text: &str,
+    language: Option<&str>,
     doc: Option<&Value>,
 ) -> Result<(f64, Option<String>), String> {
     let destination = resources_dir.join(filename);
     let calibration = doc
         .map(|d| estimate::calibration(d, provider, voice))
         .unwrap_or(1.0);
-    let language = estimate::voice_language(voice);
+    let language = language
+        .map(str::to_string)
+        .or_else(|| estimate::voice_language(voice));
     let guess = estimate::estimate(text, language.as_deref(), calibration);
     std::fs::create_dir_all(resources_dir).map_err(|e| format!("write: {e}"))?;
     let replaced = bytes_key(&destination);
@@ -1030,6 +1308,15 @@ fn retire_records(resources_dir: &Path, old: &str, doc: &Value, written: &str) {
         .map(Vec::as_slice)
         .unwrap_or(&[])
         .iter()
+        // A language's take says its own words from its own file.
+        .flat_map(|r| {
+            let languages = r
+                .get("localized")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|all| all.values());
+            std::iter::once(r).chain(languages)
+        })
         .filter_map(|r| {
             let name = r.get("filename")?.as_str()?;
             if name == written || !plain_name(name) {
@@ -1134,6 +1421,254 @@ mod tests {
         assert_eq!(google_model("Achernar@de-DE"), Some("gemini-2.5-flash-tts"));
         assert_eq!(google_model("en-US-Neural2-A"), None);
         assert_eq!(google_model("cmn-CN-Standard-A"), None);
+    }
+
+    /// Stubs a provider: each voice answers its own bytes, and every call is
+    /// counted.
+    struct Voices(std::cell::RefCell<Vec<(String, String)>>);
+    impl Synth for Voices {
+        fn synthesize(&self, _: &str, voice: &str, text: &str) -> Result<Vec<u8>, String> {
+            self.0
+                .borrow_mut()
+                .push((voice.to_string(), text.to_string()));
+            Ok(format!("{voice}|{text}").into_bytes())
+        }
+    }
+
+    fn multilingual() -> (std::path::PathBuf, Value) {
+        let dir = std::env::temp_dir().join(format!(
+            "promo-speech-languages-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc = json!({
+            "languages": { "source": "en", "targets": ["de", "ja", "fr"] },
+            "resources": [ {
+                "id": "r1", "kind": "audio", "filename": "r1.mp3", "duration": 2.0,
+                "trimStart": 0.5,
+                "speech": { "text": "Hello there", "provider": "openai", "voiceID": "alloy" },
+                "localized": {
+                    "de": { "speech": { "text": "Hallo zusammen", "provider": "elevenlabs",
+                                         "voiceID": "anna" }, "by": "person" },
+                    "ja": { "speech": { "text": "こんにちは" } }
+                } } ]
+        });
+        (dir, doc)
+    }
+
+    /// Each language's take is its own: its own bytes under its own name, in
+    /// its own entry, its own receipt, and the source's file untouched. A
+    /// language with words and no voice is named, never voiced with the
+    /// source's, and one with no words is left alone.
+    #[test]
+    fn a_language_has_a_take_of_its_own() {
+        let (dir, mut doc) = multilingual();
+        std::fs::write(dir.join("r1.mp3"), b"english bytes").unwrap();
+        let all = choose_languages(&doc, Some(&json!("de,ja"))).unwrap();
+        let measure = |_: &Path| -> Result<f64, String> { Ok(3.5) };
+        let plan = plan_languages(&doc, &dir, &measure, &all);
+        assert_eq!(plan.pending.len(), 1);
+        assert_eq!(plan.pending[0].language.as_deref(), Some("de"));
+        assert_eq!(plan.pending[0].provider, "elevenlabs");
+        assert_eq!(plan.pending[0].characters, 14);
+        assert_eq!(plan.no_voice, vec![("r1".to_string(), "ja".to_string())]);
+
+        let synth = Voices(Default::default());
+        let lines =
+            settle_languages(&mut doc, &dir, &synth, &measure, &mut |_| Ok(()), &[], &all).unwrap();
+        assert!(
+            lines[0].starts_with("r1 (de): generated (3.50s)"),
+            "{lines:?}"
+        );
+        assert_eq!(
+            synth.0.borrow().as_slice(),
+            [("anna".to_string(), "Hallo zusammen".to_string())]
+        );
+        assert_eq!(
+            std::fs::read(dir.join("r1.de.mp3")).unwrap(),
+            b"anna|Hallo zusammen"
+        );
+        assert_eq!(std::fs::read(dir.join("r1.mp3")).unwrap(), b"english bytes");
+        let entry = &doc["resources"][0]["localized"]["de"];
+        assert_eq!(entry["filename"], "r1.de.mp3");
+        assert_eq!(entry["duration"], 3.5);
+        assert_eq!(
+            entry["speech"]["renderedHash"],
+            fingerprint("elevenlabs", "anna", "Hallo zusammen")
+        );
+        assert_eq!(
+            entry["by"], "person",
+            "a take does not say who wrote the words"
+        );
+        let source = &doc["resources"][0];
+        assert_eq!(source["filename"], "r1.mp3");
+        assert_eq!(source["duration"], 2.0);
+        assert_eq!(source["trimStart"], 0.5);
+        assert!(source["speech"].get("renderedHash").is_none());
+
+        // Bought once: the receipt holds per language.
+        settle_languages(&mut doc, &dir, &synth, &measure, &mut |_| Ok(()), &[], &all).unwrap();
+        assert_eq!(synth.0.borrow().len(), 1);
+        // Only the words of that language spend again.
+        doc["resources"][0]["localized"]["de"]["speech"]["text"] = json!("Hallo allerseits");
+        let plan = plan_languages(&doc, &dir, &measure, &all);
+        assert_eq!(plan.pending.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Unasked, a walk is the source: nothing is bought in ten languages by
+    /// accident. A code off the list is refused before anything is spent.
+    #[test]
+    fn a_walk_is_the_source_unless_asked() {
+        let (dir, doc) = multilingual();
+        let measure = |_: &Path| -> Result<f64, String> { Ok(1.0) };
+        assert_eq!(choose_languages(&doc, None).unwrap(), vec![None]);
+        let plan = plan(&doc, &dir, &measure);
+        assert_eq!(plan.pending.len(), 1);
+        assert_eq!(plan.pending[0].language, None);
+        assert_eq!(
+            choose_languages(&doc, Some(&json!("all"))).unwrap(),
+            vec![
+                None,
+                Some("de".to_string()),
+                Some("ja".to_string()),
+                Some("fr".to_string())
+            ]
+        );
+        assert_eq!(
+            choose_languages(&doc, Some(&json!(["en", "de"]))).unwrap(),
+            vec![None, Some("de".to_string())]
+        );
+        let refused = choose_languages(&doc, Some(&json!("it"))).unwrap_err();
+        assert!(refused.contains("en, de, ja, fr"), "{refused}");
+        let plan = plan_languages(
+            &doc,
+            &dir,
+            &measure,
+            &choose_languages(&doc, Some(&json!("fr"))).unwrap(),
+        );
+        assert!(plan.pending.is_empty() && plan.no_voice.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// No key: a language gets a silent stand-in of its own, estimated in its
+    /// own language, and no receipt, so the next walk with a key voices it.
+    #[test]
+    fn a_language_stands_in_on_its_own_file() {
+        let (dir, mut doc) = multilingual();
+        let de = vec![Some("de".to_string())];
+        let lines = placehold_languages(
+            &mut doc,
+            &dir,
+            &["elevenlabs".to_string()],
+            &mut |_| Ok(()),
+            &de,
+        )
+        .unwrap();
+        assert!(
+            lines[0].starts_with("r1 (de): silent placeholder"),
+            "{lines:?}"
+        );
+        let entry = doc["resources"][0]["localized"]["de"].clone();
+        assert_eq!(entry["speech"]["placeholder"], true);
+        assert!(entry["speech"].get("renderedHash").is_none());
+        assert!(dir.join("r1.de.mp3").is_file());
+        assert!(doc["resources"][0]["speech"].get("placeholder").is_none());
+
+        let measure = |_: &Path| -> Result<f64, String> { Ok(2.5) };
+        let plan = plan_languages(&doc, &dir, &measure, &de);
+        assert_eq!(plan.pending.len(), 1, "still owed");
+        let synth = Voices(Default::default());
+        settle_languages(&mut doc, &dir, &synth, &measure, &mut |_| Ok(()), &[], &de).unwrap();
+        assert!(doc["resources"][0]["localized"]["de"]["speech"]
+            .get("placeholder")
+            .is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A take's word record has its own key, from its own bytes and words:
+    /// voicing German leaves the source's record alone.
+    #[test]
+    fn each_take_keeps_its_own_word_record() {
+        struct Timed;
+        impl Synth for Timed {
+            fn synthesize(&self, _: &str, _: &str, _: &str) -> Result<Vec<u8>, String> {
+                unreachable!()
+            }
+            fn synthesize_timed(&self, _: &str, voice: &str, text: &str) -> Result<Take, String> {
+                Ok(Take {
+                    audio: format!("{voice}|{text}").into_bytes(),
+                    spoken: Some(timing::Spoken {
+                        source: promo_model::speech::TimingSource::Provider("stub".into()),
+                        confidence: 1.0,
+                        against: text.to_string(),
+                        words: text
+                            .split(' ')
+                            .enumerate()
+                            .map(|(i, word)| promo_model::speech::SpokenWord {
+                                text: word.to_string(),
+                                start: i as f64 * 0.2,
+                                end: Some((i + 1) as f64 * 0.2),
+                                chars: None,
+                            })
+                            .collect(),
+                    }),
+                    note: None,
+                })
+            }
+        }
+        let (dir, mut doc) = multilingual();
+        let both = vec![None, Some("de".to_string())];
+        let measure = |_: &Path| -> Result<f64, String> { Ok(1.0) };
+        settle_languages(
+            &mut doc,
+            &dir,
+            &Timed,
+            &measure,
+            &mut |_| Ok(()),
+            &[],
+            &both,
+        )
+        .unwrap();
+        let english = promo_model::word_cache::lookup_in(&dir, &dir.join("r1.mp3"), "Hello there");
+        let german =
+            promo_model::word_cache::lookup_in(&dir, &dir.join("r1.de.mp3"), "Hallo zusammen");
+        assert_eq!(english.unwrap().timing.words[0].text, "Hello");
+        assert_eq!(german.unwrap().timing.words[0].text, "Hallo");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// What an app's own walk reads: the same rules, one row per take.
+    #[test]
+    fn the_takes_report_names_files_and_no_voice() {
+        let (dir, doc) = multilingual();
+        let rows = takes_json(
+            &doc,
+            &dir,
+            &[Some("de".to_string()), Some("ja".to_string())],
+        );
+        let rows = rows.as_array().unwrap();
+        let japanese = rows.iter().find(|r| r["language"] == "ja").unwrap();
+        assert_eq!(japanese["noVoice"], true);
+        assert_eq!(japanese["provider"], "openai");
+        let german = rows.iter().find(|r| r["language"] == "de").unwrap();
+        assert_eq!(german["filename"], "r1.de.mp3");
+        assert_eq!(german["settled"], false);
+        assert_eq!(german["voiceID"], "anna");
+
+        // A person's recording is not owed, and is never voiced over.
+        let mut doc = doc;
+        doc["resources"][0]["localized"]["ja"]["filename"] = json!("mine.m4a");
+        let japanese = vec![Some("ja".to_string())];
+        let rows = takes_json(&doc, &dir, &japanese);
+        assert_eq!(rows[0]["recorded"], true, "{rows}");
+        assert_eq!(rows[0]["settled"], true);
+        let measure = |_: &Path| -> Result<f64, String> { Ok(1.0) };
+        let plan = plan_languages(&doc, &dir, &measure, &japanese);
+        assert!(plan.pending.is_empty() && plan.no_voice.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     use super::*;

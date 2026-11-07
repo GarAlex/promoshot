@@ -400,3 +400,180 @@ fn frames_and_the_sheet_land_in_the_languages_folder() {
     assert!(exports.join("de/frames").is_dir(), "{text}");
     assert!(!exports.join("frames").exists(), "{text}");
 }
+
+/// Seconds of a sound, tone or silence, as ffmpeg writes it.
+fn sound(path: &Path, seconds: f64, tone: bool) {
+    let source = if tone {
+        format!("sine=frequency=880:duration={seconds}")
+    } else {
+        format!("anullsrc=r=44100:cl=mono:d={seconds}")
+    };
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", &source])
+        .arg(path)
+        .status()
+        .expect("ffmpeg");
+    assert!(status.success());
+}
+
+/// The peak of a render's sound, in dB, and how long it runs.
+fn peak_and_length(path: &Path) -> (f64, f64) {
+    let out = Command::new("ffmpeg")
+        .args([
+            "-i",
+            path.to_str().unwrap(),
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .expect("ffmpeg");
+    let text = String::from_utf8_lossy(&out.stderr).to_string();
+    let peak = text
+        .split("max_volume: ")
+        .nth(1)
+        .and_then(|rest| rest.split(" dB").next())
+        .and_then(|number| number.parse().ok())
+        .unwrap_or(f64::NEG_INFINITY);
+    let probe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(path)
+        .output()
+        .expect("ffprobe");
+    let length = String::from_utf8_lossy(&probe.stdout)
+        .trim()
+        .parse()
+        .unwrap();
+    (peak, length)
+}
+
+/// A silent source and a German take of a tone, three times as long: the
+/// render plays the German one, runs its length, and what is anchored on the
+/// speech moves with it, while a literal time does not and validate says so.
+#[test]
+fn a_languages_take_is_what_the_render_plays() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    if Command::new("ffmpeg").arg("-version").output().is_err() {
+        eprintln!("no ffmpeg — the render cannot be written or read back");
+        return;
+    }
+    let dir = project(
+        "take",
+        json!({}),
+        Some(json!({"source": "en", "targets": ["de"]})),
+    );
+    let resources = dir.join("Resources");
+    std::fs::create_dir_all(&resources).unwrap();
+    sound(&resources.join("r1.wav"), 1.0, false);
+    sound(&resources.join("r1.de.wav"), 3.0, true);
+    let path = dir.join("metadata.json");
+    let mut doc: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    doc["resources"].as_array_mut().unwrap().push(json!({
+        "id": "r1", "kind": "audio", "filename": "r1.wav", "displayName": "Intro",
+        "addedAt": 0, "duration": 1.0,
+        "speech": {"text": "One one one. Two two two.", "provider": "openai", "voiceID": "alloy"},
+        "localized": {"de": {
+            "filename": "r1.de.wav", "duration": 3.0,
+            "speech": {"text": "Eins eins eins. Zwei zwei zwei.", "provider": "openai",
+                       "voiceID": "nova"}}}}));
+    let layers = doc["layers"].as_array_mut().unwrap();
+    layers.push(
+        json!({"id": "voice", "name": "voice", "sortIndex": 6, "kind": "audio",
+        "isEnabled": true, "startTime": 0, "duration": 1.0, "resourceID": "r1", "keyframes": []}),
+    );
+    // The caption is said in the second sentence; a literal one sits past the
+    // source's end, inside the German take.
+    let caption = layers.iter_mut().find(|l| l["id"] == "l").unwrap();
+    caption["during"] = json!({"sentence": 2, "of": "voice"});
+    layers.push(
+        json!({"id": "fixed", "name": "fixed", "sortIndex": 7, "kind": "caption",
+        "isEnabled": true, "startTime": 2.5, "duration": 0.2, "resourceID": "c",
+        "keyframes": [{"id": "k2", "time": 0, "transitionDuration": 0,
+                       "placement": {"anchor": "center"}}]}),
+    );
+    std::fs::write(&path, doc.to_string()).unwrap();
+
+    let out = dir.with_extension("videos").join("film.mp4");
+    let render = |language: Option<&str>| {
+        let mut args = vec![
+            "video",
+            dir.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+        ];
+        if let Some(language) = language {
+            args.extend(["--language", language]);
+        }
+        let (ok, text) = promo(&args);
+        assert!(ok, "{text}");
+    };
+    render(None);
+    let (source_peak, source_length) = peak_and_length(&out);
+    assert!(
+        source_peak < -60.0,
+        "the source is silent: {source_peak} dB"
+    );
+    render(Some("de"));
+    let german = dir.with_extension("videos").join("de").join("film.mp4");
+    let (german_peak, german_length) = peak_and_length(&german);
+    assert!(
+        german_peak > -30.0,
+        "the German take plays: {german_peak} dB"
+    );
+    assert!(
+        german_length > source_length,
+        "{german_length} vs {source_length}"
+    );
+    assert!((german_length - 3.0).abs() < 0.2, "{german_length}");
+
+    // The spoken caption is not on screen yet in German when the source's is.
+    let lit = |png: Vec<u8>| {
+        let image = image::load_from_memory(&png).unwrap().to_rgba8();
+        image.pixels().any(|p| p[0] > 128)
+    };
+    let shot = |time: &str, language: Option<&str>| {
+        let exports = dir.with_extension("stills");
+        let written = exports.join("shot.png");
+        let mut args = vec![
+            "still",
+            dir.to_str().unwrap(),
+            "--out",
+            written.to_str().unwrap(),
+            "--time",
+            time,
+        ];
+        if let Some(language) = language {
+            args.extend(["--language", language]);
+        }
+        let (ok, text) = promo(&args);
+        assert!(ok, "{text}");
+        let file = match language {
+            Some(language) => exports.join(language).join("shot.png"),
+            None => written,
+        };
+        std::fs::read(file).unwrap()
+    };
+    // (A silent source aligns its second sentence late: at 0.9 of its 1 s.)
+    assert!(lit(shot("0.95", None)), "the source says it by then");
+    assert!(!lit(shot("0.95", Some("de"))), "German has not said it yet");
+    assert!(lit(shot("2.95", Some("de"))), "German is saying it");
+
+    let (_, report) = promo(&["validate", dir.to_str().unwrap()]);
+    assert!(
+        report.contains("runs 2.0 s longer than the source"),
+        "{report}"
+    );
+    assert!(report.contains("1 layer(s) at literal times"), "{report}");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(dir.with_extension("stills"));
+    let _ = std::fs::remove_dir_all(dir.with_extension("videos"));
+}

@@ -1397,6 +1397,25 @@ and state. Validate has a Languages block: strings missing and stale per
 language, and a warning for a caption that its translation pushes off the
 canvas.
 
+A narration in a language is a take of its own. Its words are `speech.text`
+in the entry, and it needs its own `speech.voiceID` (and `provider`): a
+language is never voiced with the source's by default.
+
+    "localized": { "de": {
+        "speech": { "text": "Hallo zusammen", "provider": "elevenlabs", "voiceID": "…",
+                    "renderedHash": "…" },
+        "filename": "r1.de.mp3", "duration": 2.8 } }
+
+`promo_speak` writes `filename`, `duration` and the receipt, with `language`
+naming which takes to buy (one code, a list, `all`; the source by default),
+and `check` says what each would spend. Until a language has its take the
+source's plays. A layer that played the whole take plays the whole of a
+language's and the background covers it; speech values, `during` and `sync`
+follow by themselves. Literal seconds do not, and validate says how many sit
+in the difference. A script of its own has no `renderedHash`, `placeholder` or
+`wordFixes` but its own, and a `speech` naming no text changes nothing yet.
+Taking a script back with `setTranslation` (`key`, no `text`) takes its take too.
+
 A render's `language` (`--language`) is one code, a list (`de,ja`) or `all`.
 The source writes where it always does, any other language into a folder
 named for it beside that: `<Name> Exports/de/export.mp4`. One that fails is

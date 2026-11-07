@@ -448,7 +448,10 @@ is for; the schema section says how to write it.
   `promo_strings`, and write each with `setTranslation` (`key` and `text` from
   a row, `by: "machine"` when you translated it): anything that is a resource's parameter can differ,
   layers and timing cannot. Keep a narration's sentence count and a label's
-  length close to the source, and read validate's Languages block after.
+  length close to the source, and read validate's Languages block after. A
+  narration needs its language's own voice (`setTranslation` patch
+  `{"speech": {"provider", "voiceID"}}`), then `promo_speak` with `language`,
+  `check: true` first: each language is its own spend.
   `language` on a render picks one, a list or `all`.
 - **Routes** (`route`) — the 3D twin of a motion path, for a member's
   move or the camera's flight, with `target` saying where the camera

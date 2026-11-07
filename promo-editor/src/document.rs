@@ -469,38 +469,11 @@ fn retime_layers_for_resource(
         if layer.resource_id.as_deref() != Some(updated.id.as_str()) || !plays {
             continue;
         }
-        if layer.media_cut_id.is_some() {
-            continue;
-        }
-        if layer.beyond_end.is_some() || updated.is_looped() {
-            continue;
-        }
-        let current = layer.duration.unwrap_or(old_len);
-        if current >= old_len - 0.05 || current > new_len {
-            layer.duration = Some(new_len.max(0.1));
+        if !updated.is_looped() {
+            layer.follow_length(old_len, new_len);
         }
     }
-    extend_background_over_content(meta);
-}
-
-/// The Mac editor's `extendBackgroundOverContent`: every background layer
-/// lasts at least as long as the content above it.
-fn extend_background_over_content(meta: &mut ProjectMetadata) {
-    let Some(layers) = meta.layers.as_mut() else {
-        return;
-    };
-    let content_end = layers
-        .iter()
-        .filter(|l| l.kind != promo_model::ProjectLayerKind::Background)
-        .fold(0.1f64, |end, l| {
-            end.max(l.start_time + l.duration.unwrap_or(0.0))
-        });
-    for layer in layers
-        .iter_mut()
-        .filter(|l| l.kind == promo_model::ProjectLayerKind::Background)
-    {
-        layer.duration = Some(layer.duration.unwrap_or(0.0).max(content_end));
-    }
+    promo_model::extend_background_over_content(layers);
 }
 
 /// Writes a caption layer's words and style where the renderer reads them.
