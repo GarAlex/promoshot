@@ -1416,6 +1416,18 @@ in the difference. A script of its own has no `renderedHash`, `placeholder` or
 `wordFixes` but its own, and a `speech` naming no text changes nothing yet.
 Taking a script back with `setTranslation` (`key`, no `text`) takes its take too.
 
+Sentences are what languages share, so keep a translation's sentence count:
+`{"sentence": 2}` carries over, and validate says when a language's count
+differs. Words do not carry over. Once a language has its own take, a word
+reference (`{"word": 12}`, `{"word": "Euclid"}`, a `during`, a pinned `sync`, a
+generator's list) becomes the same word when that sentence says it, as a name
+does, else the word in the same place in the same sentence, or the same place
+in the whole take when the counts differ. Validate lists each one that landed
+by its place. `captions` regenerate from the language's script, on its take's
+times. A caption a person edited keeps its text and times, and validate lists
+it. Until the language has its take, the source's words count, because the
+source's sound plays.
+
 A render's `language` (`--language`) is one code, a list (`de,ja`) or `all`.
 The source writes where it always does, any other language into a folder
 named for it beside that: `<Name> Exports/de/export.mp4`. One that fails is

@@ -7,6 +7,7 @@ pub mod beat_cache;
 pub mod estimate;
 pub mod geometry;
 pub mod inventory;
+mod language_words;
 pub mod localized;
 pub mod media_cache;
 pub mod midi;

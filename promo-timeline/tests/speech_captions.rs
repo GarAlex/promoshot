@@ -534,3 +534,225 @@ fn a_composition_caption_syncs_on_its_own_take() {
         "{times:?}"
     );
 }
+
+// ---- A language's own words (core-private docs/LOCALIZATION.md §3.4–3.5) ----
+
+const GERMAN: &str = "Euklid bewies es. Primzahlen enden nie, sagte Euklid. Dann ruhte er.";
+
+/// `file` with German on its take: its own file and its own script.
+fn in_german(mut file: Value) -> Value {
+    file["languages"] = json!({"source": "en", "targets": ["de"]});
+    file["resources"][0]["localized"] = json!({"de": {
+        "filename": "intro.de.mp3", "duration": 9,
+        "speech": {"text": GERMAN, "voiceID": "anna"}}});
+    file["resources"].as_array_mut().unwrap().push(json!({
+        "id": "pic", "kind": "image", "filename": "pic.png", "displayName": "Pic", "addedAt": 0}));
+    file
+}
+
+fn german_inputs() -> BeatGrids {
+    inputs_with(timing(GERMAN, 9.0))
+}
+
+fn flat(file: &Value) -> (ProjectMetadata, Vec<String>) {
+    let mut meta = ProjectMetadata::from_json(&file.to_string()).expect("decodes");
+    let notes = promo_model::localized::flatten_noting(&mut meta, "de").expect("flattens");
+    (meta, notes)
+}
+
+/// Captions regenerate from the language's script, on its take's times, and
+/// a copy of the app's resolved form makes the same ones: its English
+/// generated layers are not the person's.
+#[test]
+fn generated_captions_say_the_languages_words() {
+    let file = in_german(narrated(json!({"by": "sentence", "maxSeconds": 30})));
+    let (mut meta, _) = flat(&file);
+    let report = resolve_timing(&mut meta, &german_inputs());
+    assert!(
+        !report.problems.iter().any(TimingProblem::is_break),
+        "{:?}",
+        report.problems
+    );
+    let shown: Vec<String> = generated(&meta)
+        .iter()
+        .map(|c| c.caption_text.clone().unwrap())
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            "Euklid bewies es.",
+            "Primzahlen enden nie, sagte Euklid.",
+            "Dann ruhte er."
+        ]
+    );
+    let german = timing(GERMAN, 9.0);
+    let first = generated(&meta)[1];
+    assert!(
+        close(first.start_time, 2.0 + german.words[3].start - 0.1),
+        "{}",
+        first.start_time
+    );
+
+    // Their words are the script's: nothing to translate on the layer.
+    let report =
+        promo_timeline::report::file_report_with(&file.to_string(), None, &german_inputs())
+            .unwrap();
+    assert!(
+        !report
+            .findings
+            .iter()
+            .any(|f| f.message.contains("keeps its text on the layer")),
+        "{:#?}",
+        report.findings
+    );
+
+    // The app hands the core its resolved source: English pieces in the layers.
+    let (app_form, _) = resolved_with(&file, &inputs());
+    let app_json = serde_json::to_string(&app_form).unwrap();
+    let mut meta = ProjectMetadata::from_json(&app_json).unwrap();
+    assert!(generated(&meta)
+        .iter()
+        .any(|c| c.caption_text.as_deref() == Some("Euclid proved it.")));
+    promo_model::localized::flatten(&mut meta, "de").unwrap();
+    resolve_timing(&mut meta, &german_inputs());
+    let shown: Vec<String> = generated(&meta)
+        .iter()
+        .map(|c| c.caption_text.clone().unwrap())
+        .collect();
+    assert_eq!(shown[0], "Euklid bewies es.", "{shown:?}");
+    assert_eq!(shown.len(), 3, "{shown:?}");
+}
+
+/// A script with no take of its own: the English file plays, so English is
+/// what captions and anchors count, whatever record the file has.
+#[test]
+fn a_script_without_its_file_captions_what_plays() {
+    let mut file = in_german(narrated(json!({"by": "sentence", "maxSeconds": 30})));
+    file["resources"][0]["localized"] = json!({"de": {"speech": {"text": GERMAN}}});
+    let (mut meta, notes) = flat(&file);
+    assert!(notes.is_empty(), "{notes:?}");
+    resolve_timing(&mut meta, &inputs());
+    let first = generated(&meta)[0].caption_text.clone().unwrap();
+    assert_eq!(first, "Euclid proved it.");
+}
+
+/// A pinned reveal and a `during` land in the same sentence, by place; the
+/// name said in that sentence is found exactly and not listed.
+#[test]
+fn pinned_words_follow_into_the_translation() {
+    let file = in_german(project(json!([
+        caption("pinned", "Euklid bewies es.", json!({"by": "word", "sync": {"of": "intro", "words": [1, 3]}}), json!({})),
+        {"id": "seen", "name": "seen", "sortIndex": 3, "kind": "image", "isEnabled": true,
+         "startTime": 0, "resourceID": "pic", "during": {"words": [4, 5], "of": "intro"}, "keyframes": []},
+        {"id": "said", "name": "said", "sortIndex": 4, "kind": "image", "isEnabled": true,
+         "startTime": {"word": "Euclid", "nth": 2, "of": "intro"}, "duration": 1, "resourceID": "pic",
+         "keyframes": []},
+        {"id": "last", "name": "last", "sortIndex": 5, "kind": "image", "isEnabled": true,
+         "startTime": {"word": 10, "of": "vo", "text": "Then"}, "duration": 1, "resourceID": "pic",
+         "keyframes": []},
+    ])));
+    let (mut meta, notes) = flat(&file);
+    resolve_timing(&mut meta, &german_inputs());
+    let t = timing(GERMAN, 9.0);
+    // "Euclid" (2nd) is "Euklid", another word: by its place, the sentence's end.
+    assert!(
+        close(layer(&meta, "said").start_time, 2.0 + t.words[7].start),
+        "{notes:?}"
+    );
+    assert!(
+        close(layer(&meta, "last").start_time, 2.0 + t.words[8].start),
+        "{notes:?}"
+    );
+    let seen = layer(&meta, "seen");
+    assert!(
+        close(seen.start_time, 2.0 + t.words[3].start),
+        "{}",
+        seen.start_time
+    );
+    assert!(close(
+        seen.start_time + seen.duration.unwrap(),
+        2.0 + t.words[4].end
+    ));
+    assert_eq!(reveal(&meta, "pinned").sync.unwrap().words, Some([1, 3]));
+    assert!(
+        notes
+            .iter()
+            .any(|n| n.contains("\u{201C}Euclid\u{201D} lands on word 8")),
+        "{notes:?}"
+    );
+    assert!(
+        notes.iter().any(|n| n.contains("\u{201C}Then\u{201D}")),
+        "{notes:?}"
+    );
+}
+
+/// A translation with fewer sentences still lands in the take, a sentence
+/// value included, rather than breaking past the end.
+#[test]
+fn another_sentence_count_lands_by_place_and_says_so() {
+    let mut file = in_german(project(json!([
+        {"id": "third", "name": "third", "sortIndex": 3, "kind": "image", "isEnabled": true,
+         "startTime": {"sentence": 3, "of": "intro"}, "duration": 1, "resourceID": "pic",
+         "keyframes": []},
+    ])));
+    let short = "Euklid bewies es, Primzahlen enden nie und er ruhte.";
+    file["resources"][0]["localized"]["de"]["speech"]["text"] = json!(short);
+    let (mut meta, notes) = flat(&file);
+    let report = resolve_timing(&mut meta, &inputs_with(timing(short, 9.0)));
+    assert!(
+        !report.problems.iter().any(TimingProblem::is_break),
+        "{:?}",
+        report.problems
+    );
+    assert!(
+        notes
+            .iter()
+            .any(|n| n.contains("sentence 3 lands on sentence 1")),
+        "{notes:?}"
+    );
+}
+
+/// A generator's named words follow; a nested composition counts on its own
+/// clock; validate lists what is approximate, breaks nothing and says the
+/// sentence count.
+#[test]
+fn generators_and_validate_follow_the_language() {
+    let mut file = in_german(project(json!([
+        {"id": "s", "name": "s", "sortIndex": 3, "kind": "image", "isEnabled": true,
+         "startTime": 0, "duration": 12, "resourceID": "pic", "keyframes": [],
+         "pulse": {"on": {"words": ["Euclid", 5], "of": "intro"}, "amount": 0.05, "decay": 0.25}},
+    ])));
+    let (mut meta, notes) = flat(&file);
+    let report = resolve_timing(&mut meta, &german_inputs());
+    assert!(
+        !report.problems.iter().any(TimingProblem::is_break),
+        "{:?}",
+        report.problems
+    );
+    let peaks = layer(&meta, "s")
+        .keyframes
+        .iter()
+        .filter(|k| k.id.ends_with("-peak"))
+        .count();
+    assert_eq!(peaks, 3, "{notes:?}");
+
+    file["resources"][0]["localized"]["de"]["speech"]["text"] = json!("Nur ein Satz hier.");
+    let text = file.to_string();
+    let out = promo_timeline::report::file_report_with(
+        &text,
+        None,
+        &inputs_with(timing("Nur ein Satz hier.", 9.0)),
+    )
+    .unwrap();
+    let lines: Vec<&str> = out.findings.iter().map(|f| f.message.as_str()).collect();
+    assert!(
+        lines.iter().any(|l| l.contains("1 sentence(s) here and 3")),
+        "{lines:#?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("de: ") && l.contains("by its place")),
+        "{lines:#?}"
+    );
+}

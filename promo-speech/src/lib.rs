@@ -875,6 +875,8 @@ pub fn takes_json(doc: &Value, resources_dir: &Path, languages: &[Option<String>
                     "noVoice": false, "recorded": true, "settled": true,
                     "text": resource.pointer(&format!("/localized/{code}/speech/text")),
                     "filename": resource.pointer(&format!("/localized/{code}/filename")),
+                    "sentences": sentences(resource, Some(code)),
+                    "sourceSentences": sentences(resource, None),
                 }));
             }
             if let Some(id) = no_voice(index, resource, code) {
@@ -885,6 +887,8 @@ pub fn takes_json(doc: &Value, resources_dir: &Path, languages: &[Option<String>
                     "provider": resource.pointer(&format!("/localized/{code}/speech/provider"))
                         .or_else(|| resource.pointer("/speech/provider")),
                     "filename": language_filename(resource, &id, code, extension),
+                    "sentences": sentences(resource, Some(code)),
+                    "sourceSentences": sentences(resource, None),
                 }));
             }
         }
@@ -903,10 +907,23 @@ pub fn takes_json(doc: &Value, resources_dir: &Path, languages: &[Option<String>
                 "filename": found.unwrap_or(&script.filename), "settled": found.is_some(),
                 "placeholder": take_of(resource, script.language.as_deref())["speech"]["placeholder"]
                     == json!(true),
+                "sentences": sentences(resource, script.language.as_deref()),
+                "sourceSentences": sentences(resource, None),
             }));
         }
     }
     Value::Array(rows)
+}
+
+/// How many sentences a language's script says (None: the source's).
+fn sentences(resource: &Value, language: Option<&str>) -> usize {
+    let words = match language {
+        Some(code) => resource.pointer(&format!("/localized/{code}/speech/text")),
+        None => resource.pointer("/speech/text"),
+    };
+    words.and_then(Value::as_str).map_or(0, |text| {
+        promo_model::speech::tokenize(text).sentences.len()
+    })
 }
 
 /// The providers a plan needs that `keys` has no key for — checked BEFORE

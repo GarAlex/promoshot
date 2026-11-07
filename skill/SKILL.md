@@ -451,7 +451,11 @@ is for; the schema section says how to write it.
   length close to the source, and read validate's Languages block after. A
   narration needs its language's own voice (`setTranslation` patch
   `{"speech": {"provider", "voiceID"}}`), then `promo_speak` with `language`,
-  `check: true` first: each language is its own spend.
+  `check: true` first: each language is its own spend. Once a language has its
+  take, word anchors land on the same word when that sentence says it, else by
+  their place in the sentence, and validate lists those; sentence anchors need
+  the count kept. `captions` regenerate from its script. Words with no take of
+  their own change nothing: the source's sound plays, so its words count.
   `language` on a render picks one, a list or `all`.
 - **Routes** (`route`) — the 3D twin of a motion path, for a member's
   move or the camera's flight, with `target` saying where the camera

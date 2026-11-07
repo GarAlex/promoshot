@@ -135,9 +135,10 @@ fn patched(resource: &ProjectResource, entry: &Value) -> Result<ProjectResource,
     for key in ENTRY_KEYS {
         patch.remove(*key);
     }
-    // A voice chosen before there are words for it changes nothing yet, and
-    // a script of its own is a new take.
-    if entry_script(entry).is_some() {
+    // A voice chosen before there is a take changes nothing yet, and words
+    // with no file of their own say nothing about what plays: the source's
+    // take plays, so its words are the ones anchors and captions count.
+    if new_file && entry_script(entry).is_some() {
         if let Some(speech) = map.get_mut("speech").and_then(Value::as_object_mut) {
             for key in TAKE_BOUND_SPEECH {
                 speech.remove(*key);
@@ -249,6 +250,13 @@ fn scale_keyframe_sizes(
 /// the blocks. A language not on the project's list is refused, as is any
 /// entry that cannot apply: a render never shows half a translation.
 pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String> {
+    flatten_noting(meta, language).map(|_| ())
+}
+
+/// [`flatten`], answering what validate lists: each reference to a word that
+/// landed by its place alone, and what else the language's words leave
+/// approximate.
+pub fn flatten_noting(meta: &mut ProjectMetadata, language: &str) -> Result<Vec<String>, String> {
     let list = languages(meta);
     let known = list.as_ref().map(Languages::all).unwrap_or_default();
     if !known.contains(&language) {
@@ -265,6 +273,8 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
     let default_size = meta.composition_settings.subtitle_font_size;
     let mut ratios = std::collections::BTreeMap::new();
     let mut lengths = Vec::new();
+    let mut maps = std::collections::BTreeMap::new();
+    let mut notes = Vec::new();
     for resource in meta.resources.iter_mut().flatten() {
         let entry = entries(resource)
             .filter(|_| !is_source)
@@ -275,11 +285,28 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
                 let id = resource.id.clone();
                 let size = caption_size(resource, default_size);
                 let length = played_length(resource);
+                let script = crate::speech::take_script(resource);
+                let filename = resource.filename.clone();
                 *resource = patched(resource, &entry)
                     .map_err(|why| format!("resource \"{id}\", language \"{language}\": {why}"))?;
-                if entry_script(&entry).is_some() {
+                let own_file = resource.filename != filename;
+                if own_file && entry_script(&entry).is_some() {
                     if let Some(speech) = resource.extra.get_mut("speech") {
                         speech["language"] = Value::from(language);
+                    }
+                } else if own_file && script.is_some() {
+                    notes.push(format!(
+                        "narration \"{}\" has its own file and no words here, so anchors and \
+                         captions count the source's",
+                        resource.display_name
+                    ));
+                }
+                if let (Some(source), Some(here)) = (&script, crate::speech::take_script(resource))
+                {
+                    if *source != here {
+                        if let Some(map) = crate::language_words::TakeMap::new(source, &here) {
+                            maps.insert(id.clone(), map);
+                        }
                     }
                 }
                 let now_length = played_length(resource);
@@ -318,7 +345,8 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
             }
         }
     }
-    Ok(())
+    notes.extend(crate::language_words::follow(meta, &maps));
+    Ok(notes)
 }
 
 /// What is wrong with the file's languages: `(breaks, warnings)`. A break
@@ -371,7 +399,8 @@ pub fn problems(meta: &ProjectMetadata) -> (Vec<String>, Vec<String>) {
                 .resource_id
                 .as_deref()
                 .is_some_and(|id| on_a_resource.contains(id));
-            if layer.caption_text.is_some() && !on_resource {
+            // A generated caption's words come from its narration's script.
+            if layer.caption_text.is_some() && !on_resource && layer.generated_by.is_none() {
                 warnings.push(format!(
                     "caption layer \"{}\" keeps its text on the layer, so it shows the source in \
                      every language: move the text to a caption resource",
@@ -591,6 +620,11 @@ pub struct TakeRow {
     /// The language the chosen voice speaks, when that is not this one.
     #[serde(rename = "voiceSpeaks")]
     pub voice_speaks: Option<String>,
+    /// How many sentences it says, and how many the source does: what
+    /// anchors on a sentence count on, so a translation keeps them.
+    pub sentences: usize,
+    #[serde(rename = "sourceSentences")]
+    pub source_sentences: usize,
 }
 
 fn base_code(code: &str) -> String {
@@ -669,6 +703,9 @@ pub fn takes(meta: &ProjectMetadata, language: &str) -> Vec<TakeRow> {
             voice_speaks: voice
                 .and_then(voice_speaks)
                 .filter(|speaks| *speaks != base_code(language)),
+            sentences: crate::speech::tokenize(script).sentences.len(),
+            source_sentences: crate::speech::take_script(resource)
+                .map_or(0, |source| crate::speech::tokenize(&source).sentences.len()),
         });
     }
     rows
@@ -1741,9 +1778,13 @@ mod tests {
         let take = &flat.resources.as_ref().unwrap()[0];
         assert_eq!(take.filename, "r1.mp3");
         assert_eq!(take.trim_end, Some(6.0));
-        assert_eq!(take.extra["speech"]["text"], "Hallo zusammen.");
+        // What plays is English, so English is what anchors and captions read.
+        assert_eq!(
+            take.extra["speech"]["text"],
+            meta.resources.as_ref().unwrap()[0].extra["speech"]["text"]
+        );
         assert_eq!(take.extra["speech"]["voiceID"], "alloy");
-        assert!(take.extra["speech"].get("renderedHash").is_none());
+        assert_eq!(take.extra["speech"]["renderedHash"], "english");
 
         meta.resources.as_mut().unwrap()[0].extra.insert(
             LOCALIZED_KEY.into(),

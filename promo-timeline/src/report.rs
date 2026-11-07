@@ -473,6 +473,11 @@ fn languages_report(
         return;
     }
     let source_layout = crate::layout_check::layout_warnings(source);
+    let source_timing: Vec<String> = crate::resolve_timing(&mut original.clone(), grids)
+        .problems
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     for summary in &summaries {
         if !summary.missing.is_empty() {
             out.warn(format!(
@@ -497,8 +502,39 @@ fn languages_report(
         for line in takes_in_language(&original, summary, grids, source) {
             out.warn(format!("{}: {line}", summary.language));
         }
+        words_in_language(&original, &summary.language, grids, &source_timing, out);
     }
     out.languages = summaries;
+}
+
+/// What `language`'s own words do to everything counting on them: each word
+/// reference that landed by its place, and what its timing says that the
+/// source's does not.
+fn words_in_language(
+    original: &ProjectMetadata,
+    language: &str,
+    grids: &crate::BeatGrids,
+    source_timing: &[String],
+    out: &mut Report,
+) {
+    let mut flat = original.clone();
+    let Ok(notes) = promo_model::localized::flatten_noting(&mut flat, language) else {
+        return;
+    };
+    for note in notes {
+        out.warn(format!("{language}: {note}"));
+    }
+    for problem in crate::resolve_timing(&mut flat, grids).problems {
+        let line = problem.to_string();
+        if source_timing.contains(&line) {
+            continue;
+        }
+        if problem.is_break() {
+            out.breaks(format!("{language}: {line}"));
+        } else {
+            out.warn(format!("{language}: {line}"));
+        }
+    }
 }
 
 /// What `language`'s own words do to the layout: what its render warns of
@@ -557,6 +593,13 @@ fn takes_in_language(
         if let Some(speaks) = &take.voice_speaks {
             lines.push(format!(
                 "narration \"{name}\" has a voice that speaks {speaks}"
+            ));
+        }
+        if take.sentences != take.source_sentences {
+            lines.push(format!(
+                "narration \"{name}\" has {} sentence(s) here and {} in the source: keep the \
+                 count, or anchors land only by their place in the narration",
+                take.sentences, take.source_sentences
             ));
         }
         let (Some(seconds), Some(source_seconds)) = (take.seconds, take.source_seconds) else {
