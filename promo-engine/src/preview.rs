@@ -25,7 +25,7 @@ use promo_gpu::iosurface::IOSurfaceRef;
 use promo_gpu::{GpuContext, GpuError};
 use promo_model::{ProjectLayer, ProjectLayerKind, ProjectMetadata, ProjectResource, Size};
 use promo_timeline as tl;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, c_void, CString};
 
 /// Provider out-flag: the bitmap already carries its decorative frame —
@@ -629,34 +629,52 @@ impl PreviewEngine {
         let new = meta.layers.clone().unwrap_or_default();
         let old_resources = self.meta.resources.clone().unwrap_or_default();
         let new_resources = meta.resources.clone().unwrap_or_default();
-        // A layer whose RESOURCE changed is as stale as one that changed
-        // itself: an image cut's rect, a device frame's material, a caption
-        // resource's text all live there, and the layer struct is untouched
-        // when they move. Comparing only layers kept the old bake on screen.
-        let resource_changed = |layer: &ProjectLayer| -> bool {
-            let Some(rid) = layer.resource_id.as_ref() else {
-                return false;
-            };
-            let before = old_resources.iter().find(|r| &r.id == rid);
-            let after = new_resources.iter().find(|r| &r.id == rid);
-            if before != after {
-                return true;
-            }
-            // A model's picture also changes when a resource its slots BIND
-            // changes — the composition on its screen edited, the picture
-            // on its body replaced — and the model resource itself is
-            // untouched by that.
-            after.is_some_and(|r| {
-                r.materials
+        // A layer that reaches a changed RESOURCE is as stale as one that
+        // changed itself: an image cut's rect, a device frame's material, a
+        // caption resource's text, a language's own file all live there, and
+        // the layer struct is untouched when they move. Comparing only layers
+        // kept the old bake on screen. It may reach it by a keyframe's swap or
+        // a stage member, and through what a resource holds: the composition
+        // on its layer, the picture on a model's slot.
+        let mut touched: HashSet<&str> = old_resources
+            .iter()
+            .filter(|before| new_resources.iter().find(|r| r.id == before.id) != Some(*before))
+            .map(|r| r.id.as_str())
+            .chain(
+                new_resources
                     .iter()
-                    .flat_map(|m| m.values())
-                    .filter_map(|b| b.resource_id())
-                    .any(|id| {
-                        old_resources.iter().find(|r| r.id == id)
-                            != new_resources.iter().find(|r| r.id == id)
-                    })
-            })
-        };
+                    .filter(|r| !old_resources.iter().any(|before| before.id == r.id))
+                    .map(|r| r.id.as_str()),
+            )
+            .collect();
+        fn reaches(layer: &ProjectLayer, touched: &HashSet<&str>) -> bool {
+            let names = |id: &Option<String>| id.as_deref().is_some_and(|id| touched.contains(id));
+            names(&layer.resource_id)
+                || layer.keyframes.iter().any(|k| names(&k.resource_id))
+                || layer.members.iter().flatten().any(|m| reaches(m, touched))
+        }
+        loop {
+            let more: Vec<&str> = new_resources
+                .iter()
+                .filter(|r| !touched.contains(r.id.as_str()))
+                .filter(|r| {
+                    r.composition
+                        .as_ref()
+                        .is_some_and(|c| c.layers.iter().any(|l| reaches(l, &touched)))
+                        || r.materials
+                            .iter()
+                            .flat_map(|m| m.values())
+                            .filter_map(|b| b.resource_id())
+                            .any(|id| touched.contains(id))
+                })
+                .map(|r| r.id.as_str())
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            touched.extend(more);
+        }
+        let resource_changed = |layer: &ProjectLayer| reaches(layer, &touched);
         let mut stale: Vec<String> = Vec::new();
         for layer in &old {
             match new.iter().find(|l| l.id == layer.id) {
@@ -677,8 +695,25 @@ impl PreviewEngine {
             .filter(|l| stale.contains(&l.id))
             .filter_map(|l| l.stage.clone())
             .collect();
-        for id in stale {
+        // A nested layer's frames are cached under its own id.
+        let nested: Vec<String> = old_resources
+            .iter()
+            .filter_map(|r| r.composition.as_ref())
+            .flat_map(|c| &c.layers)
+            .filter(|l| reaches(l, &touched))
+            .map(|l| l.id.clone())
+            .collect();
+        for id in stale.into_iter().chain(nested) {
             self.evict_layer(&id);
+        }
+        // A slot's picture and a world's panorama are cached per RESOURCE,
+        // under synthetic layers no layer's id reaches.
+        let by_resource: Vec<String> = touched
+            .iter()
+            .flat_map(|id| [format!("slot\u{1f}{id}"), format!("environment\u{1f}{id}")])
+            .collect();
+        for prefix in by_resource {
+            self.evict_prefix(&prefix);
         }
         for stage in stages {
             self.evict_prefix(&format!("stage\u{1f}{stage}"));
@@ -6509,6 +6544,69 @@ mod tests {
         engine.set_project(retimed);
         engine.render(3.5, out.raw(), 64, 64).unwrap();
         assert_eq!(engine.stats().misses, 2, "edited layer re-fetches");
+    }
+
+    /// A language's file is a project change at one instant: the engine has to
+    /// ask again for every picture that file reaches, however it is reached —
+    /// a layer's own, a swap keyframe's, a stage member's, inside a composition.
+    #[test]
+    fn a_replaced_file_is_asked_for_again_however_a_layer_reaches_it() {
+        let meta = |filename: &str| {
+            let json = format!(
+                r#"{{"id": "P", "name": "P", "createdAt": 0, "state": "recorded",
+                "trimStart": 0, "trimEnd": 4, "videoDuration": 4, "subtitles": [],
+                "compositionSettings": {{"canvasWidth": 64, "canvasHeight": 64}},
+                "layers": [
+                  {{"id": "SWAP", "name": "s", "sortIndex": 0, "kind": "image",
+                    "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "OTHER",
+                    "keyframes": [{{"id": "K0", "time": 0, "transitionDuration": 0,
+                                    "resourceID": "SHOT"}}]}},
+                  {{"id": "SHOW", "name": "c", "sortIndex": 1, "kind": "video",
+                    "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "REEL",
+                    "keyframes": []}}
+                ],
+                "resources": [
+                  {{"id": "OTHER", "kind": "image", "filename": "other.png", "displayName": "o",
+                    "addedAt": 0, "pixelWidth": 32, "pixelHeight": 32}},
+                  {{"id": "SHOT", "kind": "image", "filename": "{filename}", "displayName": "s",
+                    "addedAt": 0, "pixelWidth": 32, "pixelHeight": 32}},
+                  {{"id": "REEL", "kind": "composition", "filename": "", "displayName": "r",
+                    "addedAt": 0, "duration": 4,
+                    "composition": {{"canvasWidth": 64, "canvasHeight": 64, "layers": [
+                      {{"id": "NESTED", "name": "n", "sortIndex": 0, "kind": "image",
+                        "isEnabled": true, "startTime": 0, "duration": 4, "resourceID": "SHOT",
+                        "keyframes": []}}]}}}}
+                ]}}"#
+            );
+            ProjectMetadata::from_json(&json).expect("fixture")
+        };
+        let (mut engine, state) = make_engine(
+            meta("shot.png"),
+            vec![
+                ("SWAP".into(), [255, 0, 0, 255], 32),
+                ("NESTED".into(), [255, 0, 0, 255], 32),
+            ],
+            64 << 20,
+        );
+        let out = OwnedIoSurface::new_bgra(64, 64).unwrap();
+        engine.render(1.0, out.raw(), 64, 64).unwrap();
+        let count = |state: &Box<Mutex<ProviderState>>, id: &str| {
+            let state = state.lock().unwrap();
+            state.requests.iter().filter(|r| r.0 == id).count()
+        };
+        let (swap, nested) = (count(&state, "SWAP"), count(&state, "NESTED"));
+        assert!(swap > 0 && nested > 0, "both were drawn");
+
+        engine.set_project(meta("shot.de.png"));
+        engine.render(1.0, out.raw(), 64, 64).unwrap();
+        assert!(count(&state, "SWAP") > swap, "a swap keyframe's file");
+        assert!(count(&state, "NESTED") > nested, "a nested layer's file");
+
+        // And back: the same instant, the source's picture again.
+        let (swap, nested) = (count(&state, "SWAP"), count(&state, "NESTED"));
+        engine.set_project(meta("shot.png"));
+        engine.render(1.0, out.raw(), 64, 64).unwrap();
+        assert!(count(&state, "SWAP") > swap && count(&state, "NESTED") > nested);
     }
 
     #[test]

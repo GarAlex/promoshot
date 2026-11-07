@@ -511,7 +511,11 @@ fn numbered_pieces(meta: &ProjectMetadata, scope: &Scope, notes: &mut Vec<String
 
 /// Every reference to a word of a take in `maps`, rewritten in place. Each
 /// reference that landed by position alone is a line in the answer.
-pub(crate) fn follow(meta: &mut ProjectMetadata, maps: &BTreeMap<String, TakeMap>) -> Vec<String> {
+pub(crate) fn follow(
+    meta: &mut ProjectMetadata,
+    maps: &BTreeMap<String, TakeMap>,
+    own: &BTreeSet<String>,
+) -> Vec<String> {
     let mut notes = Vec::new();
     if maps.is_empty() {
         return notes;
@@ -550,7 +554,12 @@ pub(crate) fn follow(meta: &mut ProjectMetadata, maps: &BTreeMap<String, TakeMap
             &whose,
             &mut notes,
         );
-        if let Some(composition) = resource.composition.as_mut() {
+        // A composition the language owns says its own words already.
+        if let Some(composition) = resource
+            .composition
+            .as_mut()
+            .filter(|_| !own.contains(&resource.id))
+        {
             let inner = Scope::new(
                 composition.speech_clock.clone(),
                 &composition.layers,

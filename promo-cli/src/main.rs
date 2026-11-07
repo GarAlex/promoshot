@@ -2090,6 +2090,29 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
             Some(why) => report.breaks(format!("layer \"{}\" will not render — {why}", layer.name)),
         }
     }
+    // The same in each language that names files or content of its own.
+    let source_says = report.messages();
+    if let Ok(meta) = promo_model::ProjectMetadata::from_json(&raw) {
+        for language in promo_model::localized::languages_with_media(&meta) {
+            let Ok(there) =
+                Project::open_in(&project.dir, project::Analysis::CacheOnly, Some(&language))
+            else {
+                continue; // what it cannot do is already a break
+            };
+            for layer in promo_model::nesting::all_layers(&there.meta) {
+                let Some(why) = there.unsupported(layer) else {
+                    continue;
+                };
+                if why == project::Unsupported::Audio {
+                    continue;
+                }
+                let line = format!("layer \"{}\" will not render — {why}", layer.name);
+                if !source_says.iter().any(|said| said == &line) {
+                    report.breaks(format!("{language}: {line}"));
+                }
+            }
+        }
+    }
     // A MIDI resource whose take is missing or older than its block.
     if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&raw) {
         for finding in promo_midi::findings(&doc, &project.dir.join("Resources")) {

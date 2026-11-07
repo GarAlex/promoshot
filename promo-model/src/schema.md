@@ -1373,7 +1373,31 @@ language with no entry, shows the source. `id`, `kind`, `addedAt` and
 
 An entry that names another `filename` brings that file's facts: the
 source's `duration`, trims, cuts and pixel size do not carry over, because
-they describe the source's file. Restate the ones the new file has.
+they describe the source's file. Restate the ones the new file has; the
+`resource` a `promo_media_probe` answers with has them. The file sits in
+`Resources/` beside the source's, and a resource from the library stops being
+one in that language. A layer that played the whole clip plays the whole of a
+language's, a placement rule fits its shape, and validate names a picture of
+another shape under fixed numbers, a trim or cut it left behind, and a file
+that is not there.
+
+    "localized": { "de": { "filename": "shot.de.png",
+                           "pixelWidth": 1290, "pixelHeight": 2796 } }
+
+A composition can have a language's own content. Its entry's `composition`
+merges over the source's, and `layers` replaces the source's list whole. A
+composition a language owns is written in that language: nothing is translated
+into it, so its word references and sizes are read as they stand. Its layers
+point at the project's resources, which still answer for the language, and
+validate breaks on one that makes a composition contain itself.
+
+    { "kind": "forkComposition", "resourceID": "reel", "language": "de" }
+    { "kind": "inComposition", "resourceID": "reel", "language": "de",
+      "command": { "kind": "deleteLayer", "layerID": "subtitle" } }
+
+`forkComposition` copies the composition as that language shows it now, words
+and sizes already its own. `inComposition` with a `language` edits that copy, and
+`setTranslation` with `{"composition": null}` shares the source's again.
 
 A caption with its text on the LAYER has nowhere to keep a translation and
 shows the source in every language, and validate warns. A translated caption
@@ -1396,6 +1420,14 @@ takes its content off every resource.
 and state. Validate has a Languages block: strings missing and stale per
 language, and a warning for a caption that its translation pushes off the
 canvas.
+
+Takes per language, and what words do across languages, are under "Language takes". Renders:
+a `language` (`--language`) is one code, a list (`de,ja`) or `all`.
+The source writes where it always does, any other language into a folder
+named for it beside that: `<Name> Exports/de/export.mp4`. One that fails is
+named and the others finish. Without it a render is the source.
+
+## Language takes — language take, narration in a language, translated narration, word references in a language, generated captions in a language
 
 A narration in a language is a take of its own. Its words are `speech.text`
 in the entry, and it needs its own `speech.voiceID` (and `provider`): a
@@ -1427,11 +1459,6 @@ by its place. `captions` regenerate from the language's script, on its take's
 times. A caption a person edited keeps its text and times, and validate lists
 it. Until the language has its take, the source's words count, because the
 source's sound plays.
-
-A render's `language` (`--language`) is one code, a list (`de,ja`) or `all`.
-The source writes where it always does, any other language into a folder
-named for it beside that: `<Name> Exports/de/export.mp4`. One that fails is
-named and the others finish. Without it a render is the source.
 
 ## MIDI — midi, sequence, steps, notes, piano roll, instrument, program, drums, loop, tempo map, level, sound effect, soundfont, mid, generated, ace-step
 

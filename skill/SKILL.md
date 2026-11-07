@@ -447,7 +447,9 @@ is for; the schema section says how to write it.
   languages. List them with `setLanguages`, read every string with
   `promo_strings`, and write each with `setTranslation` (`key` and `text` from
   a row, `by: "machine"` when you translated it): anything that is a resource's parameter can differ,
-  layers and timing cannot. Keep a narration's sentence count and a label's
+  layers and timing cannot. A German screenshot is a patch naming its `filename`
+  and pixel size (`promo_media_probe` answers both), a composition of its own is
+  `forkComposition`, then `inComposition` with `language`. Keep a narration's sentence count and a label's
   length close to the source, and read validate's Languages block after. A
   narration needs its language's own voice (`setTranslation` patch
   `{"speech": {"provider", "voiceID"}}`), then `promo_speak` with `language`,

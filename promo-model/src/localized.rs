@@ -130,6 +130,8 @@ fn patched(resource: &ProjectResource, entry: &Value) -> Result<ProjectResource,
         for key in FILE_BOUND_KEYS {
             map.remove(*key);
         }
+        // The language's file is the project's, wherever the source's lives.
+        map.remove("libraryID");
     }
     let mut patch = patch.clone();
     for key in ENTRY_KEYS {
@@ -172,17 +174,128 @@ fn entry_script(entry: &Value) -> Option<&str> {
         .filter(|text| !text.trim().is_empty())
 }
 
-/// The files a resource's languages name, each once.
+/// The files a resource's languages name, each once: a replacement, and any
+/// cut of it that has a file of its own.
 pub fn files(resource: &ProjectResource) -> Vec<String> {
-    let mut names = Vec::new();
+    let mut names: Vec<String> = Vec::new();
     for entry in entries(resource).into_iter().flat_map(Map::values) {
-        if let Some(name) = entry["filename"].as_str().filter(|n| !n.is_empty()) {
+        let cuts = entry["imageCuts"].as_array().into_iter().flatten();
+        for name in std::iter::once(&entry["filename"])
+            .chain(cuts.map(|cut| &cut["filename"]))
+            .filter_map(Value::as_str)
+            .filter(|name| !name.is_empty())
+        {
             if !names.iter().any(|known| known == name) {
                 names.push(name.to_string());
             }
         }
     }
     names
+}
+
+/// The language whose entry on `resource` points at resource `id`: its own
+/// composition, the picture its slots wear. What a delete has to ask, because
+/// a pointer that only one language has is still a pointer.
+pub fn language_pointing_at(resource: &ProjectResource, id: &str) -> Option<String> {
+    fn points(node: &Value, parent: Option<&str>, id: &str) -> bool {
+        match node {
+            Value::Object(map) => map.iter().any(|(key, value)| {
+                let pointer = key == "resourceID"
+                    || key.ends_with("ResourceID")
+                    || key == "themePlateID"
+                    || (parent == Some("morph") && (key == "from" || key == "to"));
+                (pointer && value.as_str() == Some(id)) || points(value, Some(key), id)
+            }),
+            Value::Array(items) => items.iter().any(|item| points(item, parent, id)),
+            _ => false,
+        }
+    }
+    entries(resource)?
+        .iter()
+        .find(|(_, entry)| points(entry, None, id))
+        .map(|(language, _)| language.clone())
+}
+
+/// The composition a language has of its own on `resource`, whole: what its
+/// entry says over the source's. `None` when it shares the source's.
+pub fn own_composition(resource: &ProjectResource, language: &str) -> Option<crate::Composition> {
+    let entry = entries(resource)?.get(language)?;
+    entry.get("composition")?;
+    patched(resource, entry).ok()?.composition
+}
+
+/// Gives `language` its own copy of a composition, as that language shows it
+/// now: words and sizes already its own. Nothing is translated into a copy a
+/// language owns, so this is the one moment they carry over.
+pub fn fork_composition(
+    meta: &mut ProjectMetadata,
+    resource_id: &str,
+    language: &str,
+    by: &str,
+) -> Result<(), String> {
+    let mut flat = meta.clone();
+    flatten(&mut flat, language)?;
+    let composition = flat
+        .resources
+        .iter()
+        .flatten()
+        .find(|r| r.id == resource_id)
+        .and_then(|r| r.composition.as_ref())
+        .ok_or_else(|| format!("resource {resource_id} is not a composition"))?;
+    let patch = serde_json::json!({ "composition": composition });
+    set_translation(
+        meta,
+        TranslationTarget::Resource(resource_id),
+        language,
+        &patch,
+        by,
+    )
+}
+
+/// Writes `composition` as what `language` owns on `resource_id`: what an edit
+/// inside that language's own content changes.
+pub fn set_own_composition(
+    meta: &mut ProjectMetadata,
+    resource_id: &str,
+    language: &str,
+    composition: &crate::Composition,
+) -> Result<(), String> {
+    let resource = meta
+        .resources
+        .iter_mut()
+        .flatten()
+        .find(|r| r.id == resource_id)
+        .ok_or_else(|| format!("no resource with id {resource_id}"))?;
+    let Some(entry) = resource
+        .extra
+        .get_mut(LOCALIZED_KEY)
+        .and_then(|all| all.get_mut(language))
+        .filter(|entry| entry.get("composition").is_some())
+    else {
+        return Err(format!(
+            "resource {resource_id} has no composition of its own in \"{language}\""
+        ));
+    };
+    entry["composition"] = serde_json::to_value(composition).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The targets that name a file or a composition of their own, so a question
+/// about the source's media says nothing about them.
+pub fn languages_with_media(meta: &ProjectMetadata) -> Vec<String> {
+    let Some(list) = languages(meta) else {
+        return Vec::new();
+    };
+    list.targets
+        .into_iter()
+        .filter(|language| {
+            meta.resources.iter().flatten().any(|resource| {
+                entries(resource)
+                    .and_then(|all| all.get(language))
+                    .is_some_and(|e| e.get("filename").is_some() || e.get("composition").is_some())
+            })
+        })
+        .collect()
 }
 
 /// A sound's playing length, the way the timeline reads it.
@@ -193,14 +306,12 @@ fn played_length(resource: &ProjectResource) -> f64 {
         .sum()
 }
 
-/// Each language keeps its own length: a layer that played the whole take
-/// plays the whole of this language's, the rule a trim follows.
+/// Each language keeps its own length: a layer that played the whole take,
+/// clip or composition plays the whole of this language's, the rule a trim
+/// follows.
 fn follow_takes(layers: &mut [crate::ProjectLayer], lengths: &[(String, f64, f64)]) {
     let mut moved = false;
-    for layer in layers
-        .iter_mut()
-        .filter(|l| l.kind == crate::ProjectLayerKind::Audio)
-    {
+    for layer in layers.iter_mut() {
         let id = layer.resource_id.as_deref();
         if let Some((_, old, new)) = lengths
             .iter()
@@ -208,6 +319,9 @@ fn follow_takes(layers: &mut [crate::ProjectLayer], lengths: &[(String, f64, f64
         {
             layer.follow_length(*old, *new);
             moved = true;
+        }
+        if let Some(members) = layer.members.as_mut() {
+            follow_takes(members, lengths);
         }
     }
     if moved {
@@ -275,6 +389,8 @@ pub fn flatten_noting(meta: &mut ProjectMetadata, language: &str) -> Result<Vec<
     let mut lengths = Vec::new();
     let mut maps = std::collections::BTreeMap::new();
     let mut notes = Vec::new();
+    // Written in this language already: nothing below is translated into it.
+    let mut own = std::collections::BTreeSet::new();
     for resource in meta.resources.iter_mut().flatten() {
         let entry = entries(resource)
             .filter(|_| !is_source)
@@ -283,6 +399,9 @@ pub fn flatten_noting(meta: &mut ProjectMetadata, language: &str) -> Result<Vec<
         match entry {
             Some(entry) => {
                 let id = resource.id.clone();
+                if entry.get("composition").is_some() {
+                    own.insert(id.clone());
+                }
                 let size = caption_size(resource, default_size);
                 let length = played_length(resource);
                 let script = crate::speech::take_script(resource);
@@ -310,8 +429,12 @@ pub fn flatten_noting(meta: &mut ProjectMetadata, language: &str) -> Result<Vec<
                     }
                 }
                 let now_length = played_length(resource);
-                if resource.kind == crate::ProjectResourceKind::Audio
-                    && !resource.is_looped()
+                if matches!(
+                    resource.kind,
+                    crate::ProjectResourceKind::Audio
+                        | crate::ProjectResourceKind::Video
+                        | crate::ProjectResourceKind::Composition
+                ) && !resource.is_looped()
                     && length > 0.0
                     && now_length > 0.0
                     && (now_length - length).abs() > 0.000_1
@@ -332,7 +455,11 @@ pub fn flatten_noting(meta: &mut ProjectMetadata, language: &str) -> Result<Vec<
     if !lengths.is_empty() {
         follow_takes(meta.layers.as_deref_mut().unwrap_or_default(), &lengths);
         for resource in meta.resources.iter_mut().flatten() {
-            if let Some(composition) = resource.composition.as_mut() {
+            if let Some(composition) = resource
+                .composition
+                .as_mut()
+                .filter(|_| !own.contains(&resource.id))
+            {
                 follow_takes(&mut composition.layers, &lengths);
             }
         }
@@ -340,12 +467,26 @@ pub fn flatten_noting(meta: &mut ProjectMetadata, language: &str) -> Result<Vec<
     if !ratios.is_empty() {
         scale_keyframe_sizes(meta.layers.as_deref_mut().unwrap_or_default(), &ratios);
         for resource in meta.resources.iter_mut().flatten() {
-            if let Some(composition) = resource.composition.as_mut() {
+            if let Some(composition) = resource
+                .composition
+                .as_mut()
+                .filter(|_| !own.contains(&resource.id))
+            {
                 scale_keyframe_sizes(&mut composition.layers, &ratios);
             }
         }
     }
-    notes.extend(crate::language_words::follow(meta, &maps));
+    notes.extend(crate::language_words::follow(meta, &maps, &own));
+    // A composition a language made its own can reach back into itself where
+    // the source's cannot, and recursion only stops on a finite nesting.
+    if !own.is_empty() {
+        if let Some(problem) = crate::nesting::problems(meta)
+            .into_iter()
+            .find(|p| p.contains("contains itself") || p.contains("nests deeper than"))
+        {
+            return Err(format!("language \"{language}\": {problem}"));
+        }
+    }
     Ok(notes)
 }
 
@@ -386,6 +527,20 @@ pub fn problems(meta: &ProjectMetadata) -> (Vec<String>, Vec<String>) {
             }
         }
     }
+    // What only the whole language can say: its own compositions together.
+    for language in known.iter().skip(1) {
+        let owns = meta.resources.iter().flatten().any(|r| {
+            entries(r).is_some_and(|all| {
+                all.get(*language)
+                    .is_some_and(|entry| entry.get("composition").is_some())
+            })
+        });
+        if owns && breaks.is_empty() {
+            if let Err(why) = flatten(&mut meta.clone(), language) {
+                breaks.push(why);
+            }
+        }
+    }
     if list.is_some() {
         let captions = meta
             .resources
@@ -410,6 +565,101 @@ pub fn problems(meta: &ProjectMetadata) -> (Vec<String>, Vec<String>) {
         }
     }
     (breaks, warnings)
+}
+
+/// What a language's replaced files leave for someone to look at: a picture of
+/// another shape under a layer that says fixed numbers, a clip with no length,
+/// and the trims and cuts that do not carry over to another file.
+pub fn replacements(meta: &ProjectMetadata, language: &str) -> Vec<String> {
+    fn aspect(resource: &ProjectResource) -> Option<f64> {
+        let (width, height) = match (resource.pixel_width, resource.pixel_height) {
+            (Some(width), Some(height)) => (width, height),
+            _ => (
+                resource.video_natural_width?,
+                resource.video_natural_height?,
+            ),
+        };
+        (height > 0.0).then(|| width / height)
+    }
+    let mut lines = Vec::new();
+    let layers = crate::nesting::all_layers(meta);
+    for resource in meta.resources.iter().flatten() {
+        let Some(entry) = entries(resource).and_then(|all| all.get(language)) else {
+            continue;
+        };
+        let Ok(here) = patched(resource, entry) else {
+            continue;
+        };
+        if here.filename == resource.filename {
+            continue;
+        }
+        let name = &resource.display_name;
+        let playing = || {
+            layers
+                .iter()
+                .filter(|l| l.resource_id.as_deref() == Some(resource.id.as_str()))
+        };
+        if let (Some(source), Some(own)) = (aspect(resource), aspect(&here)) {
+            let fixed = playing()
+                .filter(|l| {
+                    l.keyframes.iter().any(|k| {
+                        k.placement.is_none()
+                            && (k.zoom.is_some()
+                                || k.vertical_shift.is_some()
+                                || k.horizontal_shift.is_some())
+                    })
+                })
+                .count();
+            if fixed > 0 && (source / own - 1.0).abs() > 0.01 {
+                lines.push(format!(
+                    "\"{name}\" has another shape here ({own:.2} wide for its height, {source:.2} \
+                     in the source), and {fixed} layer(s) place it by fixed numbers: a placement \
+                     rule fits either"
+                ));
+            }
+        }
+        if resource.kind == crate::ProjectResourceKind::Video && here.duration.is_none() {
+            lines.push(format!(
+                "\"{name}\" names its own file and no duration, so nothing knows how long it \
+                 plays"
+            ));
+        }
+        let trimmed = resource.trim_start.is_some_and(|t| t > 0.0)
+            || resource.trim_end.is_some_and(|t| t > 0.0)
+            || resource
+                .trim_keyframes
+                .as_ref()
+                .is_some_and(|k| !k.is_empty());
+        let says_trims = ["trimStart", "trimEnd", "trimKeyframes"]
+            .iter()
+            .any(|key| entry.get(*key).is_some());
+        if trimmed && !says_trims {
+            lines.push(format!(
+                "\"{name}\" is trimmed in the source, and its own file here plays whole: a trim \
+                 is seconds of the file it cuts"
+            ));
+        }
+        for layer in playing() {
+            let lost = layer
+                .image_cut_id
+                .as_ref()
+                .filter(|id| !here.image_cuts.iter().any(|cut| &cut.id == *id))
+                .or_else(|| {
+                    layer
+                        .media_cut_id
+                        .as_ref()
+                        .filter(|id| !here.media_cuts.iter().any(|cut| &cut.id == *id))
+                });
+            if lost.is_some() {
+                lines.push(format!(
+                    "layer \"{}\" plays a cut of \"{name}\" that its own file here does not \
+                     have, so it plays the whole file",
+                    layer.name
+                ));
+            }
+        }
+    }
+    lines
 }
 
 /// The strings of a resource that a translation answers for: `(key, text)`,
@@ -1918,5 +2168,95 @@ mod tests {
             .map(|r| r.resource.filename.as_str())
             .collect();
         assert_eq!(names, ["r1.mp3", "new.mp3"]);
+    }
+
+    fn nested(resources: Value, layers: Value) -> ProjectMetadata {
+        let mut doc = serde_json::to_value(meta(resources)).unwrap();
+        doc["layers"] = layers;
+        ProjectMetadata::from_json(&doc.to_string()).unwrap()
+    }
+
+    /// Nothing is translated into a composition a language owns: it is written
+    /// in that language, so its sizes are not scaled again and its words are
+    /// not looked up in the source's script. A copy of the source's is, once,
+    /// at the moment it is made.
+    #[test]
+    fn nothing_is_translated_into_a_composition_a_language_owns() {
+        let keyframes = json!([{"id": "k", "time": 0, "transitionDuration": 0, "fontSize": 60}]);
+        let inner = json!({"id": "in", "name": "in", "sortIndex": 0, "kind": "caption",
+                           "isEnabled": true, "startTime": 0, "duration": 2, "resourceID": "c",
+                           "keyframes": keyframes});
+        let reel = json!({"id": "reel", "kind": "composition", "filename": "",
+                          "displayName": "Reel", "addedAt": 0, "duration": 2,
+                          "composition": {"canvasWidth": 100, "canvasHeight": 100,
+                                          "layers": [inner.clone()]}});
+        let size = |m: &ProjectMetadata| {
+            m.resources.as_ref().unwrap()[1]
+                .composition
+                .as_ref()
+                .unwrap()
+                .layers[0]
+                .keyframes[0]
+                .font_size
+        };
+        let mut shared = nested(json!([caption(), reel.clone()]), json!([]));
+        flatten(&mut shared, "de").unwrap();
+        assert_eq!(size(&shared), Some(40.0), "the source's layers are scaled");
+
+        let mut forked = nested(json!([caption(), reel.clone()]), json!([]));
+        fork_composition(&mut forked, "reel", "de", "person").unwrap();
+        let owned = own_composition(&forked.resources.as_ref().unwrap()[1], "de").unwrap();
+        assert_eq!(owned.layers[0].keyframes[0].font_size, Some(40.0));
+        flatten(&mut forked, "de").unwrap();
+        assert_eq!(size(&forked), Some(40.0), "scaled once, when it was copied");
+
+        // The other languages still share the source's.
+        let mut japanese = nested(json!([caption(), reel]), json!([]));
+        fork_composition(&mut japanese, "reel", "de", "person").unwrap();
+        flatten(&mut japanese, "ja").unwrap();
+        assert_eq!(size(&japanese), Some(60.0));
+    }
+
+    #[test]
+    fn a_replaced_file_leaves_the_library_and_the_source_files_facts() {
+        let image = json!({"id": "i", "kind": "image", "filename": "shared.png",
+                           "displayName": "i", "addedAt": 0, "libraryID": "lib",
+                           "pixelWidth": 10, "pixelHeight": 10, "imageCuts":
+                               [{"id": "cut", "filename": "shared-cut.png", "rect": [[0, 0], [1, 1]], "createdAt": 0}],
+                           "localized": {
+                               "de": {"filename": "mine.de.png", "pixelWidth": 20},
+                               "ja": {"captionStyle": {"fontSize": 1}}}});
+        let mut m = meta(json!([image.clone()]));
+        flatten(&mut m, "de").unwrap();
+        let r = resource(&m);
+        assert_eq!(r.filename, "mine.de.png");
+        assert!(r.extra.get("libraryID").is_none());
+        assert_eq!((r.pixel_width, r.pixel_height), (Some(20.0), None));
+        assert!(r.image_cuts.is_empty());
+
+        let mut m = meta(json!([image]));
+        flatten(&mut m, "ja").unwrap();
+        assert!(
+            resource(&m).extra.contains_key("libraryID"),
+            "its file is the library's"
+        );
+    }
+
+    #[test]
+    fn a_language_pointing_at_a_resource_is_found() {
+        let reel = json!({"id": "reel", "kind": "composition", "filename": "",
+                          "displayName": "Reel", "addedAt": 0, "duration": 2,
+                          "composition": {"canvasWidth": 100, "canvasHeight": 100, "layers": []},
+                          "localized": {"de": {"composition": {"layers": [
+                              {"id": "n", "name": "n", "sortIndex": 0, "kind": "image",
+                               "isEnabled": true, "startTime": 0, "duration": 1,
+                               "resourceID": "only-german", "keyframes": []}]}}}});
+        let m = meta(json!([reel]));
+        let r = resource(&m);
+        assert_eq!(
+            language_pointing_at(r, "only-german").as_deref(),
+            Some("de")
+        );
+        assert_eq!(language_pointing_at(r, "nothing"), None);
     }
 }

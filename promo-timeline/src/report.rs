@@ -451,7 +451,7 @@ pub fn file_report_with(
         },
     );
     out.findings.extend(rest.findings);
-    languages_report(json, grids, &meta, &mut out);
+    languages_report(json, listing, grids, &meta, &mut out);
     Ok(out)
 }
 
@@ -460,6 +460,7 @@ pub fn file_report_with(
 /// file again for each, because `flatten` runs before timing.
 fn languages_report(
     json: &str,
+    listing: Option<&[String]>,
     grids: &crate::BeatGrids,
     source: &ProjectMetadata,
     out: &mut Report,
@@ -472,12 +473,7 @@ fn languages_report(
     if summaries.is_empty() {
         return;
     }
-    let source_layout = crate::layout_check::layout_warnings(source);
-    let source_timing: Vec<String> = crate::resolve_timing(&mut original.clone(), grids)
-        .problems
-        .iter()
-        .map(ToString::to_string)
-        .collect();
+    let said_of_source: Vec<String> = out.findings.iter().map(|f| f.message.clone()).collect();
     for summary in &summaries {
         if !summary.missing.is_empty() {
             out.warn(format!(
@@ -496,25 +492,33 @@ fn languages_report(
                 summary.stale.join(", ")
             ));
         }
-        for line in layout_in_language(&original, &summary.language, grids, &source_layout) {
-            out.warn(format!("{}: {line}", summary.language));
-        }
         for line in takes_in_language(&original, summary, grids, source) {
             out.warn(format!("{}: {line}", summary.language));
         }
-        words_in_language(&original, &summary.language, grids, &source_timing, out);
+        for line in localized::replacements(&original, &summary.language) {
+            out.warn(format!("{}: {line}", summary.language));
+        }
+        language_findings(
+            &original,
+            &summary.language,
+            listing,
+            grids,
+            &said_of_source,
+            out,
+        );
     }
     out.languages = summaries;
 }
 
-/// What `language`'s own words do to everything counting on them: each word
-/// reference that landed by its place, and what its timing says that the
-/// source's does not.
-fn words_in_language(
+/// The report of the file as `language` shows it, less what the source's says:
+/// everything a project can get wrong can differ per language, so nothing
+/// here keeps a list of it. Also each word reference that landed by its place.
+fn language_findings(
     original: &ProjectMetadata,
     language: &str,
+    listing: Option<&[String]>,
     grids: &crate::BeatGrids,
-    source_timing: &[String],
+    said_of_source: &[String],
     out: &mut Report,
 ) {
     let mut flat = original.clone();
@@ -524,16 +528,22 @@ fn words_in_language(
     for note in notes {
         out.warn(format!("{language}: {note}"));
     }
-    for problem in crate::resolve_timing(&mut flat, grids).problems {
-        let line = problem.to_string();
-        if source_timing.contains(&line) {
+    flat.extra.remove(promo_model::localized::LANGUAGES_KEY);
+    let Some(report) = serde_json::to_string(&flat)
+        .ok()
+        .and_then(|text| file_report_with(&text, listing, grids).ok())
+    else {
+        return;
+    };
+    for finding in report.findings {
+        // A key nothing reads is the file's, whichever language shows it.
+        if finding.shape.is_some() || said_of_source.contains(&finding.message) {
             continue;
         }
-        if problem.is_break() {
-            out.breaks(format!("{language}: {line}"));
-        } else {
-            out.warn(format!("{language}: {line}"));
-        }
+        out.findings.push(Finding {
+            message: format!("{language}: {}", finding.message),
+            ..finding
+        });
     }
 }
 

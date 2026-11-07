@@ -424,7 +424,19 @@ pub enum Command {
     InComposition {
         #[serde(rename = "resourceID")]
         resource_id: String,
+        /// The language whose own copy of the composition this edits. Absent
+        /// is the source's.
+        #[serde(default)]
+        language: Option<String>,
         command: Box<Command>,
+    },
+    /// Gives a language its own copy of a composition, as it shows there now.
+    /// `setTranslation` with `{"composition": null}` shares the source's again.
+    #[serde(rename_all = "camelCase")]
+    ForkComposition {
+        #[serde(rename = "resourceID")]
+        resource_id: String,
+        language: String,
     },
 }
 
@@ -1140,12 +1152,17 @@ impl Document {
             ),
             Command::InComposition {
                 resource_id,
+                language,
                 command: inner,
             } if crate::vector::keys_nodes(inner) => {
                 let mut host = self.vector_host.as_deref_mut();
-                Self::run_in_composition_with(meta, resource_id, inner, &mut |m, c| {
-                    crate::vector::run_key(m, host.as_deref_mut(), c)
-                })
+                Self::run_in_composition_with(
+                    meta,
+                    resource_id,
+                    language.as_deref(),
+                    inner,
+                    &mut |m, c| crate::vector::run_key(m, host.as_deref_mut(), c),
+                )
             }
             other if crate::vector::keys_nodes(other) => {
                 crate::vector::run_key(meta, self.vector_host.as_deref_mut(), other)
@@ -1614,9 +1631,10 @@ impl Document {
     fn run_in_composition(
         meta: &mut ProjectMetadata,
         resource_id: &str,
+        language: Option<&str>,
         command: &Command,
     ) -> Result<(), String> {
-        Self::run_in_composition_with(meta, resource_id, command, &mut Self::run)
+        Self::run_in_composition_with(meta, resource_id, language, command, &mut Self::run)
     }
 
     /// [`Self::run_in_composition`], with `runner` running the command on
@@ -1624,6 +1642,7 @@ impl Document {
     fn run_in_composition_with(
         meta: &mut ProjectMetadata,
         resource_id: &str,
+        language: Option<&str>,
         command: &Command,
         runner: &mut dyn FnMut(&mut ProjectMetadata, &Command) -> Result<(), String>,
     ) -> Result<(), String> {
@@ -1632,10 +1651,18 @@ impl Document {
             .iter()
             .position(|r| r.id == resource_id)
             .ok_or_else(|| format!("no resource with id {resource_id}"))?;
-        let composition = resources[index]
-            .composition
-            .clone()
-            .ok_or_else(|| format!("resource {resource_id} is not a composition"))?;
+        let shared = resources[index].composition.clone();
+        let composition = match language {
+            Some(language) => promo_model::localized::own_composition(&resources[index], language)
+                .ok_or_else(|| {
+                    format!(
+                        "resource {resource_id} has no composition of its own in \"{language}\""
+                    )
+                })?,
+            None => shared
+                .clone()
+                .ok_or_else(|| format!("resource {resource_id} is not a composition"))?,
+        };
         let mut inner = meta.clone();
         inner.layers = Some(composition.layers.clone());
         inner.composition_settings.canvas_width = composition.canvas_width;
@@ -1648,6 +1675,11 @@ impl Document {
         outside.id = OUTSIDE.into();
         if let Some(c) = outside.composition.as_mut() {
             c.layers = meta.layers.clone().unwrap_or_default();
+            // In a language's own copy, the source's layers are outside too.
+            if language.is_some() {
+                c.layers
+                    .extend(shared.iter().flat_map(|s| s.layers.iter().cloned()));
+            }
         }
         inner.resources.get_or_insert_with(Vec::new).push(outside);
         runner(&mut inner, command)?;
@@ -1661,8 +1693,15 @@ impl Document {
         // itself is the updated one.
         let mut resources = inner.resources.unwrap_or_default();
         resources.retain(|r| r.id != OUTSIDE);
-        resources[index].composition = Some(updated);
+        if language.is_none() {
+            resources[index].composition = Some(updated.clone());
+        }
         meta.resources = Some(resources);
+        if let Some(language) = language {
+            promo_model::localized::set_own_composition(meta, resource_id, language, &updated)?;
+            // Flatten refuses a language whose compositions do not nest.
+            promo_model::localized::flatten(&mut meta.clone(), language)?;
+        }
         let problems = promo_model::nesting::problems(meta);
         if let Some(problem) = problems
             .iter()
@@ -1676,10 +1715,11 @@ impl Document {
     pub(crate) fn run(meta: &mut ProjectMetadata, command: &Command) -> Result<(), String> {
         if let Command::InComposition {
             resource_id,
+            language,
             command,
         } = command
         {
-            return Self::run_in_composition(meta, resource_id, command);
+            return Self::run_in_composition(meta, resource_id, language.as_deref(), command);
         }
         let layers = meta.layers.get_or_insert_with(Vec::new);
         // A stage layer's members (rung 33) are layers too, one depth
@@ -1993,6 +2033,16 @@ impl Document {
                                 })
                         })
                 };
+                let in_a_language = meta
+                    .resources
+                    .iter()
+                    .flatten()
+                    .find_map(|r| promo_model::localized::language_pointing_at(r, id));
+                if let Some(language) = in_a_language {
+                    return Err(format!(
+                        "resource {id} is used by the \"{language}\" content of another resource"
+                    ));
+                }
                 let referenced = promo_model::nesting::all_layers(meta)
                     .iter()
                     .any(|l| points_at(l))
@@ -2227,6 +2277,12 @@ impl Document {
             }
             Command::SetLanguages { source, targets } => {
                 promo_model::localized::set_languages(meta, source, targets)?;
+            }
+            Command::ForkComposition {
+                resource_id,
+                language,
+            } => {
+                promo_model::localized::fork_composition(meta, resource_id, language, "person")?;
             }
             Command::SetTranslation {
                 resource_id,
@@ -3893,6 +3949,7 @@ mod tests {
         });
         let mut doc = Document::open(&json.to_string()).unwrap();
         let inside = |command: serde_json::Value| Command::InComposition {
+            language: None,
             resource_id: "C".into(),
             command: Box::new(serde_json::from_value(command).unwrap()),
         };
@@ -3951,6 +4008,7 @@ mod tests {
         assert!(err.contains("contains itself"), "{err}");
         assert!(doc
             .apply(&Command::InComposition {
+                language: None,
                 resource_id: "cap".into(),
                 command: Box::new(
                     serde_json::from_value(
@@ -4160,6 +4218,7 @@ mod tests {
     fn a_caption_edit_inside_a_composition_is_kept() {
         let mut doc = Document::open(APP_CAPTIONS).unwrap();
         doc.apply(&Command::InComposition {
+            language: None,
             resource_id: "C".into(),
             command: Box::new(Command::UpdateLayer {
                 layer_id: "N".into(),
@@ -4876,5 +4935,99 @@ mod auto_zoom_tests {
         assert_eq!(out["layers"][0]["fadeIn"], 0.4);
         assert!(!out.to_string().contains("timeSpecs"));
         assert_eq!(out["minReaderVersion"], 49);
+    }
+
+    /// A language's own copy of a composition is one more place a command can
+    /// be addressed: its edits stay in that language, one step of the history,
+    /// and a delete or a cycle only it causes is still refused.
+    #[test]
+    fn a_languages_own_composition_takes_commands_of_its_own() {
+        let image = |id: &str| {
+            serde_json::json!({"id": id, "kind": "video", "filename": format!("{id}.mp4"),
+                               "displayName": id, "addedAt": 0, "imageCuts": []})
+        };
+        let inner = |id: &str, resource: &str| {
+            serde_json::json!({"id": id, "name": id, "sortIndex": 0, "kind": "video",
+                               "isEnabled": true, "startTime": 0, "duration": 2,
+                               "resourceID": resource, "keyframes": []})
+        };
+        let json = serde_json::json!({
+            "id": "P", "name": "p", "createdAt": 0, "state": "recorded",
+            "trimStart": 0, "trimEnd": 0, "videoDuration": 0, "subtitles": [],
+            "compositionSettings": {"canvasWidth": 100, "canvasHeight": 100},
+            "languages": {"source": "en", "targets": ["de"]},
+            "resources": [
+                image("shot"), image("german"),
+                {"id": "C", "kind": "composition", "filename": "", "displayName": "Card",
+                 "addedAt": 0, "duration": 2, "imageCuts": [],
+                 "composition": {"canvasWidth": 100, "canvasHeight": 100,
+                                 "layers": [inner("A", "shot")]}}
+            ],
+            "layers": [inner("show", "C")]
+        });
+        let mut doc = Document::open(&json.to_string()).unwrap();
+        let inside = |command: serde_json::Value| {
+            serde_json::from_value::<Command>(serde_json::json!({
+                "kind": "inComposition", "resourceID": "C", "language": "de", "command": command
+            }))
+            .unwrap()
+        };
+        let rename =
+            inside(serde_json::json!({"kind": "renameLayer", "layerID": "A", "name": "x"}));
+        assert!(doc.apply(&rename).is_err(), "it has no copy yet");
+
+        doc.apply(
+            &serde_json::from_value(serde_json::json!({
+            "kind": "forkComposition", "resourceID": "C", "language": "de"}))
+            .unwrap(),
+        )
+        .unwrap();
+        doc.apply(&rename).unwrap();
+        doc.apply(&inside(
+            serde_json::json!({"kind": "setLayerResource", "layerID": "A", "resourceID": "german"}),
+        ))
+        .unwrap();
+
+        let resource = |doc: &Document| doc.meta().resources.as_deref().unwrap()[2].clone();
+        assert_eq!(
+            resource(&doc).composition.unwrap().layers[0].name,
+            "A",
+            "the source's"
+        );
+        let own = promo_model::localized::own_composition(&resource(&doc), "de").unwrap();
+        assert_eq!(own.layers[0].name, "x");
+        assert_eq!(own.layers[0].resource_id.as_deref(), Some("german"));
+
+        // Only German shows "german", and that still counts.
+        let delete: Command = serde_json::from_value(
+            serde_json::json!({"kind": "deleteResource", "resourceID": "german"}),
+        )
+        .unwrap();
+        let refused = doc.apply(&delete).unwrap_err();
+        assert!(refused.contains("\"de\""), "{refused}");
+
+        // Inside itself, in German only.
+        let cycle = doc.apply(&inside(
+            serde_json::json!({"kind": "setLayerResource", "layerID": "A", "resourceID": "C"}),
+        ));
+        assert!(cycle.is_err(), "{cycle:?}");
+        let own = promo_model::localized::own_composition(&resource(&doc), "de").unwrap();
+        assert_eq!(
+            own.layers[0].resource_id.as_deref(),
+            Some("german"),
+            "refused whole"
+        );
+
+        // Sharing the source's again.
+        doc.apply(
+            &serde_json::from_value(serde_json::json!({
+            "kind": "setTranslation", "resourceID": "C", "language": "de",
+            "patch": {"composition": null}}))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(promo_model::localized::own_composition(&resource(&doc), "de").is_none());
+        assert!(doc.undo());
+        assert!(promo_model::localized::own_composition(&resource(&doc), "de").is_some());
     }
 }

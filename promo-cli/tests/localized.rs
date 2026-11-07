@@ -577,3 +577,220 @@ fn a_languages_take_is_what_the_render_plays() {
     let _ = std::fs::remove_dir_all(dir.with_extension("stills"));
     let _ = std::fs::remove_dir_all(dir.with_extension("videos"));
 }
+
+/// A flat PNG of one colour, the shape a replaced screenshot has.
+fn picture(path: &Path, width: u32, height: u32, colour: [u8; 3]) {
+    let mut image = image::RgbaImage::new(width, height);
+    for pixel in image.pixels_mut() {
+        *pixel = image::Rgba([colour[0], colour[1], colour[2], 255]);
+    }
+    image.save(path).unwrap();
+}
+
+fn pixel(png: &[u8], x: u32, y: u32) -> [u8; 3] {
+    let p = *image::load_from_memory(png)
+        .unwrap()
+        .to_rgba8()
+        .get_pixel(x, y);
+    [p[0], p[1], p[2]]
+}
+
+const RED: [u8; 3] = [255, 0, 0];
+const GREEN: [u8; 3] = [0, 255, 0];
+const BLUE: [u8; 3] = [0, 0, 255];
+
+fn edit(dir: &Path, change: impl FnOnce(&mut Value)) {
+    let path = dir.join("metadata.json");
+    let mut doc: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    change(&mut doc);
+    std::fs::write(&path, doc.to_string()).unwrap();
+}
+
+fn validate(dir: &Path) -> String {
+    promo(&["validate", dir.to_str().unwrap()]).1
+}
+
+/// One image layer: red here, its own file in German, and a shape of its own.
+fn with_a_replaced_picture(tag: &str) -> PathBuf {
+    let dir = project(tag, json!({}), Some(languages()));
+    picture(&dir.join("Resources/shot.png"), 320, 180, RED);
+    picture(&dir.join("Resources/shot.de.png"), 90, 180, GREEN);
+    edit(&dir, |doc| {
+        doc["resources"].as_array_mut().unwrap().push(json!({
+            "id": "shot", "kind": "image", "filename": "shot.png", "displayName": "Shot",
+            "addedAt": 0, "pixelWidth": 320, "pixelHeight": 180,
+            "localized": {"de": {"filename": "shot.de.png",
+                                 "pixelWidth": 90, "pixelHeight": 180}}}));
+        doc["layers"] = json!([{
+            "id": "pic", "name": "pic", "sortIndex": 1, "kind": "image", "isEnabled": true,
+            "startTime": 0, "duration": 2, "resourceID": "shot",
+            "keyframes": [{"id": "k", "time": 0, "transitionDuration": 0,
+                           "placement": {"anchor": "center", "height": 180}}]}]);
+    });
+    dir
+}
+
+#[test]
+fn a_replaced_picture_draws_with_its_own_file_and_shape() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = with_a_replaced_picture("picture");
+    let source = still(&dir, None).unwrap();
+    let german = still(&dir, Some("de")).unwrap();
+    assert_eq!(pixel(&source, 320, 180), RED);
+    assert_eq!(pixel(&german, 320, 180), GREEN);
+    // The source is 320 wide on the canvas, the German 90: the placement rule
+    // read the language's own size.
+    assert_eq!(pixel(&source, 200, 180), RED);
+    assert_eq!(
+        pixel(&german, 200, 180),
+        [0, 0, 0],
+        "wider than its own file"
+    );
+    // Its file is claimed, so it is not a loose resource on the next open.
+    let inspected = promo(&["inspect", dir.to_str().unwrap()]).1;
+    assert!(!inspected.contains("shot.de"), "{inspected}");
+}
+
+#[test]
+fn validate_names_a_languages_missing_file_and_fixed_numbers() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = with_a_replaced_picture("missing");
+    edit(&dir, |doc| {
+        let keyframe = &mut doc["layers"][0]["keyframes"][0];
+        keyframe.as_object_mut().unwrap().remove("placement");
+        keyframe["zoom"] = json!(1.0);
+    });
+    let said = validate(&dir);
+    assert!(
+        said.contains("de: \"Shot\" has another shape here"),
+        "{said}"
+    );
+    assert!(!said.contains("will not render"), "{said}");
+
+    std::fs::remove_file(dir.join("Resources/shot.de.png")).unwrap();
+    let said = validate(&dir);
+    assert!(
+        said.contains("de: layer \"pic\" will not render") && said.contains("shot.de.png"),
+        "{said}"
+    );
+    assert!(still(&dir, None).is_ok(), "the source still renders");
+}
+
+/// A title composition: green in the source; in German its own layers, blue.
+fn with_a_composition(tag: &str, german_layers: Value) -> PathBuf {
+    let dir = project(tag, json!({}), Some(languages()));
+    picture(&dir.join("Resources/green.png"), 64, 64, GREEN);
+    picture(&dir.join("Resources/blue.png"), 64, 64, BLUE);
+    edit(&dir, |doc| {
+        let image = |id: &str, file: &str| {
+            json!({"id": id, "kind": "image", "filename": file, "displayName": id,
+                   "addedAt": 0, "pixelWidth": 64, "pixelHeight": 64})
+        };
+        let list = doc["resources"].as_array_mut().unwrap();
+        list.push(image("green", "green.png"));
+        list.push(image("blue", "blue.png"));
+        list.push(json!({
+            "id": "reel", "kind": "composition", "filename": "", "displayName": "Reel",
+            "addedAt": 0, "duration": 2, "pixelWidth": 640, "pixelHeight": 360,
+            "composition": {"canvasWidth": 640, "canvasHeight": 360, "layers": [full("green")]},
+            "localized": {"de": {"composition": {"layers": german_layers}}}}));
+        doc["layers"] = json!([{
+            "id": "show", "name": "show", "sortIndex": 1, "kind": "video", "isEnabled": true,
+            "startTime": 0, "duration": 2, "resourceID": "reel",
+            "keyframes": [{"id": "k", "time": 0, "transitionDuration": 0,
+                           "placement": {"anchor": "center", "height": 360}}]}]);
+    });
+    dir
+}
+
+fn full(resource: &str) -> Value {
+    json!({"id": format!("in-{resource}"), "name": resource, "sortIndex": 0, "kind": "image",
+           "isEnabled": true, "startTime": 0, "duration": 2, "resourceID": resource,
+           "keyframes": [{"id": format!("k-{resource}"), "time": 0, "transitionDuration": 0,
+                          "placement": {"anchor": "center", "height": 360}}]})
+}
+
+#[test]
+fn a_language_has_its_own_composition() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = with_a_composition("composition", json!([full("blue")]));
+    assert_eq!(pixel(&still(&dir, None).unwrap(), 320, 180), GREEN);
+    assert_eq!(pixel(&still(&dir, Some("de")).unwrap(), 320, 180), BLUE);
+    assert_eq!(pixel(&still(&dir, Some("ja")).unwrap(), 320, 180), GREEN);
+    // "blue" is placed only in German, and that is a placement.
+    let inspected = promo(&["inspect", dir.to_str().unwrap()]).1;
+    assert!(!inspected.contains("\"blue\""), "{inspected}");
+}
+
+#[test]
+fn a_composition_that_contains_itself_only_in_one_language_is_refused() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let mut itself = full("reel");
+    itself["kind"] = json!("video");
+    let dir = with_a_composition("cycle", json!([itself]));
+    assert!(still(&dir, None).is_ok(), "the source has no cycle");
+    let refused = still(&dir, Some("de")).unwrap_err();
+    assert!(refused.contains("contains itself"), "{refused}");
+    let said = validate(&dir);
+    assert!(said.contains("contains itself"), "{said}");
+}
+
+/// A clip with a real length, so the layer's following it can be read back.
+fn clip(path: &Path, seconds: f64, colour: &str) {
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i"])
+        .arg(format!("color=c={colour}:s=64x64:r=10:d={seconds}"))
+        .args(["-pix_fmt", "yuv420p"])
+        .arg(path)
+        .status()
+        .expect("ffmpeg");
+    assert!(status.success());
+}
+
+#[test]
+fn a_replaced_video_plays_its_own_file_and_its_own_length() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = project("video", json!({}), Some(languages()));
+    clip(&dir.join("Resources/clip.mp4"), 2.0, "red");
+    clip(&dir.join("Resources/clip.de.mp4"), 4.0, "lime");
+    edit(&dir, |doc| {
+        doc["resources"].as_array_mut().unwrap().push(json!({
+            "id": "clip", "kind": "video", "filename": "clip.mp4", "displayName": "Clip",
+            "addedAt": 0, "duration": 2, "videoNaturalWidth": 64, "videoNaturalHeight": 64,
+            "trimStart": 0.5,
+            "localized": {"de": {"filename": "clip.de.mp4", "duration": 4,
+                                 "videoNaturalWidth": 64, "videoNaturalHeight": 64}}}));
+        doc["layers"] = json!([{
+            "id": "v", "name": "v", "sortIndex": 1, "kind": "video", "isEnabled": true,
+            "startTime": 0, "resourceID": "clip", "duration": 1.5,
+            "keyframes": [{"id": "k", "time": 0, "transitionDuration": 0,
+                           "placement": {"anchor": "center", "height": 360}}]}]);
+    });
+    assert_eq!(pixel(&still(&dir, None).unwrap(), 320, 180)[0] > 200, true);
+    let german = still(&dir, Some("de")).unwrap();
+    let centre = pixel(&german, 320, 180);
+    assert!(centre[1] > 200 && centre[0] < 60, "{centre:?}");
+
+    // Past the source's end the German layer is still on screen.
+    let exports = dir.with_extension("stills");
+    let (ok, text) = promo(&[
+        "still",
+        dir.to_str().unwrap(),
+        "--out",
+        exports.join("late.png").to_str().unwrap(),
+        "--time",
+        "3.5",
+        "--language",
+        "de",
+    ]);
+    assert!(ok, "{text}");
+    let late = pixel(
+        &std::fs::read(exports.join("de/late.png")).unwrap(),
+        320,
+        180,
+    );
+    assert!(late[1] > 200 && late[0] < 60, "{late:?}");
+
+    let said = validate(&dir);
+    assert!(said.contains("is trimmed in the source"), "{said}");
+}
