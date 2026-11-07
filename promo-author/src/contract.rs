@@ -673,7 +673,8 @@ pub fn tools(host: Host) -> Vec<Value> {
                 replaces the timeline's \
                 markers and chapters whole; setLanguages {{source, targets}} lists the project's \
                 languages, and setTranslation {{resourceID or layerID, language, patch, by?}} \
-                writes one language's entry on a resource, any of its parameters. Every command succeeds or nothing is \
+                writes one language's entry on a resource, any of its parameters; key and text \
+                instead write one promo_strings row. Every command succeeds or nothing is \
                 written.{undoable} The schema of `commands` IS the editor's Command enum."),
             "inputSchema": { "type": "object",
                 "properties": {

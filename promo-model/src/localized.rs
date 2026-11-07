@@ -131,8 +131,52 @@ fn patched(resource: &ProjectResource, entry: &Value) -> Result<ProjectResource,
     for key in ENTRY_KEYS {
         patch.remove(*key);
     }
+    let source_overrides = doc["svg"]["overrides"].as_array().cloned();
     merge_patch(&mut doc, &Value::Object(patch));
+    // A list has no keys for a merge patch to name, and a language answers
+    // element by element: the ones it says nothing about keep the source's.
+    if let Some(mut merged) = source_overrides {
+        if let Some(own) = entry["svg"]["overrides"].as_array() {
+            for said in own {
+                match merged.iter_mut().find(|o| o["node"] == said["node"]) {
+                    Some(override_) => merge_patch(override_, said),
+                    None => merged.push(said.clone()),
+                }
+            }
+            doc["svg"]["overrides"] = Value::Array(merged);
+        }
+    }
     serde_json::from_value(doc).map_err(|e| e.to_string())
+}
+
+/// The size a caption resource says, for telling what a language changed.
+fn caption_size(resource: &ProjectResource, default: f64) -> f64 {
+    resource
+        .caption_style
+        .as_ref()
+        .and_then(|style| style.font_size)
+        .unwrap_or(default)
+}
+
+/// A keyframe's size outranks the style's, and the app stamps one on any
+/// caption dragged on the canvas. So a language's size is a ratio over its
+/// layers' keyframes: a title animating 50 to 60 at a German 40 where the
+/// source says 50 animates 40 to 48.
+fn scale_keyframe_sizes(
+    layers: &mut [crate::ProjectLayer],
+    ratios: &std::collections::BTreeMap<String, f64>,
+) {
+    for layer in layers {
+        if let Some(ratio) = layer.resource_id.as_ref().and_then(|id| ratios.get(id)) {
+            for keyframe in &mut layer.keyframes {
+                keyframe.font_size = keyframe.font_size.map(|size| size * ratio);
+                keyframe.zoom = keyframe.zoom.map(|size| size * ratio);
+            }
+        }
+        if let Some(members) = layer.members.as_mut() {
+            scale_keyframe_sizes(members, ratios);
+        }
+    }
 }
 
 /// `meta` as an ordinary project in `language`: each resource's entry for
@@ -153,6 +197,8 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
         });
     }
     let is_source = list.is_some_and(|l| l.source == language);
+    let default_size = meta.composition_settings.subtitle_font_size;
+    let mut ratios = std::collections::BTreeMap::new();
     for resource in meta.resources.iter_mut().flatten() {
         let entry = entries(resource)
             .filter(|_| !is_source)
@@ -161,11 +207,25 @@ pub fn flatten(meta: &mut ProjectMetadata, language: &str) -> Result<(), String>
         match entry {
             Some(entry) => {
                 let id = resource.id.clone();
+                let size = caption_size(resource, default_size);
                 *resource = patched(resource, &entry)
                     .map_err(|why| format!("resource \"{id}\", language \"{language}\": {why}"))?;
+                let now = caption_size(resource, default_size);
+                if resource.kind == crate::ProjectResourceKind::Caption && now != size && size > 0.0
+                {
+                    ratios.insert(id, now / size);
+                }
             }
             None => {
                 resource.extra.remove(LOCALIZED_KEY);
+            }
+        }
+    }
+    if !ratios.is_empty() {
+        scale_keyframe_sizes(meta.layers.as_deref_mut().unwrap_or_default(), &ratios);
+        for resource in meta.resources.iter_mut().flatten() {
+            if let Some(composition) = resource.composition.as_mut() {
+                scale_keyframe_sizes(&mut composition.layers, &ratios);
             }
         }
     }
@@ -236,8 +296,12 @@ pub fn problems(meta: &ProjectMetadata) -> (Vec<String>, Vec<String>) {
 
 /// The strings of a resource that a translation answers for: `(key, text)`,
 /// the key as [`StringRow::key`] spells it. A resource's own words, not
-/// what plays them.
+/// what plays them. A generated caption has none: it is made again from
+/// the narration, which is what gets translated.
 fn source_strings(resource: &ProjectResource) -> Vec<(String, String)> {
+    if resource.generated_by.is_some() {
+        return Vec::new();
+    }
     let doc = serde_json::to_value(resource).unwrap_or(Value::Null);
     strings_of(&doc)
 }
@@ -371,7 +435,12 @@ pub fn strings(meta: &ProjectMetadata) -> Vec<StringRow> {
             .resource_id
             .as_deref()
             .is_some_and(|id| on_a_resource.contains(id));
-        if let Some(text) = layer.caption_text.as_ref().filter(|_| !on_resource) {
+        let generated = layer.generated_by.is_some();
+        if let Some(text) = layer
+            .caption_text
+            .as_ref()
+            .filter(|_| !on_resource && !generated)
+        {
             rows.push(StringRow {
                 resource: None,
                 layer: Some(layer.id.clone()),
@@ -724,7 +793,10 @@ pub fn set_translation(
         ));
     }
     merge_patch(&mut entry, patch);
-    if names_text {
+    prune_empty(&mut entry);
+    // Words, not their neighbours: a title's bold says nothing about whether
+    // its text is still right.
+    if !strings_of(patch).is_empty() {
         let map = entry.as_object_mut().expect("an entry is an object");
         map.insert("sourceHash".into(), Value::from(source_hash(resource)));
         map.insert("by".into(), Value::from(by));
@@ -749,6 +821,84 @@ pub fn set_translation(
         resource.extra.remove(LOCALIZED_KEY);
     }
     Ok(())
+}
+
+/// What a patch that took the last key out of an object leaves behind.
+fn prune_empty(value: &mut Value) {
+    if let Some(map) = value.as_object_mut() {
+        map.values_mut().for_each(prune_empty);
+        map.retain(|_, v| !v.as_object().is_some_and(Map::is_empty));
+    }
+}
+
+/// The patch that says `text` for one of [`strings`]' keys, or takes it back
+/// to the source. `entry` is the language's as it stands: an element of a
+/// vector is one item of a list, and a patch replaces a list whole.
+fn string_patch(entry: Option<&Value>, key: &str, text: Option<&str>) -> Result<Value, String> {
+    let said = text.map_or(Value::Null, Value::from);
+    Ok(match key {
+        "captionText" => serde_json::json!({ "captionText": said }),
+        "recipe" => serde_json::json!({ "recipe": { "text": { "text": said } } }),
+        "speech" => serde_json::json!({ "speech": { "text": said } }),
+        other => {
+            let Some(node) = other.strip_prefix("svg:") else {
+                return Err(format!(
+                    "key \"{key}\" is none of captionText, recipe, speech or svg:<node>"
+                ));
+            };
+            let mut own = entry
+                .and_then(|e| e["svg"]["overrides"].as_array())
+                .cloned()
+                .unwrap_or_default();
+            match own.iter_mut().find(|o| o["node"] == node) {
+                Some(found) => merge_patch(found, &serde_json::json!({ "text": said })),
+                None if text.is_some() => {
+                    own.push(serde_json::json!({ "node": node, "text": said }))
+                }
+                None => {}
+            }
+            own.retain(|o| o.as_object().is_some_and(|m| m.keys().any(|k| k != "node")));
+            let list = if own.is_empty() {
+                Value::Null
+            } else {
+                Value::Array(own)
+            };
+            serde_json::json!({ "svg": { "overrides": list } })
+        }
+    })
+}
+
+/// `setTranslation` by a row of [`strings`]: its `key` and the language's
+/// `text`. No text, or only spaces, takes the string back to the source: a
+/// language is never blank because nobody has written it.
+pub fn set_string(
+    meta: &mut ProjectMetadata,
+    target: TranslationTarget<'_>,
+    language: &str,
+    key: &str,
+    text: Option<&str>,
+    by: &str,
+) -> Result<(), String> {
+    let resource_id = match target {
+        TranslationTarget::Resource(id) => id.to_string(),
+        TranslationTarget::Layer(id) => caption_resource_of(meta, id)?,
+    };
+    let entry = meta
+        .resources
+        .iter()
+        .flatten()
+        .find(|r| r.id == resource_id)
+        .and_then(entries)
+        .and_then(|all| all.get(language));
+    let text = text.filter(|t| !t.trim().is_empty());
+    let patch = string_patch(entry, key, text)?;
+    set_translation(
+        meta,
+        TranslationTarget::Resource(&resource_id),
+        language,
+        &patch,
+        by,
+    )
 }
 
 /// Whether the file carries languages: ignorable, so stamped the lossless
@@ -937,6 +1087,181 @@ mod tests {
         let summary = summaries(&m);
         assert_eq!(summary[0].stale, vec!["c captionText".to_string()]);
         assert_eq!(summary[1].missing, vec!["c captionText".to_string()]);
+    }
+
+    #[test]
+    fn a_language_size_scales_the_sizes_its_keyframes_say() {
+        let mut m = with_layers(
+            json!([caption()]),
+            json!([{"id": "l", "name": "l", "kind": "caption", "isEnabled": true, "resourceID": "c", "startTime": 0,
+                    "sortIndex": 0, "keyframes": [{"id": "k0", "time": 0, "zoom": 60},
+                                                  {"id": "k1", "time": 1, "fontSize": 90},
+                                                  {"id": "k2", "time": 2, "verticalShift": 10}]}]),
+        );
+        flatten(&mut m, "de").unwrap();
+        let keys = &m.layers.as_ref().unwrap()[0].keyframes;
+        assert_eq!(keys[0].zoom, Some(40.0));
+        assert_eq!(keys[1].font_size, Some(60.0));
+        assert_eq!(keys[2].vertical_shift, Some(10.0), "position is shared");
+    }
+
+    #[test]
+    fn the_source_leaves_keyframe_sizes_alone() {
+        let layers = json!([{"id": "l", "name": "l", "kind": "caption", "isEnabled": true, "resourceID": "c",
+                             "startTime": 0, "sortIndex": 0,
+                             "keyframes": [{"id": "k0", "time": 0, "zoom": 60}]}]);
+        let mut m = with_layers(json!([caption()]), layers);
+        flatten(&mut m, "en").unwrap();
+        assert_eq!(m.layers.as_ref().unwrap()[0].keyframes[0].zoom, Some(60.0));
+    }
+
+    #[test]
+    fn a_string_is_written_and_taken_back_by_its_key() {
+        let mut m = meta(
+            json!([{"id": "c", "kind": "caption", "filename": "", "displayName": "c",
+                                 "addedAt": 0, "captionText": "Now on iPad"}]),
+        );
+        set_string(
+            &mut m,
+            TranslationTarget::Resource("c"),
+            "de",
+            "captionText",
+            Some("Jetzt"),
+            "person",
+        )
+        .unwrap();
+        let row = &strings(&m)[0].translations[0];
+        assert_eq!(
+            (row.text.as_deref(), row.state),
+            (Some("Jetzt"), StringState::Current)
+        );
+        // Spaces are nothing written: the source shows, and nothing is left.
+        set_string(
+            &mut m,
+            TranslationTarget::Resource("c"),
+            "de",
+            "captionText",
+            Some("  "),
+            "person",
+        )
+        .unwrap();
+        assert_eq!(strings(&m)[0].translations[0].state, StringState::Missing);
+        assert!(!resource(&m).extra.contains_key(LOCALIZED_KEY));
+        let unknown = set_string(
+            &mut m,
+            TranslationTarget::Resource("c"),
+            "de",
+            "nope",
+            Some("x"),
+            "person",
+        );
+        assert!(unknown.unwrap_err().contains("nope"));
+    }
+
+    #[test]
+    fn a_title_takes_its_words_and_keeps_its_recipe() {
+        let mut m = meta(
+            json!([{"id": "t", "kind": "model", "filename": "", "displayName": "t",
+                                 "addedAt": 0,
+                                 "recipe": {"text": {"text": "Hello", "bold": true}}}]),
+        );
+        set_string(
+            &mut m,
+            TranslationTarget::Resource("t"),
+            "de",
+            "recipe",
+            Some("Hallo"),
+            "person",
+        )
+        .unwrap();
+        let mut flat = m.clone();
+        flatten(&mut flat, "de").unwrap();
+        let doc = serde_json::to_value(resource(&flat)).unwrap();
+        assert_eq!(doc["recipe"]["text"]["text"], json!("Hallo"));
+        assert_eq!(doc["recipe"]["text"]["bold"], json!(true));
+        set_string(
+            &mut m,
+            TranslationTarget::Resource("t"),
+            "de",
+            "recipe",
+            None,
+            "person",
+        )
+        .unwrap();
+        assert!(
+            !resource(&m).extra.contains_key(LOCALIZED_KEY),
+            "no empty husk left"
+        );
+    }
+
+    #[test]
+    fn a_titles_bold_does_not_make_old_words_look_fresh() {
+        let mut m = meta(
+            json!([{"id": "t", "kind": "model", "filename": "", "displayName": "t",
+                                 "addedAt": 0, "recipe": {"text": {"text": "Hello"}},
+                                 "localized": {"de": {"recipe": {"text": {"text": "Hallo"}},
+                                                      "sourceHash": "old", "by": "machine"}}}]),
+        );
+        set_translation(
+            &mut m,
+            TranslationTarget::Resource("t"),
+            "de",
+            &json!({"recipe": {"text": {"bold": true}}}),
+            "person",
+        )
+        .unwrap();
+        let row = &strings(&m)[0].translations[0];
+        assert_eq!(row.state, StringState::Stale);
+        assert_eq!(row.by.as_deref(), Some("machine"));
+    }
+
+    #[test]
+    fn a_vector_answers_element_by_element() {
+        let mut m = meta(json!([{"id": "v", "kind": "image", "filename": "a.svg",
+                                 "displayName": "v", "addedAt": 0,
+                                 "svg": {"overrides": [
+                                     {"node": "one", "text": "First", "fill": "#ff0000"},
+                                     {"node": "two", "text": "Second"}]}}]));
+        set_string(
+            &mut m,
+            TranslationTarget::Resource("v"),
+            "de",
+            "svg:one",
+            Some("Erste"),
+            "person",
+        )
+        .unwrap();
+        let rows = strings(&m);
+        assert_eq!(rows[0].translations[0].state, StringState::Current);
+        assert_eq!(
+            rows[1].translations[0].state,
+            StringState::Missing,
+            "only what it wrote"
+        );
+        let mut flat = m.clone();
+        flatten(&mut flat, "de").unwrap();
+        let doc = serde_json::to_value(resource(&flat)).unwrap();
+        let list = doc["svg"]["overrides"].as_array().unwrap();
+        assert_eq!(list[0]["text"], json!("Erste"));
+        assert_eq!(
+            list[0]["fill"],
+            json!("#ff0000"),
+            "the source's other fields stay"
+        );
+        assert_eq!(
+            list[1]["text"],
+            json!("Second"),
+            "an element it did not name stays"
+        );
+    }
+
+    #[test]
+    fn a_generated_caption_has_no_string_of_its_own() {
+        let m = meta(
+            json!([{"id": "g", "kind": "caption", "filename": "", "displayName": "g",
+                             "addedAt": 0, "captionText": "Hello", "generatedBy": "n"}]),
+        );
+        assert!(strings(&m).is_empty());
     }
 
     #[test]

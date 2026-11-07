@@ -327,7 +327,14 @@ pub enum Command {
         #[serde(default, rename = "layerID")]
         layer_id: Option<String>,
         language: String,
-        patch: serde_json::Value,
+        // A merge patch over the language's entry. Or `key` and `text`: one
+        // row of promo_strings, no text taking it back to the source.
+        #[serde(default)]
+        patch: Option<serde_json::Value>,
+        #[serde(default)]
+        key: Option<String>,
+        #[serde(default)]
+        text: Option<String>,
         #[serde(default)]
         by: Option<String>,
     },
@@ -2253,21 +2260,24 @@ impl Document {
                 layer_id,
                 language,
                 patch,
+                key,
+                text,
                 by,
             } => {
-                use promo_model::localized::{set_translation, TranslationTarget};
+                use promo_model::localized::{set_string, set_translation, TranslationTarget};
                 let target = match (resource_id, layer_id) {
                     (Some(id), None) => TranslationTarget::Resource(id),
                     (None, Some(id)) => TranslationTarget::Layer(id),
                     _ => return Err("name one of resourceID and layerID".into()),
                 };
-                set_translation(
-                    meta,
-                    target,
-                    language,
-                    patch,
-                    by.as_deref().unwrap_or("person"),
-                )?;
+                let by = by.as_deref().unwrap_or("person");
+                match (patch, key) {
+                    (Some(patch), None) => set_translation(meta, target, language, patch, by)?,
+                    (None, Some(key)) => {
+                        set_string(meta, target, language, key, text.as_deref(), by)?
+                    }
+                    _ => return Err("name one of patch and key".into()),
+                }
             }
             Command::PatchResource { resource_id, patch } => {
                 checked_patch(

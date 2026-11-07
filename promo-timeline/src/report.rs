@@ -480,18 +480,52 @@ fn languages_report(
                 summary.stale.join(", ")
             ));
         }
-        let mut flat = original.clone();
-        // A language that cannot flatten is already a break.
-        if localized::flatten(&mut flat, &summary.language).is_ok() {
-            crate::resolve_timing(&mut flat, grids);
-            for line in crate::layout_check::layout_warnings(&flat) {
-                if !source_layout.contains(&line) {
-                    out.warn(format!("{}: {line}", summary.language));
-                }
-            }
+        for line in layout_in_language(&original, &summary.language, grids, &source_layout) {
+            out.warn(format!("{}: {line}", summary.language));
         }
     }
     out.languages = summaries;
+}
+
+/// What `language`'s own words do to the layout: what its render warns of
+/// and the source's does not. A language that cannot flatten is already a
+/// break, and says nothing here.
+fn layout_in_language(
+    original: &ProjectMetadata,
+    language: &str,
+    grids: &crate::BeatGrids,
+    source_layout: &[String],
+) -> Vec<String> {
+    let mut flat = original.clone();
+    if promo_model::localized::flatten(&mut flat, language).is_err() {
+        return Vec::new();
+    }
+    crate::resolve_timing(&mut flat, grids);
+    crate::layout_check::layout_warnings(&flat)
+        .into_iter()
+        .filter(|line| !source_layout.contains(line))
+        .collect()
+}
+
+/// Each target language and what its words do to the layout, for the apps'
+/// table of strings.
+pub fn language_fit(
+    meta: &ProjectMetadata,
+    grids: &crate::BeatGrids,
+) -> Vec<(String, Vec<String>)> {
+    let Some(list) = promo_model::localized::languages(meta) else {
+        return Vec::new();
+    };
+    let mut source = meta.clone();
+    crate::resolve_timing(&mut source, grids);
+    let source_layout = crate::layout_check::layout_warnings(&source);
+    list.targets
+        .into_iter()
+        .map(|language| {
+            let lines = layout_in_language(meta, &language, grids, &source_layout);
+            (language, lines)
+        })
+        .collect()
 }
 
 /// The object a key sits in, as far as the bags go: whose bag keeps it.

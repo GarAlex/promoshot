@@ -445,8 +445,8 @@ is for; the schema section says how to write it.
   sharing a stage name) is read forever and rewritten on open.
 - **Languages** (`languages`) — one project, one timeline, in several
   languages. List them with `setLanguages`, read every string with
-  `promo_strings`, and write each with `setTranslation`, `by: "machine"` when
-  you translated it: anything that is a resource's parameter can differ,
+  `promo_strings`, and write each with `setTranslation` (`key` and `text` from
+  a row, `by: "machine"` when you translated it): anything that is a resource's parameter can differ,
   layers and timing cannot. Keep a narration's sentence count and a label's
   length close to the source, and read validate's Languages block after.
   `language` on a render picks one, a list or `all`.
