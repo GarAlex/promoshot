@@ -25,6 +25,7 @@ pub mod local;
 pub mod stress;
 pub mod timing;
 pub mod transcribe;
+pub mod translate;
 pub mod voices;
 
 pub use estimate::{
