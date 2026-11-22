@@ -31,6 +31,139 @@ pub fn fingerprint(provider: &str, voice: &str, text: &str) -> String {
         .collect()
 }
 
+/// English names for the language codes providers hand back, so a
+/// person searching "russian" finds a voice whose roster says "ru" — the
+/// Swift side asks Foundation; this table covers the codes the rosters
+/// actually carry and falls back to the code itself.
+pub fn language_name(code: &str) -> String {
+    let lower = code.to_ascii_lowercase();
+    let base = lower.split(['-', '_']).next().unwrap_or(&lower);
+    let table: std::collections::BTreeMap<&str, &str> = [
+        ("ar", "Arabic"),
+        ("bg", "Bulgarian"),
+        ("bn", "Bengali"),
+        ("ca", "Catalan"),
+        ("cs", "Czech"),
+        ("da", "Danish"),
+        ("de", "German"),
+        ("el", "Greek"),
+        ("en", "English"),
+        ("es", "Spanish"),
+        ("et", "Estonian"),
+        ("fa", "Persian"),
+        ("fi", "Finnish"),
+        ("fil", "Filipino"),
+        ("fr", "French"),
+        ("gu", "Gujarati"),
+        ("he", "Hebrew"),
+        ("hi", "Hindi"),
+        ("hr", "Croatian"),
+        ("hu", "Hungarian"),
+        ("id", "Indonesian"),
+        ("is", "Icelandic"),
+        ("it", "Italian"),
+        ("ja", "Japanese"),
+        ("kn", "Kannada"),
+        ("ko", "Korean"),
+        ("lt", "Lithuanian"),
+        ("lv", "Latvian"),
+        ("ml", "Malayalam"),
+        ("mr", "Marathi"),
+        ("ms", "Malay"),
+        ("nb", "Norwegian"),
+        ("nl", "Dutch"),
+        ("no", "Norwegian"),
+        ("pa", "Punjabi"),
+        ("pl", "Polish"),
+        ("pt", "Portuguese"),
+        ("ro", "Romanian"),
+        ("ru", "Russian"),
+        ("sk", "Slovak"),
+        ("sl", "Slovenian"),
+        ("sr", "Serbian"),
+        ("sv", "Swedish"),
+        ("sw", "Swahili"),
+        ("ta", "Tamil"),
+        ("te", "Telugu"),
+        ("th", "Thai"),
+        ("tr", "Turkish"),
+        ("uk", "Ukrainian"),
+        ("ur", "Urdu"),
+        ("vi", "Vietnamese"),
+        ("yue", "Cantonese"),
+        ("zh", "Chinese"),
+        ("cmn", "Chinese"),
+    ]
+    .into_iter()
+    .collect();
+    table
+        .get(base)
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| code.to_string())
+}
+
+/// The song provider: Google's Lyria through the Gemini API, on the
+/// person's Google key. A song is a narration whose `speech.text` is its
+/// lyrics (empty: an instrumental), `speech.style` the music in words
+/// (genre, mood, instruments, tempo, key, the voice) and `speech.seconds`
+/// the length asked for; `voiceID` names the model.
+pub const SONG_PROVIDER: &str = "lyria";
+/// Full songs, a couple of minutes at most, length asked in words.
+pub const SONG_MODEL: &str = "lyria-3.5";
+/// Always thirty seconds: loops and previews.
+pub const SONG_CLIP_MODEL: &str = "lyria-3-clip-preview";
+
+pub fn is_song(provider: &str) -> bool {
+    provider == SONG_PROVIDER
+}
+
+/// Everything a song asks Lyria for, as the one prompt it reads — and so
+/// what its receipt is bought under: changing the lyrics, the style, the
+/// length or the language buys a new song. Lyria has no fields for any of
+/// it (docs: music generation), so they are sentences: the style, the
+/// length (not for the clip model, which is always 30 s), the language the
+/// lyrics are sung in, or that there are none, then the lyrics as written
+/// — section tags (`[Verse]`, `[Chorus]`) and timed sections
+/// (`[0:00 - 0:10] Intro: …`) pass through. `language` is the take's code;
+/// the source's when the project says. None when it asks for nothing.
+pub fn song_request(speech: &Value, model: &str, language: Option<&str>) -> Option<String> {
+    let lyrics = speech
+        .get("text")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty());
+    let style = speech
+        .get("style")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty());
+    if lyrics.is_none() && style.is_none() {
+        return None;
+    }
+    let mut lines: Vec<String> = Vec::new();
+    if let Some(style) = style {
+        lines.push(style.to_string());
+    }
+    let seconds = speech
+        .get("seconds")
+        .and_then(Value::as_f64)
+        .filter(|s| *s > 0.0);
+    if let (Some(seconds), false) = (seconds, model == SONG_CLIP_MODEL) {
+        lines.push(format!("Length: about {} seconds.", seconds.round() as i64));
+    }
+    match (lyrics, language) {
+        (None, _) => lines.push("Instrumental only, no vocals.".to_string()),
+        (Some(_), Some(code)) => {
+            lines.push(format!("Vocals sung in {}.", language_name(code)));
+        }
+        (Some(_), None) => {}
+    }
+    if let Some(lyrics) = lyrics {
+        lines.push(format!("\nLyrics:\n{lyrics}"));
+    }
+    Some(lines.join("\n"))
+}
+
 /// The language a take speaks, when anything says: the language a project
 /// is being shown in (`flatten` writes it on the take it applies), else the
 /// voice's own name.
@@ -1415,6 +1548,32 @@ pub fn needs_speech_reader(meta: &crate::ProjectMetadata) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// The request in words: style, length (never for the 30 s clip), the
+    /// language sung in or that there are no vocals, then the lyrics.
+    #[test]
+    fn a_song_request_is_sentences_lyria_reads() {
+        let speech = serde_json::json!({ "text": " [Verse]\nla ", "style": "folk",
+                                         "seconds": 29.6 });
+        assert_eq!(
+            song_request(&speech, SONG_MODEL, Some("fr")).unwrap(),
+            "folk\nLength: about 30 seconds.\nVocals sung in French.\n\nLyrics:\n[Verse]\nla"
+        );
+        assert_eq!(
+            song_request(&speech, SONG_CLIP_MODEL, None).unwrap(),
+            "folk\n\nLyrics:\n[Verse]\nla"
+        );
+        let bare = serde_json::json!({ "style": "drone" });
+        assert_eq!(
+            song_request(&bare, SONG_MODEL, Some("fr")).unwrap(),
+            "drone\nInstrumental only, no vocals."
+        );
+        assert_eq!(
+            song_request(&serde_json::json!({ "text": " " }), SONG_MODEL, None),
+            None
+        );
+        assert!(is_song("lyria") && !is_song("google"));
+    }
+
     use super::*;
 
     fn words(script: &str) -> Vec<String> {

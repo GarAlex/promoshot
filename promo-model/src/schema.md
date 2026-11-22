@@ -1349,6 +1349,17 @@ A reveal can arrive on a narration's words instead of at its own pace —
   promo_speak to synthesize it; the app fills in filename and duration.
   `renderedHash` is written by the app — do not set it by hand, it is
   what stops unchanged text from being paid for twice.
+- A SONG is `speech` with `"provider": "lyria"` (Google's Lyria, on the
+  Google key): `text` is the lyrics, empty for an instrumental, with
+  `[Verse]`/`[Chorus]` tags or timed sections (`[0:00 - 0:10] Intro: …`);
+  `style` is the music in words (genre, mood, instruments, BPM, key, the
+  voice); `seconds` the length asked for; `voiceID` the model,
+  `lyria-3.5` (default) or `lyria-3-clip-preview` (always 30 s). The
+  receipt covers all of them, and a language's song is sung in it.
+
+      { "text": "[Chorus]\nShoot it once…", "provider": "lyria",
+        "voiceID": "lyria-3.5", "style": "upbeat synth-pop, 118 BPM",
+        "seconds": 45 }
 
 ## Languages — languages, localized, localization, translation, translate, language
 

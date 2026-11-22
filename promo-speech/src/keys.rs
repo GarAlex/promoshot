@@ -20,6 +20,17 @@ pub const SERVICE: &str = "promoshot";
 /// The providers, in the order the docs list them.
 pub const PROVIDERS: [&str; 3] = ["openai", "elevenlabs", "google"];
 
+/// The key a provider spends: its own, except a song's — Lyria is asked
+/// on the person's Google key (the Gemini API in the same Google Cloud
+/// project as the voices).
+pub fn account(provider: &str) -> &str {
+    if crate::is_song(provider) {
+        "google"
+    } else {
+        provider
+    }
+}
+
 /// Per provider: the variable that may name a secrets file, and the
 /// Docker-convention path read when it does not.
 pub const SECRETS: [(&str, &str, &str); 3] = [
@@ -72,6 +83,7 @@ pub struct SystemKeys;
 
 impl KeyStore for SystemKeys {
     fn key(&self, provider: &str) -> Option<(String, KeySource)> {
+        let provider = account(provider);
         if let Ok(Some(key)) = keyring_get(provider) {
             return Some((key, KeySource::Keyring));
         }
@@ -98,6 +110,7 @@ pub struct FixedKeys(pub Vec<(String, String)>);
 
 impl KeyStore for FixedKeys {
     fn key(&self, provider: &str) -> Option<(String, KeySource)> {
+        let provider = account(provider);
         self.0
             .iter()
             .find(|(p, _)| p == provider)
@@ -218,6 +231,7 @@ pub fn status(provider: &str) -> Result<KeyStatus, String> {
 
 /// The honest refusal: how to register a key, and what to do without one.
 pub fn missing_key_message(provider: &str) -> String {
+    let provider = account(provider);
     let (var, default) = SECRETS
         .iter()
         .find(|(p, _, _)| *p == provider)

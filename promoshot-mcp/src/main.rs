@@ -1234,8 +1234,9 @@ mod tests {
             // 55,300 since languages: promo_strings, `language` on the four
             // renders and setLanguages and setTranslation, 2.9 KB;
             // 55,500 since promo_speak's `language`, 0.15 KB;
-            // 56,000 since forkComposition and inComposition's `language`, 0.45 KB.
-            bytes < 56_000,
+            // 56,000 since forkComposition and inComposition's `language`, 0.45 KB;
+            // 56,300 since promo_speak's `lyria` songs, 0.25 KB.
+            bytes < 56_300,
             "tools/list is {bytes} bytes; it was 118,533 before the type graph came out, \
              and every request pays for it"
         );

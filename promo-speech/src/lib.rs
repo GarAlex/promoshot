@@ -15,13 +15,13 @@
 //! Resources/ is the other honest route.
 
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
 use std::path::Path;
 
 pub mod estimate;
 pub mod keys;
 #[cfg(feature = "local")]
 pub mod local;
+pub mod song;
 pub mod stress;
 pub mod timing;
 pub mod transcribe;
@@ -35,6 +35,9 @@ pub use estimate::{
 pub use keys::{
     secrets_path, FixedKeys, KeySource, KeyStatus, KeyStore, SystemKeys, PROVIDERS, SECRETS,
     SERVICE,
+};
+pub use promo_model::speech::{
+    is_song, language_name, song_request, SONG_CLIP_MODEL, SONG_MODEL, SONG_PROVIDER,
 };
 pub use stress::{google_input, marking_stress, marking_stress_mapped};
 pub use timing::{google_ssml_marked, google_supports_marks, Spoken, Take};
@@ -294,7 +297,10 @@ pub fn synthesize_with_key_timed(
             }
             google_plain(text, &spoken, key, "MP3")
         }
-        other => Err(format!("provider `{other}` — openai, elevenlabs or google")),
+        SONG_PROVIDER => song::generate(voice, text, key),
+        other => Err(format!(
+            "provider `{other}` — openai, elevenlabs, google or lyria"
+        )),
     }
 }
 
@@ -548,11 +554,21 @@ fn language_filename(resource: &Value, id: &str, code: &str, extension: &str) ->
 }
 
 /// The takes `languages` have on one resource, in order. None is the source.
-fn scripts(index: usize, resource: &Value, languages: &[Option<String>]) -> Vec<Script> {
+fn scripts(
+    index: usize,
+    resource: &Value,
+    languages: &[Option<String>],
+    source: Option<&str>,
+) -> Vec<Script> {
     languages
         .iter()
-        .filter_map(|language| script(index, resource, language.as_deref()))
+        .filter_map(|language| script(index, resource, language.as_deref(), source))
         .collect()
+}
+
+/// The language the project's own text is in, when it says.
+fn source_language(doc: &Value) -> Option<&str> {
+    doc.pointer("/languages/source").and_then(Value::as_str)
 }
 
 /// A language with words of its own, a file of its own and nothing that made
@@ -595,7 +611,12 @@ fn no_voice(index: usize, resource: &Value, language: &str) -> Option<String> {
     })
 }
 
-fn script(index: usize, resource: &Value, language: Option<&str>) -> Option<Script> {
+fn script(
+    index: usize,
+    resource: &Value,
+    language: Option<&str>,
+    source: Option<&str>,
+) -> Option<Script> {
     let entry = match language {
         Some(code) => {
             let entry = resource.get("localized")?.get(code)?;
@@ -605,19 +626,6 @@ fn script(index: usize, resource: &Value, language: Option<&str>) -> Option<Scri
         None => resource,
     };
     let speech = entry.get("speech")?;
-    let words = speech
-        .get("text")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    if words.trim().is_empty() {
-        return None;
-    }
-    let id = resource
-        .get("id")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("R{index}"));
     let provider = speech
         .get("provider")
         .and_then(Value::as_str)
@@ -626,6 +634,8 @@ fn script(index: usize, resource: &Value, language: Option<&str>) -> Option<Scri
         .to_string();
     let default_voice = if is_keyless(&provider) {
         LOCAL_DEFAULT_VOICE
+    } else if is_song(&provider) {
+        SONG_MODEL
     } else {
         "alloy"
     };
@@ -634,6 +644,25 @@ fn script(index: usize, resource: &Value, language: Option<&str>) -> Option<Scri
         .and_then(Value::as_str)
         .unwrap_or(default_voice)
         .to_string();
+    // A song is bought under its whole request — lyrics, style, length,
+    // language — and may have no lyrics at all.
+    let words = if is_song(&provider) {
+        song_request(speech, &voice, language.or(source))?
+    } else {
+        speech
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    if words.trim().is_empty() {
+        return None;
+    }
+    let id = resource
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("R{index}"));
     // The extension follows what the provider sends (`take_extension`) —
     // a take never sits under the wrong name.
     let extension = take_extension(&provider, &voice);
@@ -827,16 +856,22 @@ pub fn plan_languages(
                 unvoiced.push((id, code.clone()));
             }
         }
-        for script in scripts(index, resource, languages) {
+        for script in scripts(index, resource, languages, source_language(doc)) {
             if is_settled(&script, resources_dir, measure).is_some() {
                 settled += 1;
             } else {
+                // A song is billed by the song, not its words.
+                let characters = if is_song(&script.provider) {
+                    0
+                } else {
+                    script.words.chars().count()
+                };
                 pending.push(Pending {
                     id: script.id,
                     provider: script.provider,
                     voice: script.voice,
                     language: script.language,
-                    characters: script.words.chars().count(),
+                    characters,
                 });
             }
         }
@@ -893,7 +928,7 @@ pub fn takes_json(doc: &Value, resources_dir: &Path, languages: &[Option<String>
                 }));
             }
         }
-        for script in scripts(index, resource, languages) {
+        for script in scripts(index, resource, languages, source_language(doc)) {
             // A settled take stays under the name it has, though a new one
             // would be named otherwise.
             let holds = script.receipt.as_deref() == Some(receipt(&script, resources_dir).as_str());
@@ -1025,9 +1060,14 @@ pub fn settle_languages(
     let mut spent = 0usize;
     let takes: Vec<(usize, Script)> = (0..count)
         .flat_map(|index| {
-            scripts(index, &doc["resources"][index], languages)
-                .into_iter()
-                .map(move |script| (index, script))
+            scripts(
+                index,
+                &doc["resources"][index],
+                languages,
+                source_language(doc),
+            )
+            .into_iter()
+            .map(move |script| (index, script))
         })
         .collect();
     for (index, script) in takes {
@@ -1164,9 +1204,14 @@ pub fn placehold_languages(
     let mut report = Vec::new();
     let takes: Vec<(usize, Script)> = (0..count)
         .flat_map(|index| {
-            scripts(index, &doc["resources"][index], languages)
-                .into_iter()
-                .map(move |script| (index, script))
+            scripts(
+                index,
+                &doc["resources"][index],
+                languages,
+                source_language(doc),
+            )
+            .into_iter()
+            .map(move |script| (index, script))
         })
         .collect();
     for (index, script) in takes {
@@ -1177,6 +1222,14 @@ pub fn placehold_languages(
         let print = receipt(&script, resources_dir);
         let destination = resources_dir.join(&script.filename);
         if script.receipt.as_deref() == Some(print.as_str()) && destination.exists() {
+            continue;
+        }
+        // A stand-in is estimated from words spoken; a song's length is
+        // the music's, so it waits for its key with nothing in its place.
+        if is_song(&script.provider) {
+            report.push(format!(
+                "{label}: a song — no stand-in, it waits for a Google key"
+            ));
             continue;
         }
         if script.filename.contains('/')
@@ -1346,77 +1399,6 @@ fn retire_records(resources_dir: &Path, old: &str, doc: &Value, written: &str) {
         })
         .collect();
     promo_model::word_cache::retire_in(resources_dir, old, &keep);
-}
-
-/// English names for the language codes providers hand back, so a
-/// person searching "russian" finds a voice whose roster says "ru" — the
-/// Swift side asks Foundation; this table covers the codes the rosters
-/// actually carry and falls back to the code itself.
-pub fn language_name(code: &str) -> String {
-    let lower = code.to_ascii_lowercase();
-    let base = lower.split(['-', '_']).next().unwrap_or(&lower);
-    let table: BTreeMap<&str, &str> = [
-        ("ar", "Arabic"),
-        ("bg", "Bulgarian"),
-        ("bn", "Bengali"),
-        ("ca", "Catalan"),
-        ("cs", "Czech"),
-        ("da", "Danish"),
-        ("de", "German"),
-        ("el", "Greek"),
-        ("en", "English"),
-        ("es", "Spanish"),
-        ("et", "Estonian"),
-        ("fa", "Persian"),
-        ("fi", "Finnish"),
-        ("fil", "Filipino"),
-        ("fr", "French"),
-        ("gu", "Gujarati"),
-        ("he", "Hebrew"),
-        ("hi", "Hindi"),
-        ("hr", "Croatian"),
-        ("hu", "Hungarian"),
-        ("id", "Indonesian"),
-        ("is", "Icelandic"),
-        ("it", "Italian"),
-        ("ja", "Japanese"),
-        ("kn", "Kannada"),
-        ("ko", "Korean"),
-        ("lt", "Lithuanian"),
-        ("lv", "Latvian"),
-        ("ml", "Malayalam"),
-        ("mr", "Marathi"),
-        ("ms", "Malay"),
-        ("nb", "Norwegian"),
-        ("nl", "Dutch"),
-        ("no", "Norwegian"),
-        ("pa", "Punjabi"),
-        ("pl", "Polish"),
-        ("pt", "Portuguese"),
-        ("ro", "Romanian"),
-        ("ru", "Russian"),
-        ("sk", "Slovak"),
-        ("sl", "Slovenian"),
-        ("sr", "Serbian"),
-        ("sv", "Swedish"),
-        ("sw", "Swahili"),
-        ("ta", "Tamil"),
-        ("te", "Telugu"),
-        ("th", "Thai"),
-        ("tr", "Turkish"),
-        ("uk", "Ukrainian"),
-        ("ur", "Urdu"),
-        ("vi", "Vietnamese"),
-        ("yue", "Cantonese"),
-        ("zh", "Chinese"),
-        ("cmn", "Chinese"),
-    ]
-    .into_iter()
-    .collect();
-    table
-        .get(base)
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| code.to_string())
 }
 
 #[cfg(test)]
@@ -2025,6 +2007,95 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("plain file name"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// What a song asked for, by provider|model|prompt.
+    struct Songs(std::cell::RefCell<Vec<String>>);
+    impl Synth for Songs {
+        fn synthesize(&self, provider: &str, voice: &str, text: &str) -> Result<Vec<u8>, String> {
+            self.0
+                .borrow_mut()
+                .push(format!("{provider}|{voice}|{text}"));
+            Ok(b"ID3song".to_vec())
+        }
+    }
+
+    fn song(speech: Value) -> Value {
+        json!({ "languages": { "source": "uk", "targets": ["en"] }, "resources": [
+            { "id": "S1", "kind": "audio", "filename": "", "displayName": "Song",
+              "addedAt": 0, "speech": speech } ] })
+    }
+
+    /// A song is one prompt — style, length, the language it is sung in,
+    /// the lyrics — and its receipt is bought under all of it, on the
+    /// person's Google key.
+    #[test]
+    fn a_song_asks_lyria_in_words_and_its_receipt_covers_the_style() {
+        let dir = std::env::temp_dir().join(format!("promo-speech-song-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut doc = song(json!({ "provider": "lyria", "text": "[Chorus]\nСвітло",
+                                   "style": "upbeat synth-pop, 118 BPM", "seconds": 45 }));
+        let measure = |_: &Path| Ok(45.0);
+        let keys = FixedKeys(vec![("google".into(), "g-test".into())]);
+        let plan = plan(&doc, &dir, &measure);
+        assert_eq!(plan.pending.len(), 1);
+        assert_eq!(plan.pending[0].voice, SONG_MODEL, "lyria-3.5 unless chosen");
+        assert!(
+            missing_keys(&plan, &keys).is_empty(),
+            "a song spends the Google key"
+        );
+        assert_eq!(
+            missing_keys(&plan, &FixedKeys(vec![])),
+            vec!["lyria".to_string()]
+        );
+        assert!(keys::missing_key_message("lyria").contains("key set google"));
+
+        let synth = Songs(Default::default());
+        let report = settle(&mut doc, &dir, &synth, &measure, &mut |_| Ok(())).unwrap();
+        assert!(report[0].contains("generated (45.00s)"), "{report:?}");
+        assert_eq!(
+            synth.0.borrow().as_slice(),
+            [
+                "lyria|lyria-3.5|upbeat synth-pop, 118 BPM\nLength: about 45 seconds.\n\
+              Vocals sung in Ukrainian.\n\nLyrics:\n[Chorus]\nСвітло"
+            ]
+        );
+        let take = &doc["resources"][0];
+        assert_eq!(take["filename"], "narration-S1.mp3");
+        assert_eq!(take["speech"]["voiceID"], SONG_MODEL);
+
+        // Settled: asked again, nothing is bought.
+        settle(&mut doc, &dir, &synth, &measure, &mut |_| Ok(())).unwrap();
+        assert_eq!(synth.0.borrow().len(), 1);
+        // Another style is another song.
+        doc["resources"][0]["speech"]["style"] = json!("slow piano ballad");
+        settle(&mut doc, &dir, &synth, &measure, &mut |_| Ok(())).unwrap();
+        assert_eq!(synth.0.borrow().len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// No lyrics is an instrumental, not nothing; the clip model is always
+    /// 30 s, so a length is not asked of it; a song never gets a silent
+    /// stand-in, which is estimated from spoken words.
+    #[test]
+    fn an_instrumental_song_is_owed_and_never_stood_in_for() {
+        let dir = std::env::temp_dir().join(format!("promo-speech-instr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut doc = song(json!({ "provider": "lyria", "voiceID": SONG_CLIP_MODEL,
+                                   "style": "calm lo-fi", "seconds": 45 }));
+        let measure = |_: &Path| Ok(30.0);
+        assert_eq!(plan(&doc, &dir, &measure).pending.len(), 1);
+        assert_eq!(
+            song_request(&doc["resources"][0]["speech"], SONG_CLIP_MODEL, Some("uk")).unwrap(),
+            "calm lo-fi\nInstrumental only, no vocals."
+        );
+        let report = placehold(&mut doc, &dir, &["lyria".to_string()], &mut |_| Ok(())).unwrap();
+        assert!(report[0].contains("no stand-in"), "{report:?}");
+        assert!(doc["resources"][0]["speech"].get("placeholder").is_none());
+        // Neither lyrics nor style: nothing asked.
+        let silent = song(json!({ "provider": "lyria" }));
+        assert!(plan(&silent, &dir, &measure).pending.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

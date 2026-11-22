@@ -858,7 +858,10 @@ pub fn tools(host: Host) -> Vec<Value> {
                  needs no key: English voices synthesized on this machine, Apache-2.0, safe to \
                  publish; takes are .wav. A word the dictionary lacks (a product name) fails \
                  with its name — spell it once in Resources/pronunciations.dict (CMU format: \
-                 `PROMOSHOT  P R OW1 M OW0 SH AA2 T`) or write it as words."
+                 `PROMOSHOT  P R OW1 M OW0 SH AA2 T`) or write it as words. Provider \
+                 `lyria` sings (Google key, billed per song): text = lyrics ([Chorus] tags; \
+                 empty = instrumental), style = the music in words, seconds = length; voiceID \
+                 lyria-3.5 or lyria-3-clip-preview (30 s)."
             },
             "inputSchema": { "type": "object",
                 "properties": { "project": project,

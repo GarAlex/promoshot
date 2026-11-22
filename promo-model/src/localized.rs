@@ -931,8 +931,15 @@ pub fn takes(meta: &ProjectMetadata, language: &str) -> Vec<TakeRow> {
                 // A local voice's receipt folds in the project's pronunciations,
                 // which this has no folder to read.
                 (Some(voice), Some(receipt)) => {
+                    // A song is bought under its whole request, sung in this language.
+                    let bought = if crate::speech::is_song(provider) {
+                        crate::speech::song_request(speech, voice, Some(language))
+                            .unwrap_or_default()
+                    } else {
+                        script.to_string()
+                    };
                     if provider == "local"
-                        || receipt == crate::speech::fingerprint(provider, voice, script)
+                        || receipt == crate::speech::fingerprint(provider, voice, &bought)
                     {
                         TakeState::Current
                     } else {
@@ -2112,6 +2119,27 @@ mod tests {
             "renderedHash": crate::speech::fingerprint("elevenlabs", "anna", text) } }),
         );
         assert_eq!(state(&meta), TakeState::Current);
+        // A song is bought under its whole request, sung in German: the
+        // style is part of the receipt.
+        let sung = serde_json::json!({ "text": text, "provider": "lyria",
+            "voiceID": "lyria-3.5", "style": "synth-pop" });
+        let mut bought = sung.clone();
+        bought["renderedHash"] = serde_json::json!(crate::speech::fingerprint(
+            "lyria",
+            "lyria-3.5",
+            &crate::speech::song_request(&sung, "lyria-3.5", Some("de")).unwrap()
+        ));
+        write(
+            &mut meta,
+            serde_json::json!({ "filename": "r1.de.mp3", "duration": 40, "speech": bought }),
+        );
+        assert_eq!(state(&meta), TakeState::Current);
+        bought["style"] = serde_json::json!("ballad");
+        write(
+            &mut meta,
+            serde_json::json!({ "filename": "r1.de.mp3", "duration": 40, "speech": bought }),
+        );
+        assert_eq!(state(&meta), TakeState::OutOfDate);
         write(&mut meta, serde_json::json!({ "speech": { "text": text } }));
         assert_eq!(state(&meta), TakeState::NoVoice);
         write(

@@ -121,20 +121,27 @@ pub fn speak(
                 plan.pending.len(),
                 plan.providers().join(", ")
             )
+        } else if missing.iter().all(|p| promo_speech::is_song(p)) {
+            format!(
+                "{} — the songs wait for it, with no stand-in",
+                blocked_phrase(&missing)
+            )
         } else {
             format!(
-                "{} — those would get silent placeholders of their estimated length",
+                "{} — those would get silent placeholders of their estimated length \
+                 (songs wait, with none)",
                 blocked_phrase(&missing)
             )
         };
         let characters: usize = plan.pending.iter().map(|p| p.characters).sum();
         return Ok(format!(
-            "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}; {characters} characters{}{}",
+            "{}\n{}: {} narration(s), {} settled, {} pending — {verdict}; {characters} characters{}{}{}",
             key_report(keys, plan.providers(), &blockers),
             dir.display(),
             plan.settled + plan.pending.len(),
             plan.settled,
             plan.pending.len(),
+            songs_line(&plan),
             language_lines(&plan, &languages),
             no_voice
                 .as_ref()
@@ -238,13 +245,45 @@ fn language_lines(plan: &promo_speech::Plan, languages: &[Option<String>]) -> St
     for language in languages {
         let pending = || plan.pending.iter().filter(|p| p.language == *language);
         let characters: usize = pending().map(|p| p.characters).sum();
+        let songs = pending()
+            .filter(|p| promo_speech::is_song(&p.provider))
+            .count();
         out.push_str(&format!(
-            "\n  {}: {} pending, {characters} characters",
+            "\n  {}: {} pending, {characters} characters{}",
             language.as_deref().unwrap_or("source"),
             pending().count(),
+            if songs > 0 {
+                format!(", {songs} song(s)")
+            } else {
+                String::new()
+            },
         ));
     }
     out
+}
+
+/// What the pending songs would cost: Lyria bills per song, not by the
+/// character (Google's price list, 2026-11).
+fn songs_line(plan: &promo_speech::Plan) -> String {
+    let songs: Vec<&promo_speech::Pending> = plan
+        .pending
+        .iter()
+        .filter(|p| promo_speech::is_song(&p.provider))
+        .collect();
+    if songs.is_empty() {
+        return String::new();
+    }
+    let clips = songs
+        .iter()
+        .filter(|p| p.voice == promo_speech::SONG_CLIP_MODEL)
+        .count();
+    let cents = clips * 4 + (songs.len() - clips) * 8;
+    format!(
+        "; {} song(s) of them, about ${}.{:02} at Google's price ($0.08 a song, $0.04 a 30-second clip)",
+        songs.len(),
+        cents / 100,
+        cents % 100
+    )
 }
 
 /// Where each provider's key comes from — never the key. One line.
@@ -271,7 +310,10 @@ fn key_report(
                 format!("{provider} — secrets file")
             }
             Some((_, promo_speech::KeySource::Given)) => format!("{provider} — given"),
-            None => format!("{provider} — NO KEY (`promoshot-mcp key set {provider}`)"),
+            None => format!(
+                "{provider} — NO KEY (`promoshot-mcp key set {}`)",
+                promo_speech::keys::account(provider)
+            ),
         })
         .collect();
     format!("narration keys: {}", parts.join("; "))
