@@ -306,7 +306,7 @@ pub fn tools(host: Host) -> Vec<Value> {
                     "times": { "type": "array", "items": { "type": "number" }, "description":
                         "Exact seconds to render, inside the composition — rendered in time order" },
                     "sample": { "type": "integer", "description": format!(
-                        "How many moments to spread across the range, both ends included \
+                        "How many moments to spread from the range's first frame to its last \
                          (default {SAMPLE_FRAMES} when neither times nor a range is given)") },
                     "from": { "type": "number", "description": "Range start (default 0)" },
                     "to": { "type": "number", "description": "Range end (default: the end)" },
@@ -1574,7 +1574,11 @@ mod tests {
         .unwrap();
         let bare = look_times(&meta, &json!({})).unwrap();
         assert_eq!(bare.len(), SAMPLE_FRAMES);
-        assert_eq!((bare[0], *bare.last().unwrap()), (0.0, 10.0));
+        assert_eq!(bare[0], 0.0);
+        assert!(
+            (bare.last().unwrap() - (10.0 - 1.0 / 30.0)).abs() < 1e-9,
+            "the last moment is the last frame, not the end: {bare:?}"
+        );
         let every = look_times(&meta, &json!({ "from": 0, "to": 10 })).unwrap_err();
         assert!(every.starts_with("300 frames"), "{every}");
         assert_eq!(

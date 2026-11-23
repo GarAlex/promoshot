@@ -33,7 +33,7 @@ USAGE:
         cache (never into the project folder); idempotent
     promo still   <project-dir> --out <file.png> [--time <s>] [--size <WxH>] [--language <c>]
     promo frames  <project-dir> --out <dir> [--times <s,s,…>|--sample <n>|--fps <n>]
-                  [--from <s>] [--to <s>] [--size <WxH>] [--sheet <file.png>] [--cap <n>]
+                  [--from <s>] [--to <s>] [--size <WxH>] [--sheet <file.png|.jpg>] [--cap <n>]
                   [--language <c>]
     promo video   <project-dir> --out <file.mp4> [--fps <n>] [--size <WxH>]
                   [--from <s|Nf>] [--to <s|Nf>] [--segment <s>] [--language <c>]
@@ -121,7 +121,7 @@ OPTIONS (`promo <command> --help` lists the ones a command takes):
     --times <list> Render exactly these seconds, comma separated
     --sample <n>   n moments spread evenly across the range — a contact
                    sheet rather than every frame
-    --sheet <file> Also tile the rendered moments into one PNG
+    --sheet <file> Also tile the rendered moments into one PNG (or JPEG)
     --cap <n>      Refuse rather than render more than n frames
     --size <WxH>   Output size (default: the project's canvas size)
     --json         Machine output: one JSON object on stdout (errors too)
@@ -2336,6 +2336,19 @@ fn frames(project: &Project, opts: &Options) -> Result<String, String> {
         project.duration(),
         opts.cap,
     )?;
+    // A sheet the writer cannot make is refused before the frames render,
+    // not after.
+    if let Some(sheet) = &opts.sheet {
+        if !matches!(
+            image::ImageFormat::from_path(sheet),
+            Ok(image::ImageFormat::Png | image::ImageFormat::Jpeg)
+        ) {
+            return Err(format!(
+                "{}: --sheet writes a .png or .jpg",
+                sheet.display()
+            ));
+        }
+    }
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     // This tool's own previous frames go first. Without it a shorter run
     // leaves the tail of a longer one behind and the next reader — a person
@@ -2760,8 +2773,8 @@ mod tests {
 
     /// The moments a frames call renders, in precedence order: exact times,
     /// then a sample across the range, then every frame at the rate. The
-    /// sample includes both ends, which is what makes a contact sheet show
-    /// the first and last picture.
+    /// sample runs from the first frame to the last one an export writes,
+    /// which is what makes a contact sheet show the first and last picture.
     #[test]
     fn frame_times_follow_what_was_asked_for() {
         let plan = |end: f64, fps: f64| promo_timeline::ExportPlan {
@@ -2780,7 +2793,12 @@ mod tests {
             vec![0.0, 0.25, 0.5, 0.75],
             "the export plan's own count"
         );
-        assert_eq!(pick(&[], Some(5), 8.0, 30.0), vec![0.0, 2.0, 4.0, 6.0, 8.0]);
+        let five = pick(&[], Some(5), 8.0, 30.0);
+        assert_eq!((five.len(), five[0]), (5, 0.0));
+        assert!(
+            (five[4] - (8.0 - 1.0 / 30.0)).abs() < 1e-9,
+            "the last moment is the last frame, where layers running to the end still show: {five:?}"
+        );
         assert_eq!(
             pick(&[], Some(1), 8.0, 30.0),
             vec![4.0],

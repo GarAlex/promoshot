@@ -116,7 +116,7 @@ pub fn export_plan(
 /// The moments a LOOK renders — `promo frames`, and `promo_render_frames`
 /// on both servers, which used to pick them three ways (review 2026-09-27,
 /// P2-32): explicit `times` in time order; else `sample` moments spread
-/// over the plan's range, both ends included (one is the middle); else
+/// over the plan's range from its first frame to its last (one is the middle); else
 /// every frame of the plan. A moment outside the composition is refused
 /// rather than rendered as an empty frame, and so is more than `cap` of
 /// them — the message names the way out.
@@ -153,7 +153,12 @@ pub fn look_times(
             }
             Some(1) => vec![(plan.start + plan.end) / 2.0],
             Some(n) => {
-                let span = (plan.end - plan.start).max(0.0);
+                // The last moment is the last frame an export writes, not
+                // the range's end: at the composition's end every layer that
+                // runs to it has already gone, and the sheet's last cell
+                // came out as bare background.
+                let last = plan.frame_time(plan.count.saturating_sub(1)).min(plan.end);
+                let span = (last - plan.start).max(0.0);
                 (0..n)
                     .map(|i| plan.start + span * i as f64 / (n - 1) as f64)
                     .collect()
@@ -288,7 +293,7 @@ mod tests {
     }
 
     /// One rule for the moments a look renders: times in time order, a
-    /// sample spread over the range with both ends, every frame otherwise;
+    /// sample spread from the first frame to the last, every frame otherwise;
     /// outside the composition or over the cap is refused, naming why.
     #[test]
     fn a_look_picks_its_moments_one_way() {
@@ -307,7 +312,11 @@ mod tests {
         );
         let twelve = look_times(&[], Some(12), &whole, 10.0, Some(240)).unwrap();
         assert_eq!(twelve.len(), 12);
-        assert_eq!((twelve[0], twelve[11]), (0.0, 10.0), "both ends");
+        assert_eq!(
+            (twelve[0], twelve[11]),
+            (0.0, 9.5),
+            "the first frame and the last one an export writes, never the end itself"
+        );
         assert_eq!(
             look_times(&[], Some(1), &whole, 10.0, None).unwrap(),
             vec![5.0]

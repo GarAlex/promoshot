@@ -1038,18 +1038,44 @@ pub(crate) fn unpremultiply(bgra: &mut [u8]) {
     }
 }
 
-/// Writes RGBA rows as a PNG.
+/// Writes RGBA rows as a picture in the format the extension names — a
+/// PNG, normally. A JPEG has no alpha, so an opaque picture is written
+/// without it and a transparent one is refused, naming PNG. The bytes are
+/// encoded before the file is touched: a failed encode used to leave a
+/// 0-byte file behind (issue #23).
 pub fn write_png(
     path: &std::path::Path,
     rgba: &[u8],
     width: u32,
     height: u32,
 ) -> Result<(), String> {
+    let format = image::ImageFormat::from_path(path)
+        .map_err(|_| format!("{}: name a .png (or .jpg) file", path.display()))?;
+    let picture = image::RgbaImage::from_raw(width, height, rgba.to_vec()).ok_or_else(|| {
+        format!(
+            "{}: {width}x{height} does not match the pixels",
+            path.display()
+        )
+    })?;
+    let picture = if format == image::ImageFormat::Jpeg {
+        if picture.pixels().any(|p| p[3] != 255) {
+            return Err(format!(
+                "{}: the picture is transparent and a JPEG cannot keep that — use a .png path",
+                path.display()
+            ));
+        }
+        image::DynamicImage::ImageRgb8(image::DynamicImage::ImageRgba8(picture).to_rgb8())
+    } else {
+        image::DynamicImage::ImageRgba8(picture)
+    };
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    picture
+        .write_to(&mut bytes, format)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
-    image::save_buffer(path, rgba, width, height, image::ColorType::Rgba8)
-        .map_err(|e| format!("{}: {e}", path.display()))
+    std::fs::write(path, bytes.into_inner()).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The composition's soundtrack: the apps' mix graph (`audio_inputs` —
@@ -1279,6 +1305,36 @@ pub fn build_soundtrack_between(
 
 #[cfg(test)]
 mod tests {
+
+    /// Issue #23: a .jpg writes a JPEG (an opaque picture loses only its
+    /// alpha channel), a transparent one is refused, and a refusal leaves
+    /// no file behind — the old writer left 0 bytes.
+    #[test]
+    fn a_jpeg_path_writes_a_jpeg_and_a_refusal_leaves_nothing() {
+        let dir = std::env::temp_dir().join(format!("promo-jpeg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opaque = [200u8, 30, 30, 255].repeat(8 * 4);
+        let jpg = dir.join("sheet.jpg");
+        write_png(&jpg, &opaque, 8, 4).unwrap();
+        let back = image::open(&jpg).unwrap();
+        assert_eq!((back.width(), back.height()), (8, 4));
+        assert!(image::ImageFormat::from_path(&jpg).unwrap() == image::ImageFormat::Jpeg);
+        assert_eq!(
+            &std::fs::read(&jpg).unwrap()[..2],
+            &[0xFF, 0xD8],
+            "JPEG bytes"
+        );
+
+        let clear = [200u8, 30, 30, 0].repeat(8 * 4);
+        let refused = dir.join("clear.jpg");
+        let err = write_png(&refused, &clear, 8, 4).unwrap_err();
+        assert!(err.contains("use a .png path"), "{err}");
+        assert!(!refused.exists());
+        let odd = dir.join("sheet.xyz");
+        assert!(write_png(&odd, &opaque, 8, 4).is_err());
+        assert!(!odd.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use super::*;
     use std::process::Command;
 
