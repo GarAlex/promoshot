@@ -62,7 +62,46 @@ pub(crate) struct Take {
     play: usize,
 }
 
+/// What [`Take::unsure`] says, found again in a reason passed on as text.
+pub(crate) const UNSURE_MARK: &str = "\" is unsure (";
+
+/// The problem an effect generator (`what`: pulse, shake, flash) reports
+/// when it could not be placed: on an unsure take, a warning that nothing
+/// was made; anything else, the generator's break.
+pub(crate) fn generator_problem(layer: String, what: &str, why: String) -> TimingProblem {
+    if why.contains(UNSURE_MARK) {
+        TimingProblem::SpeechNotPlaced {
+            layer,
+            what: what.into(),
+            why: format!("{why}; none made"),
+        }
+    } else {
+        TimingProblem::Generator {
+            layer,
+            why: format!("{what}: {why}"),
+        }
+    }
+}
+
 impl Take {
+    /// Why nothing may be placed on this take's words: a measured timing
+    /// under [`promo_model::speech::TRUSTED_FROM`]. None when it is
+    /// trusted — the provider's or a local voice's own, or sure enough —
+    /// and for an estimate, which lays a draft out and a render waits past.
+    pub fn unsure(&self) -> Option<String> {
+        let t = &self.timing;
+        (!self.estimated_now && !t.estimated && t.confidence < promo_model::speech::TRUSTED_FROM)
+            .then(|| {
+                format!(
+                    "the timing of \"{}\" is unsure ({} {:.2}, under {})",
+                    self.id,
+                    t.source.as_text(),
+                    t.confidence,
+                    promo_model::speech::TRUSTED_FROM
+                )
+            })
+    }
+
     /// Output seconds of the take's source second `s` — None when the layer
     /// never plays it (trimmed out, or past the layer's end).
     pub fn out(&self, s: f64) -> Option<f64> {
@@ -156,13 +195,15 @@ pub(crate) enum Fault {
     Take(String),
     /// The word is in the take but the layer never plays it.
     Trimmed(String),
+    /// The take's timing is measured but unsure ([`Take::unsure`]).
+    Unsure(String),
 }
 
 impl Fault {
     /// The sentence that says what is wrong.
     pub fn why(self) -> String {
         match self {
-            Fault::Word(why) | Fault::Take(why) | Fault::Trimmed(why) => why,
+            Fault::Word(why) | Fault::Take(why) | Fault::Trimmed(why) | Fault::Unsure(why) => why,
         }
     }
 }
@@ -227,6 +268,22 @@ impl<'a> Speech<'a> {
 
     /// The take a value of `owner` names (`of`, else the owner's speech
     /// clock, else the scope's, else the scope's only take).
+    /// [`Self::take_for`] for something placed ON its words: a take whose
+    /// timing is unsure ([`Take::unsure`]) is a [`Fault::Unsure`], so
+    /// nothing lands on words that may be wrong.
+    pub fn take_on_words(
+        &self,
+        own_clock: Option<&SpeechClock>,
+        owner: &str,
+        of: Option<&str>,
+    ) -> Result<(Take, Vec<TimingProblem>), Fault> {
+        let (take, warnings) = self.take_for(own_clock, owner, of)?;
+        match take.unsure() {
+            Some(why) => Err(Fault::Unsure(why)),
+            None => Ok((take, warnings)),
+        }
+    }
+
     pub fn take_for(
         &self,
         own_clock: Option<&SpeechClock>,
@@ -390,11 +447,12 @@ impl<'a> Speech<'a> {
         grid: &Grid,
         near: Option<(f64, f64)>,
     ) -> Result<Resolved, Fault> {
-        let (take, mut warnings) = self.take_for(
-            owner.speech_clock.as_ref(),
-            &owner.name,
-            value.of.as_deref(),
-        )?;
+        let (take, mut warnings) = self
+            .take_on_words(owner.speech_clock.as_ref(), &owner.name, value.of.as_deref())
+            .map_err(|f| match f {
+                Fault::Unsure(why) => Fault::Unsure(format!("{why}; the stored seconds stand")),
+                other => other,
+            })?;
         let plays = take.plays();
         // The plays a value may land in: the one it names, else all.
         let pool: Vec<Take> = match value.play {
@@ -690,11 +748,12 @@ impl<'a> Speech<'a> {
         owner: &ProjectLayer,
         during: &During,
     ) -> Result<(f64, f64, String, String), Fault> {
-        let (take, _) = self.take_for(
-            owner.speech_clock.as_ref(),
-            &owner.name,
-            during.of.as_deref(),
-        )?;
+        let (take, _) = self
+            .take_on_words(owner.speech_clock.as_ref(), &owner.name, during.of.as_deref())
+            .map_err(|f| match f {
+                Fault::Unsure(why) => Fault::Unsure(format!("{why}; the stored seconds stand")),
+                other => other,
+            })?;
         let words = &take.timing.words;
         let (first, last) = match (&during.word, during.words, during.sentence) {
             (Some(word), None, None) => {
@@ -790,6 +849,11 @@ impl Fault {
                 spec,
                 why,
             },
+            Fault::Unsure(why) => TimingProblem::SpeechNotPlaced {
+                layer,
+                what: format!("{field} {spec}"),
+                why,
+            },
         }
     }
 }
@@ -833,8 +897,16 @@ pub(crate) fn expand_per(
             });
             continue;
         }
-        let take = match speech.take_for(None, &here, entry.of.as_deref()) {
+        let take = match speech.take_on_words(None, &here, entry.of.as_deref()) {
             Ok((take, _)) => take,
+            Err(Fault::Unsure(why)) => {
+                problems.push(TimingProblem::SpeechNotPlaced {
+                    layer: here,
+                    what: "slides per sentence".into(),
+                    why: format!("{why}; the stored seconds stand"),
+                });
+                continue;
+            }
             Err(f) => {
                 problems.push(TimingProblem::Generator {
                     layer: here,
@@ -975,6 +1047,11 @@ pub(crate) fn speech_pass(
                     layer: layer.name.clone(),
                     field: field.into(),
                     spec,
+                    why,
+                },
+                Fault::Unsure(why) => TimingProblem::SpeechNotPlaced {
+                    layer: layer.name.clone(),
+                    what: format!("{field} {spec}"),
                     why,
                 },
             })
@@ -1301,7 +1378,7 @@ pub(crate) fn findings(
             problems.push(TimingProblem::SpeechEstimated { take: id.clone() });
         } else if t.estimated {
             problems.push(TimingProblem::SpeechPlaceholder { take: id.clone() });
-        } else if t.confidence < 0.6 {
+        } else if t.confidence < promo_model::speech::TRUSTED_FROM {
             problems.push(TimingProblem::SpeechUnsure {
                 take: id.clone(),
                 confidence: t.confidence,
@@ -1539,7 +1616,7 @@ impl<'a> Speech<'a> {
     fn take_at(&self, owner: &ProjectLayer, t: f64) -> Result<Take, String> {
         if owner.speech_clock.is_some() || self.clock.is_some() {
             return self
-                .take_for(owner.speech_clock.as_ref(), &owner.name, None)
+                .take_on_words(owner.speech_clock.as_ref(), &owner.name, None)
                 .map(|(take, _)| take)
                 .map_err(Fault::why);
         }
@@ -1551,7 +1628,7 @@ impl<'a> Speech<'a> {
                     .is_some_and(|r| promo_model::speech::take_script(r).is_some())
         });
         let of = playing.map(|p| p.id.clone());
-        self.take_for(None, &owner.name, of.as_deref())
+        self.take_on_words(None, &owner.name, of.as_deref())
             .map(|(take, _)| take)
             .map_err(Fault::why)
     }

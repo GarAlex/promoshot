@@ -380,10 +380,19 @@ pub enum TimingProblem {
         units: usize,
         span: Option<(u32, u32)>,
     },
-    /// A synced caption reveal that cannot be matched at all: it walks at
-    /// its own pace.
+    /// A synced caption reveal with no times it can trust — unmatched, or
+    /// on an unsure timing: it shows whole, no word lit.
     RevealSync {
         layer: String,
+        why: String,
+    },
+    /// Something placed on a take's words (a time, `during`, captions)
+    /// whose timing is unsure (`speech::TRUSTED_FROM`): not placed — the
+    /// stored seconds stand, no captions are made. A warning, not a
+    /// break: plain is the designed answer, wrong is not.
+    SpeechNotPlaced {
+        layer: String,
+        what: String,
         why: String,
     },
     /// A `per` sentence entry whose layers and the take's sentences differ
@@ -723,8 +732,11 @@ impl std::fmt::Display for TimingProblem {
             }
             Self::RevealSync { layer, why } => write!(
                 f,
-                "caption \"{layer}\": its reveal cannot sync — {why}; it walks at its own pace"
+                "caption \"{layer}\": its reveal cannot sync — {why}; it shows whole, no word lit"
             ),
+            Self::SpeechNotPlaced { layer, what, why } => {
+                write!(f, "layer \"{layer}\": {what} — {why}")
+            }
             Self::CutMidWord {
                 layer,
                 at,

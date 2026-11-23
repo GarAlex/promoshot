@@ -198,6 +198,14 @@ pub const ALIGNER_VERSION: u32 = 3;
 /// like "GPT"; a record from before stands — an estimate is a guess.)
 pub const ESTIMATE_VERSION: u32 = 1;
 
+/// A measured timing (aligned, transcribed) this sure of itself, or more,
+/// is trusted: under it nothing is placed on its words — a synced reveal
+/// shows its caption whole, a take makes no captions, and a time on a word
+/// keeps the seconds the file stores. Wrong is worse than plain: a song
+/// over music aligns at a few hundredths, and karaoke lit on those times
+/// lights the wrong words.
+pub const TRUSTED_FROM: f64 = 0.6;
+
 /// Where a take's word times came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TimingSource {
@@ -322,6 +330,7 @@ pub struct TakeTiming {
     /// True only for `source: "estimate"` — so a reader never parses the
     /// source to learn whether it may trust the times.
     pub estimated: bool,
+
     /// 0–1 for the take as a whole.
     pub confidence: f64,
     pub words: Vec<Word>,

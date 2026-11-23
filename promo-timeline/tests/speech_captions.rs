@@ -169,7 +169,10 @@ fn synced_reveal_maps_caption_units_to_take_words() {
     assert!(e[1] > e[0] && e[1] < e[2], "{e:?}");
     assert!(report.problems.iter().any(|p| matches!(p,
         TimingProblem::RevealUnmatched { layer, matched: 3, units: 4, .. } if layer == "e")));
-    assert!(reveal(&meta, "f").unit_times.is_none());
+    // Nothing matched: shown whole, never a walk at its own pace.
+    let f = reveal(&meta, "f");
+    assert!(f.unit_times.unwrap().iter().all(|t| *t == 0.0));
+    assert!(f.unit_ends.unwrap().iter().all(|t| *t == 0.0));
     assert!(report.problems.iter().any(|p| matches!(p,
         TimingProblem::RevealSync { layer, .. } if layer == "f")));
 }
@@ -835,4 +838,56 @@ fn a_synced_reveal_without_spaces_walks_its_words() {
     let units = promo_model::speech::unit_texts(first.caption_text.as_deref().unwrap());
     assert_eq!(times.len(), units.len(), "{units:?} {report:?}");
     assert!(times.windows(2).all(|t| t[0] < t[1]), "{times:?}");
+}
+
+/// Timing under `speech::TRUSTED_FROM` places nothing on its words — wrong
+/// is worse than plain: a synced reveal shows its caption whole with no
+/// word lit, a take makes no captions, a time on a word keeps the seconds
+/// the file stores. Each is a warning, never a break, and the same take
+/// timed surely does all three.
+#[test]
+fn unsure_timing_disables_word_effects_rather_than_guessing() {
+    let mut unsure = timing(SCRIPT, 6.0);
+    unsure.source = TimingSource::Aligned;
+    unsure.confidence = 0.03;
+    let mut file = narrated(json!({}));
+    let mut layers = file["layers"].as_array().unwrap().clone();
+    layers.push(caption(
+        "k",
+        "Primes never end, said Euclid.",
+        json!({"by": "word", "mode": "highlight", "sync": {"of": "intro"}}),
+        json!({}),
+    ));
+    layers.push(json!({"id": "slide", "name": "slide", "sortIndex": 3, "kind": "caption",
+        "isEnabled": true, "startTime": {"word": "Primes", "of": "intro"}, "duration": 1,
+        "captionText": "x", "keyframes": []}));
+    file["layers"] = Value::Array(layers);
+
+    let (meta, report) = resolved_with(&file, &inputs_with(unsure));
+    let karaoke = reveal(&meta, "k");
+    let times = karaoke.unit_times.clone().expect("plain times");
+    assert!(times.iter().all(|t| *t == 0.0), "{times:?}");
+    assert_eq!(karaoke.unit_ends.as_deref(), Some(&times[..]), "none lit");
+    let progress = promo_timeline::reveal::progress(&karaoke, layer(&meta, "k"), 3.0, times.len());
+    assert_eq!((progress.shown, progress.active), (times.len(), None));
+    assert!(generated(&meta).is_empty(), "no captions on unsure words");
+    assert_eq!(layer(&meta, "slide").start_time, 0.0, "the stored seconds stand");
+    assert!(
+        !report.problems.iter().any(TimingProblem::is_break),
+        "{:?}",
+        report.problems
+    );
+    let said: Vec<String> = report.problems.iter().map(|p| p.to_string()).collect();
+    assert!(
+        said.iter().any(|p| p.contains("captions") && p.contains("unsure (aligned 0.03")),
+        "{said:?}"
+    );
+    assert!(said.iter().any(|p| p.contains("shows whole")), "{said:?}");
+    assert!(said.iter().any(|p| p.contains("stored seconds stand")), "{said:?}");
+
+    // Sure, the same file does all three.
+    let (meta, _) = resolved_with(&file, &inputs());
+    assert!(reveal(&meta, "k").unit_times.unwrap().iter().any(|t| *t > 0.0));
+    assert!(!generated(&meta).is_empty());
+    assert!(layer(&meta, "slide").start_time > 0.0);
 }

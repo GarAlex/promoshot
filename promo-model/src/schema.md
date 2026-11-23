@@ -430,7 +430,13 @@ was voiced (ElevenLabs, Google, the local voices), else promo aligns the
 take to its text on open and keeps the answer in `Resources/.words/`,
 keyed by the audio and the text — `promo words` (promo_words) shows it.
 A take with no timing yet lays out on an estimate, validate says so, and
-a render waits for it. Rewrite a line and re-voice it, and every cut on
+a render waits for it. A MEASURED timing under 0.6 confidence (an alignment or
+a transcription unsure of itself — a song over its music) places nothing
+on its words, because wrong is worse than plain: a synced reveal or
+karaoke shows its caption whole with no word lit, `captions` makes none,
+and a time, `during` or word trigger keeps the seconds the file stores.
+validate warns for each; a surer timing (the provider's, an import, a
+transcription) lifts it. Rewrite a line and re-voice it, and every cut on
 its words moves with them. validate lists "Speech times": each value, the
 word it landed on, and the timing's source. A recording's script is its
 `transcript` (a narration's is `speech.text`); a word the timing got

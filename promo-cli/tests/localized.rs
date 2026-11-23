@@ -501,6 +501,19 @@ fn a_languages_take_is_what_the_render_plays() {
                        "placement": {"anchor": "center"}}]}),
     );
     std::fs::write(&path, doc.to_string()).unwrap();
+    // Each take's words as a voice would hand them over: the tones are no
+    // speech, and an alignment of them is too unsure to place anything on.
+    for (file, script, seconds) in [
+        ("r1.wav", "One one one. Two two two.", 1.0),
+        ("r1.de.wav", "Eins eins eins. Zwei zwei zwei.", 3.0),
+    ] {
+        let mut timing = promo_model::estimate::estimate_words(script, seconds, None, 1.0);
+        timing.source = promo_model::speech::TimingSource::Provider("test".into());
+        timing.estimated = false;
+        timing.confidence = 1.0;
+        timing.aligner_version = None;
+        promo_model::word_cache::store(&dir, &resources.join(file), timing).unwrap();
+    }
 
     let out = dir.with_extension("videos").join("film.mp4");
     let render = |language: Option<&str>| {
@@ -562,10 +575,11 @@ fn a_languages_take_is_what_the_render_plays() {
         };
         std::fs::read(file).unwrap()
     };
-    // (A silent source aligns its second sentence late: at 0.9 of its 1 s.)
-    assert!(lit(shot("0.95", None)), "the source says it by then");
-    assert!(!lit(shot("0.95", Some("de"))), "German has not said it yet");
-    assert!(lit(shot("2.95", Some("de"))), "German is saying it");
+    // Sentence 2 is the last ~43% of each take: 0.57–1 s in the source,
+    // 1.7–3 s in German.
+    assert!(lit(shot("0.75", None)), "the source says it by then");
+    assert!(!lit(shot("0.75", Some("de"))), "German has not said it yet");
+    assert!(lit(shot("2.3", Some("de"))), "German is saying it");
 
     let (_, report) = promo(&["validate", dir.to_str().unwrap()]);
     assert!(

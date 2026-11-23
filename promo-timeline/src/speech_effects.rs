@@ -314,6 +314,9 @@ pub(crate) fn sync_reveals(
                         problems.push(estimated);
                     }
                 }
+                if let Some(why) = take.unsure() {
+                    return Err(why);
+                }
                 // A looping take: the play the caption sits in.
                 let take = take.play_holding(caption_middle(layer));
                 unit_times(&text, &sync, &take, layer.start_time)
@@ -333,12 +336,15 @@ pub(crate) fn sync_reveals(
                         Some(found.ends.iter().copied().map(us).collect::<Vec<_>>()),
                     )
                 }
+                // No times it can trust: every word there from the start and
+                // none lit — the caption whole, never a guessed walk.
                 Err(why) => {
                     problems.push(TimingProblem::RevealSync {
                         layer: layer.name.clone(),
                         why,
                     });
-                    (None, None)
+                    let plain = vec![0.0; unit_texts(&text).len().max(1)];
+                    (Some(plain.clone()), Some(plain))
                 }
             };
             if on_layer {
@@ -525,6 +531,14 @@ pub(crate) fn expand_captions(
             continue;
         }
         let take = match speech.take_for(None, &layer.name, Some(&layer.id)) {
+            Ok((take, _)) if take.unsure().is_some() => {
+                problems.push(TimingProblem::SpeechNotPlaced {
+                    layer: layer.name.clone(),
+                    what: "captions".into(),
+                    why: format!("{}; none made", take.unsure().unwrap_or_default()),
+                });
+                continue;
+            }
             Ok((take, _)) => take,
             Err(f) => {
                 problems.push(TimingProblem::Generator {
@@ -658,7 +672,7 @@ pub fn reveal_match(
         inputs,
     );
     let found = speech
-        .take_for(layer.speech_clock.as_ref(), &layer.name, sync.of.as_deref())
+        .take_on_words(layer.speech_clock.as_ref(), &layer.name, sync.of.as_deref())
         .map_err(|f| f.why())
         .and_then(|(take, _)| {
             let take = take.play_holding(caption_middle(layer));

@@ -93,7 +93,7 @@ fn speech_times(
         .ok_or("a speech trigger here has no take to count on")?;
     let of = trigger.get("of").and_then(Value::as_str);
     let (take, _) = speech
-        .take_for(owner.clock, owner.name, of)
+        .take_on_words(owner.clock, owner.name, of)
         .map_err(|f| f.why())?;
     let words = &take.timing.words;
     let mut source: Vec<f64> = Vec::new();
@@ -486,10 +486,11 @@ pub(crate) fn expand_layer(
         let indices = match found {
             Ok(indices) => indices,
             Err(why) => {
-                problems.push(TimingProblem::Generator {
-                    layer: layer.name.clone(),
-                    why: format!("pulse: {why}"),
-                });
+                problems.push(crate::speech_time::generator_problem(
+                    layer.name.clone(),
+                    "pulse",
+                    why,
+                ));
                 continue;
             }
         };
@@ -574,10 +575,11 @@ pub(crate) fn expand_layer(
         let indices = match found {
             Ok(indices) => indices,
             Err(why) => {
-                problems.push(TimingProblem::Generator {
-                    layer: layer.name.clone(),
-                    why: format!("shake: {why}"),
-                });
+                problems.push(crate::speech_time::generator_problem(
+                    layer.name.clone(),
+                    "shake",
+                    why,
+                ));
                 continue;
             }
         };
@@ -820,9 +822,13 @@ pub(crate) fn expand_flash(meta: &mut ProjectMetadata, ctx: &Context) -> Vec<Tim
         let indices = match found {
             Ok(indices) => indices,
             Err(why) => {
-                problems.push(TimingProblem::Generator {
-                    layer: format!("flash {n}"),
-                    why,
+                problems.push(if why.contains(crate::speech_time::UNSURE_MARK) {
+                    crate::speech_time::generator_problem(format!("flash {n}"), "flash", why)
+                } else {
+                    TimingProblem::Generator {
+                        layer: format!("flash {n}"),
+                        why,
+                    }
                 });
                 continue;
             }

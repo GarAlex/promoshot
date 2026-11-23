@@ -59,6 +59,7 @@ impl promo_speech::Synth for FakeSynth {
                 against: text.to_string(),
             }),
             note: None,
+            sung: None,
         })
     }
 }
