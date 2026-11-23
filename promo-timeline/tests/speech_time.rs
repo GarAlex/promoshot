@@ -736,3 +736,57 @@ fn validate_lists_speech_times() {
     assert_eq!(clocks[0]["words"], 11);
     assert_eq!(clocks[0]["sentences"], 3);
 }
+
+/// Issue #26: a position or a during naming a piece of a script word —
+/// "twenty" of "twenty-five", as an import split it — lands on the
+/// piece's own seconds; the whole word still resolves as before.
+#[test]
+fn a_piece_of_a_word_resolves_to_its_seconds() {
+    let script = "About twenty-five minutes.";
+    let mut t = timing(script);
+    let w = &mut t.words[1];
+    (w.start, w.end) = (1.0, 2.0);
+    w.pieces = Some(vec![
+        promo_model::speech::WordPiece {
+            text: "twenty".into(),
+            start: 1.0,
+            end: 1.4,
+        },
+        promo_model::speech::WordPiece {
+            text: "five".into(),
+            start: 1.4,
+            end: 2.0,
+        },
+    ]);
+    let mut grids = BeatGrids::default();
+    grids.words.by_resource.insert("intro".into(), t);
+    let mut value = project(
+        json!({"canvasWidth": 320, "canvasHeight": 180}),
+        json!([
+            voice(json!({})),
+            image("a", json!({"startTime": {"word": "five", "of": "intro"}})),
+            image(
+                "b",
+                json!({"startTime": {"word": "twenty-five", "of": "intro"}})
+            ),
+            image(
+                "c",
+                json!({"startTime": 0, "during": {"word": "twenty", "of": "intro"}})
+            ),
+        ]),
+        json!({}),
+    );
+    value["resources"][0]["speech"]["text"] = json!(script);
+    let (meta, report) = resolved_with(&value, &grids);
+    assert!(breaks(&report).is_empty(), "{:?}", breaks(&report));
+    // The voice starts at 2 s: the piece "five" at 1.4 s of the take.
+    assert!(
+        close(layer(&meta, "a").start_time, 3.4),
+        "{}",
+        layer(&meta, "a").start_time
+    );
+    assert!(close(layer(&meta, "b").start_time, 3.0));
+    let c = layer(&meta, "c");
+    assert!(close(c.start_time, 3.0), "{}", c.start_time);
+    assert!(close(c.duration.unwrap(), 0.4), "{:?}", c.duration);
+}

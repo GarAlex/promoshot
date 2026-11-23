@@ -752,8 +752,23 @@ pub fn record(script_text: &str, spoken: &Spoken, duration: f64) -> TakeTiming {
         .iter()
         .zip(words)
         .zip(interpolated)
-        .map(|((w, times), guessed)| {
+        .zip(&runs)
+        .map(|(((w, times), guessed), run)| {
             let (start, end) = times.unwrap_or((0.0, 0.0));
+            // Several source tokens folded into one script word keep their
+            // own seconds, inside the word's (issue #26).
+            let pieces = (run.len() > 1 && !guessed).then(|| {
+                run.iter()
+                    .map(|&k| {
+                        let s = spoken_words[k].start.clamp(start, end);
+                        promo_model::speech::WordPiece {
+                            text: spoken_words[k].text.clone(),
+                            start: round_us(s),
+                            end: round_us(ends[k].clamp(s, end)),
+                        }
+                    })
+                    .collect()
+            });
             Word {
                 text: w.text.clone(),
                 start: round_us(start),
@@ -762,6 +777,7 @@ pub fn record(script_text: &str, spoken: &Spoken, duration: f64) -> TakeTiming {
                 confidence: (guessed && confidence > 0.3).then_some(0.3),
                 interpolated: guessed,
                 prominence: None,
+                pieces,
             }
         })
         .collect();
@@ -1507,5 +1523,41 @@ mod tests {
         assert!(imported_record(script, wrapped, Some("bad name"), 2.0)
             .unwrap_err()
             .contains("provider"));
+    }
+
+    /// Issue #26: tokens an import splits a hyphenated script word into
+    /// stay as the word's pieces, each with its own seconds; the word
+    /// keeps the script's spelling and spans them.
+    #[test]
+    fn a_split_word_keeps_its_pieces() {
+        let script = "About twenty-five minutes. Cock-a-doodle-doo.";
+        let file = r#"[{"text":"About","start":0.00,"end":0.30},
+            {"text":"twenty","start":0.30,"end":0.55},{"text":"five","start":0.55,"end":0.85},
+            {"text":"minutes","start":0.85,"end":1.20},{"text":"Cock","start":1.50,"end":1.70},
+            {"text":"a","start":1.70,"end":1.85},{"text":"doodle","start":1.85,"end":2.15},
+            {"text":"doo","start":2.15,"end":2.45}]"#;
+        let timing = imported_record(script, file, Some("test"), 3.0).unwrap();
+        let texts: Vec<&str> = timing.words.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["About", "twenty-five", "minutes", "Cock-a-doodle-doo"]
+        );
+        let twenty_five = &timing.words[1];
+        assert_eq!((twenty_five.start, twenty_five.end), (0.30, 0.85));
+        let pieces: Vec<(&str, f64, f64)> = twenty_five
+            .pieces
+            .iter()
+            .flatten()
+            .map(|p| (p.text.as_str(), p.start, p.end))
+            .collect();
+        assert_eq!(pieces, [("twenty", 0.30, 0.55), ("five", 0.55, 0.85)]);
+        assert_eq!(
+            timing.words[3].piece_named("doodle").map(|p| p.start),
+            Some(1.85)
+        );
+        assert!(
+            timing.words[0].pieces.is_none(),
+            "a word said whole has none"
+        );
     }
 }

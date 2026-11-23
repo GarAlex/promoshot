@@ -384,7 +384,10 @@ a layer's `startTime` and `duration`, and a keyframe's `time`.
 
 - `{"word": 12, "of": "intro"}` — word 12 (1-based) of take `intro`;
   `{"word": "Euclid", "of": "intro"}` the first word that says it (case and
-  outer punctuation ignored), `"nth": 2` the second.
+  outer punctuation ignored), `"nth": 2` the second. Words are the
+  script's: when a timing voiced one in several tokens (an import's
+  `twenty` + `five` for "twenty-five"), the word keeps them as `pieces`,
+  and `{"word": "twenty"}` (or a `during` on it) lands on the piece.
 - `{"sentence": 2, "of": "intro"}` — sentence 2.
 - `{"snap": "gap", "near": 4.2, "of": "intro"}` — the gap between words
   nearest 4.2 s (the safe place to cut); also `"word"`, `"wordEnd"`,
@@ -1596,10 +1599,14 @@ list order: `{ "kind": "compressor", "thresholdDb": -18, "ratio": 3,
 "attackMs": 20, "releaseMs": 250 }`, `{ "kind": "eq", "frequencyHz":
 1000, "widthOctaves": 1, "gainDb": 3 }` (one band per entry).
 `{ "kind": "normalize", "targetLufs": -16 }` is one static gain at the
-end of the chain, wherever it sits in the list: the whole resource,
-through its other effects, measured as ITU BS.1770 loudness (pauses
-gated out) and moved to the target, its peak held under -1.5 dBFS and
-the gain within ±24 dB. Headless mixes with ffmpeg's filters and the
+end of the chain, wherever it sits in the list: the part of the
+resource each layer plays (its media cut and trims; the whole file when
+it plays all of it), through its other effects, measured as ITU BS.1770
+loudness (pauses gated out) and moved to the target, its peak held
+under -1.5 dBFS and the gain within ±24 dB. A take whose peaks are
+already over the ceiling is never turned down to meet it when it was
+asked to come up; validate warns when a normalize lands more than 1 LU
+short, and says which limit held it. Headless mixes with ffmpeg's filters and the
 apps with AVAudioEngine, and the core plans the normalize gain for both.
 An unknown kind reads as `none` and is skipped. A project with any
 effect carries `minReaderVersion: 21`.

@@ -845,6 +845,7 @@ pub fn align(x: &[f64], duration: f64, script: &str, options: &AlignOptions) -> 
             confidence: Some((c * 100.0).round() / 100.0),
             interpolated: false,
             prominence: None,
+            pieces: None,
         });
     }
     // Keep them in order after refinement.
@@ -919,6 +920,7 @@ fn spread(tokens: &promo_model::speech::Script, script: &str, duration: f64) -> 
             confidence: None,
             interpolated: true,
             prominence: None,
+            pieces: None,
         })
         .collect();
     let mut extra = serde_json::Map::new();

@@ -687,26 +687,40 @@ impl<'a> Speech<'a> {
                         .map(|w| w.text.to_lowercase())
                         .collect::<String>()
                 });
-                let hits: Vec<usize> = words
+                // A word, or a piece of one: the source's own token inside
+                // a script word it voiced in several (issue #26) — "twenty"
+                // inside "twenty-five" lands on the piece's seconds.
+                let hits: Vec<(usize, Option<f64>)> = words
                     .iter()
                     .enumerate()
-                    .filter(|(k, w)| match &whole {
+                    .filter_map(|(k, w)| match &whole {
                         Some(whole) => {
                             let mut said = String::new();
-                            words[*k..].iter().any(|next| {
-                                said.push_str(&next.text.to_lowercase());
-                                if said.len() >= whole.len() {
-                                    return said == *whole;
-                                }
-                                false
-                            })
+                            words[k..]
+                                .iter()
+                                .any(|next| {
+                                    said.push_str(&next.text.to_lowercase());
+                                    if said.len() >= whole.len() {
+                                        return said == *whole;
+                                    }
+                                    false
+                                })
+                                .then_some((k, None))
                         }
-                        None => fold_word(&w.text) == wanted,
+                        None if fold_word(&w.text) == wanted => Some((k, None)),
+                        None => w.piece_named(&wanted).map(|p| {
+                            (
+                                k,
+                                Some(match edge {
+                                    SpeechEdge::Start => p.start,
+                                    SpeechEdge::End => p.end,
+                                }),
+                            )
+                        }),
                     })
-                    .map(|(k, _)| k)
                     .collect();
                 match hits.get(*nth as usize - 1) {
-                    Some(&k) => Ok((at(k), Some(k))),
+                    Some(&(k, piece)) => Ok((piece.unwrap_or_else(|| at(k)), Some(k))),
                     None if hits.is_empty() => {
                         let closest = words
                             .iter()
@@ -763,6 +777,8 @@ impl<'a> Speech<'a> {
                 other => other,
             })?;
         let words = &take.timing.words;
+        // A piece of a word (issue #26) spans its own seconds.
+        let mut piece_span: Option<(f64, f64)> = None;
         let (first, last) = match (&during.word, during.words, during.sentence) {
             (Some(word), None, None) => {
                 let i = match word {
@@ -772,12 +788,26 @@ impl<'a> Speech<'a> {
                         .ok_or_else(|| {
                             Fault::Word(format!("word {n} is past the end of \"{}\"", take.id))
                         })?,
-                    WordRef::Text(text) => words
-                        .iter()
-                        .position(|w| fold_word(&w.text) == fold_word(text))
-                        .ok_or_else(|| {
-                            Fault::Word(format!("no word \"{text}\" in \"{}\"", take.id))
-                        })?,
+                    WordRef::Text(text) => {
+                        let wanted = fold_word(text);
+                        match words.iter().position(|w| fold_word(&w.text) == wanted) {
+                            Some(i) => i,
+                            None => {
+                                let (i, piece) = words
+                                    .iter()
+                                    .enumerate()
+                                    .find_map(|(i, w)| w.piece_named(&wanted).map(|p| (i, p)))
+                                    .ok_or_else(|| {
+                                        Fault::Word(format!(
+                                            "no word \"{text}\" in \"{}\"",
+                                            take.id
+                                        ))
+                                    })?;
+                                piece_span = Some((piece.start, piece.end));
+                                i
+                            }
+                        }
+                    }
                 };
                 (i, i)
             }
@@ -808,14 +838,15 @@ impl<'a> Speech<'a> {
                 ))
             }
         };
-        let start = take.out(words[first].start).ok_or_else(|| {
+        let (from, to) = piece_span.unwrap_or((words[first].start, words[last].end));
+        let start = take.out(from).ok_or_else(|| {
             Fault::Trimmed(format!(
                 "word {} \"{}\" is trimmed out",
                 first + 1,
                 words[first].text
             ))
         })?;
-        let end = take.out(words[last].end).ok_or_else(|| {
+        let end = take.out(to).ok_or_else(|| {
             Fault::Trimmed(format!(
                 "word {} \"{}\" is trimmed out",
                 last + 1,

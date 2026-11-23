@@ -566,6 +566,7 @@ pub fn estimate_words(
                 confidence: None,
                 interpolated: false,
                 prominence: None,
+                pieces: None,
             }
         })
         .collect();

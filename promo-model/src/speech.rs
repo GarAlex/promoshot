@@ -299,6 +299,31 @@ pub struct Word {
     /// 0–1, from the audio (S8): a cue for generators, never a timing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prominence: Option<f64>,
+    /// The source's own tokens this word was folded from, when it voiced
+    /// the word in several (an aligner's `twenty` + `five` for the
+    /// script's "twenty-five"). A speech position may name a piece
+    /// (`{"word": "twenty"}`) and lands on its seconds (issue #26).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pieces: Option<Vec<WordPiece>>,
+}
+
+/// One source token inside a script word.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordPiece {
+    pub text: String,
+    pub start: f64,
+    pub end: f64,
+}
+
+impl Word {
+    /// The piece of this word that `folded` (a [`fold_word`] spelling)
+    /// names.
+    pub fn piece_named(&self, folded: &str) -> Option<&WordPiece> {
+        self.pieces
+            .iter()
+            .flatten()
+            .find(|p| fold_word(&p.text) == folded)
+    }
 }
 
 /// One sentence of the take.
@@ -826,6 +851,7 @@ pub fn regrouped(timing: TakeTiming) -> TakeTiming {
                 .iter()
                 .filter_map(|old| old.prominence)
                 .max_by(f64::total_cmp),
+            pieces: (covered.len() == 1).then(|| first.pieces.clone()).flatten(),
         });
     }
     let sentences = sentences_of(&script, &words);
@@ -980,6 +1006,8 @@ pub fn apply_fixes(timing: &mut TakeTiming, fixes: &[WordFix]) -> Vec<String> {
         }
         word.start = round_us(start);
         word.end = round_us(end);
+        // A fixed word's pieces were the source's seconds, not the fix's.
+        word.pieces = None;
         word.interpolated = false;
         word.confidence = (timing.confidence != 1.0).then_some(1.0);
         moved = true;
@@ -1613,7 +1641,8 @@ mod tests {
     /// language sung in or that there are no vocals, then the lyrics.
     #[test]
     fn a_song_is_timed_by_its_sung_words_not_its_directions() {
-        let lyrics = "[Verse]\nShoot it once, post it everywhere\n\n[Chorus 2]\nPromoShot (oh-oh): go\n\
+        let lyrics =
+            "[Verse]\nShoot it once, post it everywhere\n\n[Chorus 2]\nPromoShot (oh-oh): go\n\
                       [0:20 - 0:30] Outro:\nVerse 1:\nLast line";
         assert_eq!(
             sung_words(lyrics),
@@ -1829,6 +1858,7 @@ mod tests {
             confidence: None,
             interpolated: false,
             prominence: None,
+            pieces: None,
         };
         let old = vec![
             word(0, 0.0),
@@ -1935,6 +1965,7 @@ mod tests {
                 confidence: None,
                 interpolated: false,
                 prominence: None,
+                pieces: None,
             })
             .collect();
         TakeTiming {
