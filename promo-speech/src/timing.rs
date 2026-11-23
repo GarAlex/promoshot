@@ -23,6 +23,9 @@ pub struct Take {
     /// Why a take that could have been timed was not (fewer marks than
     /// words, a refused SSML request) — a report line, never an error.
     pub note: Option<String>,
+    /// The lyrics a song provider says it sang (Lyria's text part), which
+    /// may repeat or reword the ones it was given.
+    pub sung: Option<String>,
 }
 
 /// What a source said, before it is mapped onto the script's words.
@@ -62,6 +65,7 @@ pub fn elevenlabs_take(text: &str, answer: &Value) -> Result<Take, String> {
     Ok(Take {
         audio,
         spoken,
+        sung: None,
         note,
     })
 }
@@ -304,6 +308,7 @@ pub fn google_take(text: &str, answer: &Value, marks: &[usize]) -> Result<Take, 
         return Ok(Take {
             audio,
             spoken: None,
+            sung: None,
             note: Some(format!(
                 "Google returned {} of {} word marks — the take will be aligned",
                 points.len(),
@@ -349,6 +354,7 @@ pub fn google_take(text: &str, answer: &Value, marks: &[usize]) -> Result<Take, 
             confidence: 0.95,
             against: text.to_string(),
         }),
+        sung: None,
         note: None,
     })
 }

@@ -858,9 +858,61 @@ pub fn take_script(resource: &crate::ProjectResource) -> Option<String> {
         .and_then(|s| s.get("text"))
         .and_then(Value::as_str)
         .filter(|t| !t.trim().is_empty());
-    spoken
-        .map(str::to_string)
-        .or_else(|| resource.transcript.clone().filter(|t| !t.trim().is_empty()))
+    let song = resource
+        .extra
+        .get("speech")
+        .and_then(|s| s.get("provider"))
+        .and_then(Value::as_str)
+        .is_some_and(is_song);
+    match spoken {
+        Some(text) if song => Some(sung_words(text)).filter(|t| !t.trim().is_empty()),
+        Some(text) => Some(text.to_string()),
+        None => resource.transcript.clone().filter(|t| !t.trim().is_empty()),
+    }
+}
+
+/// The words a song's lyrics have someone sing: the lyrics without their
+/// directions. A `[...]` span is a direction (`[Verse]`, `[Chorus 2]`,
+/// `[0:00 - 0:10]`), and so is a short label ending in a colon that opens
+/// a line one of them was on (`[0:00 - 0:10] Intro:`) or stands alone on
+/// its line (`Verse 1:`). Everything else is sung, ad-libs in parentheses
+/// included.
+pub fn sung_words(lyrics: &str) -> String {
+    let label = |text: &str| -> Option<usize> {
+        let colon = text.find(':')?;
+        let head = &text[..colon];
+        (!head.trim().is_empty()
+            && head.split_whitespace().count() <= 3
+            && !head.contains(['.', ',', '!', '?']))
+        .then_some(colon + 1)
+    };
+    lyrics
+        .lines()
+        .filter_map(|line| {
+            let mut kept = String::new();
+            let mut depth = 0usize;
+            let mut directed = false;
+            for c in line.chars() {
+                match c {
+                    '[' => {
+                        depth += 1;
+                        directed = true;
+                    }
+                    ']' if depth > 0 => depth -= 1,
+                    _ if depth == 0 => kept.push(c),
+                    _ => {}
+                }
+            }
+            let mut rest = kept.trim();
+            if let Some(end) = label(rest) {
+                if directed || rest[end..].trim().is_empty() {
+                    rest = rest[end..].trim();
+                }
+            }
+            (!rest.is_empty()).then(|| rest.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// A resource's `speech.wordFixes`, or a sentence saying what is wrong
@@ -1550,6 +1602,16 @@ pub fn needs_speech_reader(meta: &crate::ProjectMetadata) -> bool {
 mod tests {
     /// The request in words: style, length (never for the 30 s clip), the
     /// language sung in or that there are no vocals, then the lyrics.
+    #[test]
+    fn a_song_is_timed_by_its_sung_words_not_its_directions() {
+        let lyrics = "[Verse]\nShoot it once, post it everywhere\n\n[Chorus 2]\nPromoShot (oh-oh): go\n\
+                      [0:20 - 0:30] Outro:\nVerse 1:\nLast line";
+        assert_eq!(
+            sung_words(lyrics),
+            "Shoot it once, post it everywhere\nPromoShot (oh-oh): go\nLast line"
+        );
+    }
+
     #[test]
     fn a_song_request_is_sentences_lyria_reads() {
         let speech = serde_json::json!({ "text": " [Verse]\nla ", "style": "folk",

@@ -48,7 +48,7 @@ const FILE_BOUND_KEYS: &[&str] = &[
 
 /// Facts about one take's bytes, in `speech`: a language's own script makes
 /// a new take, and these say nothing about it unless its entry says them.
-const TAKE_BOUND_SPEECH: &[&str] = &["renderedHash", "placeholder", "wordFixes"];
+const TAKE_BOUND_SPEECH: &[&str] = &["renderedHash", "placeholder", "wordFixes", "sung"];
 
 /// The project's languages, as `languages` says.
 #[derive(Debug, Clone, PartialEq, Eq)]

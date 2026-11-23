@@ -99,3 +99,18 @@ fn word_fixes_read_from_the_take() {
     let err = promo_model::speech::word_fixes(&meta.resources.as_ref().unwrap()[0]).unwrap_err();
     assert!(err.contains("speech.wordFixes"), "{err}");
 }
+
+/// A song's timed words are its lyrics without their directions; a
+/// narration's text is timed whole.
+#[test]
+fn a_song_is_timed_by_its_sung_words() {
+    let script = |provider: &str| {
+        let mut project = base();
+        project["resources"][0]["speech"]["provider"] = json!(provider);
+        project["resources"][0]["speech"]["text"] = json!("[Verse]\nla la");
+        let meta = decode(&project);
+        promo_model::speech::take_script(&meta.resources.as_ref().unwrap()[0])
+    };
+    assert_eq!(script("lyria").as_deref(), Some("la la"));
+    assert_eq!(script("openai").as_deref(), Some("[Verse]\nla la"));
+}

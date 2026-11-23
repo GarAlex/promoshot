@@ -1356,6 +1356,8 @@ A reveal can arrive on a narration's words instead of at its own pace —
   voice); `seconds` the length asked for; `voiceID` the model,
   `lyria-3.5` (default) or `lyria-3-clip-preview` (always 30 s). The
   receipt covers all of them, and a language's song is sung in it.
+  Its words and captions are the lyrics without their tags; `sung`,
+  written with the take, is what Lyria says it sang.
 
       { "text": "[Chorus]\nShoot it once…", "provider": "lyria",
         "voiceID": "lyria-3.5", "style": "upbeat synth-pop, 118 BPM",

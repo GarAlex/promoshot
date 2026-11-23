@@ -92,9 +92,10 @@ pub fn generate(model: &str, prompt: &str, key: &str) -> Result<Take, String> {
     let bytes = post_bytes(&endpoint(model), &[("x-goog-api-key", key)], &body(prompt))
         .map_err(|e| explain(&e))?;
     let answer: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    let (audio, _sung) = parse(&answer)?;
+    let (audio, sung) = parse(&answer)?;
     Ok(Take {
         audio,
+        sung: Some(sung).filter(|s| !s.is_empty()),
         ..Take::default()
     })
 }

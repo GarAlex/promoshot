@@ -120,6 +120,7 @@ pub fn synthesize_local_timed(
                 confidence: 0.97,
                 against: text.to_string(),
             }),
+            sung: None,
             note: None,
         })
     }
@@ -1093,6 +1094,7 @@ pub fn settle_languages(
         let print = receipt(&script, resources_dir);
         let take = synth.synthesize_timed(&script.provider, &script.voice, &script.words)?;
         let audio = take.audio;
+        let sung = take.sung.clone().filter(|s| !s.trim().is_empty());
         // The bytes this take replaces — under its own name, or a stand-in
         // under another — and so the records that described them.
         let mut replaced: Vec<String> = bytes_key(&destination).into_iter().collect();
@@ -1157,6 +1159,11 @@ pub fn settle_languages(
             // A real take: whatever stood in for it is gone.
             if let Some(speech) = take["speech"].as_object_mut() {
                 speech.remove("placeholder");
+                // What a song provider says it sang, for this take only.
+                match &sung {
+                    Some(sung) => speech.insert("sung".into(), json!(sung)),
+                    None => speech.remove("sung"),
+                };
             }
         }
         persist(doc)?;
@@ -1615,6 +1622,7 @@ mod tests {
                             })
                             .collect(),
                     }),
+                    sung: None,
                     note: None,
                 })
             }
@@ -1961,6 +1969,7 @@ mod tests {
                         confidence: 1.0,
                         against: text.to_string(),
                     }),
+                    sung: None,
                     note: None,
                 })
             }
@@ -2019,6 +2028,13 @@ mod tests {
                 .push(format!("{provider}|{voice}|{text}"));
             Ok(b"ID3song".to_vec())
         }
+        fn synthesize_timed(&self, provider: &str, voice: &str, text: &str) -> Result<Take, String> {
+            Ok(Take {
+                audio: self.synthesize(provider, voice, text)?,
+                sung: Some("[Chorus]\nСвітло, світло".into()),
+                ..Take::default()
+            })
+        }
     }
 
     fn song(speech: Value) -> Value {
@@ -2064,6 +2080,10 @@ mod tests {
         let take = &doc["resources"][0];
         assert_eq!(take["filename"], "narration-S1.mp3");
         assert_eq!(take["speech"]["voiceID"], SONG_MODEL);
+        assert_eq!(
+            take["speech"]["sung"], "[Chorus]\nСвітло, світло",
+            "what Lyria says it sang is kept beside the take"
+        );
 
         // Settled: asked again, nothing is bought.
         settle(&mut doc, &dir, &synth, &measure, &mut |_| Ok(())).unwrap();
