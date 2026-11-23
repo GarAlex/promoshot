@@ -86,7 +86,15 @@ fn main() {
         }
     }
     if argv.first().map(String::as_str) == Some("key") {
-        match speak::key_command(&argv[1..], &mut std::io::stdin()) {
+        let typed = (argv.get(1).map(String::as_str) == Some("set"))
+            .then(|| argv.get(2))
+            .flatten()
+            .and_then(|provider| speak::prompt_for_key(provider));
+        let result = match typed {
+            Some(line) => speak::key_command(&argv[1..], &mut line.as_bytes()),
+            None => speak::key_command(&argv[1..], &mut std::io::stdin()),
+        };
+        match result {
             Ok(answer) => {
                 println!("{answer}");
                 return;

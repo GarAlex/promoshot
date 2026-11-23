@@ -461,6 +461,33 @@ pub fn voices(args: &Value, keys: &dyn promo_speech::KeyStore) -> Result<String,
 /// to the keyring. `set` reads the key from stdin (a pipe or a paste and
 /// Ctrl-D), so it never appears in a shell history or an argv; nothing
 /// here prints one.
+/// At a terminal, `key set` asks for the key and takes ONE line, typed
+/// unechoed (`stty -echo` where there is one), so Enter finishes it. Piped
+/// input is not a terminal and is read to its end, as before — `None`.
+pub fn prompt_for_key(provider: &str) -> Option<String> {
+    use std::io::{BufRead, IsTerminal, Write};
+    if !std::io::stdin().is_terminal() {
+        return None;
+    }
+    let stty = |arg: &str| {
+        std::process::Command::new("stty")
+            .arg(arg)
+            .stdin(std::process::Stdio::inherit())
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    eprint!("Paste the {provider} key, then Enter (it is not shown): ");
+    let _ = std::io::stderr().flush();
+    let hidden = stty("-echo");
+    let mut line = String::new();
+    let read = std::io::stdin().lock().read_line(&mut line);
+    if hidden {
+        stty("echo");
+    }
+    eprintln!();
+    read.ok().map(|_| line)
+}
+
 pub fn key_command(args: &[String], stdin: &mut dyn std::io::Read) -> Result<String, String> {
     let usage = "usage: promoshot-mcp key set <provider> | remove <provider> | status [provider]  (providers: openai, elevenlabs, google)";
     let action = args.first().map(String::as_str).ok_or(usage)?;
