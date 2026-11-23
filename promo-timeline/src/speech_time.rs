@@ -448,7 +448,11 @@ impl<'a> Speech<'a> {
         near: Option<(f64, f64)>,
     ) -> Result<Resolved, Fault> {
         let (take, mut warnings) = self
-            .take_on_words(owner.speech_clock.as_ref(), &owner.name, value.of.as_deref())
+            .take_on_words(
+                owner.speech_clock.as_ref(),
+                &owner.name,
+                value.of.as_deref(),
+            )
             .map_err(|f| match f {
                 Fault::Unsure(why) => Fault::Unsure(format!("{why}; the stored seconds stand")),
                 other => other,
@@ -749,7 +753,11 @@ impl<'a> Speech<'a> {
         during: &During,
     ) -> Result<(f64, f64, String, String), Fault> {
         let (take, _) = self
-            .take_on_words(owner.speech_clock.as_ref(), &owner.name, during.of.as_deref())
+            .take_on_words(
+                owner.speech_clock.as_ref(),
+                &owner.name,
+                during.of.as_deref(),
+            )
             .map_err(|f| match f {
                 Fault::Unsure(why) => Fault::Unsure(format!("{why}; the stored seconds stand")),
                 other => other,

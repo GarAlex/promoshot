@@ -858,9 +858,11 @@ fn unsure_timing_disables_word_effects_rather_than_guessing() {
         json!({"by": "word", "mode": "highlight", "sync": {"of": "intro"}}),
         json!({}),
     ));
-    layers.push(json!({"id": "slide", "name": "slide", "sortIndex": 3, "kind": "caption",
+    layers.push(
+        json!({"id": "slide", "name": "slide", "sortIndex": 3, "kind": "caption",
         "isEnabled": true, "startTime": {"word": "Primes", "of": "intro"}, "duration": 1,
-        "captionText": "x", "keyframes": []}));
+        "captionText": "x", "keyframes": []}),
+    );
     file["layers"] = Value::Array(layers);
 
     let (meta, report) = resolved_with(&file, &inputs_with(unsure));
@@ -871,7 +873,11 @@ fn unsure_timing_disables_word_effects_rather_than_guessing() {
     let progress = promo_timeline::reveal::progress(&karaoke, layer(&meta, "k"), 3.0, times.len());
     assert_eq!((progress.shown, progress.active), (times.len(), None));
     assert!(generated(&meta).is_empty(), "no captions on unsure words");
-    assert_eq!(layer(&meta, "slide").start_time, 0.0, "the stored seconds stand");
+    assert_eq!(
+        layer(&meta, "slide").start_time,
+        0.0,
+        "the stored seconds stand"
+    );
     assert!(
         !report.problems.iter().any(TimingProblem::is_break),
         "{:?}",
@@ -879,15 +885,23 @@ fn unsure_timing_disables_word_effects_rather_than_guessing() {
     );
     let said: Vec<String> = report.problems.iter().map(|p| p.to_string()).collect();
     assert!(
-        said.iter().any(|p| p.contains("captions") && p.contains("unsure (aligned 0.03")),
+        said.iter()
+            .any(|p| p.contains("captions") && p.contains("unsure (aligned 0.03")),
         "{said:?}"
     );
     assert!(said.iter().any(|p| p.contains("shows whole")), "{said:?}");
-    assert!(said.iter().any(|p| p.contains("stored seconds stand")), "{said:?}");
+    assert!(
+        said.iter().any(|p| p.contains("stored seconds stand")),
+        "{said:?}"
+    );
 
     // Sure, the same file does all three.
     let (meta, _) = resolved_with(&file, &inputs());
-    assert!(reveal(&meta, "k").unit_times.unwrap().iter().any(|t| *t > 0.0));
+    assert!(reveal(&meta, "k")
+        .unit_times
+        .unwrap()
+        .iter()
+        .any(|t| *t > 0.0));
     assert!(!generated(&meta).is_empty());
     assert!(layer(&meta, "slide").start_time > 0.0);
 }
