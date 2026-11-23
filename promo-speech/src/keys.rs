@@ -17,6 +17,14 @@ use std::path::{Path, PathBuf};
 /// The keyring service every entry lives under.
 pub const SERVICE: &str = "promoshot";
 
+/// The service this build's keyring entries live under: the person's own,
+/// except in this crate's tests, which must never overwrite or delete a
+/// real key (the round trip once set and removed `promoshot`/`google`).
+#[cfg(all(feature = "keyring", not(test)))]
+const STORE: &str = SERVICE;
+#[cfg(all(feature = "keyring", test))]
+const STORE: &str = "promoshot-test";
+
 /// The providers, in the order the docs list them.
 pub const PROVIDERS: [&str; 3] = ["openai", "elevenlabs", "google"];
 
@@ -131,7 +139,7 @@ fn known(provider: &str) -> Result<(), String> {
 #[cfg(feature = "keyring")]
 fn entry(provider: &str) -> Result<keyring::Entry, String> {
     known(provider)?;
-    keyring::Entry::new(SERVICE, provider).map_err(|e| format!("keyring: {e}"))
+    keyring::Entry::new(STORE, provider).map_err(|e| format!("keyring: {e}"))
 }
 
 /// The keyring's answer for a provider: Ok(None) when there is no entry
