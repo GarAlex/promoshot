@@ -1078,6 +1078,163 @@ pub fn write_png(
     std::fs::write(path, bytes.into_inner()).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// One audio input decoded the way the mix hears it: the file, at the
+/// input's speed, through the resource's effect chain (rung 21), and its
+/// normalize applied as one static gain planned over the part of the take
+/// the layer plays (issue #25: its included ranges, not the whole file) —
+/// the rule the apps' stems follow, measured the same way (BS.1770, pauses
+/// gated out). None when the file is gone or has no sound.
+fn decode_input(
+    project: &Project,
+    reader: &dyn promo_media::AudioReader,
+    input: &promo_timeline::AudioInput,
+) -> Result<
+    Option<(
+        promo_media::AudioBuffer,
+        f64,
+        Option<promo_media::loudness::NormalizePlan>,
+    )>,
+    String,
+> {
+    use promo_media::TrackSelection;
+    use promo_timeline::AudioSource;
+    const SAMPLE_RATE: u32 = 48_000;
+    const CHANNELS: u16 = 2;
+    let path = match &input.source {
+        AudioSource::Resource(id) => project
+            .resource(id)
+            .and_then(|res| project.resource_path(res)),
+        AudioSource::VoiceClip(filename) => {
+            let candidate = project.dir.join("Resources").join(filename);
+            candidate.is_file().then_some(candidate)
+        }
+    };
+    let Some(path) = path else { return Ok(None) };
+    let chain: Option<&[promo_model::AudioEffect]> = match &input.source {
+        AudioSource::Resource(id) => project
+            .resource(id)
+            .and_then(|res| res.audio_effects.as_deref()),
+        AudioSource::VoiceClip(_) => None,
+    };
+    let effects: Option<String> = chain.and_then(promo_media::effects_chain);
+    let normalize = chain.and_then(promo_media::loudness::normalize_target);
+    let speed = if input.speed.is_finite() {
+        input.speed.clamp(0.1, 10.0)
+    } else {
+        1.0
+    };
+    let selection = if input.single_track {
+        TrackSelection::First
+    } else if input.disabled_audio_track_indices.is_empty() {
+        TrackSelection::All
+    } else {
+        TrackSelection::Except(input.disabled_audio_track_indices.clone())
+    };
+    // Decode first: a layer contributes only if its asset has audio, which
+    // most screen recordings do not. The stretched stream has its own
+    // clock; source seconds divide by `speed` to index it.
+    let decoded = reader
+        .read_tracks_with(
+            &path,
+            SAMPLE_RATE,
+            CHANNELS,
+            speed,
+            &selection,
+            effects.as_deref(),
+        )
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let Some(mut audio) = decoded else {
+        return Ok(None);
+    };
+    let mut plan = None;
+    if let Some(target) = normalize {
+        let frame = |source: f64| (source.max(0.0) / speed * SAMPLE_RATE as f64).round() as usize;
+        let spans: Option<Vec<(usize, usize)>> = input.included_ranges.as_ref().map(|ranges| {
+            ranges
+                .iter()
+                .map(|r| (frame(r.start), frame(r.end)))
+                .collect()
+        });
+        plan = promo_media::loudness::normalize_plan(
+            &audio.samples,
+            CHANNELS as usize,
+            SAMPLE_RATE as f64,
+            target,
+            spans.as_deref(),
+        );
+        let gain = 10f32.powf(plan.map_or(0.0, |p| p.gain_db) as f32 / 20.0);
+        for sample in &mut audio.samples {
+            *sample *= gain;
+        }
+    }
+    Ok(Some((audio, speed, plan)))
+}
+
+/// A normalize that will land more than 1 LU short of its target — the
+/// take's peaks already at the ceiling — named per layer, before a render
+/// leaves it quieter than asked without a word (issue #24).
+pub fn normalize_findings(project: &Project) -> Vec<String> {
+    let registry = Registry::with_defaults();
+    let reader = registry.audio_reader();
+    let renderable = |layer: &promo_model::ProjectLayer| -> bool {
+        match layer.resource_id.as_deref() {
+            Some(id) => !project.is_missing(id),
+            None => true,
+        }
+    };
+    let lowered = project.meta.lowered();
+    let (inputs, _) = promo_timeline::audio_graph(&lowered, &renderable);
+    let mut found = Vec::new();
+    for input in &inputs {
+        let promo_timeline::AudioSource::Resource(id) = &input.source else {
+            continue;
+        };
+        let Some(resource) = project.resource(id) else {
+            continue;
+        };
+        if resource
+            .audio_effects
+            .as_deref()
+            .and_then(promo_media::loudness::normalize_target)
+            .is_none()
+        {
+            continue;
+        }
+        let Ok(Some((_, _, Some(plan)))) = decode_input(project, reader, input) else {
+            continue;
+        };
+        let (Some(short), Some(reaches)) = (plan.short_by(), plan.reaches_lufs()) else {
+            continue;
+        };
+        let layer = lowered
+            .layers
+            .iter()
+            .flatten()
+            .find(|l| l.id == input.layer_id)
+            .map_or(input.layer_id.as_str(), |l| l.name.as_str());
+        let why = if plan.held_by_peaks {
+            format!(
+                "the take's peaks ({:+.1} dBFS) leave no room under the {} dBFS ceiling, so it \
+                 is turned up only as far as they allow; lower the target, or tame the peaks \
+                 with a compressor first",
+                plan.peak_db.unwrap_or(0.0),
+                promo_media::loudness::PEAK_CEILING_DB
+            )
+        } else {
+            format!(
+                "a normalize moves a take at most {} dB; record it louder, or lower the target",
+                promo_media::loudness::MAX_GAIN_DB
+            )
+        };
+        found.push(format!(
+            "layer \"{layer}\": normalize reaches {reaches:.1} LUFS, {short:.1} LU short of the \
+             {:.1} asked — {why}",
+            plan.target_lufs,
+        ));
+    }
+    found
+}
+
 /// The composition's soundtrack: the apps' mix graph (`audio_inputs` —
 /// which layers sound, which slice plays where, at what level, ducked by
 /// whom) executed by the core mixer. Trims, media cuts, extended pauses,
@@ -1103,10 +1260,7 @@ pub fn build_soundtrack_between(
     let start = start.max(0.0);
     let duration = end;
     use promo_engine::{mix_chunk, MixInput};
-    use promo_media::TrackSelection;
-    use promo_timeline::{
-        audio_graph, level_points_ducked, scaled_segments, AudioSource, VolumePoint,
-    };
+    use promo_timeline::{audio_graph, level_points_ducked, scaled_segments, VolumePoint};
 
     const SAMPLE_RATE: u32 = 48_000;
     const CHANNELS: u16 = 2;
@@ -1138,69 +1292,9 @@ pub fn build_soundtrack_between(
     let mut placed: Vec<Placed> = Vec::new();
 
     for input in &inputs {
-        let path = match &input.source {
-            AudioSource::Resource(id) => project
-                .resource(id)
-                .and_then(|res| project.resource_path(res)),
-            AudioSource::VoiceClip(filename) => {
-                let candidate = project.dir.join("Resources").join(filename);
-                candidate.is_file().then_some(candidate)
-            }
+        let Some((audio, speed, _plan)) = decode_input(project, reader, input)? else {
+            continue;
         };
-        let Some(path) = path else { continue };
-
-        // The resource's effect chain (rung 21), applied after the tempo;
-        // its normalize is a gain planned from what the chain produced.
-        let chain: Option<&[promo_model::AudioEffect]> = match &input.source {
-            AudioSource::Resource(id) => project
-                .resource(id)
-                .and_then(|res| res.audio_effects.as_deref()),
-            AudioSource::VoiceClip(_) => None,
-        };
-        let effects: Option<String> = chain.and_then(promo_media::effects_chain);
-        let normalize = chain.and_then(promo_media::loudness::normalize_target);
-        let speed = if input.speed.is_finite() {
-            input.speed.clamp(0.1, 10.0)
-        } else {
-            1.0
-        };
-        let selection = if input.single_track {
-            TrackSelection::First
-        } else if input.disabled_audio_track_indices.is_empty() {
-            TrackSelection::All
-        } else {
-            TrackSelection::Except(input.disabled_audio_track_indices.clone())
-        };
-        // Decode first: a layer contributes only if its asset has audio,
-        // which most screen recordings do not. The stretched stream has its
-        // own clock; source seconds divide by `speed` to index it.
-        let decoded = reader
-            .read_tracks_with(
-                &path,
-                SAMPLE_RATE,
-                CHANNELS,
-                speed,
-                &selection,
-                effects.as_deref(),
-            )
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        let Some(mut audio) = decoded else { continue };
-        // Normalize: the WHOLE resource, through its other effects, to the
-        // target with one static gain — the rule the apps' stems follow,
-        // measured the same way (BS.1770, pauses gated out), never over
-        // just the window this export plays.
-        if let Some(target) = normalize {
-            let gain_db = promo_media::loudness::normalize_gain_db(
-                &audio.samples,
-                CHANNELS as usize,
-                SAMPLE_RATE as f64,
-                target,
-            );
-            let gain = 10f32.powf(gain_db as f32 / 20.0);
-            for sample in &mut audio.samples {
-                *sample *= gain;
-            }
-        }
         let asset_seconds = audio.duration_s() * speed;
 
         let ranges = match &input.included_ranges {
@@ -1619,6 +1713,62 @@ mod tests {
         out.extend_from_slice(&(data.len() as u32).to_le_bytes());
         out.extend_from_slice(&data);
         std::fs::write(path, out).unwrap();
+    }
+
+    /// Issues #24, #25: a layer playing the quiet half of a loud-then-quiet
+    /// take hears that half at the target — the gain is measured over the
+    /// cut it plays, not the whole file — and validate's finding for a
+    /// target past the ±24 dB range names that limit.
+    #[test]
+    fn normalize_measures_the_cut_a_layer_plays() {
+        let dir = std::env::temp_dir().join(format!("promo-normcut-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Resources")).unwrap();
+        let tone = |amp: f32| {
+            (0..4 * 48_000).map(move |i| {
+                amp * (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / 48_000.0).sin()
+            })
+        };
+        let take: Vec<f32> = tone(0.3).chain(tone(0.03)).collect();
+        write_wav(&dir.join("Resources/lq.wav"), &take);
+        let write = |target: f64| {
+            std::fs::write(
+                dir.join("metadata.json"),
+                format!(
+                    r#"{{"id":"P","name":"cut","createdAt":0,"state":"recorded","minReaderVersion":21,
+                    "trimStart":0,"trimEnd":4,"videoDuration":4,"subtitles":[],
+                    "compositionSettings":{{"canvasWidth":64,"canvasHeight":64,"backgroundColorHex":"000000"}},
+                    "resources":[{{"id":"A","kind":"audio","filename":"lq.wav","displayName":"v","addedAt":0,
+                      "duration":8,"mediaCuts":[{{"id":"quiet","trimStart":4,"trimEnd":8}}],
+                      "audioEffects":[{{"kind":"normalize","targetLufs":{target}}}]}}],
+                    "layers":[{{"id":"L","name":"quiet half","sortIndex":0,"kind":"audio","isEnabled":true,
+                      "startTime":0,"duration":4,"resourceID":"A","mediaCutID":"quiet","keyframes":[]}}]}}"#
+                ),
+            )
+            .unwrap();
+            crate::project::Project::open(&dir).expect("project")
+        };
+        let project = write(-20.0);
+        let mixed = match build_soundtrack_between(&project, 0.0, 4.0) {
+            Ok(Some(audio)) => audio,
+            other => {
+                eprintln!("no ffmpeg here ({:?}); skipping", other.err());
+                return;
+            }
+        };
+        let lufs = promo_media::loudness::integrated_lufs(&mixed.samples, 2, 48_000.0).unwrap();
+        assert!(
+            (lufs + 20.0).abs() < 0.5,
+            "the quiet half lands on -20: {lufs}"
+        );
+        assert!(normalize_findings(&project).is_empty());
+        let far = normalize_findings(&write(-5.0));
+        assert!(
+            far.iter()
+                .any(|f| f.contains("layer \"quiet half\"") && f.contains("at most 24 dB")),
+            "{far:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Normalize is one loudness on every host (review 2026-09-27, P2-30):

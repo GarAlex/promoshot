@@ -8,8 +8,9 @@
 //! ITU-R BS.1770-4 — K-weighting, 400 ms blocks, and the two gates that
 //! leave silence out — measured here, and both hosts apply the one static
 //! gain [`LoudnessMeter::gain_db`] plans, at the end of the resource's
-//! chain: the whole resource, through its other effects, is measured, so a
-//! compressor before or after it in the list lands on the same target.
+//! chain: the part of the resource a layer plays, through its other
+//! effects, is measured, so a compressor before or after it in the list
+//! lands on the same target.
 
 /// The true-peak ceiling loudnorm used (`TP=-1.5`), kept as a sample-peak
 /// ceiling: a quiet narration raised to the target never clips.
@@ -183,17 +184,113 @@ impl LoudnessMeter {
     /// The gain, in dB, that takes what was fed to `target_lufs` — held
     /// under the peak ceiling and within ±24 dB; 0 for silence. What the
     /// apps and the headless mixer both apply to a normalized resource, as
-    /// one static gain at the end of its chain.
+    /// one static gain at the end of its chain. [`Self::plan`] says why.
     pub fn gain_db(&self, target_lufs: f64) -> f64 {
-        let Some(loudness) = self.integrated_lufs() else {
-            return 0.0;
-        };
-        let mut gain = target_lufs - loudness;
-        if self.peak > 0.0 {
-            gain = gain.min(PEAK_CEILING_DB - 20.0 * (self.peak as f64).log10());
-        }
-        gain.clamp(-MAX_GAIN_DB, MAX_GAIN_DB)
+        self.plan(target_lufs).gain_db
     }
+
+    /// The normalize plan toward `target_lufs`: what was measured, the
+    /// gain, and whether the peak ceiling held it short. A take asked to
+    /// come UP is never turned down to meet the ceiling — its peaks were
+    /// already over it, and a normalize that left it quieter than no
+    /// normalize at all was the wrong way round (issue #24); it stays
+    /// where it was and the plan says it falls short.
+    pub fn plan(&self, target_lufs: f64) -> NormalizePlan {
+        let peak_db = (self.peak > 0.0).then(|| 20.0 * (self.peak as f64).log10());
+        let Some(loudness) = self.integrated_lufs() else {
+            return NormalizePlan {
+                target_lufs,
+                measured_lufs: None,
+                peak_db,
+                gain_db: 0.0,
+                held_by_peaks: false,
+            };
+        };
+        let wanted = target_lufs - loudness;
+        let mut gain = wanted;
+        let mut held_by_peaks = false;
+        if let Some(peak_db) = peak_db {
+            let room = PEAK_CEILING_DB - peak_db;
+            gain = if wanted > 0.0 {
+                wanted.min(room.max(0.0))
+            } else {
+                wanted.min(room)
+            };
+            held_by_peaks = gain < wanted;
+        }
+        NormalizePlan {
+            target_lufs,
+            measured_lufs: Some(loudness),
+            peak_db,
+            gain_db: gain.clamp(-MAX_GAIN_DB, MAX_GAIN_DB),
+            held_by_peaks,
+        }
+    }
+}
+
+/// What a normalize does to one take: the measured loudness and peak, the
+/// static gain, and the loudness that gain lands on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NormalizePlan {
+    pub target_lufs: f64,
+    /// None for silence: nothing passes the gate, and the gain is 0.
+    pub measured_lufs: Option<f64>,
+    /// The sample peak in dBFS before the gain; None for silence.
+    pub peak_db: Option<f64>,
+    pub gain_db: f64,
+    /// The peak ceiling, not the ±24 dB range, is what held the gain.
+    pub held_by_peaks: bool,
+}
+
+impl NormalizePlan {
+    /// The loudness the take lands on.
+    pub fn reaches_lufs(&self) -> Option<f64> {
+        self.measured_lufs.map(|m| m + self.gain_db)
+    }
+
+    /// How many LU short of the target it lands, when that is more than
+    /// one LU — the tolerance every host's parity is held to.
+    pub fn short_by(&self) -> Option<f64> {
+        let short = self.target_lufs - self.reaches_lufs()?;
+        (short > 1.0).then_some(short)
+    }
+}
+
+/// Interleaved frames `[from, to)` of `samples`, clamped to what is there:
+/// the part of a take a layer plays, which is what a normalize measures
+/// (issue #25). None measures everything.
+pub fn played_frames<'a>(
+    samples: &'a [f32],
+    channels: usize,
+    spans: Option<&[(usize, usize)]>,
+) -> Vec<&'a [f32]> {
+    let frames = samples.len() / channels.max(1);
+    match spans {
+        None => vec![samples],
+        Some(spans) => spans
+            .iter()
+            .filter_map(|&(from, to)| {
+                let (from, to) = (from.min(frames), to.min(frames));
+                (to > from).then(|| &samples[from * channels..to * channels])
+            })
+            .collect(),
+    }
+}
+
+/// The plan for interleaved `samples`, measured over `spans` (frame
+/// ranges; None for the whole).
+pub fn normalize_plan(
+    samples: &[f32],
+    channels: usize,
+    sample_rate: f64,
+    target_lufs: f64,
+    spans: Option<&[(usize, usize)]>,
+) -> Option<NormalizePlan> {
+    let mut meter = LoudnessMeter::new(channels, sample_rate)?;
+    for piece in played_frames(samples, channels, spans) {
+        meter.push(piece);
+    }
+    Some(meter.plan(target_lufs))
 }
 
 /// Integrated loudness in LUFS of interleaved samples, in one go.
@@ -353,5 +450,49 @@ mod tests {
         let whisper = sine(1000.0, -80.0, 5.0, 2, rate);
         assert!(normalize_gain_db(&whisper, 2, rate, -5.0) <= MAX_GAIN_DB);
         assert_eq!(normalize_gain_db(&[0.0; 1000], 1, rate, -16.0), 0.0);
+    }
+
+    /// Issue #24: a take whose peaks are already over the ceiling, asked
+    /// to come up, is left where it was — never turned down — and the plan
+    /// says how far short it lands. Asked to come down, the ceiling still
+    /// takes it further.
+    #[test]
+    fn a_peaky_take_asked_up_is_never_turned_down() {
+        let rate = 48_000.0;
+        // A quiet tone with one hot click: low loudness, peak over the
+        // ceiling.
+        let mut take = sine(1000.0, -30.0, 5.0, 1, rate);
+        take[1000] = 1.0;
+        let plan = normalize_plan(&take, 1, rate, -20.0, None).unwrap();
+        assert_eq!(plan.gain_db, 0.0, "{plan:?}");
+        assert!(plan.held_by_peaks);
+        let short = plan.short_by().expect("falls short");
+        assert!((short - (-20.0 - plan.measured_lufs.unwrap())).abs() < 1e-9);
+        let down = normalize_plan(&take, 1, rate, -40.0, None).unwrap();
+        assert!(down.gain_db < -1.0, "{down:?}");
+        assert_eq!(down.short_by(), None);
+    }
+
+    /// Issue #25: spans measure only the frames named — a quiet half of a
+    /// loud-then-quiet take plans for the quiet half.
+    #[test]
+    fn spans_measure_only_the_part_played() {
+        let rate = 48_000.0;
+        let mut take = sine(1000.0, -10.0, 4.0, 1, rate);
+        take.extend(sine(1000.0, -30.0, 4.0, 1, rate));
+        let half = (4.0 * rate) as usize;
+        let whole = normalize_plan(&take, 1, rate, -20.0, None).unwrap();
+        let quiet = normalize_plan(&take, 1, rate, -20.0, Some(&[(half, 2 * half)])).unwrap();
+        assert!(whole.gain_db < 0.0, "{whole:?}");
+        assert!(
+            (quiet.reaches_lufs().unwrap() + 20.0).abs() < 0.2,
+            "{quiet:?}"
+        );
+        assert!(
+            normalize_plan(&take, 1, rate, -20.0, Some(&[(9 * half, 10 * half)]))
+                .unwrap()
+                .measured_lufs
+                .is_none()
+        );
     }
 }

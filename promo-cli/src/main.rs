@@ -2126,6 +2126,11 @@ fn validation(project: &Project) -> promo_timeline::report::Report {
     // An SVG picture that will not draw as written: refused hrefs, text
     // without outlines, a font the import lacked.
     promo_cli::vectors::report_into(&mut report, project);
+    // A normalize its take's peaks hold short of the target (issue #24):
+    // measured as the mix will, so the warning is the render's number.
+    for finding in render::normalize_findings(project) {
+        report.warn(finding);
+    }
     report
 }
 
