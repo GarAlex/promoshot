@@ -2028,7 +2028,12 @@ mod tests {
                 .push(format!("{provider}|{voice}|{text}"));
             Ok(b"ID3song".to_vec())
         }
-        fn synthesize_timed(&self, provider: &str, voice: &str, text: &str) -> Result<Take, String> {
+        fn synthesize_timed(
+            &self,
+            provider: &str,
+            voice: &str,
+            text: &str,
+        ) -> Result<Take, String> {
             Ok(Take {
                 audio: self.synthesize(provider, voice, text)?,
                 sung: Some("[Chorus]\nСвітло, світло".into()),
