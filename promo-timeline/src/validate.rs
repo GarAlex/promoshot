@@ -163,7 +163,17 @@ pub fn findings(meta: &ProjectMetadata) -> Report {
                 ));
             }
         }
-        if let Some(span) = layer.duration {
+        // A span below zero (an end word that resolved before the start
+        // word, a script's subtraction gone the wrong way) is a layer that
+        // never shows; the transitions' "never finishes arriving" was the
+        // only hint, and without fades there was none.
+        if let Some(span) = layer.duration.filter(|d| !d.is_finite() || *d < 0.0) {
+            out.breaks(format!(
+                "layer \"{}\": duration {span}s is negative — the layer never shows",
+                layer.name
+            ));
+        }
+        if let Some(span) = layer.duration.filter(|d| d.is_finite() && *d >= 0.0) {
             for (side, transition) in [
                 ("transitionIn", crate::transition::incoming(layer)),
                 ("transitionOut", crate::transition::outgoing(layer)),
@@ -2143,6 +2153,48 @@ mod tests {
     }
 
     use super::*;
+
+    /// Issue #21: a negative duration is a layer that never shows — a
+    /// break, with or without fades, and the fades' arrival warnings are
+    /// not what says so.
+    #[test]
+    fn a_negative_duration_breaks() {
+        let doc = |duration: f64, fades: &str| {
+            project(
+                &format!(
+                    r#"{{"id":"neg","name":"neg","sortIndex":0,"kind":"caption","isEnabled":true,
+                     "captionText":"x","startTime":1,"duration":{duration}{fades},"keyframes":[]}}"#
+                ),
+                "",
+            )
+        };
+        for fades in ["", r#","fadeIn":0.05,"fadeOut":0.22"#] {
+            let report = findings(&doc(-1.1728, fades));
+            let broken: Vec<&str> = report
+                .findings
+                .iter()
+                .filter(|f| matches!(f.severity, crate::report::Severity::Breaks))
+                .map(|f| f.message.as_str())
+                .collect();
+            assert!(
+                broken
+                    .iter()
+                    .any(|m| m.contains("duration -1.1728s is negative — the layer never shows")),
+                "{fades}: {broken:?}"
+            );
+            assert!(
+                !report
+                    .findings
+                    .iter()
+                    .any(|f| f.message.contains("never finishes arriving")),
+                "{fades}"
+            );
+        }
+        assert!(!findings(&doc(2.0, ""))
+            .findings
+            .iter()
+            .any(|f| f.message.contains("negative")));
+    }
 
     fn project(layers: &str, extra: &str) -> ProjectMetadata {
         ProjectMetadata::from_json(&format!(
