@@ -2466,7 +2466,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "local-tts-core"
 version = "0.7.0"
-source = "git+https://github.com/GarAlex/local-tts?tag=v0.7.0#61efef0c129dff71c4ff93e0639ce290aeb674ca"
+source = "git+https://github.com/GarAlex/local-tts?rev=69dcba0daabbecfcc078ac49a7db3c39b092ff89#69dcba0daabbecfcc078ac49a7db3c39b092ff89"
 dependencies = [
  "cc",
  "flate2",
@@ -3228,7 +3228,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "promo-author"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "promo-editor",
  "promo-model",
@@ -3240,7 +3240,7 @@ dependencies = [
 
 [[package]]
 name = "promo-cli"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "image",
  "libm",
@@ -3262,7 +3262,7 @@ dependencies = [
 
 [[package]]
 name = "promo-editor"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "promo-model",
  "promo-timeline",
@@ -3273,7 +3273,7 @@ dependencies = [
 
 [[package]]
 name = "promo-engine"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "criterion",
  "gltf",
@@ -3289,7 +3289,7 @@ dependencies = [
 
 [[package]]
 name = "promo-gpu"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "core-foundation 0.10.1",
  "criterion",
@@ -3304,7 +3304,7 @@ dependencies = [
 
 [[package]]
 name = "promo-media"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "image",
  "libm",
@@ -3319,7 +3319,7 @@ dependencies = [
 
 [[package]]
 name = "promo-midi"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "libm",
  "midly",
@@ -3333,7 +3333,7 @@ dependencies = [
 
 [[package]]
 name = "promo-model"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "icu_segmenter",
  "jsonschema",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "promo-music"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -3362,7 +3362,7 @@ dependencies = [
 
 [[package]]
 name = "promo-speech"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "keyring",
  "local-tts-core",
@@ -3375,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "promo-svg"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "fontdb",
  "png",
@@ -3391,7 +3391,7 @@ dependencies = [
 
 [[package]]
 name = "promo-text"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "cosmic-text",
  "image",
@@ -3402,7 +3402,7 @@ dependencies = [
 
 [[package]]
 name = "promo-timeline"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "criterion",
  "promo-model",
@@ -3413,7 +3413,7 @@ dependencies = [
 
 [[package]]
 name = "promoshot-mcp"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "promo-author",
  "promo-editor",

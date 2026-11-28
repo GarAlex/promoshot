@@ -17,9 +17,9 @@ serde_json.workspace = true
 sha2 = "0.10"
 ureq = "2"
 keyring = { version = "4", optional = true }
-# Local voices: https://github.com/GarAlex/local-tts, pinned to a release
-# tag. Pulls in ONNX Runtime (statically linked, MIT), so it is opt-in.
-local-tts-core = { git = "https://github.com/GarAlex/local-tts", tag = "v0.7.0", features = ["download"], optional = true }
+# Local voices: https://github.com/GarAlex/local-tts, pinned to a commit.
+# Pulls in ONNX Runtime (statically linked, MIT), so it is opt-in.
+local-tts-core = { git = "https://github.com/GarAlex/local-tts", rev = "69dcba0daabbecfcc078ac49a7db3c39b092ff89", features = ["download"], optional = true }
 
 [features]
 # The OS keyring as the key store. On by default for the server; the

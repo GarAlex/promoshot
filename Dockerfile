@@ -32,6 +32,9 @@ ENV PROMOSHOT_VOICES=/voices
 # The music model (`promoshot-mcp music install ace-step-base`, 6.3 GB)
 # likewise: mount a volume at /music. Generation runs on the CPU here.
 ENV PROMOSHOT_MUSIC_MODELS=/music
+# Sound banks (`promoshot-mcp sounds install generaluser`) likewise:
+# mount a volume at /sounds so installed banks survive container restarts.
+ENV PROMOSHOT_SOUNDS=/sounds
 # Mount your projects here; promo_workspace points at it.
 LABEL io.modelcontextprotocol.server.name="io.github.GarAlex/promoshot"
 ENV PROMOSHOT_WORKSPACE=/projects
@@ -39,7 +42,8 @@ ENV PROMOSHOT_WORKSPACE=/projects
 # root, nor write root-owned files into the host's mounted folder. UID 1000
 # is the first user on most Linux hosts; elsewhere pass `--user $(id -u)`.
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin promoshot \
-    && mkdir -p /projects /voices && chown promoshot:promoshot /projects /voices
+    && mkdir -p /projects /voices /music /sounds \
+    && chown promoshot:promoshot /projects /voices /music /sounds
 USER promoshot
 WORKDIR /projects
 ENTRYPOINT ["promoshot-mcp"]

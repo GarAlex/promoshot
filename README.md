@@ -50,6 +50,11 @@ Consumer apps: [promoshot.app](https://promoshot.app) · [App Store](https://app
 | `promo-engine` | Preview/export orchestration, frame cache, memory governor, PCM mixer |
 | `promo-media` | Decoder/encoder trait registry; ffmpeg-subprocess backend + conformance suite |
 | `promo-editor` | The document's edit vocabulary: commands with undo, the wizard's arrangement, theme rules — what `promo_apply` and `promo_slideshow` are built on |
+| `promo-author` | Shared MCP/CLI authoring contract: tool descriptors, scaffolds (`init`, `upsert-layer`, `upsert-keyframe`), `explain`, `diff` |
+| `promo-speech` | Narration providers (OpenAI, ElevenLabs, Google, keyless `local`), OS keyring, receipts, word timing and stress spellings |
+| `promo-midi` | MIDI sequencing, General MIDI SoundFont rendering, and generated-layer contracts |
+| `promo-music` | Native on-device music-layer generation (ACE-Step 1.5 lego via candle) and model store |
+| `promo-svg` | Vector SVG import, text-to-outlines, node animation, and lossless drawing conversion |
 | `promo-cli` | `promo` — render a project from the command line |
 | `promoshot-mcp` | MCP server over stdio, for agents |
 
@@ -143,9 +148,10 @@ render shells to `promo` (found next to the executable, or on PATH, or via
 Two pieces: the MCP server (tools) and the skill (workflow).
 Neither is vendor-specific. Agents do not find this repo by themselves.
 
-The apps open what this engine writes from PromoShot 3.0 on. The App
-Store's 2.3.1 reads projects up to `minReaderVersion` 17 (no nested
-compositions, no 3D) and cannot be launched with `--mcp-stdio`.
+The apps open what this engine writes from PromoShot 3.0 on (current app
+release: 3.3, matching reader rung 51). Older 2.x builds read projects up
+to `minReaderVersion` 17 (no nested compositions, no 3D) and cannot be
+launched with `--mcp-stdio`.
 
 **1. Build — or don't**
 
@@ -406,7 +412,10 @@ docker run --rm -v promoshot-voices:/voices --entrypoint promoshot-mcp \
   promoshot-mcp voices install kokoro-en-q8
 ```
 
-and add `"-v", "promoshot-voices:/voices"` to the `args` above.
+and add `"-v", "promoshot-voices:/voices"` to the `args` above. The image
+likewise creates writable `/music` (`PROMOSHOT_MUSIC_MODELS`) and `/sounds`
+(`PROMOSHOT_SOUNDS`) mountpoints for optional music-model weights and MIDI
+sound banks.
 
 Projects live under the mount; `promo_workspace` answers `/projects`. All
 the [examples](examples/) are baked in, so the image proves itself with no
@@ -488,10 +497,10 @@ Releases are `0.MINOR.PATCH` until 1.0. MINOR moves for a new format rung
 (a higher `minReaderVersion`), a new tool, or any change in behaviour a
 user or an agent would notice; PATCH is for fixes only. Every GitHub
 release carries generated notes and build provenance for its binaries,
-and releases come at most weekly. 0.3.0 is the first release under this
-rule: the reader is at rung 47. (0.2.x ran 79 patch releases in 11 days
-while it added rungs 19–47 — the numbers said nothing, which is what this
-rule fixes.)
+and releases come at most weekly. 0.3.0 was the first release under this
+rule (rung 47); the reader is now at rung 51. (0.2.x ran 79 patch releases
+in 11 days while it added rungs 19–47 — the numbers said nothing, which is
+what this rule fixes.)
 
 ## License
 

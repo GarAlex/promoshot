@@ -29,9 +29,9 @@
   </Company_Info>
   <Program_Info>
     <Program_Name>PromoShot</Program_Name>
-    <Program_Version>2.3.1</Program_Version>
-    <Program_Release_Month>09</Program_Release_Month>
-    <Program_Release_Day>01</Program_Release_Day>
+    <Program_Version>3.3</Program_Version>
+    <Program_Release_Month>11</Program_Release_Month>
+    <Program_Release_Day>27</Program_Release_Day>
     <Program_Release_Year>2026</Program_Release_Year>
     <Program_Cost_Dollars>0</Program_Cost_Dollars>
     <Program_Type>Freeware</Program_Type>
@@ -49,7 +49,7 @@
       <Has_Expire_Info>N</Has_Expire_Info>
     </Expire_Info>
     <Program_System_Requirements>App Store; Mac, iPhone, and iPad open the same .promo project. See store listing for OS versions.</Program_System_Requirements>
-    <Program_Description_2000>PromoShot is a layer editor for promo video. Record screen or camera, import media, arrange layers on a timeline, then keyframe position, scale, rotation, opacity, color, and more. Export video, stills, or GIF. Made for app makers, creators, founders, and marketers who want a real editor without a subscription. Free exports carry a watermark; PromoShot Pro removes it, one time. Mac now; iPhone and iPad open the same .promo folder. Automation / MCP on Mac. Open-source Rust engine on GitHub (GarAlex/promoshot). App Store id 6770157576. Site: https://promoshot.app. Unrelated to other App Store apps named PromoShot.</Program_Description_2000>
+    <Program_Description_2000>PromoShot is a layer editor for promo video. Record screen or camera, import media, arrange layers on a timeline, then keyframe position, scale, rotation, opacity, color, and more — with 3D device frames and stages, Auto Zoom, multi-language projects and translation, word-timed captions, beat sync, MIDI, on-device voices, and SVG vector pictures. Export video, stills, or GIF. Made for app makers, creators, founders, and marketers who want a real editor without a subscription. Free exports carry a watermark; PromoShot Pro removes it, one time. Mac, iPhone, and iPad open the same .promo folder. Automation / MCP on Mac. Open-source Rust engine on GitHub (GarAlex/promoshot). App Store id 6770157576. Site: https://promoshot.app. Unrelated to other App Store apps named PromoShot.</Program_Description_2000>
     <Program_Description_250>Layer editor for promo video on Mac, iPhone, and iPad. Keyframe layers, export video/stills/GIF. Free with watermark; one-time Pro. promoshot.app</Program_Description_250>
     <Program_Description_450>PromoShot turns screen recordings, video, photos, and captions into promo assets on a timeline. Free watermarked exports; one-time Pro removes it. Mac, iPhone, iPad. https://promoshot.app</Program_Description_450>
     <Program_Description_80>Promo video layer editor — Mac / iPhone / iPad</Program_Description_80>

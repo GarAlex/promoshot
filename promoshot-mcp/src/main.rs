@@ -45,10 +45,38 @@ use serde_json::{json, Value};
 
 const PROTOCOL_FALLBACK: &str = "2025-03-26";
 
+const USAGE: &str = "\
+promoshot-mcp — headless MCP server for PromoShot .promo projects
+
+USAGE:
+    promoshot-mcp [--workspace <dir>] [--root <dir>] [--promo <path>] [--log <file>]
+    promoshot-mcp voices [list | install <pkg> | remove <pkg>]
+    promoshot-mcp sounds [list | install generaluser]
+    promoshot-mcp music  [list | install ace-step-base | remove ace-step-base]
+    promoshot-mcp key    [set <provider> | status | remove <provider>]
+    promoshot-mcp --version | --help
+
+OPTIONS:
+    --workspace <dir>   Where promo_workspace points (else $PROMOSHOT_WORKSPACE, else XDG data dir)
+    --root <dir>        Fence: refuse projects outside this tree
+    --promo <path>      Path to the promo CLI (else sibling of this executable, else PATH)
+    --log <file>        Append one TSV line per tool call (timestamp, tool, ms, status)
+    -V, --version       Print version and exit
+    -h, --help          Print this help and exit
+";
+
 fn main() {
     // `promoshot-mcp key …` is the person's door to the keyring, not a
     // server session: handled and done before any stdio framing.
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(argv.first().map(String::as_str), Some("-h" | "--help")) {
+        print!("{USAGE}");
+        return;
+    }
+    if matches!(argv.first().map(String::as_str), Some("-V" | "--version")) {
+        println!("promoshot-mcp {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     if argv.first().map(String::as_str) == Some("voices") {
         match speak::voices_command(&argv[1..]) {
             Ok(answer) => {
@@ -1971,5 +1999,23 @@ mod tests {
         let req = serde_json::json!({ "jsonrpc": "2.0", "id": 6, "method": "resources/list" });
         let answer = handle(&req, &config(), &never).unwrap();
         assert!(answer.get("error").is_some());
+    }
+
+    #[test]
+    fn usage_names_flags_and_subcommands() {
+        for needle in [
+            "--workspace",
+            "--root",
+            "--promo",
+            "--log",
+            "--version",
+            "--help",
+            "voices",
+            "sounds",
+            "music",
+            "key",
+        ] {
+            assert!(USAGE.contains(needle), "USAGE omits `{needle}`");
+        }
     }
 }

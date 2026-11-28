@@ -84,6 +84,16 @@ jobs:
             grep -q "no fonts found" /tmp/err.txt
             test $(wc -c < /tmp/smoke.png) -gt 6000
           '
+      - name: Smoke render from the tarball (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p /tmp/promo-smoke
+          tar -xzf dist/*.tar.gz -C /tmp/promo-smoke
+          /tmp/promo-smoke/promo --version
+          /tmp/promo-smoke/promoshot-mcp --version
+          /tmp/promo-smoke/promo validate examples/ProductCard.promo
+          /tmp/promo-smoke/promo still examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300
+          test $(wc -c < /tmp/smoke.png) -gt 6000
       # Provenance a downloader can verify (`gh attestation verify`), instead
       # of a checksum published on the same page as the file it vouches for.
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
@@ -126,7 +136,7 @@ jobs:
           docker run --rm --entrypoint promo promoshot-mcp:smoke \
             validate /usr/local/share/promoshot/examples/ProductCard.promo
           docker run --rm --entrypoint sh promoshot-mcp:smoke -c \
-            'promo still /usr/local/share/promoshot/examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300 && test $(wc -c < /tmp/smoke.png) -gt 6000'
+            'test -w /projects -a -w /voices -a -w /music -a -w /sounds && promoshot-mcp --version && promo still /usr/local/share/promoshot/examples/ProductCard.promo --out /tmp/smoke.png --time 1 --size 480x300 && test $(wc -c < /tmp/smoke.png) -gt 6000'
       - name: Push
         run: |
           for tag in "${GITHUB_REF_NAME}" latest; do

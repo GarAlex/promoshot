@@ -28,10 +28,13 @@ members = [
 chunks_exact_to_as_chunks = "allow"
 
 [workspace.package]
-version = "0.4.8"
+version = "0.4.9"
 edition = "2021"
+rust-version = "1.96"
 license = "Apache-2.0"
 authors = ["Alex"]
+repository = "https://github.com/GarAlex/promoshot"
+homepage = "https://promoshot.app"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
